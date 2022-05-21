@@ -1,17 +1,11 @@
-import { SafeAreaView, StyleSheet, TextInput, Button, Text } from 'react-native';
-import { useState } from 'react';
-import * as SecureStore from 'expo-secure-store';
-import login from '../../api/endpoints/auth/login';
+import { useContext, useState } from 'react';
+import { Button, SafeAreaView, StyleSheet, Text, TextInput } from 'react-native';
+import { AuthContext } from '../../context/AuthProvider';
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [token, setToken] = useState('token');
-
-  const onSubmit = async () => {
-    const response = await login(email, password);
-    SecureStore.setItemAsync('user', JSON.stringify(response));
-  };
+  const { login, error, isLoading } = useContext(AuthContext);
 
   return (
     <SafeAreaView>
@@ -32,7 +26,7 @@ export default function LoginScreen({ navigation }) {
       />
       <Button
         title="Login"
-        onPress={() => onSubmit()}
+        onPress={() => login(email, password)}
       />
       <Text onPress={() => navigation.navigate('Register')}>
         Create an account
