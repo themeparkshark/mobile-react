@@ -1,41 +1,38 @@
-import React, { createContext, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { createContext, useEffect, useState } from 'react';
+import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const { headers } = client.defaults;
+    headers.common.Authorization = `Bearer ${user?.token}`;
+  }, [user?.token]);
 
   return (
     <AuthContext.Provider
       value={{
         user,
         setUser,
-        error,
-        isLoading,
-        login: (email, password) => {
-          setIsLoading(true);
-          login(email, password).then((response) => {
+        login: (credential) => {
+          login(credential)
+            .then((response) => {
               const userResponse = {
-                token: response.data.token,
-                id: response.data.user.id,
-                username: response.data.user.username,
-                email: response.data.user.email,
+                token: response.token,
+                id: response.user.id,
+                username: response.user.username,
+                email: response.user.email,
               };
 
               setUser(userResponse);
-              setError(null);
               SecureStore.setItemAsync('user', JSON.stringify(userResponse));
-              setIsLoading(false);
             })
-            .catch(error => {
-              console.log(error.response);
-              const key = Object.keys(error.response.data.errors)[0];
-              setError(error.response.data.errors[key][0]);
-              setIsLoading(false);
+            .catch((error) => {
+              console.log(error);
             });
         },
       }}
