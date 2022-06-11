@@ -3,15 +3,51 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as SecureStore from 'expo-secure-store';
 import { useContext, useEffect } from 'react';
 import { AuthContext } from './context/AuthProvider';
+import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
+import NewsScreen from './screens/NewsScreen';
+import ParkScreen from './screens/ParkScreen';
+import ProfileScreen from './screens/ProfileScreen';
 
 const Stack = createNativeStackNavigator();
 
 const HomeStackNavigator = () => {
   return (
-    <Stack.Navigator>
-      <Stack.Screen name="Explore" component={ExploreScreen} />
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen
+        name="Explore"
+        component={ExploreScreen}
+        options={{
+          animation: 'none',
+        }}
+      />
+      <Stack.Screen
+        name="News"
+        component={NewsScreen}
+        options={{
+          animation: 'none',
+        }}
+      />
+      <Stack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          animation: 'none',
+        }}
+      />
+      <Stack.Screen
+        name="Park"
+        component={ParkScreen}
+        options={{
+          headerShown: true,
+          title: '',
+        }}
+      />
     </Stack.Navigator>
   );
 };
@@ -42,7 +78,7 @@ export default function App() {
   return (
     <>
       {user ? (
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
           <HomeStackNavigator />
         </NavigationContainer>
       ) : (

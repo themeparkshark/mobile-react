@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import {
+  Dimensions,
+  SafeAreaView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
+import { useTailwind } from 'tailwind-rn';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
+import completeTask from '../api/endpoints/me/tasks/complete-task';
+import Wrapper from '../components/Wrapper';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
 
-export default function App() {
+export default function ExploreScreen() {
+  const tailwind = useTailwind();
   const [park, setPark] = useState(null);
   const [redeemables, setRedeemables] = useState(null);
   const [inRedeemZone, setInRedeemZone] = useState(null);
@@ -35,7 +45,6 @@ export default function App() {
           setRedeemables(null);
           setInRedeemZone(null);
         }
-        console.log('park set');
       });
     }
   }, [location]);
@@ -54,21 +63,35 @@ export default function App() {
     }
   }, [location, redeemables]);
 
+  const completeRedeemable = async (redeemable) => {
+    await completeTask(redeemable);
+  };
+
   return (
-    <View style={styles.container}>
-      <Text>
-        {park?.name
-          ? 'You are currently at ' + park?.name
-          : 'You are not at a park'}
-      </Text>
-      <Text>You can currently redeem: {inRedeemZone?.name}</Text>
-      <Text>Redeemables: {redeemables?.tasks.length}</Text>
+    <Wrapper>
+      <SafeAreaView style={tailwind('absolute justify-end w-full h-full z-50')}>
+        {inRedeemZone && (
+          <View style={tailwind('flex-row justify-center')}>
+            <TouchableOpacity
+              onPress={() => {
+                completeRedeemable(inRedeemZone);
+              }}
+              style={tailwind('bg-indigo-500 p-4')}
+            >
+              <Text style={tailwind('text-white')}>Redeem zone</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </SafeAreaView>
       <MapView
         showsUserLocation={true}
-        style={styles.map}
+        style={{
+          width: Dimensions.get('window').width,
+          height: Dimensions.get('window').height,
+        }}
         followsUserLocation={true}
         showsIndoors={false}
-        maxZoomLevel={20}
+        minZoomLevel={18}
         rotateEnabled={false}
         scrollEnabled={false}
         pitchEnabled={false}
@@ -86,19 +109,6 @@ export default function App() {
           );
         })}
       </MapView>
-    </View>
+    </Wrapper>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  map: {
-    width: Dimensions.get('window').width,
-    height: Dimensions.get('window').height - 150,
-  },
-});
