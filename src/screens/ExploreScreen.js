@@ -1,22 +1,15 @@
 import { useEffect, useState } from 'react';
-import {
-  Dimensions,
-  SafeAreaView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Dimensions, SafeAreaView, Text, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { useTailwind } from 'tailwind-rn';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
-import completeTask from '../api/endpoints/me/tasks/complete-task';
+import RedeemModal from '../components/RedeemModal';
+import TaskListModal from '../components/TaskListModal';
 import Wrapper from '../components/Wrapper';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
 
 export default function ExploreScreen() {
-  const tailwind = useTailwind();
   const [park, setPark] = useState(null);
   const [redeemables, setRedeemables] = useState(null);
   const [inRedeemZone, setInRedeemZone] = useState(null);
@@ -63,23 +56,31 @@ export default function ExploreScreen() {
     }
   }, [location, redeemables]);
 
-  const completeRedeemable = async (redeemable) => {
-    await completeTask(redeemable);
-  };
-
   return (
     <Wrapper>
-      <SafeAreaView style={tailwind('absolute justify-end w-full h-full z-50')}>
+      <SafeAreaView
+        style={{
+          position: 'absolute',
+          justifyContent: 'flex-end',
+          width: '100%',
+          height: '100%',
+          zIndex: 10,
+        }}
+      >
+        <View>
+          <View style={{ flexDirection: 'row' }}>
+            <TaskListModal
+              trigger={<Text>View task list</Text>}
+              redeemables={redeemables}
+            />
+          </View>
+        </View>
         {inRedeemZone && (
-          <View style={tailwind('flex-row justify-center')}>
-            <TouchableOpacity
-              onPress={() => {
-                completeRedeemable(inRedeemZone);
-              }}
-              style={tailwind('bg-indigo-500 p-4')}
-            >
-              <Text style={tailwind('text-white')}>Redeem zone</Text>
-            </TouchableOpacity>
+          <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+            <RedeemModal
+              trigger={<Text>Redeem zone</Text>}
+              redeemable={inRedeemZone}
+            />
           </View>
         )}
       </SafeAreaView>

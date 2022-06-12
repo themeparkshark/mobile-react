@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { SafeAreaView, Text } from 'react-native';
+import { SafeAreaView, Text, View } from 'react-native';
 import getPark from '../api/endpoints/parks/getPark';
 import getTasks from '../api/endpoints/parks/getTasks';
 
@@ -29,10 +29,10 @@ export default function ParkScreen({ route }) {
       <Text>Park tasks:</Text>
       {tasks?.map((task) => {
         return (
-          <>
+          <View key={task.id}>
             <Text>Task name: {task.name}</Text>
             <Text>Completed: {task.has_completed ? 'Yes' : 'No'}</Text>
-          </>
+          </View>
         );
       })}
     </SafeAreaView>
