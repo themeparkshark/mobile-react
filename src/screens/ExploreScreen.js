@@ -67,19 +67,25 @@ export default function ExploreScreen() {
           zIndex: 10,
         }}
       >
-        <View>
-          <View style={{ flexDirection: 'row' }}>
-            <TaskListModal
-              trigger={<Text>View task list</Text>}
-              redeemables={redeemables}
-            />
+        {park && (
+          <View>
+            <View style={{ flexDirection: 'row' }}>
+              <TaskListModal
+                trigger={<Text>View task list</Text>}
+                redeemables={redeemables}
+              />
+            </View>
           </View>
-        </View>
+        )}
         {inRedeemZone && (
           <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
             <RedeemModal
-              trigger={<Text>Redeem zone</Text>}
               redeemable={inRedeemZone}
+              onPress={() => {
+                currentRedeemables().then((response) => {
+                  setRedeemables(response);
+                });
+              }}
             />
           </View>
         )}

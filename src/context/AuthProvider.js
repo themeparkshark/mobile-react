@@ -35,6 +35,10 @@ export const AuthProvider = ({ children }) => {
               console.log(error);
             });
         },
+        logout: () => {
+          SecureStore.deleteItemAsync('user');
+          setUser(null);
+        },
       }}
     >
       {children}
