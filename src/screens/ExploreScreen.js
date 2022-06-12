@@ -103,6 +103,7 @@ export default function ExploreScreen() {
         scrollEnabled={false}
         pitchEnabled={false}
         loadingEnabled={true}
+        userInterfaceStyle={'light'}
       >
         {redeemables?.tasks.map((task) => {
           return (
