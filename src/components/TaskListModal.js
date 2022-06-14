@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import list from '../../assets/images/screens/explore/list.png';
 import completeTask from '../api/endpoints/me/tasks/complete-task';
+import Button from './Button';
 
 export default function RedeemModal({ redeemables, trigger }) {
   const [modalVisible, setModalVisible] = useState(false);
@@ -12,9 +14,20 @@ export default function RedeemModal({ redeemables, trigger }) {
 
   return (
     <>
-      <Pressable onPress={() => setModalVisible(true)}>
-        <Text>View task list</Text>
-      </Pressable>
+      <Button
+        onPress={() => {
+          setModalVisible(true);
+        }}
+      >
+        <Image
+          style={{
+            width: 80,
+            height: 80,
+            resizeMode: 'contain',
+          }}
+          source={list}
+        />
+      </Button>
       <Modal
         animationType="slide"
         transparent={true}

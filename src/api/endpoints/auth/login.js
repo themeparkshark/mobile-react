@@ -5,7 +5,5 @@ export default async function login(credential) {
     credential,
   });
 
-  console.log(response);
-
   return response.data;
 }

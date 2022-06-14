@@ -32,7 +32,7 @@ export default function Wrapper({ children }) {
     },
     {
       icon: profile,
-      screen: 'News',
+      screen: 'Profile',
       size: 'normal',
     },
   ];

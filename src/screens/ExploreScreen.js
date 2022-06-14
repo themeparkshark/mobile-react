@@ -20,7 +20,7 @@ export default function ExploreScreen() {
       getCurrentLocation().then((response) => {
         setLocation(response);
       });
-    }, 60 * 1000);
+    }, 10 * 1000);
 
     getCurrentLocation().then((response) => {
       setLocation(response);
@@ -56,10 +56,15 @@ export default function ExploreScreen() {
     }
   }, [location, redeemables]);
 
+  if (!location) {
+    return <View></View>;
+  }
+
   return (
     <Wrapper>
       <SafeAreaView
         style={{
+          display: 'none',
           position: 'absolute',
           justifyContent: 'flex-end',
           width: '100%',
@@ -91,19 +96,24 @@ export default function ExploreScreen() {
         )}
       </SafeAreaView>
       <MapView
-        showsUserLocation={true}
         style={{
           width: Dimensions.get('window').width,
           height: Dimensions.get('window').height,
         }}
-        followsUserLocation={true}
+        showsUserLocation={true}
         showsIndoors={false}
-        minZoomLevel={18}
+        zoomEnabled={true}
         rotateEnabled={false}
         scrollEnabled={false}
         pitchEnabled={false}
         loadingEnabled={true}
         userInterfaceStyle={'light'}
+        region={{
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.001,
+          longitudeDelta: 0.001,
+        }}
       >
         {redeemables?.tasks.map((task) => {
           return (
