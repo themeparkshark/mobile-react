@@ -6,6 +6,7 @@ import { AuthContext } from './context/AuthProvider';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
+import InventoryScreen from './screens/InventoryScreen';
 import NewsScreen from './screens/NewsScreen';
 import ParkScreen from './screens/ParkScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -46,6 +47,13 @@ const HomeStackNavigator = () => {
         options={{
           headerShown: true,
           title: '',
+        }}
+      />
+      <Stack.Screen
+        name="Inventory"
+        component={InventoryScreen}
+        options={{
+          animation: 'none',
         }}
       />
     </Stack.Navigator>
