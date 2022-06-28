@@ -6,8 +6,8 @@ export default async () => {
 
   try {
     const response = await currentPark(
-      location.coords.latitude,
-      location.coords.longitude
+      location.latitude,
+      location.longitude
     );
 
     return response.data;

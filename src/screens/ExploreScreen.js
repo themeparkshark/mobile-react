@@ -108,12 +108,7 @@ export default function ExploreScreen() {
         pitchEnabled={false}
         loadingEnabled={true}
         userInterfaceStyle={'light'}
-        region={{
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          latitudeDelta: 0.001,
-          longitudeDelta: 0.001,
-        }}
+        followsUserLocation={true}
       >
         {redeemables?.tasks.map((task) => {
           return (

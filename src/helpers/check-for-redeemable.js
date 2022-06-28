@@ -9,8 +9,8 @@ export default (redeemables, location) => {
     ...redeemables.pins,
   ].find((redeemable) => {
     return (
-      redeemable.latitude - location.coords.latitude <= 0.0006 &&
-      redeemable.longitude - location.coords.longitude <= 0.0006
+      redeemable.latitude - location.latitude <= 0.0006 &&
+      redeemable.longitude - location.longitude <= 0.0006
     );
   });
 
