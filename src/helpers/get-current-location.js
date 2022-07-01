@@ -8,5 +8,10 @@ export default async function () {
     return;
   }
 
-  return await Location.getCurrentPositionAsync();
+  const location = await Location.getCurrentPositionAsync();
+
+  return {
+    latitude: location.coords.latitude,
+    longitude: location.coords.longitude,
+  };
 }

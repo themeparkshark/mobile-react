@@ -23,9 +23,9 @@ export const AuthProvider = ({ children }) => {
             .then((response) => {
               const userResponse = {
                 token: response.token,
-                id: response.user.id,
-                username: response.user.username,
-                email: response.user.email,
+                id: response.data.id,
+                username: response.data.username,
+                email: response.data.email,
               };
 
               setUser(userResponse);
