@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Dimensions, SafeAreaView, Text, View } from 'react-native';
+import { Dimensions, Text, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import RedeemModal from '../components/RedeemModal';
@@ -8,6 +8,7 @@ import Wrapper from '../components/Wrapper';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
+import { BlurView } from 'expo-blur';
 
 export default function ExploreScreen() {
   const [park, setPark] = useState(null);
@@ -16,15 +17,11 @@ export default function ExploreScreen() {
   const [location, setLocation] = useState(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      getCurrentLocation().then((response) => {
-        setLocation(response);
-      });
-    }, 10 * 1000);
+    getCurrentLocation().then((response) => setLocation(response));
 
-    getCurrentLocation().then((response) => {
-      setLocation(response);
-    });
+    const interval = setInterval(() => {
+      getCurrentLocation().then((response) => setLocation(response));
+    }, 10 * 1000);
 
     return () => clearInterval(interval);
   }, []);
@@ -40,7 +37,7 @@ export default function ExploreScreen() {
         }
       });
     }
-  }, [location]);
+  }, [location?.latitude, location?.longitude]);
 
   useEffect(() => {
     if (park) {
@@ -48,42 +45,66 @@ export default function ExploreScreen() {
         setRedeemables(response);
       });
     }
-  }, [park]);
+  }, [park?.id]);
 
   useEffect(() => {
     if (location && redeemables) {
       setInRedeemZone(checkForRedeemable(redeemables, location));
     }
-  }, [location, redeemables]);
-
-  if (!location) {
-    return <View></View>;
-  }
+  }, [location?.latitude, location?.longitude, redeemables]);
 
   return (
     <Wrapper>
-      <SafeAreaView
-        style={{
-          display: 'none',
-          position: 'absolute',
-          justifyContent: 'flex-end',
-          width: '100%',
-          height: '100%',
-          zIndex: 10,
-        }}
-      >
+      {!park &&
+        <BlurView
+          intensity={80}
+          tint="dark"
+          style={{
+            zIndex: 10,
+            resizeMode: 'contain',
+            alignSelf: 'center',
+            position: 'absolute',
+            width: Dimensions.get('window').width,
+            height: Dimensions.get('window').height,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text
+            style={{
+              color: 'white',
+              fontSize: 32,
+              paddingLeft: 48,
+              paddingRight: 48,
+              textAlign: 'center',
+            }}
+          >You are not at a park right now.</Text>
+        </BlurView>
+      }
+      <View style={{ position: 'relative' }}>
         {park && (
-          <View>
-            <View style={{ flexDirection: 'row' }}>
-              <TaskListModal
-                trigger={<Text>View task list</Text>}
-                redeemables={redeemables}
-              />
-            </View>
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 90,
+              left: 12,
+              zIndex: 10,
+            }}
+          >
+            <TaskListModal redeemables={redeemables} />
           </View>
         )}
         {inRedeemZone && (
-          <View style={{ flexDirection: 'row', justifyContent: 'center' }}>
+          <View
+            style={{
+              position: 'absolute',
+              backgroundColor: 'red',
+              bottom: 90,
+              zIndex: 10,
+              flexDirection: 'row',
+              justifyContent: 'center',
+            }}
+          >
             <RedeemModal
               redeemable={inRedeemZone}
               onPress={() => {
@@ -94,34 +115,35 @@ export default function ExploreScreen() {
             />
           </View>
         )}
-      </SafeAreaView>
-      <MapView
-        style={{
-          width: Dimensions.get('window').width,
-          height: Dimensions.get('window').height,
-        }}
-        showsUserLocation={true}
-        showsIndoors={false}
-        zoomEnabled={true}
-        rotateEnabled={false}
-        scrollEnabled={false}
-        pitchEnabled={false}
-        loadingEnabled={true}
-        userInterfaceStyle={'light'}
-        followsUserLocation={true}
-      >
-        {redeemables?.tasks.map((task) => {
-          return (
-            <Marker
-              key={task.id}
-              coordinate={{
-                latitude: task.latitude,
-                longitude: task.longitude,
-              }}
-            />
-          );
-        })}
-      </MapView>
+        <MapView
+          style={{
+            width: Dimensions.get('window').width,
+            height: Dimensions.get('window').height,
+          }}
+          showsUserLocation={true}
+          showsIndoors={false}
+          zoomEnabled={true}
+          rotateEnabled={false}
+          scrollEnabled={false}
+          pitchEnabled={false}
+          loadingEnabled={true}
+          userInterfaceStyle={'light'}
+          followsUserLocation={true}
+        >
+
+          {redeemables?.tasks.map((task) => {
+            return (
+              <Marker
+                key={task.id}
+                coordinate={{
+                  latitude: task.latitude,
+                  longitude: task.longitude,
+                }}
+              />
+            );
+          })}
+        </MapView>
+      </View>
     </Wrapper>
   );
 }

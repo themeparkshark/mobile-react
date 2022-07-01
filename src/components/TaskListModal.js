@@ -1,16 +1,10 @@
 import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import list from '../../assets/images/screens/explore/list.png';
-import completeTask from '../api/endpoints/me/tasks/complete-task';
 import Button from './Button';
 
-export default function RedeemModal({ redeemables, trigger }) {
+export default function TaskListModal({ redeemables }) {
   const [modalVisible, setModalVisible] = useState(false);
-
-  const completeRedeemable = async () => {
-    await completeTask(redeemable);
-    setModalVisible(false);
-  };
 
   return (
     <>
