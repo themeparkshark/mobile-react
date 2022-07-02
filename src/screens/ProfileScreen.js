@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Button, SafeAreaView, Text } from 'react-native';
+import { Button, ScrollView, Text } from 'react-native';
 import me from '../api/endpoints/me/me';
 import Wrapper from '../components/Wrapper';
+import Topbar from '../components/Topbar';
 
 export default function NewsScreen({ navigation }) {
   const [user, setUser] = useState(null);
@@ -14,7 +15,8 @@ export default function NewsScreen({ navigation }) {
 
   return (
     <Wrapper>
-      <SafeAreaView>
+      <Topbar text={user?.username} />
+      <ScrollView>
         <Text>Username: {user?.username}</Text>
         <Text>Level: {user?.experience_level.level}</Text>
         <Text>
@@ -36,7 +38,7 @@ export default function NewsScreen({ navigation }) {
             />
           );
         })}
-      </SafeAreaView>
+      </ScrollView>
     </Wrapper>
   );
 }
