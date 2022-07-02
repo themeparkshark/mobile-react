@@ -42,6 +42,21 @@ export default function Playercard({ inventory, style }) {
             }}
           />
         )}
+        { inventory.pin_item && (
+          <Image
+            source={{
+              uri: inventory.pin_item.image_url,
+            }}
+            style={{
+              width: 40,
+              height: 40,
+              position: 'absolute',
+              left: 10,
+              top: 100,
+              resizeMode: 'contain',
+            }}
+          />
+        )}
         <Animated.View
           style={{
             position: 'absolute',
