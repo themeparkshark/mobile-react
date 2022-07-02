@@ -25,5 +25,6 @@ export default {
   },
   extra: {
     apiBaseUrl: process.env.API_BASE_URL,
+    assetsBaseUrl: process.env.ASSETS_BASE_URL,
   },
 };

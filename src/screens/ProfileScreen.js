@@ -1,43 +1,45 @@
 import { useEffect, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, Text, Image, View } from 'react-native';
-import me from '../api/endpoints/me/me';
-import parks from '../api/endpoints/me/visited-parks';
+import getMe from '../api/endpoints/me/me';
+import getParks from '../api/endpoints/me/visited-parks';
+import getInventory from '../api/endpoints/me/inventory';
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import Progress from '../components/Progress';
+import Playercard from '../components/Playercard';
 
 export default function NewsScreen({ navigation }) {
   const [user, setUser] = useState(null);
-  const [visitedParks, setVisitedParks] = useState(null);
+  const [parks, setParks] = useState(null);
+  const [inventory, setInventory] = useState(null);
 
   useEffect(() => {
-    me().then((response) => setUser(response));
-    parks().then((response) => setVisitedParks(response));
+    getMe().then((response) => setUser(response));
+    getParks().then((response) => setParks(response));
+    getInventory().then((response) => setInventory(response));
   }, []);
 
   return (
     <Wrapper>
       <Topbar text={user?.username} />
       <ScrollView>
-        <View
-          style={{
-            height: 300,
-            overflow: 'hidden',
-            backgroundColor: 'red'
-          }}
-        >
-          <Image
-            source={{
-              uri: user?.avatar_url
-            }}
+        { inventory && (
+          <View
             style={{
-              width: Dimensions.get('window').width,
-              height: 500,
-              marginTop: -70,
-              resizeMode: 'contain'
+              height: 300,
+              overflow: 'hidden',
+              position: 'relative',
             }}
-          />
-        </View>
+          >
+            <Playercard
+              inventory={inventory}
+              style={{
+                position: 'absolute',
+                marginTop: -90,
+              }}
+            />
+          </View>
+        )}
         <View
           style={{
             borderTopStyle: 'solid',
@@ -56,7 +58,7 @@ export default function NewsScreen({ navigation }) {
           <Text style={{ fontWeight: 'bold' }}>Total activity</Text>
           <Text>Total shark coins earned: {user?.total_coins}</Text>
           <Text>Shark coin balance: {user?.coins}</Text>
-          <Text>Parks visited: {visitedParks?.length}</Text>
+          <Text>Parks visited: {parks?.length}</Text>
           <Text>Total XP: {user?.total_experience}</Text>
         </View>
         <View
@@ -66,7 +68,7 @@ export default function NewsScreen({ navigation }) {
             paddingTop: 16,
           }}
         >
-          {visitedParks?.map((park) => {
+          {parks?.map((park) => {
             return (
               <Pressable
                 key={park.id}
