@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Dimensions, ImageBackground, SafeAreaView, Text, View } from 'react-native';
+import { Dimensions, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import RedeemModal from '../components/RedeemModal';
@@ -42,9 +42,7 @@ export default function ExploreScreen() {
 
   useEffect(() => {
     if (park) {
-      currentRedeemables().then((response) => {
-        setRedeemables(response);
-      });
+      currentRedeemables().then((response) => setRedeemables(response));
     }
   }, [park?.id]);
 
@@ -84,9 +82,7 @@ export default function ExploreScreen() {
               <RedeemModal
                 redeemable={inRedeemZone}
                 onPress={() => {
-                  currentRedeemables().then((response) => {
-                    setRedeemables(response);
-                  });
+                  currentRedeemables().then((response) => setRedeemables(response));
                 }}
               />
             </View>
@@ -102,7 +98,8 @@ export default function ExploreScreen() {
         showsIndoors={false}
         zoomEnabled={false}
         rotateEnabled={false}
-        scrollEnabled={true}
+        scrollEnabled={false}
+        followsUserLocation={true}
         pitchEnabled={false}
         loadingEnabled={true}
         userInterfaceStyle={'light'}
