@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Dimensions, Text, View } from 'react-native';
+import { Dimensions, ImageBackground, SafeAreaView, Text, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import RedeemModal from '../components/RedeemModal';
@@ -9,6 +9,7 @@ import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
 import { BlurView } from 'expo-blur';
+import topbar from '../../assets/images/screens/explore/topbar.png';
 
 export default function ExploreScreen() {
   const [park, setPark] = useState(null);
@@ -78,9 +79,46 @@ export default function ExploreScreen() {
               paddingRight: 48,
               textAlign: 'center',
             }}
-          >You are not at a park right now.</Text>
+          >
+            You are not at a park right now.
+          </Text>
         </BlurView>
       }
+      {park && (
+        <SafeAreaView
+          style={{
+            position: 'absolute',
+            top: 0,
+            zIndex: 10,
+            width: '100%',
+          }}
+        >
+          <ImageBackground
+            source={topbar}
+            resizeMode="cover"
+            style={{
+              height: 120,
+              top: -50,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+            }}
+          >
+            <Text
+              style={{
+                textAlign: 'center',
+                fontSize: 28,
+                color: 'white',
+                paddingLeft: 12,
+                paddingRight: 12,
+                paddingBottom: 28,
+              }}
+            >
+              {park.name}
+            </Text>
+          </ImageBackground>
+        </SafeAreaView>
+      )}
       <View style={{ position: 'relative' }}>
         {park && (
           <View
@@ -122,15 +160,13 @@ export default function ExploreScreen() {
           }}
           showsUserLocation={true}
           showsIndoors={false}
-          zoomEnabled={true}
+          zoomEnabled={false}
           rotateEnabled={false}
-          scrollEnabled={false}
+          scrollEnabled={true}
           pitchEnabled={false}
           loadingEnabled={true}
           userInterfaceStyle={'light'}
-          followsUserLocation={true}
         >
-
           {redeemables?.tasks.map((task) => {
             return (
               <Marker
