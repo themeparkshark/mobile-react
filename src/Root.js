@@ -10,6 +10,7 @@ import InventoryScreen from './screens/InventoryScreen';
 import NewsScreen from './screens/NewsScreen';
 import ParkScreen from './screens/ParkScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import EntryScreen from './screens/EntryScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -32,6 +33,14 @@ const HomeStackNavigator = () => {
         component={NewsScreen}
         options={{
           animation: 'none',
+        }}
+      />
+      <Stack.Screen
+        name="Entry"
+        component={EntryScreen}
+        options={{
+          headerShown: true,
+          title: '',
         }}
       />
       <Stack.Screen
