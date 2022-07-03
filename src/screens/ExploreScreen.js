@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Dimensions, ImageBackground, SafeAreaView, Text, View } from 'react-native';
+import { useEffect, useState, useContext } from 'react';
+import { Dimensions, Image, ImageBackground, SafeAreaView, Text, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import RedeemModal from '../components/RedeemModal';
@@ -10,12 +10,16 @@ import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
 import { BlurView } from 'expo-blur';
 import topbar from '../../assets/images/screens/explore/topbar.png';
+import inventory from '../../assets/images/screens/explore/inventory.png';
+import Button from '../components/Button';
+import { AuthContext } from '../context/AuthProvider';
 
 export default function ExploreScreen() {
   const [park, setPark] = useState(null);
   const [redeemables, setRedeemables] = useState(null);
   const [inRedeemZone, setInRedeemZone] = useState(null);
   const [location, setLocation] = useState(null);
+  const { user } = useContext(AuthContext);
 
   useEffect(() => {
     getCurrentLocation().then((response) => setLocation(response));
@@ -121,16 +125,56 @@ export default function ExploreScreen() {
       )}
       <View style={{ position: 'relative' }}>
         {park && (
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 90,
-              left: 12,
-              zIndex: 10,
-            }}
-          >
-            <TaskListModal redeemables={redeemables} />
-          </View>
+          <>
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 120,
+                left: 12,
+                zIndex: 10,
+              }}
+            >
+              <TaskListModal redeemables={redeemables} />
+            </View>
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 120,
+                right: 12,
+                zIndex: 10,
+              }}
+            >
+              <Button
+                onPress={() => {
+                  console.log('pressed');
+                }}
+              >
+                <ImageBackground
+                  style={{
+                    width: 70,
+                    height: 84,
+                    resizeMode: 'contain',
+                    position: 'relative',
+                  }}
+                  source={inventory}
+                >
+                  <Image
+                    style={{
+                      position: 'absolute',
+                      resizeMode: 'contain',
+                      width: 100,
+                      height: 100,
+                      left: -14,
+                      top: -10,
+                    }}
+                    source={{
+                      uri: user?.avatar_url
+                    }}
+                  />
+                </ImageBackground>
+              </Button>
+            </View>
+          </>
         )}
         {inRedeemZone && (
           <View
