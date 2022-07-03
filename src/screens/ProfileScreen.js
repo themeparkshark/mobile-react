@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Dimensions, Pressable, ScrollView, Text, Image, View } from 'react-native';
+import { Pressable, ScrollView, Text, Image, View } from 'react-native';
 import getMe from '../api/endpoints/me/me';
 import getParks from '../api/endpoints/me/visited-parks';
 import getInventory from '../api/endpoints/me/inventory';
@@ -26,7 +26,7 @@ export default function NewsScreen({ navigation }) {
         { inventory && (
           <View
             style={{
-              height: 300,
+              height: 350,
               overflow: 'hidden',
               position: 'relative',
             }}
@@ -35,7 +35,7 @@ export default function NewsScreen({ navigation }) {
               inventory={inventory}
               style={{
                 position: 'absolute',
-                marginTop: -90,
+                marginTop: -70,
               }}
             />
           </View>
