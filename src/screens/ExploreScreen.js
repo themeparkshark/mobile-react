@@ -13,6 +13,7 @@ import topbar from '../../assets/images/screens/explore/topbar.png';
 import inventory from '../../assets/images/screens/explore/inventory.png';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
+import * as RootNavigation from '../RootNavigation';
 
 export default function ExploreScreen() {
   const [park, setPark] = useState(null);
@@ -140,13 +141,13 @@ export default function ExploreScreen() {
               style={{
                 position: 'absolute',
                 bottom: 120,
-                right: 12,
+                right: 16,
                 zIndex: 10,
               }}
             >
               <Button
                 onPress={() => {
-                  console.log('pressed');
+                  RootNavigation.navigate('Inventory');
                 }}
               >
                 <ImageBackground
