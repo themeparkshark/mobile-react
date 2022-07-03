@@ -25,5 +25,6 @@ export default {
   },
   extra: {
     apiBaseUrl: process.env.API_BASE_URL,
+    cmsBaseUrl: process.env.CMS_API_BASE_URL,
   },
 };
