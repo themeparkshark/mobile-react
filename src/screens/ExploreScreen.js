@@ -61,7 +61,7 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              bottom: 90,
+              bottom: 30,
               left: 12,
               zIndex: 10,
             }}
@@ -71,12 +71,11 @@ export default function ExploreScreen() {
           {inRedeemZone && (
             <View
               style={{
+                bottom: 60,
                 position: 'absolute',
-                backgroundColor: 'red',
-                bottom: 90,
-                zIndex: 10,
+                alignSelf: 'center',
                 flexDirection: 'row',
-                justifyContent: 'center',
+                zIndex: 10,
               }}
             >
               <RedeemModal
