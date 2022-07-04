@@ -111,30 +111,33 @@ export default function InventoryScreen() {
                   key={item.id}
                   style={{
                     padding: 4,
-                    width: '33.333%',
+                    aspectRatio: 1,
                   }}
                 >
                   <Pressable
                     style={{
-                      padding: 16,
-                      backgroundColor: 'green',
+                      padding: 12,
+                      backgroundColor: Object.values(inventory).map(function (inventoryItem) {
+                        return inventoryItem?.id;
+                      }).includes(item.id) ? 'lightgreen' : 'lightblue',
                       borderType: 'solid',
                       borderWidth: 6,
                       borderColor: 'white',
                       borderRadius: 10,
+                      alignSelf: 'center',
                     }}
-                    onPress={() => {
-                      updateInventory(item).then((response) => setInventory(response));
-                    }}
+                    onPress={() => updateInventory(item).then((response) => setInventory(response))}
                   >
-                    <Text>
-                      {item.name}
-                    </Text>
-                    <Text>
-                      { Object.values(inventory).map(function (inventoryItem) {
-                        return inventoryItem?.id;
-                      }).includes(item.id) ? 'Yes' : 'No' }
-                    </Text>
+                    <Image
+                      source={{
+                        uri: item.icon_url,
+                      }}
+                      style={{
+                        width: 50,
+                        height: 50,
+                        resizeMode: 'contain',
+                      }}
+                    />
                   </Pressable>
                 </View>
               );
