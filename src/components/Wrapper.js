@@ -87,12 +87,12 @@ export default function Wrapper({ children }) {
                   >
                     <Image
                       style={{
-                        width: item.size === 'normal' ? 50 : 80,
-                        height: item.size === 'normal' ? 50 : 80,
+                        width: item.size === 'normal' ? 50 : 100,
+                        height: item.size === 'normal' ? 50 : 100,
                         resizeMode: 'contain',
                         alignSelf: 'center',
                         position: 'absolute',
-                        top: item.size === 'normal' ? 0 : -35,
+                        top: item.size === 'normal' ? 0 : -45,
                       }}
                       source={item.icon}
                     />
