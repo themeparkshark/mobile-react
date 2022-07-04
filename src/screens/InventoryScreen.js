@@ -1,4 +1,4 @@
-import { SafeAreaView, View, Pressable, Image, ScrollView, Text } from 'react-native';
+import { SafeAreaView, View, Pressable, Image, ScrollView } from 'react-native';
 import { useEffect, useState } from 'react';
 import Playercard from '../components/Playercard';
 import getInventory from '../api/endpoints/me/inventory';
@@ -13,9 +13,7 @@ export default function InventoryScreen() {
   const [items, setItems] = useState(null);
 
   useEffect(() => {
-    getInventory().then((response) => {
-      setInventory(response);
-    });
+    getInventory().then((response) => setInventory(response));
     getItemTypes().then((response) => {
       setItemTypes(response)
       setCurrentItemType(response[0]);
@@ -50,8 +48,8 @@ export default function InventoryScreen() {
             bottom: 0,
             borderColor: 'white',
             borderType: 'solid',
-            borderTopWidth: 4,
-            borderBottomWidth: 4,
+            borderTopWidth: 6,
+            borderBottomWidth: 6,
           }}
           horizontal={true}
         >

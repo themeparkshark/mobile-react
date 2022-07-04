@@ -24,12 +24,13 @@ export default function NewsScreen({ navigation }) {
       <Topbar text={user?.username} />
       <ScrollView>
         { inventory && (
-          <View
+          <Pressable
             style={{
               height: 350,
               overflow: 'hidden',
               position: 'relative',
             }}
+            onPress={() => navigation.navigate('Inventory')}
           >
             <Playercard
               inventory={inventory}
@@ -38,7 +39,7 @@ export default function NewsScreen({ navigation }) {
                 marginTop: -70,
               }}
             />
-          </View>
+          </Pressable>
         )}
         <View
           style={{
@@ -72,9 +73,7 @@ export default function NewsScreen({ navigation }) {
             return (
               <Pressable
                 key={park.id}
-                onPress={() =>
-                  navigation.navigate('Park', { park: park.id })
-                }
+                onPress={() => navigation.navigate('Park', { park: park.id })}
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
