@@ -1,4 +1,4 @@
-import { Image, ImageBackground, View, Text, SafeAreaView } from 'react-native';
+import { Image, ImageBackground, View, SafeAreaView } from 'react-native';
 import explore from '../../assets/images/toolbar/explore.png';
 import forum from '../../assets/images/toolbar/forum.png';
 import news from '../../assets/images/toolbar/news.png';
@@ -7,6 +7,7 @@ import social from '../../assets/images/toolbar/social.png';
 import toolbar from '../../assets/images/toolbar/toolbar.png';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
+import { Dimensions } from 'react-native';
 
 export default function Wrapper({ children }) {
   const items = [
@@ -14,46 +15,56 @@ export default function Wrapper({ children }) {
       icon: news,
       screen: 'News',
       size: 'normal',
+      hidden: false,
     },
     {
       icon: forum,
       screen: 'News',
       size: 'normal',
+      hidden: true,
     },
     {
       icon: explore,
       screen: 'Explore',
       size: 'large',
+      hidden: false,
     },
     {
       icon: social,
       screen: 'News',
       size: 'normal',
+      hidden: true,
     },
     {
       icon: profile,
       screen: 'Profile',
       size: 'normal',
+      hidden: false,
     },
   ];
 
   return (
-    <View style={{ flex: '1 1 0%' }}>
-      <View style={{ flex: '1 1 0%', position: 'relative' }}>
-        {children}
+    <View style={{ flex: 1 }}>
+      <View style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1 }}>
+          {children}
+        </SafeAreaView>
       </View>
-      <SafeAreaView>
+      <SafeAreaView
+        style={{
+          width: Dimensions.get('window').width,
+          marginBottom: -45,
+        }}
+      >
         <ImageBackground
           source={toolbar}
           resizeMode="cover"
           style={{
             height: 100,
-            bottom: -45,
           }}
         >
           <View
             style={{
-              height: 60,
               paddingLeft: 12,
               paddingRight: 12,
               display: 'flex',
@@ -65,6 +76,7 @@ export default function Wrapper({ children }) {
                 <View
                   key={key}
                   style={{
+                    display: item.hidden ? 'none' : 'flex',
                     flex: '1 1 0%',
                   }}
                 >
@@ -75,12 +87,12 @@ export default function Wrapper({ children }) {
                   >
                     <Image
                       style={{
-                        width: item.size === 'normal' ? 50 : 80,
-                        height: item.size === 'normal' ? 50 : 80,
+                        width: item.size === 'normal' ? 50 : 100,
+                        height: item.size === 'normal' ? 50 : 100,
                         resizeMode: 'contain',
                         alignSelf: 'center',
                         position: 'absolute',
-                        top: item.size === 'normal' ? 0 : -35,
+                        top: item.size === 'normal' ? 0 : -45,
                       }}
                       source={item.icon}
                     />
