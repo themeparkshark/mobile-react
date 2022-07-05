@@ -44,22 +44,156 @@ export default function NewsScreen({ navigation }) {
           style={{
             borderTopStyle: 'solid',
             borderTopWidth: 5,
-            borderTopColor: 'blue',
+            borderTopColor: '#09268f',
             paddingLeft: 64,
             paddingRight: 64,
             paddingTop: 32,
           }}
         >
-          <Text>Level: {user?.experience_level.level}</Text>
+          <Text
+            style={{
+              fontFamily: 'Knockout',
+              textTransform: 'uppercase',
+              textAlign: 'center',
+              fontSize: 32,
+              paddingBottom: 8,
+            }}
+          >
+            Level {user?.experience_level.level}
+          </Text>
           <Progress progress={user?.experience / user?.experience_level.experience * 100} />
-          <Text>
+          <Text
+            style={{
+              paddingTop: 8,
+              textAlign: 'center',
+              fontFamily: 'Knockout',
+              fontSize: 20,
+            }}
+          >
             {user?.experience} / {user?.experience_level.experience} XP
           </Text>
-          <Text style={{ fontWeight: 'bold' }}>Total activity</Text>
-          <Text>Total shark coins earned: {user?.total_coins}</Text>
-          <Text>Shark coin balance: {user?.coins}</Text>
-          <Text>Parks visited: {parks?.length}</Text>
-          <Text>Total XP: {user?.total_experience}</Text>
+          <Text
+            style={{
+              fontFamily: 'Knockout',
+              fontSize: 26,
+              textAlign: 'center',
+              textTransform: 'uppercase',
+              paddingTop: 32,
+              paddingBottom: 16,
+            }}
+          >
+            Total activity
+          </Text>
+          <View>
+            <View
+              style={{
+                flexDirection: 'row',
+              }}
+            >
+              <Text
+                style={{
+                  paddingRight: 12,
+                  flex: 1,
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 16,
+                }}
+              >
+                Total shark coins
+              </Text>
+              <Text
+                style={{
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 16,
+                  color: '#09268f',
+                }}
+              >
+                {user?.total_coins}
+              </Text>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+              }}
+            >
+              <Text
+                style={{
+                  paddingRight: 12,
+                  flex: 1,
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 16,
+                }}
+              >
+                Shark coin balance
+              </Text>
+              <Text
+                style={{
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 16,
+                  color: '#09268f',
+                }}
+              >
+                {user?.coins}
+              </Text>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+              }}
+            >
+              <Text
+                style={{
+                  paddingRight: 12,
+                  flex: 1,
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 16,
+                }}
+              >
+                Parks visited
+              </Text>
+              <Text
+                style={{
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 16,
+                  color: '#09268f',
+                }}
+              >
+                {parks?.length}
+              </Text>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+              }}
+            >
+              <Text
+                style={{
+                  paddingRight: 12,
+                  flex: 1,
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 16,
+                }}
+              >
+                Total XP
+              </Text>
+              <Text
+                style={{
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 16,
+                  color: '#09268f',
+                }}
+              >
+                {user?.total_experience}
+              </Text>
+            </View>
+          </View>
         </View>
         <View
           style={{
@@ -99,11 +233,25 @@ export default function NewsScreen({ navigation }) {
                     paddingLeft: 24,
                   }}
                 >
-                  <Text style={{ paddingBottom: 8 }}>
+                  <Text
+                    style={{
+                      paddingBottom: 8,
+                      fontFamily: 'Knockout',
+                      textTransform: 'uppercase',
+                      fontSize: 16,
+                    }}
+                  >
                     {park.name}
                   </Text>
                   <Progress progress={park.completion_rate} />
-                  <Text style={{ paddingTop: 8 }}>
+                  <Text
+                    style={{
+                      paddingTop: 8,
+                      fontFamily: 'Knockout',
+                      textTransform: 'uppercase',
+                      fontSize: 16,
+                    }}
+                  >
                     {park.completion_rate}% complete
                   </Text>
                 </View>

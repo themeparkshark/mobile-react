@@ -6,12 +6,12 @@ export default function Progress({ progress }) {
       style={{
         position: 'relative',
         width: '100%',
-        height: 20,
-        borderRadius: 5,
-        border: 3,
-        borderColor: 'red',
+        height: 23,
+        borderRadius: 10,
+        borderWidth: 3,
+        borderColor: '#09268f',
         borderStyle: 'solid',
-        backgroundColor: 'blue',
+        backgroundColor: '#09268f',
         overflow: 'hidden',
       }}
     >
@@ -20,7 +20,7 @@ export default function Progress({ progress }) {
           position: 'absolute',
           width: `${progress}%`,
           height: '100%',
-          backgroundColor: 'green',
+          backgroundColor: 'white',
         }}
       />
     </View>

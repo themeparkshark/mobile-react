@@ -10,6 +10,7 @@ import InventoryScreen from './screens/InventoryScreen';
 import NewsScreen from './screens/NewsScreen';
 import ParkScreen from './screens/ParkScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import { useFonts } from 'expo-font';
 
 const Stack = createNativeStackNavigator();
 
@@ -70,6 +71,11 @@ const AuthStackNavigator = () => {
 
 export default function App() {
   const { user, setUser } = useContext(AuthContext);
+
+  useFonts({
+    'Shark': require('../assets/fonts/shark-random-funnyness-2.ttf'),
+    'Knockout': require('../assets/fonts/knockout.otf'),
+  });
 
   useEffect(() => {
     SecureStore.getItemAsync('user')
