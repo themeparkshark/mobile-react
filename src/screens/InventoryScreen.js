@@ -159,6 +159,7 @@ export default function InventoryScreen() {
                           zIndex: 10,
                           alignItems: 'center',
                           justifyContent: 'center',
+                          borderRadius: 4,
                         }}
                       >
                         <FontAwesomeIcon
