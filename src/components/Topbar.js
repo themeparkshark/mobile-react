@@ -18,11 +18,18 @@ export default function Topbar({ text }) {
         <Text
           style={{
             textAlign: 'center',
-            fontSize: 28,
+            fontSize: 42,
             color: 'white',
             paddingLeft: 12,
             paddingRight: 12,
-            paddingBottom: 28,
+            paddingBottom: 20,
+            fontFamily: 'Shark',
+            textTransform: 'uppercase',
+            textShadowOffset: {
+              width: -1,
+            },
+            textShadowColor: '#09268f',
+            textShadowRadius: 5,
           }}
         >
           {text}

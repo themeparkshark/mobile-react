@@ -21,12 +21,8 @@ export const AuthProvider = ({ children }) => {
         login: (credential) => {
           login(credential)
             .then((response) => {
-              const userResponse = {
-                token: response.token,
-                id: response.data.id,
-                username: response.data.username,
-                email: response.data.email,
-              };
+              const userResponse = response.data;
+              userResponse.token = response.token;
 
               setUser(userResponse);
               SecureStore.setItemAsync('user', JSON.stringify(userResponse));

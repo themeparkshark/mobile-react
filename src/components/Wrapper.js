@@ -15,26 +15,31 @@ export default function Wrapper({ children }) {
       icon: news,
       screen: 'News',
       size: 'normal',
+      hidden: false,
     },
     {
       icon: forum,
       screen: 'News',
       size: 'normal',
+      hidden: true,
     },
     {
       icon: explore,
       screen: 'Explore',
       size: 'large',
+      hidden: false,
     },
     {
       icon: social,
       screen: 'News',
       size: 'normal',
+      hidden: true,
     },
     {
       icon: profile,
       screen: 'Profile',
       size: 'normal',
+      hidden: false,
     },
   ];
 
@@ -71,6 +76,7 @@ export default function Wrapper({ children }) {
                 <View
                   key={key}
                   style={{
+                    display: item.hidden ? 'none' : 'flex',
                     flex: '1 1 0%',
                   }}
                 >
@@ -81,12 +87,12 @@ export default function Wrapper({ children }) {
                   >
                     <Image
                       style={{
-                        width: item.size === 'normal' ? 50 : 80,
-                        height: item.size === 'normal' ? 50 : 80,
+                        width: item.size === 'normal' ? 50 : 100,
+                        height: item.size === 'normal' ? 50 : 100,
                         resizeMode: 'contain',
                         alignSelf: 'center',
                         position: 'absolute',
-                        top: item.size === 'normal' ? 0 : -35,
+                        top: item.size === 'normal' ? 0 : -45,
                       }}
                       source={item.icon}
                     />

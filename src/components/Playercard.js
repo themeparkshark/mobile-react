@@ -29,7 +29,7 @@ export default function Playercard({ inventory, style }) {
           position: 'relative',
         }}
       >
-        { inventory.background_item && (
+        { inventory?.background_item && (
           <Image
             source={{
               uri: inventory.background_item.paper_url,
@@ -42,7 +42,7 @@ export default function Playercard({ inventory, style }) {
             }}
           />
         )}
-        { inventory.pin_item && (
+        { inventory?.pin_item && (
           <Image
             source={{
               uri: inventory.pin_item.image_url,
@@ -77,7 +77,7 @@ export default function Playercard({ inventory, style }) {
               marginTop: '5%',
             }}
           >
-            { inventory.skin_item && (
+            { inventory?.skin_item && (
               <Image
                 source={{
                   uri: inventory.skin_item.paper_url
@@ -91,7 +91,7 @@ export default function Playercard({ inventory, style }) {
               }}
               style={styles.image}
             />
-            { inventory.face_item && (
+            { inventory?.face_item && (
               <Image
                 source={{
                   uri: inventory.face_item.paper_url
@@ -99,7 +99,7 @@ export default function Playercard({ inventory, style }) {
                 style={styles.image}
               />
             )}
-            { inventory.body_item && (
+            { inventory?.body_item && (
               <Image
                 source={{
                   uri: inventory.body_item.paper_url
@@ -107,7 +107,7 @@ export default function Playercard({ inventory, style }) {
                 style={styles.image}
               />
             )}
-            { inventory.neck_item && (
+            { inventory?.neck_item && (
               <Image
                 source={{
                   uri: inventory.neck_item.paper_url
@@ -115,7 +115,7 @@ export default function Playercard({ inventory, style }) {
                 style={styles.image}
               />
             )}
-            { inventory.hand_item && (
+            { inventory?.hand_item && (
               <Image
                 source={{
                   uri: inventory.hand_item.paper_url
@@ -123,7 +123,7 @@ export default function Playercard({ inventory, style }) {
                 style={styles.image}
               />
             )}
-            { inventory.hand_item && (
+            { inventory?.head_item && (
               <Image
                 source={{
                   uri: inventory.head_item.paper_url
