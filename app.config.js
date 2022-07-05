@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 export default {
-  name: 'mobile-react',
+  name: 'Theme Park Shark',
   slug: 'mobile-react',
   version: '1.0.0',
   orientation: 'portrait',
