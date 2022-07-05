@@ -54,7 +54,8 @@ const HomeStackNavigator = () => {
         name="Inventory"
         component={InventoryScreen}
         options={{
-          animation: 'none',
+          headerShown: true,
+          title: '',
         }}
       />
     </Stack.Navigator>

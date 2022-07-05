@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Dimensions, View } from 'react-native';
+import { useEffect, useState, useContext } from 'react';
+import { Dimensions, Image, ImageBackground, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import RedeemModal from '../components/RedeemModal';
@@ -8,6 +8,10 @@ import Wrapper from '../components/Wrapper';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
+import inventory from '../../assets/images/screens/explore/inventory.png';
+import Button from '../components/Button';
+import { AuthContext } from '../context/AuthProvider';
+import * as RootNavigation from '../RootNavigation';
 import NotAtPark from './ExploreScreen/NotAtPark';
 import Topbar from '../components/Topbar';
 
@@ -16,6 +20,7 @@ export default function ExploreScreen() {
   const [redeemables, setRedeemables] = useState(null);
   const [inRedeemZone, setInRedeemZone] = useState(null);
   const [location, setLocation] = useState(null);
+  const { user } = useContext(AuthContext);
 
   useEffect(() => {
     getCurrentLocation().then((response) => setLocation(response));
@@ -61,12 +66,50 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              bottom: 90,
+              bottom: 30,
               left: 12,
               zIndex: 10,
             }}
           >
             <TaskListModal redeemables={redeemables} />
+          </View>
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 30,
+              right: 16,
+              zIndex: 10,
+            }}
+          >
+            <Button
+              onPress={() => {
+                RootNavigation.navigate('Inventory');
+              }}
+            >
+              <ImageBackground
+                style={{
+                  width: 70,
+                  height: 84,
+                  resizeMode: 'contain',
+                  position: 'relative',
+                }}
+                source={inventory}
+              >
+                <Image
+                  style={{
+                    position: 'absolute',
+                    resizeMode: 'contain',
+                    width: 100,
+                    height: 100,
+                    left: -14,
+                    top: -10,
+                  }}
+                  source={{
+                    uri: user?.avatar_url
+                  }}
+                />
+              </ImageBackground>
+            </Button>
           </View>
           {inRedeemZone && (
             <View
