@@ -200,6 +200,7 @@ export default function NewsScreen({ navigation }) {
             paddingLeft: 16,
             paddingRight: 16,
             paddingTop: 16,
+            paddingBottom: 32,
           }}
         >
           {parks?.map((park) => {
