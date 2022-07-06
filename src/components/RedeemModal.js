@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ImageBackground, Dimensions, Image, Modal, Pressable, Text, View } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { Animated, ImageBackground, Dimensions, Image, Modal, Pressable, Text, View } from 'react-native';
 import completeTask from '../api/endpoints/me/tasks/complete-task';
 import redeem from '../../assets/images/screens/explore/redeem.png';
 import collect from '../../assets/images/screens/explore/collect.png';
@@ -7,9 +7,19 @@ import watch from '../../assets/images/screens/explore/watch.png';
 import xp from '../../assets/images/screens/explore/xp.png';
 import coins from '../../assets/images/screens/explore/coins.png';
 import Button from './Button';
+import Lottie from 'lottie-react-native';
 
 export default function RedeemModal({ redeemable, onPress }) {
   const [modalVisible, setModalVisible] = useState(false);
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(Animated.timing(progress, {
+      toValue: 1,
+      duration: 2250,
+      useNativeDriver: true,
+    })).start();
+  }, []);
 
   const completeRedeemable = async () => {
     await completeTask(redeemable);
@@ -44,7 +54,19 @@ export default function RedeemModal({ redeemable, onPress }) {
             justifyContent: 'center',
           }}
         >
-          <Pressable
+          <Lottie
+            source={require('../../assets/animations/confetti.json')}
+            progress={progress}
+            style={{
+              position: 'absolute',
+              width: 900,
+              height: 400,
+              zIndex: 20,
+              top: 15,
+              left: -80,
+            }}
+          />
+          <View
             style={{
               position: 'absolute',
               width: '100%',
@@ -52,7 +74,6 @@ export default function RedeemModal({ redeemable, onPress }) {
               alignSelf: 'center',
               backgroundColor: 'rgba(0, 0, 0, .7)',
             }}
-            onPress={() => setModalVisible(false)}
           />
           <ImageBackground
             source={redeem}
@@ -66,6 +87,7 @@ export default function RedeemModal({ redeemable, onPress }) {
               right: 0,
               margin: 'auto',
               position: 'relative',
+              zIndex: 20,
             }}
           >
             <Text
