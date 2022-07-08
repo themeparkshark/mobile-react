@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { createContext, useEffect, useState } from 'react';
 import client from '../api/client';
 import login from '../api/endpoints/auth/login';
+import * as RootNavigation from '../RootNavigation';
 
 export const AuthContext = createContext();
 
@@ -26,6 +27,7 @@ export const AuthProvider = ({ children }) => {
 
               setUser(userResponse);
               SecureStore.setItemAsync('user', JSON.stringify(userResponse));
+              RootNavigation.navigate('Loading');
             })
             .catch((error) => {
               console.log(error);
