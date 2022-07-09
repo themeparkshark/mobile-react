@@ -8,9 +8,9 @@ import Wrapper from '../components/Wrapper';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
-import inventory from '../../assets/images/screens/explore/inventory.png';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
+import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
 import NotAtPark from './ExploreScreen/NotAtPark';
 import Topbar from '../components/Topbar';
@@ -21,6 +21,7 @@ export default function ExploreScreen() {
   const [inRedeemZone, setInRedeemZone] = useState(null);
   const [location, setLocation] = useState(null);
   const { user } = useContext(AuthContext);
+  const { theme } = useContext(ThemeContext);
 
   useEffect(() => {
     getCurrentLocation().then((response) => setLocation(response));
@@ -93,7 +94,9 @@ export default function ExploreScreen() {
                   resizeMode: 'contain',
                   position: 'relative',
                 }}
-                source={inventory}
+                source={{
+                  uri: theme.base_button_url
+                }}
               >
                 <Image
                   style={{

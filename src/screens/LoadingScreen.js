@@ -22,7 +22,7 @@ export default function LoadingScreen() {
         return RootNavigation.navigate('Error');
       }
 
-      setTheme(theme);
+      setTheme(theme.data.data);
       setLoading(false);
     });
   }, []);

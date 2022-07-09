@@ -5,16 +5,18 @@ import getInventory from '../api/endpoints/me/inventory';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
 import updateInventory from '../api/endpoints/me/inventory/update-inventory';
-import background from '../../assets/images/screens/inventory/background.png';
 import shark from '../../assets/images/screens/inventory/shark.png';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
+import { useContext } from 'react';
+import { ThemeContext } from '../context/ThemeProvider';
 
 export default function InventoryScreen() {
   const [inventory, setInventory] = useState(null);
   const [itemTypes, setItemTypes] = useState(null);
   const [currentItemType, setCurrentItemType] = useState(null);
   const [items, setItems] = useState(null);
+  const { theme } = useContext(ThemeContext);
 
   useEffect(() => {
     getInventory().then((response) => setInventory(response));
@@ -96,7 +98,9 @@ export default function InventoryScreen() {
       </View>
       { inventory && (
         <ImageBackground
-          source={background}
+          source={{
+            uri: theme.shark_background_url,
+          }}
           style={{
             width: '100%',
             height: '100%',

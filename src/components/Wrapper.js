@@ -1,42 +1,39 @@
-import { Image, ImageBackground, View, SafeAreaView } from 'react-native';
-import explore from '../../assets/images/toolbar/explore.png';
-import forum from '../../assets/images/toolbar/forum.png';
-import news from '../../assets/images/toolbar/news.png';
-import profile from '../../assets/images/toolbar/profile.png';
-import social from '../../assets/images/toolbar/social.png';
-import toolbar from '../../assets/images/toolbar/toolbar.png';
+import { Dimensions, Image, ImageBackground, View, SafeAreaView } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
-import { Dimensions } from 'react-native';
+import { useContext } from 'react';
+import { ThemeContext} from '../context/ThemeProvider';
 
 export default function Wrapper({ children }) {
+  const { theme } = useContext(ThemeContext);
+
   const items = [
     {
-      icon: news,
+      icon: theme.news_button_url,
       screen: 'News',
       size: 'normal',
       hidden: false,
     },
     {
-      icon: forum,
+      icon: theme.news_button_url,
       screen: 'News',
       size: 'normal',
       hidden: true,
     },
     {
-      icon: explore,
+      icon: theme.explore_button_url,
       screen: 'Explore',
       size: 'large',
       hidden: false,
     },
     {
-      icon: social,
+      icon: theme.news_button_url,
       screen: 'News',
       size: 'normal',
       hidden: true,
     },
     {
-      icon: profile,
+      icon: theme.profile_button_url,
       screen: 'Profile',
       size: 'normal',
       hidden: false,
@@ -57,7 +54,9 @@ export default function Wrapper({ children }) {
         }}
       >
         <ImageBackground
-          source={toolbar}
+          source={{
+            uri: theme.bottom_bar_url,
+          }}
           resizeMode="cover"
           style={{
             height: 100,
@@ -94,7 +93,9 @@ export default function Wrapper({ children }) {
                         position: 'absolute',
                         top: item.size === 'normal' ? 0 : -45,
                       }}
-                      source={item.icon}
+                      source={{
+                        uri: item.icon,
+                      }}
                     />
                   </Button>
                 </View>

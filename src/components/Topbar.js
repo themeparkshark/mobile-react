@@ -1,11 +1,16 @@
 import { ImageBackground, SafeAreaView, Text } from 'react-native';
-import topbar from '../../assets/images/screens/explore/topbar.png';
+import { ThemeContext} from '../context/ThemeProvider';
+import { useContext } from 'react';
 
 export default function Topbar({ text }) {
+  const { theme } = useContext(ThemeContext);
+
   return (
     <SafeAreaView>
       <ImageBackground
-        source={topbar}
+        source={{
+          uri: theme.top_bar_url,
+        }}
         resizeMode="cover"
         style={{
           height: 120,
