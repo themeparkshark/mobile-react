@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, Image, View } from 'react-native';
 import getMe from '../api/endpoints/me/me';
 import getParks from '../api/endpoints/me/visited-parks';
@@ -7,11 +7,13 @@ import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import Progress from '../components/Progress';
 import Playercard from '../components/Playercard';
+import { ThemeContext } from '../context/ThemeProvider';
 
 export default function NewsScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [parks, setParks] = useState(null);
   const [inventory, setInventory] = useState(null);
+  const { theme } = useContext(ThemeContext);
 
   useEffect(() => {
     getMe().then((response) => setUser(response));
@@ -45,7 +47,7 @@ export default function NewsScreen({ navigation }) {
           style={{
             borderTopStyle: 'solid',
             borderTopWidth: 5,
-            borderTopColor: '#09268f',
+            borderTopColor: theme.primary_color,
             paddingLeft: 64,
             paddingRight: 64,
             paddingTop: 32,
@@ -107,7 +109,7 @@ export default function NewsScreen({ navigation }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: '#09268f',
+                  color: theme.primary_color,
                 }}
               >
                 {user?.total_coins}
@@ -134,7 +136,7 @@ export default function NewsScreen({ navigation }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: '#09268f',
+                  color: theme.primary_color,
                 }}
               >
                 {user?.coins}
@@ -161,7 +163,7 @@ export default function NewsScreen({ navigation }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: '#09268f',
+                  color: theme.primary_color,
                 }}
               >
                 {parks?.length}
@@ -188,7 +190,7 @@ export default function NewsScreen({ navigation }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: '#09268f',
+                  color: theme.primary_color,
                 }}
               >
                 {user?.total_experience}

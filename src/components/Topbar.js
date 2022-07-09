@@ -33,7 +33,7 @@ export default function Topbar({ text }) {
             textShadowOffset: {
               width: -1,
             },
-            textShadowColor: '#09268f',
+            textShadowColor: theme.primary_color,
             textShadowRadius: 5,
           }}
         >
