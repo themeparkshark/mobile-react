@@ -11,6 +11,7 @@ import NewsScreen from './screens/NewsScreen';
 import ParkScreen from './screens/ParkScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import LoadingScreen from './screens/LoadingScreen';
+import ErrorScreen from './screens/ErrorScreen';
 import { useFonts } from 'expo-font';
 
 const Stack = createNativeStackNavigator();
@@ -25,6 +26,13 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Loading"
         component={LoadingScreen}
+        options={{
+          animation: 'none',
+        }}
+      />
+      <Stack.Screen
+        name="Error"
+        component={ErrorScreen}
         options={{
           animation: 'none',
         }}

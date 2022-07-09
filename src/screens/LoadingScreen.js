@@ -1,20 +1,30 @@
 import { View, Text } from 'react-native';
 import { useEffect, useContext, useState } from 'react';
-import currentTheme from '../api/endpoints/current-theme/current-theme';
 import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
+import client from '../api/client';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
   const { setTheme } = useContext(ThemeContext);
 
   useEffect(() => {
-    (async () => {
-      const response = await currentTheme();
-      setTheme(response);
+    Promise.all([
+      client.get('/health'),
+      client.get('/current-theme'),
+    ]).then((responses) => {
+      const [health, theme] = responses;
 
+      if (
+        health.status !== 200
+        || health.data.checkResults.filter((result) => result.status === 'failed').length)
+      {
+        return RootNavigation.navigate('Error');
+      }
+
+      setTheme(theme);
       setLoading(false);
-    })();
+    });
   }, []);
 
   useEffect(() => {
