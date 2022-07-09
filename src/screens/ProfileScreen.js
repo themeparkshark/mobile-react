@@ -3,22 +3,27 @@ import { Pressable, ScrollView, Text, Image, View } from 'react-native';
 import getMe from '../api/endpoints/me/me';
 import getParks from '../api/endpoints/me/visited-parks';
 import getInventory from '../api/endpoints/me/inventory';
+import getStores from '../api/endpoints/stores/stores';
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import Progress from '../components/Progress';
 import Playercard from '../components/Playercard';
 import { ThemeContext } from '../context/ThemeProvider';
+import Button from '../components/Button';
+import * as RootNavigation from '../RootNavigation';
 
 export default function NewsScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [parks, setParks] = useState(null);
   const [inventory, setInventory] = useState(null);
+  const [stores, setStores] = useState(null);
   const { theme } = useContext(ThemeContext);
 
   useEffect(() => {
     getMe().then((response) => setUser(response));
     getParks().then((response) => setParks(response));
     getInventory().then((response) => setInventory(response));
+    getStores().then((response) => setStores(response));
   }, []);
 
   return (
@@ -75,6 +80,52 @@ export default function NewsScreen({ navigation }) {
           >
             {user?.experience} / {user?.experience_level.experience} XP
           </Text>
+          <View
+            style={{
+              paddingTop: 32,
+              paddingBottom: 16,
+              flexDirection: 'row',
+              justifyContent: 'center',
+            }}
+          >
+            {stores?.map((store) => {
+              return (
+                <Pressable
+                  key={store.id}
+                >
+                  <Button
+                    onPress={() => {
+                      RootNavigation.navigate('Store', {
+                        store: store.id,
+                      });
+                    }}
+                  >
+                    <Image
+                      source={{
+                        uri: store.icon_url,
+                      }}
+                      style={{
+                        width: 70,
+                        height: 70,
+                      }}
+                      resizeMode="contain"
+                    />
+                  </Button>
+                  <Text
+                    style={{
+                      paddingTop: 8,
+                      textAlign: 'center',
+                      fontFamily: 'Knockout',
+                      textTransform: 'uppercase',
+                      fontSize: 20,
+                    }}
+                  >
+                    {store.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
           <Text
             style={{
               fontFamily: 'Knockout',
