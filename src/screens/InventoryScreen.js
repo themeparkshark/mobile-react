@@ -10,6 +10,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
 import { useContext } from 'react';
 import { ThemeContext } from '../context/ThemeProvider';
+import Topbar from '../components/Topbar';
 
 export default function InventoryScreen() {
   const [inventory, setInventory] = useState(null);
@@ -33,6 +34,10 @@ export default function InventoryScreen() {
         flex: 1,
       }}
     >
+      <Topbar
+        showBackBar={true}
+        text="Inventory"
+      />
       <View
         style={{
           height: 400,

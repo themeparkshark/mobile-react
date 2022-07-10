@@ -1,0 +1,100 @@
+import { Image, ImageBackground, Text, View } from 'react-native';
+import coins from '../../../assets/images/coins.png';
+import gradient from '../../../assets/images/screens/store/gradient.png';
+import shark from '../../../assets/images/screens/inventory/shark.png';
+
+export default function Item({ item }) {
+
+  return (
+    <View
+      style={{
+        borderRadius: 6,
+        borderColor: '#fff',
+        borderWidth: 3,
+        borderStyle: 'solid',
+        shadowOffset: {
+          width: 0,
+          height: 3
+        },
+        shadowOpacity: .4,
+        shadowRadius: 0,
+      }}
+    >
+      <ImageBackground
+        source={gradient}
+        style={{
+          width: 100,
+          resizeMode: 'cover',
+          overflow: 'hidden',
+        }}
+      >
+        <View
+          style={{
+            padding: 10,
+          }}
+        >
+          { item.item_type.name === 'Body item' ? (
+            <ImageBackground
+              source={shark}
+              style={{
+                margin: -12,
+              }}
+            >
+              <Image
+                source={{
+                  uri: item.paper_url,
+                }}
+                style={{
+                  aspectRatio: 1,
+                  resizeMode: 'contain',
+                }}
+              />
+            </ImageBackground>
+          ) : (
+            <Image
+              source={{
+                uri: item.icon_url,
+              }}
+              style={{
+                width: '100%',
+                height: 80,
+                resizeMode: 'contain',
+              }}
+            />
+          )}
+        </View>
+        <View
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, .5)',
+            paddingLeft: 8,
+            paddingRight: 8,
+            paddingTop: 4,
+            paddingBottom: 4,
+            flexDirection: 'row',
+            justifyContent: 'center',
+          }}
+        >
+          <Image
+            source={coins}
+            style={{
+              width: 15,
+              height: 15,
+              resizeMode: 'contain',
+              marginRight: 8,
+            }}
+          />
+          <Text
+            style={{
+              textAlign: 'center',
+              color: '#fff',
+              fontFamily: 'Knockout',
+              fontSize: 16,
+            }}
+          >
+            {item.cost}
+          </Text>
+        </View>
+      </ImageBackground>
+    </View>
+  );
+}

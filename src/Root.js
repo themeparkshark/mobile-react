@@ -41,9 +41,6 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Store"
         component={StoreScreen}
-        options={{
-          animation: 'none',
-        }}
       />
       <Stack.Screen
         name="Explore"
@@ -77,10 +74,6 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Inventory"
         component={InventoryScreen}
-        options={{
-          headerShown: true,
-          title: '',
-        }}
       />
     </Stack.Navigator>
   );
