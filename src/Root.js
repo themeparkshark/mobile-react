@@ -1,6 +1,5 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import * as SecureStore from 'expo-secure-store';
 import { useContext, useEffect } from 'react';
 import { AuthContext } from './context/AuthProvider';
 import { navigationRef } from './RootNavigation';
@@ -14,6 +13,7 @@ import LoadingScreen from './screens/LoadingScreen';
 import ErrorScreen from './screens/ErrorScreen';
 import StoreScreen from './screens/StoreScreen';
 import { useFonts } from 'expo-font';
+import { Storage } from 'expo-storage';
 
 const Stack = createNativeStackNavigator();
 
@@ -96,16 +96,13 @@ export default function App() {
   });
 
   useEffect(() => {
-    SecureStore.getItemAsync('user')
-      .then((userString) => {
-        if (userString) {
-          const userStr = JSON.parse(userString);
-          setUser({ ...userStr });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-      });
+    Storage.getItem({ key: 'user' }).then((userString) => {
+      if (userString) {
+        setUser({ ...JSON.parse(userString) });
+      }
+    }).catch((err) => {
+      console.log(err);
+    });
   }, []);
 
   return (

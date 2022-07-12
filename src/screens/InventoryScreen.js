@@ -151,10 +151,12 @@ export default function InventoryScreen() {
                         position: 'relative',
                         width: '100%',
                       }}
-                      onPress={() => updateInventory(item).then((response) => {
-                        updateUser();
-                        setInventory(response);
-                      })}
+                      onPress={() => {
+                        updateInventory(item).then((response) => {
+                          updateUser();
+                          setInventory(response);
+                        })
+                      }}
                     >
                       <View
                         style={{

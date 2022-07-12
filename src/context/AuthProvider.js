@@ -4,7 +4,7 @@ import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import * as RootNavigation from '../RootNavigation';
 import getMe from '../api/endpoints/me/me';
-
+import Storage from 'expo-storage';
 
 export const AuthContext = createContext({
   user: null,
@@ -19,7 +19,7 @@ export const AuthContext = createContext({
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [inventory, setInventory] = useState(null);
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState('');
 
   useEffect(() => {
     const { headers } = client.defaults;
@@ -27,44 +27,36 @@ export const AuthProvider = ({ children }) => {
   }, [token, user]);
 
   useEffect(() => {
-    SecureStore.getItemAsync("token").then(_token => {
+    SecureStore.getItemAsync('token').then(_token => {
       if (_token) {
         setToken(_token);
       }
-    })
-  }, [])
-
-  useEffect(() => {
-    if (user?.token || token) {
-      setTimeout(() => {
-        updateUser();
-      }, 1500)
-    }
-  }, [token, user])
+    });
+  }, []);
 
   const requestLogin = async (credential) => {
     try {
+      console.log('test');
       const response = await login(credential);
-      const userResponse = response.data;
-      userResponse.token = response.token;
       setToken(response.token);
 
-      SecureStore.setItemAsync("token", response.token).then(() => {
-        RootNavigation.navigate('Loading');
-      })
+      await SecureStore.setItemAsync('token', response.token);
+      await updateUser();
 
+      RootNavigation.navigate('Loading');
     } catch (error) {
       console.log(error);
     }
   }
 
   const updateUser = () => {
-    getMe().then(_user => {
-      if (_user) {
-        console.log("User was refreshed");
-        setUser(_user);
-        SecureStore.setItemAsync('user', JSON.stringify({ ..._user }));
-      }
+    getMe().then((_user) => {
+      setUser(_user);
+
+      Storage.setItem({
+        key: 'user',
+        value: JSON.stringify({ ..._user })
+      });
     }).catch(error => {
       console.log(error);
     })
@@ -72,8 +64,8 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await SecureStore.deleteItemAsync("user");
-      await SecureStore.deleteItemAsync("token");
+      await Storage.removeItem({ key: 'user' })
+      await SecureStore.deleteItemAsync('token');
       setUser(null);
     } catch (error) {
       console.log(error);
