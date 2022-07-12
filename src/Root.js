@@ -14,6 +14,7 @@ import ErrorScreen from './screens/ErrorScreen';
 import StoreScreen from './screens/StoreScreen';
 import { useFonts } from 'expo-font';
 import { Storage } from 'expo-storage';
+import SettingsScreen from './screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -74,6 +75,10 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Inventory"
         component={InventoryScreen}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
       />
     </Stack.Navigator>
   );

@@ -36,7 +36,6 @@ export const AuthProvider = ({ children }) => {
 
   const requestLogin = async (credential) => {
     try {
-      console.log('test');
       const response = await login(credential);
       setToken(response.token);
 
