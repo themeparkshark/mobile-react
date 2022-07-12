@@ -1,9 +1,8 @@
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
-import { Button, SafeAreaView } from 'react-native';
+import { Button, SafeAreaView, Text } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import { useContext } from 'react';
-import * as RootNavigation from '../RootNavigation';
 
 export default function SettingsScreen() {
   const { logout } = useContext(AuthContext);
@@ -12,6 +11,10 @@ export default function SettingsScreen() {
     <Wrapper>
       <Topbar text="Settings" />
       <SafeAreaView>
+        <Text>Update email</Text>
+        <Text>Sound volume</Text>
+        <Text>Delete account</Text>
+        <Text>Views Terms and Conditions</Text>
         <Button
           onPress={() => {
             logout();
