@@ -30,6 +30,7 @@ const HomeStackNavigator = () => {
         component={LoadingScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -37,6 +38,7 @@ const HomeStackNavigator = () => {
         component={ErrorScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -48,6 +50,7 @@ const HomeStackNavigator = () => {
         component={ExploreScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -55,6 +58,7 @@ const HomeStackNavigator = () => {
         component={NewsScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -62,6 +66,7 @@ const HomeStackNavigator = () => {
         component={ProfileScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -81,6 +86,7 @@ const HomeStackNavigator = () => {
         component={SettingsScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
     </Stack.Navigator>
