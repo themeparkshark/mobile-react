@@ -79,6 +79,9 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
+        options={{
+          animation: 'none',
+        }}
       />
     </Stack.Navigator>
   );
