@@ -33,7 +33,16 @@ export default function Topbar({ text, showBackBar = false, showCoins = false })
             }}
           >
             <Button onPress={() => RootNavigation.goBack()}>
-              <Text>Go Back</Text>
+              <Image
+                source={{
+                  uri: theme.back_button_url,
+                }}
+                style={{
+                  width: 35,
+                  height: 35,
+                  resizeMode: 'contain',
+                }}
+              />
             </Button>
           </SafeAreaView>
         )}
