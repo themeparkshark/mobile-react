@@ -11,16 +11,15 @@ import Playercard from '../components/Playercard';
 import { ThemeContext } from '../context/ThemeProvider';
 import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
+import { AuthContext } from '../context/AuthProvider';
 
 export default function NewsScreen({ navigation }) {
-  const [user, setUser] = useState(null);
   const [parks, setParks] = useState(null);
-  const [inventory, setInventory] = useState(null);
   const [stores, setStores] = useState(null);
   const { theme } = useContext(ThemeContext);
+  const { user, inventory, setInventory } = useContext(AuthContext);
 
   useEffect(() => {
-    getMe().then((response) => setUser(response));
     getParks().then((response) => setParks(response));
     getInventory().then((response) => setInventory(response));
     getStores().then((response) => setStores(response));
@@ -30,7 +29,7 @@ export default function NewsScreen({ navigation }) {
     <Wrapper>
       <Topbar text={user?.username} />
       <ScrollView>
-        { inventory && (
+        {inventory && (
           <Pressable
             style={{
               height: 350,

@@ -99,7 +99,8 @@ export default function App() {
     SecureStore.getItemAsync('user')
       .then((userString) => {
         if (userString) {
-          setUser(JSON.parse(userString));
+          const userStr = JSON.parse(userString);
+          setUser({ ...userStr });
         }
       })
       .catch((err) => {

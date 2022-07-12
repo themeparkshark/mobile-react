@@ -11,13 +11,14 @@ import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
 import { useContext } from 'react';
 import { ThemeContext } from '../context/ThemeProvider';
 import Topbar from '../components/Topbar';
+import { AuthContext } from '../context/AuthProvider';
 
 export default function InventoryScreen() {
-  const [inventory, setInventory] = useState(null);
   const [itemTypes, setItemTypes] = useState(null);
   const [currentItemType, setCurrentItemType] = useState(null);
   const [items, setItems] = useState(null);
   const { theme } = useContext(ThemeContext);
+  const { inventory, setInventory, updateUser } = useContext(AuthContext);
 
   useEffect(() => {
     getInventory().then((response) => setInventory(response));
@@ -101,7 +102,7 @@ export default function InventoryScreen() {
           })}
         </ScrollView>
       </View>
-      { inventory && (
+      {inventory && (
         <ImageBackground
           source={{
             uri: theme.shark_background_url,
@@ -150,7 +151,10 @@ export default function InventoryScreen() {
                         position: 'relative',
                         width: '100%',
                       }}
-                      onPress={() => updateInventory(item).then((response) => setInventory(response))}
+                      onPress={() => updateInventory(item).then((response) => {
+                        updateUser();
+                        setInventory(response);
+                      })}
                     >
                       <View
                         style={{
@@ -172,7 +176,7 @@ export default function InventoryScreen() {
                         }}
                       >
                         <FontAwesomeIcon
-                          icon={ faCircleCheck }
+                          icon={faCircleCheck}
                           size={56}
                           color={'white'}
                         />
@@ -182,7 +186,7 @@ export default function InventoryScreen() {
                           padding: 12,
                         }}
                       >
-                        { currentItemType.name === 'Body item' ? (
+                        {currentItemType.name === 'Body item' ? (
                           <ImageBackground
                             source={shark}
                             style={{
