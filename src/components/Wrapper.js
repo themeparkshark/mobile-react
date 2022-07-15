@@ -12,31 +12,26 @@ export default function Wrapper({ children }) {
       icon: theme.news_button_url,
       screen: 'News',
       size: 'normal',
-      hidden: false,
     },
     {
-      icon: theme.news_button_url,
+      icon: theme.base_button_url,
       screen: 'News',
       size: 'normal',
-      hidden: true,
     },
     {
       icon: theme.explore_button_url,
       screen: 'Explore',
       size: 'large',
-      hidden: false,
-    },
-    {
-      icon: theme.news_button_url,
-      screen: 'News',
-      size: 'normal',
-      hidden: true,
     },
     {
       icon: theme.profile_button_url,
       screen: 'Profile',
       size: 'normal',
-      hidden: false,
+    },
+    {
+      icon: theme.base_button_url,
+      screen: 'Settings',
+      size: 'normal',
     },
   ];
 
@@ -75,7 +70,6 @@ export default function Wrapper({ children }) {
                 <View
                   key={key}
                   style={{
-                    display: item.hidden ? 'none' : 'flex',
                     flex: '1 1 0%',
                   }}
                 >

@@ -14,6 +14,7 @@ import ErrorScreen from './screens/ErrorScreen';
 import StoreScreen from './screens/StoreScreen';
 import { useFonts } from 'expo-font';
 import { Storage } from 'expo-storage';
+import SettingsScreen from './screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -29,6 +30,7 @@ const HomeStackNavigator = () => {
         component={LoadingScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -36,6 +38,7 @@ const HomeStackNavigator = () => {
         component={ErrorScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -47,6 +50,7 @@ const HomeStackNavigator = () => {
         component={ExploreScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -54,6 +58,7 @@ const HomeStackNavigator = () => {
         component={NewsScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -61,6 +66,7 @@ const HomeStackNavigator = () => {
         component={ProfileScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -74,6 +80,14 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Inventory"
         component={InventoryScreen}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
       />
     </Stack.Navigator>
   );
