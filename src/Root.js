@@ -1,7 +1,8 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { AuthContext } from './context/AuthProvider';
+import { ThemeContext } from './context/ThemeProvider';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
@@ -15,6 +16,8 @@ import StoreScreen from './screens/StoreScreen';
 import { useFonts } from 'expo-font';
 import { Storage } from 'expo-storage';
 import SettingsScreen from './screens/SettingsScreen';
+import { Audio } from 'expo-av';
+import client from './api/client';
 
 const Stack = createNativeStackNavigator();
 
@@ -103,6 +106,8 @@ const AuthStackNavigator = () => {
 
 export default function App() {
   const { user, setUser } = useContext(AuthContext);
+  const { setTheme, theme } = useContext(ThemeContext);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useFonts({
     'Shark': require('../assets/fonts/shark-random-funnyness-2.ttf'),
@@ -110,6 +115,8 @@ export default function App() {
   });
 
   useEffect(() => {
+    client.get('/current-theme').then((response) => setTheme(response.data.data));
+
     Storage.getItem({ key: 'user' }).then((userString) => {
       if (userString) {
         setUser({ ...JSON.parse(userString) });
@@ -118,6 +125,21 @@ export default function App() {
       console.log(err);
     });
   }, []);
+
+  useEffect(() => {
+    if (theme?.music.length && !isPlaying) {
+      (async () => {
+        const music = theme.music[Math.floor(Math.random() * theme.music.length)];
+
+        const { sound } = await Audio.Sound.createAsync({
+          uri: music.source_url,
+        });
+
+        await sound.playAsync();
+        setIsPlaying(true);
+      })();
+    }
+  }, [theme?.id]);
 
   return (
     <>
