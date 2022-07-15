@@ -1,7 +1,6 @@
 import { Dimensions, SafeAreaView, ImageBackground, View, Pressable, Image, ScrollView } from 'react-native';
 import { useEffect, useState } from 'react';
 import Playercard from '../components/Playercard';
-import getInventory from '../api/endpoints/me/inventory';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
 import updateInventory from '../api/endpoints/me/inventory/update-inventory';
@@ -10,8 +9,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
 import { useContext } from 'react';
 import { ThemeContext } from '../context/ThemeProvider';
-import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
+import Topbar from '../components/Topbar';
 
 export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState(null);
@@ -21,7 +20,6 @@ export default function InventoryScreen() {
   const { inventory, setInventory, updateUser } = useContext(AuthContext);
 
   useEffect(() => {
-    getInventory().then((response) => setInventory(response));
     getItemTypes().then((response) => {
       setItemTypes(response)
       setCurrentItemType(response[0]);
@@ -47,7 +45,6 @@ export default function InventoryScreen() {
         }}
       >
         <Playercard
-          inventory={inventory}
           style={{
             position: 'absolute',
             width: Dimensions.get('window').width,

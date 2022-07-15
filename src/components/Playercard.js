@@ -1,11 +1,16 @@
-import { View, Image, Dimensions, StyleSheet, Animated } from 'react-native';
+import { View, Image, StyleSheet, Animated } from 'react-native';
 import asset from '../helpers/asset';
-import { useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef } from 'react';
+import { AuthContext } from '../context/AuthProvider';
+import getInventory from '../api/endpoints/me/inventory';
 
-export default function Playercard({ inventory, style, showBackground = true, animate = true}) {
+export default function Playercard({style, showBackground = true, animate = true}) {
+  const { inventory, setInventory } = useContext(AuthContext);
   const translate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    getInventory().then((response) => setInventory(response));
+
     Animated.loop(Animated.sequence([
       Animated.timing(translate, {
         toValue: animate ? 10 : 0,
@@ -80,17 +85,21 @@ export default function Playercard({ inventory, style, showBackground = true, an
             { inventory?.skin_item && (
               <Image
                 source={{
-                  uri: inventory.skin_item.no_eye_url
+                  uri: animate ? inventory.skin_item.no_eye_url : inventory.skin_item.paper_url
                 }}
                 style={styles.image}
               />
             )}
-            <Image
-              source={{
-                uri: asset('inventory/sharks/blink.gif'),
-              }}
-              style={styles.image}
-            />
+            {
+              animate && (
+                <Image
+                  source={{
+                    uri: asset('inventory/sharks/blink.gif'),
+                  }}
+                  style={styles.image}
+                />
+              )
+            }
             { inventory?.face_item && (
               <Image
                 source={{

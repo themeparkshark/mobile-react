@@ -1,5 +1,5 @@
 import { useEffect, useState, useContext } from 'react';
-import { Dimensions, Image, ImageBackground, View } from 'react-native';
+import { Dimensions, ImageBackground, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import RedeemModal from '../components/RedeemModal';
@@ -21,7 +21,7 @@ export default function ExploreScreen() {
   const [redeemables, setRedeemables] = useState(null);
   const [inRedeemZone, setInRedeemZone] = useState(null);
   const [location, setLocation] = useState(null);
-  const { user, inventory } = useContext(AuthContext);
+  const { inventory } = useContext(AuthContext);
   const { theme } = useContext(ThemeContext);
 
   useEffect(() => {
@@ -100,7 +100,6 @@ export default function ExploreScreen() {
                 }}
               >
                 <Playercard
-                  inventory={inventory}
                   showBackground={false}
                   animate={false}
                   style={{

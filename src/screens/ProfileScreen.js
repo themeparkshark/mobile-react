@@ -1,7 +1,6 @@
 import { useContext, useEffect, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, Text, Image, View } from 'react-native';
 import getParks from '../api/endpoints/me/visited-parks';
-import getInventory from '../api/endpoints/me/inventory';
 import getStores from '../api/endpoints/stores/stores';
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
@@ -16,11 +15,10 @@ export default function NewsScreen({ navigation }) {
   const [parks, setParks] = useState(null);
   const [stores, setStores] = useState(null);
   const { theme } = useContext(ThemeContext);
-  const { user, inventory, setInventory } = useContext(AuthContext);
+  const { user } = useContext(AuthContext);
 
   useEffect(() => {
     getParks().then((response) => setParks(response));
-    getInventory().then((response) => setInventory(response));
     getStores().then((response) => setStores(response));
   }, []);
 
@@ -28,26 +26,23 @@ export default function NewsScreen({ navigation }) {
     <Wrapper>
       <Topbar text={user?.username} />
       <ScrollView>
-        {inventory && (
-          <Pressable
+        <Pressable
+          style={{
+            height: 350,
+            overflow: 'hidden',
+            position: 'relative',
+          }}
+          onPress={() => navigation.navigate('Inventory')}
+        >
+          <Playercard
             style={{
-              height: 350,
-              overflow: 'hidden',
-              position: 'relative',
+              position: 'absolute',
+              width: Dimensions.get('window').width,
+              height: 500,
+              marginTop: -70,
             }}
-            onPress={() => navigation.navigate('Inventory')}
-          >
-            <Playercard
-              inventory={inventory}
-              style={{
-                position: 'absolute',
-                width: Dimensions.get('window').width,
-                height: 500,
-                marginTop: -70,
-              }}
-            />
-          </Pressable>
-        )}
+          />
+        </Pressable>
         <View
           style={{
             borderTopStyle: 'solid',
