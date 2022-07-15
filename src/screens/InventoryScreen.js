@@ -1,4 +1,4 @@
-import { SafeAreaView, ImageBackground, Text, View, Pressable, Image, ScrollView } from 'react-native';
+import { Dimensions, SafeAreaView, ImageBackground, View, Pressable, Image, ScrollView } from 'react-native';
 import { useEffect, useState } from 'react';
 import Playercard from '../components/Playercard';
 import getInventory from '../api/endpoints/me/inventory';
@@ -50,6 +50,8 @@ export default function InventoryScreen() {
           inventory={inventory}
           style={{
             position: 'absolute',
+            width: Dimensions.get('window').width,
+            height: 500,
             marginTop: -70,
           }}
         />

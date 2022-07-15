@@ -14,13 +14,14 @@ import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
 import NotAtPark from './ExploreScreen/NotAtPark';
 import Topbar from '../components/Topbar';
+import Playercard from '../components/Playercard';
 
 export default function ExploreScreen() {
   const [park, setPark] = useState(null);
   const [redeemables, setRedeemables] = useState(null);
   const [inRedeemZone, setInRedeemZone] = useState(null);
   const [location, setLocation] = useState(null);
-  const { user } = useContext(AuthContext);
+  const { user, inventory } = useContext(AuthContext);
   const { theme } = useContext(ThemeContext);
 
   useEffect(() => {
@@ -98,17 +99,16 @@ export default function ExploreScreen() {
                   uri: theme.base_button_url
                 }}
               >
-                <Image
+                <Playercard
+                  inventory={inventory}
+                  showBackground={false}
+                  animate={false}
                   style={{
                     position: 'absolute',
-                    resizeMode: 'contain',
                     width: 100,
                     height: 100,
                     left: -14,
-                    top: -10,
-                  }}
-                  source={{
-                    uri: user?.avatar_url
+                    top: -15,
                   }}
                 />
               </ImageBackground>

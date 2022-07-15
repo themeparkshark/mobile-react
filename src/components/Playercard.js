@@ -2,13 +2,13 @@ import { View, Image, Dimensions, StyleSheet, Animated } from 'react-native';
 import asset from '../helpers/asset';
 import { useEffect, useRef } from 'react';
 
-export default function Playercard({ inventory, style }) {
+export default function Playercard({ inventory, style, showBackground = true, animate = true}) {
   const translate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.loop(Animated.sequence([
       Animated.timing(translate, {
-        toValue: 10,
+        toValue: animate ? 10 : 0,
         duration: 4000,
         useNativeDriver: true,
       }),
@@ -24,12 +24,12 @@ export default function Playercard({ inventory, style }) {
     <View style={style}>
       <View
         style={{
-          width: Dimensions.get('window').width,
-          height: 500,
+          width: '100%',
+          height: '100%',
           position: 'relative',
         }}
       >
-        { inventory?.background_item && (
+        { inventory?.background_item && showBackground && (
           <Image
             source={{
               uri: inventory.background_item.paper_url,

@@ -1,6 +1,5 @@
 import { useContext, useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, Image, View } from 'react-native';
-import getMe from '../api/endpoints/me/me';
+import { Dimensions, Pressable, ScrollView, Text, Image, View } from 'react-native';
 import getParks from '../api/endpoints/me/visited-parks';
 import getInventory from '../api/endpoints/me/inventory';
 import getStores from '../api/endpoints/stores/stores';
@@ -42,6 +41,8 @@ export default function NewsScreen({ navigation }) {
               inventory={inventory}
               style={{
                 position: 'absolute',
+                width: Dimensions.get('window').width,
+                height: 500,
                 marginTop: -70,
               }}
             />
