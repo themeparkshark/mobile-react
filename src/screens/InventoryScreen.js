@@ -105,7 +105,7 @@ export default function InventoryScreen() {
       {inventory && (
         <ImageBackground
           source={{
-            uri: theme.shark_background_url,
+            uri: theme.primary_background_url,
           }}
           style={{
             width: '100%',
