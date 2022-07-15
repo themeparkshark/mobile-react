@@ -152,6 +152,10 @@ export default function InventoryScreen() {
                         width: '100%',
                       }}
                       onPress={() => {
+                        if (inventory.skin_item.id === item.id) {
+                          return false;
+                        }
+
                         updateInventory(item).then((response) => {
                           updateUser();
                           setInventory(response);

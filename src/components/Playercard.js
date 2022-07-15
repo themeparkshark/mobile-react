@@ -80,7 +80,7 @@ export default function Playercard({ inventory, style }) {
             { inventory?.skin_item && (
               <Image
                 source={{
-                  uri: inventory.skin_item.paper_url
+                  uri: inventory.skin_item.no_eye_url
                 }}
                 style={styles.image}
               />
