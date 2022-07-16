@@ -135,11 +135,17 @@ export default function App() {
           uri: music.source_url,
         });
 
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.didJustFinish) {
+            sound.unloadAsync();
+            setIsPlaying(false);
+          }
+        });
         await sound.playAsync();
         setIsPlaying(true);
       })();
     }
-  }, [theme?.id]);
+  }, [theme?.id, isPlaying]);
 
   return (
     <>
