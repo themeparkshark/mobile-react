@@ -10,6 +10,7 @@ import InventoryScreen from './screens/InventoryScreen';
 import NewsScreen from './screens/NewsScreen';
 import ParkScreen from './screens/ParkScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import EntryScreen from './screens/EntryScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import ErrorScreen from './screens/ErrorScreen';
 import StoreScreen from './screens/StoreScreen';
@@ -64,6 +65,10 @@ const HomeStackNavigator = () => {
           animation: 'none',
           gestureEnabled: false,
         }}
+      />
+      <Stack.Screen
+        name="Entry"
+        component={EntryScreen}
       />
       <Stack.Screen
         name="Profile"
