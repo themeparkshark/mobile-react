@@ -15,7 +15,7 @@ export default function Wrapper({ children }) {
     },
     {
       icon: theme.base_button_url,
-      screen: 'News',
+      screen: 'Leaderboard',
       size: 'normal',
     },
     {

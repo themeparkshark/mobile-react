@@ -18,6 +18,7 @@ import { Storage } from 'expo-storage';
 import SettingsScreen from './screens/SettingsScreen';
 import { Audio } from 'expo-av';
 import client from './api/client';
+import LeaderboardScreen from './screens/LeaderboardScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -87,6 +88,14 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Leaderboard"
+        component={LeaderboardScreen}
         options={{
           animation: 'none',
           gestureEnabled: false,

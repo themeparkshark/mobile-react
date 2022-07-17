@@ -9,20 +9,8 @@ export default function LoadingScreen() {
   const { setTheme } = useContext(ThemeContext);
 
   useEffect(() => {
-    Promise.all([
-      client.get('/health'),
-      client.get('/current-theme'),
-    ]).then((responses) => {
-      const [health, theme] = responses;
-
-      if (
-        health.status !== 200
-        || health.data.checkResults.filter((result) => result.status === 'failed').length)
-      {
-        return RootNavigation.navigate('Error');
-      }
-
-      setTheme(theme.data.data);
+    client.get('/current-theme').then((response) => {
+      setTheme(response.data.data)
       setLoading(false);
     });
   }, []);

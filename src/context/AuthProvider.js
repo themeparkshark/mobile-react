@@ -2,7 +2,6 @@ import * as SecureStore from 'expo-secure-store';
 import { createContext, useEffect, useState } from 'react';
 import client from '../api/client';
 import login from '../api/endpoints/auth/login';
-import * as RootNavigation from '../RootNavigation';
 import getMe from '../api/endpoints/me/me';
 import Storage from 'expo-storage';
 
@@ -41,8 +40,6 @@ export const AuthProvider = ({ children }) => {
 
       await SecureStore.setItemAsync('token', response.token);
       await updateUser();
-
-      RootNavigation.navigate('Loading');
     } catch (error) {
       console.log(error);
     }
