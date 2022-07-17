@@ -1,17 +1,21 @@
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
+import { useContext } from 'react';
+import { ThemeContext} from '../context/ThemeProvider';
 
 export default function Progress({ progress }) {
+  const { theme } = useContext(ThemeContext);
+
   return (
     <View
       style={{
         position: 'relative',
         width: '100%',
-        height: 20,
-        borderRadius: 5,
-        border: 3,
-        borderColor: 'red',
+        height: 23,
+        borderRadius: 10,
+        borderWidth: 3,
+        borderColor: theme.primary_color,
         borderStyle: 'solid',
-        backgroundColor: 'blue',
+        backgroundColor: theme.primary_color,
         overflow: 'hidden',
       }}
     >
@@ -20,7 +24,7 @@ export default function Progress({ progress }) {
           position: 'absolute',
           width: `${progress}%`,
           height: '100%',
-          backgroundColor: 'green',
+          backgroundColor: 'white',
         }}
       />
     </View>

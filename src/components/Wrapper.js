@@ -1,39 +1,36 @@
-import { Image, ImageBackground, View, SafeAreaView } from 'react-native';
-import explore from '../../assets/images/toolbar/explore.png';
-import forum from '../../assets/images/toolbar/forum.png';
-import news from '../../assets/images/toolbar/news.png';
-import profile from '../../assets/images/toolbar/profile.png';
-import social from '../../assets/images/toolbar/social.png';
-import toolbar from '../../assets/images/toolbar/toolbar.png';
+import { Dimensions, Image, ImageBackground, View, SafeAreaView } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
-import { Dimensions } from 'react-native';
+import { useContext } from 'react';
+import { ThemeContext} from '../context/ThemeProvider';
 
 export default function Wrapper({ children }) {
+  const { theme } = useContext(ThemeContext);
+
   const items = [
     {
-      icon: news,
+      icon: theme.news_button_url,
       screen: 'News',
       size: 'normal',
     },
     {
-      icon: forum,
-      screen: 'News',
+      icon: theme.base_button_url,
+      screen: 'Leaderboard',
       size: 'normal',
     },
     {
-      icon: explore,
+      icon: theme.explore_button_url,
       screen: 'Explore',
       size: 'large',
     },
     {
-      icon: social,
-      screen: 'News',
+      icon: theme.profile_button_url,
+      screen: 'Profile',
       size: 'normal',
     },
     {
-      icon: profile,
-      screen: 'Profile',
+      icon: theme.base_button_url,
+      screen: 'Settings',
       size: 'normal',
     },
   ];
@@ -52,7 +49,9 @@ export default function Wrapper({ children }) {
         }}
       >
         <ImageBackground
-          source={toolbar}
+          source={{
+            uri: theme.bottom_bar_url,
+          }}
           resizeMode="cover"
           style={{
             height: 100,
@@ -81,14 +80,16 @@ export default function Wrapper({ children }) {
                   >
                     <Image
                       style={{
-                        width: item.size === 'normal' ? 50 : 80,
-                        height: item.size === 'normal' ? 50 : 80,
+                        width: item.size === 'normal' ? 50 : 100,
+                        height: item.size === 'normal' ? 50 : 100,
                         resizeMode: 'contain',
                         alignSelf: 'center',
                         position: 'absolute',
-                        top: item.size === 'normal' ? 0 : -35,
+                        top: item.size === 'normal' ? 0 : -45,
                       }}
-                      source={item.icon}
+                      source={{
+                        uri: item.icon,
+                      }}
                     />
                   </Button>
                 </View>

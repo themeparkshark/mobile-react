@@ -1,14 +1,19 @@
-import { View, Image, Dimensions, StyleSheet, Animated } from 'react-native';
+import { View, Image, StyleSheet, Animated } from 'react-native';
 import asset from '../helpers/asset';
-import { useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef } from 'react';
+import { AuthContext } from '../context/AuthProvider';
+import getInventory from '../api/endpoints/me/inventory';
 
-export default function Playercard({ inventory, style }) {
+export default function Playercard({style, showBackground = true, animate = true}) {
+  const { inventory, setInventory } = useContext(AuthContext);
   const translate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    getInventory().then((response) => setInventory(response));
+
     Animated.loop(Animated.sequence([
       Animated.timing(translate, {
-        toValue: 10,
+        toValue: animate ? 10 : 0,
         duration: 4000,
         useNativeDriver: true,
       }),
@@ -24,12 +29,12 @@ export default function Playercard({ inventory, style }) {
     <View style={style}>
       <View
         style={{
-          width: Dimensions.get('window').width,
-          height: 500,
+          width: '100%',
+          height: '100%',
           position: 'relative',
         }}
       >
-        { inventory.background_item && (
+        { inventory?.background_item && showBackground && (
           <Image
             source={{
               uri: inventory.background_item.paper_url,
@@ -42,7 +47,7 @@ export default function Playercard({ inventory, style }) {
             }}
           />
         )}
-        { inventory.pin_item && (
+        { inventory?.pin_item && (
           <Image
             source={{
               uri: inventory.pin_item.image_url,
@@ -77,21 +82,25 @@ export default function Playercard({ inventory, style }) {
               marginTop: '5%',
             }}
           >
-            { inventory.skin_item && (
+            { inventory?.skin_item && (
               <Image
                 source={{
-                  uri: inventory.skin_item.paper_url
+                  uri: animate ? inventory.skin_item.no_eye_url : inventory.skin_item.paper_url
                 }}
                 style={styles.image}
               />
             )}
-            <Image
-              source={{
-                uri: asset('inventory/sharks/blink.gif'),
-              }}
-              style={styles.image}
-            />
-            { inventory.face_item && (
+            {
+              animate && (
+                <Image
+                  source={{
+                    uri: asset('inventory/sharks/blink.gif'),
+                  }}
+                  style={styles.image}
+                />
+              )
+            }
+            { inventory?.face_item && (
               <Image
                 source={{
                   uri: inventory.face_item.paper_url
@@ -99,7 +108,7 @@ export default function Playercard({ inventory, style }) {
                 style={styles.image}
               />
             )}
-            { inventory.body_item && (
+            { inventory?.body_item && (
               <Image
                 source={{
                   uri: inventory.body_item.paper_url
@@ -107,7 +116,7 @@ export default function Playercard({ inventory, style }) {
                 style={styles.image}
               />
             )}
-            { inventory.neck_item && (
+            { inventory?.neck_item && (
               <Image
                 source={{
                   uri: inventory.neck_item.paper_url
@@ -115,7 +124,7 @@ export default function Playercard({ inventory, style }) {
                 style={styles.image}
               />
             )}
-            { inventory.hand_item && (
+            { inventory?.hand_item && (
               <Image
                 source={{
                   uri: inventory.hand_item.paper_url
@@ -123,7 +132,7 @@ export default function Playercard({ inventory, style }) {
                 style={styles.image}
               />
             )}
-            { inventory.hand_item && (
+            { inventory?.head_item && (
               <Image
                 source={{
                   uri: inventory.head_item.paper_url
