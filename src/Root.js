@@ -20,6 +20,7 @@ import SettingsScreen from './screens/SettingsScreen';
 import { Audio } from 'expo-av';
 import client from './api/client';
 import LeaderboardScreen from './screens/LeaderboardScreen';
+import PinCollectionScreen from './screens/PinCollectionsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -49,6 +50,10 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Store"
         component={StoreScreen}
+      />
+      <Stack.Screen
+        name="PinCollections"
+        component={PinCollectionScreen}
       />
       <Stack.Screen
         name="Explore"
