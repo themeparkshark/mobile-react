@@ -49,7 +49,7 @@ export default function Entry({ entry, horizontal = true }) {
             marginTop: 8,
           }}
         >
-          {date} | {entry.category[0].name }
+          {date}
         </Text>
       </View>
     </Pressable>

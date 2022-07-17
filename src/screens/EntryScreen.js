@@ -1,11 +1,14 @@
-import { Dimensions, ScrollView, SafeAreaView, Text } from 'react-native';
+import { Dimensions, ScrollView, Text, View } from 'react-native';
 import RenderHtml from 'react-native-render-html';
+import Topbar from '../components/Topbar';
+import Wrapper from '../components/Wrapper';
 
 export default function EntryScreen({ route }) {
   const { entry } = route.params;
 
   return (
-    <SafeAreaView>
+    <Wrapper showBar={false}>
+      <Topbar showBackBar={true} />
       <ScrollView
         style={{
           padding: 16,
@@ -25,13 +28,15 @@ export default function EntryScreen({ route }) {
         >
           By {entry.contributors.map((user) => user.name).join(', ')}
         </Text>
-        <RenderHtml
-          contentWidth={Dimensions.get('window').width}
-          source={{
-            html: entry.content,
-          }}
-        />
+        <View>
+          <RenderHtml
+            contentWidth={Dimensions.get('window').width - 32}
+            source={{
+              html: entry.content,
+            }}
+          />
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </Wrapper>
   )
 }

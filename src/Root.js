@@ -69,10 +69,6 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Entry"
         component={EntryScreen}
-        options={{
-          headerShown: true,
-          title: '',
-        }}
       />
       <Stack.Screen
         name="Profile"

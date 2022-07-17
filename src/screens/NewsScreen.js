@@ -1,4 +1,4 @@
-import { ScrollView, RefreshControl } from 'react-native';
+import { View, ScrollView, RefreshControl } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import Wrapper from '../components/Wrapper';
 import client from '../api/client-cms';
@@ -26,9 +26,6 @@ export default function NewsScreen() {
     <Wrapper>
       <Topbar text={'Latest News'} />
       <ScrollView
-        style={{
-          padding: 16,
-        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -36,15 +33,24 @@ export default function NewsScreen() {
           />
         }
       >
-        { entries && entries.map((entry, key) => {
-          return (
-            <Entry
-              key={entry.id}
-              entry={entry}
-              horizontal={key > 0}
-            />
-          );
-        })}
+        <View
+          style={{
+            paddingLeft: 16,
+            paddingRight: 16,
+            paddingTop: 32,
+            paddingBottom: 32,
+          }}
+        >
+          { entries && entries.map((entry, key) => {
+            return (
+              <Entry
+                key={entry.id}
+                entry={entry}
+                horizontal={key > 0}
+              />
+            );
+          })}
+        </View>
       </ScrollView>
     </Wrapper>
   );
