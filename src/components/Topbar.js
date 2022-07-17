@@ -2,6 +2,7 @@ import { ImageBackground, SafeAreaView, Text, View, Image } from 'react-native';
 import { ThemeContext } from '../context/ThemeProvider';
 import { AuthContext } from '../context/AuthProvider';
 import { useContext } from 'react';
+import { truncate } from 'lodash';
 import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import coins from '../../assets/images/coins.png';
@@ -105,7 +106,9 @@ export default function Topbar({ text, showBackBar = false, showCoins = false })
             textShadowRadius: 5,
           }}
         >
-          {text}
+          {truncate(text, {
+            length: 15,
+          })}
         </Text>
       </ImageBackground>
     </SafeAreaView>
