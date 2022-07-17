@@ -87,6 +87,10 @@ export default function NewsScreen({ navigation }) {
               return (
                 <Pressable
                   key={store.id}
+                  style={{
+                    marginLeft: 8,
+                    marginRight: 8,
+                  }}
                 >
                   <Button
                     onPress={() => {
@@ -102,6 +106,8 @@ export default function NewsScreen({ navigation }) {
                       style={{
                         width: 70,
                         height: 70,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
                       }}
                       resizeMode="contain"
                     />
