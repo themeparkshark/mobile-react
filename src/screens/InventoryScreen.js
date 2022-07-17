@@ -1,23 +1,25 @@
-import { SafeAreaView, ImageBackground, Text, View, Pressable, Image, ScrollView } from 'react-native';
+import { Dimensions, SafeAreaView, ImageBackground, View, Pressable, Image, ScrollView } from 'react-native';
 import { useEffect, useState } from 'react';
 import Playercard from '../components/Playercard';
-import getInventory from '../api/endpoints/me/inventory';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
 import updateInventory from '../api/endpoints/me/inventory/update-inventory';
-import background from '../../assets/images/screens/inventory/background.png';
 import shark from '../../assets/images/screens/inventory/shark.png';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
+import { useContext } from 'react';
+import { ThemeContext } from '../context/ThemeProvider';
+import { AuthContext } from '../context/AuthProvider';
+import Topbar from '../components/Topbar';
 
 export default function InventoryScreen() {
-  const [inventory, setInventory] = useState(null);
   const [itemTypes, setItemTypes] = useState(null);
   const [currentItemType, setCurrentItemType] = useState(null);
   const [items, setItems] = useState(null);
+  const { theme } = useContext(ThemeContext);
+  const { inventory, setInventory, updateUser } = useContext(AuthContext);
 
   useEffect(() => {
-    getInventory().then((response) => setInventory(response));
     getItemTypes().then((response) => {
       setItemTypes(response)
       setCurrentItemType(response[0]);
@@ -31,6 +33,10 @@ export default function InventoryScreen() {
         flex: 1,
       }}
     >
+      <Topbar
+        showBackBar={true}
+        text="Inventory"
+      />
       <View
         style={{
           height: 400,
@@ -39,9 +45,10 @@ export default function InventoryScreen() {
         }}
       >
         <Playercard
-          inventory={inventory}
           style={{
             position: 'absolute',
+            width: Dimensions.get('window').width,
+            height: 500,
             marginTop: -70,
           }}
         />
@@ -94,9 +101,11 @@ export default function InventoryScreen() {
           })}
         </ScrollView>
       </View>
-      { inventory && (
+      {inventory && (
         <ImageBackground
-          source={background}
+          source={{
+            uri: theme.primary_background_url,
+          }}
           style={{
             width: '100%',
             height: '100%',
@@ -141,7 +150,16 @@ export default function InventoryScreen() {
                         position: 'relative',
                         width: '100%',
                       }}
-                      onPress={() => updateInventory(item).then((response) => setInventory(response))}
+                      onPress={() => {
+                        if (inventory.skin_item.id === item.id) {
+                          return false;
+                        }
+
+                        updateInventory(item).then((response) => {
+                          updateUser();
+                          setInventory(response);
+                        })
+                      }}
                     >
                       <View
                         style={{
@@ -163,7 +181,7 @@ export default function InventoryScreen() {
                         }}
                       >
                         <FontAwesomeIcon
-                          icon={ faCircleCheck }
+                          icon={faCircleCheck}
                           size={56}
                           color={'white'}
                         />
@@ -173,7 +191,7 @@ export default function InventoryScreen() {
                           padding: 12,
                         }}
                       >
-                        { currentItemType.name === 'Body item' ? (
+                        {currentItemType.name === 'Body item' ? (
                           <ImageBackground
                             source={shark}
                             style={{

@@ -1,51 +1,53 @@
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, Image, View } from 'react-native';
-import getMe from '../api/endpoints/me/me';
+import { useContext, useEffect, useState } from 'react';
+import { Dimensions, Pressable, ScrollView, Text, Image, View } from 'react-native';
 import getParks from '../api/endpoints/me/visited-parks';
-import getInventory from '../api/endpoints/me/inventory';
+import getStores from '../api/endpoints/stores/stores';
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import Progress from '../components/Progress';
 import Playercard from '../components/Playercard';
+import { ThemeContext } from '../context/ThemeProvider';
+import Button from '../components/Button';
+import * as RootNavigation from '../RootNavigation';
+import { AuthContext } from '../context/AuthProvider';
 
 export default function NewsScreen({ navigation }) {
-  const [user, setUser] = useState(null);
   const [parks, setParks] = useState(null);
-  const [inventory, setInventory] = useState(null);
+  const [stores, setStores] = useState(null);
+  const { theme } = useContext(ThemeContext);
+  const { user } = useContext(AuthContext);
 
   useEffect(() => {
-    getMe().then((response) => setUser(response));
     getParks().then((response) => setParks(response));
-    getInventory().then((response) => setInventory(response));
+    getStores().then((response) => setStores(response));
   }, []);
 
   return (
     <Wrapper>
       <Topbar text={user?.username} />
       <ScrollView>
-        { inventory && (
-          <Pressable
+        <Pressable
+          style={{
+            height: 350,
+            overflow: 'hidden',
+            position: 'relative',
+          }}
+          onPress={() => navigation.navigate('Inventory')}
+        >
+          <Playercard
             style={{
-              height: 350,
-              overflow: 'hidden',
-              position: 'relative',
+              position: 'absolute',
+              width: Dimensions.get('window').width,
+              height: 500,
+              marginTop: -70,
             }}
-            onPress={() => navigation.navigate('Inventory')}
-          >
-            <Playercard
-              inventory={inventory}
-              style={{
-                position: 'absolute',
-                marginTop: -70,
-              }}
-            />
-          </Pressable>
-        )}
+          />
+        </Pressable>
         <View
           style={{
             borderTopStyle: 'solid',
             borderTopWidth: 5,
-            borderTopColor: '#09268f',
+            borderTopColor: theme.primary_color,
             paddingLeft: 64,
             paddingRight: 64,
             paddingTop: 32,
@@ -73,6 +75,52 @@ export default function NewsScreen({ navigation }) {
           >
             {user?.experience} / {user?.experience_level.experience} XP
           </Text>
+          <View
+            style={{
+              paddingTop: 32,
+              paddingBottom: 16,
+              flexDirection: 'row',
+              justifyContent: 'center',
+            }}
+          >
+            {stores?.map((store) => {
+              return (
+                <Pressable
+                  key={store.id}
+                >
+                  <Button
+                    onPress={() => {
+                      RootNavigation.navigate('Store', {
+                        store: store.id,
+                      });
+                    }}
+                  >
+                    <Image
+                      source={{
+                        uri: store.icon_url,
+                      }}
+                      style={{
+                        width: 70,
+                        height: 70,
+                      }}
+                      resizeMode="contain"
+                    />
+                  </Button>
+                  <Text
+                    style={{
+                      paddingTop: 8,
+                      textAlign: 'center',
+                      fontFamily: 'Knockout',
+                      textTransform: 'uppercase',
+                      fontSize: 20,
+                    }}
+                  >
+                    {store.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
           <Text
             style={{
               fontFamily: 'Knockout',
@@ -107,7 +155,7 @@ export default function NewsScreen({ navigation }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: '#09268f',
+                  color: theme.primary_color,
                 }}
               >
                 {user?.total_coins}
@@ -134,7 +182,7 @@ export default function NewsScreen({ navigation }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: '#09268f',
+                  color: theme.primary_color,
                 }}
               >
                 {user?.coins}
@@ -161,7 +209,7 @@ export default function NewsScreen({ navigation }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: '#09268f',
+                  color: theme.primary_color,
                 }}
               >
                 {parks?.length}
@@ -188,7 +236,7 @@ export default function NewsScreen({ navigation }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: '#09268f',
+                  color: theme.primary_color,
                 }}
               >
                 {user?.total_experience}

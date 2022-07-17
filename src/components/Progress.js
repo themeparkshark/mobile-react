@@ -1,6 +1,10 @@
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
+import { useContext } from 'react';
+import { ThemeContext} from '../context/ThemeProvider';
 
 export default function Progress({ progress }) {
+  const { theme } = useContext(ThemeContext);
+
   return (
     <View
       style={{
@@ -9,9 +13,9 @@ export default function Progress({ progress }) {
         height: 23,
         borderRadius: 10,
         borderWidth: 3,
-        borderColor: '#09268f',
+        borderColor: theme.primary_color,
         borderStyle: 'solid',
-        backgroundColor: '#09268f',
+        backgroundColor: theme.primary_color,
         overflow: 'hidden',
       }}
     >

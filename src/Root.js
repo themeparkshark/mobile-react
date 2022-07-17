@@ -1,8 +1,8 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import * as SecureStore from 'expo-secure-store';
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { AuthContext } from './context/AuthProvider';
+import { ThemeContext } from './context/ThemeProvider';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
@@ -10,7 +10,15 @@ import InventoryScreen from './screens/InventoryScreen';
 import NewsScreen from './screens/NewsScreen';
 import ParkScreen from './screens/ParkScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import LoadingScreen from './screens/LoadingScreen';
+import ErrorScreen from './screens/ErrorScreen';
+import StoreScreen from './screens/StoreScreen';
 import { useFonts } from 'expo-font';
+import { Storage } from 'expo-storage';
+import SettingsScreen from './screens/SettingsScreen';
+import { Audio } from 'expo-av';
+import client from './api/client';
+import LeaderboardScreen from './screens/LeaderboardScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -22,10 +30,31 @@ const HomeStackNavigator = () => {
       }}
     >
       <Stack.Screen
+        name="Loading"
+        component={LoadingScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Error"
+        component={ErrorScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Store"
+        component={StoreScreen}
+      />
+      <Stack.Screen
         name="Explore"
         component={ExploreScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -33,6 +62,7 @@ const HomeStackNavigator = () => {
         component={NewsScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -40,6 +70,7 @@ const HomeStackNavigator = () => {
         component={ProfileScreen}
         options={{
           animation: 'none',
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen
@@ -53,9 +84,21 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Inventory"
         component={InventoryScreen}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
         options={{
-          headerShown: true,
-          title: '',
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Leaderboard"
+        component={LeaderboardScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
         }}
       />
     </Stack.Navigator>
@@ -72,6 +115,8 @@ const AuthStackNavigator = () => {
 
 export default function App() {
   const { user, setUser } = useContext(AuthContext);
+  const { setTheme, theme } = useContext(ThemeContext);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useFonts({
     'Shark': require('../assets/fonts/shark-random-funnyness-2.ttf'),
@@ -79,16 +124,37 @@ export default function App() {
   });
 
   useEffect(() => {
-    SecureStore.getItemAsync('user')
-      .then((userString) => {
-        if (userString) {
-          setUser(JSON.parse(userString));
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-      });
+    client.get('/current-theme').then((response) => setTheme(response.data.data));
+
+    Storage.getItem({ key: 'user' }).then((userString) => {
+      if (userString) {
+        setUser({ ...JSON.parse(userString) });
+      }
+    }).catch((err) => {
+      console.log(err);
+    });
   }, []);
+
+  useEffect(() => {
+    if (theme?.music.length && !isPlaying) {
+      (async () => {
+        const music = theme.music[Math.floor(Math.random() * theme.music.length)];
+
+        const { sound } = await Audio.Sound.createAsync({
+          uri: music.source_url,
+        });
+
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.didJustFinish) {
+            sound.unloadAsync();
+            setIsPlaying(false);
+          }
+        });
+        await sound.playAsync();
+        setIsPlaying(true);
+      })();
+    }
+  }, [theme?.id, isPlaying]);
 
   return (
     <>
