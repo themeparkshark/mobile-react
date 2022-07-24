@@ -8,7 +8,7 @@ import purchaseItem from '../../api/endpoints/me/inventory/purchase-item';
 import { useContext } from 'react';
 
 export default function Item({ item }) {
-  const { user } = useContext(AuthContext);
+  const { user, updateUser } = useContext(AuthContext);
 
   return (
     <Pressable
@@ -19,6 +19,19 @@ export default function Item({ item }) {
           return Alert.alert(
             '',
             'You have already purchased this item.',
+            [
+              {
+                text: 'Ok',
+                style: 'cancel',
+              },
+            ]
+          );
+        }
+
+        if (user.coins < item.cost) {
+          return Alert.alert(
+            '',
+            'You need more coins.',
             [
               {
                 text: 'Ok',
@@ -44,6 +57,7 @@ export default function Item({ item }) {
               text: 'Ok',
               onPress: async () => {
                 const response = await purchaseItem(item);
+                await updateUser();
 
                 Alert.alert(
                   '',
