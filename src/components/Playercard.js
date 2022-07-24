@@ -56,7 +56,7 @@ export default function Playercard({style, showBackground = true, animate = true
               width: 40,
               height: 40,
               position: 'absolute',
-              left: 20,
+              right: 20,
               top: 90,
               resizeMode: 'contain',
             }}
