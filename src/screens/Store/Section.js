@@ -44,7 +44,7 @@ export default function Section({ title, items }) {
         >
           <Text
             style={{
-              color: theme.tertiary_color,
+              color: '#fff',
               textShadowOffset: {
                 width: -1,
               },
