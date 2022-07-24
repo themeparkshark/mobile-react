@@ -50,7 +50,7 @@ export default function NewsScreen({ navigation }) {
             borderTopColor: theme.primary_color,
             paddingLeft: 32,
             paddingRight: 32,
-            paddingTop: 32,
+            paddingTop: 24,
           }}
         >
           <Text
@@ -84,8 +84,8 @@ export default function NewsScreen({ navigation }) {
           </Text>
           <View
             style={{
-              paddingTop: 32,
-              paddingBottom: 16,
+              paddingTop: 24,
+              paddingBottom: 24,
               flexDirection: 'row',
               justifyContent: 'center',
             }}
@@ -103,8 +103,8 @@ export default function NewsScreen({ navigation }) {
                     uri: theme.pin_collections_button_url,
                   }}
                   style={{
-                    width: 70,
-                    height: 70,
+                    width: 80,
+                    height: 80,
                     marginLeft: 'auto',
                     marginRight: 'auto',
                   }}
@@ -143,8 +143,8 @@ export default function NewsScreen({ navigation }) {
                         uri: store.icon_url,
                       }}
                       style={{
-                        width: 70,
-                        height: 70,
+                        width: 80,
+                        height: 80,
                         marginLeft: 'auto',
                         marginRight: 'auto',
                       }}
@@ -168,50 +168,55 @@ export default function NewsScreen({ navigation }) {
           </View>
           <View
             style={{
+              position: 'relative',
+              width: '100%',
+              marginTop: 8,
+              marginBottom: 16,
+              flexDirection: 'row',
+              marginLeft: 0,
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, .4)',
+                height: 2,
+                position: 'absolute',
+                width: '100%',
+                top: '50%',
+              }}
+            />
+            <View
+              style={{
+                backgroundColor: '#e2e8f0',
+                borderRadius: 6,
+                marginLeft: 'auto',
+                marginRight: 'auto',
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: 'Knockout',
+                  fontSize: 18,
+                  textAlign: 'center',
+                  textTransform: 'uppercase',
+                  paddingTop: 8,
+                  paddingBottom: 8,
+                  paddingLeft: 12,
+                  paddingRight: 12,
+                  color: '#334155'
+                }}
+              >
+                Total activity
+              </Text>
+            </View>
+          </View>
+          <View
+            style={{
               paddingLeft: 32,
               paddingRight: 32,
             }}
           >
-            <Text
-              style={{
-                fontFamily: 'Knockout',
-                fontSize: 26,
-                textAlign: 'center',
-                textTransform: 'uppercase',
-                paddingTop: 32,
-                paddingBottom: 16,
-              }}
-            >
-              Total activity
-            </Text>
             <View>
-              <View
-                style={{
-                  flexDirection: 'row',
-                }}
-              >
-                <Text
-                  style={{
-                    paddingRight: 12,
-                    flex: 1,
-                    fontFamily: 'Knockout',
-                    textTransform: 'uppercase',
-                    fontSize: 16,
-                  }}
-                >
-                  Total shark coins
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    textTransform: 'uppercase',
-                    fontSize: 16,
-                    color: theme.primary_color,
-                  }}
-                >
-                  {user?.total_coins}
-                </Text>
-              </View>
               <View
                 style={{
                   flexDirection: 'row',
