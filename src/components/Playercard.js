@@ -47,17 +47,17 @@ export default function Playercard({style, showBackground = true, animate = true
             }}
           />
         )}
-        { inventory?.pin_item && (
+        { inventory?.pin_item && showBackground && (
           <Image
             source={{
-              uri: inventory.pin_item.image_url,
+              uri: inventory.pin_item.icon_url,
             }}
             style={{
               width: 40,
               height: 40,
               position: 'absolute',
-              left: 10,
-              top: 100,
+              left: 20,
+              top: 90,
               resizeMode: 'contain',
             }}
           />

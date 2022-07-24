@@ -10,6 +10,7 @@ import InventoryScreen from './screens/InventoryScreen';
 import NewsScreen from './screens/NewsScreen';
 import ParkScreen from './screens/ParkScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import EntryScreen from './screens/EntryScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import ErrorScreen from './screens/ErrorScreen';
 import StoreScreen from './screens/StoreScreen';
@@ -19,6 +20,7 @@ import SettingsScreen from './screens/SettingsScreen';
 import { Audio } from 'expo-av';
 import client from './api/client';
 import LeaderboardScreen from './screens/LeaderboardScreen';
+import PinCollectionScreen from './screens/PinCollectionsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -50,6 +52,10 @@ const HomeStackNavigator = () => {
         component={StoreScreen}
       />
       <Stack.Screen
+        name="PinCollections"
+        component={PinCollectionScreen}
+      />
+      <Stack.Screen
         name="Explore"
         component={ExploreScreen}
         options={{
@@ -64,6 +70,10 @@ const HomeStackNavigator = () => {
           animation: 'none',
           gestureEnabled: false,
         }}
+      />
+      <Stack.Screen
+        name="Entry"
+        component={EntryScreen}
       />
       <Stack.Screen
         name="Profile"

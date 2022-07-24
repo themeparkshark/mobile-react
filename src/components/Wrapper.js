@@ -4,7 +4,7 @@ import Button from './Button';
 import { useContext } from 'react';
 import { ThemeContext} from '../context/ThemeProvider';
 
-export default function Wrapper({ children }) {
+export default function Wrapper({ showBar = true, children }) {
   const { theme } = useContext(ThemeContext);
 
   const items = [
@@ -46,6 +46,7 @@ export default function Wrapper({ children }) {
         style={{
           width: Dimensions.get('window').width,
           marginBottom: -45,
+          display: showBar ? 'flex' : 'none',
         }}
       >
         <ImageBackground

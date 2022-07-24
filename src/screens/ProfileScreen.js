@@ -48,8 +48,8 @@ export default function NewsScreen({ navigation }) {
             borderTopStyle: 'solid',
             borderTopWidth: 5,
             borderTopColor: theme.primary_color,
-            paddingLeft: 64,
-            paddingRight: 64,
+            paddingLeft: 32,
+            paddingRight: 32,
             paddingTop: 32,
           }}
         >
@@ -64,7 +64,14 @@ export default function NewsScreen({ navigation }) {
           >
             Level {user?.experience_level.level}
           </Text>
-          <Progress progress={user?.experience / user?.experience_level.experience * 100} />
+          <View
+            style={{
+              paddingLeft: 32,
+              paddingRight: 32,
+            }}
+          >
+            <Progress progress={user?.experience / user?.experience_level.experience * 100} />
+          </View>
           <Text
             style={{
               paddingTop: 8,
@@ -83,10 +90,46 @@ export default function NewsScreen({ navigation }) {
               justifyContent: 'center',
             }}
           >
+            <Pressable
+              style={{
+                width: '33.33333%',
+              }}
+            >
+              <Button
+                onPress={() => RootNavigation.navigate('PinCollections')}
+              >
+                <Image
+                  source={{
+                    uri: theme.pin_collections_button_url,
+                  }}
+                  style={{
+                    width: 70,
+                    height: 70,
+                    marginLeft: 'auto',
+                    marginRight: 'auto',
+                  }}
+                  resizeMode="contain"
+                />
+              </Button>
+              <Text
+                style={{
+                  paddingTop: 8,
+                  textAlign: 'center',
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 20,
+                }}
+              >
+                Pins
+              </Text>
+            </Pressable>
             {stores?.map((store) => {
               return (
                 <Pressable
                   key={store.id}
+                  style={{
+                    width: '33.33333%',
+                  }}
                 >
                   <Button
                     onPress={() => {
@@ -102,6 +145,8 @@ export default function NewsScreen({ navigation }) {
                       style={{
                         width: 70,
                         height: 70,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
                       }}
                       resizeMode="contain"
                     />
@@ -121,99 +166,106 @@ export default function NewsScreen({ navigation }) {
               );
             })}
           </View>
-          <Text
+          <View
             style={{
-              fontFamily: 'Knockout',
-              fontSize: 26,
-              textAlign: 'center',
-              textTransform: 'uppercase',
-              paddingTop: 32,
-              paddingBottom: 16,
+              paddingLeft: 32,
+              paddingRight: 32,
             }}
           >
-            Total activity
-          </Text>
-          <View>
-            <View
+            <Text
               style={{
-                flexDirection: 'row',
+                fontFamily: 'Knockout',
+                fontSize: 26,
+                textAlign: 'center',
+                textTransform: 'uppercase',
+                paddingTop: 32,
+                paddingBottom: 16,
               }}
             >
-              <Text
+              Total activity
+            </Text>
+            <View>
+              <View
                 style={{
-                  paddingRight: 12,
-                  flex: 1,
-                  fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
-                  fontSize: 16,
+                  flexDirection: 'row',
                 }}
               >
-                Total shark coins
-              </Text>
-              <Text
+                <Text
+                  style={{
+                    paddingRight: 12,
+                    flex: 1,
+                    fontFamily: 'Knockout',
+                    textTransform: 'uppercase',
+                    fontSize: 16,
+                  }}
+                >
+                  Total shark coins
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: 'Knockout',
+                    textTransform: 'uppercase',
+                    fontSize: 16,
+                    color: theme.primary_color,
+                  }}
+                >
+                  {user?.total_coins}
+                </Text>
+              </View>
+              <View
                 style={{
-                  fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
-                  fontSize: 16,
-                  color: theme.primary_color,
+                  flexDirection: 'row',
                 }}
               >
-                {user?.total_coins}
-              </Text>
-            </View>
-            <View
-              style={{
-                flexDirection: 'row',
-              }}
-            >
-              <Text
+                <Text
+                  style={{
+                    paddingRight: 12,
+                    flex: 1,
+                    fontFamily: 'Knockout',
+                    textTransform: 'uppercase',
+                    fontSize: 16,
+                  }}
+                >
+                  Shark coin balance
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: 'Knockout',
+                    textTransform: 'uppercase',
+                    fontSize: 16,
+                    color: theme.primary_color,
+                  }}
+                >
+                  {user?.coins}
+                </Text>
+              </View>
+              <View
                 style={{
-                  paddingRight: 12,
-                  flex: 1,
-                  fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
-                  fontSize: 16,
+                  flexDirection: 'row',
                 }}
               >
-                Shark coin balance
-              </Text>
-              <Text
-                style={{
-                  fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
-                  fontSize: 16,
-                  color: theme.primary_color,
-                }}
-              >
-                {user?.coins}
-              </Text>
-            </View>
-            <View
-              style={{
-                flexDirection: 'row',
-              }}
-            >
-              <Text
-                style={{
-                  paddingRight: 12,
-                  flex: 1,
-                  fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
-                  fontSize: 16,
-                }}
-              >
-                Parks visited
-              </Text>
-              <Text
-                style={{
-                  fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
-                  fontSize: 16,
-                  color: theme.primary_color,
-                }}
-              >
-                {parks?.length}
-              </Text>
+                <Text
+                  style={{
+                    paddingRight: 12,
+                    flex: 1,
+                    fontFamily: 'Knockout',
+                    textTransform: 'uppercase',
+                    fontSize: 16,
+                  }}
+                >
+                  Parks visited
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: 'Knockout',
+                    textTransform: 'uppercase',
+                    fontSize: 16,
+                    color: theme.primary_color,
+                  }}
+                >
+                  {parks?.length}
+                </Text>
+              </View>
             </View>
             <View
               style={{

@@ -1,23 +1,19 @@
-import { Dimensions, SafeAreaView, ImageBackground, View, Pressable, Image, ScrollView } from 'react-native';
-import { useEffect, useState } from 'react';
+import { Dimensions, SafeAreaView, ImageBackground, View, Pressable, Text, Image, ScrollView, FlatList } from 'react-native';
+import { useContext, useEffect, useState } from 'react';
 import Playercard from '../components/Playercard';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
-import updateInventory from '../api/endpoints/me/inventory/update-inventory';
-import shark from '../../assets/images/screens/inventory/shark.png';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
-import { useContext } from 'react';
 import { ThemeContext } from '../context/ThemeProvider';
-import { AuthContext } from '../context/AuthProvider';
 import Topbar from '../components/Topbar';
+import { AuthContext } from '../context/AuthProvider';
+import Item from '../components/Item';
 
 export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState(null);
   const [currentItemType, setCurrentItemType] = useState(null);
   const [items, setItems] = useState(null);
   const { theme } = useContext(ThemeContext);
-  const { inventory, setInventory, updateUser } = useContext(AuthContext);
+  const { inventory } = useContext(AuthContext);
 
   useEffect(() => {
     getItemTypes().then((response) => {
@@ -80,9 +76,9 @@ export default function InventoryScreen() {
                 }}
               >
                 <Pressable
-                  onPress={() => {
+                  onPress={async () => {
+                    await getItems(itemType.id).then((response) => setItems(response));
                     setCurrentItemType(itemType);
-                    getItems(itemType.id).then((response) => setItems(response));
                   }}
                 >
                   <Image
@@ -112,120 +108,22 @@ export default function InventoryScreen() {
             resizeMode: 'cover',
           }}
         >
-          <ScrollView
+          <View
             style={{
               flex: 1,
             }}
           >
-            <View
+            <FlatList
               style={{
-                flexDirection: 'row',
-                flexWrap: 'wrap',
+                flex: 1,
                 padding: 4,
               }}
-            >
-              {items?.map((item) => {
-                return (
-                  <View
-                    key={item.id}
-                    style={{
-                      padding: 8,
-                      width: '33.33333%'
-                    }}
-                  >
-                    <Pressable
-                      style={{
-                        backgroundColor: 'lightblue',
-                        borderType: 'solid',
-                        borderWidth: 6,
-                        borderColor: 'white',
-                        borderRadius: 10,
-                        alignSelf: 'center',
-                        shadowOffset: {
-                          width: 0,
-                          height: 3
-                        },
-                        shadowOpacity: .4,
-                        shadowRadius: 0,
-                        position: 'relative',
-                        width: '100%',
-                      }}
-                      onPress={() => {
-                        if (inventory.skin_item.id === item.id) {
-                          return false;
-                        }
-
-                        updateInventory(item).then((response) => {
-                          updateUser();
-                          setInventory(response);
-                        })
-                      }}
-                    >
-                      <View
-                        style={{
-                          position: 'absolute',
-                          display: Object.values(inventory).map(function (inventoryItem) {
-                            return inventoryItem?.id;
-                          }).includes(item.id) ? 'flex' : 'none',
-                          backgroundColor: 'rgba(0, 0, 0, .6)',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          width: '100%',
-                          height: '100%',
-                          zIndex: 10,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 4,
-                        }}
-                      >
-                        <FontAwesomeIcon
-                          icon={faCircleCheck}
-                          size={56}
-                          color={'white'}
-                        />
-                      </View>
-                      <View
-                        style={{
-                          padding: 12,
-                        }}
-                      >
-                        {currentItemType.name === 'Body item' ? (
-                          <ImageBackground
-                            source={shark}
-                            style={{
-                              margin: -12,
-                            }}
-                          >
-                            <Image
-                              source={{
-                                uri: item.paper_url,
-                              }}
-                              style={{
-                                aspectRatio: 1,
-                                resizeMode: 'contain',
-                              }}
-                            />
-                          </ImageBackground>
-                        ) : (
-                          <Image
-                            source={{
-                              uri: item.icon_url,
-                            }}
-                            style={{
-                              aspectRatio: 1,
-                              resizeMode: 'contain',
-                            }}
-                          />
-                        )}
-                      </View>
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-          </ScrollView>
+              data={items}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => <Item item={item} currentItemType={currentItemType} />}
+              numColumns={3}
+            />
+          </View>
         </ImageBackground>
       )}
     </SafeAreaView>
