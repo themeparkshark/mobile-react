@@ -28,7 +28,7 @@ export default function NewsScreen({ navigation }) {
       <ScrollView>
         <Pressable
           style={{
-            height: 350,
+            height: 315,
             overflow: 'hidden',
             position: 'relative',
           }}
@@ -38,8 +38,8 @@ export default function NewsScreen({ navigation }) {
             style={{
               position: 'absolute',
               width: Dimensions.get('window').width,
-              height: 500,
-              marginTop: -70,
+              height: 455,
+              marginTop: -55,
             }}
           />
         </Pressable>

@@ -14,12 +14,12 @@ export default function Playercard({style, showBackground = true, animate = true
     Animated.loop(Animated.sequence([
       Animated.timing(translate, {
         toValue: animate ? 10 : 0,
-        duration: 4000,
+        duration: 2700,
         useNativeDriver: true,
       }),
       Animated.timing(translate, {
         toValue: 0,
-        duration: 4000,
+        duration: 2700,
         useNativeDriver: true,
       }),
     ])).start();
@@ -70,6 +70,9 @@ export default function Playercard({style, showBackground = true, animate = true
             transform: [
               {
                 translateY: translate,
+              },
+              {
+                rotate: '-7deg',
               }
             ]
           }}
