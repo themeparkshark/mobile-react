@@ -158,6 +158,36 @@ export default function RedeemModal({ redeemable, onPress }) {
             <View
               style={{
                 position: 'absolute',
+                top: 290,
+                left: 236,
+                alignSelf: 'center',
+              }}
+            >
+              <Image
+                source={{
+                  uri: redeemable.coin_url,
+                }}
+                style={{
+                  width: 60,
+                  height: 60,
+                  resizeMode: 'contain',
+                }}
+              />
+            </View>
+            <Text
+              style={{
+                fontSize: 18,
+                position: 'absolute',
+                top: 280,
+                left: 280,
+                zIndex: 10,
+              }}
+            >
+              1
+            </Text>
+            <View
+              style={{
+                position: 'absolute',
                 bottom: 82,
                 alignSelf: 'center',
               }}
