@@ -44,8 +44,8 @@ export default function InventoryScreen() {
           style={{
             position: 'absolute',
             width: Dimensions.get('window').width,
-            height: 500,
-            marginTop: -70,
+            height: 460,
+            marginTop: -50,
           }}
         />
         <ScrollView
