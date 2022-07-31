@@ -200,7 +200,17 @@ export default function ExploreScreen() {
             </Marker>
           );
         })}
-
+        {redeemables?.tasks.map((task) => {
+          return (
+            <Marker
+              key={task.id}
+              coordinate={{
+                latitude: task.latitude,
+                longitude: task.longitude,
+              }}
+            />
+          );
+        })}
         {redeemables?.coins.filter((coin) => {
           return dayjs().isBetween(dayjs(coin.pivot.active_from), dayjs(coin.pivot.active_to));
         }).map((coin) => {
