@@ -93,7 +93,7 @@ export default function Topbar({ text, showBackBar = false, showCoins = false })
           adjustsFontSizeToFit={true}
           style={{
             textAlign: 'center',
-            fontSize: 42,
+            fontSize: 38,
             color: 'white',
             paddingLeft: 24,
             paddingRight: 24,

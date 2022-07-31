@@ -15,6 +15,10 @@ import NotAtPark from './ExploreScreen/NotAtPark';
 import Topbar from '../components/Topbar';
 import Playercard from '../components/Playercard';
 import collectItem from '../helpers/collect-item';
+import Coin from './ExploreScreen/Coin';
+import dayjs from 'dayjs';
+
+dayjs.extend(require('dayjs/plugin/isBetween'));
 
 export default function ExploreScreen() {
   const [park, setPark] = useState(null);
@@ -196,15 +200,23 @@ export default function ExploreScreen() {
             </Marker>
           );
         })}
-        {redeemables?.tasks.map((task) => {
+
+        {redeemables?.coins.filter((coin) => {
+          return dayjs().isBetween(dayjs(coin.pivot.active_from), dayjs(coin.pivot.active_to));
+        }).map((coin) => {
           return (
             <Marker
-              key={task.id}
+              key={coin.id}
               coordinate={{
-                latitude: task.latitude,
-                longitude: task.longitude,
+                latitude: coin.latitude,
+                longitude: coin.longitude,
               }}
-            />
+            >
+              <Coin
+                coin={coin}
+                onExpire={() => getRedeemables()}
+              />
+            </Marker>
           );
         })}
       </MapView>
