@@ -1,10 +1,9 @@
-import { Alert, Image, ImageBackground, Pressable, Text, View } from 'react-native';
+import { Image, ImageBackground, Pressable, Text, View } from 'react-native';
 import coins from '../../../assets/images/coins.png';
 import gradient from '../../../assets/images/screens/store/gradient.png';
 import shark from '../../../assets/images/screens/inventory/shark.png';
+import purchaseItem from '../../helpers/purchase-item';
 import { AuthContext } from '../../context/AuthProvider';
-import search from '../../api/endpoints/me/inventory/search';
-import purchaseItem from '../../api/endpoints/me/inventory/purchase-item';
 import { useContext } from 'react';
 
 export default function Item({ item }) {
@@ -12,68 +11,10 @@ export default function Item({ item }) {
 
   return (
     <Pressable
-      onPress={async () => {
-        const response = await search(item);
-
-        if (response.has_purchased) {
-          return Alert.alert(
-            '',
-            'You have already purchased this item.',
-            [
-              {
-                text: 'Ok',
-                style: 'cancel',
-              },
-            ]
-          );
-        }
-
-        if (user.coins < item.cost) {
-          return Alert.alert(
-            '',
-            'You need more coins.',
-            [
-              {
-                text: 'Ok',
-                style: 'cancel',
-              },
-            ]
-          );
-        }
-
-        const text = item.cost === 0
-          ? `You have found ${item.name}. Would you like to pick it up?`
-          : `Would you like to buy ${item.name} for ${item.cost} coins? You currently have ${user.coins} coins.`;
-
-        Alert.alert(
-          '',
-          text,
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel',
-            },
-            {
-              text: 'Ok',
-              onPress: async () => {
-                const response = await purchaseItem(item);
-                await updateUser();
-
-                Alert.alert(
-                  '',
-                  `${response.name} has been added to your inventory.`,
-                  [
-                    {
-                      text: 'Ok',
-                      style: 'cancel',
-                    },
-                  ]
-                );
-              }
-            },
-          ]
-        );
-      }}
+      onPress={async () => {await purchaseItem(item, {
+        user,
+        updateUser,
+      })}}
     >
       <View
         style={{

@@ -14,7 +14,7 @@ export default function Wrapper({ showBar = true, children }) {
       size: 'normal',
     },
     {
-      icon: theme.base_button_url,
+      icon: theme.leaderboard_button_url,
       screen: 'Leaderboard',
       size: 'normal',
     },
@@ -29,7 +29,7 @@ export default function Wrapper({ showBar = true, children }) {
       size: 'normal',
     },
     {
-      icon: theme.base_button_url,
+      icon: theme.settings_button_url,
       screen: 'Settings',
       size: 'normal',
     },

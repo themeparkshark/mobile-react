@@ -1,5 +1,5 @@
 import { useEffect, useState, useContext } from 'react';
-import { Dimensions, ImageBackground, View } from 'react-native';
+import { Image, Dimensions, ImageBackground, View, Text, Pressable } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import RedeemModal from '../components/RedeemModal';
@@ -9,20 +9,27 @@ import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
 import Button from '../components/Button';
-import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
 import NotAtPark from './ExploreScreen/NotAtPark';
 import Topbar from '../components/Topbar';
 import Playercard from '../components/Playercard';
+import collectItem from '../helpers/collect-item';
+import Coin from './ExploreScreen/Coin';
+import dayjs from 'dayjs';
+
+dayjs.extend(require('dayjs/plugin/isBetween'));
 
 export default function ExploreScreen() {
   const [park, setPark] = useState(null);
   const [redeemables, setRedeemables] = useState(null);
-  const [inRedeemZone, setInRedeemZone] = useState(null);
+  const [activeRedeemable, setActiveRedeemable] = useState(null);
   const [location, setLocation] = useState(null);
-  const { inventory } = useContext(AuthContext);
   const { theme } = useContext(ThemeContext);
+
+  const getRedeemables = () => {
+    currentRedeemables().then((response) => setRedeemables(response));
+  };
 
   useEffect(() => {
     getCurrentLocation().then((response) => setLocation(response));
@@ -41,7 +48,7 @@ export default function ExploreScreen() {
 
         if (response === null) {
           setRedeemables(null);
-          setInRedeemZone(null);
+          setActiveRedeemable(null);
         }
       });
     }
@@ -49,13 +56,13 @@ export default function ExploreScreen() {
 
   useEffect(() => {
     if (park) {
-      currentRedeemables().then((response) => setRedeemables(response));
+      getRedeemables();
     }
   }, [park?.id]);
 
   useEffect(() => {
     if (location && redeemables) {
-      setInRedeemZone(checkForRedeemable(redeemables, location));
+      setActiveRedeemable(checkForRedeemable(redeemables, location));
     }
   }, [location?.latitude, location?.longitude, redeemables]);
 
@@ -113,23 +120,40 @@ export default function ExploreScreen() {
               </ImageBackground>
             </Button>
           </View>
-          {inRedeemZone && (
+          {activeRedeemable && (
             <View
               style={{
+                bottom: 60,
                 position: 'absolute',
-                backgroundColor: 'red',
-                bottom: 90,
-                zIndex: 10,
+                alignSelf: 'center',
                 flexDirection: 'row',
-                justifyContent: 'center',
+                zIndex: 10,
               }}
             >
-              <RedeemModal
-                redeemable={inRedeemZone}
-                onPress={() => {
-                  currentRedeemables().then((response) => setRedeemables(response));
-                }}
-              />
+              {activeRedeemable.type === 'task' || activeRedeemable.type === 'secret_task' || activeRedeemable.type === 'coin' && (
+                <RedeemModal
+                  redeemable={activeRedeemable.model}
+                  onPress={() => getRedeemables()}
+                />
+              )}
+              {activeRedeemable.type === 'item' && !activeRedeemable.model.pivot.hidden (
+                <Pressable
+                  onPress={async () => {
+                    await collectItem(activeRedeemable.model, () => getRedeemables());
+                  }}
+                >
+                  <Text
+                    style={{
+                      backgroundColor: 'orange',
+                      padding: 16,
+                      borderRadius: 6,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    Collect Item
+                  </Text>
+                </Pressable>
+              )}
             </View>
           )}
         </>
@@ -149,6 +173,33 @@ export default function ExploreScreen() {
         loadingEnabled={true}
         userInterfaceStyle={'light'}
       >
+        {redeemables?.items.map((item) => {
+          return (
+            <Marker
+              key={item.id}
+              coordinate={{
+                latitude: item.pivot.latitude,
+                longitude: item.pivot.longitude,
+              }}
+              centerOffset={{
+                x: 0,
+                y: 0,
+              }}
+              tracksViewChanges={false}
+              stopPropagation={true}
+            >
+              <Image
+                source={{
+                  uri: item.icon_url,
+                }}
+                style={{
+                  width: 60,
+                  height: 60,
+                }}
+              />
+            </Marker>
+          );
+        })}
         {redeemables?.tasks.map((task) => {
           return (
             <Marker
@@ -158,6 +209,24 @@ export default function ExploreScreen() {
                 longitude: task.longitude,
               }}
             />
+          );
+        })}
+        {redeemables?.coins.filter((coin) => {
+          return dayjs().isBetween(dayjs(coin.pivot.active_from), dayjs(coin.pivot.active_to));
+        }).map((coin) => {
+          return (
+            <Marker
+              key={coin.id}
+              coordinate={{
+                latitude: coin.latitude,
+                longitude: coin.longitude,
+              }}
+            >
+              <Coin
+                coin={coin}
+                onExpire={() => getRedeemables()}
+              />
+            </Marker>
           );
         })}
       </MapView>
