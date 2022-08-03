@@ -1,11 +1,13 @@
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
-import { SafeAreaView, PlatformColor } from 'react-native';
+import { SafeAreaView, PlatformColor, Alert } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import { useContext } from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import dayjs from 'dayjs';
 import * as WebBrowser from 'expo-web-browser';
+import deleteUser from '../api/endpoints/me/delete';
+import * as RootNavigation from '../RootNavigation';
 
 export default function SettingsScreen() {
   const { user, logout } = useContext(AuthContext);
@@ -26,6 +28,9 @@ export default function SettingsScreen() {
               cellStyle="RightDetail"
               detail={user.email}
               accessory="DisclosureIndicator"
+              onPress={() => {
+                RootNavigation.navigate('UpdateEmail');
+              }}
             />
             <Cell
               title="Joined on"
@@ -55,7 +60,27 @@ export default function SettingsScreen() {
               titleTextStyle={{
                 color: PlatformColor('systemRed'),
               }}
-              onPress={() => logout()}
+              onPress={() => {
+                Alert.alert(
+                  'Are you sure you want to delete your account?',
+                  'You cannot undo this action.',
+                  [
+                    {
+                      text: 'Cancel',
+                      onPress: () => console.log('Cancel Pressed'),
+                      style: 'cancel',
+                    },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: async () => {
+                        await deleteUser();
+                        logout();
+                      },
+                    },
+                  ]
+                );
+              }}
             />
             <Cell
               title="Sign Out"

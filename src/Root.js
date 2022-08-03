@@ -21,6 +21,8 @@ import { Audio } from 'expo-av';
 import client from './api/client';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import PinCollectionScreen from './screens/PinCollectionsScreen';
+import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
+import { Button } from 'react-native';
 
 const Stack = createNativeStackNavigator();
 
@@ -101,6 +103,15 @@ const HomeStackNavigator = () => {
         options={{
           animation: 'none',
           gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="UpdateEmail"
+        component={UpdateEmailScreen}
+        options={{
+          headerBackTitle: 'Settings',
+          title: 'Email',
+          headerShown: true,
         }}
       />
       <Stack.Screen
