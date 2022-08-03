@@ -9,7 +9,7 @@ export default async function updateUser(data) {
   } catch (error) {
     Toast.show(error.response.data.message, {
       duration: Toast.durations.LONG,
-      position: Toast.positions.TOP,
+      position: Toast.positions.BOTTOM,
       animation: true,
       delay: 0,
     });
