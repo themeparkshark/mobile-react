@@ -6,34 +6,24 @@ import { AuthContext} from '../../context/AuthProvider';
 
 export default function UpdateEmailScreen({ navigation }) {
   const { user } = useContext(AuthContext);
-  const [canSubmit, setCanSubmit] = useState(false);
   const [email, setEmail] = useState(user.email);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <Button
-          disabled={!canSubmit}
           title="Done"
           onPress={async () => {
-            setCanSubmit(false);
-
-            try {
-              await updateUser({
-                email,
-              });
-            } catch {
-              setCanSubmit(true);
-
-              return false;
-            }
+            await updateUser({
+              email,
+            });
 
             navigation.goBack();
           }}
         />
       ),
     });
-  }, [navigation, email, canSubmit]);
+  }, [navigation, email]);
 
   return (
     <SafeAreaView>
@@ -43,10 +33,9 @@ export default function UpdateEmailScreen({ navigation }) {
             cellContentView={
               <TextInput
                 value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  setCanSubmit(true);
-                }}
+                onChangeText={(text) => setEmail(text)}
+                keyboardType={'email-address'}
+                autoCapitalize={'none'}
               />
             }
           />

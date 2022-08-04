@@ -1,5 +1,5 @@
 import client from '../../client';
-import Toast from 'react-native-root-toast';
+import { Alert } from 'react-native';
 
 export default async function updateUser(data) {
   try {
@@ -7,12 +7,16 @@ export default async function updateUser(data) {
 
     return response.data.data;
   } catch (error) {
-    Toast.show(error.response.data.message, {
-      duration: Toast.durations.LONG,
-      position: Toast.positions.BOTTOM,
-      animation: true,
-      delay: 0,
-    });
+    Alert.alert(
+      '',
+      error.response.data.message,
+      [
+        {
+          text: 'Ok',
+          style: 'cancel',
+        },
+      ]
+    );
 
     throw error;
   }
