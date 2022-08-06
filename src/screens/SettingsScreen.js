@@ -67,7 +67,6 @@ export default function SettingsScreen() {
                   [
                     {
                       text: 'Cancel',
-                      onPress: () => console.log('Cancel Pressed'),
                       style: 'cancel',
                     },
                     {
