@@ -56,7 +56,7 @@ export default function SettingsScreen() {
           </Section>
           <Section footer={`© Theme Park Shark ${new Date().getFullYear()} v1.0`}>
             <Cell
-              title="Delete My Account"
+              title="Deactivate My Account"
               titleTextStyle={{
                 color: PlatformColor('systemRed'),
               }}
