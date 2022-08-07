@@ -24,17 +24,14 @@ export default function InventoryScreen() {
   }, []);
 
   return (
-    <SafeAreaView
-      style={{
-        flex: 1,
-      }}
-    >
+    <>
       <Topbar
-        showBackBar={true}
+        showBackButton={true}
         text="Inventory"
       />
       <View
         style={{
+          marginTop: -8,
           height: 400,
           overflow: 'hidden',
           position: 'relative',
@@ -126,6 +123,6 @@ export default function InventoryScreen() {
           </View>
         </ImageBackground>
       )}
-    </SafeAreaView>
+    </>
   );
 }

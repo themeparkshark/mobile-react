@@ -161,7 +161,8 @@ export default function ExploreScreen() {
       <MapView
         style={{
           width: Dimensions.get('window').width,
-          flex: 1,
+          height: Dimensions.get('window').height - 188,
+          marginTop: -8,
         }}
         showsUserLocation={true}
         showsIndoors={false}

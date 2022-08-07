@@ -34,11 +34,16 @@ export default function StoreScreen({ route }) {
   return (
     <>
       <Topbar
-        showBackBar={true}
+        showBackButton={true}
         showCoins={true}
         text={currentStore?.name}
       />
-      <View style={{ flex: 1}}>
+      <View
+        style={{
+          flex: 1,
+          marginTop: -8,
+        }}
+      >
         <ImageBackground
           style={{
             flex: 1,
@@ -47,7 +52,11 @@ export default function StoreScreen({ route }) {
             uri: theme.secondary_background_url,
           }}
         >
-          <ScrollView>
+          <ScrollView
+            style={{
+              paddingTop: 8,
+            }}
+          >
             <View
               style={{
                 height: 300,

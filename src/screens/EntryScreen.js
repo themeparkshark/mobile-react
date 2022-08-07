@@ -8,7 +8,7 @@ export default function EntryScreen({ route }) {
 
   return (
     <Wrapper showBar={false}>
-      <Topbar showBackBar={true} />
+      <Topbar showBackButton={true} />
       <ScrollView
         style={{
           padding: 16,

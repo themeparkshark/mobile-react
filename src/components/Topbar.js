@@ -6,12 +6,16 @@ import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import coins from '../../assets/images/coins.png';
 
-export default function Topbar({ text, showBackBar = false, showCoins = false }) {
+export default function Topbar({ text, showBackButton = false, showCoins = false }) {
   const { theme } = useContext(ThemeContext);
   const { user } = useContext(AuthContext);
 
   return (
-    <SafeAreaView>
+    <SafeAreaView
+      style={{
+        zIndex: 10,
+      }}
+    >
       <ImageBackground
         source={{
           uri: theme.top_bar_url,
@@ -24,7 +28,7 @@ export default function Topbar({ text, showBackBar = false, showCoins = false })
           justifyContent: 'flex-end',
         }}
       >
-        {showBackBar && (
+        {showBackButton && (
           <SafeAreaView
             style={{
               position: 'absolute',

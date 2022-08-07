@@ -25,7 +25,12 @@ export default function NewsScreen({ navigation }) {
   return (
     <Wrapper>
       <Topbar text={user?.username} />
-      <ScrollView>
+      <ScrollView
+        style={{
+          flex: 1,
+          marginTop: -8,
+        }}
+      >
         <Pressable
           style={{
             height: 315,
