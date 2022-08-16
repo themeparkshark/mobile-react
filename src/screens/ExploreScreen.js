@@ -68,10 +68,10 @@ export default function ExploreScreen() {
 
   return (
     <Wrapper>
+      <Topbar showCoins={true} showPurpleDiamonds={true} />
       {!park && <NotAtPark /> }
       {park && (
         <>
-          <Topbar text={park.name} />
           <View
             style={{
               position: 'absolute',

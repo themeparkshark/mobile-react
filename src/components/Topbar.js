@@ -5,15 +5,16 @@ import { useContext } from 'react';
 import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import coins from '../../assets/images/coins.png';
+import diamonds from '../../assets/images/purple_diamonds.png';
 
-export default function Topbar({ text, showBackButton = false, showCoins = false }) {
+export default function Topbar({ text, showBackButton = false, showCoins = false, showPurpleDiamonds = false }) {
   const { theme } = useContext(ThemeContext);
   const { user } = useContext(AuthContext);
 
   return (
     <SafeAreaView
       style={{
-        zIndex: 10,
+        zIndex: 20,
       }}
     >
       <ImageBackground
@@ -88,6 +89,48 @@ export default function Topbar({ text, showBackButton = false, showCoins = false
                 }}
               >
                 {user?.coins}
+              </Text>
+            </View>
+          </SafeAreaView>
+        )}
+        {showPurpleDiamonds && (
+          <SafeAreaView
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: 16,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <Image
+                source={diamonds}
+                style={{
+                  width: 30,
+                  height: 30,
+                  resizeMode: 'contain',
+                  marginRight: 8,
+                }}
+              />
+              <Text
+                style={{
+                  textAlign: 'center',
+                  fontSize: 24,
+                  color: 'white',
+                  fontFamily: 'Shark',
+                  textTransform: 'uppercase',
+                  textShadowOffset: {
+                    width: -1,
+                  },
+                  textShadowColor: theme.primary_color,
+                  textShadowRadius: 5,
+                }}
+              >
+                {user?.purple_diamonds}
               </Text>
             </View>
           </SafeAreaView>
