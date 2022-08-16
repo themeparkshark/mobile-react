@@ -2,15 +2,15 @@ import { View, Text } from 'react-native';
 import { useEffect, useContext, useState } from 'react';
 import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
-import client from '../api/client';
+import currentTheme from '../api/endpoints/themes/current';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
   const { setTheme } = useContext(ThemeContext);
 
   useEffect(() => {
-    client.get('/current-theme').then((response) => {
-      setTheme(response.data.data)
+    currentTheme().then((response) => {
+      setTheme(response);
       setLoading(false);
     });
   }, []);

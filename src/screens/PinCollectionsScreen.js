@@ -57,7 +57,7 @@ export default function PinCollectionsScreen() {
             </View>
             <View
               style={{
-                paddingTop: 16,
+                paddingTop: 0,
                 paddingLeft: 16,
                 paddingRight: 16,
                 paddingBottom: 48,
@@ -86,9 +86,34 @@ export default function PinCollectionsScreen() {
                         <View
                           style={{
                             width: '33.333333%',
+                            position: 'relative',
+                            marginTop: 16,
                           }}
                         >
-                          <Pressable>
+                          {item.pins_count === 1 && (
+                            <Image
+                              source={star}
+                              style={{
+                                width: 30,
+                                height: 30,
+                                resizeMode: 'contain',
+                                position: 'absolute',
+                                zIndex: 10,
+                                right: -15,
+                                top: -15,
+                                transform: [
+                                  {
+                                    rotate: '25deg',
+                                  }
+                                ],
+                              }}
+                            />
+                          )}
+                          <Pressable
+                            onPress={() => {
+
+                            }}
+                          >
                             <View
                               style={{
                                 borderRadius: 6,
@@ -120,7 +145,7 @@ export default function PinCollectionsScreen() {
                                       uri: item.pin.item.paper_url,
                                     }}
                                     style={{
-                                      width: 80,
+                                      width: '100%',
                                       height: 80,
                                       resizeMode: 'contain',
                                       marginLeft: 'auto',
@@ -131,35 +156,52 @@ export default function PinCollectionsScreen() {
                               </ImageBackground>
                               <View
                                 style={{
-                                  padding: 10,
+                                  padding: 6,
                                   flexDirection: 'row',
+                                  justifyContent: 'center',
                                   backgroundColor: theme.secondary_color,
                                 }}
                               >
                                 {[...Array(item.pins_count)].map((element, index) => {
                                   return (
-                                    <Image
-                                      key={index}
-                                      source={star}
+                                    <View
                                       style={{
-                                        width: 20,
-                                        height: 20,
-                                        resizeMode: 'contain',
+                                        paddingLeft: 1,
+                                        paddingRight: 1,
+                                        width: '20%',
                                       }}
-                                    />
+                                    >
+                                      <Image
+                                        key={index}
+                                        source={star}
+                                        style={{
+                                          width: '100%',
+                                          height: 20,
+                                          resizeMode: 'contain',
+                                        }}
+                                      />
+                                    </View>
                                   );
                                 })}
                                 {[...Array(5 - item.pins_count)].map((element, index) => {
                                   return (
-                                    <Image
-                                      key={index}
-                                      source={darkstar}
+                                    <View
                                       style={{
-                                        width: 20,
-                                        height: 20,
-                                        resizeMode: 'contain',
+                                        paddingLeft: 1,
+                                        paddingRight: 1,
+                                        width: '20%',
                                       }}
-                                    />
+                                    >
+                                      <Image
+                                        key={index}
+                                        source={darkstar}
+                                        style={{
+                                          width: '100%',
+                                          height: 20,
+                                          resizeMode: 'contain',
+                                        }}
+                                      />
+                                    </View>
                                   );
                                 })}
                               </View>
