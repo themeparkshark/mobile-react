@@ -20,7 +20,6 @@ export default function pinCollectionModal({ pinCollection }) {
       >
         <View
           style={{
-            backgroundColor: 'red',
             position: 'relative',
             marginTop: 16,
           }}
