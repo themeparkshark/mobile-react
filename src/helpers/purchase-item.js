@@ -9,7 +9,7 @@ export default async function purchaseItem(item, context) {
   if (response.has_purchased) {
     return Alert.alert(
       '',
-      'You have already purchased this item.',
+      `You have already ${item.cost === 0 ? 'redeemed' : 'purchased'} this item.`,
       [
         {
           text: 'Ok',
