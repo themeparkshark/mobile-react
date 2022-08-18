@@ -23,6 +23,7 @@ import LeaderboardScreen from './screens/LeaderboardScreen';
 import PinCollectionScreen from './screens/PinCollectionsScreen';
 import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import { Button } from 'react-native';
+import SocialScreen from './screens/SocialScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -96,10 +97,6 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
       />
       <Stack.Screen
         name="UpdateEmail"
@@ -113,6 +110,14 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Leaderboard"
         component={LeaderboardScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Social"
+        component={SocialScreen}
         options={{
           animation: 'none',
           gestureEnabled: false,

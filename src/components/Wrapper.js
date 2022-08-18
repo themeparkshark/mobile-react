@@ -24,13 +24,13 @@ export default function Wrapper({ showBar = true, children }) {
       size: 'large',
     },
     {
-      icon: theme.profile_button_url,
-      screen: 'Profile',
+      icon: theme.base_button_url,
+      screen: 'Social',
       size: 'normal',
     },
     {
-      icon: theme.settings_button_url,
-      screen: 'Settings',
+      icon: theme.profile_button_url,
+      screen: 'Profile',
       size: 'normal',
     },
   ];

@@ -14,7 +14,7 @@ export default function SettingsScreen() {
 
   return (
     <Wrapper>
-      <Topbar text="Settings" />
+      <Topbar text="Settings" showBackButton={true} />
       <SafeAreaView>
         <TableView>
           <Section header={'General'.toUpperCase()}>
