@@ -88,10 +88,6 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Park"
         component={ParkScreen}
-        options={{
-          headerShown: true,
-          title: '',
-        }}
       />
       <Stack.Screen
         name="Inventory"

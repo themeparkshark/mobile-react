@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { SafeAreaView, Text, View } from 'react-native';
+import { SafeAreaView, ScrollView, Text, View } from 'react-native';
 import getPark from '../api/endpoints/parks/getPark';
 import getTasks from '../api/endpoints/parks/getTasks';
+import Topbar from '../components/Topbar';
+import Wrapper from '../components/Wrapper';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;
@@ -19,22 +21,39 @@ export default function ParkScreen({ route }) {
   }, []);
 
   return (
-    <SafeAreaView>
-      <Text>{currentPark?.name}</Text>
-      <Text>{currentPark?.completion_rate}% complete</Text>
-      <Text>
-        {tasks?.filter((task) => task.has_completed).length} out of{' '}
-        {tasks?.length} tasks unlocked.
-      </Text>
-      <Text>Park tasks:</Text>
-      {tasks?.map((task) => {
-        return (
-          <View key={task.id}>
-            <Text>Task name: {task.name}</Text>
-            <Text>Completed: {task.has_completed ? 'Yes' : 'No'}</Text>
-          </View>
-        );
-      })}
-    </SafeAreaView>
+    <>
+      <Topbar
+        showBackButton={true}
+        text={currentPark?.name}
+      />
+      <ScrollView
+        style={{
+          flex: 1,
+          marginTop: -8,
+        }}
+      >
+        <Text
+          style={{
+            paddingTop: 8,
+          }}
+        >
+          {currentPark?.name}
+        </Text>
+        <Text>{currentPark?.completion_rate}% complete</Text>
+        <Text>
+          {tasks?.filter((task) => task.has_completed).length} out of{' '}
+          {tasks?.length} tasks unlocked.
+        </Text>
+        <Text>Park tasks:</Text>
+        {tasks?.map((task) => {
+          return (
+            <View key={task.id}>
+              <Text>Task name: {task.name}</Text>
+              <Text>Completed: {task.has_completed ? 'Yes' : 'No'}</Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </>
   );
 }

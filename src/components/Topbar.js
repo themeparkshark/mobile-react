@@ -1,4 +1,4 @@
-import { ImageBackground, SafeAreaView, Text, View, Image } from 'react-native';
+import { Dimensions, ImageBackground, SafeAreaView, Text, View, Image } from 'react-native';
 import { ThemeContext } from '../context/ThemeProvider';
 import { AuthContext } from '../context/AuthProvider';
 import { useContext } from 'react';
@@ -10,6 +10,7 @@ import diamonds from '../../assets/images/purple_diamonds.png';
 export default function Topbar({ text, showBackButton = false, showCoins = false, showPurpleDiamonds = false }) {
   const { theme } = useContext(ThemeContext);
   const { user } = useContext(AuthContext);
+  const width = text ? (showCoins ? '20%' : '15%') : '20%';
 
   return (
     <SafeAreaView
@@ -29,55 +30,84 @@ export default function Topbar({ text, showBackButton = false, showCoins = false
           justifyContent: 'flex-end',
         }}
       >
-        {showBackButton && (
-          <SafeAreaView
+        <SafeAreaView>
+          <View
             style={{
-              position: 'absolute',
-              top: '50%',
-              left: 16,
+              paddingLeft: 12,
+              paddingRight: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              width: Dimensions.get('window').width,
+              height: 80,
             }}
           >
-            <Button onPress={() => RootNavigation.goBack()}>
-              <Image
-                source={{
-                  uri: theme.back_button_url,
-                }}
+            {(showPurpleDiamonds || showBackButton || showCoins) && (
+              <View
                 style={{
-                  width: 35,
-                  height: 35,
-                  resizeMode: 'contain',
+                  width,
                 }}
-              />
-            </Button>
-          </SafeAreaView>
-        )}
-        {showCoins && (
-          <SafeAreaView
-            style={{
-              position: 'absolute',
-              top: '50%',
-              right: 16,
-            }}
-          >
+              >
+                {showBackButton && (
+                  <Button onPress={() => RootNavigation.goBack()}>
+                    <Image
+                      source={{
+                        uri: theme.back_button_url,
+                      }}
+                      style={{
+                        width: 35,
+                        height: 35,
+                        resizeMode: 'contain',
+                      }}
+                    />
+                  </Button>
+                )}
+                {showPurpleDiamonds && (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <Image
+                      source={diamonds}
+                      style={{
+                        width: 30,
+                        height: 30,
+                        resizeMode: 'contain',
+                        marginRight: 8,
+                      }}
+                    />
+                    <Text
+                      style={{
+                        textAlign: 'center',
+                        fontSize: 24,
+                        color: 'white',
+                        fontFamily: 'Shark',
+                        textTransform: 'uppercase',
+                        textShadowOffset: {
+                          width: -1,
+                        },
+                        textShadowColor: theme.primary_color,
+                        textShadowRadius: 5,
+                      }}
+                    >
+                      {user?.purple_diamonds}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
             <View
               style={{
-                flexDirection: 'row',
-                alignItems: 'center',
+                flex: 1,
               }}
             >
-              <Image
-                source={coins}
-                style={{
-                  width: 30,
-                  height: 30,
-                  resizeMode: 'contain',
-                  marginRight: 8,
-                }}
-              />
               <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit={true}
                 style={{
                   textAlign: 'center',
-                  fontSize: 24,
+                  fontSize: 38,
                   color: 'white',
                   fontFamily: 'Shark',
                   textTransform: 'uppercase',
@@ -86,76 +116,57 @@ export default function Topbar({ text, showBackButton = false, showCoins = false
                   },
                   textShadowColor: theme.primary_color,
                   textShadowRadius: 5,
+                  paddingLeft: 12,
+                  paddingRight: 12,
                 }}
               >
-                {user?.coins}
+                {text}
               </Text>
             </View>
-          </SafeAreaView>
-        )}
-        {showPurpleDiamonds && (
-          <SafeAreaView
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: 16,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
-            >
-              <Image
-                source={diamonds}
+            {(showPurpleDiamonds || showBackButton || showCoins) && (
+              <View
                 style={{
-                  width: 30,
-                  height: 30,
-                  resizeMode: 'contain',
-                  marginRight: 8,
-                }}
-              />
-              <Text
-                style={{
-                  textAlign: 'center',
-                  fontSize: 24,
-                  color: 'white',
-                  fontFamily: 'Shark',
-                  textTransform: 'uppercase',
-                  textShadowOffset: {
-                    width: -1,
-                  },
-                  textShadowColor: theme.primary_color,
-                  textShadowRadius: 5,
+                  width,
                 }}
               >
-                {user?.purple_diamonds}
-              </Text>
-            </View>
-          </SafeAreaView>
-        )}
-        <Text
-          numberOfLines={1}
-          adjustsFontSizeToFit={true}
-          style={{
-            textAlign: 'center',
-            fontSize: 38,
-            color: 'white',
-            paddingLeft: 24,
-            paddingRight: 24,
-            paddingBottom: 24,
-            fontFamily: 'Shark',
-            textTransform: 'uppercase',
-            textShadowOffset: {
-              width: -1,
-            },
-            textShadowColor: theme.primary_color,
-            textShadowRadius: 5,
-          }}
-        >
-          {text}
-        </Text>
+                {showCoins && (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Image
+                      source={coins}
+                      style={{
+                        width: 30,
+                        height: 30,
+                        resizeMode: 'contain',
+                        marginRight: 8,
+                      }}
+                    />
+                    <Text
+                      style={{
+                        textAlign: 'center',
+                        fontSize: 24,
+                        color: 'white',
+                        fontFamily: 'Shark',
+                        textTransform: 'uppercase',
+                        textShadowOffset: {
+                          width: -1,
+                        },
+                        textShadowColor: theme.primary_color,
+                        textShadowRadius: 5,
+                      }}
+                    >
+                      {user?.coins}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </SafeAreaView>
       </ImageBackground>
     </SafeAreaView>
   );

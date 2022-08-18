@@ -19,12 +19,12 @@ export default function SettingsScreen() {
         <TableView>
           <Section header={'General'.toUpperCase()}>
             <Cell
-              title="Theme Park Shark ID"
+              title="Username"
               cellStyle="RightDetail"
               detail={user.username}
             />
             <Cell
-              title="Email"
+              title="Theme Park Shark ID"
               cellStyle="RightDetail"
               detail={user.email}
               accessory="DisclosureIndicator"
