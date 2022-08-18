@@ -30,15 +30,9 @@ export default function ParkScreen({ route }) {
         style={{
           flex: 1,
           marginTop: -8,
+          paddingTop: 8,
         }}
       >
-        <Text
-          style={{
-            paddingTop: 8,
-          }}
-        >
-          {currentPark?.name}
-        </Text>
         <Text>{currentPark?.completion_rate}% complete</Text>
         <Text>
           {tasks?.filter((task) => task.has_completed).length} out of{' '}
