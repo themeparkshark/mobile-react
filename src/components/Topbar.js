@@ -7,7 +7,7 @@ import * as RootNavigation from '../RootNavigation';
 import coins from '../../assets/images/coins.png';
 import diamonds from '../../assets/images/purple_diamonds.png';
 
-export default function Topbar({ text, showBackButton = false, showCoins = false, showPurpleDiamonds = false }) {
+export default function Topbar({ button, text, showBackButton = false, showCoins = false, showPurpleDiamonds = false }) {
   const { theme } = useContext(ThemeContext);
   const { user } = useContext(AuthContext);
   const width = text ? (showCoins ? '20%' : '15%') : '20%';
@@ -41,7 +41,7 @@ export default function Topbar({ text, showBackButton = false, showCoins = false
               height: 80,
             }}
           >
-            {(showPurpleDiamonds || showBackButton || showCoins) && (
+            {(showPurpleDiamonds || showBackButton || showCoins || button) && (
               <View
                 style={{
                   width,
@@ -123,12 +123,13 @@ export default function Topbar({ text, showBackButton = false, showCoins = false
                 {text}
               </Text>
             </View>
-            {(showPurpleDiamonds || showBackButton || showCoins) && (
+            {(showPurpleDiamonds || showBackButton || showCoins || button) && (
               <View
                 style={{
                   width,
                 }}
               >
+                {button}
                 {showCoins && (
                   <View
                     style={{

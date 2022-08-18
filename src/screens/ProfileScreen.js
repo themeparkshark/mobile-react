@@ -24,7 +24,28 @@ export default function NewsScreen({ navigation }) {
 
   return (
     <Wrapper>
-      <Topbar text={user?.username} />
+      <Topbar
+        text={user?.username}
+        button={
+          <Button
+            onPress={() => {
+              RootNavigation.navigate('Settings');
+            }}
+          >
+            <Image
+              style={{
+                width: 50,
+                height: 50,
+                resizeMode: 'contain',
+                alignSelf: 'center',
+              }}
+              source={{
+                uri: theme.settings_button_url,
+              }}
+            />
+          </Button>
+        }
+      />
       <ScrollView
         style={{
           flex: 1,

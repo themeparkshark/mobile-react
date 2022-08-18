@@ -13,7 +13,7 @@ export default function SettingsScreen() {
   const { user, logout } = useContext(AuthContext);
 
   return (
-    <Wrapper>
+    <>
       <Topbar text="Settings" showBackButton={true} />
       <SafeAreaView>
         <TableView>
@@ -91,6 +91,6 @@ export default function SettingsScreen() {
           </Section>
         </TableView>
       </SafeAreaView>
-    </Wrapper>
+    </>
   );
 };
