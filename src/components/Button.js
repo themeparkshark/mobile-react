@@ -18,7 +18,14 @@ export default function Button({ children, onPress }) {
   };
 
   return (
-    <Pressable onPress={onPress} onPressIn={zoomOut} onPressOut={zoomIn}>
+    <Pressable
+      style={{
+        flexDirection: 'row'
+      }}
+      onPress={onPress}
+      onPressIn={zoomOut}
+      onPressOut={zoomIn}
+    >
       <Animated.View
         style={{
           transform: [

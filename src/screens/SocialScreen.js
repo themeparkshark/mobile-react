@@ -1,8 +1,9 @@
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
-import { Text, ScrollView, View, ImageBackground, Dimensions } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useEffect, useState } from 'react';
 import all from '../api/endpoints/announcements/all';
+import Announcement from '../components/Announcement';
 
 export default function SocialScreen() {
   const [announcements, setAnnouncements] = useState();
@@ -13,7 +14,7 @@ export default function SocialScreen() {
 
   return (
     <Wrapper>
-      <Topbar text="Social" />
+      <Topbar text="Social" showBackButton={true} />
       <ScrollView
         style={{
           marginTop: -8,
@@ -31,58 +32,12 @@ export default function SocialScreen() {
           {announcements?.map((announcement, index) => {
             return (
               <View
-                key={announcement.id}
-                style={{
-                  position: 'relative',
-                  width: Dimensions.get('window').width - 100,
-                  height: 200,
-                  borderRadius: 10,
-                  overflow: 'hidden',
-                  marginLeft: index === 0 ? 0 : 16,
-                }}
+                key={index}
+                style={{ marginLeft: index === 0 ? 0 : 16 }}
               >
-                <ImageBackground
-                  source={{
-                    uri: announcement.image_url,
-                  }}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    flexDirection: 'row',
-                  }}
-                >
-                  <View
-                    style={{
-                      padding: 16,
-                      backgroundColor: 'rgba(0, 0, 0, .7)',
-                      width: '100%',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <View>
-                      <Text
-                        style={{
-                          color: 'white',
-                          fontFamily: 'Knockout',
-                          textTransform: 'uppercase',
-                          fontSize: 22,
-                        }}
-                      >
-                        {announcement.title}
-                      </Text>
-                    </View>
-                    <Text
-                      style={{
-                        fontFamily: 'Knockout',
-                        fontSize: 18,
-                        color: 'white',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      Learn more
-                    </Text>
-                  </View>
-                </ImageBackground>
+                <Announcement
+                  announcement={announcement}
+                />
               </View>
             );
           })}
