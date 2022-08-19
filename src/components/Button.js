@@ -19,9 +19,6 @@ export default function Button({ children, onPress }) {
 
   return (
     <Pressable
-      style={{
-        flexDirection: 'row'
-      }}
       onPress={onPress}
       onPressIn={zoomOut}
       onPressOut={zoomIn}

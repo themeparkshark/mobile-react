@@ -14,7 +14,7 @@ export default function SocialScreen() {
 
   return (
     <Wrapper>
-      <Topbar text="Social" showBackButton={true} />
+      <Topbar text="Social" />
       <ScrollView
         style={{
           marginTop: -8,
