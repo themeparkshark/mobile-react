@@ -4,6 +4,7 @@ import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 import Storage from 'expo-storage';
+import * as RootNavigation from '../RootNavigation';
 
 export const AuthContext = createContext({
   user: null,
@@ -40,6 +41,12 @@ export const AuthProvider = ({ children }) => {
 
       await SecureStore.setItemAsync('token', response.token);
       await updateUser();
+
+      if (response.data.was_recently_created) {
+        RootNavigation.navigate('Welcome');
+      } else {
+        RootNavigation.navigate('Loading');
+      }
     } catch (error) {
       console.log(error);
     }

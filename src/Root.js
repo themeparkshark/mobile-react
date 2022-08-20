@@ -7,6 +7,7 @@ import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
 import InventoryScreen from './screens/InventoryScreen';
+import WelcomeScreen from './screens/WelcomeScreen';
 import NewsScreen from './screens/NewsScreen';
 import ParkScreen from './screens/ParkScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -35,9 +36,24 @@ const HomeStackNavigator = () => {
       }}
     >
       <Stack.Screen
+        name="Login"
+        component={LoginScreen}
+      />
+      <Stack.Screen
         name="Loading"
         component={LoadingScreen}
         options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Welcome"
+        component={WelcomeScreen}
+        options={{
+          title: 'Welcome',
+          headerBackVisible: false,
+          headerShown: true,
           animation: 'none',
           gestureEnabled: false,
         }}
@@ -131,14 +147,6 @@ const HomeStackNavigator = () => {
   );
 };
 
-const AuthStackNavigator = () => {
-  return (
-    <Stack.Navigator>
-      <Stack.Screen name="Login" component={LoginScreen} />
-    </Stack.Navigator>
-  );
-};
-
 export default function App() {
   const { user, setUser } = useContext(AuthContext);
   const { setTheme, theme } = useContext(ThemeContext);
@@ -183,16 +191,8 @@ export default function App() {
   }, [theme?.id, isPlaying]);
 
   return (
-    <>
-      {user ? (
-        <NavigationContainer ref={navigationRef}>
-          <HomeStackNavigator />
-        </NavigationContainer>
-      ) : (
-        <NavigationContainer>
-          <AuthStackNavigator />
-        </NavigationContainer>
-      )}
-    </>
+    <NavigationContainer ref={navigationRef}>
+      <HomeStackNavigator />
+    </NavigationContainer>
   );
 }

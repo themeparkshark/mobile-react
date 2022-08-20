@@ -1,7 +1,7 @@
 import { Button, SafeAreaView, TextInput } from 'react-native';
 import { useLayoutEffect, useContext, useState } from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
-import updateUser from '../../api/endpoints/me/update';
+import updateUser from '../../api/endpoints/me/update-email';
 import { AuthContext} from '../../context/AuthProvider';
 
 export default function UpdateEmailScreen({ navigation }) {
