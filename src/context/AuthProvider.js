@@ -70,6 +70,7 @@ export const AuthProvider = ({ children }) => {
       await Storage.removeItem({ key: 'user' })
       await SecureStore.deleteItemAsync('token');
       setUser(null);
+      RootNavigation.navigate('Login');
     } catch (error) {
       console.log(error);
     }
