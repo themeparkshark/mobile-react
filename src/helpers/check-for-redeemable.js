@@ -1,65 +1,17 @@
-export default (redeemables, location) => {
-  const distance = 0.0005;
+import getCurrentLocation from '../helpers/get-current-location';
+import currentRedeemable from '../api/endpoints/me/current-redeemable';
 
-  if (redeemables === null) {
-    return false;
-  }
+export default async function checkForRedeemable() {
+  const location = await getCurrentLocation();
 
-  const coin = redeemables.coins.find((coin) => {
-    return (
-      coin.latitude - location.latitude <= distance
-      && coin.longitude - location.longitude <= distance
+  try {
+    const response = await currentRedeemable(
+      location.latitude,
+      location.longitude
     );
-  });
 
-  if (coin) {
-    return {
-      model: coin,
-      type: 'coin',
-    }
+    return response;
+  } catch (error) {
+    return null;
   }
-
-  const item = redeemables.items.find((item) => {
-    return (
-      item.pivot.latitude - location.latitude <= distance
-      && item.pivot.longitude - location.longitude <= distance
-    );
-  });
-
-  if (item) {
-    return {
-      model: item,
-      type: 'item',
-    }
-  }
-
-  const secretTask = redeemables.secret_tasks.find((task) => {
-    return (
-      task.latitude - location.latitude <= distance
-      && task.longitude - location.longitude <= distance
-    );
-  });
-
-  if (secretTask) {
-    return {
-      model: secretTask,
-      type: 'secret_task',
-    }
-  }
-
-  const task = redeemables.tasks.find((task) => {
-    return (
-      task.latitude - location.latitude <= distance
-      && task.longitude - location.longitude <= distance
-    );
-  });
-
-  if (task) {
-    return {
-      model: task,
-      type: 'task',
-    }
-  }
-
-  return null;
 };

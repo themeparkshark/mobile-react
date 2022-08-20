@@ -10,6 +10,7 @@ import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
 import Button from '../components/Button';
 import { ThemeContext } from '../context/ThemeProvider';
+import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
 import NotAtPark from './ExploreScreen/NotAtPark';
 import Topbar from '../components/Topbar';
@@ -26,6 +27,7 @@ export default function ExploreScreen() {
   const [activeRedeemable, setActiveRedeemable] = useState(null);
   const [location, setLocation] = useState(null);
   const { theme } = useContext(ThemeContext);
+  const { updateUser } = useContext(AuthContext);
 
   const getRedeemables = () => {
     currentRedeemables().then((response) => setRedeemables(response));
@@ -62,7 +64,9 @@ export default function ExploreScreen() {
 
   useEffect(() => {
     if (location && redeemables) {
-      setActiveRedeemable(checkForRedeemable(redeemables, location));
+      checkForRedeemable(redeemables, location).then((response) => {
+        setActiveRedeemable(response);
+      })
     }
   }, [location?.latitude, location?.longitude, redeemables]);
 
@@ -130,13 +134,17 @@ export default function ExploreScreen() {
                 zIndex: 10,
               }}
             >
-              {activeRedeemable.type === 'task' || activeRedeemable.type === 'secret_task' || activeRedeemable.type === 'coin' && (
+              {(activeRedeemable.type === 'task' || activeRedeemable.type === 'secret_task' || activeRedeemable.type === 'coin') && (
                 <RedeemModal
                   redeemable={activeRedeemable.model}
-                  onPress={() => getRedeemables()}
+                  park={park}
+                  onPress={() => {
+                    getRedeemables();
+                    updateUser();
+                  }}
                 />
               )}
-              {activeRedeemable.type === 'item' && !activeRedeemable.model.pivot.hidden (
+              {activeRedeemable.type === 'item' && !activeRedeemable.model.pivot.hidden && (
                 <Pressable
                   onPress={async () => {
                     await collectItem(activeRedeemable.model, () => getRedeemables());

@@ -9,7 +9,7 @@ import coins from '../../assets/images/screens/explore/coins.png';
 import Button from './Button';
 import Lottie from 'lottie-react-native';
 
-export default function RedeemModal({ redeemable, onPress }) {
+export default function RedeemModal({ redeemable, park, onPress }) {
   const [modalVisible, setModalVisible] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
 
@@ -101,6 +101,25 @@ export default function RedeemModal({ redeemable, onPress }) {
             >
               Congratulations
             </Text>
+            <View
+              style={{
+                position: 'absolute',
+                top: 103,
+                left: 115,
+                alignSelf: 'center',
+              }}
+            >
+              <Image
+                source={{
+                  uri: redeemable.coin_url,
+                }}
+                style={{
+                  width: 140,
+                  height: 140,
+                  resizeMode: 'contain',
+                }}
+              />
+            </View>
             <Text
               style={{
                 fontSize: 18,
@@ -165,7 +184,7 @@ export default function RedeemModal({ redeemable, onPress }) {
             >
               <Image
                 source={{
-                  uri: redeemable.coin_url,
+                  uri: park.coin_url,
                 }}
                 style={{
                   width: 60,
