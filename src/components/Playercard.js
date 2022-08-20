@@ -1,18 +1,13 @@
 import { View, Image, StyleSheet, Animated } from 'react-native';
 import asset from '../helpers/asset';
 import { useContext, useEffect, useRef } from 'react';
-import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
-import getInventory from '../api/endpoints/me/inventory';
 
-export default function Playercard({style, showBackground = true, animate = true}) {
-  const { user, inventory, setInventory } = useContext(AuthContext);
+export default function Playercard({user, inventory, style, showBackground = true, animate = true}) {
   const { theme } = useContext(ThemeContext);
   const translate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    getInventory().then((response) => setInventory(response));
-
     Animated.loop(Animated.sequence([
       Animated.timing(translate, {
         toValue: animate ? 10 : 0,
@@ -49,7 +44,7 @@ export default function Playercard({style, showBackground = true, animate = true
             }}
           />
         )}
-        { user.verified_at && showBackground && (
+        { user?.verified_at && showBackground && (
           <Image
             source={{
               uri: theme.verified_badge_url,

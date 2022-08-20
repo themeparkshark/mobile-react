@@ -1,105 +1,40 @@
 import { useContext, useEffect, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, Text, Image, View } from 'react-native';
-import getParks from '../api/endpoints/me/visited-parks';
-import getStores from '../api/endpoints/stores/stores';
-import Wrapper from '../components/Wrapper';
+import getUser from '../api/endpoints/users/get';
 import Topbar from '../components/Topbar';
 import Progress from '../components/Progress';
 import Playercard from '../components/Playercard';
 import { ThemeContext } from '../context/ThemeProvider';
-import Button from '../components/Button';
-import * as RootNavigation from '../RootNavigation';
-import { AuthContext } from '../context/AuthProvider';
-import getInventory from '../api/endpoints/me/inventory';
 
-export default function NewsScreen({ navigation }) {
-  const [parks, setParks] = useState(null);
-  const [stores, setStores] = useState(null);
-  const [buttons, setButtons] = useState(null);
+export default function UserScreen({ navigation, route }) {
+  const { user } = route.params;
+  const [parks, setParks] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const { theme } = useContext(ThemeContext);
-  const { user, inventory, setInventory } = useContext(AuthContext);
 
   useEffect(() => {
-    getParks().then((response) => setParks(response));
-    getStores().then((response) => setStores(response));
-    getInventory().then((response) => setInventory(response));
+    getUser(user).then((response) => setCurrentUser(response));
   }, []);
 
-  useEffect(() => {
-    if (stores) {
-      setButtons([
-        {
-          image: theme.pin_collections_button_url,
-          screen: () => {
-            RootNavigation.navigate('PinCollections')
-          },
-          text: 'Pins',
-        },
-        {
-          image: theme.base_button_url,
-          screen: () => {
-            RootNavigation.navigate('User', {
-              user: 3,
-            })
-          },
-          text: 'Test profile',
-        },
-        ...stores.map((store) => {
-          return {
-            image: store.icon_url,
-            screen: () => {
-              RootNavigation.navigate('Store', {
-                store: store.id,
-              })
-            },
-            text: store.name,
-          }
-        }),
-      ]);
-    }
-  }, [stores]);
-
   return (
-    <Wrapper>
-      <Topbar
-        text={user?.username}
-        button={
-          <Button
-            onPress={() => {
-              RootNavigation.navigate('Settings');
-            }}
-          >
-            <Image
-              style={{
-                width: 50,
-                height: 50,
-                resizeMode: 'contain',
-                alignSelf: 'center',
-              }}
-              source={{
-                uri: theme.settings_button_url,
-              }}
-            />
-          </Button>
-        }
-      />
+    <>
+      <Topbar text={currentUser?.username} showBackButton={true} />
       <ScrollView
         style={{
           flex: 1,
           marginTop: -8,
         }}
       >
-        <Pressable
+        <View
           style={{
             height: 315,
             overflow: 'hidden',
             position: 'relative',
           }}
-          onPress={() => navigation.navigate('Inventory')}
         >
           <Playercard
-            user={user}
-            inventory={inventory}
+            user={currentUser}
+            inventory={currentUser?.inventory}
             style={{
               position: 'absolute',
               width: Dimensions.get('window').width,
@@ -107,7 +42,7 @@ export default function NewsScreen({ navigation }) {
               marginTop: -55,
             }}
           />
-        </Pressable>
+        </View>
         <View
           style={{
             borderTopStyle: 'solid',
@@ -127,7 +62,7 @@ export default function NewsScreen({ navigation }) {
               paddingBottom: 8,
             }}
           >
-            Level {user?.experience_level.level}
+            Level {currentUser?.experience_level.level}
           </Text>
           <View
             style={{
@@ -135,7 +70,7 @@ export default function NewsScreen({ navigation }) {
               paddingRight: 32,
             }}
           >
-            <Progress progress={user?.experience / user?.experience_level.experience * 100} />
+            <Progress progress={currentUser?.experience / currentUser?.experience_level.experience * 100} />
           </View>
           <Text
             style={{
@@ -145,60 +80,13 @@ export default function NewsScreen({ navigation }) {
               fontSize: 20,
             }}
           >
-            {user?.experience} / {user?.experience_level.experience} XP
+            {currentUser?.experience} / {currentUser?.experience_level.experience} XP
           </Text>
-          <View
-            style={{
-              paddingTop: 24,
-              paddingBottom: 24,
-              flexDirection: 'row',
-              justifyContent: 'center',
-            }}
-          >
-            {buttons?.map((button, index) => {
-              return (
-                <Pressable
-                  key={index}
-                  style={{
-                    width: `${100 / buttons.length}%`,
-                  }}
-                >
-                  <Button
-                    onPress={button.screen}
-                  >
-                    <Image
-                      source={{
-                        uri: button.image,
-                      }}
-                      style={{
-                        width: 80,
-                        height: 80,
-                        marginLeft: 'auto',
-                        marginRight: 'auto',
-                      }}
-                      resizeMode="contain"
-                    />
-                  </Button>
-                  <Text
-                    style={{
-                      paddingTop: 8,
-                      textAlign: 'center',
-                      fontFamily: 'Knockout',
-                      textTransform: 'uppercase',
-                      fontSize: 20,
-                    }}
-                  >
-                    {button.text}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
           <View
             style={{
               position: 'relative',
               width: '100%',
-              marginTop: 8,
+              marginTop: 16,
               marginBottom: 16,
               flexDirection: 'row',
               marginLeft: 0,
@@ -259,33 +147,6 @@ export default function NewsScreen({ navigation }) {
                     fontSize: 16,
                   }}
                 >
-                  Shark coin balance
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    textTransform: 'uppercase',
-                    fontSize: 16,
-                    color: theme.primary_color,
-                  }}
-                >
-                  {user?.coins}
-                </Text>
-              </View>
-              <View
-                style={{
-                  flexDirection: 'row',
-                }}
-              >
-                <Text
-                  style={{
-                    paddingRight: 12,
-                    flex: 1,
-                    fontFamily: 'Knockout',
-                    textTransform: 'uppercase',
-                    fontSize: 16,
-                  }}
-                >
                   Parks visited
                 </Text>
                 <Text
@@ -324,7 +185,7 @@ export default function NewsScreen({ navigation }) {
                   color: theme.primary_color,
                 }}
               >
-                {user?.total_experience}
+                {currentUser?.total_experience}
               </Text>
             </View>
           </View>
@@ -393,6 +254,6 @@ export default function NewsScreen({ navigation }) {
           })}
         </View>
       </ScrollView>
-    </Wrapper>
+    </>
   );
 }

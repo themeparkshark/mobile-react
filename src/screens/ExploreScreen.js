@@ -27,7 +27,7 @@ export default function ExploreScreen() {
   const [activeRedeemable, setActiveRedeemable] = useState(null);
   const [location, setLocation] = useState(null);
   const { theme } = useContext(ThemeContext);
-  const { updateUser } = useContext(AuthContext);
+  const { inventory, updateUser } = useContext(AuthContext);
 
   const getRedeemables = () => {
     currentRedeemables().then((response) => setRedeemables(response));
@@ -113,6 +113,7 @@ export default function ExploreScreen() {
                 <Playercard
                   showBackground={false}
                   animate={false}
+                  inventory={inventory}
                   style={{
                     position: 'absolute',
                     width: 100,

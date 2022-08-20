@@ -14,6 +14,7 @@ import EntryScreen from './screens/EntryScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import ErrorScreen from './screens/ErrorScreen';
 import StoreScreen from './screens/StoreScreen';
+import UserScreen from './screens/UserScreen';
 import { useFonts } from 'expo-font';
 import { Storage } from 'expo-storage';
 import SettingsScreen from './screens/SettingsScreen';
@@ -22,7 +23,6 @@ import client from './api/client';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import PinCollectionScreen from './screens/PinCollectionsScreen';
 import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
-import { Button } from 'react-native';
 import SocialScreen from './screens/SocialScreen';
 
 const Stack = createNativeStackNavigator();
@@ -85,6 +85,10 @@ const HomeStackNavigator = () => {
           animation: 'none',
           gestureEnabled: false,
         }}
+      />
+      <Stack.Screen
+        name="User"
+        component={UserScreen}
       />
       <Stack.Screen
         name="Park"

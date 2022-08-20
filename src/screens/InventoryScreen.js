@@ -38,6 +38,7 @@ export default function InventoryScreen() {
         }}
       >
         <Playercard
+          inventory={inventory}
           style={{
             position: 'absolute',
             width: Dimensions.get('window').width,
