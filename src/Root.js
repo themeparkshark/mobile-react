@@ -36,10 +36,6 @@ const HomeStackNavigator = () => {
       }}
     >
       <Stack.Screen
-        name="Login"
-        component={LoginScreen}
-      />
-      <Stack.Screen
         name="Loading"
         component={LoadingScreen}
         options={{
@@ -147,6 +143,14 @@ const HomeStackNavigator = () => {
   );
 };
 
+const AuthStackNavigator = () => {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="Login" component={LoginScreen} />
+    </Stack.Navigator>
+  );
+};
+
 export default function App() {
   const { user, setUser } = useContext(AuthContext);
   const { setTheme, theme } = useContext(ThemeContext);
@@ -191,8 +195,16 @@ export default function App() {
   }, [theme?.id, isPlaying]);
 
   return (
-    <NavigationContainer ref={navigationRef}>
-      <HomeStackNavigator />
-    </NavigationContainer>
+    <>
+      {user ? (
+        <NavigationContainer ref={navigationRef}>
+          <HomeStackNavigator />
+        </NavigationContainer>
+      ) : (
+        <NavigationContainer>
+          <AuthStackNavigator />
+        </NavigationContainer>
+      )}
+    </>
   );
 }
