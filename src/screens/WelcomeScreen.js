@@ -1,9 +1,11 @@
 import { Button, Text, View, TextInput } from 'react-native';
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useState, useContext } from 'react';
 import updateUsername from '../api/endpoints/me/update-username';
+import { AuthContext } from '../context/AuthProvider';
 
 export default function WelcomeScreen({ navigation }) {
   const [username, setUsername] = useState();
+  const { updateUser } = useContext(AuthContext);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -14,6 +16,8 @@ export default function WelcomeScreen({ navigation }) {
             await updateUsername({
               username,
             });
+
+            await updateUser();
 
             navigation.navigate('Explore');
           }}

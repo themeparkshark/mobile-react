@@ -31,13 +31,14 @@ const Stack = createNativeStackNavigator();
 const HomeStackNavigator = () => {
   return (
     <Stack.Navigator
+      initialRouteName='Loading'
       screenOptions={{
         headerShown: false,
       }}
     >
       <Stack.Screen
-        name="Loading"
-        component={LoadingScreen}
+        name="Error"
+        component={ErrorScreen}
         options={{
           animation: 'none',
           gestureEnabled: false,
@@ -50,14 +51,6 @@ const HomeStackNavigator = () => {
           title: 'Welcome',
           headerBackVisible: false,
           headerShown: true,
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Error"
-        component={ErrorScreen}
-        options={{
           animation: 'none',
           gestureEnabled: false,
         }}
@@ -139,14 +132,27 @@ const HomeStackNavigator = () => {
           gestureEnabled: false,
         }}
       />
+      <Stack.Screen
+        name="Loading"
+        component={LoadingScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
     </Stack.Navigator>
   );
 };
 
 const AuthStackNavigator = () => {
   return (
-    <Stack.Navigator>
-      <Stack.Screen name="Login" component={LoginScreen} />
+    <Stack.Navigator
+      initialRouteName='Login'
+    >
+      <Stack.Screen
+        name="Login"
+        component={LoginScreen}
+      />
     </Stack.Navigator>
   );
 };

@@ -1,22 +1,32 @@
 import { View, Text } from 'react-native';
-import { useEffect, useContext, useState } from 'react';
-import { ThemeContext } from '../context/ThemeProvider';
+import { useContext, useEffect, useState } from 'react';
 import * as RootNavigation from '../RootNavigation';
-import currentTheme from '../api/endpoints/themes/current';
+import { AuthContext } from '../context/AuthProvider';
+import getInventory from '../api/endpoints/me/inventory';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
-  const { setTheme } = useContext(ThemeContext);
+  const { setInventory, isReady, user } = useContext(AuthContext);
 
   useEffect(() => {
-    currentTheme().then((response) => {
-      setTheme(response);
+    if (!isReady) {
+      return;
+    }
+
+    (async () => {
+      setInventory(await getInventory());
+
       setLoading(false);
-    });
-  }, []);
+    })();
+  }, [isReady]);
 
   useEffect(() => {
     if (!loading) {
+      if (!user?.username) {
+        RootNavigation.navigate('Welcome');
+        return;
+      }
+
       RootNavigation.navigate('Explore');
     }
   }, [loading]);

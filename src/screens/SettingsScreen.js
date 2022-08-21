@@ -74,7 +74,9 @@ export default function SettingsScreen() {
                       style: 'destructive',
                       onPress: async () => {
                         await deleteUser();
-                        logout();
+                        await logout();
+
+                        RootNavigation.navigate('Login');
                       },
                     },
                   ]

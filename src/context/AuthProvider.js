@@ -4,7 +4,6 @@ import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 import Storage from 'expo-storage';
-import * as RootNavigation from '../RootNavigation';
 
 export const AuthContext = createContext({
   user: null,
@@ -20,11 +19,16 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [inventory, setInventory] = useState(null);
   const [token, setToken] = useState('');
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const { headers } = client.defaults;
-    headers.common.Authorization = `Bearer ${user?.token ?? token}`;
-  }, [token, user]);
+    headers.common.Authorization = `Bearer ${token}`;
+
+    if (token) {
+      setIsReady(true);
+    }
+  }, [token]);
 
   useEffect(() => {
     SecureStore.getItemAsync('token').then(_token => {
@@ -41,12 +45,6 @@ export const AuthProvider = ({ children }) => {
 
       await SecureStore.setItemAsync('token', response.token);
       await updateUser();
-
-      if (response.data.was_recently_created) {
-        RootNavigation.navigate('Welcome');
-      } else {
-        RootNavigation.navigate('Loading');
-      }
     } catch (error) {
       console.log(error);
     }
@@ -70,7 +68,6 @@ export const AuthProvider = ({ children }) => {
       await Storage.removeItem({ key: 'user' })
       await SecureStore.deleteItemAsync('token');
       setUser(null);
-      RootNavigation.navigate('Login');
     } catch (error) {
       console.log(error);
     }
@@ -86,6 +83,7 @@ export const AuthProvider = ({ children }) => {
         logout,
         inventory,
         setInventory,
+        isReady,
       }}
     >
       {children}
