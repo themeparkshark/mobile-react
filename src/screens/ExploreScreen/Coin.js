@@ -14,6 +14,7 @@ export default function Coin({coin, onExpire}) {
       await detachCoin(coin);
       onExpire();
     }, dayjs(coin.pivot.active_to).diff(dayjs()));
+
     return () => clearInterval(interval);
   }, [coin.id]);
 
@@ -65,7 +66,7 @@ export default function Coin({coin, onExpire}) {
         </ImageBackground>
         <Image
           source={{
-            uri: 'https://static.wikia.nocookie.net/club-penguin-rewritten/images/d/d9/Coin_Icon.png/revision/latest/scale-to-width-down/1970?cb=20190112081805',
+            uri: theme.coin_animation_url,
           }}
           style={{
             width: 30,

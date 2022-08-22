@@ -135,7 +135,18 @@ export default function ExploreScreen() {
                 zIndex: 10,
               }}
             >
-              {(activeRedeemable.type === 'task' || activeRedeemable.type === 'secret_task' || activeRedeemable.type === 'coin') && (
+              {(activeRedeemable.type === 'task' || activeRedeemable.type === 'secret_task') && (
+                <RedeemModal
+                  redeemable={activeRedeemable.model}
+                  park={park}
+                  onPress={() => {
+                    getRedeemables();
+                    updateUser();
+                  }}
+                />
+              )}
+              {activeRedeemable.type === 'coin'
+              && dayjs().isBetween(dayjs(activeRedeemable.model.pivot.active_from), dayjs(activeRedeemable.model.pivot.active_to)) && (
                 <RedeemModal
                   redeemable={activeRedeemable.model}
                   park={park}
@@ -218,7 +229,18 @@ export default function ExploreScreen() {
                 latitude: task.latitude,
                 longitude: task.longitude,
               }}
-            />
+            >
+              <Image
+                source={{
+                  uri: theme.task_animation_url,
+                }}
+                style={{
+                  width: 80,
+                  height: 80,
+                  resizeMode: 'contain',
+                }}
+              />
+            </Marker>
           );
         })}
         {redeemables?.coins.filter((coin) => {
