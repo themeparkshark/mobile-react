@@ -35,15 +35,6 @@ export default function NewsScreen({ navigation }) {
           },
           text: 'Pins',
         },
-        {
-          image: theme.base_button_url,
-          screen: () => {
-            RootNavigation.navigate('User', {
-              user: 3,
-            })
-          },
-          text: 'Test profile',
-        },
         ...stores.map((store) => {
           return {
             image: store.icon_url,
