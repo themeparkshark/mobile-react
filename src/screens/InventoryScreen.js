@@ -102,13 +102,14 @@ export default function InventoryScreen() {
           }}
           style={{
             width: '100%',
-            height: '100%',
+            flex: 1,
             resizeMode: 'cover',
           }}
         >
           <View
             style={{
               flex: 1,
+              paddingBottom: 8,
             }}
           >
             <FlatList
