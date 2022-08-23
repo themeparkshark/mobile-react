@@ -106,23 +106,17 @@ export default function InventoryScreen() {
             resizeMode: 'cover',
           }}
         >
-          <View
+          <FlatList
             style={{
               flex: 1,
-              paddingBottom: 8,
+              padding: 4,
             }}
-          >
-            <FlatList
-              style={{
-                flex: 1,
-                padding: 4,
-              }}
-              data={items}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <Item item={item} currentItemType={currentItemType} />}
-              numColumns={3}
-            />
-          </View>
+            contentContainerStyle={{ paddingBottom: 8 }}
+            data={items}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => <Item item={item} currentItemType={currentItemType} />}
+            numColumns={3}
+          />
         </ImageBackground>
       )}
     </>
