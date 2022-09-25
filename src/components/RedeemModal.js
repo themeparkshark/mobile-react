@@ -14,12 +14,20 @@ export default function RedeemModal({ redeemable, park, onPress }) {
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(Animated.timing(progress, {
-      toValue: 1,
-      duration: 2250,
-      useNativeDriver: true,
-    })).start();
-  }, []);
+    if (modalVisible) {
+      Animated.loop(Animated.timing(progress, {
+        toValue: 1,
+        duration: 2250,
+        useNativeDriver: true,
+      })).start();
+    } else {
+      Animated.loop(Animated.timing(progress, {
+        toValue: 0,
+        duration: 0,
+        useNativeDriver: true,
+      })).start();
+    }
+  }, [modalVisible]);
 
   const completeRedeemable = async () => {
     await completeTask(redeemable);
@@ -54,27 +62,36 @@ export default function RedeemModal({ redeemable, park, onPress }) {
             justifyContent: 'center',
           }}
         >
-          <Lottie
-            source={require('../../assets/animations/confetti.json')}
-            progress={progress}
+          <Pressable
             style={{
-              position: 'absolute',
-              width: 900,
-              height: 400,
-              zIndex: 20,
-              top: 15,
-              left: -80,
-            }}
-          />
-          <View
-            style={{
-              position: 'absolute',
               width: '100%',
               height: '100%',
-              alignSelf: 'center',
-              backgroundColor: 'rgba(0, 0, 0, .7)',
+              position: 'absolute',
             }}
-          />
+            onPress={() => setModalVisible(false)}
+          >
+            <Lottie
+              source={require('../../assets/animations/confetti.json')}
+              progress={progress}
+              style={{
+                position: 'absolute',
+                width: 900,
+                height: 400,
+                top: 15,
+                zIndex: 20,
+                left: -80,
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                alignSelf: 'center',
+                backgroundColor: 'rgba(0, 0, 0, .7)',
+              }}
+            />
+          </Pressable>
           <ImageBackground
             source={redeem}
             resizeMode="contain"
