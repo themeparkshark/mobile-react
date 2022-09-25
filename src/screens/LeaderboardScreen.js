@@ -54,7 +54,7 @@ export default function LeaderboardScreen() {
           <RNPickerSelect
             placeholder={{}}
             onValueChange={(value) => setSelectedPark(value)}
-            onDonePress={() => setTime(Date.now())}
+            onClose={() => setTime(Date.now())}
             value={selectedPark}
             items={parks.map((item) => {
               return {
