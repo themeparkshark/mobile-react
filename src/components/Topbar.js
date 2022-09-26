@@ -6,6 +6,8 @@ import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import coins from '../../assets/images/coins.png';
 import diamonds from '../../assets/images/purple_diamonds.png';
+import topbar from '../../assets/images/screens/explore/topbar.png';
+import back from '../../assets/images/screens/explore/back.png';
 
 export default function Topbar({ button, text, showBackButton = false, showCoins = false, showPurpleDiamonds = false }) {
   const { theme } = useContext(ThemeContext);
@@ -19,9 +21,7 @@ export default function Topbar({ button, text, showBackButton = false, showCoins
       }}
     >
       <ImageBackground
-        source={{
-          uri: theme.top_bar_url,
-        }}
+        source={topbar}
         resizeMode="cover"
         style={{
           height: 120,
@@ -50,9 +50,7 @@ export default function Topbar({ button, text, showBackButton = false, showCoins
                 {showBackButton && (
                   <Button onPress={() => RootNavigation.goBack()}>
                     <Image
-                      source={{
-                        uri: theme.back_button_url,
-                      }}
+                      source={back}
                       style={{
                         width: 35,
                         height: 35,
