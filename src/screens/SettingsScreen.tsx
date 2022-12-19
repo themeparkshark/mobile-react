@@ -1,0 +1,108 @@
+import Topbar from '../components/Topbar';
+import Wrapper from '../components/Wrapper';
+import { SafeAreaView, PlatformColor, Alert } from 'react-native';
+import { AuthContext } from '../context/AuthProvider';
+import { useContext } from 'react';
+import { Cell, Section, TableView } from 'react-native-tableview-simple';
+import dayjs from 'dayjs';
+import * as WebBrowser from 'expo-web-browser';
+import deleteUser from '../api/endpoints/me/delete';
+import * as RootNavigation from '../RootNavigation';
+
+export default function SettingsScreen() {
+  const { user, logout } = useContext(AuthContext);
+
+  return (
+    <>
+      <Topbar text="Settings" showBackButton={true} />
+      <SafeAreaView>
+        <TableView>
+          <Section header={'General'.toUpperCase()}>
+            <Cell
+              title="Username"
+              cellStyle="RightDetail"
+              detail={user.username}
+            />
+            <Cell
+              title="Theme Park Shark ID"
+              cellStyle="RightDetail"
+              detail={user.email}
+              accessory="DisclosureIndicator"
+              onPress={() => {
+                RootNavigation.navigate('UpdateEmail');
+              }}
+            />
+            <Cell
+              title="Joined on"
+              cellStyle="RightDetail"
+              detail={dayjs(user.created_at).format('DD MMMM YYYY')}
+            />
+          </Section>
+          <Section header={'Help'.toUpperCase()}>
+            <Cell
+              title="Terms of Service"
+              titleTextStyle={{
+                color: PlatformColor('systemBlue'),
+              }}
+              onPress={() =>
+                WebBrowser.openBrowserAsync(
+                  'https://themeparkshark.com/info/terms-of-service'
+                )
+              }
+            />
+            <Cell
+              title="Privacy Policy"
+              titleTextStyle={{
+                color: PlatformColor('systemBlue'),
+              }}
+              onPress={() =>
+                WebBrowser.openBrowserAsync(
+                  'https://themeparkshark.com/info/privacy-policy'
+                )
+              }
+            />
+          </Section>
+          <Section
+            footer={`© Theme Park Shark ${new Date().getFullYear()} v1.0`}
+          >
+            <Cell
+              title="Deactivate My Account"
+              titleTextStyle={{
+                color: PlatformColor('systemRed'),
+              }}
+              onPress={() => {
+                Alert.alert(
+                  'Are you sure you want to delete your account?',
+                  'You cannot undo this action.',
+                  [
+                    {
+                      text: 'Cancel',
+                      style: 'cancel',
+                    },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: async () => {
+                        await deleteUser();
+                        await logout();
+
+                        RootNavigation.navigate('Login');
+                      },
+                    },
+                  ]
+                );
+              }}
+            />
+            <Cell
+              title="Sign Out"
+              titleTextStyle={{
+                color: PlatformColor('systemBlue'),
+              }}
+              onPress={() => logout()}
+            />
+          </Section>
+        </TableView>
+      </SafeAreaView>
+    </>
+  );
+}

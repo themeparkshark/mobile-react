@@ -14,4 +14,4 @@ export default async function checkForRedeemable() {
   } catch (error) {
     return null;
   }
-};
+}

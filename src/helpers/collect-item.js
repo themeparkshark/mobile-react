@@ -29,8 +29,8 @@ export default async function collectItem(item, onPurchase) {
               },
             ]
           );
-        }
+        },
       },
     ]
   );
-};
+}
