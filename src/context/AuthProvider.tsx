@@ -7,15 +7,20 @@ import Storage from 'expo-storage';
 import { UserType } from '../models/user-type';
 import { InventoryType } from '../models/inventory-type';
 
+export interface CredentialType {
+  readonly identityToken: string;
+  readonly user: string;
+}
+
 export interface AuthContextType {
-  readonly inventory: InventoryType;
-  readonly isReady: () => void;
-  readonly login: () => void;
+  readonly inventory: InventoryType | null;
+  readonly isReady: boolean;
+  readonly login: (credential: CredentialType) => void;
   readonly logout: () => void;
   readonly setInventory: (inventory: InventoryType) => void;
-  readonly setUser: () => void;
+  readonly setUser: (user: UserType) => void;
   readonly updateUser: () => void;
-  readonly user: UserType;
+  readonly user: UserType | null;
 }
 
 export const AuthContext = createContext<AuthContextType>(
@@ -23,8 +28,8 @@ export const AuthContext = createContext<AuthContextType>(
 );
 
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserType | null>();
-  const [inventory, setInventory] = useState<InventoryType>();
+  const [user, setUser] = useState<UserType | null>(null);
+  const [inventory, setInventory] = useState<InventoryType | null>(null);
   const [token, setToken] = useState<string>();
   const [isReady, setIsReady] = useState<boolean>(false);
 
@@ -45,10 +50,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     });
   }, []);
 
-  const requestLogin = async (credential: {
-    readonly identityToken: string;
-    readonly user: string;
-  }) => {
+  const requestLogin = async (credential: CredentialType) => {
     try {
       const response = await login(credential);
       setToken(response.token);

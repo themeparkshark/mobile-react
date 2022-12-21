@@ -92,43 +92,45 @@ export default function ExploreScreen() {
           >
             <TaskListModal redeemables={redeemables} />
           </View>
-          <View
-            style={{
-              position: 'absolute',
-              bottom: 30,
-              right: 16,
-              zIndex: 10,
-            }}
-          >
-            <Button
-              onPress={() => {
-                RootNavigation.navigate('Inventory');
+          {inventory && (
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 30,
+                right: 16,
+                zIndex: 10,
               }}
             >
-              <ImageBackground
-                style={{
-                  width: 70,
-                  height: 84,
-                  resizeMode: 'contain',
-                  position: 'relative',
+              <Button
+                onPress={() => {
+                  RootNavigation.navigate('Inventory');
                 }}
-                source={require('../../assets/images/screens/explore/list.png')}
               >
-                <Playercard
-                  showBackground={false}
-                  animate={false}
-                  inventory={inventory}
+                <ImageBackground
                   style={{
-                    position: 'absolute',
-                    width: 100,
-                    height: 100,
-                    left: -14,
-                    top: -15,
+                    width: 70,
+                    height: 84,
+                    resizeMode: 'contain',
+                    position: 'relative',
                   }}
-                />
-              </ImageBackground>
-            </Button>
-          </View>
+                  source={require('../../assets/images/screens/explore/base.png')}
+                >
+                  <Playercard
+                    showBackground={false}
+                    animate={false}
+                    inventory={inventory}
+                    style={{
+                      position: 'absolute',
+                      width: 100,
+                      height: 100,
+                      left: -14,
+                      top: -15,
+                    }}
+                  />
+                </ImageBackground>
+              </Button>
+            </View>
+          )}
           {activeRedeemable && (
             <View
               style={{

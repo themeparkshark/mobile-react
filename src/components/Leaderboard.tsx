@@ -14,7 +14,7 @@ export default function Leaderboard({
   useEffect(() => {
     (async () => {
       const response = await getUsers(leaderboard.id);
-      setUsers(response.data);
+      setUsers(response);
     })();
   }, []);
 

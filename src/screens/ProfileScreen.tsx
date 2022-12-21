@@ -64,10 +64,10 @@ export default function NewsScreen({ navigation }) {
     }
   }, [stores]);
 
-  return (
+  return user && (
     <Wrapper>
       <Topbar
-        text={user?.username}
+        text={user.username}
         button={
           <Button
             onPress={() => {
@@ -130,7 +130,7 @@ export default function NewsScreen({ navigation }) {
               paddingBottom: 8,
             }}
           >
-            Level {user?.experience_level.level}
+            Level {user.experience_level.level}
           </Text>
           <View
             style={{
@@ -140,7 +140,7 @@ export default function NewsScreen({ navigation }) {
           >
             <Progress
               progress={
-                (user?.experience / user?.experience_level.experience) * 100
+                (user.experience / user.experience_level.experience) * 100
               }
             />
           </View>
@@ -152,7 +152,7 @@ export default function NewsScreen({ navigation }) {
               fontSize: 20,
             }}
           >
-            {user?.experience} / {user?.experience_level.experience} XP
+            {user.experience} / {user.experience_level.experience} XP
           </Text>
           <View
             style={{
@@ -274,7 +274,7 @@ export default function NewsScreen({ navigation }) {
                     color: theme.primary,
                   }}
                 >
-                  {user?.coins}
+                  {user.coins}
                 </Text>
               </View>
               <View
@@ -329,7 +329,7 @@ export default function NewsScreen({ navigation }) {
                   color: theme.primary,
                 }}
               >
-                {user?.total_experience}
+                {user.total_experience}
               </Text>
             </View>
           </View>

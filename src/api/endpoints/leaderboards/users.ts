@@ -4,13 +4,13 @@ import { ApiResponseType } from '../../../models/api-response-type';
 
 export default async function leaderboardUsers(
   leaderboard: number,
-  page: number
+  page?: number
 ): Promise<UserType[]> {
   const { data } = await client.get<ApiResponseType<UserType[]>>(
     `/leaderboards/${leaderboard}/users`,
     {
       params: {
-        page,
+        page: page ?? 1,
       },
     }
   );
