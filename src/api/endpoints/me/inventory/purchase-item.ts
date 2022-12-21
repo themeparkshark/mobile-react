@@ -1,5 +1,4 @@
 import client from '../../../client';
-import { AnnouncementType } from '../../../../models/announcement-type';
 import { ItemType } from '../../../../models/item-type';
 import { ApiResponseType } from '../../../../models/api-response-type';
 

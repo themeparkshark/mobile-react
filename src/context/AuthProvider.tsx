@@ -23,9 +23,9 @@ export const AuthContext = createContext<AuthContextType>(
 );
 
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserType | null>(null);
-  const [inventory, setInventory] = useState<InventoryType | null>(null);
-  const [token, setToken] = useState<string>('');
+  const [user, setUser] = useState<UserType | null>();
+  const [inventory, setInventory] = useState<InventoryType>();
+  const [token, setToken] = useState<string>();
   const [isReady, setIsReady] = useState<boolean>(false);
 
   useEffect(() => {
@@ -61,28 +61,20 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const updateUser = () => {
-    getMe()
-      .then((_user) => {
-        setUser(_user);
+    getMe().then((_user) => {
+      setUser(_user);
 
-        Storage.setItem({
-          key: 'user',
-          value: JSON.stringify({ ..._user }),
-        });
-      })
-      .catch((error) => {
-        console.log(error);
+      Storage.setItem({
+        key: 'user',
+        value: JSON.stringify({ ..._user }),
       });
+    });
   };
 
   const logout = async () => {
-    try {
-      await Storage.removeItem({ key: 'user' });
-      await SecureStore.deleteItemAsync('token');
-      setUser(null);
-    } catch (error) {
-      console.log(error);
-    }
+    await Storage.removeItem({ key: 'user' });
+    await SecureStore.deleteItemAsync('token');
+    setUser(null);
   };
 
   return (

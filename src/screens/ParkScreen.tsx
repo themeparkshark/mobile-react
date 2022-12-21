@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import getPark from '../api/endpoints/parks/getPark';
 import getTasks from '../api/endpoints/parks/getTasks';
 import Topbar from '../components/Topbar';
-import Wrapper from '../components/Wrapper';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;

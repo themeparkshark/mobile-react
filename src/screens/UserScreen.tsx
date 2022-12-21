@@ -1,23 +1,24 @@
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dimensions,
+  Image,
   Pressable,
   ScrollView,
   Text,
-  Image,
   View,
 } from 'react-native';
 import getUser from '../api/endpoints/users/get';
 import Topbar from '../components/Topbar';
 import Progress from '../components/Progress';
 import Playercard from '../components/Playercard';
-import { ThemeContext } from '../context/ThemeProvider';
+import { ParkType } from '../models/park-type';
+import { UserType } from '../models/user-type';
+import theme from '../config/theme';
 
 export default function UserScreen({ navigation, route }) {
   const { user } = route.params;
-  const [parks, setParks] = useState([]);
-  const [currentUser, setCurrentUser] = useState(null);
-  const { theme } = useContext(ThemeContext);
+  const [parks, setParks] = useState<ParkType[]>();
+  const [currentUser, setCurrentUser] = useState<UserType>();
 
   useEffect(() => {
     getUser(user).then((response) => setCurrentUser(response));
@@ -39,22 +40,24 @@ export default function UserScreen({ navigation, route }) {
             position: 'relative',
           }}
         >
-          <Playercard
-            user={currentUser}
-            inventory={currentUser?.inventory}
-            style={{
-              position: 'absolute',
-              width: Dimensions.get('window').width,
-              height: 455,
-              marginTop: -55,
-            }}
-          />
+          {currentUser && (
+            <Playercard
+              user={currentUser}
+              inventory={currentUser.inventory}
+              style={{
+                position: 'absolute',
+                width: Dimensions.get('window').width,
+                height: 455,
+                marginTop: -55,
+              }}
+            />
+          )}
         </View>
         <View
           style={{
             borderTopStyle: 'solid',
             borderTopWidth: 5,
-            borderTopColor: theme.primary_color,
+            borderTopColor: theme.primary,
             paddingLeft: 32,
             paddingRight: 32,
             paddingTop: 24,
@@ -168,7 +171,7 @@ export default function UserScreen({ navigation, route }) {
                     fontFamily: 'Knockout',
                     textTransform: 'uppercase',
                     fontSize: 16,
-                    color: theme.primary_color,
+                    color: theme.primary,
                   }}
                 >
                   {parks?.length}
@@ -196,7 +199,7 @@ export default function UserScreen({ navigation, route }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: theme.primary_color,
+                  color: theme.primary,
                 }}
               >
                 {currentUser?.total_experience}

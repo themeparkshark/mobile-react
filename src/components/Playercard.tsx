@@ -1,14 +1,13 @@
 import {
-  View,
-  Image,
-  StyleSheet,
   Animated,
+  Image,
   StyleProp,
+  StyleSheet,
+  View,
   ViewStyle,
 } from 'react-native';
 import asset from '../helpers/asset';
-import { useContext, useEffect, useRef } from 'react';
-import { ThemeContext } from '../context/ThemeProvider';
+import { useEffect, useRef } from 'react';
 import { UserType } from '../models/user-type';
 import { InventoryType } from '../models/inventory-type';
 
@@ -19,13 +18,12 @@ export default function Playercard({
   showBackground = true,
   animate = true,
 }: {
-  readonly user: UserType;
+  readonly user?: UserType;
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
-  readonly showBackground: boolean;
-  readonly animate: boolean;
+  readonly showBackground?: boolean;
+  readonly animate?: boolean;
 }) {
-  const { theme } = useContext(ThemeContext);
   const translate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -69,9 +67,7 @@ export default function Playercard({
         )}
         {user?.verified_at && showBackground && (
           <Image
-            source={{
-              uri: theme.verified_badge_url,
-            }}
+            source={require('../../assets/images/screens/profile/verified.png')}
             style={{
               width: 40,
               height: 40,

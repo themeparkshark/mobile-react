@@ -1,24 +1,25 @@
 import {
+  Dimensions,
+  Image,
   ImageBackground,
   ScrollView,
-  Dimensions,
   View,
-  Image,
 } from 'react-native';
 import getStore from '../api/endpoints/stores/get';
 import getCatalog from '../api/endpoints/catalogs/get';
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Topbar from '../components/Topbar';
-import { ThemeContext } from '../context/ThemeProvider';
 import Section from './Store/Section';
+import { StoreType } from '../models/store-type';
+import { CatalogType } from '../models/catalog-type';
+import { ItemType } from '../models/item-type';
 
 export default function StoreScreen({ route }) {
   const { store } = route.params;
-  const [currentStore, setCurrentStore] = useState(null);
-  const [catalog, setCatalog] = useState(null);
-  const [weeklyItems, setWeeklyItems] = useState(null);
-  const [monthlyItems, setMonthlyItems] = useState(null);
-  const { theme } = useContext(ThemeContext);
+  const [currentStore, setCurrentStore] = useState<StoreType>();
+  const [catalog, setCatalog] = useState<CatalogType>();
+  const [weeklyItems, setWeeklyItems] = useState<ItemType[]>();
+  const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
 
   useEffect(() => {
     getStore(store).then((response) => setCurrentStore(response));
@@ -60,9 +61,7 @@ export default function StoreScreen({ route }) {
           style={{
             flex: 1,
           }}
-          source={{
-            uri: theme.secondary_background_url,
-          }}
+          source={require('../../assets/images/water_background.png')}
         >
           <ScrollView
             style={{
@@ -87,8 +86,8 @@ export default function StoreScreen({ route }) {
                 }}
               />
             </View>
-            <Section title="Weekly Items" items={weeklyItems} />
-            <Section title="Monthly Items" items={monthlyItems} />
+            {weeklyItems && <Section title="Weekly Items" items={weeklyItems} />}
+            {monthlyItems && <Section title="Weekly Items" items={monthlyItems} />}
           </ScrollView>
         </ImageBackground>
       </View>

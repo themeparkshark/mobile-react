@@ -1,10 +1,10 @@
 import {
   ActivityIndicator,
-  View,
-  ScrollView,
   RefreshControl,
+  ScrollView,
+  View,
 } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Wrapper from '../components/Wrapper';
 import client from '../api/client-cms';
 import Topbar from '../components/Topbar';

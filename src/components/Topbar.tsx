@@ -1,12 +1,12 @@
 import {
   Dimensions,
+  Image,
   ImageBackground,
   SafeAreaView,
   Text,
   View,
-  Image,
 } from 'react-native';
-import { ThemeContext } from '../context/ThemeProvider';
+import theme from '../config/theme';
 import { AuthContext } from '../context/AuthProvider';
 import { ReactNode, useContext } from 'react';
 import Button from '../components/Button';
@@ -25,7 +25,6 @@ export default function Topbar({
   readonly showCoins?: boolean;
   readonly showPurpleDiamonds?: boolean;
 }) {
-  const { theme } = useContext(ThemeContext);
   const { user } = useContext(AuthContext);
   const width = text ? (showCoins ? '20%' : '15%') : '20%';
 
@@ -100,7 +99,7 @@ export default function Topbar({
                         textShadowOffset: {
                           width: -1,
                         },
-                        textShadowColor: theme.primary_color,
+                        textShadowColor: theme.primary,
                         textShadowRadius: 5,
                       }}
                     >
@@ -127,7 +126,7 @@ export default function Topbar({
                   textShadowOffset: {
                     width: -1,
                   },
-                  textShadowColor: theme.primary_color,
+                  textShadowColor: theme.primary,
                   textShadowRadius: 5,
                   paddingLeft: 12,
                   paddingRight: 12,
@@ -169,7 +168,7 @@ export default function Topbar({
                         textShadowOffset: {
                           width: -1,
                         },
-                        textShadowColor: theme.primary_color,
+                        textShadowColor: theme.primary,
                         textShadowRadius: 5,
                       }}
                     >

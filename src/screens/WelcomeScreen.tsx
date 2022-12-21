@@ -1,5 +1,5 @@
-import { Button, Text, View, TextInput } from 'react-native';
-import { useLayoutEffect, useState, useContext } from 'react';
+import { Button, Text, TextInput, View } from 'react-native';
+import { useContext, useLayoutEffect, useState } from 'react';
 import updateUsername from '../api/endpoints/me/update-username';
 import { AuthContext } from '../context/AuthProvider';
 

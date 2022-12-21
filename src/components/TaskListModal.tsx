@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Button from './Button';
-import { useContext } from 'react';
-import { ThemeContext } from '../context/ThemeProvider';
 import { RedeemableType } from '../models/redeemable-type';
 
 export default function TaskListModal({
@@ -11,7 +9,6 @@ export default function TaskListModal({
   readonly redeemables: RedeemableType[];
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const { theme } = useContext(ThemeContext);
 
   return (
     <>
@@ -26,9 +23,7 @@ export default function TaskListModal({
             height: 80,
             resizeMode: 'contain',
           }}
-          source={{
-            uri: theme.task_list_button_url,
-          }}
+          source={require('../../assets/images/screens/explore/list.png')}
         />
       </Button>
       <Modal

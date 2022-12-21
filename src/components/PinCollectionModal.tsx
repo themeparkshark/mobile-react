@@ -1,14 +1,14 @@
-import { useState, useContext } from 'react';
+import { useState } from 'react';
 import {
-  ImageBackground,
   Dimensions,
+  Image,
+  ImageBackground,
   Modal,
   Pressable,
   Text,
   View,
-  Image,
 } from 'react-native';
-import { ThemeContext } from '../context/ThemeProvider';
+import theme from '../config/theme';
 import { PinCollectionType } from '../models/pin-collection-type';
 
 export default function pinCollectionModal({
@@ -16,7 +16,6 @@ export default function pinCollectionModal({
 }: {
   readonly pinCollection: PinCollectionType;
 }) {
-  const { theme } = useContext(ThemeContext);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
 
   return (
@@ -97,7 +96,7 @@ export default function pinCollectionModal({
                 padding: 6,
                 flexDirection: 'row',
                 justifyContent: 'center',
-                backgroundColor: theme.secondary_color,
+                backgroundColor: theme.secondary,
               }}
             >
               {[...Array(pinCollection.pins_count)].map((element, index) => {
@@ -148,7 +147,7 @@ export default function pinCollectionModal({
             <View
               style={{
                 padding: 10,
-                backgroundColor: theme.primary_color,
+                backgroundColor: theme.primary,
               }}
             >
               <Text
@@ -161,7 +160,7 @@ export default function pinCollectionModal({
                   textShadowOffset: {
                     width: -1,
                   },
-                  textShadowColor: theme.primary_color,
+                  textShadowColor: theme.primary,
                   textShadowRadius: 5,
                 }}
               >

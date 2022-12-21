@@ -1,13 +1,18 @@
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
-import yellow from '../../../assets/images/screens/store/yellow.png';
-import purple from '../../../assets/images/screens/store/purple.png';
-import { ThemeContext } from '../../context/ThemeProvider';
-import { useContext } from 'react';
+import theme from '../../config/theme';
 import Item from './Item';
+import { ItemType } from '../../models/item-type';
 
-export default function Section({ title, items }) {
-  const { theme } = useContext(ThemeContext);
+const yellow = require('../../../assets/images/screens/store/yellow.png');
+const purple = require('../../../assets/images/screens/store/purple.png');
 
+export default function Section({
+  title,
+  items,
+}: {
+  title: string;
+  items: ItemType[];
+}) {
   return (
     <View
       style={{
@@ -48,7 +53,7 @@ export default function Section({ title, items }) {
               textShadowOffset: {
                 width: -1,
               },
-              textShadowColor: theme.primary_color,
+              textShadowColor: theme.primary,
               textShadowRadius: 5,
               fontFamily: 'Knockout',
               fontSize: 16,
@@ -70,7 +75,7 @@ export default function Section({ title, items }) {
             textShadowOffset: {
               width: -1,
             },
-            textShadowColor: theme.primary_color,
+            textShadowColor: theme.primary,
             textShadowRadius: 5,
           }}
         >

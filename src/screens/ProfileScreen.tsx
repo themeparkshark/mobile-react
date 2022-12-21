@@ -1,10 +1,10 @@
 import { useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
+  Image,
   Pressable,
   ScrollView,
   Text,
-  Image,
   View,
 } from 'react-native';
 import getParks from '../api/endpoints/me/visited-parks';
@@ -13,17 +13,24 @@ import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import Progress from '../components/Progress';
 import Playercard from '../components/Playercard';
-import { ThemeContext } from '../context/ThemeProvider';
 import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import getInventory from '../api/endpoints/me/inventory';
+import theme from '../config/theme';
+import {ParkType} from '../models/park-type';
+import {StoreType} from '../models/store-type';
+
+interface ButtonType {
+    readonly image: any;
+    readonly screen: () => void;
+    readonly text: string;
+}
 
 export default function NewsScreen({ navigation }) {
-  const [parks, setParks] = useState(null);
-  const [stores, setStores] = useState(null);
-  const [buttons, setButtons] = useState(null);
-  const { theme } = useContext(ThemeContext);
+  const [parks, setParks] = useState<ParkType[]>();
+  const [stores, setStores] = useState<StoreType[]>();
+  const [buttons, setButtons] = useState<ButtonType[]>();
   const { user, inventory, setInventory } = useContext(AuthContext);
 
   useEffect(() => {
@@ -36,7 +43,7 @@ export default function NewsScreen({ navigation }) {
     if (stores) {
       setButtons([
         {
-          image: theme.pin_collections_button_url,
+          image: require('../../assets/images/screens/profile/pin_collections.png'),
           screen: () => {
             RootNavigation.navigate('PinCollections');
           },
@@ -74,9 +81,7 @@ export default function NewsScreen({ navigation }) {
                 resizeMode: 'contain',
                 alignSelf: 'center',
               }}
-              source={{
-                uri: theme.settings_button_url,
-              }}
+              source={require('../../assets/images/screens/profile/settings.png')}
             />
           </Button>
         }
@@ -110,7 +115,7 @@ export default function NewsScreen({ navigation }) {
           style={{
             borderTopStyle: 'solid',
             borderTopWidth: 5,
-            borderTopColor: theme.primary_color,
+            borderTopColor: theme.primary,
             paddingLeft: 32,
             paddingRight: 32,
             paddingTop: 24,
@@ -266,7 +271,7 @@ export default function NewsScreen({ navigation }) {
                     fontFamily: 'Knockout',
                     textTransform: 'uppercase',
                     fontSize: 16,
-                    color: theme.primary_color,
+                    color: theme.primary,
                   }}
                 >
                   {user?.coins}
@@ -293,7 +298,7 @@ export default function NewsScreen({ navigation }) {
                     fontFamily: 'Knockout',
                     textTransform: 'uppercase',
                     fontSize: 16,
-                    color: theme.primary_color,
+                    color: theme.primary,
                   }}
                 >
                   {parks?.length}
@@ -321,7 +326,7 @@ export default function NewsScreen({ navigation }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: theme.primary_color,
+                  color: theme.primary,
                 }}
               >
                 {user?.total_experience}

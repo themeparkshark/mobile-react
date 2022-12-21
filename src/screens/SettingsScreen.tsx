@@ -1,6 +1,5 @@
 import Topbar from '../components/Topbar';
-import Wrapper from '../components/Wrapper';
-import { SafeAreaView, PlatformColor, Alert } from 'react-native';
+import { Alert, PlatformColor, SafeAreaView } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import { useContext } from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';

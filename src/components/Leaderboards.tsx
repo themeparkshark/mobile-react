@@ -1,4 +1,4 @@
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import Leaderboard from './Leaderboard';
 import { LeaderboardType } from '../models/leaderboard-type';
 

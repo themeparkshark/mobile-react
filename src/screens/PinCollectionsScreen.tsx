@@ -4,18 +4,15 @@ import {
   FlatList,
   Image,
   ImageBackground,
-  Pressable,
-  Text,
   View,
 } from 'react-native';
 import all from '../api/endpoints/pin-collections/all';
-import { useContext, useEffect, useState } from 'react';
-import { ThemeContext } from '../context/ThemeProvider';
+import { useEffect, useState } from 'react';
 import PinCollectionModal from '../components/PinCollectionModal';
+import { PinCollectionType } from '../models/pin-collection-type';
 
 export default function PinCollectionsScreen() {
-  const [collections, setCollections] = useState();
-  const { theme } = useContext(ThemeContext);
+  const [collections, setCollections] = useState<PinCollectionType[]>();
 
   useEffect(() => {
     all().then((response) => setCollections(response));
@@ -35,9 +32,7 @@ export default function PinCollectionsScreen() {
             flex: 1,
             paddingTop: 8,
           }}
-          source={{
-            uri: theme.secondary_background_url,
-          }}
+          source={require('../../assets/images/water_background.png')}
         >
           <View>
             <View
@@ -46,9 +41,7 @@ export default function PinCollectionsScreen() {
               }}
             >
               <Image
-                source={{
-                  uri: theme.pin_collections_promotion_image_url,
-                }}
+                source={require('../../assets/images/screens/pin-collections/shark.png')}
                 style={{
                   width: Dimensions.get('window').width - 25,
                   height: '100%',

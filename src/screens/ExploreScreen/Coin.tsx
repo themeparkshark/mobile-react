@@ -1,10 +1,10 @@
 import { Image, ImageBackground, Text, View } from 'react-native';
-import { useEffect, useContext } from 'react';
+import { useEffect } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import dayjs from 'dayjs';
 import detachCoin from '../../api/endpoints/me/coins/detach-coin';
-import { ThemeContext } from '../../context/ThemeProvider';
 import { CoinType } from '../../models/coin-type';
+import theme from '../../config/theme';
 
 export default function Coin({
   coin,
@@ -13,8 +13,6 @@ export default function Coin({
   readonly coin: CoinType;
   readonly onExpire: () => void;
 }) {
-  const { theme } = useContext(ThemeContext);
-
   useEffect(() => {
     const interval = setInterval(async () => {
       await detachCoin(coin);
@@ -56,7 +54,7 @@ export default function Coin({
                     fontFamily: 'Shark',
                     textTransform: 'uppercase',
                     fontSize: 18,
-                    color: theme.primary_color,
+                    color: theme.primary,
                   }}
                 >
                   {minutes}:{zeroPad(seconds)}
@@ -66,9 +64,7 @@ export default function Coin({
           />
         </ImageBackground>
         <Image
-          source={{
-            uri: theme.coin_animation_url,
-          }}
+          source={require('../../../assets/images/screens/explore/coin.gif')}
           style={{
             width: 30,
             height: 30,

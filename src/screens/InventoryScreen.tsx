@@ -1,28 +1,26 @@
 import {
   Dimensions,
-  SafeAreaView,
-  ImageBackground,
-  View,
-  Pressable,
-  Text,
-  Image,
-  ScrollView,
   FlatList,
+  Image,
+  ImageBackground,
+  Pressable,
+  ScrollView,
+  View,
 } from 'react-native';
 import { useContext, useEffect, useState } from 'react';
 import Playercard from '../components/Playercard';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
-import { ThemeContext } from '../context/ThemeProvider';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
 import Item from '../components/Item';
+import { ItemTypeType } from '../models/item-type-type';
+import { ItemType } from '../models/item-type';
 
 export default function InventoryScreen() {
-  const [itemTypes, setItemTypes] = useState(null);
-  const [currentItemType, setCurrentItemType] = useState(null);
-  const [items, setItems] = useState(null);
-  const { theme } = useContext(ThemeContext);
+  const [itemTypes, setItemTypes] = useState<ItemTypeType[]>();
+  const [currentItemType, setCurrentItemType] = useState<ItemTypeType>();
+  const [items, setItems] = useState<ItemType[]>();
   const { inventory } = useContext(AuthContext);
 
   useEffect(() => {
@@ -105,32 +103,30 @@ export default function InventoryScreen() {
           })}
         </ScrollView>
       </View>
-      {inventory && (
-        <ImageBackground
-          source={{
-            uri: theme.primary_background_url,
-          }}
-          style={{
-            width: '100%',
-            flex: 1,
-            resizeMode: 'cover',
-          }}
-        >
-          <FlatList
+      {inventory && currentItemType && (
+          <ImageBackground
+            source={require('../../assets/images/shark_background.png')}
             style={{
+              width: '100%',
               flex: 1,
-              padding: 4,
+              resizeMode: 'cover',
             }}
-            contentContainerStyle={{ paddingBottom: 8 }}
-            data={items}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <Item item={item} currentItemType={currentItemType} />
-            )}
-            numColumns={3}
-          />
-        </ImageBackground>
-      )}
+          >
+            <FlatList
+              style={{
+                flex: 1,
+                padding: 4,
+              }}
+              contentContainerStyle={{ paddingBottom: 8 }}
+              data={items}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <Item item={item} currentItemType={currentItemType} />
+              )}
+              numColumns={3}
+            />
+          </ImageBackground>
+        )}
     </>
   );
 }

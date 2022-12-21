@@ -2,13 +2,12 @@ import {
   Dimensions,
   Image,
   ImageBackground,
-  View,
   SafeAreaView,
+  View,
 } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
-import { ReactNode, useContext } from 'react';
-import { ThemeContext } from '../context/ThemeProvider';
+import { ReactNode } from 'react';
 
 export default function Wrapper({
   showBar = true,
@@ -17,31 +16,29 @@ export default function Wrapper({
   readonly showBar?: boolean;
   readonly children: ReactNode[];
 }) {
-  const { theme } = useContext(ThemeContext);
-
   const items = [
     {
-      icon: theme.news_button_url,
+      icon: require('../../assets/images/toolbar/news.png'),
       screen: 'News',
       size: 'normal',
     },
     {
-      icon: theme.leaderboard_button_url,
+      icon: require('../../assets/images/toolbar/leaderboard.png'),
       screen: 'Leaderboard',
       size: 'normal',
     },
     {
-      icon: theme.explore_button_url,
+      icon: require('../../assets/images/toolbar/explore.png'),
       screen: 'Explore',
       size: 'large',
     },
     {
-      icon: theme.base_button_url,
+      icon: require('../../assets/images/toolbar/social.png'),
       screen: 'Social',
       size: 'normal',
     },
     {
-      icon: theme.profile_button_url,
+      icon: require('../../assets/images/toolbar/profile.png'),
       screen: 'Profile',
       size: 'normal',
     },
@@ -98,9 +95,7 @@ export default function Wrapper({
                         position: 'absolute',
                         top: item.size === 'normal' ? 0 : -45,
                       }}
-                      source={{
-                        uri: item.icon,
-                      }}
+                      source={item.icon}
                     />
                   </Button>
                 </View>

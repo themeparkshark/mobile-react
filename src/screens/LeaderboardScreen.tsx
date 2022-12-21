@@ -5,16 +5,18 @@ import allParks from '../api/endpoints/parks/allParks';
 import getLeaderboards from '../api/endpoints/parks/leaderboards/get';
 import { useContext, useEffect, useState } from 'react';
 import { AuthContext } from '../context/AuthProvider';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { Chevron } from 'react-native-shapes';
 import Leaderboards from '../components/Leaderboards';
+import {ParkType} from '../models/park-type';
+import {LeaderboardType} from '../models/leaderboard-type';
 
 export default function LeaderboardScreen() {
   const { user } = useContext(AuthContext);
-  const [parks, setParks] = useState([]);
-  const [selectedPark, setSelectedPark] = useState(user.current_park_id);
-  const [time, setTime] = useState();
-  const [leaderboards, setLeaderboards] = useState([]);
+  const [parks, setParks] = useState<ParkType[]>();
+  const [selectedPark, setSelectedPark] = useState<number>(user.current_park_id);
+  const [time, setTime] = useState<number>();
+  const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>();
 
   const requestLeaderboards = async () => {
     const response = await getLeaderboards(selectedPark);
@@ -51,36 +53,38 @@ export default function LeaderboardScreen() {
         >
           <Text style={{ textAlign: 'center' }}>Updated hourly</Text>
           <Text>Select a park:</Text>
-          <RNPickerSelect
-            placeholder={{}}
-            onValueChange={(value) => setSelectedPark(value)}
-            onClose={() => setTime(Date.now())}
-            value={selectedPark}
-            items={parks.map((item) => {
-              return {
-                label: item.name,
-                value: item.id,
-              };
-            })}
-            style={{
-              inputIOS: {
-                fontSize: 16,
-                paddingVertical: 12,
-                paddingHorizontal: 10,
-                borderWidth: 1,
-                borderColor: 'gray',
-                borderRadius: 4,
-                color: 'black',
-                paddingRight: 30,
-              },
-              iconContainer: {
-                top: 18,
-                right: 15,
-              },
-            }}
-            Icon={() => <Chevron size={1.5} color="gray" />}
-          />
-          <Leaderboards leaderboards={leaderboards} />
+          {parks && (
+            <RNPickerSelect
+              placeholder={{}}
+              onValueChange={(value) => setSelectedPark(value)}
+              onClose={() => setTime(Date.now())}
+              value={selectedPark}
+              items={parks.map((item) => {
+                return {
+                  label: item.name,
+                  value: item.id,
+                };
+              })}
+              style={{
+                inputIOS: {
+                  fontSize: 16,
+                  paddingVertical: 12,
+                  paddingHorizontal: 10,
+                  borderWidth: 1,
+                  borderColor: 'gray',
+                  borderRadius: 4,
+                  color: 'black',
+                  paddingRight: 30,
+                },
+                iconContainer: {
+                  top: 18,
+                  right: 15,
+                },
+              }}
+              Icon={() => <Chevron size={1.5} color="gray" />}
+            />
+          )}
+          {leaderboards && <Leaderboards leaderboards={leaderboards} />}
         </View>
       </ScrollView>
     </Wrapper>

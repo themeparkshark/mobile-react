@@ -2,7 +2,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useContext, useEffect, useState } from 'react';
 import { AuthContext } from './context/AuthProvider';
-import { ThemeContext } from './context/ThemeProvider';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
@@ -20,12 +19,10 @@ import { useFonts } from 'expo-font';
 import { Storage } from 'expo-storage';
 import SettingsScreen from './screens/SettingsScreen';
 import { Audio } from 'expo-av';
-import client from './api/client';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import PinCollectionScreen from './screens/PinCollectionsScreen';
 import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import SocialScreen from './screens/SocialScreen';
-import { ThemeType } from './models/theme-type';
 
 const Stack = createNativeStackNavigator();
 
@@ -134,7 +131,6 @@ const AuthStackNavigator = () => {
 
 export default function App() {
   const { user, setUser } = useContext(AuthContext);
-  const { setTheme, theme } = useContext(ThemeContext);
   const [isPlaying, setIsPlaying] = useState(false);
 
   useFonts({
@@ -143,30 +139,24 @@ export default function App() {
   });
 
   useEffect(() => {
-    client
-      .get('/current-theme')
-      .then((response: ThemeType) => setTheme(response.data.data));
-
-    Storage.getItem({ key: 'user' })
-      .then((userString: string) => {
-        if (userString) {
-          setUser({ ...JSON.parse(userString) });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-      });
+    Storage.getItem({ key: 'user' }).then((userString: string) => {
+      if (userString) {
+        setUser({ ...JSON.parse(userString) });
+      }
+    });
   }, []);
 
   useEffect(() => {
-    if (theme?.music.length && !isPlaying) {
+    if (!isPlaying) {
       (async () => {
-        const music =
-          theme.music[Math.floor(Math.random() * theme.music.length)];
+        const tracks = [
+          require('../assets/sounds/shark-v2.mp3'),
+        ];
 
-        const { sound } = await Audio.Sound.createAsync({
-          uri: music.source_url,
-        });
+        const music =
+          tracks[Math.floor(Math.random() * tracks.length)];
+
+        const { sound } = await Audio.Sound.createAsync(music);
 
         sound.setOnPlaybackStatusUpdate((status) => {
           if (status.didJustFinish) {
@@ -178,7 +168,7 @@ export default function App() {
         setIsPlaying(true);
       })();
     }
-  }, [theme?.id, isPlaying]);
+  }, [isPlaying]);
 
   return (
     <>

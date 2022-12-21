@@ -1,17 +1,16 @@
 import {
-  SafeAreaView,
-  ScrollView,
-  Modal,
-  ImageBackground,
-  Text,
-  View,
-  Pressable,
   Dimensions,
   Image,
+  ImageBackground,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  View,
 } from 'react-native';
-import { useState, useContext } from 'react';
+import { useState } from 'react';
 import Button from './Button';
-import { ThemeContext } from '../context/ThemeProvider';
 import { AnnouncementType } from '../models/announcement-type';
 
 export default function Announcement({
@@ -20,7 +19,6 @@ export default function Announcement({
   announcement: AnnouncementType;
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const { theme } = useContext(ThemeContext);
 
   return (
     <View>
@@ -55,9 +53,7 @@ export default function Announcement({
               >
                 <Button onPress={() => setModalVisible(!modalVisible)}>
                   <Image
-                    source={{
-                      uri: theme.back_button_url,
-                    }}
+                    source={require('../../assets/images/screens/explore/back.png')}
                     style={{
                       width: 35,
                       height: 35,

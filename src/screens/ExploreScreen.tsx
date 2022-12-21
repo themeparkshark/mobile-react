@@ -1,11 +1,11 @@
-import { useEffect, useState, useContext } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import {
-  Image,
   Dimensions,
+  Image,
   ImageBackground,
-  View,
-  Text,
   Pressable,
+  Text,
+  View,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
@@ -16,7 +16,6 @@ import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
 import Button from '../components/Button';
-import { ThemeContext } from '../context/ThemeProvider';
 import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
 import NotAtPark from './ExploreScreen/NotAtPark';
@@ -33,7 +32,6 @@ export default function ExploreScreen() {
   const [redeemables, setRedeemables] = useState(null);
   const [activeRedeemable, setActiveRedeemable] = useState(null);
   const [location, setLocation] = useState(null);
-  const { theme } = useContext(ThemeContext);
   const { inventory, updateUser } = useContext(AuthContext);
 
   const getRedeemables = () => {
@@ -113,9 +111,7 @@ export default function ExploreScreen() {
                   resizeMode: 'contain',
                   position: 'relative',
                 }}
-                source={{
-                  uri: theme.base_button_url,
-                }}
+                source={require('../../assets/images/screens/explore/list.png')}
               >
                 <Playercard
                   showBackground={false}
@@ -245,9 +241,7 @@ export default function ExploreScreen() {
               }}
             >
               <Image
-                source={{
-                  uri: theme.task_animation_url,
-                }}
+                source={require('../../assets/images/screens/explore/task_animation.gif')}
                 style={{
                   width: 80,
                   height: 80,
