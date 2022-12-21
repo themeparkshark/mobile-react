@@ -57,9 +57,7 @@ export default function Wrapper({
         }}
       >
         <ImageBackground
-          source={{
-            uri: theme.bottom_bar_url,
-          }}
+          source={require('../../assets/images/screens/explore/bottombar.png')}
           resizeMode="cover"
           style={{
             height: 100,

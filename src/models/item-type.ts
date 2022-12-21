@@ -6,6 +6,8 @@ export interface ItemType {
   readonly item_type: ItemTypeType;
   readonly paper_url: string;
   readonly pivot: {
+    readonly latitude: number;
+    readonly longitude: number;
     readonly section: string;
   };
 }

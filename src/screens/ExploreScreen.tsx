@@ -24,14 +24,17 @@ import Playercard from '../components/Playercard';
 import collectItem from '../helpers/collect-item';
 import Coin from './ExploreScreen/Coin';
 import dayjs from 'dayjs';
+import { ParkType } from '../models/park-type';
+import { LocationType } from '../models/location-type';
+import { RedeemablesType } from '../models/redeemables-type';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
 export default function ExploreScreen() {
-  const [park, setPark] = useState(null);
-  const [redeemables, setRedeemables] = useState(null);
+  const [park, setPark] = useState<ParkType>();
+  const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   const [activeRedeemable, setActiveRedeemable] = useState(null);
-  const [location, setLocation] = useState(null);
+  const [location, setLocation] = useState<LocationType>();
   const { inventory, updateUser } = useContext(AuthContext);
 
   const getRedeemables = () => {
@@ -69,9 +72,7 @@ export default function ExploreScreen() {
 
   useEffect(() => {
     if (location && redeemables) {
-      checkForRedeemable(redeemables, location).then((response) => {
-        setActiveRedeemable(response);
-      });
+      checkForRedeemable().then((response) => setActiveRedeemable(response));
     }
   }, [location?.latitude, location?.longitude, redeemables]);
 
@@ -79,7 +80,7 @@ export default function ExploreScreen() {
     <Wrapper>
       <Topbar showCoins={true} showPurpleDiamonds={true} />
       {!park && <NotAtPark />}
-      {park && (
+      {park && redeemables && (
         <>
           <View
             style={{

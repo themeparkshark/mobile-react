@@ -104,29 +104,29 @@ export default function InventoryScreen() {
         </ScrollView>
       </View>
       {inventory && currentItemType && (
-          <ImageBackground
-            source={require('../../assets/images/shark_background.png')}
+        <ImageBackground
+          source={require('../../assets/images/shark_background.png')}
+          style={{
+            width: '100%',
+            flex: 1,
+            resizeMode: 'cover',
+          }}
+        >
+          <FlatList
             style={{
-              width: '100%',
               flex: 1,
-              resizeMode: 'cover',
+              padding: 4,
             }}
-          >
-            <FlatList
-              style={{
-                flex: 1,
-                padding: 4,
-              }}
-              contentContainerStyle={{ paddingBottom: 8 }}
-              data={items}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <Item item={item} currentItemType={currentItemType} />
-              )}
-              numColumns={3}
-            />
-          </ImageBackground>
-        )}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            data={items}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <Item item={item} currentItemType={currentItemType} />
+            )}
+            numColumns={3}
+          />
+        </ImageBackground>
+      )}
     </>
   );
 }

@@ -4,7 +4,7 @@ export interface TaskType {
   readonly experience: number;
   readonly has_completed: boolean;
   readonly id: number;
-  readonly latidude: string;
+  readonly latitude: string;
   readonly longitude: string;
   readonly name: string;
 }

@@ -86,8 +86,12 @@ export default function StoreScreen({ route }) {
                 }}
               />
             </View>
-            {weeklyItems && <Section title="Weekly Items" items={weeklyItems} />}
-            {monthlyItems && <Section title="Weekly Items" items={monthlyItems} />}
+            {weeklyItems && (
+              <Section title="Weekly Items" items={weeklyItems} />
+            )}
+            {monthlyItems && (
+              <Section title="Weekly Items" items={monthlyItems} />
+            )}
           </ScrollView>
         </ImageBackground>
       </View>

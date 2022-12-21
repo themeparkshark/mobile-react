@@ -5,10 +5,8 @@ export default async () => {
   const location = await getCurrentLocation();
 
   try {
-    const response = await currentPark(location.latitude, location.longitude);
-
-    return response.data;
+    return await currentPark(location.latitude, location.longitude);
   } catch (error) {
-    return null;
+    //
   }
 };

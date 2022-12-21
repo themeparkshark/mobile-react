@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Button from './Button';
-import { RedeemableType } from '../models/redeemable-type';
+import { RedeemablesType } from '../models/redeemables-type';
 
 export default function TaskListModal({
   redeemables,
 }: {
-  readonly redeemables: RedeemableType[];
+  readonly redeemables: RedeemablesType;
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
 

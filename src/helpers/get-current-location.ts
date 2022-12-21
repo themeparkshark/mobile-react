@@ -1,11 +1,15 @@
 import * as Location from 'expo-location';
+import { LocationType } from '../models/location-type';
+import { ParkType } from '../models/park-type';
 
-export default async function () {
+export default async function (): Promise<LocationType> {
   const { status } = await Location.requestForegroundPermissionsAsync();
 
   if (status !== 'granted') {
-    setErrorMsg('Permission to access location was denied');
-    return;
+    return {
+      latitude: 0,
+      longitude: 0,
+    };
   }
 
   const location = await Location.getCurrentPositionAsync();

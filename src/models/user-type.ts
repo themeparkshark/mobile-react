@@ -1,5 +1,5 @@
 import { InventoryType } from './inventory-type';
-import {ExperienceLevelType} from './experience-level-type';
+import { ExperienceLevelType } from './experience-level-type';
 
 export interface UserType {
   readonly coins: number;

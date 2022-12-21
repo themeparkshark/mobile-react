@@ -8,13 +8,15 @@ import { AuthContext } from '../context/AuthProvider';
 import { ScrollView, Text, View } from 'react-native';
 import { Chevron } from 'react-native-shapes';
 import Leaderboards from '../components/Leaderboards';
-import {ParkType} from '../models/park-type';
-import {LeaderboardType} from '../models/leaderboard-type';
+import { ParkType } from '../models/park-type';
+import { LeaderboardType } from '../models/leaderboard-type';
 
 export default function LeaderboardScreen() {
   const { user } = useContext(AuthContext);
   const [parks, setParks] = useState<ParkType[]>();
-  const [selectedPark, setSelectedPark] = useState<number>(user.current_park_id);
+  const [selectedPark, setSelectedPark] = useState<number>(
+    user.current_park_id
+  );
   const [time, setTime] = useState<number>();
   const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>();
 

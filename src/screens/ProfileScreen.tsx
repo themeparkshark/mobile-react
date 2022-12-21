@@ -18,13 +18,13 @@ import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import getInventory from '../api/endpoints/me/inventory';
 import theme from '../config/theme';
-import {ParkType} from '../models/park-type';
-import {StoreType} from '../models/store-type';
+import { ParkType } from '../models/park-type';
+import { StoreType } from '../models/store-type';
 
 interface ButtonType {
-    readonly image: any;
-    readonly screen: () => void;
-    readonly text: string;
+  readonly image: any;
+  readonly screen: () => void;
+  readonly text: string;
 }
 
 export default function NewsScreen({ navigation }) {

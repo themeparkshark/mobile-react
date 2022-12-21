@@ -149,12 +149,9 @@ export default function App() {
   useEffect(() => {
     if (!isPlaying) {
       (async () => {
-        const tracks = [
-          require('../assets/sounds/shark-v2.mp3'),
-        ];
+        const tracks = [require('../assets/sounds/shark-v2.mp3')];
 
-        const music =
-          tracks[Math.floor(Math.random() * tracks.length)];
+        const music = tracks[Math.floor(Math.random() * tracks.length)];
 
         const { sound } = await Audio.Sound.createAsync(music);
 
