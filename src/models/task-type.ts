@@ -7,4 +7,10 @@ export interface TaskType {
   readonly latitude: string;
   readonly longitude: string;
   readonly name: string;
+  readonly pivot: {
+    readonly active_from: string;
+    readonly active_to: string;
+    readonly coins: number;
+    readonly experience: number;
+  };
 }

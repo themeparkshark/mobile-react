@@ -9,5 +9,6 @@ export interface ItemType {
     readonly latitude: number;
     readonly longitude: number;
     readonly section: string;
+    readonly hidden: boolean;
   };
 }

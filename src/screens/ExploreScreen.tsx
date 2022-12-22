@@ -27,13 +27,14 @@ import dayjs from 'dayjs';
 import { ParkType } from '../models/park-type';
 import { LocationType } from '../models/location-type';
 import { RedeemablesType } from '../models/redeemables-type';
+import {RedeemableType} from '../models/redeemable-type';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
 export default function ExploreScreen() {
   const [park, setPark] = useState<ParkType>();
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
-  const [activeRedeemable, setActiveRedeemable] = useState(null);
+  const [activeRedeemable, setActiveRedeemable] = useState<RedeemableType | null>();
   const [location, setLocation] = useState<LocationType>();
   const { inventory, updateUser } = useContext(AuthContext);
 
