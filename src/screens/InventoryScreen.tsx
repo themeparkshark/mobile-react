@@ -42,15 +42,17 @@ export default function InventoryScreen() {
           position: 'relative',
         }}
       >
-        <Playercard
-          inventory={inventory}
-          style={{
-            position: 'absolute',
-            width: Dimensions.get('window').width,
-            height: 460,
-            marginTop: -50,
-          }}
-        />
+        {inventory && (
+          <Playercard
+            inventory={inventory}
+            style={{
+              position: 'absolute',
+              width: Dimensions.get('window').width,
+              height: 460,
+              marginTop: -50,
+            }}
+          />
+        )}
         <ScrollView
           style={{
             position: 'absolute',

@@ -16,6 +16,7 @@ import ErrorScreen from './screens/ErrorScreen';
 import StoreScreen from './screens/StoreScreen';
 import UserScreen from './screens/UserScreen';
 import { useFonts } from 'expo-font';
+// @ts-ignore
 import { Storage } from 'expo-storage';
 import SettingsScreen from './screens/SettingsScreen';
 import { Audio } from 'expo-av';
@@ -156,6 +157,7 @@ export default function App() {
         const { sound } = await Audio.Sound.createAsync(music);
 
         sound.setOnPlaybackStatusUpdate((status) => {
+          // @ts-ignore
           if (status.didJustFinish) {
             sound.unloadAsync();
             setIsPlaying(false);

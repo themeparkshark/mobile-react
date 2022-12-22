@@ -3,19 +3,16 @@ import { createContext, FC, ReactNode, useEffect, useState } from 'react';
 import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
+// @ts-ignore
 import Storage from 'expo-storage';
 import { UserType } from '../models/user-type';
 import { InventoryType } from '../models/inventory-type';
-
-export interface CredentialType {
-  readonly identityToken: string;
-  readonly user: string;
-}
+import { AppleAuthenticationCredential } from 'expo-apple-authentication';
 
 export interface AuthContextType {
   readonly inventory: InventoryType | null;
   readonly isReady: boolean;
-  readonly login: (credential: CredentialType) => void;
+  readonly login: (credential: AppleAuthenticationCredential) => void;
   readonly logout: () => void;
   readonly setInventory: (inventory: InventoryType) => void;
   readonly setUser: (user: UserType) => void;
@@ -50,7 +47,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     });
   }, []);
 
-  const requestLogin = async (credential: CredentialType) => {
+  const requestLogin = async (credential: AppleAuthenticationCredential) => {
     try {
       const response = await login(credential);
       setToken(response.token);

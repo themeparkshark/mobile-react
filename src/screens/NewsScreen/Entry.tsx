@@ -1,8 +1,15 @@
 import { Image, Pressable, Text, View } from 'react-native';
 import dayjs from '../../helpers/dayjs';
 import * as RootNavigation from '../../RootNavigation';
+import { EntryType } from '../../models/entry-type';
 
-export default function Entry({ entry, horizontal = true }) {
+export default function Entry({
+  entry,
+  horizontal = true,
+}: {
+  readonly entry: EntryType;
+  readonly horizontal?: boolean;
+}) {
   const date =
     dayjs().diff(dayjs(entry.published_at), 'day') >= 7
       ? dayjs(entry.published_at).format('MMM D, YYYY')
