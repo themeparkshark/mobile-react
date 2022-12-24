@@ -7,7 +7,7 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState, useRef } from 'react';
 import Playercard from '../components/Playercard';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
@@ -22,6 +22,8 @@ export default function InventoryScreen() {
   const [currentItemType, setCurrentItemType] = useState<ItemTypeType>();
   const [items, setItems] = useState<ItemType[]>();
   const { inventory } = useContext(AuthContext);
+
+  const flatListRef = useRef();
 
   useEffect(() => {
     getItemTypes().then((response) => {
@@ -87,6 +89,7 @@ export default function InventoryScreen() {
                       setItems(response)
                     );
                     setCurrentItemType(itemType);
+                    flatListRef.current.scrollToOffset({ animated: true, offset: 0 });
                   }}
                 >
                   <Image
@@ -115,6 +118,7 @@ export default function InventoryScreen() {
           }}
         >
           <FlatList
+            ref={flatListRef}
             style={{
               flex: 1,
               padding: 4,

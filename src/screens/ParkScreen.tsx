@@ -5,11 +5,15 @@ import getTasks from '../api/endpoints/parks/getTasks';
 import Topbar from '../components/Topbar';
 import { ParkType } from '../models/park-type';
 import { TaskType } from '../models/task-type';
+import Progress from '../components/Progress';
+import config from '../config/theme';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;
   const [currentPark, setCurrentPark] = useState<ParkType>();
   const [tasks, setTasks] = useState<TaskType[]>();
+
+  const completedTasks = tasks?.filter((task) => task.has_completed).length;
 
   useEffect(() => {
     getPark(park).then((response) => setCurrentPark(response));
@@ -31,26 +35,66 @@ export default function ParkScreen({ route }) {
           }}
           source={require('../../assets/images/screens/park/background.png')}
         >
-          <ScrollView
-            style={{
-              paddingTop: 8,
-            }}
-          >
-            <Text>{currentPark?.completion_rate}% complete</Text>
-            <Text>
-              {tasks?.filter((task) => task.has_completed).length} out of{' '}
-              {tasks?.length} tasks unlocked.
-            </Text>
-            <Text>Park tasks:</Text>
-            {tasks?.map((task) => {
-              return (
-                <View key={task.id}>
-                  <Text>Task name: {task.name}</Text>
-                  <Text>Completed: {task.has_completed ? 'Yes' : 'No'}</Text>
+          {currentPark && tasks && (
+            <ScrollView
+              style={{
+                paddingTop: 32,
+                paddingLeft: 32,
+                paddingRight: 32,
+              }}
+            >
+              <View
+                style={{
+                  backgroundColor: config.secondary,
+                  borderColor: 'white',
+                  borderWidth: 3,
+                  borderRadius: 10,
+                }}
+              >
+                <View
+                  style={{
+                    padding: 8,
+                  }}
+                >
+                  <Progress progress={currentPark.completion_rate} />
                 </View>
-              );
-            })}
-          </ScrollView>
+                <View
+                  style={{
+                    padding: 8,
+                    borderTopColor: config.primary,
+                    borderTopWidth: 3,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: 'white',
+                      fontSize: 16,
+                      textAlign: 'center',
+                      fontFamily: 'Knockout',
+                      textTransform: 'uppercase',
+                      textShadowOffset: {
+                        width: -1,
+                      },
+                      textShadowColor: config.primary,
+                      textShadowRadius: 5,
+                    }}
+                  >
+                    {completedTasks} of {tasks.length} tasks complete - 100 park
+                    coins earned
+                  </Text>
+                </View>
+              </View>
+              <Text>Park tasks:</Text>
+              {tasks?.map((task) => {
+                return (
+                  <View key={task.id}>
+                    <Text>Task name: {task.name}</Text>
+                    <Text>Completed: {task.has_completed ? 'Yes' : 'No'}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
         </ImageBackground>
       </View>
     </>
