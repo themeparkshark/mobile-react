@@ -5,12 +5,7 @@ export default async function checkForRedeemable() {
   const location = await getCurrentLocation();
 
   try {
-    const response = await currentRedeemable(
-      location.latitude,
-      location.longitude
-    );
-
-    return response;
+    return await currentRedeemable(location.latitude, location.longitude);
   } catch (error) {
     return null;
   }

@@ -35,11 +35,9 @@ export default function StoreScreen({ route }) {
 
   useEffect(() => {
     if (catalog) {
-      setWeeklyItems(
-        catalog.items.filter((item) => item.pivot.section === 'weekly')
-      );
+      setWeeklyItems(catalog.items.filter((item) => item.section === 'weekly'));
       setMonthlyItems(
-        catalog.items.filter((item) => item.pivot.section === 'monthly')
+        catalog.items.filter((item) => item.section === 'monthly')
       );
     }
   }, [catalog]);

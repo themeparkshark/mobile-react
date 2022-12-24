@@ -101,16 +101,18 @@ export default function NewsScreen({ navigation }) {
             }}
             onPress={() => navigation.navigate('Inventory')}
           >
-            <Playercard
-              user={user}
-              inventory={inventory}
-              style={{
-                position: 'absolute',
-                width: Dimensions.get('window').width,
-                height: 455,
-                marginTop: -55,
-              }}
-            />
+            {inventory && (
+              <Playercard
+                user={user}
+                inventory={inventory}
+                style={{
+                  position: 'absolute',
+                  width: Dimensions.get('window').width,
+                  height: 455,
+                  marginTop: -55,
+                }}
+              />
+            )}
           </Pressable>
           <View
             style={{

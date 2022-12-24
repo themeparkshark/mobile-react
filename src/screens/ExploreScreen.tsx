@@ -28,6 +28,8 @@ import { ParkType } from '../models/park-type';
 import { LocationType } from '../models/location-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import { RedeemableType } from '../models/redeemable-type';
+import { ItemType } from '../models/item-type';
+import { CoinType } from '../models/coin-type';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -146,7 +148,7 @@ export default function ExploreScreen() {
               {(activeRedeemable.type === 'task' ||
                 activeRedeemable.type === 'secret_task') && (
                 <RedeemModal
-                  redeemable={activeRedeemable.model}
+                  redeemable={activeRedeemable}
                   park={park}
                   onPress={() => {
                     getRedeemables();
@@ -156,11 +158,11 @@ export default function ExploreScreen() {
               )}
               {activeRedeemable.type === 'coin' &&
                 dayjs().isBetween(
-                  dayjs(activeRedeemable.model.pivot.active_from),
-                  dayjs(activeRedeemable.model.pivot.active_to)
+                  dayjs((activeRedeemable.model as CoinType).active_from),
+                  dayjs((activeRedeemable.model as CoinType).active_to)
                 ) && (
                   <RedeemModal
-                    redeemable={activeRedeemable.model}
+                    redeemable={activeRedeemable}
                     park={park}
                     onPress={() => {
                       getRedeemables();
@@ -169,7 +171,7 @@ export default function ExploreScreen() {
                   />
                 )}
               {activeRedeemable.type === 'item' &&
-                !activeRedeemable.model.pivot.hidden && (
+                !(activeRedeemable.model as ItemType).is_hidden && (
                   <Pressable
                     onPress={async () => {
                       await collectItem(activeRedeemable.model, () =>
@@ -201,9 +203,9 @@ export default function ExploreScreen() {
         }}
         showsUserLocation={true}
         showsIndoors={false}
-        zoomEnabled={false}
+        zoomEnabled={true}
         rotateEnabled={false}
-        scrollEnabled={false}
+        scrollEnabled={true}
         followsUserLocation={true}
         pitchEnabled={false}
         loadingEnabled={true}
@@ -214,8 +216,8 @@ export default function ExploreScreen() {
             <Marker
               key={item.id}
               coordinate={{
-                latitude: item.pivot.latitude,
-                longitude: item.pivot.longitude,
+                latitude: item.latitude,
+                longitude: item.longitude,
               }}
               centerOffset={{
                 x: 0,
@@ -259,8 +261,8 @@ export default function ExploreScreen() {
         {redeemables?.coins
           .filter((coin) => {
             return dayjs().isBetween(
-              dayjs(coin.pivot.active_from),
-              dayjs(coin.pivot.active_to)
+              dayjs(coin.active_from),
+              dayjs(coin.active_to)
             );
           })
           .map((coin) => {

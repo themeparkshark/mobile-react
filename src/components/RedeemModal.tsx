@@ -13,13 +13,17 @@ import completeTask from '../api/endpoints/me/tasks/complete-task';
 import Button from './Button';
 import Lottie from 'lottie-react-native';
 import { ParkType } from '../models/park-type';
+import { RedeemableType } from '../models/redeemable-type';
+import { TaskType } from '../models/task-type';
+import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
+import { CoinType } from '../models/coin-type';
 
 export default function RedeemModal({
   redeemable,
   park,
   onPress,
 }: {
-  readonly redeemable: any;
+  readonly redeemable: RedeemableType;
   readonly park: ParkType;
   readonly onPress: () => void;
 }) {
@@ -47,7 +51,12 @@ export default function RedeemModal({
   }, [modalVisible]);
 
   const completeRedeemable = async () => {
-    await completeTask(redeemable);
+    if (redeemable.type === 'task') {
+      await completeTask(redeemable.model as TaskType);
+    } else {
+      await redeemCoin(redeemable.model as CoinType);
+    }
+
     onPress();
     setModalVisible(false);
   };
@@ -135,25 +144,27 @@ export default function RedeemModal({
             >
               Congratulations
             </Text>
-            <View
-              style={{
-                position: 'absolute',
-                top: 103,
-                left: 115,
-                alignSelf: 'center',
-              }}
-            >
-              <Image
-                source={{
-                  uri: redeemable.coin_url,
-                }}
+            {redeemable.type === 'task' && (
+              <View
                 style={{
-                  width: 140,
-                  height: 140,
-                  resizeMode: 'contain',
+                  position: 'absolute',
+                  top: 103,
+                  left: 115,
+                  alignSelf: 'center',
                 }}
-              />
-            </View>
+              >
+                <Image
+                  source={{
+                    uri: redeemable.model.coin_url,
+                  }}
+                  style={{
+                    width: 140,
+                    height: 140,
+                    resizeMode: 'contain',
+                  }}
+                />
+              </View>
+            )}
             <Text
               style={{
                 fontSize: 18,
@@ -163,7 +174,7 @@ export default function RedeemModal({
                 zIndex: 10,
               }}
             >
-              {redeemable?.experience}
+              {redeemable?.model.experience}
             </Text>
             <View
               style={{
@@ -190,7 +201,7 @@ export default function RedeemModal({
                 zIndex: 10,
               }}
             >
-              {redeemable?.coins}
+              {redeemable?.model.coins}
             </Text>
             <View
               style={{

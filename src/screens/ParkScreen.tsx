@@ -3,20 +3,17 @@ import { ScrollView, Text, View } from 'react-native';
 import getPark from '../api/endpoints/parks/getPark';
 import getTasks from '../api/endpoints/parks/getTasks';
 import Topbar from '../components/Topbar';
+import { ParkType } from '../models/park-type';
+import { TaskType } from '../models/task-type';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;
-  const [currentPark, setCurrentPark] = useState(null);
-  const [tasks, setTasks] = useState(null);
+  const [currentPark, setCurrentPark] = useState<ParkType>();
+  const [tasks, setTasks] = useState<TaskType[]>();
 
   useEffect(() => {
-    getPark(park).then((response) => {
-      setCurrentPark(response);
-    });
-
-    getTasks(park).then((response) => {
-      setTasks(response);
-    });
+    getPark(park).then((response) => setCurrentPark(response));
+    getTasks(park).then((response) => setTasks(response));
   }, []);
 
   return (

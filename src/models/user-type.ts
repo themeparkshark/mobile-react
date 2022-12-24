@@ -11,9 +11,7 @@ export interface UserType {
   readonly id: number;
   readonly inventory: InventoryType;
   readonly name: string;
-  readonly pivot: {
-    readonly tasks_completed: number;
-  };
+  readonly tasks_completed: number;
   readonly purple_diamonds: number;
   readonly total_coins: number;
   readonly total_experience: number;

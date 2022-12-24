@@ -17,7 +17,7 @@ export default function Coin({
     const interval = setInterval(async () => {
       await detachCoin(coin);
       onExpire();
-    }, dayjs(coin.pivot.active_to).diff(dayjs()));
+    }, dayjs(coin.active_to).diff(dayjs()));
 
     return () => clearInterval(interval);
   }, [coin.id]);
@@ -44,7 +44,7 @@ export default function Coin({
           source={require('../../../assets/images/screens/explore/cloud.png')}
         >
           <Countdown
-            date={Date.parse(coin.pivot.active_to)}
+            date={Date.parse(coin.active_to)}
             renderer={({ minutes, seconds }) => {
               return (
                 <Text

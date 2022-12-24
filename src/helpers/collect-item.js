@@ -4,7 +4,7 @@ import purchase from '../api/endpoints/me/inventory/purchase-item';
 export default async function collectItem(item, onPurchase) {
   Alert.alert(
     '',
-    `You have found ${item.name}. Would you like to pick it up?`,
+    `You have found a ${item.name}. Would you like to pick it up?`,
     [
       {
         text: 'Cancel',
