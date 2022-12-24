@@ -7,6 +7,7 @@ import { ParkType } from '../models/park-type';
 import { TaskType } from '../models/task-type';
 import Progress from '../components/Progress';
 import config from '../config/theme';
+import { chunk } from 'lodash';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;
@@ -39,60 +40,81 @@ export default function ParkScreen({ route }) {
             <ScrollView
               style={{
                 paddingTop: 32,
-                paddingLeft: 32,
-                paddingRight: 32,
               }}
             >
               <View
                 style={{
-                  backgroundColor: config.secondary,
-                  borderColor: 'white',
-                  borderWidth: 3,
-                  borderRadius: 10,
+                  paddingLeft: 32,
+                  paddingRight: 32,
+                  paddingBottom: 32,
                 }}
               >
                 <View
                   style={{
-                    padding: 8,
+                    backgroundColor: config.secondary,
+                    borderColor: 'white',
+                    borderWidth: 3,
+                    borderRadius: 10,
                   }}
                 >
-                  <Progress progress={currentPark.completion_rate} />
-                </View>
-                <View
-                  style={{
-                    padding: 8,
-                    borderTopColor: config.primary,
-                    borderTopWidth: 3,
-                  }}
-                >
-                  <Text
+                  <View
                     style={{
-                      color: 'white',
-                      fontSize: 16,
-                      textAlign: 'center',
-                      fontFamily: 'Knockout',
-                      textTransform: 'uppercase',
-                      textShadowOffset: {
-                        width: -1,
-                      },
-                      textShadowColor: config.primary,
-                      textShadowRadius: 5,
+                      padding: 8,
                     }}
                   >
-                    {completedTasks} of {tasks.length} tasks complete - 100 park
-                    coins earned
-                  </Text>
+                    <Progress progress={currentPark.completion_rate} />
+                  </View>
+                  <View
+                    style={{
+                      padding: 8,
+                      borderTopColor: config.primary,
+                      borderTopWidth: 3,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: 'white',
+                        fontSize: 16,
+                        textAlign: 'center',
+                        fontFamily: 'Knockout',
+                        textTransform: 'uppercase',
+                        textShadowOffset: {
+                          width: -1,
+                        },
+                        textShadowColor: config.primary,
+                        textShadowRadius: 5,
+                      }}
+                    >
+                      {completedTasks} of {tasks.length} tasks complete - 100 park
+                      coins earned
+                    </Text>
+                  </View>
                 </View>
               </View>
-              <Text>Park tasks:</Text>
-              {tasks?.map((task) => {
-                return (
-                  <View key={task.id}>
-                    <Text>Task name: {task.name}</Text>
-                    <Text>Completed: {task.has_completed ? 'Yes' : 'No'}</Text>
-                  </View>
-                );
-              })}
+              <View
+                style={{
+                  paddingTop: 32,
+                  paddingBottom: 32,
+                  paddingLeft: 32,
+                  paddingRight: 32,
+                  backgroundColor: 'rgba(255, 255, 255, .6)',
+                }}
+              >
+                {chunk(tasks, 5).map((tasks: TaskType[], index: number) => {
+                  return (
+                    <View key={index} style={{ paddingBottom: 32 }}>
+                      {tasks.map((task) => {
+                        return (
+                          <View>
+                            <Text>Task name: {task.name}</Text>
+                            <Text>Completed: {task.has_completed ? 'Yes' : 'No'}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
+              </View>
             </ScrollView>
           )}
         </ImageBackground>
