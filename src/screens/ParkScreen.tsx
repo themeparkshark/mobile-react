@@ -108,9 +108,6 @@ export default function ParkScreen({ route }) {
                         textAlign: 'center',
                         fontFamily: 'Knockout',
                         textTransform: 'uppercase',
-                        textShadowOffset: {
-                          width: -1,
-                        },
                         textShadowColor: config.primary,
                         textShadowRadius: 5,
                       }}

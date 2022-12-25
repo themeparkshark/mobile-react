@@ -17,18 +17,37 @@ import { RedeemableType } from '../models/redeemable-type';
 import { TaskType } from '../models/task-type';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import { CoinType } from '../models/coin-type';
+import YellowButton from './YellowButton';
+import dayjs from 'dayjs';
+import { ItemType } from '../models/item-type';
+import collectItem from '../helpers/collect-item';
 
 export default function RedeemModal({
   redeemable,
   park,
   onPress,
 }: {
-  readonly redeemable: RedeemableType;
+  readonly redeemable?: RedeemableType;
   readonly park: ParkType;
   readonly onPress: () => void;
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const progress = useRef(new Animated.Value(0)).current;
+  const animated = useRef(new Animated.Value(0)).current;
+  const slideUp = () => {
+    Animated.timing(animated, {
+      toValue: 0,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  };
+  const slideDown = () => {
+    Animated.timing(animated, {
+      toValue: 120,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+  };
 
   useEffect(() => {
     if (modalVisible) {
@@ -50,244 +69,276 @@ export default function RedeemModal({
     }
   }, [modalVisible]);
 
-  const completeRedeemable = async () => {
-    if (redeemable.type === 'task') {
-      await completeTask(redeemable.model as TaskType);
-    } else {
-      await redeemCoin(redeemable.model as CoinType);
-    }
+  useEffect(() => {
+    const isCoin =
+      redeemable?.type === 'coin' &&
+      dayjs().isBetween(
+        dayjs((redeemable?.model as CoinType).active_from),
+        dayjs((redeemable?.model as CoinType).active_to)
+      );
+    const isItem = redeemable?.type === 'item';
+    const isTask = redeemable?.type === 'task';
+    const isSecretTask = redeemable?.type === 'secret_task';
 
-    onPress();
-    setModalVisible(false);
-  };
+    if (redeemable && (isCoin || isItem || isTask || isSecretTask)) {
+      slideUp();
+    } else {
+      slideDown();
+    }
+  }, [redeemable]);
 
   return (
     <>
-      <Pressable onPress={() => setModalVisible(true)}>
-        <Text
-          style={{
-            backgroundColor: 'orange',
-            padding: 16,
-            borderRadius: 6,
-            overflow: 'hidden',
-          }}
-        >
-          Redeem
-        </Text>
-      </Pressable>
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+      <Animated.View
+        style={{
+          transform: [
+            {
+              translateY: animated,
+            },
+          ],
+        }}
       >
-        <View
-          style={{
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
+        <YellowButton
+          onPress={async () => {
+            if (redeemable?.type === 'item') {
+              await collectItem(redeemable.model, () => onPress());
+            } else {
+              setModalVisible(true);
+            }
           }}
+          text={'Redeem'}
+        />
+      </Animated.View>
+      {redeemable && (
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
         >
-          <Pressable
+          <View
             style={{
-              width: '100%',
-              height: '100%',
-              position: 'absolute',
+              flex: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
-            onPress={() => setModalVisible(false)}
           >
-            <Lottie
-              source={require('../../assets/animations/confetti.json')}
-              progress={progress}
+            <Pressable
               style={{
-                position: 'absolute',
-                width: 900,
-                height: 400,
-                top: 15,
-                zIndex: 20,
-                left: -80,
-              }}
-            />
-            <View
-              style={{
-                position: 'absolute',
                 width: '100%',
                 height: '100%',
-                alignSelf: 'center',
-                backgroundColor: 'rgba(0, 0, 0, .7)',
-              }}
-            />
-          </Pressable>
-          <ImageBackground
-            source={require('../../assets/images/screens/explore/redeem.png')}
-            resizeMode="contain"
-            style={{
-              width: Dimensions.get('window').width - 40,
-              height: 500,
-              top: 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-              margin: 'auto',
-              position: 'relative',
-              zIndex: 20,
-            }}
-          >
-            <Text
-              style={{
                 position: 'absolute',
-                top: 25,
-                fontSize: 28,
-                alignSelf: 'center',
-                textTransform: 'uppercase',
               }}
+              onPress={() => setModalVisible(false)}
             >
-              Congratulations
-            </Text>
-            {redeemable.type === 'task' && (
+              <Lottie
+                source={require('../../assets/animations/confetti.json')}
+                progress={progress}
+                style={{
+                  position: 'absolute',
+                  width: 900,
+                  height: 400,
+                  top: 15,
+                  zIndex: 20,
+                  left: -80,
+                }}
+              />
               <View
                 style={{
                   position: 'absolute',
-                  top: 103,
-                  left: 115,
+                  width: '100%',
+                  height: '100%',
+                  alignSelf: 'center',
+                  backgroundColor: 'rgba(0, 0, 0, .7)',
+                }}
+              />
+            </Pressable>
+            <ImageBackground
+              source={require('../../assets/images/screens/explore/redeem.png')}
+              resizeMode="contain"
+              style={{
+                width: Dimensions.get('window').width - 40,
+                height: 500,
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+                margin: 'auto',
+                position: 'relative',
+                zIndex: 20,
+              }}
+            >
+              <Text
+                style={{
+                  position: 'absolute',
+                  top: 25,
+                  fontSize: 28,
+                  alignSelf: 'center',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Congratulations
+              </Text>
+              {redeemable.type === 'task' && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 103,
+                    left: 115,
+                    alignSelf: 'center',
+                  }}
+                >
+                  <Image
+                    source={{
+                      uri: (redeemable.model as TaskType).coin_url,
+                    }}
+                    style={{
+                      width: 140,
+                      height: 140,
+                      resizeMode: 'contain',
+                    }}
+                  />
+                </View>
+              )}
+              <Text
+                style={{
+                  fontSize: 18,
+                  position: 'absolute',
+                  top: 280,
+                  left: 110,
+                  zIndex: 10,
+                }}
+              >
+                {(redeemable.model as TaskType).experience}
+              </Text>
+              <View
+                style={{
+                  position: 'absolute',
+                  top: 160,
+                  left: 78,
                   alignSelf: 'center',
                 }}
               >
                 <Image
-                  source={{
-                    uri: redeemable.model.coin_url,
-                  }}
+                  source={require('../../assets/images/screens/explore/xp.png')}
                   style={{
-                    width: 140,
-                    height: 140,
+                    width: 60,
                     resizeMode: 'contain',
                   }}
                 />
               </View>
-            )}
-            <Text
-              style={{
-                fontSize: 18,
-                position: 'absolute',
-                top: 280,
-                left: 110,
-                zIndex: 10,
-              }}
-            >
-              {redeemable?.model.experience}
-            </Text>
-            <View
-              style={{
-                position: 'absolute',
-                top: 160,
-                left: 78,
-                alignSelf: 'center',
-              }}
-            >
-              <Image
-                source={require('../../assets/images/screens/explore/xp.png')}
+              <Text
                 style={{
-                  width: 60,
-                  resizeMode: 'contain',
+                  fontSize: 18,
+                  position: 'absolute',
+                  top: 280,
+                  left: 190,
+                  zIndex: 10,
                 }}
-              />
-            </View>
-            <Text
-              style={{
-                fontSize: 18,
-                position: 'absolute',
-                top: 280,
-                left: 190,
-                zIndex: 10,
-              }}
-            >
-              {redeemable?.model.coins}
-            </Text>
-            <View
-              style={{
-                position: 'absolute',
-                top: 153,
-                left: 158,
-                alignSelf: 'center',
-              }}
-            >
-              <Image
-                source={require('../../assets/images/screens/explore/coins.png')}
+              >
+                {(redeemable.model as TaskType).coins}
+              </Text>
+              <View
                 style={{
-                  width: 60,
-                  resizeMode: 'contain',
+                  position: 'absolute',
+                  top: 153,
+                  left: 158,
+                  alignSelf: 'center',
                 }}
-              />
-            </View>
-            <View
-              style={{
-                position: 'absolute',
-                top: 290,
-                left: 236,
-                alignSelf: 'center',
-              }}
-            >
-              <Image
-                source={{
-                  uri: park.coin_url,
-                }}
-                style={{
-                  width: 60,
-                  height: 60,
-                  resizeMode: 'contain',
-                }}
-              />
-            </View>
-            <Text
-              style={{
-                fontSize: 18,
-                position: 'absolute',
-                top: 280,
-                left: 280,
-                zIndex: 10,
-              }}
-            >
-              1
-            </Text>
-            <View
-              style={{
-                position: 'absolute',
-                bottom: 82,
-                alignSelf: 'center',
-              }}
-            >
-              <Button>
+              >
                 <Image
-                  source={require('../../assets/images/screens/explore/watch.png')}
+                  source={require('../../assets/images/screens/explore/coins.png')}
                   style={{
-                    width: 120,
-                    height: 73,
+                    width: 60,
                     resizeMode: 'contain',
                   }}
                 />
-              </Button>
-            </View>
-            <View
-              style={{
-                position: 'absolute',
-                bottom: 30,
-                alignSelf: 'center',
-              }}
-            >
-              <Button onPress={() => completeRedeemable()}>
-                <Image
-                  source={require('../../assets/images/screens/explore/collect.png')}
-                  style={{
-                    width: 280,
-                    height: 73,
-                    resizeMode: 'contain',
+              </View>
+              {redeemable.type === 'task' && (
+                <>
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: 290,
+                      left: 236,
+                      alignSelf: 'center',
+                    }}
+                  >
+                    <Image
+                      source={{
+                        uri: park.coin_url,
+                      }}
+                      style={{
+                        width: 60,
+                        height: 60,
+                        resizeMode: 'contain',
+                      }}
+                    />
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      position: 'absolute',
+                      top: 280,
+                      left: 280,
+                      zIndex: 10,
+                    }}
+                  >
+                    1
+                  </Text>
+                </>
+              )}
+              <View
+                style={{
+                  position: 'absolute',
+                  bottom: 82,
+                  alignSelf: 'center',
+                }}
+              >
+                <Button>
+                  <Image
+                    source={require('../../assets/images/screens/explore/watch.png')}
+                    style={{
+                      width: 120,
+                      height: 73,
+                      resizeMode: 'contain',
+                    }}
+                  />
+                </Button>
+              </View>
+              <View
+                style={{
+                  position: 'absolute',
+                  bottom: 30,
+                  alignSelf: 'center',
+                }}
+              >
+                <Button
+                  onPress={async () => {
+                    if (redeemable.type === 'task') {
+                      await completeTask(redeemable.model as TaskType);
+                    } else {
+                      await redeemCoin(redeemable.model as CoinType);
+                    }
+
+                    onPress();
+                    setModalVisible(false);
                   }}
-                />
-              </Button>
-            </View>
-          </ImageBackground>
-        </View>
-      </Modal>
+                >
+                  <Image
+                    source={require('../../assets/images/screens/explore/collect.png')}
+                    style={{
+                      width: 280,
+                      height: 73,
+                      resizeMode: 'contain',
+                    }}
+                  />
+                </Button>
+              </View>
+            </ImageBackground>
+          </View>
+        </Modal>
+      )}
     </>
   );
 }

@@ -156,9 +156,6 @@ export default function pinCollectionModal({
                   fontSize: 18,
                   textTransform: 'uppercase',
                   fontFamily: 'Knockout',
-                  textShadowOffset: {
-                    width: -1,
-                  },
                   textShadowColor: theme.primary,
                   textShadowRadius: 5,
                 }}

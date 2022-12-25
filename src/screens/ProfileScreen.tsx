@@ -22,6 +22,7 @@ import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
+import YellowButton from '../components/YellowButton';
 
 interface ButtonType {
   readonly image: any;

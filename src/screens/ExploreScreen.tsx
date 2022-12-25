@@ -32,14 +32,16 @@ import { ItemType } from '../models/item-type';
 import { CoinType } from '../models/coin-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
+import YellowButton from '../components/YellowButton';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
 export default function ExploreScreen() {
   const [park, setPark] = useState<ParkType>();
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
-  const [activeRedeemable, setActiveRedeemable] =
-    useState<RedeemableType | null>();
+  const [activeRedeemable, setActiveRedeemable] = useState<
+    RedeemableType | undefined
+  >();
   const [location, setLocation] = useState<LocationType>();
   const { inventory, updateUser } = useContext(AuthContext);
 
@@ -70,7 +72,7 @@ export default function ExploreScreen() {
 
         if (response === null) {
           setRedeemables(null);
-          setActiveRedeemable(null);
+          setActiveRedeemable(undefined);
         }
       });
     }
@@ -119,10 +121,10 @@ export default function ExploreScreen() {
                 }}
               >
                 <ImageBackground
+                  resizeMode={'contain'}
                   style={{
                     width: 70,
                     height: 84,
-                    resizeMode: 'contain',
                     position: 'relative',
                   }}
                   source={require('../../assets/images/screens/explore/base.png')}
@@ -143,64 +145,24 @@ export default function ExploreScreen() {
               </Button>
             </View>
           )}
-          {activeRedeemable && (
-            <View
-              style={{
-                bottom: 60,
-                position: 'absolute',
-                alignSelf: 'center',
-                flexDirection: 'row',
-                zIndex: 10,
+          <View
+            style={{
+              bottom: 60,
+              position: 'absolute',
+              alignSelf: 'center',
+              flexDirection: 'row',
+              zIndex: 10,
+            }}
+          >
+            <RedeemModal
+              redeemable={activeRedeemable}
+              park={park}
+              onPress={() => {
+                getRedeemables();
+                updateUser();
               }}
-            >
-              {(activeRedeemable.type === 'task' ||
-                activeRedeemable.type === 'secret_task') && (
-                <RedeemModal
-                  redeemable={activeRedeemable}
-                  park={park}
-                  onPress={() => {
-                    getRedeemables();
-                    updateUser();
-                  }}
-                />
-              )}
-              {activeRedeemable.type === 'coin' &&
-                dayjs().isBetween(
-                  dayjs((activeRedeemable.model as CoinType).active_from),
-                  dayjs((activeRedeemable.model as CoinType).active_to)
-                ) && (
-                  <RedeemModal
-                    redeemable={activeRedeemable}
-                    park={park}
-                    onPress={() => {
-                      getRedeemables();
-                      updateUser();
-                    }}
-                  />
-                )}
-              {activeRedeemable.type === 'item' &&
-                !(activeRedeemable.model as ItemType).is_hidden && (
-                  <Pressable
-                    onPress={async () => {
-                      await collectItem(activeRedeemable.model, () =>
-                        getRedeemables()
-                      );
-                    }}
-                  >
-                    <Text
-                      style={{
-                        backgroundColor: 'orange',
-                        padding: 16,
-                        borderRadius: 6,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      Collect Item
-                    </Text>
-                  </Pressable>
-                )}
-            </View>
-          )}
+            />
+          </View>
         </>
       )}
       <MapView

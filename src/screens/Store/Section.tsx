@@ -49,9 +49,6 @@ export default function Section({
           <Text
             style={{
               color: '#fff',
-              textShadowOffset: {
-                width: -1,
-              },
               textShadowColor: theme.primary,
               textShadowRadius: 5,
               fontFamily: 'Knockout',
@@ -71,9 +68,6 @@ export default function Section({
             paddingTop: title === 'Weekly Items' ? 7 : 3,
             fontFamily: 'Shark',
             textTransform: 'uppercase',
-            textShadowOffset: {
-              width: -1,
-            },
             textShadowColor: theme.primary,
             textShadowRadius: 5,
           }}

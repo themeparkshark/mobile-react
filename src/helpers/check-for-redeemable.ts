@@ -7,6 +7,6 @@ export default async function checkForRedeemable() {
   try {
     return await currentRedeemable(location.latitude, location.longitude);
   } catch (error) {
-    return null;
+    return undefined;
   }
 }
