@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import theme from '../config/theme';
 import { PinCollectionType } from '../models/pin-collection-type';
-import Lottie from 'lottie-react-native';
 
 export default function pinCollectionModal({
   pinCollection,
@@ -95,6 +94,7 @@ export default function pinCollectionModal({
               style={{
                 padding: 6,
                 flexDirection: 'row',
+                flexWrap: 'wrap',
                 justifyContent: 'center',
                 backgroundColor: theme.secondary,
               }}

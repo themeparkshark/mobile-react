@@ -118,7 +118,7 @@ export default function ParkScreen({ route }) {
                     >
                       {currentPark.completed_tasks_count +
                         currentPark.completed_secret_tasks_count}{' '}
-                      of {currentPark.tasks_count} tasks complete -{' '}
+                      of {currentPark.tasks_count} tasks completed -{' '}
                       {currentPark.park_coins} park coins earned
                     </Text>
                   </View>
