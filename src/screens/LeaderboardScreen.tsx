@@ -3,22 +3,30 @@ import Topbar from '../components/Topbar';
 import RNPickerSelect from 'react-native-picker-select';
 import allParks from '../api/endpoints/parks/allParks';
 import getLeaderboards from '../api/endpoints/parks/leaderboards/get';
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { AuthContext } from '../context/AuthProvider';
 import { ScrollView, Text, View } from 'react-native';
 import { Chevron } from 'react-native-shapes';
 import Leaderboards from '../components/Leaderboards';
 import { ParkType } from '../models/park-type';
 import { LeaderboardType } from '../models/leaderboard-type';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
-export default function LeaderboardScreen() {
+export default function LeaderboardScreen({ route }) {
   const { user } = useContext(AuthContext);
   const [parks, setParks] = useState<ParkType[]>();
   const [selectedPark, setSelectedPark] = useState<number>(
-    user.current_park_id
+    route.params?.park ?? user?.current_park_id
   );
   const [time, setTime] = useState<number>();
   const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>();
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Leaderboard screen.');
+    }, [])
+  );
 
   const requestLeaderboards = async () => {
     const response = await getLeaderboards(selectedPark);
@@ -35,7 +43,7 @@ export default function LeaderboardScreen() {
 
   useEffect(() => {
     requestLeaderboards();
-  }, [time]);
+  }, [time, selectedPark]);
 
   return (
     <Wrapper>

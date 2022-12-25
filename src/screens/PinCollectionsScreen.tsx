@@ -7,12 +7,20 @@ import {
   View,
 } from 'react-native';
 import all from '../api/endpoints/pin-collections/all';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import PinCollectionModal from '../components/PinCollectionModal';
 import { PinCollectionType } from '../models/pin-collection-type';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 export default function PinCollectionsScreen() {
   const [collections, setCollections] = useState<PinCollectionType[]>();
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Pin Collections screen.');
+    }, [])
+  );
 
   useEffect(() => {
     all().then((response) => setCollections(response));

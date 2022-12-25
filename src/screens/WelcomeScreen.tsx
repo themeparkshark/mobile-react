@@ -1,11 +1,19 @@
 import { Button, Text, TextInput, View } from 'react-native';
-import { useContext, useLayoutEffect, useState } from 'react';
+import { useCallback, useContext, useLayoutEffect, useState } from 'react';
 import updateUsername from '../api/endpoints/me/update-username';
 import { AuthContext } from '../context/AuthProvider';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 export default function WelcomeScreen({ navigation }) {
   const [username, setUsername] = useState();
   const { updateUser } = useContext(AuthContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Welcome screen.');
+    }, [])
+  );
 
   useLayoutEffect(() => {
     navigation.setOptions({

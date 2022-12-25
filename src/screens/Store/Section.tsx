@@ -40,7 +40,6 @@ export default function Section({
             paddingBottom: 4,
             borderTopLeftRadius: 6,
             borderTopRightRadius: 6,
-            borderStyle: 'solid',
             borderColor: 'rgba(255, 255, 255, .4)',
             borderTopWidth: 2,
             borderLeftWidth: 2,

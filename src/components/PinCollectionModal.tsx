@@ -56,7 +56,6 @@ export default function pinCollectionModal({
               borderRadius: 6,
               borderColor: '#fff',
               borderWidth: 3,
-              borderStyle: 'solid',
               shadowOffset: {
                 width: 0,
                 height: 3,

@@ -1,12 +1,20 @@
 import { Button, SafeAreaView, TextInput } from 'react-native';
-import { useContext, useLayoutEffect, useState } from 'react';
+import { useCallback, useContext, useLayoutEffect, useState } from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import updateUser from '../../api/endpoints/me/update-email';
 import { AuthContext } from '../../context/AuthProvider';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../../api/endpoints/activities/create';
 
 export default function UpdateEmailScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const [email, setEmail] = useState(user.email);
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Update Email screen.');
+    }, [])
+  );
 
   useLayoutEffect(() => {
     navigation.setOptions({

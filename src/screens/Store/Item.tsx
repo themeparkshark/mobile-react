@@ -23,7 +23,6 @@ export default function Item({ item }) {
           borderRadius: 6,
           borderColor: '#fff',
           borderWidth: 3,
-          borderStyle: 'solid',
           shadowOffset: {
             width: 0,
             height: 3,

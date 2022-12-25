@@ -11,7 +11,6 @@ export default function Progress({ progress }: { readonly progress: number }) {
         borderRadius: 10,
         borderWidth: 3,
         borderColor: theme.primary,
-        borderStyle: 'solid',
         backgroundColor: theme.primary,
         overflow: 'hidden',
       }}

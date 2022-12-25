@@ -1,14 +1,22 @@
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import allAnnouncements from '../api/endpoints/announcements/all';
 import Announcement from '../components/Announcement';
 import { AnnouncementType } from '../models/announcement-type';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 export default function SocialScreen() {
   const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
   const [loading, setLoading] = useState<boolean>(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Social screen.');
+    }, [])
+  );
 
   useEffect(() => {
     (async () => {

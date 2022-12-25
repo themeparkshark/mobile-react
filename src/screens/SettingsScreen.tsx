@@ -1,15 +1,23 @@
 import Topbar from '../components/Topbar';
 import { Alert, PlatformColor, SafeAreaView } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
-import { useContext } from 'react';
+import { useCallback, useContext } from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import dayjs from 'dayjs';
 import * as WebBrowser from 'expo-web-browser';
 import deleteUser from '../api/endpoints/me/delete';
 import * as RootNavigation from '../RootNavigation';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 export default function SettingsScreen() {
   const { user, logout } = useContext(AuthContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Settings screen.');
+    }, [])
+  );
 
   return (
     <>

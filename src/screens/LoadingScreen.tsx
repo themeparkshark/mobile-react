@@ -3,6 +3,7 @@ import { useContext, useEffect, useState } from 'react';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import getInventory from '../api/endpoints/me/inventory';
+import recordActivity from '../api/endpoints/activities/create';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
@@ -12,6 +13,8 @@ export default function LoadingScreen() {
     if (!isReady) {
       return;
     }
+
+    recordActivity('Viewed the Loading screen.');
 
     (async () => {
       setInventory(await getInventory());

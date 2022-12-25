@@ -9,11 +9,19 @@ import Wrapper from '../components/Wrapper';
 import client from '../api/client-cms';
 import Topbar from '../components/Topbar';
 import Entry from './NewsScreen/Entry';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 export default function NewsScreen() {
   const [entries, setEntries] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the News screen.');
+    }, [])
+  );
 
   const fetchEntries = () => {
     return client

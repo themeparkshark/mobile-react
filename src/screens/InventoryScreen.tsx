@@ -7,7 +7,7 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-import { useContext, useEffect, useState, useRef } from 'react';
+import { useContext, useEffect, useState, useRef, useCallback } from 'react';
 import Playercard from '../components/Playercard';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
@@ -16,14 +16,21 @@ import { AuthContext } from '../context/AuthProvider';
 import Item from '../components/Item';
 import { ItemTypeType } from '../models/item-type-type';
 import { ItemType } from '../models/item-type';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>();
   const [currentItemType, setCurrentItemType] = useState<ItemTypeType>();
   const [items, setItems] = useState<ItemType[]>();
   const { inventory } = useContext(AuthContext);
-
   const flatListRef = useRef();
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Inventory screen.');
+    }, [])
+  );
 
   useEffect(() => {
     getItemTypes().then((response) => {
@@ -89,7 +96,10 @@ export default function InventoryScreen() {
                       setItems(response)
                     );
                     setCurrentItemType(itemType);
-                    flatListRef.current.scrollToOffset({ animated: true, offset: 0 });
+                    flatListRef.current.scrollToOffset({
+                      animated: true,
+                      offset: 0,
+                    });
                   }}
                 >
                   <Image

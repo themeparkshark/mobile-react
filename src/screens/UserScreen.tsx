@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Dimensions,
   Image,
@@ -14,11 +14,19 @@ import Playercard from '../components/Playercard';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
 import theme from '../config/theme';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 export default function UserScreen({ navigation, route }) {
   const { user } = route.params;
   const [parks, setParks] = useState<ParkType[]>();
   const [currentUser, setCurrentUser] = useState<UserType>();
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the User screen.');
+    }, [])
+  );
 
   useEffect(() => {
     getUser(user).then((response) => setCurrentUser(response));

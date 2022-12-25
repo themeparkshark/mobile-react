@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
   Image,
@@ -30,6 +30,8 @@ import { RedeemablesType } from '../models/redeemables-type';
 import { RedeemableType } from '../models/redeemable-type';
 import { ItemType } from '../models/item-type';
 import { CoinType } from '../models/coin-type';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -40,6 +42,12 @@ export default function ExploreScreen() {
     useState<RedeemableType | null>();
   const [location, setLocation] = useState<LocationType>();
   const { inventory, updateUser } = useContext(AuthContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Explore screen.');
+    }, [])
+  );
 
   const getRedeemables = () => {
     currentRedeemables().then((response) => setRedeemables(response));

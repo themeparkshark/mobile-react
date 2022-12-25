@@ -7,12 +7,14 @@ import {
 } from 'react-native';
 import getStore from '../api/endpoints/stores/get';
 import getCatalog from '../api/endpoints/catalogs/get';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Topbar from '../components/Topbar';
 import Section from './Store/Section';
 import { StoreType } from '../models/store-type';
 import { CatalogType } from '../models/catalog-type';
 import { ItemType } from '../models/item-type';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 export default function StoreScreen({ route }) {
   const { store } = route.params;
@@ -20,6 +22,12 @@ export default function StoreScreen({ route }) {
   const [catalog, setCatalog] = useState<CatalogType>();
   const [weeklyItems, setWeeklyItems] = useState<ItemType[]>();
   const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Store screen.');
+    }, [])
+  );
 
   useEffect(() => {
     getStore(store).then((response) => setCurrentStore(response));
@@ -88,7 +96,7 @@ export default function StoreScreen({ route }) {
               <Section title="Weekly Items" items={weeklyItems} />
             )}
             {monthlyItems && (
-              <Section title="Weekly Items" items={monthlyItems} />
+              <Section title="Monthly Items" items={monthlyItems} />
             )}
           </ScrollView>
         </ImageBackground>

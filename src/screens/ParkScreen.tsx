@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ImageBackground, ScrollView, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Image, ImageBackground, ScrollView, Text, View } from 'react-native';
 import getPark from '../api/endpoints/parks/getPark';
 import getTasks from '../api/endpoints/parks/getTasks';
 import Topbar from '../components/Topbar';
@@ -8,13 +8,21 @@ import { TaskType } from '../models/task-type';
 import Progress from '../components/Progress';
 import config from '../config/theme';
 import { chunk } from 'lodash';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
+import Button from '../components/Button';
+import * as RootNavigation from '../RootNavigation';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;
   const [currentPark, setCurrentPark] = useState<ParkType>();
   const [tasks, setTasks] = useState<TaskType[]>();
 
-  const completedTasks = tasks?.filter((task) => task.has_completed).length;
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Park screen.');
+    }, [])
+  );
 
   useEffect(() => {
     getPark(park).then((response) => setCurrentPark(response));
@@ -23,7 +31,29 @@ export default function ParkScreen({ route }) {
 
   return (
     <>
-      <Topbar showBackButton={true} text={currentPark?.name} />
+      <Topbar
+        showBackButton={true}
+        text={currentPark?.name}
+        button={
+          <Button
+            onPress={() => {
+              RootNavigation.navigate('Leaderboard', {
+                park: currentPark?.id,
+              });
+            }}
+          >
+            <Image
+              style={{
+                width: 50,
+                height: 50,
+                resizeMode: 'contain',
+                alignSelf: 'center',
+              }}
+              source={require('../../assets/images/toolbar/leaderboard.png')}
+            />
+          </Button>
+        }
+      />
       <View
         style={{
           flex: 1,
@@ -44,8 +74,8 @@ export default function ParkScreen({ route }) {
             >
               <View
                 style={{
-                  paddingLeft: 32,
-                  paddingRight: 32,
+                  paddingLeft: 16,
+                  paddingRight: 16,
                   paddingBottom: 32,
                 }}
               >
@@ -85,35 +115,94 @@ export default function ParkScreen({ route }) {
                         textShadowRadius: 5,
                       }}
                     >
-                      {completedTasks} of {tasks.length} tasks complete - 100 park
-                      coins earned
+                      {currentPark.completed_tasks_count +
+                        currentPark.completed_secret_tasks_count}{' '}
+                      of {currentPark.tasks_count} tasks complete -{' '}
+                      {currentPark.park_coins} park coins earned
                     </Text>
                   </View>
                 </View>
               </View>
               <View
                 style={{
-                  paddingTop: 32,
-                  paddingBottom: 32,
-                  paddingLeft: 32,
-                  paddingRight: 32,
-                  backgroundColor: 'rgba(255, 255, 255, .6)',
+                  paddingTop: 16,
+                  paddingLeft: 16,
+                  paddingRight: 16,
                 }}
               >
-                {chunk(tasks, 5).map((tasks: TaskType[], index: number) => {
-                  return (
-                    <View key={index} style={{ paddingBottom: 32 }}>
-                      {tasks.map((task) => {
-                        return (
-                          <View>
-                            <Text>Task name: {task.name}</Text>
-                            <Text>Completed: {task.has_completed ? 'Yes' : 'No'}</Text>
+                <View style={{ paddingBottom: 16 }}>
+                  <View style={{ position: 'relative', height: 95 }}>
+                    <Image
+                      source={require('../../assets/images/screens/park/trophyshelf.png')}
+                      resizeMode="contain"
+                      style={{
+                        width: '100%',
+                        height: 50,
+                        bottom: 0,
+                        position: 'absolute',
+                      }}
+                    />
+                  </View>
+                </View>
+                {chunk(tasks, 6).map((tasks: TaskType[], index: number) => (
+                  <View key={index} style={{ paddingBottom: 16 }}>
+                    <View style={{ position: 'relative', height: 95 }}>
+                      <Image
+                        source={require('../../assets/images/screens/park/shelf.png')}
+                        resizeMode="contain"
+                        style={{
+                          width: '100%',
+                          height: 50,
+                          bottom: 0,
+                          position: 'absolute',
+                        }}
+                      />
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'center',
+                          position: 'absolute',
+                          top: 0,
+                          width: '100%',
+                        }}
+                      >
+                        {tasks.map((task, index) => (
+                          <View
+                            key={task.id}
+                            style={{
+                              paddingLeft: index === 0 ? 0 : 12,
+                            }}
+                          >
+                            {task.has_completed && (
+                              <Image
+                                source={{
+                                  uri: task.coin_url,
+                                }}
+                                style={{
+                                  width: 53,
+                                  height: 50,
+                                  borderWidth: 2,
+                                  borderColor: '#fff',
+                                  borderRadius: 50,
+                                }}
+                              />
+                            )}
+                            {!task.has_completed && (
+                              <View
+                                style={{
+                                  width: 53,
+                                  height: 50,
+                                  backgroundColor: 'rgba(0, 0, 0, .5)',
+                                  borderRadius: 50,
+                                }}
+                              />
+                            )}
                           </View>
-                        );
-                      })}
+                        ))}
+                      </View>
                     </View>
-                  );
-                })}
+                  </View>
+                ))}
               </View>
             </ScrollView>
           )}

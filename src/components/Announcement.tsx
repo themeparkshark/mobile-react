@@ -53,7 +53,7 @@ export default function Announcement({
               >
                 <Button onPress={() => setModalVisible(!modalVisible)}>
                   <Image
-                    source={require('../../assets/images/screens/explore/back.png')}
+                    source={require('../../assets/images/screens/pin-collections/close.png')}
                     style={{
                       width: 35,
                       height: 35,

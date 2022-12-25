@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
   Image,
@@ -20,6 +20,8 @@ import getInventory from '../api/endpoints/me/inventory';
 import theme from '../config/theme';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
+import { useFocusEffect } from '@react-navigation/native';
+import recordActivity from '../api/endpoints/activities/create';
 
 interface ButtonType {
   readonly image: any;
@@ -32,6 +34,12 @@ export default function NewsScreen({ navigation }) {
   const [stores, setStores] = useState<StoreType[]>();
   const [buttons, setButtons] = useState<ButtonType[]>();
   const { user, inventory, setInventory } = useContext(AuthContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      recordActivity('Viewed the Profile screen.');
+    }, [])
+  );
 
   useEffect(() => {
     getParks().then((response) => setParks(response));
