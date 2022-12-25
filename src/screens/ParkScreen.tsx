@@ -132,7 +132,58 @@ export default function ParkScreen({ route }) {
                 }}
               >
                 <View style={{ paddingBottom: 16 }}>
-                  <View style={{ position: 'relative', height: 95 }}>
+                  <View style={{ position: 'relative', height: 145 }}>
+                    <Image
+                      source={require('../../assets/images/screens/park/silver.png')}
+                      style={{
+                        width: 90,
+                        height: 90,
+                        zIndex: 15,
+                        position: 'absolute',
+                        left: 45,
+                        top: 10,
+                      }}
+                    />
+                    <Image
+                      source={require('../../assets/images/screens/park/gold.png')}
+                      style={{
+                        width: 100,
+                        height: 140,
+                        zIndex: 15,
+                        position: 'absolute',
+                        left: 140,
+                        top: -37,
+                      }}
+                    />
+                    <Image
+                      source={require('../../assets/images/screens/park/bronze.png')}
+                      style={{
+                        width: 70,
+                        height: 75,
+                        zIndex: 15,
+                        position: 'absolute',
+                        left: 250,
+                        top: 25,
+                      }}
+                    />
+                    <View
+                      style={{
+                        display: 'none',
+                        position: 'absolute',
+                        zIndex: 10,
+                        width: '100%',
+                        height: 100,
+                      }}
+                    >
+                      <Image
+                        source={require('../../assets/images/screens/park/placeholder.png')}
+                        style={{
+                          height: '100%',
+                          width: '100%',
+                        }}
+                        resizeMode={'contain'}
+                      />
+                    </View>
                     <Image
                       source={require('../../assets/images/screens/park/trophyshelf.png')}
                       resizeMode="contain"
