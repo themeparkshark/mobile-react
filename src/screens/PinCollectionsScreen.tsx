@@ -12,6 +12,7 @@ import PinCollectionModal from '../components/PinCollectionModal';
 import { PinCollectionType } from '../models/pin-collection-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
+import {PinType} from '../models/pin-type';
 
 export default function PinCollectionsScreen() {
   const [collections, setCollections] = useState<PinCollectionType[]>();
@@ -67,7 +68,6 @@ export default function PinCollectionsScreen() {
                 paddingBottom: 48,
                 backgroundColor: 'rgba(255, 255, 255, .6)',
                 borderTopWidth: 5,
-                borderTopStyle: 'solid',
                 borderTopColor: '#fff',
                 height: '100%',
               }}
@@ -84,7 +84,7 @@ export default function PinCollectionsScreen() {
                       padding: 4,
                     }}
                     data={collections}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(pinCollection) => pinCollection.name}
                     renderItem={({ item }) => (
                       <PinCollectionModal pinCollection={item} />
                     )}

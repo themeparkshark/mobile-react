@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import theme from '../config/theme';
 import { PinCollectionType } from '../models/pin-collection-type';
+import Lottie from 'lottie-react-native';
 
 export default function pinCollectionModal({
   pinCollection,
@@ -32,7 +33,7 @@ export default function pinCollectionModal({
             marginTop: 16,
           }}
         >
-          {pinCollection.pins_count === 1 && (
+          {pinCollection.collected_pins_count === pinCollection.pins.length && (
             <Image
               source={require('../../assets/images/screens/pin-collections/star.png')}
               style={{
@@ -66,8 +67,8 @@ export default function pinCollectionModal({
           >
             <ImageBackground
               source={require('../../assets/images/screens/store/gradient.png')}
+              resizeMode={'cover'}
               style={{
-                resizeMode: 'cover',
                 overflow: 'hidden',
               }}
             >
@@ -98,7 +99,7 @@ export default function pinCollectionModal({
                 backgroundColor: theme.secondary,
               }}
             >
-              {[...Array(pinCollection.pins_count)].map((element, index) => {
+              {[...Array(pinCollection.collected_pins_count)].map((element, index) => {
                 return (
                   <View
                     key={index}
@@ -119,7 +120,7 @@ export default function pinCollectionModal({
                   </View>
                 );
               })}
-              {[...Array(5 - pinCollection.pins_count)].map(
+              {[...Array(pinCollection.pins.length - pinCollection.collected_pins_count)].map(
                 (element, index) => {
                   return (
                     <View
@@ -179,15 +180,24 @@ export default function pinCollectionModal({
             justifyContent: 'center',
           }}
         >
-          <View
+          <Pressable
             style={{
-              position: 'absolute',
               width: '100%',
               height: '100%',
-              alignSelf: 'center',
-              backgroundColor: 'rgba(0, 0, 0, .7)',
+              position: 'absolute',
             }}
-          />
+            onPress={() => setModalVisible(false)}
+          >
+            <View
+              style={{
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                alignSelf: 'center',
+                backgroundColor: 'rgba(0, 0, 0, .7)',
+              }}
+            />
+          </Pressable>
           <ImageBackground
             source={require('../../assets/images/screens/explore/redeem.png')}
             resizeMode="contain"
