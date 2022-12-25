@@ -5,7 +5,7 @@ import { ApiResponseType } from '../../../models/api-response-type';
 
 export default async function getTasks(park: number): Promise<TaskType[]> {
   const { data } = await client.get<ApiResponseType<TaskType[]>>(
-    `/me/parks/${park}/tasks`
+    `/parks/${park}/tasks`
   );
 
   return data.data;

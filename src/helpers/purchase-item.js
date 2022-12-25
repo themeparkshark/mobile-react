@@ -33,7 +33,7 @@ export default async function purchaseItem(item, context) {
   const text =
     item.cost === 0
       ? `You have found ${item.name}. Would you like to pick it up?`
-      : `Would you like to buy ${item.name} for ${item.cost} coins? You currently have ${user.coins} coins.`;
+      : `Would you like to buy the ${item.name} for ${item.cost} coins? You currently have ${user.coins} coins.`;
 
   Alert.alert('', text, [
     {

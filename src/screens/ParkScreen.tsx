@@ -12,11 +12,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
+import {SecretTaskType} from '../models/secret-task-type';
+import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;
   const [currentPark, setCurrentPark] = useState<ParkType>();
   const [tasks, setTasks] = useState<TaskType[]>();
+  const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>();
 
   useFocusEffect(
     useCallback(() => {
@@ -27,6 +30,7 @@ export default function ParkScreen({ route }) {
   useEffect(() => {
     getPark(park).then((response) => setCurrentPark(response));
     getTasks(park).then((response) => setTasks(response));
+    getSecretTasks(park).then((response) => setSecretTasks(response));
   }, []);
 
   return (
@@ -66,7 +70,7 @@ export default function ParkScreen({ route }) {
           }}
           source={require('../../assets/images/screens/park/background.png')}
         >
-          {currentPark && tasks && (
+          {currentPark && tasks && secretTasks && (
             <ScrollView
               style={{
                 paddingTop: 32,
@@ -141,6 +145,65 @@ export default function ParkScreen({ route }) {
                     />
                   </View>
                 </View>
+                {chunk(secretTasks, 6).map((secretTasks: SecretTaskType[], index: number) => (
+                  <View key={index} style={{ paddingBottom: 16 }}>
+                    <View style={{ position: 'relative', height: 95 }}>
+                      <Image
+                        source={require('../../assets/images/screens/park/secretshelf.png')}
+                        resizeMode="contain"
+                        style={{
+                          width: '100%',
+                          height: 50,
+                          bottom: 0,
+                          position: 'absolute',
+                        }}
+                      />
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'center',
+                          position: 'absolute',
+                          top: 0,
+                          width: '100%',
+                        }}
+                      >
+                        {secretTasks.map((secretTask, index) => (
+                          <View
+                            key={secretTask.id}
+                            style={{
+                              paddingLeft: index === 0 ? 0 : 12,
+                            }}
+                          >
+                            {secretTask.has_completed && (
+                              <Image
+                                source={{
+                                  uri: secretTask.coin_url,
+                                }}
+                                style={{
+                                  width: 53,
+                                  height: 50,
+                                  borderWidth: 2,
+                                  borderColor: '#fff',
+                                  borderRadius: 50,
+                                }}
+                              />
+                            )}
+                            {!secretTask.has_completed && (
+                              <View
+                                style={{
+                                  width: 53,
+                                  height: 50,
+                                  backgroundColor: 'rgba(0, 0, 0, .5)',
+                                  borderRadius: 50,
+                                }}
+                              />
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                ))}
                 {chunk(tasks, 6).map((tasks: TaskType[], index: number) => (
                   <View key={index} style={{ paddingBottom: 16 }}>
                     <View style={{ position: 'relative', height: 95 }}>

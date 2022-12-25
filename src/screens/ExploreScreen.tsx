@@ -181,7 +181,7 @@ export default function ExploreScreen() {
         loadingEnabled={true}
         userInterfaceStyle={'light'}
       >
-        {redeemables?.items.map((item) => {
+        {redeemables?.items.filter((item) => !item.is_hidden).map((item) => {
           return (
             <Marker
               key={item.id}

@@ -19,8 +19,9 @@ import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import { CoinType } from '../models/coin-type';
 import YellowButton from './YellowButton';
 import dayjs from 'dayjs';
-import { ItemType } from '../models/item-type';
 import collectItem from '../helpers/collect-item';
+import {SecretTaskType} from '../models/secret-task-type';
+import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
 
 export default function RedeemModal({
   redeemable,
@@ -179,7 +180,7 @@ export default function RedeemModal({
               >
                 Congratulations
               </Text>
-              {redeemable.type === 'task' && (
+              {redeemable.type === 'task' || redeemable.type === 'secret_task' && (
                 <View
                   style={{
                     position: 'absolute',
@@ -190,7 +191,7 @@ export default function RedeemModal({
                 >
                   <Image
                     source={{
-                      uri: (redeemable.model as TaskType).coin_url,
+                      uri: (redeemable.model as TaskType | SecretTaskType).coin_url,
                     }}
                     style={{
                       width: 140,
@@ -209,7 +210,7 @@ export default function RedeemModal({
                   zIndex: 10,
                 }}
               >
-                {(redeemable.model as TaskType).experience}
+                {(redeemable.model as TaskType | SecretTaskType).experience}
               </Text>
               <View
                 style={{
@@ -236,7 +237,7 @@ export default function RedeemModal({
                   zIndex: 10,
                 }}
               >
-                {(redeemable.model as TaskType).coins}
+                {(redeemable.model as TaskType | SecretTaskType).coins}
               </Text>
               <View
                 style={{
@@ -254,7 +255,7 @@ export default function RedeemModal({
                   }}
                 />
               </View>
-              {redeemable.type === 'task' && (
+              {redeemable.type === 'task' || redeemable.type === 'secret_task' && (
                 <>
                   <View
                     style={{
@@ -317,6 +318,8 @@ export default function RedeemModal({
                   onPress={async () => {
                     if (redeemable.type === 'task') {
                       await completeTask(redeemable.model as TaskType);
+                    } else if (redeemable.type === 'secret_task') {
+                      await completeSecretTask(redeemable.model as SecretTaskType)
                     } else {
                       await redeemCoin(redeemable.model as CoinType);
                     }
