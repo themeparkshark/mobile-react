@@ -180,29 +180,28 @@ export default function RedeemModal({
               >
                 Congratulations
               </Text>
-              {redeemable.type === 'task' ||
-                (redeemable.type === 'secret_task' && (
-                  <View
-                    style={{
-                      position: 'absolute',
-                      top: 103,
-                      left: 115,
-                      alignSelf: 'center',
+              {(redeemable.type === 'task' || redeemable.type === 'secret_task') && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 103,
+                    left: 115,
+                    alignSelf: 'center',
+                  }}
+                >
+                  <Image
+                    source={{
+                      uri: (redeemable.model as TaskType | SecretTaskType)
+                        .coin_url,
                     }}
-                  >
-                    <Image
-                      source={{
-                        uri: (redeemable.model as TaskType | SecretTaskType)
-                          .coin_url,
-                      }}
-                      style={{
-                        width: 140,
-                        height: 140,
-                        resizeMode: 'contain',
-                      }}
-                    />
-                  </View>
-                ))}
+                    style={{
+                      width: 140,
+                      height: 140,
+                      resizeMode: 'contain',
+                    }}
+                  />
+                </View>
+              )}
               <Text
                 style={{
                   fontSize: 18,
@@ -257,41 +256,40 @@ export default function RedeemModal({
                   }}
                 />
               </View>
-              {redeemable.type === 'task' ||
-                (redeemable.type === 'secret_task' && (
-                  <>
-                    <View
-                      style={{
-                        position: 'absolute',
-                        top: 290,
-                        left: 236,
-                        alignSelf: 'center',
+              {(redeemable.type === 'task' || redeemable.type === 'secret_task') && (
+                <>
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: 290,
+                      left: 236,
+                      alignSelf: 'center',
+                    }}
+                  >
+                    <Image
+                      source={{
+                        uri: park.coin_url,
                       }}
-                    >
-                      <Image
-                        source={{
-                          uri: park.coin_url,
-                        }}
-                        style={{
-                          width: 60,
-                          height: 60,
-                          resizeMode: 'contain',
-                        }}
-                      />
-                    </View>
-                    <Text
                       style={{
-                        fontSize: 18,
-                        position: 'absolute',
-                        top: 280,
-                        left: 280,
-                        zIndex: 10,
+                        width: 60,
+                        height: 60,
+                        resizeMode: 'contain',
                       }}
-                    >
-                      1
-                    </Text>
-                  </>
-                ))}
+                    />
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      position: 'absolute',
+                      top: 280,
+                      left: 280,
+                      zIndex: 10,
+                    }}
+                  >
+                    1
+                  </Text>
+                </>
+              )}
               <View
                 style={{
                   position: 'absolute',
