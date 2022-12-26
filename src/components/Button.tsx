@@ -1,13 +1,15 @@
 import { Animated, Pressable } from 'react-native';
-import { ReactNode } from 'react';
+import {ReactNode, useContext} from 'react';
+import {SoundEffectContext} from '../context/SoundEffectProvider';
 
 export default function Button({
   children,
   onPress,
 }: {
   children: ReactNode;
-  onPress?: () => void;
+  onPress: () => void;
 }) {
+  const { playSound } = useContext(SoundEffectContext);
   const animated = new Animated.Value(1);
   const zoomOut = () => {
     Animated.timing(animated, {
@@ -25,7 +27,14 @@ export default function Button({
   };
 
   return (
-    <Pressable onPress={onPress} onPressIn={zoomOut} onPressOut={zoomIn}>
+    <Pressable
+      onPress={() => {
+        playSound(require('../../assets/sounds/button-press.mp3'))
+        onPress();
+      }}
+      onPressIn={zoomOut}
+      onPressOut={zoomIn}
+    >
       <Animated.View
         style={{
           transform: [

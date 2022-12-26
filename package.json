@@ -50,7 +50,8 @@
     "react-native-shapes": "^0.1.0",
     "react-native-svg": "12.3.0",
     "react-native-tableview-simple": "^4.3.1",
-    "url": "^0.11.0"
+    "url": "^0.11.0",
+    "use-sound": "^4.0.1"
   },
   "devDependencies": {
     "@babel/core": "^7.12.9",
