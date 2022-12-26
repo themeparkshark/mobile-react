@@ -13,7 +13,7 @@ import PinCollectionModal from '../components/PinCollectionModal';
 import { PinCollectionType } from '../models/pin-collection-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import {PinType} from '../models/pin-type';
+import { PinType } from '../models/pin-type';
 
 export default function PinCollectionsScreen() {
   const [collections, setCollections] = useState<PinCollectionType[]>();

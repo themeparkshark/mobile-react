@@ -11,7 +11,7 @@ import Topbar from '../components/Topbar';
 import Entry from './NewsScreen/Entry';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import {EntryType} from '../models/entry-type';
+import { EntryType } from '../models/entry-type';
 
 export default function NewsScreen() {
   const [entries, setEntries] = useState<EntryType[]>();

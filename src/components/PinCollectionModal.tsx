@@ -99,28 +99,7 @@ export default function pinCollectionModal({
                 backgroundColor: theme.secondary,
               }}
             >
-              {[...Array(pinCollection.collected_pins_count)].map((element, index) => {
-                return (
-                  <View
-                    key={index}
-                    style={{
-                      paddingLeft: 1,
-                      paddingRight: 1,
-                      width: '20%',
-                    }}
-                  >
-                    <Image
-                      source={require('../../assets/images/screens/pin-collections/star.png')}
-                      style={{
-                        width: '100%',
-                        height: 20,
-                        resizeMode: 'contain',
-                      }}
-                    />
-                  </View>
-                );
-              })}
-              {[...Array(pinCollection.pins.length - pinCollection.collected_pins_count)].map(
+              {[...Array(pinCollection.collected_pins_count)].map(
                 (element, index) => {
                   return (
                     <View
@@ -132,7 +111,7 @@ export default function pinCollectionModal({
                       }}
                     >
                       <Image
-                        source={require('../../assets/images/screens/pin-collections/darkstar.png')}
+                        source={require('../../assets/images/screens/pin-collections/star.png')}
                         style={{
                           width: '100%',
                           height: 20,
@@ -143,6 +122,31 @@ export default function pinCollectionModal({
                   );
                 }
               )}
+              {[
+                ...Array(
+                  pinCollection.pins.length - pinCollection.collected_pins_count
+                ),
+              ].map((element, index) => {
+                return (
+                  <View
+                    key={index}
+                    style={{
+                      paddingLeft: 1,
+                      paddingRight: 1,
+                      width: '20%',
+                    }}
+                  >
+                    <Image
+                      source={require('../../assets/images/screens/pin-collections/darkstar.png')}
+                      style={{
+                        width: '100%',
+                        height: 20,
+                        resizeMode: 'contain',
+                      }}
+                    />
+                  </View>
+                );
+              })}
             </View>
             <View
               style={{

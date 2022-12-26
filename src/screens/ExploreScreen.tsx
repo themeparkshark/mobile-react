@@ -181,33 +181,35 @@ export default function ExploreScreen() {
         loadingEnabled={true}
         userInterfaceStyle={'light'}
       >
-        {redeemables?.items.filter((item) => !item.is_hidden).map((item) => {
-          return (
-            <Marker
-              key={item.id}
-              coordinate={{
-                latitude: item.latitude,
-                longitude: item.longitude,
-              }}
-              centerOffset={{
-                x: 0,
-                y: 0,
-              }}
-              tracksViewChanges={false}
-              stopPropagation={true}
-            >
-              <Image
-                source={{
-                  uri: item.icon_url,
+        {redeemables?.items
+          .filter((item) => !item.is_hidden)
+          .map((item) => {
+            return (
+              <Marker
+                key={item.id}
+                coordinate={{
+                  latitude: item.latitude,
+                  longitude: item.longitude,
                 }}
-                style={{
-                  width: 60,
-                  height: 60,
+                centerOffset={{
+                  x: 0,
+                  y: 0,
                 }}
-              />
-            </Marker>
-          );
-        })}
+                tracksViewChanges={false}
+                stopPropagation={true}
+              >
+                <Image
+                  source={{
+                    uri: item.icon_url,
+                  }}
+                  style={{
+                    width: 60,
+                    height: 60,
+                  }}
+                />
+              </Marker>
+            );
+          })}
         {redeemables?.tasks.map((task) => {
           return (
             <Marker

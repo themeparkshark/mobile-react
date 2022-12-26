@@ -204,8 +204,8 @@ export default function NewsScreen({ navigation }) {
                             button.text === 'Pins'
                               ? button.image
                               : {
-                                uri: button.image,
-                              }
+                                  uri: button.image,
+                                }
                           }
                           style={{
                             width: 80,
@@ -378,7 +378,9 @@ export default function NewsScreen({ navigation }) {
                 return (
                   <Pressable
                     key={park.id}
-                    onPress={() => navigation.navigate('Park', { park: park.id })}
+                    onPress={() =>
+                      navigation.navigate('Park', { park: park.id })
+                    }
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',

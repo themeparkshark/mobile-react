@@ -39,7 +39,7 @@ export default function InventoryScreen() {
       setItemTypes(response);
       setCurrentItemType(response[0]);
       getItems(response[0].id).then((response) => {
-        setItems(response)
+        setItems(response);
         setLoading(false);
       });
     });
