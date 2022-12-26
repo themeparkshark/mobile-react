@@ -1,6 +1,6 @@
 import { Animated, Pressable } from 'react-native';
 import {ReactNode, useContext} from 'react';
-import {SoundEffectContext} from '../context/SoundEffectProvider';
+import {SoundEffectContext, SoundEffectContextType} from '../context/SoundEffectProvider';
 
 export default function Button({
   children,
@@ -9,7 +9,7 @@ export default function Button({
   children: ReactNode;
   onPress: () => void;
 }) {
-  const { playSound } = useContext(SoundEffectContext);
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const animated = new Animated.Value(1);
   const zoomOut = () => {
     Animated.timing(animated, {

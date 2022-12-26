@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import {useContext, useEffect, useRef, useState} from 'react';
 import {
   Animated,
   Dimensions,
@@ -22,6 +22,7 @@ import dayjs from 'dayjs';
 import collectItem from '../helpers/collect-item';
 import { SecretTaskType } from '../models/secret-task-type';
 import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
+import {SoundEffectContext, SoundEffectContextType} from '../context/SoundEffectProvider';
 
 export default function RedeemModal({
   redeemable,
@@ -32,6 +33,7 @@ export default function RedeemModal({
   readonly park: ParkType;
   readonly onPress: () => void;
 }) {
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const progress = useRef(new Animated.Value(0)).current;
   const animated = useRef(new Animated.Value(0)).current;
@@ -52,6 +54,8 @@ export default function RedeemModal({
 
   useEffect(() => {
     if (modalVisible) {
+      playSound(require('../../assets/sounds/redeem_modal_open.mp3'));
+
       Animated.loop(
         Animated.timing(progress, {
           toValue: 1,
@@ -82,6 +86,7 @@ export default function RedeemModal({
     const isSecretTask = redeemable?.type === 'secret_task';
 
     if (redeemable && (isCoin || isItem || isTask || isSecretTask)) {
+      playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
       slideUp();
     } else {
       slideDown();
@@ -115,7 +120,10 @@ export default function RedeemModal({
           animationType="fade"
           transparent={true}
           visible={modalVisible}
-          onRequestClose={() => setModalVisible(false)}
+          onRequestClose={() => {
+            playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
+            setModalVisible(false);
+          }}
         >
           <View
             style={{
@@ -130,7 +138,10 @@ export default function RedeemModal({
                 height: '100%',
                 position: 'absolute',
               }}
-              onPress={() => setModalVisible(false)}
+              onPress={() => {
+                playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
+                setModalVisible(false);
+              }}
             >
               <Lottie
                 source={require('../../assets/animations/confetti.json')}
@@ -328,6 +339,7 @@ export default function RedeemModal({
                     }
 
                     onPress();
+                    playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
                     setModalVisible(false);
                   }}
                 >

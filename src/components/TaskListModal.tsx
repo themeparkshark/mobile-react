@@ -1,19 +1,22 @@
-import { useState } from 'react';
+import {useContext, useState} from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import Button from './Button';
 import { RedeemablesType } from '../models/redeemables-type';
+import {SoundEffectContext, SoundEffectContextType} from '../context/SoundEffectProvider';
 
 export default function TaskListModal({
   redeemables,
 }: {
   readonly redeemables: RedeemablesType;
 }) {
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
 
   return (
     <>
       <Button
         onPress={() => {
+          playSound(require('../../assets/sounds/modal_open.mp3'));
           setModalVisible(true);
         }}
       >
@@ -31,6 +34,7 @@ export default function TaskListModal({
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => {
+          playSound(require('../../assets/sounds/modal_close.mp3'));
           setModalVisible(false);
         }}
       >
@@ -41,7 +45,10 @@ export default function TaskListModal({
             })}
             <Pressable
               style={[styles.button, styles.buttonClose]}
-              onPress={() => setModalVisible(false)}
+              onPress={() => {
+                playSound(require('../../assets/sounds/modal_close.mp3'));
+                setModalVisible(false);
+              }}
             >
               <Text style={styles.textStyle}>Close</Text>
             </Pressable>
