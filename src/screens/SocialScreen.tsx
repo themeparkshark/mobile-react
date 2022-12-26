@@ -34,7 +34,7 @@ export default function SocialScreen() {
         <View
           style={{
             flex: 1,
-            paddingTop: 32,
+            justifyContent: 'center',
           }}
         >
           <ActivityIndicator size="large" />

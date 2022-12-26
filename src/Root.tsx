@@ -24,6 +24,7 @@ import LeaderboardScreen from './screens/LeaderboardScreen';
 import PinCollectionScreen from './screens/PinCollectionsScreen';
 import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import SocialScreen from './screens/SocialScreen';
+import { useKeepAwake } from 'expo-keep-awake';
 
 const Stack = createNativeStackNavigator();
 
@@ -131,6 +132,7 @@ const AuthStackNavigator = () => {
 };
 
 export default function App() {
+  useKeepAwake();
   const { user, setUser } = useContext(AuthContext);
   const [isPlaying, setIsPlaying] = useState(false);
 

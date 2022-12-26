@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -25,6 +26,7 @@ export default function InventoryScreen() {
   const [items, setItems] = useState<ItemType[]>();
   const { inventory } = useContext(AuthContext);
   const flatListRef = useRef();
+  const [loading, setLoading] = useState<boolean>(true);
 
   useFocusEffect(
     useCallback(() => {
@@ -36,112 +38,127 @@ export default function InventoryScreen() {
     getItemTypes().then((response) => {
       setItemTypes(response);
       setCurrentItemType(response[0]);
-      getItems(response[0].id).then((response) => setItems(response));
+      getItems(response[0].id).then((response) => {
+        setItems(response)
+        setLoading(false);
+      });
     });
   }, []);
 
   return (
     <>
       <Topbar showBackButton={true} text="Inventory" />
-      <View
-        style={{
-          marginTop: -8,
-          height: 400,
-          overflow: 'hidden',
-          position: 'relative',
-        }}
-      >
-        {inventory && (
-          <Playercard
-            inventory={inventory}
-            style={{
-              position: 'absolute',
-              width: Dimensions.get('window').width,
-              height: 460,
-              marginTop: -50,
-            }}
-          />
-        )}
-        <ScrollView
+      {loading && (
+        <View
           style={{
-            position: 'absolute',
-            width: '100%',
-            bottom: 0,
-            borderColor: 'white',
-            borderType: 'solid',
-            borderTopWidth: 6,
-            borderBottomWidth: 6,
-          }}
-          horizontal={true}
-        >
-          {itemTypes?.map((itemType, key) => {
-            return (
-              <View
-                key={itemType.id}
-                style={{
-                  paddingLeft: 8,
-                  paddingRight: 8,
-                  borderType: 'solid',
-                  borderColor: 'white',
-                  borderRightWidth: key === itemTypes.length - 1 ? 0 : 1,
-                  backgroundColor:
-                    itemType.id === currentItemType?.id
-                      ? 'rgba(240, 255, 0, .6)'
-                      : 'rgba(255, 255, 255, .6)',
-                }}
-              >
-                <Pressable
-                  onPress={async () => {
-                    await getItems(itemType.id).then((response) =>
-                      setItems(response)
-                    );
-                    setCurrentItemType(itemType);
-                    flatListRef.current.scrollToOffset({
-                      animated: true,
-                      offset: 0,
-                    });
-                  }}
-                >
-                  <Image
-                    style={{
-                      width: 60,
-                      height: 60,
-                      resizeMode: 'contain',
-                    }}
-                    source={{
-                      uri: itemType.image_url,
-                    }}
-                  />
-                </Pressable>
-              </View>
-            );
-          })}
-        </ScrollView>
-      </View>
-      {inventory && currentItemType && (
-        <ImageBackground
-          source={require('../../assets/images/shark_background.png')}
-          style={{
-            width: '100%',
             flex: 1,
-            resizeMode: 'cover',
+            justifyContent: 'center',
           }}
         >
-          <FlatList
-            ref={flatListRef}
+          <ActivityIndicator size="large" />
+        </View>
+      )}
+      {!loading && (
+        <>
+          <View
             style={{
-              flex: 1,
-              padding: 4,
+              marginTop: -8,
+              height: 400,
+              overflow: 'hidden',
+              position: 'relative',
             }}
-            contentContainerStyle={{ paddingBottom: 8 }}
-            data={items}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <Item item={item} currentItemType={currentItemType} />
+          >
+            {inventory && (
+              <Playercard
+                inventory={inventory}
+                style={{
+                  position: 'absolute',
+                  width: Dimensions.get('window').width,
+                  height: 460,
+                  marginTop: -50,
+                }}
+              />
             )}
-            numColumns={3}
-          />
-        </ImageBackground>
+            <ScrollView
+              style={{
+                position: 'absolute',
+                width: '100%',
+                bottom: 0,
+                borderColor: 'white',
+                borderTopWidth: 6,
+                borderBottomWidth: 6,
+              }}
+              horizontal={true}
+            >
+              {itemTypes?.map((itemType, key) => {
+                return (
+                  <View
+                    key={itemType.id}
+                    style={{
+                      paddingLeft: 8,
+                      paddingRight: 8,
+                      borderColor: 'white',
+                      borderRightWidth: key === itemTypes.length - 1 ? 0 : 1,
+                      backgroundColor:
+                        itemType.id === currentItemType?.id
+                          ? 'rgba(240, 255, 0, .6)'
+                          : 'rgba(255, 255, 255, .6)',
+                    }}
+                  >
+                    <Pressable
+                      onPress={async () => {
+                        await getItems(itemType.id).then((response) =>
+                          setItems(response)
+                        );
+                        setCurrentItemType(itemType);
+                        flatListRef.current.scrollToOffset({
+                          animated: true,
+                          offset: 0,
+                        });
+                      }}
+                    >
+                      <Image
+                        style={{
+                          width: 60,
+                          height: 60,
+                          resizeMode: 'contain',
+                        }}
+                        source={{
+                          uri: itemType.image_url,
+                        }}
+                      />
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+          {inventory && currentItemType && (
+            <ImageBackground
+              source={require('../../assets/images/shark_background.png')}
+              resizeMode={'cover'}
+              style={{
+                width: '100%',
+                flex: 1,
+              }}
+            >
+              <FlatList
+                ref={flatListRef}
+                style={{
+                  flex: 1,
+                  padding: 4,
+                }}
+                contentContainerStyle={{ paddingBottom: 8 }}
+                data={items}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <Item item={item} currentItemType={currentItemType} />
+                )}
+                numColumns={3}
+              />
+            </ImageBackground>
+          )}
+        </>
       )}
     </>
   );

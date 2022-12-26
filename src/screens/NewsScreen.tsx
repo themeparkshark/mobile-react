@@ -11,11 +11,12 @@ import Topbar from '../components/Topbar';
 import Entry from './NewsScreen/Entry';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
+import {EntryType} from '../models/entry-type';
 
 export default function NewsScreen() {
-  const [entries, setEntries] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<EntryType[]>();
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useFocusEffect(
     useCallback(() => {
@@ -45,7 +46,7 @@ export default function NewsScreen() {
         <View
           style={{
             flex: 1,
-            paddingTop: 32,
+            justifyContent: 'center',
           }}
         >
           <ActivityIndicator size="large" />
@@ -65,12 +66,11 @@ export default function NewsScreen() {
               paddingBottom: 32,
             }}
           >
-            {entries &&
-              entries.map((entry, key) => {
-                return (
-                  <Entry key={entry.id} entry={entry} horizontal={key > 0} />
-                );
-              })}
+            {entries.map((entry, key) => {
+              return (
+                <Entry key={entry.id} entry={entry} horizontal={key > 0} />
+              );
+            })}
           </View>
         </ScrollView>
       )}

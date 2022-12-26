@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   ImageBackground,
@@ -22,6 +23,7 @@ export default function StoreScreen({ route }) {
   const [catalog, setCatalog] = useState<CatalogType>();
   const [weeklyItems, setWeeklyItems] = useState<ItemType[]>();
   const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
+  const [loading, setLoading] = useState<boolean>(true);
 
   useFocusEffect(
     useCallback(() => {
@@ -47,6 +49,7 @@ export default function StoreScreen({ route }) {
       setMonthlyItems(
         catalog.items.filter((item) => item.section === 'monthly')
       );
+      setLoading(false);
     }
   }, [catalog]);
 
@@ -57,50 +60,62 @@ export default function StoreScreen({ route }) {
         showCoins={true}
         text={currentStore?.name}
       />
-      <View
-        style={{
-          flex: 1,
-          marginTop: -8,
-        }}
-      >
-        <ImageBackground
+      {loading && (
+        <View
           style={{
             flex: 1,
+            justifyContent: 'center',
           }}
-          source={require('../../assets/images/water_background.png')}
         >
-          <ScrollView
+          <ActivityIndicator size="large" />
+        </View>
+      )}
+      {!loading && (
+        <View
+          style={{
+            flex: 1,
+            marginTop: -8,
+          }}
+        >
+          <ImageBackground
             style={{
-              paddingTop: 8,
+              flex: 1,
             }}
+            source={require('../../assets/images/water_background.png')}
           >
-            <View
+            <ScrollView
               style={{
-                height: 300,
+                paddingTop: 8,
               }}
             >
-              <Image
-                source={{
-                  uri: catalog?.promotion_image_url,
-                }}
+              <View
                 style={{
-                  width: Dimensions.get('window').width - 25,
-                  height: '100%',
-                  resizeMode: 'contain',
-                  marginLeft: 'auto',
-                  marginRight: 'auto',
+                  height: 300,
                 }}
-              />
-            </View>
-            {weeklyItems && (
-              <Section title="Weekly Items" items={weeklyItems} />
-            )}
-            {monthlyItems && (
-              <Section title="Monthly Items" items={monthlyItems} />
-            )}
-          </ScrollView>
-        </ImageBackground>
-      </View>
+              >
+                <Image
+                  source={{
+                    uri: catalog?.promotion_image_url,
+                  }}
+                  style={{
+                    width: Dimensions.get('window').width - 25,
+                    height: '100%',
+                    resizeMode: 'contain',
+                    marginLeft: 'auto',
+                    marginRight: 'auto',
+                  }}
+                />
+              </View>
+              {weeklyItems && (
+                <Section title="Weekly Items" items={weeklyItems} />
+              )}
+              {monthlyItems && (
+                <Section title="Monthly Items" items={monthlyItems} />
+              )}
+            </ScrollView>
+          </ImageBackground>
+        </View>
+      )}
     </>
   );
 }
