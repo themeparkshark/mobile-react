@@ -33,7 +33,7 @@ export default function Leaderboard({
         users.map((user) => {
           return (
             <Text key={user.id}>
-              {user.username} - {user.tasks_completed}
+              {user.screen_name} - {user.tasks_completed}
             </Text>
           );
         })}

@@ -34,7 +34,7 @@ export default function UserScreen({ navigation, route }) {
 
   return (
     <>
-      <Topbar text={currentUser?.username} showBackButton={true} />
+      <Topbar text={currentUser?.screen_name} showBackButton={true} />
       <ScrollView
         style={{
           flex: 1,

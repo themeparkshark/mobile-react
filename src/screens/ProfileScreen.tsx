@@ -83,7 +83,7 @@ export default function NewsScreen({ navigation }) {
     user && (
       <Wrapper>
         <Topbar
-          text={user.username}
+          text={user.screen_name}
           button={
             <Button
               onPress={() => {

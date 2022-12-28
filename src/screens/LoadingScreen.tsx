@@ -24,7 +24,7 @@ export default function LoadingScreen() {
   }, [isReady]);
 
   useEffect(() => {
-    if (!loading) {
+    if (!loading && isReady) {
       if (!user?.username) {
         RootNavigation.navigate('Welcome');
         return;
@@ -32,7 +32,7 @@ export default function LoadingScreen() {
 
       RootNavigation.navigate('Explore');
     }
-  }, [loading]);
+  }, [loading, isReady]);
 
   return (
     <View

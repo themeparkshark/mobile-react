@@ -28,7 +28,7 @@ export default function SettingsScreen() {
             <Cell
               title="Username"
               cellStyle="RightDetail"
-              detail={user.username}
+              detail={user.screen_name}
             />
             <Cell
               title="Theme Park Shark ID"

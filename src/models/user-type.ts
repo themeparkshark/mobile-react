@@ -13,6 +13,7 @@ export interface UserType {
   readonly name: string;
   readonly tasks_completed: number;
   readonly purple_diamonds: number;
+  readonly screen_name: string;
   readonly total_coins: number;
   readonly total_experience: number;
   readonly username: string;

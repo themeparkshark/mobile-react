@@ -6,7 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 
 export default function WelcomeScreen({ navigation }) {
-  const [username, setUsername] = useState();
+  const [username, setUsername] = useState<string>('');
   const { updateUser } = useContext(AuthContext);
 
   useFocusEffect(
