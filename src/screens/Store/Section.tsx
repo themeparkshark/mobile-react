@@ -22,10 +22,10 @@ export default function Section({
     >
       <ImageBackground
         source={title === 'Weekly Items' ? yellow : purple}
+        resizeMode={'contain'}
         style={{
           width: Dimensions.get('window').width,
           height: 75,
-          resizeMode: 'contain',
         }}
       >
         <View
@@ -65,7 +65,7 @@ export default function Section({
             textAlign: 'center',
             fontSize: 32,
             color: 'white',
-            paddingTop: title === 'Weekly Items' ? 7 : 3,
+            paddingTop: 10,
             fontFamily: 'Shark',
             textTransform: 'uppercase',
             textShadowColor: theme.primary,

@@ -19,7 +19,6 @@ import { useFonts } from 'expo-font';
 // @ts-ignore
 import { Storage } from 'expo-storage';
 import SettingsScreen from './screens/SettingsScreen';
-import { Audio } from 'expo-av';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import PinCollectionScreen from './screens/PinCollectionsScreen';
 import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
@@ -125,7 +124,12 @@ const HomeStackNavigator = () => {
 
 const AuthStackNavigator = () => {
   return (
-    <Stack.Navigator initialRouteName="Login">
+    <Stack.Navigator
+      initialRouteName="Login"
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
       <Stack.Screen name="Login" component={LoginScreen} />
     </Stack.Navigator>
   );
@@ -134,7 +138,6 @@ const AuthStackNavigator = () => {
 export default function App() {
   useKeepAwake();
   const { user, setUser } = useContext(AuthContext);
-  const [isPlaying, setIsPlaying] = useState(false);
 
   useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
@@ -148,28 +151,6 @@ export default function App() {
       }
     });
   }, []);
-
-  useEffect(() => {
-    if (!isPlaying) {
-      (async () => {
-        const tracks = [require('../assets/sounds/shark-v2.mp3')];
-
-        const music = tracks[Math.floor(Math.random() * tracks.length)];
-
-        const { sound } = await Audio.Sound.createAsync(music);
-
-        sound.setOnPlaybackStatusUpdate((status) => {
-          // @ts-ignore
-          if (status.didJustFinish) {
-            sound.unloadAsync();
-            setIsPlaying(false);
-          }
-        });
-        await sound.playAsync();
-        setIsPlaying(true);
-      })();
-    }
-  }, [isPlaying]);
 
   return (
     <>
