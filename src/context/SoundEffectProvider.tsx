@@ -9,14 +9,16 @@ export const SoundEffectContext = createContext<SoundEffectContextType>(
   {} as SoundEffectContextType
 );
 
-export const SoundEffectProvider: FC<{ children: ReactNode }> = ({ children }) => {
+export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   const [sound, setSound] = useState<any>();
 
   useEffect(() => {
     return sound
       ? () => {
-        sound.unloadAsync();
-      }
+          sound.unloadAsync();
+        }
       : undefined;
   }, [sound]);
 

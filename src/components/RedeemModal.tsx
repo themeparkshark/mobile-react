@@ -1,4 +1,4 @@
-import {useContext, useEffect, useRef, useState} from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -22,7 +22,10 @@ import dayjs from 'dayjs';
 import collectItem from '../helpers/collect-item';
 import { SecretTaskType } from '../models/secret-task-type';
 import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
-import {SoundEffectContext, SoundEffectContextType} from '../context/SoundEffectProvider';
+import {
+  SoundEffectContext,
+  SoundEffectContextType,
+} from '../context/SoundEffectProvider';
 
 export default function RedeemModal({
   redeemable,
@@ -139,7 +142,9 @@ export default function RedeemModal({
                 position: 'absolute',
               }}
               onPress={() => {
-                playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
+                playSound(
+                  require('../../assets/sounds/redeem_modal_close.mp3')
+                );
                 setModalVisible(false);
               }}
             >
@@ -191,7 +196,8 @@ export default function RedeemModal({
               >
                 Congratulations
               </Text>
-              {(redeemable.type === 'task' || redeemable.type === 'secret_task') && (
+              {(redeemable.type === 'task' ||
+                redeemable.type === 'secret_task') && (
                 <View
                   style={{
                     position: 'absolute',
@@ -267,7 +273,8 @@ export default function RedeemModal({
                   }}
                 />
               </View>
-              {(redeemable.type === 'task' || redeemable.type === 'secret_task') && (
+              {(redeemable.type === 'task' ||
+                redeemable.type === 'secret_task') && (
                 <>
                   <View
                     style={{
@@ -339,7 +346,9 @@ export default function RedeemModal({
                     }
 
                     onPress();
-                    playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
+                    playSound(
+                      require('../../assets/sounds/redeem_modal_close.mp3')
+                    );
                     setModalVisible(false);
                   }}
                 >

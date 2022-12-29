@@ -1,6 +1,9 @@
 import { Animated, Pressable } from 'react-native';
-import {ReactNode, useContext} from 'react';
-import {SoundEffectContext, SoundEffectContextType} from '../context/SoundEffectProvider';
+import { ReactNode, useContext } from 'react';
+import {
+  SoundEffectContext,
+  SoundEffectContextType,
+} from '../context/SoundEffectProvider';
 
 export default function Button({
   children,
@@ -29,7 +32,7 @@ export default function Button({
   return (
     <Pressable
       onPress={() => {
-        playSound(require('../../assets/sounds/button-press.mp3'))
+        playSound(require('../../assets/sounds/button-press.mp3'));
         onPress();
       }}
       onPressIn={zoomOut}

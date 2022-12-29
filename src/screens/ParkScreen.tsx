@@ -29,17 +29,20 @@ export default function ParkScreen({ route }) {
   const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>();
   const [loading, setLoading] = useState<boolean>(true);
 
-  const silver = currentPark && currentPark.park_coins >= 50
-    ? require('../../assets/images/screens/park/silver.png')
-    : require('../../assets/images/screens/park/silver_placeholder.png');
+  const silver =
+    currentPark && currentPark.park_coins >= 50
+      ? require('../../assets/images/screens/park/silver.png')
+      : require('../../assets/images/screens/park/silver_placeholder.png');
 
-  const gold = currentPark && currentPark.park_coins >= 100
-    ? require('../../assets/images/screens/park/gold.png')
-    : require('../../assets/images/screens/park/gold_placeholder.png');
+  const gold =
+    currentPark && currentPark.park_coins >= 100
+      ? require('../../assets/images/screens/park/gold.png')
+      : require('../../assets/images/screens/park/gold_placeholder.png');
 
-  const bronze = currentPark && currentPark.park_coins >= 12
-    ? require('../../assets/images/screens/park/bronze.png')
-    : require('../../assets/images/screens/park/bronze_placeholder.png');
+  const bronze =
+    currentPark && currentPark.park_coins >= 12
+      ? require('../../assets/images/screens/park/bronze.png')
+      : require('../../assets/images/screens/park/bronze_placeholder.png');
 
   useFocusEffect(
     useCallback(() => {
@@ -176,7 +179,7 @@ export default function ParkScreen({ route }) {
                           position: 'absolute',
                           left: 45,
                           top: 5,
-                          opacity: currentPark.park_coins >= 50 ? 1 : .6,
+                          opacity: currentPark.park_coins >= 50 ? 1 : 0.6,
                         }}
                       />
                       <Image
@@ -188,7 +191,7 @@ export default function ParkScreen({ route }) {
                           position: 'absolute',
                           left: 145,
                           top: -40,
-                          opacity: currentPark.park_coins >= 100 ? 1 : .6,
+                          opacity: currentPark.park_coins >= 100 ? 1 : 0.6,
                         }}
                       />
                       <Image
@@ -200,7 +203,7 @@ export default function ParkScreen({ route }) {
                           position: 'absolute',
                           left: 250,
                           top: 25,
-                          opacity: currentPark.park_coins >= 12 ? 1 : .6,
+                          opacity: currentPark.park_coins >= 12 ? 1 : 0.6,
                         }}
                       />
                       <View
