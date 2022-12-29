@@ -142,7 +142,9 @@ export default function TaskListModal({
                   <Text
                     key={task.id}
                     style={{
-                      fontSize: 16,
+                      fontFamily: 'Knockout',
+                      textTransform: 'uppercase',
+                      fontSize: 20,
                       paddingTop: index === 0 ? 0 : 8,
                     }}
                   >
