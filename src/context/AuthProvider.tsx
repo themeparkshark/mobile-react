@@ -8,6 +8,7 @@ import Storage from 'expo-storage';
 import { UserType } from '../models/user-type';
 import { InventoryType } from '../models/inventory-type';
 import { AppleAuthenticationCredential } from 'expo-apple-authentication';
+import recordActivity from '../api/endpoints/activities/create';
 
 export interface AuthContextType {
   readonly inventory: InventoryType | null;
@@ -71,6 +72,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const logout = async () => {
+    recordActivity('Logged out.');
     await Storage.removeItem({ key: 'user' });
     await SecureStore.deleteItemAsync('token');
     setUser(null);

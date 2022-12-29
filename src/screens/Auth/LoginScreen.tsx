@@ -5,11 +5,13 @@ import { AuthContext } from '../../context/AuthProvider';
 import { MusicContext } from '../../context/MusicProvider';
 
 export default function LoginScreen() {
-  const { login } = useContext(AuthContext);
+  const { user, isReady, login } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
 
   useEffect(() => {
-    playMusic(require('../../../assets/sounds/login.mp3'));
+    if (!user && isReady) {
+      playMusic(require('../../../assets/sounds/login.mp3'));
+    }
   }, []);
 
   return (

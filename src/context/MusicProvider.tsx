@@ -1,7 +1,8 @@
-import { createContext, FC, ReactNode, useEffect, useState } from 'react';
+import { createContext, FC, ReactNode, useState } from 'react';
 import { Audio } from 'expo-av';
 
 export interface MusicContextType {
+  readonly currentSound: any;
   readonly playMusic: (pendingSound: any) => void;
 }
 
@@ -12,35 +13,21 @@ export const MusicContext = createContext<MusicContextType>(
 export const MusicProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [currentSound, setCurrentSound] = useState<any>();
 
-  const stopMusic = async () => {
-    await currentSound.stopAsync();
-    setCurrentSound(null);
-  };
-
-  useEffect(() => {
-    (async () => {
-      if (currentSound) {
-        currentSound.setOnPlaybackStatusUpdate((status) => {
-          // @ts-ignore
-          if (status.didJustFinish) {
-            currentSound.unloadAsync();
-          }
-        });
-        await currentSound.playAsync();
-      }
-    })();
-  }, [currentSound]);
-
   return (
     <MusicContext.Provider
       value={{
+        currentSound,
         playMusic: async (pendingMusic: any) => {
           if (currentSound) {
-            await stopMusic();
+            await currentSound.stopAsync();
+            await currentSound.unloadAsync();
+            await setCurrentSound(null);
           }
 
           const { sound } = await Audio.Sound.createAsync(pendingMusic);
-          setCurrentSound(sound);
+          await sound.setIsLoopingAsync(true);
+          await sound.playAsync();
+          await setCurrentSound(sound);
         },
       }}
     >
