@@ -29,6 +29,18 @@ export default function ParkScreen({ route }) {
   const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>();
   const [loading, setLoading] = useState<boolean>(true);
 
+  const silver = currentPark && currentPark.park_coins >= 50
+    ? require('../../assets/images/screens/park/silver.png')
+    : require('../../assets/images/screens/park/silver_placeholder.png');
+
+  const gold = currentPark && currentPark.park_coins >= 100
+    ? require('../../assets/images/screens/park/gold.png')
+    : require('../../assets/images/screens/park/gold_placeholder.png');
+
+  const bronze = currentPark && currentPark.park_coins >= 12
+    ? require('../../assets/images/screens/park/bronze.png')
+    : require('../../assets/images/screens/park/bronze_placeholder.png');
+
   useFocusEffect(
     useCallback(() => {
       recordActivity('Viewed the Park screen.');
@@ -156,29 +168,31 @@ export default function ParkScreen({ route }) {
                   <View style={{ paddingBottom: 16 }}>
                     <View style={{ position: 'relative', height: 145 }}>
                       <Image
-                        source={require('../../assets/images/screens/park/silver.png')}
+                        source={silver}
                         style={{
                           width: 90,
-                          height: 90,
+                          height: 95,
                           zIndex: 15,
                           position: 'absolute',
                           left: 45,
-                          top: 10,
+                          top: 5,
+                          opacity: currentPark.park_coins >= 50 ? 1 : .6,
                         }}
                       />
                       <Image
-                        source={require('../../assets/images/screens/park/gold.png')}
+                        source={gold}
                         style={{
                           width: 100,
                           height: 140,
                           zIndex: 15,
                           position: 'absolute',
-                          left: 140,
-                          top: -37,
+                          left: 145,
+                          top: -40,
+                          opacity: currentPark.park_coins >= 100 ? 1 : .6,
                         }}
                       />
                       <Image
-                        source={require('../../assets/images/screens/park/bronze.png')}
+                        source={bronze}
                         style={{
                           width: 70,
                           height: 75,
@@ -186,6 +200,7 @@ export default function ParkScreen({ route }) {
                           position: 'absolute',
                           left: 250,
                           top: 25,
+                          opacity: currentPark.park_coins >= 12 ? 1 : .6,
                         }}
                       />
                       <View
@@ -227,7 +242,7 @@ export default function ParkScreen({ route }) {
                             resizeMode="contain"
                             style={{
                               width: '100%',
-                              height: 50,
+                              height: 60,
                               bottom: 0,
                               position: 'absolute',
                             }}
@@ -245,7 +260,7 @@ export default function ParkScreen({ route }) {
                               <View
                                 key={secretTask.id}
                                 style={{
-                                  paddingLeft: index === 0 ? 0 : 12,
+                                  paddingLeft: index === 0 ? 0 : 16,
                                 }}
                               >
                                 {secretTask.has_completed && (
@@ -254,8 +269,8 @@ export default function ParkScreen({ route }) {
                                       uri: secretTask.coin_url,
                                     }}
                                     style={{
-                                      width: 53,
-                                      height: 50,
+                                      width: 45,
+                                      height: 45,
                                       borderWidth: 2,
                                       borderColor: '#fff',
                                       borderRadius: 50,
@@ -265,8 +280,8 @@ export default function ParkScreen({ route }) {
                                 {!secretTask.has_completed && (
                                   <View
                                     style={{
-                                      width: 53,
-                                      height: 50,
+                                      width: 45,
+                                      height: 45,
                                       backgroundColor: 'rgba(0, 0, 0, .5)',
                                       borderRadius: 50,
                                     }}
@@ -287,7 +302,7 @@ export default function ParkScreen({ route }) {
                           resizeMode="contain"
                           style={{
                             width: '100%',
-                            height: 50,
+                            height: 60,
                             bottom: 0,
                             position: 'absolute',
                           }}
@@ -305,7 +320,7 @@ export default function ParkScreen({ route }) {
                             <View
                               key={task.id}
                               style={{
-                                paddingLeft: index === 0 ? 0 : 12,
+                                paddingLeft: index === 0 ? 0 : 16,
                               }}
                             >
                               {task.has_completed && (
@@ -314,8 +329,8 @@ export default function ParkScreen({ route }) {
                                     uri: task.coin_url,
                                   }}
                                   style={{
-                                    width: 53,
-                                    height: 50,
+                                    width: 45,
+                                    height: 45,
                                     borderWidth: 2,
                                     borderColor: '#fff',
                                     borderRadius: 50,
@@ -325,8 +340,8 @@ export default function ParkScreen({ route }) {
                               {!task.has_completed && (
                                 <View
                                   style={{
-                                    width: 53,
-                                    height: 50,
+                                    width: 45,
+                                    height: 45,
                                     backgroundColor: 'rgba(0, 0, 0, .5)',
                                     borderRadius: 50,
                                   }}
