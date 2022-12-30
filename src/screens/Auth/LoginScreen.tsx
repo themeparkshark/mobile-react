@@ -1,6 +1,13 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useContext, useEffect } from 'react';
-import { ImageBackground, SafeAreaView, Dimensions, View, Text, Image } from 'react-native';
+import {
+  ImageBackground,
+  SafeAreaView,
+  Dimensions,
+  View,
+  Text,
+  Image,
+} from 'react-native';
 import { AuthContext } from '../../context/AuthProvider';
 import { MusicContext } from '../../context/MusicProvider';
 
@@ -53,8 +60,12 @@ export default function LoginScreen() {
           }}
         >
           <AppleAuthentication.AppleAuthenticationButton
-            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            buttonType={
+              AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+            }
+            buttonStyle={
+              AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+            }
             cornerRadius={5}
             style={{ width: 200, height: 44 }}
             onPress={async () => {
@@ -77,7 +88,7 @@ export default function LoginScreen() {
           />
           <Text
             style={{
-              opacity: .5,
+              opacity: 0.5,
               paddingTop: 75,
               textAlign: 'center',
               fontSize: 12,

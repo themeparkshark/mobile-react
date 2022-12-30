@@ -34,10 +34,6 @@ export default function SettingsScreen() {
               title="Theme Park Shark ID"
               cellStyle="RightDetail"
               detail={user.email}
-              accessory="DisclosureIndicator"
-              onPress={() => {
-                RootNavigation.navigate('UpdateEmail');
-              }}
             />
             <Cell
               title="Joined on"

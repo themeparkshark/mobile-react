@@ -111,10 +111,7 @@ const HomeStackNavigator = () => {
           gestureEnabled: false,
         }}
       />
-      <Stack.Screen
-        name="QueueTimes"
-        component={QueueTimesScreen}
-      />
+      <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
       <Stack.Screen
         name="Loading"
         component={LoadingScreen}

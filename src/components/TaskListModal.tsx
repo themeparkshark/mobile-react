@@ -137,9 +137,8 @@ export default function TaskListModal({
             >
               {redeemables?.tasks.map((task, index) => {
                 return (
-                  <View>
+                  <View key={task.id}>
                     <Text
-                      key={task.id}
                       style={{
                         textAlign: 'center',
                         fontFamily: 'Knockout',
