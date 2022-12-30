@@ -25,6 +25,7 @@ import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import SocialScreen from './screens/SocialScreen';
 import { useKeepAwake } from 'expo-keep-awake';
 import QueueTimesScreen from './screens/QueueTimesScreen';
+import SecretStoreScreen from './screens/SecretStoreScreen';
 
 const Stack = createNativeStackNavigator();
 

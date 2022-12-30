@@ -24,6 +24,7 @@ export default function StoreScreen({ route }) {
   const [catalog, setCatalog] = useState<CatalogType>();
   const [weeklyItems, setWeeklyItems] = useState<ItemType[]>();
   const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
+  const [items, setItems] = useState<ItemType[]>();
   const [loading, setLoading] = useState<boolean>(true);
 
   useFocusEffect(
@@ -45,11 +46,16 @@ export default function StoreScreen({ route }) {
   }, [currentStore?.id]);
 
   useEffect(() => {
-    if (catalog) {
-      setWeeklyItems(catalog.items.filter((item) => item.section === 'weekly'));
-      setMonthlyItems(
-        catalog.items.filter((item) => item.section === 'monthly')
-      );
+    if (catalog && currentStore) {
+      if (!currentStore.is_secret_store) {
+        setWeeklyItems(catalog.items.filter((item) => item.section === 'weekly'));
+        setMonthlyItems(
+          catalog.items.filter((item) => item.section === 'monthly')
+        );
+      } else {
+        setItems(catalog.items);
+      }
+
       setLoading(false);
     }
   }, [catalog]);
@@ -57,6 +63,7 @@ export default function StoreScreen({ route }) {
   return (
     <>
       <Topbar
+        purple={currentStore?.is_secret_store ?? false}
         showBackButton={true}
         showCoins={true}
         text={currentStore?.name}
@@ -82,7 +89,9 @@ export default function StoreScreen({ route }) {
             style={{
               flex: 1,
             }}
-            source={require('../../assets/images/water_background.png')}
+            source={{
+              uri: currentStore?.background_url
+            }}
           >
             <ScrollView
               style={{
@@ -112,6 +121,9 @@ export default function StoreScreen({ route }) {
               )}
               {monthlyItems && (
                 <Section title="Monthly Items" items={monthlyItems} />
+              )}
+              {items && (
+                <Section title="Items" items={items} />
               )}
             </ScrollView>
           </ImageBackground>

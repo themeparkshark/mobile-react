@@ -18,9 +18,11 @@ export default function Topbar({
   showBackButton = false,
   showCoins = false,
   showPurpleDiamonds = false,
+  purple = false,
 }: {
   readonly button?: ReactNode | null;
   readonly text?: string | null;
+  readonly purple?: boolean;
   readonly showBackButton?: boolean;
   readonly showCoins?: boolean;
   readonly showPurpleDiamonds?: boolean;
@@ -35,7 +37,7 @@ export default function Topbar({
       }}
     >
       <ImageBackground
-        source={require('../../assets/images/screens/explore/topbar.png')}
+        source={purple ? require('../../assets/images/screens/store/purple_topbar.png') : require('../../assets/images/screens/explore/topbar.png')}
         resizeMode="cover"
         style={{
           height: 120,

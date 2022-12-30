@@ -16,50 +16,52 @@ export default function Section({
   return (
     <View
       style={{
-        paddingBottom: 48,
+        paddingBottom: title !== 'Items' ? 48 : 12,
         backgroundColor: 'rgba(255, 255, 255, .6)',
       }}
     >
       <ImageBackground
-        source={title === 'Weekly Items' ? yellow : purple}
+        source={title !== 'Monthly Items' ? yellow : purple}
         resizeMode={'contain'}
         style={{
           width: Dimensions.get('window').width,
           height: 75,
         }}
       >
-        <View
-          style={{
-            backgroundColor: 'rgba(0, 0, 0, .5)',
-            position: 'absolute',
-            right: 6,
-            top: -26,
-            paddingLeft: 12,
-            paddingRight: 12,
-            paddingTop: 4,
-            paddingBottom: 4,
-            borderTopLeftRadius: 6,
-            borderTopRightRadius: 6,
-            borderColor: 'rgba(255, 255, 255, .4)',
-            borderTopWidth: 2,
-            borderLeftWidth: 2,
-            borderRightWidth: 2,
-          }}
-        >
-          <Text
+        {title !== 'Items' && (
+          <View
             style={{
-              color: '#fff',
-              textShadowColor: theme.primary,
-              textShadowRadius: 5,
-              fontFamily: 'Knockout',
-              fontSize: 16,
+              backgroundColor: 'rgba(0, 0, 0, .5)',
+              position: 'absolute',
+              right: 6,
+              top: -26,
+              paddingLeft: 12,
+              paddingRight: 12,
+              paddingTop: 4,
+              paddingBottom: 4,
+              borderTopLeftRadius: 6,
+              borderTopRightRadius: 6,
+              borderColor: 'rgba(255, 255, 255, .4)',
+              borderTopWidth: 2,
+              borderLeftWidth: 2,
+              borderRightWidth: 2,
             }}
           >
-            {title === 'Weekly Items'
-              ? 'Updates every Friday'
-              : 'Updates on 1st'}
-          </Text>
-        </View>
+            <Text
+              style={{
+                color: '#fff',
+                textShadowColor: theme.primary,
+                textShadowRadius: 5,
+                fontFamily: 'Knockout',
+                fontSize: 16,
+              }}
+            >
+              {title === 'Weekly Items'
+                ? 'Updates every Friday'
+                : 'Updates on 1st'}
+            </Text>
+          </View>
+        )}
         <Text
           style={{
             textAlign: 'center',
