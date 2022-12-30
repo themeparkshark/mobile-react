@@ -101,7 +101,7 @@ export default function InventoryScreen() {
                       borderRightWidth: key === itemTypes.length - 1 ? 0 : 1,
                       backgroundColor:
                         itemType.id === currentItemType?.id
-                          ? 'rgba(240, 255, 0, .6)'
+                          ? 'rgba(255, 255, 255, .9)'
                           : 'rgba(255, 255, 255, .6)',
                     }}
                   >

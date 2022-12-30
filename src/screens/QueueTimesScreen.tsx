@@ -78,7 +78,6 @@ export default function QueueTimesScreen({ route }) {
                 paddingRight: 16,
                 paddingTop: 32,
                 paddingBottom: 32,
-                backgroundColor: 'red',
                 flex: 1,
               }}
             >
@@ -131,7 +130,7 @@ export default function QueueTimesScreen({ route }) {
                     Icon={() => <Chevron size={1.5} color="gray" />}
                   />
                   <Text style={{fontWeight: 'bold', textAlign: 'center', paddingTop: 32}}>
-                    Last updated: {queueTimes && dayjs(queueTimes[0].updated_at).startOf('second').fromNow()} ago
+                    Last updated: {queueTimes && dayjs(queueTimes[0].last_check_at).startOf('second').fromNow()} ago
                   </Text>
                   {queueTimes?.map((queueTime, index) => {
                     return (

@@ -3,5 +3,5 @@ export interface QueueTimeType {
   readonly ride: string;
   readonly wait_time: number;
   readonly is_open: boolean;
-  readonly updated_at: string;
+  readonly last_check_at: string;
 }
