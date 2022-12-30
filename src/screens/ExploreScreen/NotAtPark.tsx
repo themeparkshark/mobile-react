@@ -1,5 +1,6 @@
 import { Dimensions, Text } from 'react-native';
 import { BlurView } from 'expo-blur';
+import theme from '../../config/theme';
 
 export default function NotAtPark() {
   return (
@@ -8,7 +9,6 @@ export default function NotAtPark() {
       tint="dark"
       style={{
         zIndex: 10,
-        resizeMode: 'contain',
         alignSelf: 'center',
         position: 'absolute',
         width: Dimensions.get('window').width,
@@ -20,6 +20,10 @@ export default function NotAtPark() {
       <Text
         style={{
           color: 'white',
+          fontFamily: 'Shark',
+          textTransform: 'uppercase',
+          textShadowColor: theme.primary,
+          textShadowRadius: 5,
           fontSize: 32,
           paddingLeft: 48,
           paddingRight: 48,

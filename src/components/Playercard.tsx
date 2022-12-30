@@ -6,7 +6,6 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import asset from '../helpers/asset';
 import { useEffect, useRef } from 'react';
 import { UserType } from '../models/user-type';
 import { InventoryType } from '../models/inventory-type';
@@ -128,9 +127,7 @@ export default function Playercard({
             )}
             {animate && (
               <Image
-                source={{
-                  uri: asset('inventory/sharks/blink.gif'),
-                }}
+                source={require('../../assets/images/screens/inventory/blink.gif')}
                 style={styles.image}
               />
             )}

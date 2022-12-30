@@ -1,7 +1,8 @@
 import { Alert } from 'react-native';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
+import {ItemType} from '../models/item-type';
 
-export default async function collectItem(item, onPurchase) {
+export default async function collectItem(item: ItemType, onPurchase: () => void) {
   Alert.alert(
     '',
     `You have found a ${item.name}. Would you like to pick it up?`,

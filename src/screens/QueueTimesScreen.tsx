@@ -4,7 +4,8 @@ import {
   ScrollView,
   View,
   Text,
-  RefreshControl, SafeAreaView,
+  RefreshControl,
+  SafeAreaView,
 } from 'react-native';
 import { Chevron } from 'react-native-shapes';
 import { useCallback, useEffect, useState } from 'react';
@@ -14,7 +15,7 @@ import get from '../api/endpoints/parks/queue-times/get';
 import { QueueTimeType } from '../models/queue-time-type';
 import dayjs from '../helpers/dayjs';
 import RNPickerSelect from 'react-native-picker-select';
-import {ParkType} from '../models/park-type';
+import { ParkType } from '../models/park-type';
 import allParks from '../api/endpoints/parks/allParks';
 
 export default function QueueTimesScreen({ route }) {
@@ -81,24 +82,33 @@ export default function QueueTimesScreen({ route }) {
                 flex: 1,
               }}
             >
-              <Text style={{ textAlign: 'center'}}>Something went wrong. Please try again later.</Text>
+              <Text style={{ textAlign: 'center' }}>
+                Something went wrong. Please try again later.
+              </Text>
             </View>
           )}
           {queueTimes.length > 0 && parks && (
-            <SafeAreaView style={{
-              flex: 1,
-              marginTop: -8,
-            }}>
+            <SafeAreaView
+              style={{
+                flex: 1,
+                marginTop: -8,
+              }}
+            >
               <ScrollView
                 refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                  />
                 }
               >
-                <View style={{
-                  paddingLeft: 16,
-                  paddingRight: 16,
-                  paddingTop: 32,
-                }}>
+                <View
+                  style={{
+                    paddingLeft: 16,
+                    paddingRight: 16,
+                    paddingTop: 32,
+                  }}
+                >
                   <Text>Select a park:</Text>
                   <RNPickerSelect
                     placeholder={{}}
@@ -129,13 +139,27 @@ export default function QueueTimesScreen({ route }) {
                     }}
                     Icon={() => <Chevron size={1.5} color="gray" />}
                   />
-                  <Text style={{fontWeight: 'bold', textAlign: 'center', paddingTop: 32}}>
-                    Last updated: {queueTimes && dayjs(queueTimes[0].last_check_at).startOf('second').fromNow()} ago
+                  <Text
+                    style={{
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      paddingTop: 32,
+                    }}
+                  >
+                    Last updated:{' '}
+                    {queueTimes &&
+                      dayjs(queueTimes[0].last_check_at)
+                        .startOf('second')
+                        .fromNow()}{' '}
+                    ago
                   </Text>
                   {queueTimes?.map((queueTime, index) => {
                     return (
-                      <View key={queueTime.id} style={{paddingTop: 16}}>
-                        <Text>{queueTime.ride} - {queueTime.wait_time} minute{queueTime.wait_time !== 1 ? 's' : ''}</Text>
+                      <View key={queueTime.id} style={{ paddingTop: 16 }}>
+                        <Text>
+                          {queueTime.ride} - {queueTime.wait_time} minute
+                          {queueTime.wait_time !== 1 ? 's' : ''}
+                        </Text>
                       </View>
                     );
                   })}
