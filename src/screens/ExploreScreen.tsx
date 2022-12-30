@@ -115,34 +115,56 @@ export default function ExploreScreen() {
                 zIndex: 10,
               }}
             >
-              <Button
-                onPress={() => {
-                  RootNavigation.navigate('Inventory');
-                }}
-              >
-                <ImageBackground
-                  resizeMode={'contain'}
-                  style={{
-                    width: 70,
-                    height: 84,
-                    position: 'relative',
+              <View style={{
+                marginBottom: 8,
+              }}>
+                <Button
+                  onPress={() => {
+                    RootNavigation.navigate('QueueTimes', {
+                      park: park.id,
+                    });
                   }}
-                  source={require('../../assets/images/screens/explore/base.png')}
                 >
-                  <Playercard
-                    showBackground={false}
-                    animate={false}
-                    inventory={inventory}
+                  <Image
                     style={{
-                      position: 'absolute',
-                      width: 100,
-                      height: 100,
-                      left: -14,
-                      top: -15,
+                      width: 70,
+                      height: 84,
+                      resizeMode: 'contain',
                     }}
+                    source={require('../../assets/images/screens/explore/queuetimes.png')}
                   />
-                </ImageBackground>
-              </Button>
+                </Button>
+              </View>
+              <View>
+                <Button
+                  onPress={() => {
+                    RootNavigation.navigate('Inventory');
+                  }}
+                >
+                  <ImageBackground
+                    resizeMode={'contain'}
+                    style={{
+                      width: 70,
+                      height: 84,
+                      position: 'relative',
+                    }}
+                    source={require('../../assets/images/screens/explore/base.png')}
+                  >
+                    <Playercard
+                      showBackground={false}
+                      animate={false}
+                      inventory={inventory}
+                      style={{
+                        position: 'absolute',
+                        width: 100,
+                        height: 100,
+                        left: -14,
+                        top: -15,
+                      }}
+                    />
+                  </ImageBackground>
+                </Button>
+              </View>
             </View>
           )}
           <View

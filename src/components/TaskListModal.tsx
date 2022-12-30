@@ -87,7 +87,6 @@ export default function TaskListModal({
               margin: 'auto',
               position: 'relative',
               width: Dimensions.get('window').width - 50,
-              height: 400,
             }}
           >
             <ImageBackground
@@ -124,7 +123,6 @@ export default function TaskListModal({
                 paddingLeft: 35,
                 paddingRight: 35,
                 paddingBottom: 35,
-                alignItems: 'center',
                 shadowColor: '#000',
                 shadowOffset: {
                   width: 0,
@@ -139,17 +137,19 @@ export default function TaskListModal({
             >
               {redeemables?.tasks.map((task, index) => {
                 return (
-                  <Text
-                    key={task.id}
-                    style={{
-                      fontFamily: 'Knockout',
-                      textTransform: 'uppercase',
-                      fontSize: 20,
-                      paddingTop: index === 0 ? 0 : 8,
-                    }}
-                  >
-                    {task.name}
-                  </Text>
+                  <View>
+                    <Text
+                      key={task.id}
+                      style={{
+                        textAlign: 'center',
+                        fontFamily: 'Knockout',
+                        fontSize: 20,
+                        paddingTop: index === 0 ? 0 : 16,
+                      }}
+                    >
+                      {task.name}
+                    </Text>
+                  </View>
                 );
               })}
             </View>

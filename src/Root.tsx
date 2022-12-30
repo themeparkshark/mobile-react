@@ -24,6 +24,7 @@ import PinCollectionScreen from './screens/PinCollectionsScreen';
 import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import SocialScreen from './screens/SocialScreen';
 import { useKeepAwake } from 'expo-keep-awake';
+import QueueTimesScreen from './screens/QueueTimesScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -109,6 +110,10 @@ const HomeStackNavigator = () => {
           animation: 'none',
           gestureEnabled: false,
         }}
+      />
+      <Stack.Screen
+        name="QueueTimes"
+        component={QueueTimesScreen}
       />
       <Stack.Screen
         name="Loading"
