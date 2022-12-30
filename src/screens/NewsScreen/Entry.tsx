@@ -22,7 +22,7 @@ export default function Entry({
         marginBottom: 32,
         flexDirection: horizontal ? 'row' : 'column',
       }}
-      onPress={() => RootNavigation.navigate('Entry', { entry })}
+      onPress={() => RootNavigation.navigate('Entry', { entry: entry.id })}
     >
       <View
         style={{

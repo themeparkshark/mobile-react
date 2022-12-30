@@ -54,6 +54,9 @@ export default function NewsScreen() {
       )}
       {!loading && entries?.length && (
         <ScrollView
+          style={{
+            marginTop: -8,
+          }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }

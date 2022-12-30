@@ -4,10 +4,10 @@ export interface EntryType {
     readonly name: string;
   }[];
   readonly content: string;
-  readonly contributors: {
+  readonly author: {
     readonly id: number;
     readonly name: string;
-  }[];
+  };
   readonly featured_image: {
     readonly width: number;
     readonly height: number;
