@@ -96,7 +96,7 @@ export default function Topbar({
                         color: 'white',
                         fontFamily: 'Shark',
                         textTransform: 'uppercase',
-                        textShadowColor: theme.primary,
+                        textShadowColor: 'rgba(0, 0, 0, .5)',
                         textShadowRadius: 5,
                       }}
                     >
@@ -120,7 +120,7 @@ export default function Topbar({
                   color: 'white',
                   fontFamily: 'Shark',
                   textTransform: 'uppercase',
-                  textShadowColor: theme.primary,
+                  textShadowColor: 'rgba(0, 0, 0, .5)',
                   textShadowRadius: 5,
                   paddingLeft: 12,
                   paddingRight: 12,
@@ -159,7 +159,7 @@ export default function Topbar({
                         color: 'white',
                         fontFamily: 'Shark',
                         textTransform: 'uppercase',
-                        textShadowColor: theme.primary,
+                        textShadowColor: 'rgba(0, 0, 0, .5)',
                         textShadowRadius: 5,
                       }}
                     >

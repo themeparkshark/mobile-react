@@ -45,11 +45,9 @@ export default function ExploreScreen() {
   >();
   const [location, setLocation] = useState<LocationType>();
   const { inventory, updateUser } = useContext(AuthContext);
-  const { playMusic } = useContext(MusicContext);
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
       recordActivity('Viewed the Explore screen.');
     }, [])
   );

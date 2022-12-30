@@ -25,16 +25,9 @@ export default function StoreScreen({ route }) {
   const [weeklyItems, setWeeklyItems] = useState<ItemType[]>();
   const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
   const [loading, setLoading] = useState<boolean>(true);
-  const { playMusic } = useContext(MusicContext);
 
   useFocusEffect(
     useCallback(() => {
-      if (store === 1) {
-        playMusic(require('../../assets/sounds/music/track3.mp3'));
-      } else {
-        playMusic(require('../../assets/sounds/music/track4.mp3'));
-      }
-
       recordActivity('Viewed the Store screen.');
     }, [])
   );

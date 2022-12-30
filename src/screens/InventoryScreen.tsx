@@ -26,13 +26,11 @@ export default function InventoryScreen() {
   const [currentItemType, setCurrentItemType] = useState<ItemTypeType>();
   const [items, setItems] = useState<ItemType[]>();
   const { inventory } = useContext(AuthContext);
-  const { playMusic } = useContext(MusicContext);
   const flatListRef = useRef();
   const [loading, setLoading] = useState<boolean>(true);
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track2.mp3'));
       recordActivity('Viewed the Inventory screen.');
     }, [])
   );

@@ -29,7 +29,6 @@ export default function ParkScreen({ route }) {
   const [tasks, setTasks] = useState<TaskType[]>();
   const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>();
   const [loading, setLoading] = useState<boolean>(true);
-  const { playMusic } = useContext(MusicContext);
 
   const silver =
     currentPark && currentPark.park_coins >= 50
@@ -48,7 +47,6 @@ export default function ParkScreen({ route }) {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track6.mp3'));
       recordActivity('Viewed the Park screen.');
     }, [])
   );
@@ -155,7 +153,7 @@ export default function ParkScreen({ route }) {
                       >
                         {currentPark.completed_tasks_count +
                           currentPark.completed_secret_tasks_count}{' '}
-                        of {currentPark.tasks_count} tasks completed -{' '}
+                        of {currentPark.tasks_count + currentPark.secret_tasks_count} tasks completed -{' '}
                         {currentPark.park_coins} park coins earned
                       </Text>
                     </View>

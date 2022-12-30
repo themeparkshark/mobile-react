@@ -37,11 +37,9 @@ export default function NewsScreen({ navigation }) {
   const [buttons, setButtons] = useState<ButtonType[]>();
   const [loading, setLoading] = useState<boolean>(true);
   const { user, inventory, setInventory } = useContext(AuthContext);
-  const { playMusic } = useContext(MusicContext);
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
       recordActivity('Viewed the Profile screen.');
     }, [])
   );
