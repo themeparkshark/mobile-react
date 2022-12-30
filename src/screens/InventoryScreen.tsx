@@ -19,17 +19,20 @@ import { ItemTypeType } from '../models/item-type-type';
 import { ItemType } from '../models/item-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
+import {MusicContext} from '../context/MusicProvider';
 
 export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>();
   const [currentItemType, setCurrentItemType] = useState<ItemTypeType>();
   const [items, setItems] = useState<ItemType[]>();
   const { inventory } = useContext(AuthContext);
+  const { playMusic } = useContext(MusicContext);
   const flatListRef = useRef();
   const [loading, setLoading] = useState<boolean>(true);
 
   useFocusEffect(
     useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track2.mp3'));
       recordActivity('Viewed the Inventory screen.');
     }, [])
   );

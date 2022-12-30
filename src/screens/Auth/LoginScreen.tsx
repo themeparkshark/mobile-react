@@ -17,7 +17,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!user && isReady) {
-      playMusic(require('../../../assets/sounds/login.mp3'));
+      playMusic(require('../../../assets/sounds/music/track1.mp3'));
     }
   }, []);
 

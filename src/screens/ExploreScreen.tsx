@@ -33,6 +33,7 @@ import { CoinType } from '../models/coin-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import YellowButton from '../components/YellowButton';
+import {MusicContext} from '../context/MusicProvider';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -44,9 +45,11 @@ export default function ExploreScreen() {
   >();
   const [location, setLocation] = useState<LocationType>();
   const { inventory, updateUser } = useContext(AuthContext);
+  const { playMusic } = useContext(MusicContext);
 
   useFocusEffect(
     useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
       recordActivity('Viewed the Explore screen.');
     }, [])
   );

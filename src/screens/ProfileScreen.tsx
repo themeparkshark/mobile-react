@@ -23,7 +23,7 @@ import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import YellowButton from '../components/YellowButton';
+import {MusicContext} from '../context/MusicProvider';
 
 interface ButtonType {
   readonly image: any;
@@ -37,9 +37,11 @@ export default function NewsScreen({ navigation }) {
   const [buttons, setButtons] = useState<ButtonType[]>();
   const [loading, setLoading] = useState<boolean>(true);
   const { user, inventory, setInventory } = useContext(AuthContext);
+  const { playMusic } = useContext(MusicContext);
 
   useFocusEffect(
     useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
       recordActivity('Viewed the Profile screen.');
     }, [])
   );

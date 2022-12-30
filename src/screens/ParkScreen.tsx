@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import {useCallback, useContext, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -21,6 +21,7 @@ import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import { SecretTaskType } from '../models/secret-task-type';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
+import {MusicContext} from '../context/MusicProvider';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;
@@ -28,6 +29,7 @@ export default function ParkScreen({ route }) {
   const [tasks, setTasks] = useState<TaskType[]>();
   const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>();
   const [loading, setLoading] = useState<boolean>(true);
+  const { playMusic } = useContext(MusicContext);
 
   const silver =
     currentPark && currentPark.park_coins >= 50
@@ -46,6 +48,7 @@ export default function ParkScreen({ route }) {
 
   useFocusEffect(
     useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track6.mp3'));
       recordActivity('Viewed the Park screen.');
     }, [])
   );
