@@ -33,9 +33,10 @@ export default function Item({ item }) {
       >
         <ImageBackground
           source={gradient}
+          resizeMode={'cover'}
           style={{
+            borderRadius: 3,
             width: 100,
-            resizeMode: 'cover',
             overflow: 'hidden',
           }}
         >
