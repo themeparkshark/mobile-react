@@ -22,7 +22,7 @@ export default function SettingsScreen() {
   return (
     <>
       <Topbar text="Settings" showBackButton={true} />
-      <SafeAreaView style={{marginTop: -8, flex: 1,}}>
+      <SafeAreaView style={{ marginTop: -8, flex: 1 }}>
         <ScrollView>
           <TableView>
             <Section header={'General'.toUpperCase()}>

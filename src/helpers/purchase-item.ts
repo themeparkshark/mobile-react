@@ -1,7 +1,7 @@
 import { Alert } from 'react-native';
 import search from '../api/endpoints/me/inventory/search';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
-import {ItemType} from '../models/item-type';
+import { ItemType } from '../models/item-type';
 
 export default async function purchaseItem(item: ItemType, context: any) {
   const { user, updateUser } = context;

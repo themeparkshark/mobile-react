@@ -116,6 +116,7 @@ export default function NewsScreen({ navigation }) {
           <ScrollView
             style={{
               flex: 1,
+              backgroundColor: 'red',
               marginTop: -8,
             }}
           >
