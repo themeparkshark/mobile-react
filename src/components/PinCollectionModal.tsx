@@ -24,6 +24,7 @@ export default function pinCollectionModal({
         onPress={() => setModalVisible(true)}
         style={{
           width: '33.333333%',
+          padding: 8,
         }}
       >
         <View
@@ -32,25 +33,6 @@ export default function pinCollectionModal({
             marginTop: 16,
           }}
         >
-          {pinCollection.collected_pins_count === pinCollection.pins.length && (
-            <Image
-              source={require('../../assets/images/screens/pin-collections/star.png')}
-              style={{
-                width: 30,
-                height: 30,
-                resizeMode: 'contain',
-                position: 'absolute',
-                zIndex: 10,
-                right: -15,
-                top: -15,
-                transform: [
-                  {
-                    rotate: '25deg',
-                  },
-                ],
-              }}
-            />
-          )}
           <View
             style={{
               borderRadius: 6,

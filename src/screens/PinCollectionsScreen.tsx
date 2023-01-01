@@ -89,7 +89,6 @@ export default function PinCollectionsScreen() {
                     <FlatList
                       style={{
                         flex: 1,
-                        padding: 4,
                       }}
                       data={collections}
                       keyExtractor={(pinCollection) => pinCollection.name}

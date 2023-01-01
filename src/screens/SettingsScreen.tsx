@@ -76,15 +76,15 @@ export default function SettingsScreen() {
                 }}
                 onPress={() => {
                   Alert.alert(
-                    'Are you sure you want to delete your account?',
-                    'You cannot undo this action.',
+                    'Are you sure you want to deactivate your account?',
+                    'You can reactivate by signing in again.',
                     [
                       {
                         text: 'Cancel',
                         style: 'cancel',
                       },
                       {
-                        text: 'Delete',
+                        text: 'Deactivate',
                         style: 'destructive',
                         onPress: async () => {
                           await deleteUser();
