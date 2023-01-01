@@ -26,6 +26,7 @@ import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
+import {ItemType} from '../models/item-type';
 
 export default function RedeemModal({
   redeemable,
@@ -94,7 +95,7 @@ export default function RedeemModal({
     } else {
       slideDown();
     }
-  }, [redeemable]);
+  }, [redeemable?.model.id]);
 
   return (
     <>
@@ -110,7 +111,7 @@ export default function RedeemModal({
         <YellowButton
           onPress={async () => {
             if (redeemable?.type === 'item') {
-              await collectItem(redeemable.model, () => onPress());
+              await collectItem(redeemable.model as ItemType, () => onPress());
             } else {
               setModalVisible(true);
             }

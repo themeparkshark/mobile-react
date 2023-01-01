@@ -224,12 +224,39 @@ export default function ExploreScreen() {
                 stopPropagation={true}
               >
                 <Image
-                  source={{
-                    uri: item.icon_url,
-                  }}
+                  source={require('../../assets/images/screens/explore/item_animation.gif')}
+                  resizeMode={'contain'}
                   style={{
-                    width: 60,
-                    height: 60,
+                    width: 80,
+                    height: 80,
+                  }}
+                />
+              </Marker>
+            );
+          })}
+        {redeemables?.pins
+          .filter((item) => !item.is_hidden)
+          .map((item) => {
+            return (
+              <Marker
+                key={item.id}
+                coordinate={{
+                  latitude: item.latitude,
+                  longitude: item.longitude,
+                }}
+                centerOffset={{
+                  x: 0,
+                  y: 0,
+                }}
+                tracksViewChanges={false}
+                stopPropagation={true}
+              >
+                <Image
+                  source={require('../../assets/images/screens/explore/pin_animation.gif')}
+                  resizeMode={'contain'}
+                  style={{
+                    width: 120,
+                    height: 120,
                   }}
                 />
               </Marker>
