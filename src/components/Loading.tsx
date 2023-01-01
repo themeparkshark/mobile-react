@@ -1,5 +1,5 @@
-import {ActivityIndicator, Text, View} from 'react-native';
-import {useEffect, useState} from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
 
 export default function Loading() {
   const [showText, setShowText] = useState<boolean>(false);
@@ -24,11 +24,14 @@ export default function Loading() {
     >
       <ActivityIndicator size="large" />
       {showText && (
-        <Text style={{
-          textAlign: 'center',
-          paddingTop: 16,
-        }}>
-          This is taking longer than usual, please check your internet connectivity.
+        <Text
+          style={{
+            textAlign: 'center',
+            paddingTop: 16,
+          }}
+        >
+          This is taking longer than usual, please check your internet
+          connectivity.
         </Text>
       )}
     </View>

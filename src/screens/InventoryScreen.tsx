@@ -19,7 +19,7 @@ import { ItemTypeType } from '../models/item-type-type';
 import { ItemType } from '../models/item-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import {MusicContext} from '../context/MusicProvider';
+import { MusicContext } from '../context/MusicProvider';
 import Loading from '../components/Loading';
 
 export default function InventoryScreen() {

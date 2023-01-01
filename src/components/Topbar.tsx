@@ -37,7 +37,11 @@ export default function Topbar({
       }}
     >
       <ImageBackground
-        source={purple ? require('../../assets/images/screens/store/purple_topbar.png') : require('../../assets/images/screens/explore/topbar.png')}
+        source={
+          purple
+            ? require('../../assets/images/screens/store/purple_topbar.png')
+            : require('../../assets/images/screens/explore/topbar.png')
+        }
         resizeMode="cover"
         style={{
           height: 120,

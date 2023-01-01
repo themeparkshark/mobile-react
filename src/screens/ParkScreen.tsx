@@ -1,4 +1,4 @@
-import {useCallback, useContext, useEffect, useState} from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -21,7 +21,7 @@ import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import { SecretTaskType } from '../models/secret-task-type';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
-import {MusicContext} from '../context/MusicProvider';
+import { MusicContext } from '../context/MusicProvider';
 import Loading from '../components/Loading';
 
 export default function ParkScreen({ route }) {
@@ -145,8 +145,11 @@ export default function ParkScreen({ route }) {
                       >
                         {currentPark.completed_tasks_count +
                           currentPark.completed_secret_tasks_count}{' '}
-                        of {currentPark.tasks_count + currentPark.secret_tasks_count} tasks completed -{' '}
-                        {currentPark.park_coins} park coins earned
+                        of{' '}
+                        {currentPark.tasks_count +
+                          currentPark.secret_tasks_count}{' '}
+                        tasks completed - {currentPark.park_coins} park coins
+                        earned
                       </Text>
                     </View>
                   </View>

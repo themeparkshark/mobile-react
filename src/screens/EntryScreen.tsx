@@ -1,10 +1,17 @@
-import {ActivityIndicator, Dimensions, Image, ScrollView, Text, View} from 'react-native';
+import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import RenderHtml from 'react-native-render-html';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import { UserType } from '../models/user-type';
-import {useEffect, useState} from 'react';
-import {EntryType} from '../models/entry-type';
+import { useEffect, useState } from 'react';
+import { EntryType } from '../models/entry-type';
 import client from '../api/client-cms';
 import dayjs from '../helpers/dayjs';
 import Loading from '../components/Loading';
@@ -32,7 +39,7 @@ export default function EntryScreen({ route }) {
             padding: 16,
           }}
         >
-          <View style={{marginBottom: 16}}>
+          <View style={{ marginBottom: 16 }}>
             <Image
               style={{
                 aspectRatio: 16 / 9,
@@ -54,7 +61,8 @@ export default function EntryScreen({ route }) {
               marginTop: 8,
             }}
           >
-            By {currentEntry.author.name} | {dayjs(currentEntry.published_at).format('MMM D, YYYY')}
+            By {currentEntry.author.name} |{' '}
+            {dayjs(currentEntry.published_at).format('MMM D, YYYY')}
           </Text>
           <View>
             <RenderHtml

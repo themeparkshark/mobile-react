@@ -23,7 +23,7 @@ import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import {MusicContext} from '../context/MusicProvider';
+import { MusicContext } from '../context/MusicProvider';
 import Loading from '../components/Loading';
 
 interface ButtonType {

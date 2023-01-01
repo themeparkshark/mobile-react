@@ -4,7 +4,7 @@ import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import getInventory from '../api/endpoints/me/inventory';
 import recordActivity from '../api/endpoints/activities/create';
-import {MusicContext} from '../context/MusicProvider';
+import { MusicContext } from '../context/MusicProvider';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);

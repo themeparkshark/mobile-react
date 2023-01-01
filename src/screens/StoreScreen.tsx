@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import getStore from '../api/endpoints/stores/get';
 import getCatalog from '../api/endpoints/catalogs/get';
-import {useCallback, useContext, useEffect, useState} from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import Topbar from '../components/Topbar';
 import Section from './Store/Section';
 import { StoreType } from '../models/store-type';
@@ -16,7 +16,7 @@ import { CatalogType } from '../models/catalog-type';
 import { ItemType } from '../models/item-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import {MusicContext} from '../context/MusicProvider';
+import { MusicContext } from '../context/MusicProvider';
 import Loading from '../components/Loading';
 
 export default function StoreScreen({ route }) {
@@ -49,7 +49,9 @@ export default function StoreScreen({ route }) {
   useEffect(() => {
     if (catalog && currentStore) {
       if (!currentStore.is_secret_store) {
-        setWeeklyItems(catalog.items.filter((item) => item.section === 'weekly'));
+        setWeeklyItems(
+          catalog.items.filter((item) => item.section === 'weekly')
+        );
         setMonthlyItems(
           catalog.items.filter((item) => item.section === 'monthly')
         );
@@ -82,7 +84,7 @@ export default function StoreScreen({ route }) {
               flex: 1,
             }}
             source={{
-              uri: currentStore?.background_url
+              uri: currentStore?.background_url,
             }}
           >
             <ScrollView
@@ -114,9 +116,7 @@ export default function StoreScreen({ route }) {
               {monthlyItems && (
                 <Section title="Monthly Items" items={monthlyItems} />
               )}
-              {items && (
-                <Section title="Items" items={items} />
-              )}
+              {items && <Section title="Items" items={items} />}
             </ScrollView>
           </ImageBackground>
         </View>
