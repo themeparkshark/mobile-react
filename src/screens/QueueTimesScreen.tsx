@@ -17,6 +17,7 @@ import dayjs from '../helpers/dayjs';
 import RNPickerSelect from 'react-native-picker-select';
 import { ParkType } from '../models/park-type';
 import allParks from '../api/endpoints/parks/allParks';
+import Loading from '../components/Loading';
 
 export default function QueueTimesScreen({ route }) {
   const [queueTimes, setQueueTimes] = useState<QueueTimeType[]>();
@@ -59,16 +60,7 @@ export default function QueueTimesScreen({ route }) {
   return (
     <>
       <Topbar text="Queue Times" showBackButton />
-      {loading && (
-        <View
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-          }}
-        >
-          <ActivityIndicator size="large" />
-        </View>
-      )}
+      {loading && <Loading />}
       {!loading && queueTimes && (
         <>
           {queueTimes.length === 0 && (

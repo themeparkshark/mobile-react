@@ -14,6 +14,7 @@ import { PinCollectionType } from '../models/pin-collection-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import { PinType } from '../models/pin-type';
+import Loading from '../components/Loading';
 
 export default function PinCollectionsScreen() {
   const [collections, setCollections] = useState<PinCollectionType[]>();
@@ -35,16 +36,7 @@ export default function PinCollectionsScreen() {
   return (
     <>
       <Topbar text={'Pin Packs'} showBackButton={true} />
-      {loading && (
-        <View
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-          }}
-        >
-          <ActivityIndicator size="large" />
-        </View>
-      )}
+      {loading && <Loading />}
       {!loading && (
         <View
           style={{

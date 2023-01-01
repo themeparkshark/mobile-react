@@ -22,6 +22,7 @@ import * as RootNavigation from '../RootNavigation';
 import { SecretTaskType } from '../models/secret-task-type';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import {MusicContext} from '../context/MusicProvider';
+import Loading from '../components/Loading';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;
@@ -85,16 +86,7 @@ export default function ParkScreen({ route }) {
           </Button>
         }
       />
-      {loading && (
-        <View
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-          }}
-        >
-          <ActivityIndicator size="large" />
-        </View>
-      )}
+      {loading && <Loading />}
       {!loading && (
         <View
           style={{

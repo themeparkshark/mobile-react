@@ -7,6 +7,7 @@ import {useEffect, useState} from 'react';
 import {EntryType} from '../models/entry-type';
 import client from '../api/client-cms';
 import dayjs from '../helpers/dayjs';
+import Loading from '../components/Loading';
 
 export default function EntryScreen({ route }) {
   const { entry } = route.params;
@@ -24,16 +25,7 @@ export default function EntryScreen({ route }) {
   return (
     <Wrapper showBar={false}>
       <Topbar showBackButton={true} />
-      {loading && (
-        <View
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-          }}
-        >
-          <ActivityIndicator size="large" />
-        </View>
-      )}
+      {loading && <Loading />}
       {!loading && currentEntry && (
         <ScrollView
           style={{

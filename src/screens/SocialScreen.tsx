@@ -7,6 +7,7 @@ import Announcement from '../components/Announcement';
 import { AnnouncementType } from '../models/announcement-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
+import Loading from '../components/Loading';
 
 export default function SocialScreen() {
   const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
@@ -30,16 +31,7 @@ export default function SocialScreen() {
   return (
     <Wrapper>
       <Topbar text="Social" />
-      {loading && (
-        <View
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-          }}
-        >
-          <ActivityIndicator size="large" />
-        </View>
-      )}
+      {loading && <Loading />}
       {!loading && (
         <ScrollView
           style={{

@@ -12,6 +12,7 @@ import Entry from './NewsScreen/Entry';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import { EntryType } from '../models/entry-type';
+import Loading from '../components/Loading';
 
 export default function NewsScreen() {
   const [entries, setEntries] = useState<EntryType[]>();
@@ -42,16 +43,7 @@ export default function NewsScreen() {
   return (
     <Wrapper>
       <Topbar text={'Latest News'} />
-      {loading && (
-        <View
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-          }}
-        >
-          <ActivityIndicator size="large" />
-        </View>
-      )}
+      {loading && <Loading />}
       {!loading && entries?.length && (
         <ScrollView
           style={{
