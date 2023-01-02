@@ -25,6 +25,7 @@ import getUsers from '../api/endpoints/leaderboards/users';
 import Loading from '../components/Loading';
 import LeaderboardUser from '../components/LeaderboardUser';
 import LeaderboardAvatar from '../components/LeaderboardAvatar';
+import Button from '../components/Button';
 
 export default function LeaderboardScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);
@@ -35,7 +36,6 @@ export default function LeaderboardScreen({ route }) {
   );
   const [selectedLeaderboard, setSelectedLeaderboard] =
     useState<LeaderboardType>();
-  const [time, setTime] = useState<number>();
   const [users, setUsers] = useState<UserType[]>([]);
   const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>();
 
@@ -45,14 +45,9 @@ export default function LeaderboardScreen({ route }) {
     }, [])
   );
 
-  const requestLeaderboards = async () => {
-    setLeaderboards(await getLeaderboards(selectedPark));
-  };
-
   useEffect(() => {
     (async () => {
       setParks(await allParks());
-      await requestLeaderboards();
     })();
   }, []);
 
@@ -72,8 +67,10 @@ export default function LeaderboardScreen({ route }) {
   }, [selectedLeaderboard]);
 
   useEffect(() => {
-    requestLeaderboards();
-  }, [time, selectedPark]);
+    (async () => {
+      setLeaderboards(await getLeaderboards(selectedPark));
+    })();
+  }, [selectedPark]);
 
   return (
     <Wrapper>
@@ -100,7 +97,7 @@ export default function LeaderboardScreen({ route }) {
                   position: 'relative',
                 }}
               >
-                {users.length && (
+                {users.length > 0 && (
                   <>
                     <View
                       style={{
@@ -147,7 +144,6 @@ export default function LeaderboardScreen({ route }) {
                     <RNPickerSelect
                       placeholder={{}}
                       onValueChange={(value) => setSelectedPark(value)}
-                      onClose={() => setTime(Date.now())}
                       value={selectedPark}
                       items={parks.map((item) => {
                         return {
@@ -162,7 +158,7 @@ export default function LeaderboardScreen({ route }) {
                           borderWidth: 3,
                           borderRadius: 10,
                           paddingRight: 30,
-                          backgroundColor: config.secondary,
+                          backgroundColor: 'rgba(255, 255, 255, .4)',
                           borderColor: 'white',
                           color: 'white',
                           fontSize: 20,
@@ -195,38 +191,36 @@ export default function LeaderboardScreen({ route }) {
                               paddingLeft: index === 0 ? 0 : 8,
                             }}
                           >
-                            <Pressable
+                            <Button
                               onPress={() =>
                                 setSelectedLeaderboard(leaderboard)
                               }
-                              style={{
-                                backgroundColor:
-                                  selectedLeaderboard?.id === leaderboard.id
-                                    ? config.primary
-                                    : 'white',
-                                borderColor:
-                                  selectedLeaderboard?.id === leaderboard.id
-                                    ? 'white'
-                                    : config.primary,
-                                borderWidth: 3,
-                                padding: 12,
-                                borderRadius: 10,
-                              }}
                             >
-                              <Text
+                              <View
                                 style={{
-                                  textAlign: 'center',
-                                  color:
+                                  backgroundColor:
                                     selectedLeaderboard?.id === leaderboard.id
-                                      ? 'white'
-                                      : config.primary,
-                                  fontFamily: 'Knockout',
-                                  fontSize: 20,
+                                      ? config.primary
+                                      : 'white',
+                                  padding: 12,
+                                  borderRadius: 10,
                                 }}
                               >
-                                {leaderboard.duration_text}
-                              </Text>
-                            </Pressable>
+                                <Text
+                                  style={{
+                                    textAlign: 'center',
+                                    color:
+                                      selectedLeaderboard?.id === leaderboard.id
+                                        ? 'white'
+                                        : config.primary,
+                                    fontFamily: 'Knockout',
+                                    fontSize: 20,
+                                  }}
+                                >
+                                  {leaderboard.duration_text}
+                                </Text>
+                              </View>
+                            </Button>
                           </View>
                         );
                       })}
@@ -253,78 +247,77 @@ export default function LeaderboardScreen({ route }) {
                   paddingBottom: 32,
                 }}
               >
-                {users.length &&
-                  users.map((user, index) => {
-                    return (
+                {users.slice(3).length > 0 && users.slice(3).map((user, index) => {
+                  return (
+                    <View
+                      key={user.id}
+                      style={{
+                        paddingTop: 25,
+                        paddingBottom: 25,
+                        borderTopWidth: index === 0 ? 0 : 3,
+                        borderColor: 'rgba(0, 0, 0, .4)',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                      }}
+                    >
                       <View
-                        key={user.id}
                         style={{
-                          paddingTop: 25,
-                          paddingBottom: 25,
-                          borderTopWidth: index === 0 ? 0 : 3,
-                          borderColor: 'rgba(0, 0, 0, .4)',
+                          paddingLeft: 16,
+                          paddingRight: 16,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 24,
+                            fontFamily: 'Shark',
+                            color: 'black',
+                          }}
+                        >
+                          {index + 4}
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          paddingLeft: 16,
+                          paddingRight: 16,
+                          flex: 1,
                           flexDirection: 'row',
                           alignItems: 'center',
                         }}
                       >
-                        <View
+                        <LeaderboardAvatar size={50} user={user} />
+                        <Text
                           style={{
-                            paddingLeft: 16,
-                            paddingRight: 16,
+                            fontSize: 24,
+                            fontFamily: 'Shark',
+                            color: 'black',
+                            textTransform: 'uppercase',
+                            paddingLeft: 32,
                           }}
                         >
-                          <Text
-                            style={{
-                              fontSize: 24,
-                              fontFamily: 'Shark',
-                              color: 'black',
-                            }}
-                          >
-                            {index + 4}
-                          </Text>
-                        </View>
-                        <View
-                          style={{
-                            paddingLeft: 16,
-                            paddingRight: 16,
-                            flex: 1,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <LeaderboardAvatar size={50} user={user} />
-                          <Text
-                            style={{
-                              fontSize: 24,
-                              fontFamily: 'Shark',
-                              color: 'black',
-                              textTransform: 'uppercase',
-                              paddingLeft: 32,
-                            }}
-                          >
-                            {user.screen_name}
-                          </Text>
-                        </View>
-                        <View
-                          style={{
-                            paddingLeft: 16,
-                            paddingRight: 16,
-                            flex: 0,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 24,
-                              fontFamily: 'Shark',
-                              color: 'black',
-                            }}
-                          >
-                            {user.park_coins}
-                          </Text>
-                        </View>
+                          {user.screen_name}
+                        </Text>
                       </View>
-                    );
-                  })}
+                      <View
+                        style={{
+                          paddingLeft: 16,
+                          paddingRight: 16,
+                          flex: 0,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 24,
+                            fontFamily: 'Shark',
+                            color: 'black',
+                          }}
+                        >
+                          {user.park_coins}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
               </View>
             </ScrollView>
           </ImageBackground>
