@@ -227,8 +227,8 @@ export default function ExploreScreen() {
                   source={require('../../assets/images/screens/explore/item_animation.gif')}
                   resizeMode={'contain'}
                   style={{
-                    width: 80,
-                    height: 80,
+                    width: 70,
+                    height: 70,
                   }}
                 />
               </Marker>
@@ -255,8 +255,8 @@ export default function ExploreScreen() {
                   source={require('../../assets/images/screens/explore/pin_animation.gif')}
                   resizeMode={'contain'}
                   style={{
-                    width: 80,
-                    height: 80,
+                    width: 70,
+                    height: 70,
                   }}
                 />
               </Marker>
@@ -274,8 +274,8 @@ export default function ExploreScreen() {
               <Image
                 source={require('../../assets/images/screens/explore/task_animation.gif')}
                 style={{
-                  width: 100,
-                  height: 100,
+                  width: 120,
+                  height: 120,
                   resizeMode: 'contain',
                 }}
               />

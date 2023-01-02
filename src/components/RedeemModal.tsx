@@ -26,7 +26,7 @@ import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
-import {ItemType} from '../models/item-type';
+import { ItemType } from '../models/item-type';
 
 export default function RedeemModal({
   redeemable,

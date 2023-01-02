@@ -41,7 +41,7 @@ export default function Item({
           width: '100%',
         }}
         onPress={() => {
-          if (inventory.skin_item.id === item.id) {
+          if (inventory && inventory.skin_item.id === item.id) {
             return false;
           }
 
