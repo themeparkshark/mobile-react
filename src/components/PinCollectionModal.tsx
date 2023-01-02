@@ -185,7 +185,7 @@ export default function pinCollectionModal({
             />
           </Pressable>
           <ImageBackground
-            source={require('../../assets/images/screens/explore/redeem.png')}
+            source={require('../../assets/images/redeem.png')}
             resizeMode="contain"
             style={{
               width: Dimensions.get('window').width - 40,
@@ -199,17 +199,122 @@ export default function pinCollectionModal({
               zIndex: 20,
             }}
           >
-            <Text
+            <View
               style={{
-                position: 'absolute',
-                top: 25,
-                fontSize: 28,
-                alignSelf: 'center',
-                textTransform: 'uppercase',
+                top: 50,
+                marginLeft: 'auto',
+                marginRight: 'auto',
+                width: '80%',
               }}
             >
-              {pinCollection.name}
-            </Text>
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={{
+                  fontSize: 28,
+                  alignSelf: 'center',
+                  textTransform: 'uppercase',
+                  fontFamily: 'Knockout',
+                  color: 'white',
+                  textShadowColor: 'rgba(0, 0, 0, .5)',
+                  textShadowRadius: 5,
+                }}
+              >
+                {pinCollection.name}
+              </Text>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                top: 120,
+                marginLeft: 'auto',
+                marginRight: 'auto',
+                width: '70%',
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+              }}
+            >
+              {pinCollection.pins.map((pin) => {
+                return (
+                  <View
+                    key={pin.item.id}
+                    style={{
+                      padding: 8,
+                    }}
+                  >
+                    <Image
+                      source={{
+                        uri: pin.item.icon_url,
+                      }}
+                      resizeMode={'contain'}
+                      style={{
+                        width: 70,
+                        height: 70,
+                        opacity: pin.item.has_purchased ? 1 : .4,
+                      }}
+                    />
+                  </View>
+                );
+              })}
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                width: '70%',
+                top: 195,
+                marginLeft: 'auto',
+                marginRight: 'auto',
+              }}
+            >
+              {[...Array(pinCollection.collected_pins_count)].map(
+                (element, index) => {
+                  return (
+                    <View
+                      key={index}
+                      style={{
+                        paddingLeft: 1,
+                        paddingRight: 1,
+                        width: '20%',
+                      }}
+                    >
+                      <Image
+                        source={require('../../assets/images/screens/pin-collections/star.png')}
+                        style={{
+                          width: '100%',
+                          height: 40,
+                          resizeMode: 'contain',
+                        }}
+                      />
+                    </View>
+                  );
+                }
+              )}
+              {[
+                ...Array(
+                  pinCollection.pins.length - pinCollection.collected_pins_count
+                ),
+              ].map((element, index) => {
+                return (
+                  <View
+                    key={index}
+                    style={{
+                      paddingLeft: 1,
+                      paddingRight: 1,
+                      width: '20%',
+                    }}
+                  >
+                    <Image
+                      source={require('../../assets/images/screens/pin-collections/darkstar.png')}
+                      style={{
+                        width: '100%',
+                        height: 40,
+                        resizeMode: 'contain',
+                      }}
+                    />
+                  </View>
+                );
+              })}
+            </View>
           </ImageBackground>
         </View>
       </Modal>
