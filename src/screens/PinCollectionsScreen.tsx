@@ -1,6 +1,5 @@
 import Topbar from '../components/Topbar';
 import {
-  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -13,7 +12,6 @@ import PinCollectionModal from '../components/PinCollectionModal';
 import { PinCollectionType } from '../models/pin-collection-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import { PinType } from '../models/pin-type';
 import Loading from '../components/Loading';
 
 export default function PinCollectionsScreen() {
@@ -51,56 +49,40 @@ export default function PinCollectionsScreen() {
             }}
             source={require('../../assets/images/water_background.png')}
           >
-            <View>
-              <View
+            <View
+              style={{
+                height: 300,
+                borderBottomWidth: 5,
+                borderBottomColor: '#fff',
+              }}
+            >
+              <Image
+                source={require('../../assets/images/screens/pin-collections/shark.png')}
                 style={{
-                  height: 300,
-                }}
-              >
-                <Image
-                  source={require('../../assets/images/screens/pin-collections/shark.png')}
-                  style={{
-                    width: Dimensions.get('window').width - 25,
-                    height: '100%',
-                    resizeMode: 'contain',
-                    marginLeft: 'auto',
-                    marginRight: 'auto',
-                  }}
-                />
-              </View>
-              <View
-                style={{
-                  paddingTop: 0,
-                  paddingLeft: 16,
-                  paddingRight: 16,
-                  paddingBottom: 48,
-                  backgroundColor: 'rgba(255, 255, 255, .6)',
-                  borderTopWidth: 5,
-                  borderTopColor: '#fff',
+                  width: Dimensions.get('window').width - 25,
                   height: '100%',
+                  resizeMode: 'contain',
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
                 }}
-              >
-                <View
+              />
+            </View>
+            {collections && (
+              <>
+                <FlatList
                   style={{
                     flex: 1,
+                    padding: 4,
+                    backgroundColor: 'rgba(255, 255, 255, .6)',
                   }}
-                >
-                  {collections && (
-                    <FlatList
-                      style={{
-                        flex: 1,
-                      }}
-                      data={collections}
-                      keyExtractor={(pinCollection) => pinCollection.name}
-                      renderItem={({ item }) => (
-                        <PinCollectionModal pinCollection={item} />
-                      )}
-                      numColumns={3}
-                    />
-                  )}
-                </View>
-              </View>
-            </View>
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                  data={collections}
+                  keyExtractor={(pinCollection) => pinCollection.name}
+                  renderItem={({ item }) => <PinCollectionModal pinCollection={item} />}
+                  numColumns={3}
+                />
+              </>
+            )}
           </ImageBackground>
         </View>
       )}

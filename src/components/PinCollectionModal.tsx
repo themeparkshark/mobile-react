@@ -30,7 +30,6 @@ export default function pinCollectionModal({
         <View
           style={{
             position: 'relative',
-            marginTop: 16,
           }}
         >
           <View
