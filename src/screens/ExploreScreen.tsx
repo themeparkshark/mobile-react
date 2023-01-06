@@ -21,19 +21,19 @@ import * as RootNavigation from '../RootNavigation';
 import NotAtPark from './ExploreScreen/NotAtPark';
 import Topbar from '../components/Topbar';
 import Playercard from '../components/Playercard';
-import collectItem from '../helpers/collect-item';
 import Coin from './ExploreScreen/Coin';
 import dayjs from 'dayjs';
 import { ParkType } from '../models/park-type';
 import { LocationType } from '../models/location-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import { RedeemableType } from '../models/redeemable-type';
-import { ItemType } from '../models/item-type';
-import { CoinType } from '../models/coin-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import YellowButton from '../components/YellowButton';
-import { MusicContext } from '../context/MusicProvider';
+import {faLocationArrow as clearArrow} from '@fortawesome/pro-light-svg-icons/faLocationArrow';
+import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
+import { faLocationArrow as solidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow'
+
+import theme from '../config/theme';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -45,6 +45,7 @@ export default function ExploreScreen() {
   >();
   const [location, setLocation] = useState<LocationType>();
   const { inventory, updateUser } = useContext(AuthContext);
+  const [followingUser, setFollowingUser] = useState<boolean>(true);
 
   useFocusEffect(
     useCallback(() => {
@@ -53,6 +54,7 @@ export default function ExploreScreen() {
   );
 
   const getRedeemables = () => {
+    setActiveRedeemable(undefined);
     currentRedeemables().then((response) => setRedeemables(response));
   };
 
@@ -97,6 +99,24 @@ export default function ExploreScreen() {
       {!park && <NotAtPark />}
       {park && redeemables && (
         <>
+          <View
+            style={{
+              position: 'absolute',
+              top: 126,
+              right: 12,
+              zIndex: 10,
+            }}
+          >
+            <Pressable
+              onPress={() => setFollowingUser(true)}
+            >
+              <FontAwesomeIcon
+                icon={followingUser ? solidArrow : clearArrow}
+                size={30}
+                color={theme.primary}
+              />
+            </Pressable>
+          </View>
           <View
             style={{
               position: 'absolute',
@@ -201,10 +221,11 @@ export default function ExploreScreen() {
         zoomEnabled={true}
         rotateEnabled={false}
         scrollEnabled={true}
-        followsUserLocation={true}
+        followsUserLocation={followingUser}
         pitchEnabled={false}
         loadingEnabled={true}
         userInterfaceStyle={'light'}
+        onPanDrag={() => setFollowingUser(false)}
       >
         {redeemables?.items
           .filter((item) => !item.is_hidden)
