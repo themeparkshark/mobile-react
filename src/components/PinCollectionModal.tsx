@@ -249,7 +249,7 @@ export default function pinCollectionModal({
                       style={{
                         width: 70,
                         height: 70,
-                        opacity: pin.item.has_purchased ? 1 : .4,
+                        opacity: pin.item.has_purchased ? 1 : 0.4,
                       }}
                     />
                   </View>

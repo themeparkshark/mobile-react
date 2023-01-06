@@ -78,7 +78,9 @@ export default function PinCollectionsScreen() {
                   contentContainerStyle={{ paddingBottom: 8 }}
                   data={collections}
                   keyExtractor={(pinCollection) => pinCollection.name}
-                  renderItem={({ item }) => <PinCollectionModal pinCollection={item} />}
+                  renderItem={({ item }) => (
+                    <PinCollectionModal pinCollection={item} />
+                  )}
                   numColumns={3}
                 />
               </>

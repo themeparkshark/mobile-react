@@ -1,7 +1,10 @@
-import {UserType} from '../models/user-type';
-import {Image, View} from 'react-native';
+import { UserType } from '../models/user-type';
+import { Image, View } from 'react-native';
 
-export default function LeaderboardAvatar({user, size} : {
+export default function LeaderboardAvatar({
+  user,
+  size,
+}: {
   readonly size: number;
   readonly user: UserType;
 }) {

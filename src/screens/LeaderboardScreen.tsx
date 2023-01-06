@@ -247,77 +247,78 @@ export default function LeaderboardScreen({ route }) {
                   paddingBottom: 32,
                 }}
               >
-                {users.slice(3).length > 0 && users.slice(3).map((user, index) => {
-                  return (
-                    <View
-                      key={user.id}
-                      style={{
-                        paddingTop: 25,
-                        paddingBottom: 25,
-                        borderTopWidth: index === 0 ? 0 : 3,
-                        borderColor: 'rgba(0, 0, 0, .4)',
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                      }}
-                    >
+                {users.slice(3).length > 0 &&
+                  users.slice(3).map((user, index) => {
+                    return (
                       <View
+                        key={user.id}
                         style={{
-                          paddingLeft: 16,
-                          paddingRight: 16,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 24,
-                            fontFamily: 'Shark',
-                            color: 'black',
-                          }}
-                        >
-                          {index + 4}
-                        </Text>
-                      </View>
-                      <View
-                        style={{
-                          paddingLeft: 16,
-                          paddingRight: 16,
-                          flex: 1,
+                          paddingTop: 25,
+                          paddingBottom: 25,
+                          borderTopWidth: index === 0 ? 0 : 3,
+                          borderColor: 'rgba(0, 0, 0, .4)',
                           flexDirection: 'row',
                           alignItems: 'center',
                         }}
                       >
-                        <LeaderboardAvatar size={50} user={user} />
-                        <Text
+                        <View
                           style={{
-                            fontSize: 24,
-                            fontFamily: 'Shark',
-                            color: 'black',
-                            textTransform: 'uppercase',
-                            paddingLeft: 32,
+                            paddingLeft: 16,
+                            paddingRight: 16,
                           }}
                         >
-                          {user.screen_name}
-                        </Text>
-                      </View>
-                      <View
-                        style={{
-                          paddingLeft: 16,
-                          paddingRight: 16,
-                          flex: 0,
-                        }}
-                      >
-                        <Text
+                          <Text
+                            style={{
+                              fontSize: 24,
+                              fontFamily: 'Shark',
+                              color: 'black',
+                            }}
+                          >
+                            {index + 4}
+                          </Text>
+                        </View>
+                        <View
                           style={{
-                            fontSize: 24,
-                            fontFamily: 'Shark',
-                            color: 'black',
+                            paddingLeft: 16,
+                            paddingRight: 16,
+                            flex: 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
                           }}
                         >
-                          {user.park_coins} park coins
-                        </Text>
+                          <LeaderboardAvatar size={50} user={user} />
+                          <Text
+                            style={{
+                              fontSize: 24,
+                              fontFamily: 'Shark',
+                              color: 'black',
+                              textTransform: 'uppercase',
+                              paddingLeft: 32,
+                            }}
+                          >
+                            {user.screen_name}
+                          </Text>
+                        </View>
+                        <View
+                          style={{
+                            paddingLeft: 16,
+                            paddingRight: 16,
+                            flex: 0,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 24,
+                              fontFamily: 'Shark',
+                              color: 'black',
+                            }}
+                          >
+                            {user.park_coins} park coins
+                          </Text>
+                        </View>
                       </View>
-                    </View>
-                  );
-                })}
+                    );
+                  })}
               </View>
             </ScrollView>
           </ImageBackground>
