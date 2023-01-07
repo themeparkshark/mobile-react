@@ -30,8 +30,8 @@ export default function Coin({
         style={{
           position: 'absolute',
           alignItems: 'center',
-          top: -55,
-          left: -40,
+          top: -35,
+          left: -30,
         }}
       >
         <ImageBackground

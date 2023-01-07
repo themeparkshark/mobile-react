@@ -1,12 +1,12 @@
 import { Image, ImageURISource, Text, View } from 'react-native';
 
 export default function Box({
-  backgroundColor,
   background,
   image,
   text,
   number,
   small,
+  type,
 }: {
   readonly backgroundColor?: string;
   readonly background?: ImageURISource;
@@ -14,16 +14,29 @@ export default function Box({
   readonly number?: number;
   readonly text?: string | number;
   readonly small?: boolean;
+  readonly type: 'task' | 'coin' | 'secret_task';
 }) {
+  const backgrounds = {
+    task: '#4cdcff',
+    coin: '#ffe7a2',
+    secret_task: '#e5d4ff',
+  };
+
+  const borders = {
+    task: '#0d3249',
+    coin: '#3d4a24',
+    secret_task: '#4a2a66',
+  };
+
   return (
     <View
       style={{
         height: '100%',
-        backgroundColor: backgroundColor ?? '#aae5fe',
+        backgroundColor: backgrounds[type],
         borderRadius: 10,
         alignItems: 'center',
         justifyContent: 'center',
-        borderColor: '#0d3249',
+        borderColor: borders[type],
         borderWidth: 3,
         shadowOffset: {
           width: 0,
@@ -90,7 +103,7 @@ export default function Box({
       {text && (
         <View
           style={{
-            backgroundColor: '#2d556a',
+            backgroundColor: 'rgba(0, 0, 0, .6)',
             borderBottomLeftRadius: 6,
             borderBottomRightRadius: 6,
             padding: 4,

@@ -6,7 +6,6 @@ import {
   ImageBackground,
   Modal,
   Pressable,
-  Text,
   View,
 } from 'react-native';
 import completeTask from '../api/endpoints/me/tasks/complete-task';
@@ -56,6 +55,12 @@ export default function RedeemModal({
       useNativeDriver: true,
     }).start();
   };
+
+  const backgrounds = {
+    task: require('../../assets/images/screens/explore/redeem.png'),
+    coin: require('../../assets/images/screens/explore/redeem_coin.png'),
+    secret_task: require('../../assets/images/screens/explore/redeem_secret_task.png'),
+  }
 
   useEffect(() => {
     if (modalVisible) {
@@ -173,7 +178,7 @@ export default function RedeemModal({
               />
             </Pressable>
             <ImageBackground
-              source={require('../../assets/images/screens/explore/redeem.png')}
+              source={backgrounds[redeemable.type as keyof typeof backgrounds]}
               resizeMode="contain"
               style={{
                 width: Dimensions.get('window').width - 40,
@@ -199,10 +204,14 @@ export default function RedeemModal({
                 <Box
                   background={require('../../assets/images/screens/explore/starburst.png')}
                   image={{
-                    uri: (redeemable.model as SecretTaskType | TaskType)
-                      .coin_url,
-                  }}
+                    task: {
+                      uri: (redeemable.model as SecretTaskType | TaskType)
+                        .coin_url
+                    },
+                    coin: require('../../assets/images/screens/explore/coins.png'),
+                  }[redeemable.type]}
                   text={(redeemable.model as SecretTaskType | TaskType).name}
+                  type={redeemable.type}
                 />
               </View>
               <View
@@ -227,6 +236,7 @@ export default function RedeemModal({
                       (redeemable.model as TaskType | SecretTaskType).experience
                     }
                     small
+                    type={redeemable.type}
                   />
                 </View>
                 <View
@@ -240,6 +250,7 @@ export default function RedeemModal({
                     image={require('../../assets/images/screens/explore/coins.png')}
                     text={(redeemable.model as TaskType | SecretTaskType).coins}
                     small
+                    type={redeemable.type}
                   />
                 </View>
                 <View
@@ -255,6 +266,7 @@ export default function RedeemModal({
                     }}
                     text={1}
                     small
+                    type={redeemable.type}
                   />
                 </View>
               </View>
