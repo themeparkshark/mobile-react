@@ -4,7 +4,6 @@ import {
   Dimensions,
   Image,
   ImageBackground,
-  Modal,
   Pressable,
   View,
 } from 'react-native';
@@ -27,7 +26,7 @@ import {
 import { ItemType } from '../models/item-type';
 import Box from './RedeemModal/Box';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
-import {PinType} from '../models/pin-type';
+import Modal from 'react-native-modal';
 
 export default function RedeemModal({
   redeemable,
@@ -127,12 +126,12 @@ export default function RedeemModal({
       </Animated.View>
       {redeemable && (
         <Modal
-          animationType="fade"
-          transparent={true}
-          visible={modalVisible}
-          onRequestClose={() => {
+          animationIn="zoomIn"
+          animationOut="zoomOut"
+          swipeDirection="down"
+          isVisible={modalVisible}
+          onModalWillHide={() => {
             playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
-            setModalVisible(false);
           }}
         >
           <View
@@ -165,15 +164,6 @@ export default function RedeemModal({
                   top: 15,
                   zIndex: 20,
                   left: -80,
-                }}
-              />
-              <View
-                style={{
-                  position: 'absolute',
-                  width: '100%',
-                  height: '100%',
-                  alignSelf: 'center',
-                  backgroundColor: 'rgba(0, 0, 0, .7)',
                 }}
               />
             </Pressable>
@@ -253,6 +243,22 @@ export default function RedeemModal({
                     small
                     type={redeemable.type}
                   />
+                  <View
+                    style={{
+                      marginTop: 8,
+                    }}
+                  >
+                    <Button>
+                      <Image
+                        source={require('../../assets/images/screens/explore/watch.png')}
+                        style={{
+                          width: '100%',
+                          height: 20,
+                          resizeMode: 'contain',
+                        }}
+                      />
+                    </Button>
+                  </View>
                 </View>
                 {redeemable.type !== 'coin' && (
                   <View
@@ -268,6 +274,22 @@ export default function RedeemModal({
                       small
                       type={redeemable.type}
                     />
+                    <View
+                      style={{
+                        marginTop: 8,
+                      }}
+                    >
+                      <Button>
+                        <Image
+                          source={require('../../assets/images/screens/explore/watch.png')}
+                          style={{
+                            width: '100%',
+                            height: 20,
+                            resizeMode: 'contain',
+                          }}
+                        />
+                      </Button>
+                    </View>
                   </View>
                 )}
                 <View
@@ -290,24 +312,6 @@ export default function RedeemModal({
               <View
                 style={{
                   position: 'absolute',
-                  bottom: 82,
-                  alignSelf: 'center',
-                }}
-              >
-                <Button>
-                  <Image
-                    source={require('../../assets/images/screens/explore/watch.png')}
-                    style={{
-                      width: 120,
-                      height: 73,
-                      resizeMode: 'contain',
-                    }}
-                  />
-                </Button>
-              </View>
-              <View
-                style={{
-                  position: 'absolute',
                   bottom: 30,
                   alignSelf: 'center',
                 }}
@@ -323,7 +327,7 @@ export default function RedeemModal({
                     } else if (redeemable.type === 'coin') {
                       await redeemCoin(redeemable.model as CoinType);
                     } else if (redeemable.type === 'coin' || redeemable.type === 'pin') {
-                      await purchase(redeemable.model as ItemType)
+                      await purchase(redeemable.model as ItemType, true)
                     }
 
                     onPress();
