@@ -15,7 +15,7 @@ export default function Item({
   readonly currentItemType: ItemTypeType;
   readonly item: ItemType;
 }) {
-  const { inventory, setInventory, updateUser } = useContext(AuthContext);
+  const { inventory, setInventory } = useContext(AuthContext);
 
   return (
     <View
@@ -46,7 +46,6 @@ export default function Item({
           }
 
           updateInventory(item).then((response: InventoryType) => {
-            updateUser();
             setInventory(response);
           });
         }}

@@ -17,15 +17,19 @@ export default function Topbar({
   text = null,
   showBackButton = false,
   showCoins = false,
-  showPurpleDiamonds = false,
+  parkCoin = null,
+  parkCoins = null,
   purple = false,
+  onBackButtonPress,
 }: {
   readonly button?: ReactNode | null;
   readonly text?: string | null;
   readonly purple?: boolean;
   readonly showBackButton?: boolean;
   readonly showCoins?: boolean;
-  readonly showPurpleDiamonds?: boolean;
+  readonly parkCoin?: string | null;
+  readonly parkCoins?: number | null;
+  readonly onBackButtonPress?: () => void;
 }) {
   const { user } = useContext(AuthContext);
   const width = text ? (showCoins ? '20%' : '15%') : '20%';
@@ -61,14 +65,20 @@ export default function Topbar({
               height: 80,
             }}
           >
-            {(showPurpleDiamonds || showBackButton || showCoins || button) && (
+            {(parkCoins || showBackButton || showCoins || button) && (
               <View
                 style={{
                   width,
                 }}
               >
                 {showBackButton && (
-                  <Button onPress={() => RootNavigation.goBack()}>
+                  <Button onPress={async () => {
+                    if (onBackButtonPress) {
+                      await onBackButtonPress();
+                    }
+
+                    RootNavigation.goBack();
+                  }}>
                     <Image
                       source={require('../../assets/images/screens/explore/back.png')}
                       style={{
@@ -79,7 +89,7 @@ export default function Topbar({
                     />
                   </Button>
                 )}
-                {showPurpleDiamonds && (
+                {parkCoins && parkCoin && (
                   <View
                     style={{
                       flexDirection: 'row',
@@ -87,7 +97,9 @@ export default function Topbar({
                     }}
                   >
                     <Image
-                      source={require('../../assets/images/purple_diamonds.png')}
+                      source={{
+                        uri: parkCoin,
+                      }}
                       style={{
                         width: 30,
                         height: 30,
@@ -106,7 +118,7 @@ export default function Topbar({
                         textShadowRadius: 5,
                       }}
                     >
-                      {user?.purple_diamonds}
+                      {parkCoins}
                     </Text>
                   </View>
                 )}
@@ -135,7 +147,7 @@ export default function Topbar({
                 {text}
               </Text>
             </View>
-            {(showPurpleDiamonds || showBackButton || showCoins || button) && (
+            {(parkCoins || showBackButton || showCoins || button) && (
               <View
                 style={{
                   width,

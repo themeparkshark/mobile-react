@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
+import * as Animatable from 'react-native-animatable';
 import {
   Animated,
   Dimensions,
@@ -248,16 +249,18 @@ export default function RedeemModal({
                       marginTop: 8,
                     }}
                   >
-                    <Button>
-                      <Image
-                        source={require('../../assets/images/screens/explore/watch.png')}
-                        style={{
-                          width: '100%',
-                          height: 20,
-                          resizeMode: 'contain',
-                        }}
-                      />
-                    </Button>
+                    <Animatable.View animation="pulse" iterationCount="infinite" direction="alternate">
+                      <Button>
+                        <Image
+                          source={require('../../assets/images/screens/explore/watch.png')}
+                          style={{
+                            width: '100%',
+                            height: 20,
+                            resizeMode: 'contain',
+                          }}
+                        />
+                      </Button>
+                    </Animatable.View>
                   </View>
                 </View>
                 {redeemable.type !== 'coin' && (
@@ -279,16 +282,18 @@ export default function RedeemModal({
                         marginTop: 8,
                       }}
                     >
-                      <Button>
-                        <Image
-                          source={require('../../assets/images/screens/explore/watch.png')}
-                          style={{
-                            width: '100%',
-                            height: 20,
-                            resizeMode: 'contain',
-                          }}
-                        />
-                      </Button>
+                      <Animatable.View animation="pulse" iterationCount="infinite" direction="alternate">
+                        <Button>
+                          <Image
+                            source={require('../../assets/images/screens/explore/watch.png')}
+                            style={{
+                              width: '100%',
+                              height: 20,
+                              resizeMode: 'contain',
+                            }}
+                          />
+                        </Button>
+                      </Animatable.View>
                     </View>
                   </View>
                 )}
