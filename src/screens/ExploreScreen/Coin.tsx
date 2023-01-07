@@ -2,7 +2,6 @@ import { Image, ImageBackground, Text, View } from 'react-native';
 import { useEffect } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import dayjs from 'dayjs';
-import detachCoin from '../../api/endpoints/me/coins/detach-coin';
 import { CoinType } from '../../models/coin-type';
 import theme from '../../config/theme';
 
@@ -15,7 +14,6 @@ export default function Coin({
 }) {
   useEffect(() => {
     const interval = setInterval(async () => {
-      await detachCoin(coin);
       onExpire();
     }, dayjs(coin.active_to).diff(dayjs()));
 

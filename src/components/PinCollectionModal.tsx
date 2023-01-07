@@ -59,7 +59,7 @@ export default function pinCollectionModal({
               >
                 <Image
                   source={{
-                    uri: pinCollection.pin.item.paper_url,
+                    uri: pinCollection.pin.item.icon_url,
                   }}
                   style={{
                     width: '100%',
