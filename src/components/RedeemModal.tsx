@@ -28,6 +28,7 @@ import { ItemType } from '../models/item-type';
 import Box from './RedeemModal/Box';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
 import Modal from 'react-native-modal';
+import redeemItem from '../api/endpoints/me/items/redeem-item';
 
 export default function RedeemModal({
   redeemable,
@@ -331,8 +332,8 @@ export default function RedeemModal({
                       );
                     } else if (redeemable.type === 'coin') {
                       await redeemCoin(redeemable.model as CoinType);
-                    } else if (redeemable.type === 'coin' || redeemable.type === 'pin') {
-                      await purchase(redeemable.model as ItemType, true)
+                    } else if (redeemable.type === 'item' || redeemable.type === 'pin') {
+                      await redeemItem(redeemable.model as ItemType)
                     }
 
                     onPress();
