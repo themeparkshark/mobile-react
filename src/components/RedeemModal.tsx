@@ -27,6 +27,7 @@ import {
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
+import Box from './RedeemModal/Box';
 
 export default function RedeemModal({
   redeemable,
@@ -186,129 +187,77 @@ export default function RedeemModal({
                 zIndex: 20,
               }}
             >
-              <Text
+              <View
                 style={{
-                  position: 'absolute',
-                  top: 25,
-                  fontSize: 28,
-                  alignSelf: 'center',
-                  textTransform: 'uppercase',
+                  width: Dimensions.get('window').width - 180,
+                  height: 150,
+                  marginTop: 95,
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
                 }}
               >
-                Congratulations
-              </Text>
-              {(redeemable.type === 'task' ||
-                redeemable.type === 'secret_task') && (
+                <Box
+                  background={require('../../assets/images/screens/explore/starburst.png')}
+                  image={{
+                    uri: (redeemable.model as SecretTaskType | TaskType)
+                      .coin_url,
+                  }}
+                  text={(redeemable.model as SecretTaskType | TaskType).name}
+                />
+              </View>
+              <View
+                style={{
+                  width: Dimensions.get('window').width - 180,
+                  height: 105,
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
+                  marginTop: 8,
+                  flexDirection: 'row',
+                }}
+              >
                 <View
                   style={{
-                    position: 'absolute',
-                    top: 103,
-                    left: 115,
-                    alignSelf: 'center',
+                    flex: 1,
                   }}
                 >
-                  <Image
-                    source={{
-                      uri: (redeemable.model as TaskType | SecretTaskType)
-                        .coin_url,
-                    }}
-                    style={{
-                      width: 140,
-                      height: 140,
-                      resizeMode: 'contain',
-                    }}
+                  <Box
+                    backgroundColor="#4cdcff"
+                    image={require('../../assets/images/screens/explore/xp.png')}
+                    text={
+                      (redeemable.model as TaskType | SecretTaskType).experience
+                    }
+                    small
                   />
                 </View>
-              )}
-              <Text
-                style={{
-                  fontSize: 18,
-                  position: 'absolute',
-                  top: 280,
-                  left: 110,
-                  zIndex: 10,
-                }}
-              >
-                {(redeemable.model as TaskType | SecretTaskType).experience}
-              </Text>
-              <View
-                style={{
-                  position: 'absolute',
-                  top: 160,
-                  left: 78,
-                  alignSelf: 'center',
-                }}
-              >
-                <Image
-                  source={require('../../assets/images/screens/explore/xp.png')}
+                <View
                   style={{
-                    width: 60,
-                    resizeMode: 'contain',
+                    flex: 1,
+                    marginLeft: 5,
                   }}
-                />
-              </View>
-              <Text
-                style={{
-                  fontSize: 18,
-                  position: 'absolute',
-                  top: 280,
-                  left: 190,
-                  zIndex: 10,
-                }}
-              >
-                {(redeemable.model as TaskType | SecretTaskType).coins}
-              </Text>
-              <View
-                style={{
-                  position: 'absolute',
-                  top: 153,
-                  left: 158,
-                  alignSelf: 'center',
-                }}
-              >
-                <Image
-                  source={require('../../assets/images/screens/explore/coins.png')}
+                >
+                  <Box
+                    backgroundColor="#4cdcff"
+                    image={require('../../assets/images/screens/explore/coins.png')}
+                    text={(redeemable.model as TaskType | SecretTaskType).coins}
+                    small
+                  />
+                </View>
+                <View
                   style={{
-                    width: 60,
-                    resizeMode: 'contain',
+                    flex: 1,
+                    marginLeft: 5,
                   }}
-                />
+                >
+                  <Box
+                    backgroundColor="#4cdcff"
+                    image={{
+                      uri: park.coin_url,
+                    }}
+                    text={1}
+                    small
+                  />
+                </View>
               </View>
-              {(redeemable.type === 'task' ||
-                redeemable.type === 'secret_task') && (
-                <>
-                  <View
-                    style={{
-                      position: 'absolute',
-                      top: 290,
-                      left: 236,
-                      alignSelf: 'center',
-                    }}
-                  >
-                    <Image
-                      source={{
-                        uri: park.coin_url,
-                      }}
-                      style={{
-                        width: 60,
-                        height: 60,
-                        resizeMode: 'contain',
-                      }}
-                    />
-                  </View>
-                  <Text
-                    style={{
-                      fontSize: 18,
-                      position: 'absolute',
-                      top: 280,
-                      left: 280,
-                      zIndex: 10,
-                    }}
-                  >
-                    1
-                  </Text>
-                </>
-              )}
               <View
                 style={{
                   position: 'absolute',
