@@ -148,6 +148,8 @@ export default function Box({
               textAlign: 'center',
               fontFamily: 'Knockout',
               fontSize: small ? 18 : 24,
+              paddingLeft: 8,
+              paddingRight: 8,
             }}
             numberOfLines={1}
             adjustsFontSizeToFit={true}
