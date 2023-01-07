@@ -1,4 +1,5 @@
-import { Image, ImageURISource, Text, View } from 'react-native';
+import {Animated, Easing, Image, ImageURISource, Text, View} from 'react-native';
+import {useEffect, useRef} from 'react';
 
 export default function Box({
   background,
@@ -14,19 +15,44 @@ export default function Box({
   readonly number?: number;
   readonly text?: string | number;
   readonly small?: boolean;
-  readonly type: 'task' | 'coin' | 'secret_task';
+  readonly type: 'task' | 'coin' | 'secret_task' | 'item';
 }) {
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  const spin = rotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
   const backgrounds = {
     task: '#4cdcff',
     coin: '#ffe7a2',
-    secret_task: '#e5d4ff',
+    item: '#e5d4ff',
+    pin: '#e5d4ff',
+    secret_task: '#c3eaff',
   };
 
   const borders = {
     task: '#0d3249',
     coin: '#3d4a24',
-    secret_task: '#4a2a66',
+    item: '#4a2a66',
+    pin: '#4a2a66',
+    secret_task: '#0c3f6c',
   };
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(
+        rotate,
+        {
+          toValue: 1,
+          duration: 20000,
+          easing: Easing.linear,
+          useNativeDriver: true
+        }
+      )
+    ).start();
+  }, []);
 
   return (
     <View
@@ -54,6 +80,7 @@ export default function Box({
           borderTopRightRadius: 6,
           position: 'relative',
           justifyContent: 'center',
+          overflow: 'hidden',
         }}
       >
         <Image
@@ -88,13 +115,18 @@ export default function Box({
           </View>
         )}
         {background && (
-          <Image
+          <Animated.Image
             source={background}
             style={{
               width: '100%',
-              height: '100%',
               position: 'absolute',
               zIndex: -10,
+              opacity: .04,
+              transform: [
+                {
+                  rotate: spin,
+                },
+              ],
             }}
             resizeMode="cover"
           />

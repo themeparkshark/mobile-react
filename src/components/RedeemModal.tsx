@@ -18,7 +18,6 @@ import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import { CoinType } from '../models/coin-type';
 import YellowButton from './YellowButton';
 import dayjs from 'dayjs';
-import collectItem from '../helpers/collect-item';
 import { SecretTaskType } from '../models/secret-task-type';
 import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
 import {
@@ -27,6 +26,8 @@ import {
 } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import Box from './RedeemModal/Box';
+import purchase from '../api/endpoints/me/inventory/purchase-item';
+import {PinType} from '../models/pin-type';
 
 export default function RedeemModal({
   redeemable,
@@ -59,6 +60,8 @@ export default function RedeemModal({
   const backgrounds = {
     task: require('../../assets/images/screens/explore/redeem.png'),
     coin: require('../../assets/images/screens/explore/redeem_coin.png'),
+    item: require('../../assets/images/screens/explore/redeem_item.png'),
+    pin: require('../../assets/images/screens/explore/redeem_item.png'),
     secret_task: require('../../assets/images/screens/explore/redeem_secret_task.png'),
   }
 
@@ -92,10 +95,11 @@ export default function RedeemModal({
         dayjs((redeemable?.model as CoinType).active_to)
       );
     const isItem = redeemable?.type === 'item';
+    const isPin = redeemable?.type === 'pin';
     const isTask = redeemable?.type === 'task';
     const isSecretTask = redeemable?.type === 'secret_task';
 
-    if (redeemable && (isCoin || isItem || isTask || isSecretTask)) {
+    if (redeemable && (isCoin || isItem || isTask || isSecretTask || isPin)) {
       playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
       slideUp();
     } else {
@@ -116,11 +120,7 @@ export default function RedeemModal({
       >
         <YellowButton
           onPress={async () => {
-            if (redeemable?.type === 'item') {
-              await collectItem(redeemable.model as ItemType, () => onPress());
-            } else {
-              setModalVisible(true);
-            }
+            setModalVisible(true);
           }}
           text={'Redeem'}
         />
@@ -194,7 +194,7 @@ export default function RedeemModal({
             >
               <View
                 style={{
-                  width: Dimensions.get('window').width - 180,
+                  width: Dimensions.get('window').width - 170,
                   height: 150,
                   marginTop: 95,
                   marginLeft: 'auto',
@@ -208,9 +208,23 @@ export default function RedeemModal({
                       uri: (redeemable.model as SecretTaskType | TaskType)
                         .coin_url
                     },
+                    secret_task: {
+                      uri: (redeemable.model as SecretTaskType | TaskType)
+                        .coin_url
+                    },
+                    item: {
+                      uri: (redeemable.model as ItemType).icon_url,
+                    },
+                    pin: {
+                      uri: (redeemable.model as ItemType).icon_url,
+                    },
                     coin: require('../../assets/images/screens/explore/coins.png'),
                   }[redeemable.type]}
-                  text={(redeemable.model as SecretTaskType | TaskType).name}
+                  text={{
+                    task: (redeemable.model as SecretTaskType | TaskType).name,
+                    secret_task: (redeemable.model as SecretTaskType | TaskType).name,
+                    coin: `${(redeemable.model as CoinType).coins} Shark Coins`,
+                  }[redeemable.type]}
                   type={redeemable.type}
                 />
               </View>
@@ -222,11 +236,12 @@ export default function RedeemModal({
                   marginRight: 'auto',
                   marginTop: 8,
                   flexDirection: 'row',
+                  justifyContent: 'center',
                 }}
               >
                 <View
                   style={{
-                    flex: 1,
+                    width: '33.3333333%',
                   }}
                 >
                   <Box
@@ -239,23 +254,25 @@ export default function RedeemModal({
                     type={redeemable.type}
                   />
                 </View>
+                {redeemable.type !== 'coin' && (
+                  <View
+                    style={{
+                      width: '33.3333333%',
+                      marginLeft: 5,
+                    }}
+                  >
+                    <Box
+                      backgroundColor="#4cdcff"
+                      image={require('../../assets/images/screens/explore/coins.png')}
+                      text={(redeemable.model as TaskType | SecretTaskType).coins}
+                      small
+                      type={redeemable.type}
+                    />
+                  </View>
+                )}
                 <View
                   style={{
-                    flex: 1,
-                    marginLeft: 5,
-                  }}
-                >
-                  <Box
-                    backgroundColor="#4cdcff"
-                    image={require('../../assets/images/screens/explore/coins.png')}
-                    text={(redeemable.model as TaskType | SecretTaskType).coins}
-                    small
-                    type={redeemable.type}
-                  />
-                </View>
-                <View
-                  style={{
-                    flex: 1,
+                    width: '33.3333333%',
                     marginLeft: 5,
                   }}
                 >
@@ -303,8 +320,10 @@ export default function RedeemModal({
                       await completeSecretTask(
                         redeemable.model as SecretTaskType
                       );
-                    } else {
+                    } else if (redeemable.type === 'coin') {
                       await redeemCoin(redeemable.model as CoinType);
+                    } else if (redeemable.type === 'coin' || redeemable.type === 'pin') {
+                      await purchase(redeemable.model as ItemType)
                     }
 
                     onPress();
