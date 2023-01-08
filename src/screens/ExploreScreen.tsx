@@ -44,7 +44,7 @@ export default function ExploreScreen() {
     RedeemableType | undefined
   >();
   const [location, setLocation] = useState<LocationType>();
-  const { inventory, updateUser } = useContext(AuthContext);
+  const { inventory, updateUser, user } = useContext(AuthContext);
   const [followingUser, setFollowingUser] = useState<boolean>(true);
 
   useFocusEffect(
@@ -95,7 +95,7 @@ export default function ExploreScreen() {
 
   return (
     <Wrapper>
-      <Topbar parkCoin={park?.coin_url} showCoins={true} parkCoins={park?.park_coins_count} />
+      <Topbar parkCoin={park?.coin_url} showCoins={true} parkCoins={user?.park_coins} />
       {!park && <NotAtPark />}
       {park && redeemables && (
         <>
