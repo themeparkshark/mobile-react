@@ -5,17 +5,29 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "API_BASE_URL": "https://dev-app.themeparkshark.com/api",
+        "CMS_API_BASE_URL": "https://themeparkshark.com/api"
+      }
     },
     "development-simulator": {
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "API_BASE_URL": "https://dev-app.themeparkshark.com/api",
+        "CMS_API_BASE_URL": "https://themeparkshark.com/api"
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "API_BASE_URL": "https://dev-app.themeparkshark.com/api",
+        "CMS_API_BASE_URL": "https://themeparkshark.com/api"
+      }
     },
     "production": {}
   },

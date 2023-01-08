@@ -6,7 +6,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import theme from '../config/theme';
 import { AuthContext } from '../context/AuthProvider';
 import { ReactNode, useContext } from 'react';
 import Button from '../components/Button';
@@ -65,7 +64,7 @@ export default function Topbar({
               height: 80,
             }}
           >
-            {(parkCoins || showBackButton || showCoins || button) && (
+            {(parkCoins !== null || showBackButton || showCoins || button) && (
               <View
                 style={{
                   width,
@@ -89,7 +88,7 @@ export default function Topbar({
                     />
                   </Button>
                 )}
-                {parkCoins && parkCoin && (
+                {parkCoins !== null && parkCoin && (
                   <View
                     style={{
                       flexDirection: 'row',
@@ -147,7 +146,7 @@ export default function Topbar({
                 {text}
               </Text>
             </View>
-            {(parkCoins || showBackButton || showCoins || button) && (
+            {(parkCoins !== null || showBackButton || showCoins || button) && (
               <View
                 style={{
                   width,

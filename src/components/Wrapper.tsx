@@ -76,7 +76,7 @@ export default function Wrapper({
                 <View
                   key={key}
                   style={{
-                    flex: '1 1 0%',
+                    flex: 1,
                   }}
                 >
                   <Button
