@@ -1,5 +1,6 @@
 import {Animated, Easing, Image, ImageURISource, Text, View} from 'react-native';
 import {useEffect, useRef} from 'react';
+import * as Animatable from 'react-native-animatable';
 
 export default function Box({
   background,
@@ -8,6 +9,7 @@ export default function Box({
   number,
   small,
   type,
+  pulse,
 }: {
   readonly backgroundColor?: string;
   readonly background?: ImageURISource;
@@ -16,6 +18,7 @@ export default function Box({
   readonly text?: string | number;
   readonly small?: boolean;
   readonly type: 'task' | 'coin' | 'secret_task' | 'item';
+  readonly pulse?: boolean;
 }) {
   const rotate = useRef(new Animated.Value(0)).current;
 
@@ -83,16 +86,37 @@ export default function Box({
           overflow: 'hidden',
         }}
       >
-        <Image
-          source={image}
-          style={{
-            width: '85%',
-            height: '85%',
-            resizeMode: 'contain',
-            marginLeft: 'auto',
-            marginRight: 'auto',
-          }}
-        />
+        {pulse && (
+          <Animatable.View
+            animation="pulse"
+            iterationCount="infinite"
+            direction="alternate"
+            style={{justifyContent: 'center'}}
+          >
+            <Image
+              source={image}
+              style={{
+                width: '85%',
+                height: '85%',
+                resizeMode: 'contain',
+                marginLeft: 'auto',
+                marginRight: 'auto',
+              }}
+            />
+          </Animatable.View>
+        )}
+        {!pulse && (
+          <Image
+            source={image}
+            style={{
+              width: '85%',
+              height: '85%',
+              resizeMode: 'contain',
+              marginLeft: 'auto',
+              marginRight: 'auto',
+            }}
+          />
+        )}
         {number && (
           <View
             style={{
@@ -128,7 +152,7 @@ export default function Box({
                 },
               ],
             }}
-            resizeMode="cover"
+            resizeMode="contain"
           />
         )}
       </View>

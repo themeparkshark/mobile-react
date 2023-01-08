@@ -26,7 +26,6 @@ import {
 } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import Box from './RedeemModal/Box';
-import purchase from '../api/endpoints/me/inventory/purchase-item';
 import Modal from 'react-native-modal';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
 
@@ -220,6 +219,7 @@ export default function RedeemModal({
                     pin: (redeemable.model as ItemType).name,
                   }[redeemable.type]}
                   type={redeemable.type}
+                  pulse
                 />
               </View>
               <View
