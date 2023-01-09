@@ -225,7 +225,7 @@ export default function pinCollectionModal({
             <View
               style={{
                 flexDirection: 'row',
-                top: 120,
+                top: 130,
                 marginLeft: 'auto',
                 marginRight: 'auto',
                 width: '70%',
@@ -258,15 +258,48 @@ export default function pinCollectionModal({
             </View>
             <View
               style={{
-                flexDirection: 'row',
-                width: '70%',
-                top: 195,
-                marginLeft: 'auto',
-                marginRight: 'auto',
+                width: '100%',
+                bottom: 65,
+                position: 'absolute',
               }}
             >
-              {[...Array(pinCollection.collected_pins_count)].map(
-                (element, index) => {
+              <View
+                style={{
+                  width: '70%',
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
+                  flexDirection: 'row',
+                  justifyContent: 'center',
+                }}
+              >
+                {[...Array(pinCollection.collected_pins_count)].map(
+                  (element, index) => {
+                    return (
+                      <View
+                        key={index}
+                        style={{
+                          paddingLeft: 1,
+                          paddingRight: 1,
+                          width: '20%',
+                        }}
+                      >
+                        <Image
+                          source={require('../../assets/images/screens/pin-collections/star.png')}
+                          style={{
+                            width: '100%',
+                            height: 40,
+                            resizeMode: 'contain',
+                          }}
+                        />
+                      </View>
+                    );
+                  }
+                )}
+                {[
+                  ...Array(
+                    pinCollection.pins.length - pinCollection.collected_pins_count
+                  ),
+                ].map((element, index) => {
                   return (
                     <View
                       key={index}
@@ -277,7 +310,7 @@ export default function pinCollectionModal({
                       }}
                     >
                       <Image
-                        source={require('../../assets/images/screens/pin-collections/star.png')}
+                        source={require('../../assets/images/screens/pin-collections/darkstar.png')}
                         style={{
                           width: '100%',
                           height: 40,
@@ -286,33 +319,8 @@ export default function pinCollectionModal({
                       />
                     </View>
                   );
-                }
-              )}
-              {[
-                ...Array(
-                  pinCollection.pins.length - pinCollection.collected_pins_count
-                ),
-              ].map((element, index) => {
-                return (
-                  <View
-                    key={index}
-                    style={{
-                      paddingLeft: 1,
-                      paddingRight: 1,
-                      width: '20%',
-                    }}
-                  >
-                    <Image
-                      source={require('../../assets/images/screens/pin-collections/darkstar.png')}
-                      style={{
-                        width: '100%',
-                        height: 40,
-                        resizeMode: 'contain',
-                      }}
-                    />
-                  </View>
-                );
-              })}
+                })}
+              </View>
             </View>
           </ImageBackground>
         </View>
