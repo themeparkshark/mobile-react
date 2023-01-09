@@ -50,10 +50,14 @@ export default function InventoryScreen() {
 
   return (
     <>
-      <Topbar onBackButtonPress={() => {
-        updateUser();
-        generateAvatar();
-      }} showBackButton={true} text="Inventory" />
+      <Topbar
+        onBackButtonPress={() => {
+          updateUser();
+          generateAvatar();
+        }}
+        showBackButton={true}
+        text="Inventory"
+      />
       {loading && <Loading />}
       {!loading && (
         <>

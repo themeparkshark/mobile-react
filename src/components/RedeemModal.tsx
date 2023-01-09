@@ -63,7 +63,7 @@ export default function RedeemModal({
     item: require('../../assets/images/screens/explore/redeem_item.png'),
     pin: require('../../assets/images/screens/explore/redeem_item.png'),
     secret_task: require('../../assets/images/screens/explore/redeem_secret_task.png'),
-  }
+  };
 
   useEffect(() => {
     if (modalVisible) {
@@ -194,30 +194,39 @@ export default function RedeemModal({
               >
                 <Box
                   background={require('../../assets/images/screens/explore/starburst.png')}
-                  image={{
-                    task: {
-                      uri: (redeemable.model as SecretTaskType | TaskType)
-                        .coin_url
-                    },
-                    secret_task: {
-                      uri: (redeemable.model as SecretTaskType | TaskType)
-                        .coin_url
-                    },
-                    item: {
-                      uri: (redeemable.model as ItemType).icon_url,
-                    },
-                    pin: {
-                      uri: (redeemable.model as ItemType).icon_url,
-                    },
-                    coin: require('../../assets/images/screens/explore/coins.png'),
-                  }[redeemable.type]}
-                  text={{
-                    task: (redeemable.model as SecretTaskType | TaskType).name,
-                    secret_task: (redeemable.model as SecretTaskType | TaskType).name,
-                    coin: `${(redeemable.model as CoinType).coins} Shark Coins`,
-                    item: (redeemable.model as ItemType).name,
-                    pin: (redeemable.model as ItemType).name,
-                  }[redeemable.type]}
+                  image={
+                    {
+                      task: {
+                        uri: (redeemable.model as SecretTaskType | TaskType)
+                          .coin_url,
+                      },
+                      secret_task: {
+                        uri: (redeemable.model as SecretTaskType | TaskType)
+                          .coin_url,
+                      },
+                      item: {
+                        uri: (redeemable.model as ItemType).icon_url,
+                      },
+                      pin: {
+                        uri: (redeemable.model as ItemType).icon_url,
+                      },
+                      coin: require('../../assets/images/screens/explore/coins.png'),
+                    }[redeemable.type]
+                  }
+                  text={
+                    {
+                      task: (redeemable.model as SecretTaskType | TaskType)
+                        .name,
+                      secret_task: (
+                        redeemable.model as SecretTaskType | TaskType
+                      ).name,
+                      coin: `${
+                        (redeemable.model as CoinType).coins
+                      } Shark Coins`,
+                      item: (redeemable.model as ItemType).name,
+                      pin: (redeemable.model as ItemType).name,
+                    }[redeemable.type]
+                  }
                   type={redeemable.type}
                   pulse
                 />
@@ -252,7 +261,11 @@ export default function RedeemModal({
                       marginTop: 8,
                     }}
                   >
-                    <Animatable.View animation="pulse" iterationCount="infinite" direction="alternate">
+                    <Animatable.View
+                      animation="pulse"
+                      iterationCount="infinite"
+                      direction="alternate"
+                    >
                       <Button>
                         <Image
                           source={require('../../assets/images/screens/explore/watch.png')}
@@ -276,7 +289,9 @@ export default function RedeemModal({
                     <Box
                       backgroundColor="#4cdcff"
                       image={require('../../assets/images/screens/explore/coins.png')}
-                      text={(redeemable.model as TaskType | SecretTaskType).coins}
+                      text={
+                        (redeemable.model as TaskType | SecretTaskType).coins
+                      }
                       small
                       type={redeemable.type}
                     />
@@ -285,7 +300,11 @@ export default function RedeemModal({
                         marginTop: 8,
                       }}
                     >
-                      <Animatable.View animation="pulse" iterationCount="infinite" direction="alternate">
+                      <Animatable.View
+                        animation="pulse"
+                        iterationCount="infinite"
+                        direction="alternate"
+                      >
                         <Button>
                           <Image
                             source={require('../../assets/images/screens/explore/watch.png')}
@@ -334,8 +353,11 @@ export default function RedeemModal({
                       );
                     } else if (redeemable.type === 'coin') {
                       await redeemCoin(redeemable.model as CoinType);
-                    } else if (redeemable.type === 'item' || redeemable.type === 'pin') {
-                      await redeemItem(redeemable.model as ItemType)
+                    } else if (
+                      redeemable.type === 'item' ||
+                      redeemable.type === 'pin'
+                    ) {
+                      await redeemItem(redeemable.model as ItemType);
                     }
 
                     onPress();

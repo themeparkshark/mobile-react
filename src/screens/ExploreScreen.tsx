@@ -98,7 +98,11 @@ export default function ExploreScreen() {
 
   return (
     <Wrapper>
-      <Topbar parkCoin={park?.coin_url} showCoins={true} parkCoins={user.park_coins} />
+      <Topbar
+        parkCoin={park?.coin_url}
+        showCoins={true}
+        parkCoins={user.park_coins}
+      />
       {!park && <NotAtPark />}
       {park && redeemables && (
         <>

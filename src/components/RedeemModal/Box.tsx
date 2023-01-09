@@ -1,5 +1,12 @@
-import {Animated, Easing, Image, ImageURISource, Text, View} from 'react-native';
-import {useEffect, useRef} from 'react';
+import {
+  Animated,
+  Easing,
+  Image,
+  ImageURISource,
+  Text,
+  View,
+} from 'react-native';
+import { useEffect, useRef } from 'react';
 import * as Animatable from 'react-native-animatable';
 
 export default function Box({
@@ -45,15 +52,12 @@ export default function Box({
 
   useEffect(() => {
     Animated.loop(
-      Animated.timing(
-        rotate,
-        {
-          toValue: 1,
-          duration: 20000,
-          easing: Easing.linear,
-          useNativeDriver: true
-        }
-      )
+      Animated.timing(rotate, {
+        toValue: 1,
+        duration: 20000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
     ).start();
   }, []);
 
@@ -91,7 +95,7 @@ export default function Box({
             animation="pulse"
             iterationCount="infinite"
             direction="alternate"
-            style={{justifyContent: 'center'}}
+            style={{ justifyContent: 'center' }}
           >
             <Image
               source={image}
@@ -145,7 +149,7 @@ export default function Box({
               width: '100%',
               position: 'absolute',
               zIndex: -10,
-              opacity: .04,
+              opacity: 0.04,
               transform: [
                 {
                   rotate: spin,

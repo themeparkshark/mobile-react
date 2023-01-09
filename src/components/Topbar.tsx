@@ -71,13 +71,15 @@ export default function Topbar({
                 }}
               >
                 {showBackButton && (
-                  <Button onPress={async () => {
-                    if (onBackButtonPress) {
-                      await onBackButtonPress();
-                    }
+                  <Button
+                    onPress={async () => {
+                      if (onBackButtonPress) {
+                        await onBackButtonPress();
+                      }
 
-                    RootNavigation.goBack();
-                  }}>
+                      RootNavigation.goBack();
+                    }}
+                  >
                     <Image
                       source={require('../../assets/images/screens/explore/back.png')}
                       style={{

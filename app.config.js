@@ -27,17 +27,17 @@ export default {
     apiBaseUrl: process.env.API_BASE_URL,
     cmsBaseUrl: process.env.CMS_API_BASE_URL,
     eas: {
-      projectId: '2381b3a5-95cc-4554-8083-c3a9d647960d'
-    }
+      projectId: '2381b3a5-95cc-4554-8083-c3a9d647960d',
+    },
   },
   plugins: [
     [
       'expo-build-properties',
       {
         ios: {
-          "deploymentTarget": "13.0"
-        }
-      }
-    ]
-  ]
+          deploymentTarget: '13.0',
+        },
+      },
+    ],
+  ],
 };
