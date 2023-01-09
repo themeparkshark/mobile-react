@@ -31,7 +31,7 @@ export default function Topbar({
   readonly onBackButtonPress?: () => void;
 }) {
   const { user } = useContext(AuthContext);
-  const width = text ? (showCoins ? '20%' : '15%') : '20%';
+  const width = text ? (showCoins ? '20%' : '15%') : '50%';
 
   return (
     <SafeAreaView
@@ -160,17 +160,9 @@ export default function Topbar({
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
+                      justifyContent: 'flex-end',
                     }}
                   >
-                    <Image
-                      source={require('../../assets/images/coins.png')}
-                      style={{
-                        width: 30,
-                        height: 30,
-                        resizeMode: 'contain',
-                        marginRight: 8,
-                      }}
-                    />
                     <Text
                       style={{
                         textAlign: 'center',
@@ -180,10 +172,21 @@ export default function Topbar({
                         textTransform: 'uppercase',
                         textShadowColor: 'rgba(0, 0, 0, .5)',
                         textShadowRadius: 5,
+                        marginRight: 8,
                       }}
+                      adjustsFontSizeToFit
+                      numberOfLines={1}
                     >
                       {user?.coins}
                     </Text>
+                    <Image
+                      source={require('../../assets/images/coins.png')}
+                      style={{
+                        width: 30,
+                        height: 30,
+                        resizeMode: 'contain',
+                      }}
+                    />
                   </View>
                 )}
               </View>

@@ -151,7 +151,7 @@ export default function InventoryScreen() {
                 }}
                 contentContainerStyle={{ paddingBottom: 8 }}
                 data={items}
-                keyExtractor={(item) => item.name}
+                keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                   <Item item={item} currentItemType={currentItemType} />
                 )}
