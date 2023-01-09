@@ -1,8 +1,22 @@
 import { Dimensions, Text } from 'react-native';
 import { BlurView } from 'expo-blur';
-import theme from '../../config/theme';
+import {useEffect, useState} from 'react';
 
 export default function NotAtPark() {
+  const [seconds, setSeconds] = useState<number>(10);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (seconds === 1) {
+        setSeconds(10);
+      } else {
+        setSeconds(seconds - 1);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [seconds]);
+
   return (
     <BlurView
       intensity={80}
@@ -22,7 +36,7 @@ export default function NotAtPark() {
           color: 'white',
           fontFamily: 'Shark',
           textTransform: 'uppercase',
-          textShadowColor: theme.primary,
+          textShadowColor: 'black',
           textShadowRadius: 5,
           fontSize: 32,
           paddingLeft: 48,
@@ -31,6 +45,18 @@ export default function NotAtPark() {
         }}
       >
         You are not at a park right now.
+      </Text>
+      <Text
+        style={{
+          color: 'white',
+          fontFamily: 'Knockout',
+          fontSize: 20,
+          paddingTop: 30,
+          textShadowColor: 'black',
+          textShadowRadius: 5,
+        }}
+      >
+        Checking again in {seconds} second{seconds === 1 ? '' : 's'}...
       </Text>
     </BlurView>
   );

@@ -4,7 +4,6 @@ import {
   Image,
   ImageBackground,
   Pressable,
-  Text,
   View,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';

@@ -24,6 +24,8 @@ export default {
     favicon: './assets/favicon.png',
   },
   extra: {
+    apiBaseUrl: process.env.API_BASE_URL,
+    cmsBaseUrl: process.env.CMS_API_BASE_URL,
     eas: {
       projectId: '2381b3a5-95cc-4554-8083-c3a9d647960d'
     }
