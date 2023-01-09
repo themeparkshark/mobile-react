@@ -23,6 +23,7 @@ import { SecretTaskType } from '../models/secret-task-type';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import { MusicContext } from '../context/MusicProvider';
 import Loading from '../components/Loading';
+import TaskCoinModal from '../components/TaskCoinModal';
 
 export default function ParkScreen({ route }) {
   const { park } = route.params;
@@ -231,10 +232,10 @@ export default function ParkScreen({ route }) {
                       />
                     </View>
                   </View>
-                  {chunk(secretTasks, 6).map(
+                  {chunk(secretTasks, 5).map(
                     (secretTasks: SecretTaskType[], index: number) => (
                       <View key={index} style={{ paddingBottom: 16 }}>
-                        <View style={{ position: 'relative', height: 95 }}>
+                        <View style={{ position: 'relative', height: 105 }}>
                           <Image
                             source={require('../../assets/images/screens/park/secretshelf.png')}
                             resizeMode="contain"
@@ -262,24 +263,13 @@ export default function ParkScreen({ route }) {
                                 }}
                               >
                                 {secretTask.has_completed && (
-                                  <Image
-                                    source={{
-                                      uri: secretTask.coin_url,
-                                    }}
-                                    style={{
-                                      width: 50,
-                                      height: 50,
-                                      borderWidth: 2,
-                                      borderColor: '#fff',
-                                      borderRadius: 50,
-                                    }}
-                                  />
+                                  <TaskCoinModal task={secretTask} />
                                 )}
                                 {!secretTask.has_completed && (
                                   <View
                                     style={{
-                                      width: 50,
-                                      height: 50,
+                                      width: 60,
+                                      height: 60,
                                       backgroundColor: 'rgba(0, 0, 0, .5)',
                                       borderRadius: 50,
                                     }}
@@ -292,9 +282,9 @@ export default function ParkScreen({ route }) {
                       </View>
                     )
                   )}
-                  {chunk(tasks, 6).map((tasks: TaskType[], index: number) => (
+                  {chunk(tasks, 5).map((tasks: TaskType[], index: number) => (
                     <View key={index} style={{ paddingBottom: 16 }}>
-                      <View style={{ position: 'relative', height: 95 }}>
+                      <View style={{ position: 'relative', height: 105 }}>
                         <Image
                           source={require('../../assets/images/screens/park/shelf.png')}
                           resizeMode="contain"
@@ -322,24 +312,13 @@ export default function ParkScreen({ route }) {
                               }}
                             >
                               {task.has_completed && (
-                                <Image
-                                  source={{
-                                    uri: task.coin_url,
-                                  }}
-                                  style={{
-                                    width: 50,
-                                    height: 50,
-                                    borderWidth: 2,
-                                    borderColor: '#fff',
-                                    borderRadius: 50,
-                                  }}
-                                />
+                                <TaskCoinModal task={task} />
                               )}
                               {!task.has_completed && (
                                 <View
                                   style={{
-                                    width: 50,
-                                    height: 50,
+                                    width: 60,
+                                    height: 60,
                                     backgroundColor: 'rgba(0, 0, 0, .5)',
                                     borderRadius: 50,
                                   }}
