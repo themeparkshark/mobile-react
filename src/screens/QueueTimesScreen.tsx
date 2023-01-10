@@ -1,11 +1,10 @@
 import Topbar from '../components/Topbar';
 import {
-  ActivityIndicator,
   ScrollView,
   View,
   Text,
   RefreshControl,
-  SafeAreaView,
+  ImageBackground, Image, Dimensions,
 } from 'react-native';
 import { Chevron } from 'react-native-shapes';
 import { useCallback, useEffect, useState } from 'react';
@@ -18,6 +17,7 @@ import RNPickerSelect from 'react-native-picker-select';
 import { ParkType } from '../models/park-type';
 import allParks from '../api/endpoints/parks/allParks';
 import Loading from '../components/Loading';
+import config from '../config/theme';
 
 export default function QueueTimesScreen({ route }) {
   const [queueTimes, setQueueTimes] = useState<QueueTimeType[]>();
@@ -63,49 +63,27 @@ export default function QueueTimesScreen({ route }) {
       {loading && <Loading />}
       {!loading && queueTimes && (
         <>
-          {queueTimes.length === 0 && (
-            <View
-              style={{
-                marginTop: -8,
-                paddingLeft: 16,
-                paddingRight: 16,
-                paddingTop: 32,
-                paddingBottom: 32,
-                flex: 1,
-              }}
-            >
-              <Text style={{ textAlign: 'center' }}>
-                Something went wrong. Please try again later.
-              </Text>
-            </View>
-          )}
-          {queueTimes.length > 0 && parks && (
-            <SafeAreaView
+          <View
+            style={{
+              flex: 1,
+              marginTop: -8,
+            }}
+          >
+            <ImageBackground
               style={{
                 flex: 1,
-                marginTop: -8,
               }}
+              source={require('../../assets/images/seaweed_background.png')}
             >
-              <ScrollView
-                refreshControl={
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                  />
-                }
+              <View
+                style={{
+                  padding: 16,
+                }}
               >
-                <View
-                  style={{
-                    paddingLeft: 16,
-                    paddingRight: 16,
-                    paddingTop: 32,
-                  }}
-                >
-                  <Text>Select a park:</Text>
+                {parks && (
                   <RNPickerSelect
                     placeholder={{}}
                     onValueChange={(value) => setSelectedPark(value)}
-                    onClose={() => setTime(Date.now())}
                     value={selectedPark}
                     items={parks.map((item) => {
                       return {
@@ -115,60 +93,157 @@ export default function QueueTimesScreen({ route }) {
                     })}
                     style={{
                       inputIOS: {
-                        fontSize: 16,
                         paddingVertical: 12,
                         paddingHorizontal: 10,
-                        borderWidth: 1,
-                        borderColor: 'gray',
-                        borderRadius: 4,
-                        color: 'black',
+                        borderWidth: 3,
+                        borderRadius: 10,
                         paddingRight: 30,
+                        backgroundColor: 'rgba(255, 255, 255, .4)',
+                        borderColor: 'white',
+                        color: 'white',
+                        fontSize: 20,
+                        textAlign: 'center',
+                        fontFamily: 'Knockout',
+                        textShadowColor: config.primary,
+                        textShadowRadius: 5,
                       },
                       iconContainer: {
-                        top: 18,
-                        right: 15,
+                        top: 22,
+                        right: 22,
                       },
                     }}
-                    Icon={() => <Chevron size={1.5} color="gray" />}
+                    Icon={() => <Chevron size={1.5} color="white" />}
                   />
-                  <Text
-                    style={{
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      paddingTop: 32,
-                    }}
-                  >
-                    Last updated:{' '}
-                    {queueTimes &&
-                      dayjs(queueTimes[0].last_check_at)
-                        .startOf('second')
-                        .fromNow()}{' '}
-                    ago
-                  </Text>
-                  {queueTimes?.map((queueTime, index) => {
-                    return (
-                      <View key={queueTime.id} style={{ paddingTop: 16 }}>
-                        <Text>
-                          {queueTime.ride} - {queueTime.wait_time} minute
-                          {queueTime.wait_time !== 1 ? 's' : ''}
+                )}
+              </View>
+              <View
+                style={{
+                  height: 100,
+                  borderBottomWidth: 5,
+                  borderBottomColor: '#fff',
+                }}
+              >
+                <Image
+                  source={require('../../assets/images/screens/pin-collections/shark.png')}
+                  style={{
+                    width: Dimensions.get('window').width - 25,
+                    height: '100%',
+                    resizeMode: 'contain',
+                    marginLeft: 'auto',
+                    marginRight: 'auto',
+                  }}
+                />
+              </View>
+              <View
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, .6)',
+                  borderTopWidth: 5,
+                  borderTopColor: '#fff',
+                  flex: 1,
+                }}
+              >
+                <ScrollView
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={refreshing}
+                      onRefresh={onRefresh}
+                    />
+                  }
+                >
+                  <View style={{
+                    padding: 16,
+                  }}>
+                    {queueTimes.length > 0 && (
+                      <>
+                        <Text
+                          style={{
+                            fontWeight: 'bold',
+                            fontFamily: 'Knockout',
+                            textAlign: 'center',
+                            fontSize: 16,
+                            paddingTop: 16,
+                            paddingBottom: 32,
+                          }}
+                        >
+                          Last updated:{' '}
+                          {queueTimes &&
+                            dayjs(queueTimes[0].last_check_at)
+                            .startOf('second')
+                            .fromNow()}{' '}
+                          ago
                         </Text>
-                      </View>
-                    );
-                  })}
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      textAlign: 'center',
-                      opacity: 0.4,
-                      paddingTop: 32,
-                    }}
-                  >
-                    Powered by Queue-Times.com
-                  </Text>
-                </View>
-              </ScrollView>
-            </SafeAreaView>
-          )}
+                        {queueTimes?.map((queueTime) => {
+                          return (
+                            <View
+                              key={queueTime.id}
+                              style={{
+                                padding: 16,
+                                borderLeftColor: queueTime.is_open
+                                  ? queueTime.wait_time <= 20 ? 'green' : 'orange'
+                                  : 'red',
+                                borderLeftWidth: 3,
+                                marginBottom: 8,
+                                flexDirection: 'row',
+                              }}
+                            >
+                              <View
+                                style={{
+                                  flex: 1,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontFamily: 'Knockout',
+                                    fontSize: 18,
+                                    paddingRight: 16,
+                                  }}
+                                >
+                                  {queueTime.ride}
+                                </Text>
+                              </View>
+                              <View>
+                                {queueTime.is_open && (
+                                  <Text
+                                    style={{
+                                      fontFamily: 'Knockout',
+                                      fontSize: 18,
+                                    }}
+                                  >
+                                    {queueTime.wait_time}m
+                                  </Text>
+                                )}
+                                {!queueTime.is_open && (
+                                  <Text
+                                    style={{
+                                      textTransform: 'uppercase',
+                                      fontFamily: 'Knockout',
+                                      fontSize: 18,
+                                    }}
+                                  >
+                                    {' '}closed
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </>
+                    )}
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        textAlign: 'center',
+                        opacity: 0.4,
+                        paddingTop: 32,
+                      }}
+                    >
+                      Powered by Queue-Times.com
+                    </Text>
+                  </View>
+                </ScrollView>
+              </View>
+            </ImageBackground>
+          </View>
         </>
       )}
     </>
