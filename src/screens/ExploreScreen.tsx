@@ -31,7 +31,6 @@ import recordActivity from '../api/endpoints/activities/create';
 import { faLocationArrow as clearArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faLocationArrow as solidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
-
 import theme from '../config/theme';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));

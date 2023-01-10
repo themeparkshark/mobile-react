@@ -7,7 +7,7 @@ import {
   Switch,
 } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
-import { useCallback, useContext, useState } from 'react';
+import {useCallback, useContext, useEffect, useState} from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import dayjs from 'dayjs';
 import * as WebBrowser from 'expo-web-browser';
@@ -16,6 +16,7 @@ import * as RootNavigation from '../RootNavigation';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import updateUser from '../api/endpoints/me/update-user';
+import {MusicContext} from '../context/MusicProvider';
 
 export default function SettingsScreen() {
   const { user, logout, refreshUser } = useContext(AuthContext);

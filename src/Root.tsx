@@ -16,7 +16,6 @@ import ErrorScreen from './screens/ErrorScreen';
 import StoreScreen from './screens/StoreScreen';
 import UserScreen from './screens/UserScreen';
 import { useFonts } from 'expo-font';
-// @ts-ignore
 import { Storage } from 'expo-storage';
 import SettingsScreen from './screens/SettingsScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
@@ -25,7 +24,6 @@ import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import SocialScreen from './screens/SocialScreen';
 import { useKeepAwake } from 'expo-keep-awake';
 import QueueTimesScreen from './screens/QueueTimesScreen';
-import SecretStoreScreen from './screens/SecretStoreScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -85,7 +83,9 @@ const HomeStackNavigator = () => {
       />
       <Stack.Screen name="User" component={UserScreen} />
       <Stack.Screen name="Park" component={ParkScreen} />
-      <Stack.Screen name="Inventory" component={InventoryScreen} />
+      <Stack.Screen name="Inventory" component={InventoryScreen} options={{
+        gestureEnabled: false,
+      }}/>
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen
         name="UpdateEmail"
