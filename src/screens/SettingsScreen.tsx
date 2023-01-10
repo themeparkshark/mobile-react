@@ -1,7 +1,13 @@
 import Topbar from '../components/Topbar';
-import { Alert, PlatformColor, SafeAreaView, ScrollView } from 'react-native';
+import {
+  Alert,
+  PlatformColor,
+  SafeAreaView,
+  ScrollView,
+  Switch,
+} from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
-import { useCallback, useContext } from 'react';
+import { useCallback, useContext, useState } from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import dayjs from 'dayjs';
 import * as WebBrowser from 'expo-web-browser';
@@ -9,15 +15,22 @@ import deleteUser from '../api/endpoints/me/delete';
 import * as RootNavigation from '../RootNavigation';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
+import updateUser from '../api/endpoints/me/update-user';
 
 export default function SettingsScreen() {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, refreshUser } = useContext(AuthContext);
+  const [enabledMusic, setEnabledMusic] = useState<boolean>(user?.enabled_music);
+  const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>(user?.enabled_sound_effects);
 
   useFocusEffect(
     useCallback(() => {
       recordActivity('Viewed the Settings screen.');
     }, [])
   );
+
+  if (!user) {
+    return;
+  }
 
   return (
     <>
@@ -40,6 +53,40 @@ export default function SettingsScreen() {
                 title="Joined on"
                 cellStyle="RightDetail"
                 detail={dayjs(user.created_at).format('DD MMMM YYYY')}
+              />
+            </Section>
+            <Section header={'Audio'.toUpperCase()}>
+              <Cell
+                title="Music"
+                cellStyle="RightDetail"
+                cellAccessoryView={
+                  <Switch
+                    onValueChange={async () => {
+                      setEnabledMusic(!enabledMusic);
+                      await updateUser({
+                        enabled_music: !user.enabled_music
+                      });
+                      await refreshUser();
+                    }}
+                    value={enabledMusic}
+                  />
+                }
+              />
+              <Cell
+                title="Sound Effects"
+                cellStyle="RightDetail"
+                cellAccessoryView={
+                  <Switch
+                    onValueChange={async () => {
+                      setEnabledSoundEffects(!enabledSoundEffects);
+                      await updateUser({
+                        enabled_sound_effects: !user?.enabled_sound_effects
+                      });
+                      await refreshUser();
+                    }}
+                    value={user.enabled_sound_effects}
+                  />
+                }
               />
             </Section>
             <Section header={'Help'.toUpperCase()}>

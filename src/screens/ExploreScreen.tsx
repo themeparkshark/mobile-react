@@ -43,7 +43,7 @@ export default function ExploreScreen() {
     RedeemableType | undefined
   >();
   const [location, setLocation] = useState<LocationType>();
-  const { inventory, updateUser, user } = useContext(AuthContext);
+  const { inventory, refreshUser, user } = useContext(AuthContext);
   const [followingUser, setFollowingUser] = useState<boolean>(true);
 
   useFocusEffect(
@@ -214,7 +214,7 @@ export default function ExploreScreen() {
               park={park}
               onPress={() => {
                 getRedeemables();
-                updateUser();
+                refreshUser();
               }}
             />
           </View>

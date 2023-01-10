@@ -297,7 +297,8 @@ export default function pinCollectionModal({
                 )}
                 {[
                   ...Array(
-                    pinCollection.pins.length - pinCollection.collected_pins_count
+                    pinCollection.pins.length -
+                      pinCollection.collected_pins_count
                   ),
                 ].map((element, index) => {
                   return (

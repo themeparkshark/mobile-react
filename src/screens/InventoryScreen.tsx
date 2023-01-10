@@ -29,7 +29,7 @@ export default function InventoryScreen() {
   const { inventory } = useContext(AuthContext);
   const flatListRef = useRef();
   const [loading, setLoading] = useState<boolean>(true);
-  const { updateUser } = useContext(AuthContext);
+  const { refreshUser } = useContext(AuthContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -52,7 +52,7 @@ export default function InventoryScreen() {
     <>
       <Topbar
         onBackButtonPress={() => {
-          updateUser();
+          refreshUser();
           generateAvatar();
         }}
         showBackButton={true}

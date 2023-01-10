@@ -7,14 +7,14 @@ import { AuthContext } from '../../context/AuthProvider';
 import { useContext } from 'react';
 
 export default function Item({ item }) {
-  const { user, updateUser } = useContext(AuthContext);
+  const { user, refreshUser } = useContext(AuthContext);
 
   return (
     <Pressable
       onPress={async () => {
         await purchaseItem(item, {
           user,
-          updateUser,
+          refreshUser,
         });
       }}
     >

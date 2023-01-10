@@ -17,7 +17,7 @@ export interface AuthContextType {
   readonly logout: () => void;
   readonly setInventory: (inventory: InventoryType) => void;
   readonly setUser: (user: UserType) => void;
-  readonly updateUser: () => void;
+  readonly refreshUser: () => void;
   readonly user: UserType | null;
 }
 
@@ -54,13 +54,13 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       setToken(response.token);
 
       await SecureStore.setItemAsync('token', response.token);
-      await updateUser();
+      await refreshUser();
     } catch (error) {
       console.log(error);
     }
   };
 
-  const updateUser = () => {
+  const refreshUser = () => {
     getMe().then((_user) => {
       setUser(_user);
 
@@ -82,7 +82,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
-        updateUser,
+        refreshUser,
         setUser,
         login: requestLogin,
         logout,

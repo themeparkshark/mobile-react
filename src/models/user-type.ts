@@ -7,6 +7,8 @@ export interface UserType {
   readonly created_at: string;
   readonly current_park_id: number;
   readonly email: string;
+  readonly enabled_music: boolean;
+  readonly enabled_sound_effects: boolean;
   readonly experience: number;
   readonly experience_level: ExperienceLevelType;
   readonly id: number;

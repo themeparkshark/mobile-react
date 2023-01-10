@@ -4,7 +4,7 @@ import purchase from '../api/endpoints/me/inventory/purchase-item';
 import { ItemType } from '../models/item-type';
 
 export default async function purchaseItem(item: ItemType, context: any) {
-  const { user, updateUser } = context;
+  const { user, refreshUser } = context;
   const response = await search(item);
 
   if (response.has_purchased) {
@@ -45,7 +45,7 @@ export default async function purchaseItem(item: ItemType, context: any) {
       text: 'Ok',
       onPress: async () => {
         const response = await purchase(item);
-        await updateUser();
+        await refreshUser();
 
         Alert.alert('', `${response.name} has been added to your inventory.`, [
           {

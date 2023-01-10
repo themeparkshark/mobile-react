@@ -1,7 +1,7 @@
 import { Button, SafeAreaView, TextInput } from 'react-native';
 import { useCallback, useContext, useLayoutEffect, useState } from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
-import updateUser from '../../api/endpoints/me/update-email';
+import updateUser from '../../api/endpoints/me/update-user';
 import { AuthContext } from '../../context/AuthProvider';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../../api/endpoints/activities/create';

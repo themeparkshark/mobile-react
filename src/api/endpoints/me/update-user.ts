@@ -3,12 +3,14 @@ import { Alert } from 'react-native';
 import { UserType } from '../../../models/user-type';
 import { ApiResponseType } from '../../../models/api-response-type';
 
-export default async function updateEmail(payload: {
-  readonly email: string;
+export default async function updateUser(payload: {
+  readonly enabled_music ?: boolean;
+  readonly enabled_sound_effects ?: boolean;
+  readonly username ?: string;
 }): Promise<UserType> {
   try {
     const { data } = await client.put<ApiResponseType<UserType>>(
-      '/me/email',
+      '/me',
       payload
     );
 

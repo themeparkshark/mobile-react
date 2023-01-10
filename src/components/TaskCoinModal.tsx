@@ -1,21 +1,28 @@
-import {TaskType} from '../models/task-type';
-import {SecretTaskType} from '../models/secret-task-type';
-import {Dimensions, Image, ImageBackground, Pressable, Text, View} from 'react-native';
+import { TaskType } from '../models/task-type';
+import { SecretTaskType } from '../models/secret-task-type';
+import {
+  Dimensions,
+  Image,
+  ImageBackground,
+  Pressable,
+  Text,
+  View,
+} from 'react-native';
 import Modal from 'react-native-modal';
 import { useState } from 'react';
 import theme from '../config/theme';
 import { Gyroscope } from 'expo-sensors';
 
-export default function TaskCoinModal({ task } : {
+export default function TaskCoinModal({
+  task,
+}: {
   readonly task: TaskType | SecretTaskType;
 }) {
   const [visible, setVisible] = useState<boolean>(false);
 
   return (
     <>
-      <Pressable
-        onPress={() => setVisible(true)}
-      >
+      <Pressable onPress={() => setVisible(true)}>
         <Image
           source={{
             uri: task.coin_url,
@@ -49,12 +56,13 @@ export default function TaskCoinModal({ task } : {
               position: 'absolute',
             }}
             onPress={() => setVisible(false)}
+          ></Pressable>
+          <View
+            style={{
+              width: Dimensions.get('window').width - 50,
+              alignItems: 'center',
+            }}
           >
-          </Pressable>
-          <View style={{
-            width: Dimensions.get('window').width - 50,
-            alignItems: 'center',
-          }}>
             <View
               style={{
                 backgroundColor: theme.primary,
@@ -63,13 +71,17 @@ export default function TaskCoinModal({ task } : {
                 marginBottom: 32,
               }}
             >
-              <Text style={{
-                color: 'white',
-                fontFamily: 'Knockout',
-                textTransform: 'uppercase',
-                fontSize: 32,
-                textAlign: 'center',
-              }}>{task.name}</Text>
+              <Text
+                style={{
+                  color: 'white',
+                  fontFamily: 'Knockout',
+                  textTransform: 'uppercase',
+                  fontSize: 32,
+                  textAlign: 'center',
+                }}
+              >
+                {task.name}
+              </Text>
             </View>
             <Image
               source={{

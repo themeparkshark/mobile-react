@@ -4,7 +4,9 @@ import {
   View,
   Text,
   RefreshControl,
-  ImageBackground, Image, Dimensions,
+  ImageBackground,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { Chevron } from 'react-native-shapes';
 import { useCallback, useEffect, useState } from 'react';
@@ -149,9 +151,11 @@ export default function QueueTimesScreen({ route }) {
                     />
                   }
                 >
-                  <View style={{
-                    padding: 16,
-                  }}>
+                  <View
+                    style={{
+                      padding: 16,
+                    }}
+                  >
                     {queueTimes.length > 0 && (
                       <>
                         <Text
@@ -167,8 +171,8 @@ export default function QueueTimesScreen({ route }) {
                           Last updated:{' '}
                           {queueTimes &&
                             dayjs(queueTimes[0].last_check_at)
-                            .startOf('second')
-                            .fromNow()}{' '}
+                              .startOf('second')
+                              .fromNow()}{' '}
                           ago
                         </Text>
                         {queueTimes?.map((queueTime) => {
@@ -178,7 +182,9 @@ export default function QueueTimesScreen({ route }) {
                               style={{
                                 padding: 16,
                                 borderLeftColor: queueTime.is_open
-                                  ? queueTime.wait_time <= 20 ? 'green' : 'orange'
+                                  ? queueTime.wait_time <= 20
+                                    ? 'green'
+                                    : 'orange'
                                   : 'red',
                                 borderLeftWidth: 3,
                                 marginBottom: 8,
@@ -219,7 +225,8 @@ export default function QueueTimesScreen({ route }) {
                                       fontSize: 18,
                                     }}
                                   >
-                                    {' '}closed
+                                    {' '}
+                                    closed
                                   </Text>
                                 )}
                               </View>
