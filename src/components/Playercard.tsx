@@ -101,9 +101,6 @@ export default function Playercard({
               {
                 translateY: translate,
               },
-              {
-                rotate: '-7deg',
-              },
             ],
           }}
         >

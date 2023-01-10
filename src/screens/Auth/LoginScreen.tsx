@@ -19,7 +19,6 @@ export default function LoginScreen() {
     if (!user && isReady) {
       playMusic(require('../../../assets/sounds/music/track1.mp3'));
     }
-    console.log('hello2');
   }, []);
 
   return (
