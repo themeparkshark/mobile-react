@@ -1,6 +1,13 @@
-import {createContext, FC, ReactNode, useContext, useEffect, useState} from 'react';
+import {
+  createContext,
+  FC,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import { Audio } from 'expo-av';
-import {AuthContext} from './AuthProvider';
+import { AuthContext } from './AuthProvider';
 
 export interface SoundEffectContextType {
   readonly playSound: (pendingSound: any) => void;

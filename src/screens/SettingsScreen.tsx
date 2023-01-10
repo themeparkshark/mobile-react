@@ -7,7 +7,7 @@ import {
   Switch,
 } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
-import {useCallback, useContext, useEffect, useState} from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import dayjs from 'dayjs';
 import * as WebBrowser from 'expo-web-browser';
@@ -16,12 +16,16 @@ import * as RootNavigation from '../RootNavigation';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import updateUser from '../api/endpoints/me/update-user';
-import {MusicContext} from '../context/MusicProvider';
+import { MusicContext } from '../context/MusicProvider';
 
 export default function SettingsScreen() {
   const { user, logout, refreshUser } = useContext(AuthContext);
-  const [enabledMusic, setEnabledMusic] = useState<boolean>(user?.enabled_music);
-  const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>(user?.enabled_sound_effects);
+  const [enabledMusic, setEnabledMusic] = useState<boolean>(
+    user?.enabled_music
+  );
+  const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>(
+    user?.enabled_sound_effects
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -65,7 +69,7 @@ export default function SettingsScreen() {
                     onValueChange={async () => {
                       setEnabledMusic(!enabledMusic);
                       await updateUser({
-                        enabled_music: !user.enabled_music
+                        enabled_music: !user.enabled_music,
                       });
                       await refreshUser();
                     }}
@@ -81,7 +85,7 @@ export default function SettingsScreen() {
                     onValueChange={async () => {
                       setEnabledSoundEffects(!enabledSoundEffects);
                       await updateUser({
-                        enabled_sound_effects: !user?.enabled_sound_effects
+                        enabled_sound_effects: !user?.enabled_sound_effects,
                       });
                       await refreshUser();
                     }}
