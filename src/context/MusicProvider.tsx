@@ -1,5 +1,6 @@
-import { createContext, FC, ReactNode, useState } from 'react';
+import {createContext, FC, ReactNode, useContext, useState} from 'react';
 import { Audio } from 'expo-av';
+import {AuthContext} from './AuthProvider';
 
 export interface MusicContextType {
   readonly currentSound: any;
@@ -12,12 +13,17 @@ export const MusicContext = createContext<MusicContextType>(
 
 export const MusicProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [currentSound, setCurrentSound] = useState<any>();
+  const { user, isReady } = useContext(AuthContext);
 
   return (
     <MusicContext.Provider
       value={{
         currentSound,
         playMusic: async (pendingMusic: any) => {
+          if (isReady && !user?.enabled_music) {
+            return;
+          }
+
           if (currentSound) {
             await currentSound.stopAsync();
             await currentSound.unloadAsync();
