@@ -16,16 +16,16 @@ import * as RootNavigation from '../RootNavigation';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import updateUser from '../api/endpoints/me/update-user';
-import { MusicContext } from '../context/MusicProvider';
 
 export default function SettingsScreen() {
   const { user, logout, refreshUser } = useContext(AuthContext);
-  const [enabledMusic, setEnabledMusic] = useState<boolean>(
-    user?.enabled_music
-  );
-  const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>(
-    user?.enabled_sound_effects
-  );
+  const [enabledMusic, setEnabledMusic] = useState<boolean>();
+  const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
+
+  useEffect(() => {
+    setEnabledMusic(user?.enabled_music);
+    setEnabledSoundEffects(user?.enabled_sound_effects);
+  }, [user]);
 
   useFocusEffect(
     useCallback(() => {
@@ -39,7 +39,13 @@ export default function SettingsScreen() {
 
   return (
     <>
-      <Topbar text="Settings" showBackButton={true} />
+      <Topbar
+        text="Settings"
+        showBackButton={true}
+        onBackButtonPress={async () => {
+          await refreshUser();
+        }}
+      />
       <SafeAreaView style={{ marginTop: -8, flex: 1 }}>
         <ScrollView>
           <TableView>
@@ -71,7 +77,6 @@ export default function SettingsScreen() {
                       await updateUser({
                         enabled_music: !user.enabled_music,
                       });
-                      await refreshUser();
                     }}
                     value={enabledMusic}
                   />
@@ -87,9 +92,8 @@ export default function SettingsScreen() {
                       await updateUser({
                         enabled_sound_effects: !user?.enabled_sound_effects,
                       });
-                      await refreshUser();
                     }}
-                    value={user.enabled_sound_effects}
+                    value={enabledSoundEffects}
                   />
                 }
               />
