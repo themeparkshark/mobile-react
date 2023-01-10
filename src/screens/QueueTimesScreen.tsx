@@ -22,7 +22,6 @@ import config from '../config/theme';
 export default function QueueTimesScreen({ route }) {
   const [queueTimes, setQueueTimes] = useState<QueueTimeType[]>();
   const [loading, setLoading] = useState<boolean>(true);
-  const [time, setTime] = useState<number>();
   const [parks, setParks] = useState<ParkType[]>();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedPark, setSelectedPark] = useState<number>(route.params.park);
@@ -55,7 +54,7 @@ export default function QueueTimesScreen({ route }) {
 
   useEffect(() => {
     requestQueueTimes();
-  }, [time, selectedPark]);
+  }, [selectedPark]);
 
   return (
     <>
