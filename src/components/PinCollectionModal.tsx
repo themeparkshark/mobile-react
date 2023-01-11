@@ -45,43 +45,75 @@ export default function pinCollectionModal({
               shadowRadius: 0,
             }}
           >
-            <ImageBackground
-              source={require('../../assets/images/screens/store/gradient.png')}
-              resizeMode={'cover'}
+            <View
               style={{
+                borderRadius: 3,
                 overflow: 'hidden',
               }}
             >
-              <View
+              <ImageBackground
+                source={require('../../assets/images/screens/store/gradient.png')}
+                resizeMode={'cover'}
                 style={{
-                  padding: 10,
+                  overflow: 'hidden',
                 }}
               >
-                <Image
-                  source={{
-                    uri: pinCollection.pin.item.icon_url,
-                  }}
+                <View
                   style={{
-                    width: '100%',
-                    height: 80,
-                    resizeMode: 'contain',
-                    marginLeft: 'auto',
-                    marginRight: 'auto',
+                    padding: 10,
                   }}
-                />
-              </View>
-            </ImageBackground>
-            <View
-              style={{
-                padding: 6,
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                justifyContent: 'center',
-                backgroundColor: theme.secondary,
-              }}
-            >
-              {[...Array(pinCollection.collected_pins_count)].map(
-                (element, index) => {
+                >
+                  <Image
+                    source={{
+                      uri: pinCollection.pin.item.icon_url,
+                    }}
+                    style={{
+                      width: '100%',
+                      height: 80,
+                      resizeMode: 'contain',
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
+                    }}
+                  />
+                </View>
+              </ImageBackground>
+              <View
+                style={{
+                  padding: 6,
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                  backgroundColor: theme.secondary,
+                }}
+              >
+                {[...Array(pinCollection.collected_pins_count)].map(
+                  (element, index) => {
+                    return (
+                      <View
+                        key={index}
+                        style={{
+                          paddingLeft: 1,
+                          paddingRight: 1,
+                          width: '20%',
+                        }}
+                      >
+                        <Image
+                          source={require('../../assets/images/screens/pin-collections/star.png')}
+                          style={{
+                            width: '100%',
+                            height: 20,
+                            resizeMode: 'contain',
+                          }}
+                        />
+                      </View>
+                    );
+                  }
+                )}
+                {[
+                  ...Array(
+                    pinCollection.pins.length - pinCollection.collected_pins_count
+                  ),
+                ].map((element, index) => {
                   return (
                     <View
                       key={index}
@@ -92,7 +124,7 @@ export default function pinCollectionModal({
                       }}
                     >
                       <Image
-                        source={require('../../assets/images/screens/pin-collections/star.png')}
+                        source={require('../../assets/images/screens/pin-collections/darkstar.png')}
                         style={{
                           width: '100%',
                           height: 20,
@@ -101,53 +133,28 @@ export default function pinCollectionModal({
                       />
                     </View>
                   );
-                }
-              )}
-              {[
-                ...Array(
-                  pinCollection.pins.length - pinCollection.collected_pins_count
-                ),
-              ].map((element, index) => {
-                return (
-                  <View
-                    key={index}
-                    style={{
-                      paddingLeft: 1,
-                      paddingRight: 1,
-                      width: '20%',
-                    }}
-                  >
-                    <Image
-                      source={require('../../assets/images/screens/pin-collections/darkstar.png')}
-                      style={{
-                        width: '100%',
-                        height: 20,
-                        resizeMode: 'contain',
-                      }}
-                    />
-                  </View>
-                );
-              })}
-            </View>
-            <View
-              style={{
-                padding: 10,
-                backgroundColor: theme.primary,
-              }}
-            >
-              <Text
+                })}
+              </View>
+              <View
                 style={{
-                  color: '#fff',
-                  textAlign: 'center',
-                  fontSize: 18,
-                  textTransform: 'uppercase',
-                  fontFamily: 'Knockout',
-                  textShadowColor: theme.primary,
-                  textShadowRadius: 5,
+                  padding: 10,
+                  backgroundColor: theme.primary,
                 }}
               >
-                {pinCollection.name}
-              </Text>
+                <Text
+                  style={{
+                    color: '#fff',
+                    textAlign: 'center',
+                    fontSize: 18,
+                    textTransform: 'uppercase',
+                    fontFamily: 'Knockout',
+                    textShadowColor: theme.primary,
+                    textShadowRadius: 5,
+                  }}
+                >
+                  {pinCollection.name}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
