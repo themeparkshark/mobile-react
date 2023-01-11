@@ -3,7 +3,6 @@ import { SecretTaskType } from '../models/secret-task-type';
 import {
   Dimensions,
   Image,
-  ImageBackground,
   Pressable,
   Text,
   View,
@@ -11,7 +10,7 @@ import {
 import Modal from 'react-native-modal';
 import { useState } from 'react';
 import theme from '../config/theme';
-import { Gyroscope } from 'expo-sensors';
+import Button from '../components/Button';
 
 export default function TaskCoinModal({
   task,
@@ -22,7 +21,7 @@ export default function TaskCoinModal({
 
   return (
     <>
-      <Pressable onPress={() => setVisible(true)}>
+      <Button onPress={() => setVisible(true)}>
         <Image
           source={{
             uri: task.coin_url,
@@ -35,7 +34,7 @@ export default function TaskCoinModal({
             borderRadius: 50,
           }}
         />
-      </Pressable>
+      </Button>
       <Modal
         animationIn="zoomIn"
         animationOut="zoomOut"
