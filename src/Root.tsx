@@ -47,6 +47,7 @@ const HomeStackNavigator = () => {
         name="Welcome"
         component={WelcomeScreen}
         options={{
+          animation: 'none',
           gestureEnabled: false,
         }}
       />
