@@ -19,7 +19,6 @@ import { ItemTypeType } from '../models/item-type-type';
 import { ItemType } from '../models/item-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import generateAvatar from '../api/endpoints/me/generate-avatar';
 import Loading from '../components/Loading';
 
 export default function InventoryScreen() {
@@ -51,10 +50,7 @@ export default function InventoryScreen() {
   return (
     <>
       <Topbar
-        onBackButtonPress={() => {
-          refreshUser();
-          generateAvatar();
-        }}
+        onBackButtonPress={() => refreshUser()}
         showBackButton={true}
         text="Inventory"
       />

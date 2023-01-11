@@ -83,9 +83,6 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Inventory"
         component={InventoryScreen}
-        options={{
-          gestureEnabled: false,
-        }}
       />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen
