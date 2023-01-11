@@ -1,4 +1,4 @@
-import { Text, View } from 'react-native';
+import {Dimensions, ImageBackground, Text, SafeAreaView, View} from 'react-native';
 import { useContext, useEffect, useState } from 'react';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
@@ -41,14 +41,35 @@ export default function LoadingScreen() {
   }, [loading, isReady]);
 
   return (
-    <View
+    <ImageBackground
+      source={require('../../assets/images/screens/login/background.png')}
+      resizeMode={'cover'}
       style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
+        width: Dimensions.get('window').width,
+        height: Dimensions.get('window').height,
       }}
     >
-      <Text>Loading...</Text>
-    </View>
+      <SafeAreaView
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <Text
+          style={{
+            paddingBottom: 32,
+            textShadowRadius: 5,
+            textShadowColor: 'black',
+            color: 'white',
+            fontFamily: 'Shark',
+            fontSize: 36,
+            textTransform: 'uppercase',
+          }}
+        >
+          Loading...
+        </Text>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
