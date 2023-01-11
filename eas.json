@@ -29,7 +29,12 @@
         "CMS_API_BASE_URL": "https://themeparkshark.com/api"
       }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "API_BASE_URL": "https://prod-app.themeparkshark.com/api",
+        "CMS_API_BASE_URL": "https://themeparkshark.com/api"
+      }
+    }
   },
   "submit": {
     "production": {}

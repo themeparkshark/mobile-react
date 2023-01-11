@@ -1,7 +1,5 @@
-import { NavigationContainer, useFocusEffect } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useCallback, useContext, useEffect, useState } from 'react';
-import { AuthContext } from './context/AuthProvider';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
@@ -15,7 +13,6 @@ import LoadingScreen from './screens/LoadingScreen';
 import ErrorScreen from './screens/ErrorScreen';
 import StoreScreen from './screens/StoreScreen';
 import UserScreen from './screens/UserScreen';
-import { useFonts } from 'expo-font';
 import { Storage } from 'expo-storage';
 import SettingsScreen from './screens/SettingsScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
@@ -24,6 +21,8 @@ import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import SocialScreen from './screens/SocialScreen';
 import { useKeepAwake } from 'expo-keep-awake';
 import QueueTimesScreen from './screens/QueueTimesScreen';
+import {useContext, useEffect} from 'react';
+import { AuthContext } from './context/AuthProvider';
 
 const Stack = createNativeStackNavigator();
 
@@ -80,10 +79,7 @@ const HomeStackNavigator = () => {
       />
       <Stack.Screen name="User" component={UserScreen} />
       <Stack.Screen name="Park" component={ParkScreen} />
-      <Stack.Screen
-        name="Inventory"
-        component={InventoryScreen}
-      />
+      <Stack.Screen name="Inventory" component={InventoryScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen
         name="UpdateEmail"
@@ -139,11 +135,6 @@ const AuthStackNavigator = () => {
 export default function App() {
   useKeepAwake();
   const { user, setUser } = useContext(AuthContext);
-
-  useFonts({
-    Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
-    Knockout: require('../assets/fonts/knockout.otf'),
-  });
 
   useEffect(() => {
     Storage.getItem({ key: 'user' }).then((userString: string) => {
