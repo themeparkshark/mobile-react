@@ -135,7 +135,7 @@ export default function Topbar({
                 adjustsFontSizeToFit={true}
                 style={{
                   textAlign: 'center',
-                  fontSize: 38,
+                  fontSize: showCoins ? 28 : 38,
                   color: 'white',
                   fontFamily: 'Shark',
                   textTransform: 'uppercase',
