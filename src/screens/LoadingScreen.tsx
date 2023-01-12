@@ -6,14 +6,10 @@ import getInventory from '../api/endpoints/me/inventory';
 import recordActivity from '../api/endpoints/activities/create';
 import { MusicContext } from '../context/MusicProvider';
 import {useFonts} from 'expo-font';
-import {
-  Pusher,
-  PusherEvent,
-} from '@pusher/pusher-websocket-react-native';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
-  const { inventory, setInventory, isReady, user } = useContext(AuthContext);
+  const { inventory, setInventory, isReady, user, refreshUser } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
 
   useEffect(() => {
@@ -31,6 +27,8 @@ export default function LoadingScreen() {
     }
 
     recordActivity('Viewed the Loading screen.');
+
+    refreshUser();
 
     (async () => {
       setInventory(await getInventory());
