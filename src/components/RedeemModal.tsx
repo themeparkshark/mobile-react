@@ -131,6 +131,7 @@ export default function RedeemModal({
           animationOut="zoomOut"
           swipeDirection="down"
           isVisible={modalVisible}
+          onSwipeComplete={() => setModalVisible(false)}
           onModalWillHide={() => {
             playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
           }}

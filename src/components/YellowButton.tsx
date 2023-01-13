@@ -46,7 +46,7 @@ export default function YellowButton({
           <View
             style={{
               justifyContent: 'center',
-              flex: 1,
+              height: 40,
             }}
           >
             <Text
@@ -54,7 +54,7 @@ export default function YellowButton({
               adjustsFontSizeToFit={true}
               style={{
                 textAlign: 'center',
-                fontSize: 32,
+                fontSize: 28,
                 color: 'white',
                 fontFamily: 'Shark',
                 textTransform: 'uppercase',
@@ -64,11 +64,8 @@ export default function YellowButton({
                   height: 2,
                 },
                 textShadowRadius: 0,
-                marginTop: -5,
                 paddingLeft: 32,
                 paddingRight: 32,
-                paddingTop: 12,
-                paddingBottom: 12,
               }}
             >
               {text}

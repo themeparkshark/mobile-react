@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useState, useContext } from 'react';
 import {
   Dimensions,
   Image,
   ImageBackground,
-  Modal,
   Pressable,
   Text,
   View,
 } from 'react-native';
+import Modal from 'react-native-modal';
 import theme from '../config/theme';
 import { PinCollectionType } from '../models/pin-collection-type';
+import {SoundEffectContext} from '../context/SoundEffectProvider';
 
 export default function pinCollectionModal({
   pinCollection,
@@ -17,6 +18,7 @@ export default function pinCollectionModal({
   readonly pinCollection: PinCollectionType;
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const { playSound } = useContext(SoundEffectContext);
 
   return (
     <>
@@ -159,10 +161,14 @@ export default function pinCollectionModal({
         </View>
       </Pressable>
       <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        animationIn="zoomIn"
+        animationOut="zoomOut"
+        swipeDirection="down"
+        onSwipeComplete={() => setModalVisible(false)}
+        isVisible={modalVisible}
+        onModalWillHide={() => {
+          playSound(require('../../assets/sounds/modal_close.mp3'));
+        }}
       >
         <View
           style={{
@@ -178,17 +184,7 @@ export default function pinCollectionModal({
               position: 'absolute',
             }}
             onPress={() => setModalVisible(false)}
-          >
-            <View
-              style={{
-                position: 'absolute',
-                width: '100%',
-                height: '100%',
-                alignSelf: 'center',
-                backgroundColor: 'rgba(0, 0, 0, .7)',
-              }}
-            />
-          </Pressable>
+          />
           <ImageBackground
             source={require('../../assets/images/redeem.png')}
             resizeMode="contain"

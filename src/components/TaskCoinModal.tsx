@@ -49,7 +49,7 @@ export default function TaskCoinModal({
               position: 'absolute',
             }}
             onPress={() => setVisible(false)}
-          ></Pressable>
+          />
           <View
             style={{
               width: Dimensions.get('window').width - 50,

@@ -2,16 +2,17 @@ import {
   Dimensions,
   Image,
   ImageBackground,
-  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
   Text,
   View,
 } from 'react-native';
-import { useState } from 'react';
+import {useContext, useState} from 'react';
 import Button from './Button';
+import Modal from 'react-native-modal';
 import { AnnouncementType } from '../models/announcement-type';
+import {SoundEffectContext} from '../context/SoundEffectProvider';
 
 export default function Announcement({
   announcement,
@@ -19,18 +20,25 @@ export default function Announcement({
   announcement: AnnouncementType;
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const { playSound } = useContext(SoundEffectContext);
 
   return (
     <View>
       <Modal
-        animationType="slide"
-        visible={modalVisible}
-        onRequestClose={() => {
-          setModalVisible(!modalVisible);
+        animationIn="slideInUp"
+        animationOut="slideOutDown"
+        isVisible={modalVisible}
+        hasBackdrop={false}
+        onModalWillHide={() => {
+          playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
+        }}
+        style={{
+          margin: 0,
         }}
       >
         <View
           style={{
+            backgroundColor: 'white',
             width: Dimensions.get('window').width,
             height: Dimensions.get('window').height,
           }}

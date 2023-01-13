@@ -3,18 +3,17 @@ import {
   Dimensions,
   Image,
   ImageBackground,
-  Modal,
   Pressable,
   Text,
   View,
 } from 'react-native';
+import Modal from 'react-native-modal';
 import Button from './Button';
 import { RedeemablesType } from '../models/redeemables-type';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
-import theme from '../config/theme';
 
 export default function TaskListModal({
   redeemables,
@@ -42,12 +41,13 @@ export default function TaskListModal({
         />
       </Button>
       <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => {
+        animationIn="zoomIn"
+        animationOut="zoomOut"
+        swipeDirection="down"
+        onSwipeComplete={() => setModalVisible(false)}
+        isVisible={modalVisible}
+        onModalWillHide={() => {
           playSound(require('../../assets/sounds/modal_close.mp3'));
-          setModalVisible(false);
         }}
       >
         <View
@@ -63,21 +63,8 @@ export default function TaskListModal({
               height: '100%',
               position: 'absolute',
             }}
-            onPress={() => {
-              playSound(require('../../assets/sounds/modal_close.mp3'));
-              setModalVisible(false);
-            }}
-          >
-            <View
-              style={{
-                position: 'absolute',
-                width: '100%',
-                height: '100%',
-                alignSelf: 'center',
-                backgroundColor: 'rgba(0, 0, 0, .7)',
-              }}
-            />
-          </Pressable>
+            onPress={() => setModalVisible(false)}
+          />
           <View
             style={{
               top: 0,
