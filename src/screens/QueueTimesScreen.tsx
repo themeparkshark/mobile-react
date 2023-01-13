@@ -105,7 +105,7 @@ export default function QueueTimesScreen({ route }) {
                         fontSize: 20,
                         textAlign: 'center',
                         fontFamily: 'Knockout',
-                        textShadowColor: config.primary,
+                        textShadowColor: 'rgba(0, 0, 0, .4)',
                         textShadowRadius: 5,
                       },
                       iconContainer: {

@@ -64,8 +64,12 @@ export default function WelcomeScreen({ navigation }) {
         <Text
           style={{
             paddingBottom: 32,
-            textShadowRadius: 5,
-            textShadowColor: 'black',
+            textShadowColor: 'rgba(0, 0, 0, .5)',
+            textShadowOffset: {
+              width: 2,
+              height: 2,
+            },
+            textShadowRadius: 0,
             color: 'white',
             fontFamily: 'Shark',
             fontSize: 36,

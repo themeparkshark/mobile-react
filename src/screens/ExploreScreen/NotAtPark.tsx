@@ -36,8 +36,12 @@ export default function NotAtPark() {
           color: 'white',
           fontFamily: 'Shark',
           textTransform: 'uppercase',
-          textShadowColor: 'black',
-          textShadowRadius: 5,
+          textShadowColor: 'rgba(0, 0, 0, .5)',
+          textShadowOffset: {
+            width: 2,
+            height: 2,
+          },
+          textShadowRadius: 0,
           fontSize: 32,
           paddingLeft: 48,
           paddingRight: 48,
@@ -52,8 +56,12 @@ export default function NotAtPark() {
           fontFamily: 'Knockout',
           fontSize: 20,
           paddingTop: 30,
-          textShadowColor: 'black',
-          textShadowRadius: 5,
+          textShadowColor: 'rgba(0, 0, 0, .5)',
+          textShadowOffset: {
+            width: 2,
+            height: 2,
+          },
+          textShadowRadius: 0,
         }}
       >
         Checking again in {seconds} second{seconds === 1 ? '' : 's'}...

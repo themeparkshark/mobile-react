@@ -149,8 +149,6 @@ export default function pinCollectionModal({
                     fontSize: 18,
                     textTransform: 'uppercase',
                     fontFamily: 'Knockout',
-                    textShadowColor: theme.primary,
-                    textShadowRadius: 5,
                   }}
                 >
                   {pinCollection.name}
@@ -224,7 +222,11 @@ export default function pinCollectionModal({
                   fontFamily: 'Knockout',
                   color: 'white',
                   textShadowColor: 'rgba(0, 0, 0, .5)',
-                  textShadowRadius: 5,
+                  textShadowOffset: {
+                    width: 2,
+                    height: 2,
+                  },
+                  textShadowRadius: 0,
                 }}
               >
                 {pinCollection.name}

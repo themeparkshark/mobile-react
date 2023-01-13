@@ -40,8 +40,12 @@ export default function LeaderboardUser({
             fontSize: text[size],
             paddingTop: 8,
             paddingBottom: 8,
-            textShadowRadius: 5,
-            textShadowColor: 'black',
+            textShadowColor: 'rgba(0, 0, 0, .5)',
+            textShadowOffset: {
+              width: 2,
+              height: 2,
+            },
+            textShadowRadius: 0,
           }}
         >
           {user.screen_name}
@@ -65,8 +69,12 @@ export default function LeaderboardUser({
               textTransform: 'uppercase',
               color: 'white',
               fontSize: text[size] * 1.4,
-              textShadowRadius: 5,
-              textShadowColor: 'black',
+              textShadowColor: 'rgba(0, 0, 0, .5)',
+              textShadowOffset: {
+                width: 2,
+                height: 2,
+              },
+              textShadowRadius: 0,
               textAlign: 'center',
             }}
           >

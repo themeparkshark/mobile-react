@@ -140,8 +140,12 @@ export default function ParkScreen({ route }) {
                           textAlign: 'center',
                           fontFamily: 'Knockout',
                           textTransform: 'uppercase',
-                          textShadowColor: config.primary,
-                          textShadowRadius: 5,
+                          textShadowColor: 'rgba(0, 0, 0, .5)',
+                          textShadowOffset: {
+                            width: 2,
+                            height: 2,
+                          },
+                          textShadowRadius: 0,
                         }}
                       >
                         {currentPark.completed_tasks_count +

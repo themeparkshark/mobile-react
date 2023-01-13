@@ -116,7 +116,11 @@ export default function Topbar({
                         fontFamily: 'Shark',
                         textTransform: 'uppercase',
                         textShadowColor: 'rgba(0, 0, 0, .5)',
-                        textShadowRadius: 5,
+                        textShadowOffset: {
+                          width: 2,
+                          height: 2,
+                        },
+                        textShadowRadius: 0,
                       }}
                     >
                       {parkCoins}
@@ -140,7 +144,11 @@ export default function Topbar({
                   fontFamily: 'Shark',
                   textTransform: 'uppercase',
                   textShadowColor: 'rgba(0, 0, 0, .5)',
-                  textShadowRadius: 5,
+                  textShadowOffset: {
+                    width: 2,
+                    height: 2,
+                  },
+                  textShadowRadius: 0,
                   paddingLeft: 12,
                   paddingRight: 12,
                 }}
@@ -171,7 +179,11 @@ export default function Topbar({
                         fontFamily: 'Shark',
                         textTransform: 'uppercase',
                         textShadowColor: 'rgba(0, 0, 0, .5)',
-                        textShadowRadius: 5,
+                        textShadowOffset: {
+                          width: 2,
+                          height: 2,
+                        },
+                        textShadowRadius: 0,
                         marginRight: 8,
                       }}
                       adjustsFontSizeToFit

@@ -50,8 +50,12 @@ export default function Section({
             <Text
               style={{
                 color: '#fff',
-                textShadowColor: theme.primary,
-                textShadowRadius: 5,
+                textShadowColor: 'rgba(0, 0, 0, .5)',
+                textShadowOffset: {
+                  width: 2,
+                  height: 2,
+                },
+                textShadowRadius: 0,
                 fontFamily: 'Knockout',
                 fontSize: 16,
               }}
@@ -70,8 +74,12 @@ export default function Section({
             paddingTop: 10,
             fontFamily: 'Shark',
             textTransform: 'uppercase',
-            textShadowColor: theme.primary,
-            textShadowRadius: 5,
+            textShadowColor: 'rgba(0, 0, 0, .5)',
+            textShadowOffset: {
+              width: 2,
+              height: 2,
+            },
+            textShadowRadius: 0,
           }}
         >
           {title}

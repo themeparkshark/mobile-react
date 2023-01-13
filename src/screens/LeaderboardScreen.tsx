@@ -164,7 +164,7 @@ export default function LeaderboardScreen({ route }) {
                           fontSize: 20,
                           textAlign: 'center',
                           fontFamily: 'Knockout',
-                          textShadowColor: config.primary,
+                          textShadowColor: 'rgba(0, 0, 0, .5)',
                           textShadowRadius: 5,
                         },
                         iconContainer: {
