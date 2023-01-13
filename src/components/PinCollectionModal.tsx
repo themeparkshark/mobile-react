@@ -169,6 +169,7 @@ export default function pinCollectionModal({
         onModalWillHide={() => {
           playSound(require('../../assets/sounds/modal_close.mp3'));
         }}
+        hideModalContentWhileAnimating={true}
       >
         <View
           style={{
