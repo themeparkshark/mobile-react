@@ -24,7 +24,7 @@ export default function Box({
   readonly number?: number;
   readonly text?: string | number;
   readonly small?: boolean;
-  readonly type: 'task' | 'coin' | 'secret_task' | 'item';
+  readonly type: string;
   readonly pulse?: boolean;
 }) {
   const rotate = useRef(new Animated.Value(0)).current;
@@ -65,11 +65,11 @@ export default function Box({
     <View
       style={{
         height: '100%',
-        backgroundColor: backgrounds[type],
+        backgroundColor: backgrounds[type as keyof typeof backgrounds],
         borderRadius: 10,
         alignItems: 'center',
         justifyContent: 'center',
-        borderColor: borders[type],
+        borderColor: borders[type as keyof typeof borders],
         borderWidth: 3,
         shadowOffset: {
           width: 0,
@@ -100,8 +100,8 @@ export default function Box({
             <Image
               source={image}
               style={{
-                width: '85%',
-                height: '85%',
+                width: '90%',
+                height: '90%',
                 resizeMode: 'contain',
                 marginLeft: 'auto',
                 marginRight: 'auto',
