@@ -1,0 +1,45 @@
+export default {
+  name: 'Theme Park Shark',
+  slug: 'mobile-react',
+  version: '1.0.0',
+  orientation: 'portrait',
+  icon: './assets/icon.png',
+  userInterfaceStyle: 'light',
+  splash: {
+    image: './assets/splash.png',
+    resizeMode: 'contain',
+    backgroundColor: '#ffffff'
+  },
+  updates: {
+    fallbackToCacheTimeout: 0
+  },
+  assetBundlePatterns: [
+    '**/*'
+  ],
+  ios: {
+    usesAppleSignIn: true,
+    bundleIdentifier: 'com.tomhartley97.mobile-react'
+  },
+  web: {
+    favicon: './assets/favicon.png'
+  },
+  extra: {
+    apiUrl: process.env.API_URL,
+    eas: {
+      projectId: '2381b3a5-95cc-4554-8083-c3a9d647960d'
+    }
+  },
+  plugins: [
+    [
+      'expo-build-properties',
+      {
+        ios: {
+          deploymentTarget: '13.0'
+        }
+      }
+    ]
+  ],
+  android: {
+    package: 'com.tomhartley97.mobilereact'
+  }
+}

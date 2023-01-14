@@ -1,14 +1,18 @@
 import axios from 'axios';
-import Constants from 'expo-constants';
+import config from '../config';
 import * as RootNavigation from '../RootNavigation';
 
 const client = axios.create({
-  baseURL: Constants.expoConfig.extra.apiBaseUrl,
+  baseURL: config.apiUrl,
 });
 
 client.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response.status === 401) {
+      // send to login screen
+    }
+
     if (error.response.status >= 500) {
       return RootNavigation.navigate('Error');
     }

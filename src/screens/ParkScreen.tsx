@@ -13,7 +13,7 @@ import Topbar from '../components/Topbar';
 import { ParkType } from '../models/park-type';
 import { TaskType } from '../models/task-type';
 import Progress from '../components/Progress';
-import config from '../config/theme';
+import config from '../config';
 import { chunk } from 'lodash';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';

@@ -3,7 +3,7 @@ import { SecretTaskType } from '../models/secret-task-type';
 import { Dimensions, Image, Pressable, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useState } from 'react';
-import theme from '../config/theme';
+import config from '../config';
 import Button from '../components/Button';
 
 export default function TaskCoinModal({
@@ -58,7 +58,7 @@ export default function TaskCoinModal({
           >
             <View
               style={{
-                backgroundColor: theme.primary,
+                backgroundColor: config.primary,
                 padding: 18,
                 borderRadius: 10,
                 marginBottom: 32,

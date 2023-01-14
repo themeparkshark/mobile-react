@@ -18,7 +18,7 @@ import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import getInventory from '../api/endpoints/me/inventory';
-import theme from '../config/theme';
+import config from '../config';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import { useFocusEffect } from '@react-navigation/native';
@@ -135,7 +135,7 @@ export default function NewsScreen({ navigation }) {
             <View
               style={{
                 borderTopWidth: 5,
-                borderTopColor: theme.primary,
+                borderTopColor: config.primary,
                 paddingLeft: 32,
                 paddingRight: 32,
                 paddingTop: 24,
@@ -295,7 +295,7 @@ export default function NewsScreen({ navigation }) {
                         fontFamily: 'Knockout',
                         textTransform: 'uppercase',
                         fontSize: 16,
-                        color: theme.primary,
+                        color: config.primary,
                       }}
                     >
                       {user.coins}
@@ -322,7 +322,7 @@ export default function NewsScreen({ navigation }) {
                         fontFamily: 'Knockout',
                         textTransform: 'uppercase',
                         fontSize: 16,
-                        color: theme.primary,
+                        color: config.primary,
                       }}
                     >
                       {parks?.length ?? 0}
@@ -350,7 +350,7 @@ export default function NewsScreen({ navigation }) {
                       fontFamily: 'Knockout',
                       textTransform: 'uppercase',
                       fontSize: 16,
-                      color: theme.primary,
+                      color: config.primary,
                     }}
                   >
                     {user.total_experience}

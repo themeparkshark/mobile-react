@@ -19,7 +19,6 @@ import RNPickerSelect from 'react-native-picker-select';
 import { ParkType } from '../models/park-type';
 import allParks from '../api/endpoints/parks/allParks';
 import Loading from '../components/Loading';
-import config from '../config/theme';
 
 export default function QueueTimesScreen({ route }) {
   const [queueTimes, setQueueTimes] = useState<QueueTimeType[]>();

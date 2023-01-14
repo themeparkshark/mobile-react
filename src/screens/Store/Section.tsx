@@ -1,5 +1,4 @@
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
-import theme from '../../config/theme';
 import Item from './Item';
 import { ItemType } from '../../models/item-type';
 

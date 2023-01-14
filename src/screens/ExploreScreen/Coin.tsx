@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import dayjs from 'dayjs';
 import { CoinType } from '../../models/coin-type';
-import theme from '../../config/theme';
+import config from '../../config';
 
 export default function Coin({
   coin,
@@ -52,7 +52,7 @@ export default function Coin({
                     fontFamily: 'Shark',
                     textTransform: 'uppercase',
                     fontSize: 18,
-                    color: theme.primary,
+                    color: config.primary,
                   }}
                 >
                   {minutes}:{zeroPad(seconds)}

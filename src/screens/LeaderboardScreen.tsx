@@ -19,7 +19,7 @@ import { ParkType } from '../models/park-type';
 import { LeaderboardType } from '../models/leaderboard-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import config from '../config/theme';
+import config from '../config';
 import { UserType } from '../models/user-type';
 import getUsers from '../api/endpoints/leaderboards/users';
 import Loading from '../components/Loading';

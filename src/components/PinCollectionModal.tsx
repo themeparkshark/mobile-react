@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import theme from '../config/theme';
+import config from '../config';
 import { PinCollectionType } from '../models/pin-collection-type';
 import {SoundEffectContext} from '../context/SoundEffectProvider';
 
@@ -85,7 +85,7 @@ export default function pinCollectionModal({
                   flexDirection: 'row',
                   flexWrap: 'wrap',
                   justifyContent: 'center',
-                  backgroundColor: theme.secondary,
+                  backgroundColor: config.secondary,
                 }}
               >
                 {[...Array(pinCollection.collected_pins_count)].map(
@@ -141,7 +141,7 @@ export default function pinCollectionModal({
               <View
                 style={{
                   padding: 10,
-                  backgroundColor: theme.primary,
+                  backgroundColor: config.primary,
                 }}
               >
                 <Text

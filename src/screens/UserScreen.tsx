@@ -13,7 +13,7 @@ import Progress from '../components/Progress';
 import Playercard from '../components/Playercard';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
-import theme from '../config/theme';
+import config from '../config';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 
@@ -63,9 +63,8 @@ export default function UserScreen({ navigation, route }) {
         </View>
         <View
           style={{
-            borderTopStyle: 'solid',
             borderTopWidth: 5,
-            borderTopColor: theme.primary,
+            borderTopColor: config.primary,
             paddingLeft: 32,
             paddingRight: 32,
             paddingTop: 24,
@@ -179,7 +178,7 @@ export default function UserScreen({ navigation, route }) {
                     fontFamily: 'Knockout',
                     textTransform: 'uppercase',
                     fontSize: 16,
-                    color: theme.primary,
+                    color: config.primary,
                   }}
                 >
                   {parks?.length}
@@ -207,7 +206,7 @@ export default function UserScreen({ navigation, route }) {
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
                   fontSize: 16,
-                  color: theme.primary,
+                  color: config.primary,
                 }}
               >
                 {currentUser?.total_experience}

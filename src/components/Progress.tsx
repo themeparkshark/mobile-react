@@ -1,5 +1,5 @@
 import { View } from 'react-native';
-import theme from '../config/theme';
+import config from '../config';
 
 export default function Progress({ progress }: { readonly progress: number }) {
   return (
@@ -10,8 +10,8 @@ export default function Progress({ progress }: { readonly progress: number }) {
         height: 23,
         borderRadius: 10,
         borderWidth: 3,
-        borderColor: theme.primary,
-        backgroundColor: theme.primary,
+        borderColor: config.primary,
+        backgroundColor: config.primary,
         overflow: 'hidden',
       }}
     >

@@ -7,8 +7,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "API_BASE_URL": "https://dev-app.themeparkshark.com/api",
-        "CMS_API_BASE_URL": "https://themeparkshark.com/api"
+        "API_URL": "https://dev-app.themeparkshark.com/api"
       }
     },
     "development-simulator": {
@@ -18,21 +17,18 @@
         "simulator": true
       },
       "env": {
-        "API_BASE_URL": "https://dev-app.themeparkshark.com/api",
-        "CMS_API_BASE_URL": "https://themeparkshark.com/api"
+        "API_URL": "https://dev-app.themeparkshark.com/api"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "API_BASE_URL": "https://dev-app.themeparkshark.com/api",
-        "CMS_API_BASE_URL": "https://themeparkshark.com/api"
+        "API_URL": "https://dev-app.themeparkshark.com/api"
       }
     },
     "production": {
       "env": {
-        "API_BASE_URL": "https://prod-app.themeparkshark.com/api",
-        "CMS_API_BASE_URL": "https://themeparkshark.com/api"
+        "API_URL": "https://prod-app.themeparkshark.com/api"
       }
     }
   },
