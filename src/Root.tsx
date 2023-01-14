@@ -23,7 +23,6 @@ import { useKeepAwake } from 'expo-keep-awake';
 import QueueTimesScreen from './screens/QueueTimesScreen';
 import {useContext, useEffect} from 'react';
 import { AuthContext } from './context/AuthProvider';
-
 const Stack = createNativeStackNavigator();
 
 const HomeStackNavigator = () => {

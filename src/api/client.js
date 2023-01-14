@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import * as RootNavigation from '../RootNavigation';
 
 const client = axios.create({
-  baseURL: Constants.manifest.extra.apiBaseUrl,
+  baseURL: Constants.expoConfig.extra.apiBaseUrl,
 });
 
 client.interceptors.response.use(
