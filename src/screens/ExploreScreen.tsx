@@ -61,7 +61,7 @@ export default function ExploreScreen() {
 
     const interval = setInterval(() => {
       getCurrentLocation().then((response) => setLocation(response));
-    }, 10 * 1000);
+    }, 10 * 5000);
 
     return () => clearInterval(interval);
   }, []);

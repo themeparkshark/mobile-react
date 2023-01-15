@@ -3,12 +3,12 @@ import { BlurView } from 'expo-blur';
 import { useEffect, useState } from 'react';
 
 export default function NotAtPark() {
-  const [seconds, setSeconds] = useState<number>(10);
+  const [seconds, setSeconds] = useState<number>(5);
 
   useEffect(() => {
     const interval = setInterval(() => {
       if (seconds === 1) {
-        setSeconds(10);
+        setSeconds(5);
       } else {
         setSeconds(seconds - 1);
       }
