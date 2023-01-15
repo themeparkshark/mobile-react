@@ -17,6 +17,7 @@ export default {
   },
   assetBundlePatterns: ['**/*'],
   ios: {
+    bitcode: 'Debug',
     usesAppleSignIn: true,
     bundleIdentifier: 'com.tomhartley97.mobile-react',
   },
