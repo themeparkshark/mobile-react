@@ -28,7 +28,7 @@ export default {
   extra: {
     apiUrl: process.env.API_URL,
     eas: {
-      projectId: '2381b3a5-95cc-4554-8083-c3a9d647960d',
+      projectId: '38c3f46e-df32-43a2-8272-44b9556aaa36',
     },
   },
   plugins: [
