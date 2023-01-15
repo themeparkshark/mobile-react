@@ -101,8 +101,9 @@ export default function ExploreScreen() {
     <Wrapper>
       <Topbar
         parkCoin={park?.coin_url}
-        showCoins={true}
+        showCoins
         parkCoins={user.park_coins}
+        showBroadcasts
       />
       {!park && <NotAtPark />}
       {park && redeemables && (
@@ -110,7 +111,7 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              top: 126,
+              top: 156,
               right: 12,
               zIndex: 10,
             }}
