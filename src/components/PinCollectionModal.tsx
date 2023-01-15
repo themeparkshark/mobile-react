@@ -55,7 +55,11 @@ export default function pinCollectionModal({
               }}
             >
               <ImageBackground
-                source={require('../../assets/images/screens/store/gradient.png')}
+                source={
+                  pinCollection.collected_pins_count === pinCollection.pins.length
+                  ? require('../../assets/images/screens/pin-collections/yellow_gradiant.png')
+                  : require('../../assets/images/screens/store/gradient.png')
+                }
                 resizeMode={'cover'}
                 style={{
                   overflow: 'hidden',
