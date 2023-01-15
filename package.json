@@ -8,7 +8,8 @@
     "web": "expo start --web",
     "eject": "expo eject",
     "prettier": "npx prettier --write .",
-    "build": "eas build --profile development-simulator --platform ios"
+    "build-dev": "eas build --profile development-simulator --platform ios",
+    "build-preview": "eas build --profile preview --platform ios"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^6.1.1",
