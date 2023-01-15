@@ -10,13 +10,10 @@ import {
 } from 'react-native';
 import { AuthContext } from '../../context/AuthProvider';
 import { MusicContext } from '../../context/MusicProvider';
-import config from '../../config';
 
 export default function LoginScreen() {
   const { user, isReady, login } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
-
-  console.log(config);
 
   useEffect(() => {
     if (!user && isReady) {

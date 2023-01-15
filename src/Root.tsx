@@ -23,8 +23,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import QueueTimesScreen from './screens/QueueTimesScreen';
 import { useContext, useEffect } from 'react';
 import { AuthContext } from './context/AuthProvider';
-import mobileAds from 'react-native-google-mobile-ads/src';
-import {
+import mobileAds, {
   InterstitialAd,
   MaxAdContentRating,
   TestIds,
@@ -143,6 +142,17 @@ export default function App() {
   const { user, setUser } = useContext(AuthContext);
 
   useEffect(() => {
+    mobileAds().setRequestConfiguration({
+      maxAdContentRating: MaxAdContentRating.PG,
+      tagForChildDirectedTreatment: true,
+      tagForUnderAgeOfConsent: true,
+      testDeviceIdentifiers: ['EMULATOR'],
+    });
+
+    mobileAds().initialize();
+
+    InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
+
     Storage.getItem({ key: 'user' }).then((userString: string) => {
       if (userString) {
         setUser({ ...JSON.parse(userString) });

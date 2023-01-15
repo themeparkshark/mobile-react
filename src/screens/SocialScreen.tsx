@@ -1,6 +1,6 @@
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
-import { ActivityIndicator, Image, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import allAnnouncements from '../api/endpoints/announcements/all';
 import Announcement from '../components/Announcement';

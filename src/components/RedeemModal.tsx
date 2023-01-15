@@ -1,5 +1,4 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import * as Animatable from 'react-native-animatable';
 import {
   Animated,
   Dimensions,
@@ -28,6 +27,7 @@ import { ItemType } from '../models/item-type';
 import Box from './RedeemModal/Box';
 import Modal from 'react-native-modal';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
+import WatchAd from './WatchAd';
 
 export default function RedeemModal({
   redeemable,
@@ -42,6 +42,9 @@ export default function RedeemModal({
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const progress = useRef(new Animated.Value(0)).current;
   const animated = useRef(new Animated.Value(0)).current;
+  const [doubleXP, setDoubleXP] = useState<boolean>(false);
+  const [doubleCoins, setDoubleCoins] = useState<boolean>(false);
+
   const slideUp = () => {
     Animated.timing(animated, {
       toValue: 0,
@@ -252,7 +255,11 @@ export default function RedeemModal({
                     backgroundColor="#4cdcff"
                     image={require('../../assets/images/screens/explore/xp.png')}
                     text={
-                      (redeemable.model as TaskType | SecretTaskType).experience
+                      doubleXP
+                        ? (redeemable.model as TaskType | SecretTaskType)
+                            .experience * 2
+                        : (redeemable.model as TaskType | SecretTaskType)
+                            .experience
                     }
                     small
                     type={redeemable.type}
@@ -262,22 +269,7 @@ export default function RedeemModal({
                       marginTop: 8,
                     }}
                   >
-                    <Animatable.View
-                      animation="pulse"
-                      iterationCount="infinite"
-                      direction="alternate"
-                    >
-                      <Button>
-                        <Image
-                          source={require('../../assets/images/screens/explore/watch.png')}
-                          style={{
-                            width: '100%',
-                            height: 20,
-                            resizeMode: 'contain',
-                          }}
-                        />
-                      </Button>
-                    </Animatable.View>
+                    <WatchAd onClose={() => setDoubleXP(true)} />
                   </View>
                 </View>
                 {redeemable.type !== 'coin' && (
@@ -291,7 +283,11 @@ export default function RedeemModal({
                       backgroundColor="#4cdcff"
                       image={require('../../assets/images/screens/explore/coins.png')}
                       text={
-                        (redeemable.model as TaskType | SecretTaskType).coins
+                        doubleCoins
+                          ? (redeemable.model as TaskType | SecretTaskType)
+                              .coins * 2
+                          : (redeemable.model as TaskType | SecretTaskType)
+                              .coins
                       }
                       small
                       type={redeemable.type}
@@ -301,22 +297,7 @@ export default function RedeemModal({
                         marginTop: 8,
                       }}
                     >
-                      <Animatable.View
-                        animation="pulse"
-                        iterationCount="infinite"
-                        direction="alternate"
-                      >
-                        <Button>
-                          <Image
-                            source={require('../../assets/images/screens/explore/watch.png')}
-                            style={{
-                              width: '100%',
-                              height: 20,
-                              resizeMode: 'contain',
-                            }}
-                          />
-                        </Button>
-                      </Animatable.View>
+                      <WatchAd onClose={() => setDoubleCoins(true)} />
                     </View>
                   </View>
                 )}
@@ -347,18 +328,28 @@ export default function RedeemModal({
                 <Button
                   onPress={async () => {
                     if (redeemable.type === 'task') {
-                      await completeTask(redeemable.model as TaskType);
+                      await completeTask(
+                        redeemable.model as TaskType,
+                        doubleXP,
+                        doubleCoins
+                      );
                     } else if (redeemable.type === 'secret_task') {
                       await completeSecretTask(
-                        redeemable.model as SecretTaskType
+                        redeemable.model as SecretTaskType,
+                        doubleXP,
+                        doubleCoins
                       );
                     } else if (redeemable.type === 'coin') {
-                      await redeemCoin(redeemable.model as CoinType);
+                      await redeemCoin(redeemable.model as CoinType, doubleXP);
                     } else if (
                       redeemable.type === 'item' ||
                       redeemable.type === 'pin'
                     ) {
-                      await redeemItem(redeemable.model as ItemType);
+                      await redeemItem(
+                        redeemable.model as ItemType,
+                        doubleXP,
+                        doubleCoins
+                      );
                     }
 
                     onPress();
