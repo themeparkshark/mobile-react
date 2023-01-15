@@ -4,6 +4,7 @@ import {
   Image,
   ImageBackground,
   Pressable,
+  Text,
   View,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
@@ -32,6 +33,7 @@ import { faLocationArrow as clearArrow } from '@fortawesome/pro-light-svg-icons/
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faLocationArrow as solidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import config from '../config';
+import Tooltip from 'rn-tooltip';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -301,14 +303,30 @@ export default function ExploreScreen() {
                 longitude: task.longitude,
               }}
             >
-              <Image
-                source={require('../../assets/images/screens/explore/task_animation.gif')}
-                style={{
-                  width: 120,
-                  height: 120,
-                  resizeMode: 'contain',
-                }}
-              />
+              <Tooltip
+                popover={
+                  <Text
+                    style={{
+                      fontFamily: 'Knockout',
+                      fontSize: 20,
+                    }}
+                  >
+                    {task.name}
+                  </Text>
+                }
+                withOverlay={false}
+                backgroundColor="white"
+                pointerColor="white"
+              >
+                <Image
+                  source={require('../../assets/images/screens/explore/task_animation.gif')}
+                  style={{
+                    width: 120,
+                    height: 120,
+                    resizeMode: 'contain',
+                  }}
+                />
+              </Tooltip>
             </Marker>
           );
         })}

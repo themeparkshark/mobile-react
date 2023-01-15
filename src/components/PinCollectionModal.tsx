@@ -11,6 +11,7 @@ import Modal from 'react-native-modal';
 import config from '../config';
 import { PinCollectionType } from '../models/pin-collection-type';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
+import Tooltip from 'rn-tooltip';
 
 export default function pinCollectionModal({
   pinCollection,
@@ -248,17 +249,33 @@ export default function pinCollectionModal({
                       padding: 8,
                     }}
                   >
-                    <Image
-                      source={{
-                        uri: pin.item.icon_url,
-                      }}
-                      resizeMode={'contain'}
-                      style={{
-                        width: 70,
-                        height: 70,
-                        opacity: pin.item.has_purchased ? 1 : 0.4,
-                      }}
-                    />
+                    <Tooltip
+                      popover={
+                        <Text
+                          style={{
+                            fontFamily: 'Knockout',
+                            fontSize: 20,
+                          }}
+                        >
+                          {pin.item.name}
+                        </Text>
+                      }
+                      withOverlay={false}
+                      backgroundColor="white"
+                      pointerColor="white"
+                    >
+                      <Image
+                        source={{
+                          uri: pin.item.icon_url,
+                        }}
+                        resizeMode={'contain'}
+                        style={{
+                          width: 70,
+                          height: 70,
+                          opacity: pin.item.has_purchased ? 1 : 0.4,
+                        }}
+                      />
+                    </Tooltip>
                   </View>
                 );
               })}
