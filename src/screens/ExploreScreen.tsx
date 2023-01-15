@@ -228,6 +228,7 @@ export default function ExploreScreen() {
           height: Dimensions.get('window').height - 188,
           marginTop: -8,
         }}
+        minZoomLevel={18}
         showsUserLocation={true}
         showsIndoors={false}
         zoomEnabled={true}
