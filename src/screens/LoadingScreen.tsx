@@ -5,11 +5,12 @@ import { AuthContext } from '../context/AuthProvider';
 import getInventory from '../api/endpoints/me/inventory';
 import recordActivity from '../api/endpoints/activities/create';
 import { MusicContext } from '../context/MusicProvider';
-import {useFonts} from 'expo-font';
+import { useFonts } from 'expo-font';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
-  const { inventory, setInventory, isReady, user, refreshUser } = useContext(AuthContext);
+  const { inventory, setInventory, isReady, user, refreshUser } =
+    useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
 
   useEffect(() => {

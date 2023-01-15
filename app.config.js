@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 export default {
   name: 'Theme Park Shark',
   slug: 'mobile-react',
@@ -8,38 +10,33 @@ export default {
   splash: {
     image: './assets/splash.png',
     resizeMode: 'contain',
-    backgroundColor: '#ffffff'
+    backgroundColor: '#ffffff',
   },
   updates: {
-    fallbackToCacheTimeout: 0
+    fallbackToCacheTimeout: 0,
   },
-  assetBundlePatterns: [
-    '**/*'
-  ],
+  assetBundlePatterns: ['**/*'],
   ios: {
     usesAppleSignIn: true,
-    bundleIdentifier: 'com.tomhartley97.mobile-react'
+    bundleIdentifier: 'com.tomhartley97.mobile-react',
   },
   web: {
-    favicon: './assets/favicon.png'
+    favicon: './assets/favicon.png',
   },
   extra: {
     apiUrl: process.env.API_URL,
     eas: {
-      projectId: '2381b3a5-95cc-4554-8083-c3a9d647960d'
-    }
+      projectId: '2381b3a5-95cc-4554-8083-c3a9d647960d',
+    },
   },
   plugins: [
     [
       'expo-build-properties',
       {
         ios: {
-          deploymentTarget: '13.0'
-        }
-      }
-    ]
+          deploymentTarget: '13.0',
+        },
+      },
+    ],
   ],
-  android: {
-    package: 'com.tomhartley97.mobilereact'
-  }
-}
+};

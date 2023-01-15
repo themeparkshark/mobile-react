@@ -10,7 +10,7 @@ import {
 import Modal from 'react-native-modal';
 import config from '../config';
 import { PinCollectionType } from '../models/pin-collection-type';
-import {SoundEffectContext} from '../context/SoundEffectProvider';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
 
 export default function pinCollectionModal({
   pinCollection,

@@ -8,11 +8,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import {useContext, useState} from 'react';
+import { useContext, useState } from 'react';
 import Button from './Button';
 import Modal from 'react-native-modal';
 import { AnnouncementType } from '../models/announcement-type';
-import {SoundEffectContext} from '../context/SoundEffectProvider';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
 
 export default function Announcement({
   announcement,

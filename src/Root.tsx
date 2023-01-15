@@ -21,10 +21,14 @@ import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import SocialScreen from './screens/SocialScreen';
 import { useKeepAwake } from 'expo-keep-awake';
 import QueueTimesScreen from './screens/QueueTimesScreen';
-import {useContext, useEffect} from 'react';
+import { useContext, useEffect } from 'react';
 import { AuthContext } from './context/AuthProvider';
 import mobileAds from 'react-native-google-mobile-ads/src';
-import { InterstitialAd, MaxAdContentRating, TestIds } from 'react-native-google-mobile-ads';
+import {
+  InterstitialAd,
+  MaxAdContentRating,
+  TestIds,
+} from 'react-native-google-mobile-ads';
 
 const Stack = createNativeStackNavigator();
 
@@ -144,17 +148,6 @@ export default function App() {
         setUser({ ...JSON.parse(userString) });
       }
     });
-
-    mobileAds().setRequestConfiguration({
-      maxAdContentRating: MaxAdContentRating.PG,
-      tagForChildDirectedTreatment: true,
-      tagForUnderAgeOfConsent: true,
-      testDeviceIdentifiers: ['EMULATOR'],
-    });
-
-    mobileAds().initialize();
-
-    InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
   }, []);
 
   return (
