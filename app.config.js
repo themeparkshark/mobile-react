@@ -7,6 +7,7 @@ export default {
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
+  owner: 'theme-park-shark',
   splash: {
     image: './assets/splash.png',
     resizeMode: 'contain',
