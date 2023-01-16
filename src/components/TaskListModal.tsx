@@ -41,8 +41,8 @@ export default function TaskListModal({
         />
       </Button>
       <Modal
-        animationIn="zoomIn"
-        animationOut="zoomOut"
+        animationIn="slideInUp"
+        animationOut="slideOutDown"
         swipeDirection="down"
         onSwipeComplete={() => setModalVisible(false)}
         isVisible={modalVisible}

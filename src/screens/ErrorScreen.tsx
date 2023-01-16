@@ -1,24 +1,30 @@
-import { Text, View } from 'react-native';
+import {Dimensions, Image} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
+import {useCallback, useContext, useEffect} from 'react';
 import recordActivity from '../api/endpoints/activities/create';
+import {AuthContext} from '../context/AuthProvider';
 
 export default function ErrorScreen() {
+  const { logout } = useContext(AuthContext);
+
   useFocusEffect(
     useCallback(() => {
       recordActivity('Viewed the Error screen.');
     }, [])
   );
 
+  useEffect(() => {
+    logout();
+  }, []);
+
   return (
-    <View
+    <Image
+      source={require('../../assets/images/screens/login/background.png')}
+      resizeMode={'cover'}
       style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
+        width: Dimensions.get('window').width,
+        height: Dimensions.get('window').height,
       }}
-    >
-      <Text>There was an error.</Text>
-    </View>
+    />
   );
 }
