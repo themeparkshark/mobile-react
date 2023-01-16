@@ -1,6 +1,6 @@
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
-import {ScrollView, View, Text, Image, Button, TouchableOpacity} from 'react-native';
+import {ScrollView, View, Text, Image, Button, TouchableOpacity, RefreshControl} from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import allAnnouncements from '../api/endpoints/announcements/all';
 import Announcement from '../components/Announcement';
@@ -19,6 +19,7 @@ export default function SocialScreen() {
   const [twitterStatuses, setTwitterStatuses] = useState<SocialPostType[]>();
   const [instagramStatuses, setInstagramStatuses] = useState<SocialPostType[]>();
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -36,6 +37,16 @@ export default function SocialScreen() {
     })();
   }, []);
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    (async () => {
+      setAnnouncements(await allAnnouncements());
+      setTwitterStatuses(await twitter());
+      setInstagramStatuses(await instagram());
+    })();
+    setRefreshing(false);
+  }, []);
+
   return (
     <Wrapper>
       <Topbar text="Social" />
@@ -45,6 +56,9 @@ export default function SocialScreen() {
           style={{
             marginTop: -8,
           }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         >
           <View
             style={{
