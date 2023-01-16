@@ -105,7 +105,7 @@ export default function ExploreScreen() {
         parkCoins={user.park_coins}
         showBroadcasts
       />
-      {!park && <NotAtPark />}
+
       {park && redeemables && (
         <>
           <View
@@ -222,53 +222,58 @@ export default function ExploreScreen() {
           </View>
         </>
       )}
-      <MapView
+      <View
         style={{
-          width: Dimensions.get('window').width,
-          height: Dimensions.get('window').height - 188,
+          backgroundColor: 'red',
+          flex: 1,
           marginTop: -8,
         }}
-        minZoomLevel={18}
-        showsUserLocation={true}
-        showsIndoors={false}
-        zoomEnabled={true}
-        rotateEnabled={false}
-        scrollEnabled={true}
-        followsUserLocation={followingUser}
-        pitchEnabled={false}
-        loadingEnabled={true}
-        userInterfaceStyle={'light'}
-        onPanDrag={() => setFollowingUser(false)}
       >
-        {redeemables?.items
-          .filter((item) => !item.is_hidden)
-          .map((item) => {
-            return (
-              <Marker
-                key={item.id}
-                coordinate={{
-                  latitude: item.latitude,
-                  longitude: item.longitude,
-                }}
-                centerOffset={{
-                  x: 0,
-                  y: 0,
-                }}
-                tracksViewChanges={false}
-                stopPropagation={true}
-              >
-                <Image
-                  source={require('../../assets/images/screens/explore/item_animation.gif')}
-                  resizeMode={'contain'}
-                  style={{
-                    width: 70,
-                    height: 70,
+        <MapView
+          style={{
+            width: Dimensions.get('window').width,
+            height: '100%',
+          }}
+          showsUserLocation={true}
+          showsIndoors={false}
+          zoomEnabled={true}
+          rotateEnabled={false}
+          scrollEnabled={true}
+          followsUserLocation={followingUser}
+          pitchEnabled={false}
+          loadingEnabled={true}
+          userInterfaceStyle={'light'}
+          onPanDrag={() => setFollowingUser(false)}
+        >
+          {redeemables?.items
+            .filter((item) => !item.is_hidden)
+            .map((item) => {
+              return (
+                <Marker
+                  key={item.id}
+                  coordinate={{
+                    latitude: item.latitude,
+                    longitude: item.longitude,
                   }}
-                />
-              </Marker>
-            );
-          })}
-        {redeemables?.pins
+                  centerOffset={{
+                    x: 0,
+                    y: 0,
+                  }}
+                  tracksViewChanges={false}
+                  stopPropagation={true}
+                >
+                  <Image
+                    source={require('../../assets/images/screens/explore/item_animation.gif')}
+                    resizeMode={'contain'}
+                    style={{
+                      width: 70,
+                      height: 70,
+                    }}
+                  />
+                </Marker>
+              );
+            })}
+          {redeemables?.pins
           .filter((item) => !item.is_hidden)
           .map((item) => {
             return (
@@ -296,43 +301,43 @@ export default function ExploreScreen() {
               </Marker>
             );
           })}
-        {redeemables?.tasks.map((task) => {
-          return (
-            <Marker
-              key={task.id}
-              coordinate={{
-                latitude: task.latitude,
-                longitude: task.longitude,
-              }}
-            >
-              <Tooltip
-                popover={
-                  <Text
-                    style={{
-                      fontFamily: 'Knockout',
-                      fontSize: 20,
-                    }}
-                  >
-                    {task.name}
-                  </Text>
-                }
-                withOverlay={false}
-                backgroundColor="white"
-                pointerColor="white"
+          {redeemables?.tasks.map((task) => {
+            return (
+              <Marker
+                key={task.id}
+                coordinate={{
+                  latitude: task.latitude,
+                  longitude: task.longitude,
+                }}
               >
-                <Image
-                  source={require('../../assets/images/screens/explore/task_animation.gif')}
-                  style={{
-                    width: 120,
-                    height: 120,
-                    resizeMode: 'contain',
-                  }}
-                />
-              </Tooltip>
-            </Marker>
-          );
-        })}
-        {redeemables?.coins
+                <Tooltip
+                  popover={
+                    <Text
+                      style={{
+                        fontFamily: 'Knockout',
+                        fontSize: 20,
+                      }}
+                    >
+                      {task.name}
+                    </Text>
+                  }
+                  withOverlay={false}
+                  backgroundColor="white"
+                  pointerColor="white"
+                >
+                  <Image
+                    source={require('../../assets/images/screens/explore/task_animation.gif')}
+                    style={{
+                      width: 120,
+                      height: 120,
+                      resizeMode: 'contain',
+                    }}
+                  />
+                </Tooltip>
+              </Marker>
+            );
+          })}
+          {redeemables?.coins
           .filter((coin) => {
             return dayjs().isBetween(
               dayjs(coin.active_from),
@@ -352,7 +357,8 @@ export default function ExploreScreen() {
               </Marker>
             );
           })}
-      </MapView>
+        </MapView>
+      </View>
     </Wrapper>
   );
 }

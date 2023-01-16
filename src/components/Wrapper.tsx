@@ -47,7 +47,13 @@ export default function Wrapper({
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
-        <SafeAreaView style={{ flex: 1 }}>{children}</SafeAreaView>
+        <SafeAreaView
+          style={{
+            height: Dimensions.get('window').height - 82,
+        }}
+        >
+          {children}
+        </SafeAreaView>
       </View>
       <SafeAreaView
         style={{
