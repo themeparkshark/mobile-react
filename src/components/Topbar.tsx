@@ -10,6 +10,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { ReactNode, useContext } from 'react';
 import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
+import Broadcasts from './Broadcasts';
 
 export default function Topbar({
   button = null,
@@ -42,48 +43,7 @@ export default function Topbar({
         position: 'relative',
       }}
     >
-      {showBroadcasts && (
-        <View
-          style={{
-            width: Dimensions.get('window').width,
-            position: 'absolute',
-            top: 62,
-            zIndex: 0,
-            alignItems: 'center',
-          }}
-        >
-          <View
-            style={{
-              width: '80%',
-              backgroundColor: 'rgba(255, 255, 255, .8)',
-              borderBottomLeftRadius: 10,
-              borderBottomRightRadius: 10,
-              borderColor: 'white',
-              borderWidth: 3,
-              paddingTop: 16,
-              paddingBottom: 12,
-              paddingLeft: 12,
-              paddingRight: 12,
-              shadowOffset: {
-                width: 0,
-                height: 0,
-              },
-              shadowOpacity: 0.4,
-              shadowRadius: 3,
-            }}
-          >
-            <Text
-              style={{
-                textAlign: 'center',
-                fontFamily: 'Knockout',
-                fontSize: 20,
-              }}
-            >
-              Welcome to Universal's Islands of Adventure!
-            </Text>
-          </View>
-        </View>
-      )}
+      {false && <Broadcasts />}
       <ImageBackground
         source={
           purple

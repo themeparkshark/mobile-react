@@ -105,7 +105,7 @@ export default function ExploreScreen() {
         parkCoins={user.park_coins}
         showBroadcasts
       />
-
+      {!park && <NotAtPark />}
       {park && redeemables && (
         <>
           <View
