@@ -1,6 +1,6 @@
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
-import {ScrollView, View, Text, Image, Button} from 'react-native';
+import {ScrollView, View, Text, Image, Button, TouchableOpacity} from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import allAnnouncements from '../api/endpoints/announcements/all';
 import Announcement from '../components/Announcement';
@@ -86,81 +86,91 @@ export default function SocialScreen() {
                   <View
                     key={twitterStatus.id}
                     style={{
-                      flexDirection: 'row',
                       marginBottom: 24,
                     }}
                   >
-                    <View
+                    <TouchableOpacity
                       style={{
-                        width: 50,
-                        height: 50,
-                        borderRadius: 10,
-                        overflow: 'hidden',
+                        flexDirection: 'row',
                       }}
-                    >
-                      <Image
-                        source={require('../../assets/icon.png')}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                        }}
-                      />
-                    </View>
-                    <View
-                      style={{
-                        flex: 1,
-                        paddingLeft: 16,
+                      onPress={() => {
+                        WebBrowser.openBrowserAsync(
+                          twitterStatus.permalink
+                        )
                       }}
                     >
                       <View
                         style={{
-                          flexDirection: 'row',
+                          width: 50,
+                          height: 50,
+                          borderRadius: 10,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <Image
+                          source={require('../../assets/icon.png')}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                          }}
+                        />
+                      </View>
+                      <View
+                        style={{
+                          flex: 1,
+                          paddingLeft: 16,
                         }}
                       >
                         <View
                           style={{
-                            flex: 1,
                             flexDirection: 'row',
-                            alignItems: 'center',
                           }}
                         >
-                          <Text
+                          <View
                             style={{
-                              fontWeight: 'bold',
-                              fontSize: 16,
-                              paddingRight: 4,
+                              flex: 1,
+                              flexDirection: 'row',
+                              alignItems: 'center',
                             }}
                           >
-                            Theme Park Shark
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 14,
-                              opacity: .5,
-                            }}
-                          >
-                            @themeparkshark
-                          </Text>
+                            <Text
+                              style={{
+                                fontWeight: 'bold',
+                                fontSize: 16,
+                                paddingRight: 4,
+                              }}
+                            >
+                              Theme Park Shark
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                opacity: .5,
+                              }}
+                            >
+                              @themeparkshark
+                            </Text>
+                          </View>
+                          <View>
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                opacity: .5,
+                              }}
+                            >
+                              {date}
+                            </Text>
+                          </View>
                         </View>
-                        <View>
-                          <Text
-                            style={{
-                              fontSize: 14,
-                              opacity: .5,
-                            }}
-                          >
-                            {date}
-                          </Text>
-                        </View>
+                        <Text
+                          style={{
+                            fontSize: 16,
+                          }}
+                        >
+                          {twitterStatus.status}
+                        </Text>
                       </View>
-                      <Text
-                        style={{
-                          fontSize: 16,
-                        }}
-                      >
-                        {twitterStatus.status}
-                      </Text>
-                    </View>
+                    </TouchableOpacity>
                   </View>
                 );
               })}
@@ -204,14 +214,22 @@ export default function SocialScreen() {
                         width: '33.33333333%',
                       }}
                     >
-                      <Image
-                        source={{
-                          uri: instagramStatus.image_url,
+                      <TouchableOpacity
+                        onPress={() => {
+                          WebBrowser.openBrowserAsync(
+                            instagramStatus.permalink
+                          )
                         }}
-                        style={{
-                          aspectRatio: 1,
-                        }}
-                      />
+                      >
+                        <Image
+                          source={{
+                            uri: instagramStatus.image_url,
+                          }}
+                          style={{
+                            aspectRatio: 1,
+                          }}
+                        />
+                      </TouchableOpacity>
                     </View>
                   );
                 })}
