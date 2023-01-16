@@ -32,8 +32,8 @@ export default function LoginScreen() {
     >
       <SafeAreaView
         style={{
-          justifyContent: 'space-between',
-          height: '100%',
+          flex: 1,
+          position: 'relative',
         }}
       >
         <View
@@ -52,11 +52,12 @@ export default function LoginScreen() {
         </View>
         <View
           style={{
+            backgroundColor: 'rgba(255, 255, 255, .8)',
+            marginTop: 300,
             marginLeft: 'auto',
             marginRight: 'auto',
-            paddingLeft: 75,
-            paddingTop: 75,
-            paddingRight: 75,
+            padding: 20,
+            borderRadius: 5,
           }}
         >
           <AppleAuthentication.AppleAuthenticationButton
@@ -69,32 +70,27 @@ export default function LoginScreen() {
             cornerRadius={5}
             style={{ width: 200, height: 44 }}
             onPress={async () => {
-              try {
-                const credential = await AppleAuthentication.signInAsync({
-                  requestedScopes: [
-                    AppleAuthentication.AppleAuthenticationScope.EMAIL,
-                  ],
-                });
+              const credential = await AppleAuthentication.signInAsync({
+                requestedScopes: [
+                  AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                ],
+              });
 
-                login(credential);
-              } catch (e) {
-                if (e.code === 'ERR_CANCELED') {
-                  // handle that the user canceled the sign-in flow
-                } else {
-                  // handle other errors
-                }
-              }
+              login(credential);
             }}
           />
-          <Text
-            style={{
-              opacity: 0.5,
-              paddingTop: 75,
-              textAlign: 'center',
-              fontSize: 12,
-            }}
-          >{`© Theme Park Shark ${new Date().getFullYear()} v1.0`}</Text>
         </View>
+        <Text
+          style={{
+            opacity: 0.5,
+            paddingTop: 75,
+            textAlign: 'center',
+            fontSize: 12,
+            marginTop: 'auto',
+          }}
+        >
+          {`© Theme Park Shark ${new Date().getFullYear()}`}
+        </Text>
       </SafeAreaView>
     </ImageBackground>
   );
