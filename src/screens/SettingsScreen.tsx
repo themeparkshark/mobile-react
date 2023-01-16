@@ -61,7 +61,7 @@ export default function SettingsScreen() {
                 detail={user.email}
               />
               <Cell
-                title="Joined on"
+                title="Member since"
                 cellStyle="RightDetail"
                 detail={dayjs(user.created_at).format('DD MMMM YYYY')}
               />
