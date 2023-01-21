@@ -28,6 +28,8 @@ import mobileAds, {
   MaxAdContentRating,
   TestIds,
 } from 'react-native-google-mobile-ads';
+import FriendsScreen from './screens/FriendsScreen';
+import PendingFriendRequestsScreen from './screens/PendingFriendRequestsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -112,6 +114,8 @@ const HomeStackNavigator = () => {
         }}
       />
       <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
+      <Stack.Screen name="Friends" component={FriendsScreen} />
+      <Stack.Screen name="PendingFriendRequests" component={PendingFriendRequestsScreen} />
       <Stack.Screen
         name="Loading"
         component={LoadingScreen}

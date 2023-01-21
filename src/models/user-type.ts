@@ -1,5 +1,6 @@
 import { InventoryType } from './inventory-type';
 import { ExperienceLevelType } from './experience-level-type';
+import {ParkType} from './park-type';
 
 export interface UserType {
   readonly avatar_url: string;
@@ -11,8 +12,11 @@ export interface UserType {
   readonly enabled_sound_effects: boolean;
   readonly experience: number;
   readonly experience_level: ExperienceLevelType;
+  readonly has_friend_request_from: boolean;
+  readonly has_pending_friend_requests: boolean;
   readonly id: number;
   readonly inventory: InventoryType;
+  readonly is_friend: boolean;
   readonly name: string;
   readonly park_coins: number;
   readonly purple_diamonds: number;
@@ -21,4 +25,5 @@ export interface UserType {
   readonly total_experience: number;
   readonly username: string;
   readonly verified_at: string;
+  readonly visited_parks: ParkType[];
 }

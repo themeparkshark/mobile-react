@@ -1,4 +1,4 @@
-import { Animated, Pressable } from 'react-native';
+import { Animated, Pressable, View } from 'react-native';
 import { ReactNode, useContext, useState } from 'react';
 import {
   SoundEffectContext,
@@ -8,9 +8,11 @@ import {
 export default function Button({
   children,
   onPress,
+  showRedCircle,
 }: {
   children: ReactNode;
   onPress: () => void;
+  showRedCircle?: boolean;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const animated = new Animated.Value(1);
@@ -44,7 +46,23 @@ export default function Button({
       }}
       onPressIn={zoomOut}
       onPressOut={zoomIn}
+      style={{
+        position: 'relative',
+      }}
     >
+      {showRedCircle && (
+        <View
+          style={{
+            width: 10,
+            height: 10,
+            backgroundColor: 'red',
+            borderRadius: 5,
+            position: 'absolute',
+            right: 10,
+            zIndex: 10,
+          }}
+        />
+      )}
       <Animated.View
         style={{
           transform: [

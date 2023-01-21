@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import getParks from '../api/endpoints/me/visited-parks';
@@ -24,6 +25,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import { MusicContext } from '../context/MusicProvider';
 import Loading from '../components/Loading';
+import Heading from '../components/Heading';
+import FriendsList from '../components/FriendsList';
+import { UserType } from '../models/user-type';
+import getFriends from '../api/endpoints/me/friends';
+import YellowButton from '../components/YellowButton';
 
 interface ButtonType {
   readonly image: any;
@@ -34,6 +40,7 @@ interface ButtonType {
 export default function NewsScreen({ navigation }) {
   const [parks, setParks] = useState<ParkType[]>();
   const [stores, setStores] = useState<StoreType[]>();
+  const [friends, setFriends] = useState<UserType[]>();
   const [buttons, setButtons] = useState<ButtonType[]>();
   const [loading, setLoading] = useState<boolean>(true);
   const { user, inventory, setInventory } = useContext(AuthContext);
@@ -44,11 +51,16 @@ export default function NewsScreen({ navigation }) {
     }, [])
   );
 
+  const requestFriends = async () => setFriends(await getFriends({
+    limit: 5,
+  }));
+
   useEffect(() => {
     (async () => {
       setParks(await getParks());
       setStores(await getStores());
       setInventory(await getInventory());
+      await requestFriends();
 
       setLoading(false);
     })();
@@ -135,8 +147,8 @@ export default function NewsScreen({ navigation }) {
               style={{
                 borderTopWidth: 5,
                 borderTopColor: config.primary,
-                paddingLeft: 32,
-                paddingRight: 32,
+                paddingLeft: 16,
+                paddingRight: 16,
                 paddingTop: 24,
               }}
             >
@@ -153,8 +165,8 @@ export default function NewsScreen({ navigation }) {
               </Text>
               <View
                 style={{
-                  paddingLeft: 32,
-                  paddingRight: 32,
+                  paddingLeft: 48,
+                  paddingRight: 48,
                 }}
               >
                 <Progress
@@ -176,7 +188,6 @@ export default function NewsScreen({ navigation }) {
               <View
                 style={{
                   paddingTop: 24,
-                  paddingBottom: 24,
                   flexDirection: 'row',
                   justifyContent: 'center',
                 }}
@@ -186,7 +197,8 @@ export default function NewsScreen({ navigation }) {
                     <Pressable
                       key={index}
                       style={{
-                        width: `${100 / buttons.length}%`,
+                        paddingLeft: 16,
+                        paddingRight: 16,
                       }}
                     >
                       <Button onPress={button.screen}>
@@ -222,50 +234,7 @@ export default function NewsScreen({ navigation }) {
                   );
                 })}
               </View>
-              <View
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  marginTop: 8,
-                  marginBottom: 16,
-                  flexDirection: 'row',
-                  marginLeft: 0,
-                }}
-              >
-                <View
-                  style={{
-                    backgroundColor: 'rgba(0, 0, 0, .4)',
-                    height: 2,
-                    position: 'absolute',
-                    width: '100%',
-                    top: '50%',
-                  }}
-                />
-                <View
-                  style={{
-                    backgroundColor: '#e2e8f0',
-                    borderRadius: 6,
-                    marginLeft: 'auto',
-                    marginRight: 'auto',
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: 'Knockout',
-                      fontSize: 18,
-                      textAlign: 'center',
-                      textTransform: 'uppercase',
-                      paddingTop: 8,
-                      paddingBottom: 8,
-                      paddingLeft: 12,
-                      paddingRight: 12,
-                      color: '#334155',
-                    }}
-                  >
-                    Total activity
-                  </Text>
-                </View>
-              </View>
+              <Heading text="Total Activity" />
               <View
                 style={{
                   paddingLeft: 32,
@@ -356,18 +325,57 @@ export default function NewsScreen({ navigation }) {
                   </Text>
                 </View>
               </View>
+              <Heading text="Your Friends" />
+              {friends && friends.length > 0 && (
+                <>
+                  <FriendsList
+                    onUnfriend={async () => await requestFriends()}
+                    users={friends}
+                  />
+                  <View style={{ alignItems: 'center', marginTop: 32}}>
+                    <YellowButton
+                      onPress={() => {
+                        RootNavigation.navigate('Friends');
+                      }}
+                      text="View all friends"
+                    />
+                  </View>
+                </>
+              )}
+              {friends && friends.length === 0 && (
+                <>
+                  <Text
+                    style={{
+                      fontFamily: 'Knockout',
+                      fontSize: 20,
+                      textAlign: 'center',
+                      paddingTop: 16,
+                    }}
+                  >
+                    You don't have any friends yet.
+                  </Text>
+                  <View style={{ alignItems: 'center', marginTop: 32}}>
+                    <YellowButton
+                      onPress={() => {
+                        RootNavigation.navigate('Friends');
+                      }}
+                      text="Find friends"
+                    />
+                  </View>
+                </>
+              )}
             </View>
             <View
               style={{
                 paddingLeft: 16,
                 paddingRight: 16,
-                paddingTop: 16,
                 paddingBottom: 32,
               }}
             >
+              <Heading text="Your Parks" />
               {parks?.map((park) => {
                 return (
-                  <Pressable
+                  <TouchableOpacity
                     key={park.id}
                     onPress={() =>
                       navigation.navigate('Park', { park: park.id })
@@ -418,7 +426,7 @@ export default function NewsScreen({ navigation }) {
                         {park.completion_rate}% complete
                       </Text>
                     </View>
-                  </Pressable>
+                  </TouchableOpacity>
                 );
               })}
             </View>

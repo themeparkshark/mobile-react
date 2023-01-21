@@ -50,7 +50,7 @@ export default function Wrapper({
         <SafeAreaView
           style={{
             height: Dimensions.get('window').height - 82,
-        }}
+          }}
         >
           {children}
         </SafeAreaView>

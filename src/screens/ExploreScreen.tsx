@@ -274,33 +274,33 @@ export default function ExploreScreen() {
               );
             })}
           {redeemables?.pins
-          .filter((item) => !item.is_hidden)
-          .map((item) => {
-            return (
-              <Marker
-                key={item.id}
-                coordinate={{
-                  latitude: item.latitude,
-                  longitude: item.longitude,
-                }}
-                centerOffset={{
-                  x: 0,
-                  y: 0,
-                }}
-                tracksViewChanges={false}
-                stopPropagation={true}
-              >
-                <Image
-                  source={require('../../assets/images/screens/explore/pin_animation.gif')}
-                  resizeMode={'contain'}
-                  style={{
-                    width: 70,
-                    height: 70,
+            .filter((item) => !item.is_hidden)
+            .map((item) => {
+              return (
+                <Marker
+                  key={item.id}
+                  coordinate={{
+                    latitude: item.latitude,
+                    longitude: item.longitude,
                   }}
-                />
-              </Marker>
-            );
-          })}
+                  centerOffset={{
+                    x: 0,
+                    y: 0,
+                  }}
+                  tracksViewChanges={false}
+                  stopPropagation={true}
+                >
+                  <Image
+                    source={require('../../assets/images/screens/explore/pin_animation.gif')}
+                    resizeMode={'contain'}
+                    style={{
+                      width: 70,
+                      height: 70,
+                    }}
+                  />
+                </Marker>
+              );
+            })}
           {redeemables?.tasks.map((task) => {
             return (
               <Marker
@@ -338,25 +338,25 @@ export default function ExploreScreen() {
             );
           })}
           {redeemables?.coins
-          .filter((coin) => {
-            return dayjs().isBetween(
-              dayjs(coin.active_from),
-              dayjs(coin.active_to)
-            );
-          })
-          .map((coin) => {
-            return (
-              <Marker
-                key={coin.id}
-                coordinate={{
-                  latitude: coin.latitude,
-                  longitude: coin.longitude,
-                }}
-              >
-                <Coin coin={coin} onExpire={() => getRedeemables()} />
-              </Marker>
-            );
-          })}
+            .filter((coin) => {
+              return dayjs().isBetween(
+                dayjs(coin.active_from),
+                dayjs(coin.active_to)
+              );
+            })
+            .map((coin) => {
+              return (
+                <Marker
+                  key={coin.id}
+                  coordinate={{
+                    latitude: coin.latitude,
+                    longitude: coin.longitude,
+                  }}
+                >
+                  <Coin coin={coin} onExpire={() => getRedeemables()} />
+                </Marker>
+              );
+            })}
         </MapView>
       </View>
     </Wrapper>

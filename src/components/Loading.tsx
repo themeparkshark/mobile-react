@@ -22,7 +22,7 @@ export default function Loading() {
         marginRight: 'auto',
       }}
     >
-      <ActivityIndicator size="large" />
+      <ActivityIndicator size="large" color="rgba(0, 0, 0, .5)" />
       {showText && (
         <Text
           style={{

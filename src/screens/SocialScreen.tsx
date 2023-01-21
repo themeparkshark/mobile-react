@@ -1,6 +1,14 @@
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
-import {ScrollView, View, Text, Image, Button, TouchableOpacity, RefreshControl} from 'react-native';
+import {
+  ScrollView,
+  View,
+  Text,
+  Image,
+  Button,
+  TouchableOpacity,
+  RefreshControl,
+} from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import allAnnouncements from '../api/endpoints/announcements/all';
 import Announcement from '../components/Announcement';
@@ -8,17 +16,18 @@ import { AnnouncementType } from '../models/announcement-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Loading from '../components/Loading';
-import {SocialPostType} from '../models/social-post-type';
+import { SocialPostType } from '../models/social-post-type';
 import twitter from '../api/endpoints/social-posts/twitter';
 import instagram from '../api/endpoints/social-posts/instagram';
 import dayjs from '../helpers/dayjs';
 import * as WebBrowser from 'expo-web-browser';
-import {PusherEvent} from '@pusher/pusher-websocket-react-native';
+import { PusherEvent } from '@pusher/pusher-websocket-react-native';
 
 export default function SocialScreen() {
   const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
   const [twitterStatuses, setTwitterStatuses] = useState<SocialPostType[]>();
-  const [instagramStatuses, setInstagramStatuses] = useState<SocialPostType[]>();
+  const [instagramStatuses, setInstagramStatuses] =
+    useState<SocialPostType[]>();
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
@@ -40,7 +49,7 @@ export default function SocialScreen() {
         channelName: 'private-App.Models.User.3',
         onEvent: (event: PusherEvent) => {
           console.log(`Event received: ${event}`);
-        }
+        },
       });
     })();
   }, []);
@@ -76,12 +85,13 @@ export default function SocialScreen() {
               paddingBottom: 32,
             }}
           >
-            <ScrollView
-              horizontal={true}
-            >
+            <ScrollView horizontal={true}>
               {announcements?.map((announcement, index) => {
                 return (
-                  <View key={index} style={{ marginLeft: index === 0 ? 0 : 16 }}>
+                  <View
+                    key={index}
+                    style={{ marginLeft: index === 0 ? 0 : 16 }}
+                  >
                     <Announcement announcement={announcement} />
                   </View>
                 );
@@ -102,7 +112,9 @@ export default function SocialScreen() {
                 Twitter
               </Text>
               {twitterStatuses?.map((twitterStatus) => {
-                const date = dayjs(twitterStatus.status_created_at).startOf('second').fromNow();
+                const date = dayjs(twitterStatus.status_created_at)
+                  .startOf('second')
+                  .fromNow();
 
                 return (
                   <View
@@ -116,9 +128,7 @@ export default function SocialScreen() {
                         flexDirection: 'row',
                       }}
                       onPress={() => {
-                        WebBrowser.openBrowserAsync(
-                          twitterStatus.permalink
-                        )
+                        WebBrowser.openBrowserAsync(twitterStatus.permalink);
                       }}
                     >
                       <View
@@ -167,7 +177,7 @@ export default function SocialScreen() {
                             <Text
                               style={{
                                 fontSize: 14,
-                                opacity: .5,
+                                opacity: 0.5,
                               }}
                             >
                               @themeparkshark
@@ -177,7 +187,7 @@ export default function SocialScreen() {
                             <Text
                               style={{
                                 fontSize: 14,
-                                opacity: .5,
+                                opacity: 0.5,
                               }}
                             >
                               {date}
@@ -240,7 +250,7 @@ export default function SocialScreen() {
                         onPress={() => {
                           WebBrowser.openBrowserAsync(
                             instagramStatus.permalink
-                          )
+                          );
                         }}
                       >
                         <Image

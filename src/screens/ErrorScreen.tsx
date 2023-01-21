@@ -1,8 +1,8 @@
-import {Dimensions, Image} from 'react-native';
+import { Dimensions, Image } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import {useCallback, useContext, useEffect} from 'react';
+import { useCallback, useContext, useEffect } from 'react';
 import recordActivity from '../api/endpoints/activities/create';
-import {AuthContext} from '../context/AuthProvider';
+import { AuthContext } from '../context/AuthProvider';
 
 export default function ErrorScreen() {
   const { logout } = useContext(AuthContext);

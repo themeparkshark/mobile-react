@@ -1,4 +1,4 @@
-import {View, Text, Dimensions} from 'react-native';
+import { View, Text, Dimensions } from 'react-native';
 
 export default function Broadcasts() {
   return (
@@ -42,5 +42,5 @@ export default function Broadcasts() {
         </Text>
       </View>
     </View>
-  )
+  );
 }
