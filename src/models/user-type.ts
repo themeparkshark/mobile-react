@@ -25,5 +25,5 @@ export interface UserType {
   readonly total_experience: number;
   readonly username: string;
   readonly verified_at: string;
-  readonly visited_parks: ParkType[];
+  readonly visited_parks_count: number;
 }

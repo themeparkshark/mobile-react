@@ -89,7 +89,11 @@ export default function FriendsScreen() {
                 enablesReturnKeyAutomatically
                 onSubmitEditing={async ({ nativeEvent }) => {
                   setLoading(true);
-                  setSearchResults(await searchUsers(nativeEvent.text));
+                  try {
+                    setSearchResults(await searchUsers(nativeEvent.text));
+                  } catch (error) {
+                    setLoading(false);
+                  }
                   setLoading(false);
                 }}
               />

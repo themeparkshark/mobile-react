@@ -19,7 +19,6 @@ export default async function updateUser(payload: {
     Alert.alert('', error.response.data.errors.username[0], [
       {
         text: 'Ok',
-        style: 'cancel',
       },
     ]);
 
