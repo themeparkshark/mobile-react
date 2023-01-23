@@ -89,64 +89,8 @@ export default function UserScreen({ navigation, route }) {
               <Experience user={currentUser} />
               <Heading text="Total Activity" />
               <Activity user={currentUser} />
-              <Heading text="Leaderboard Standings" />
-              <Heading text="Pending Trades" />
               <Heading text="Items" />
               <Heading text="Visited Parks" />
-              {parks?.map((park) => {
-                return (
-                  <Pressable
-                    key={park.id}
-                    onPress={() => navigation.navigate('Park', { park: park.id })}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingTop: 16,
-                      paddingBottom: 16,
-                    }}
-                  >
-                    <Image
-                      source={{
-                        uri: park.image_url,
-                      }}
-                      style={{
-                        width: 100,
-                        height: 100,
-                        resizeMode: 'cover',
-                        borderRadius: 20,
-                      }}
-                    />
-                    <View
-                      style={{
-                        flex: 1,
-                        paddingLeft: 24,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          paddingBottom: 8,
-                          fontFamily: 'Knockout',
-                          textTransform: 'uppercase',
-                          fontSize: 16,
-                        }}
-                      >
-                        {park.name}
-                      </Text>
-                      <Progress progress={park.completion_rate} />
-                      <Text
-                        style={{
-                          paddingTop: 8,
-                          fontFamily: 'Knockout',
-                          textTransform: 'uppercase',
-                          fontSize: 16,
-                        }}
-                      >
-                        {park.completion_rate}% complete
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
             </View>
           </View>
         </ScrollView>
