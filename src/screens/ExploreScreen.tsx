@@ -311,6 +311,7 @@ export default function ExploreScreen() {
                 }}
               >
                 <Tooltip
+                  height="auto"
                   popover={
                     <Text
                       style={{

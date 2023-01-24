@@ -31,6 +31,8 @@ import getFriends from '../api/endpoints/me/friends';
 import YellowButton from '../components/YellowButton';
 import Experience from '../components/Experience';
 import Activity from '../components/Activity';
+import VisitedParks from '../components/VisitedParks';
+import Verified from '../components/Verified';
 
 interface ButtonType {
   readonly image: any;
@@ -39,10 +41,10 @@ interface ButtonType {
 }
 
 export default function NewsScreen({ navigation }) {
-  const [parks, setParks] = useState<ParkType[]>();
-  const [stores, setStores] = useState<StoreType[]>();
-  const [friends, setFriends] = useState<UserType[]>();
-  const [buttons, setButtons] = useState<ButtonType[]>();
+  const [parks, setParks] = useState<ParkType[]>([]);
+  const [stores, setStores] = useState<StoreType[]>([]);
+  const [friends, setFriends] = useState<UserType[]>([]);
+  const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { user, inventory, setInventory } = useContext(AuthContext);
 
@@ -162,6 +164,7 @@ export default function NewsScreen({ navigation }) {
                 }}
               >
                 <Experience user={user} />
+                {user.verified_at && <Verified />}
                 <View
                   style={{
                     paddingTop: 24,
@@ -253,62 +256,7 @@ export default function NewsScreen({ navigation }) {
                   </>
                 )}
                 <Heading text="Your Parks" />
-                {parks?.map((park) => {
-                  return (
-                    <TouchableOpacity
-                      key={park.id}
-                      onPress={() =>
-                        navigation.navigate('Park', { park: park.id })
-                      }
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        paddingTop: 16,
-                        paddingBottom: 16,
-                      }}
-                    >
-                      <Image
-                        source={{
-                          uri: park.image_url,
-                        }}
-                        style={{
-                          width: 100,
-                          height: 100,
-                          resizeMode: 'cover',
-                          borderRadius: 20,
-                        }}
-                      />
-                      <View
-                        style={{
-                          flex: 1,
-                          paddingLeft: 24,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            paddingBottom: 8,
-                            fontFamily: 'Knockout',
-                            textTransform: 'uppercase',
-                            fontSize: 16,
-                          }}
-                        >
-                          {park.name}
-                        </Text>
-                        <Progress progress={park.completion_rate} />
-                        <Text
-                          style={{
-                            paddingTop: 8,
-                            fontFamily: 'Knockout',
-                            textTransform: 'uppercase',
-                            fontSize: 16,
-                          }}
-                        >
-                          {park.completion_rate}% complete
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
+                <VisitedParks parks={parks} />
               </View>
             </View>
           </ScrollView>

@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Dimensions,
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
+  Dimensions, Image,
+  ScrollView, Text,
   View,
 } from 'react-native';
 import getUser from '../api/endpoints/users/get';
 import Topbar from '../components/Topbar';
-import Progress from '../components/Progress';
 import Playercard from '../components/Playercard';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
@@ -21,6 +17,9 @@ import Experience from '../components/Experience';
 import Heading from '../components/Heading';
 import Activity from '../components/Activity';
 import getVisitedParks from '../api/endpoints/users/visited-parks';
+import Tooltip from 'rn-tooltip';
+import VisitedParks from '../components/VisitedParks';
+import Verified from '../components/Verified';
 
 export default function UserScreen({ navigation, route }) {
   const { user } = route.params;
@@ -87,10 +86,15 @@ export default function UserScreen({ navigation, route }) {
               }}
             >
               <Experience user={currentUser} />
+              {currentUser.verified_at && <Verified />}
               <Heading text="Total Activity" />
               <Activity user={currentUser} />
-              <Heading text="Items" />
-              <Heading text="Visited Parks" />
+              {parks.length > 0 && (
+                <>
+                  <Heading text="Visited Parks" />
+                  <VisitedParks parks={parks} />
+                </>
+              )}
             </View>
           </View>
         </ScrollView>

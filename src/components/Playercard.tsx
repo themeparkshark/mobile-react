@@ -3,6 +3,7 @@ import {
   Image,
   StyleProp,
   StyleSheet,
+  Text,
   View,
   ViewStyle,
 } from 'react-native';
@@ -61,19 +62,6 @@ export default function Playercard({
               height: '100%',
               position: 'absolute',
               resizeMode: 'cover',
-            }}
-          />
-        )}
-        {user?.verified_at && showBackground && (
-          <Image
-            source={require('../../assets/images/screens/profile/verified.png')}
-            style={{
-              width: 40,
-              height: 40,
-              position: 'absolute',
-              left: 20,
-              top: 90,
-              resizeMode: 'contain',
             }}
           />
         )}
