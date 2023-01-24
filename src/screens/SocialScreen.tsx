@@ -21,7 +21,6 @@ import twitter from '../api/endpoints/social-posts/twitter';
 import instagram from '../api/endpoints/social-posts/instagram';
 import dayjs from '../helpers/dayjs';
 import * as WebBrowser from 'expo-web-browser';
-import { PusherEvent } from '@pusher/pusher-websocket-react-native';
 
 export default function SocialScreen() {
   const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
@@ -44,13 +43,6 @@ export default function SocialScreen() {
       setInstagramStatuses(await instagram());
 
       setLoading(false);
-
-      await pusher.subscribe({
-        channelName: 'private-App.Models.User.3',
-        onEvent: (event: PusherEvent) => {
-          console.log(`Event received: ${event}`);
-        },
-      });
     })();
   }, []);
 

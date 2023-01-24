@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
   ImageBackground,
   ScrollView,
@@ -21,7 +20,6 @@ import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import { SecretTaskType } from '../models/secret-task-type';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
-import { MusicContext } from '../context/MusicProvider';
 import Loading from '../components/Loading';
 import TaskCoinModal from '../components/TaskCoinModal';
 

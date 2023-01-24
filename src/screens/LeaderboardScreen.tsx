@@ -12,7 +12,6 @@ import {
   View,
   ImageBackground,
   Image,
-  Pressable,
 } from 'react-native';
 import { Chevron } from 'react-native-shapes';
 import { ParkType } from '../models/park-type';
@@ -30,10 +29,8 @@ import Button from '../components/Button';
 export default function LeaderboardScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);
   const { user } = useContext(AuthContext);
-  const [parks, setParks] = useState<ParkType[]>();
-  const [selectedPark, setSelectedPark] = useState<number>(
-    route.params?.park ?? user?.current_park_id
-  );
+  const [parks, setParks] = useState<ParkType[]>([]);
+  const [selectedPark, setSelectedPark] = useState<number>();
   const [selectedLeaderboard, setSelectedLeaderboard] =
     useState<LeaderboardType>();
   const [users, setUsers] = useState<UserType[]>([]);
@@ -52,6 +49,16 @@ export default function LeaderboardScreen({ route }) {
   }, []);
 
   useEffect(() => {
+    if (route.params?.park) {
+      setSelectedPark(route.params?.park);
+    } else if (user?.current_park_id) {
+      setSelectedPark(user.current_park_id);
+    } else if (parks.length) {
+      setSelectedPark(parks[0].id);
+    }
+  }, [route.params?.park, parks, user]);
+
+  useEffect(() => {
     if (leaderboards) {
       setSelectedLeaderboard(leaderboards[0]);
     }
@@ -68,6 +75,10 @@ export default function LeaderboardScreen({ route }) {
 
   useEffect(() => {
     (async () => {
+      if (!selectedPark) {
+        return;
+      }
+
       setLeaderboards(await getLeaderboards(selectedPark));
     })();
   }, [selectedPark]);
