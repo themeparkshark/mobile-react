@@ -26,8 +26,8 @@ export default function TaskListModal({
   return (
     <>
       <Button
+        onPressSound={require('../../assets/sounds/modal_open.mp3')}
         onPress={() => {
-          playSound(require('../../assets/sounds/modal_open.mp3'));
           setModalVisible(true);
         }}
       >

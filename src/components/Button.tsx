@@ -8,10 +8,12 @@ import {
 export default function Button({
   children,
   onPress,
+  onPressSound,
   showRedCircle,
 }: {
   children: ReactNode;
   onPress: () => void;
+  onPressSound: any;
   showRedCircle?: boolean;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
@@ -40,7 +42,7 @@ export default function Button({
         }
 
         setHasPressed(true);
-        playSound(require('../../assets/sounds/button-press.mp3'));
+        playSound(onPressSound ?? require('../../assets/sounds/button-press.mp3'));
         await onPress();
         setHasPressed(false);
       }}
