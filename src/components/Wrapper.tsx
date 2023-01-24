@@ -3,6 +3,7 @@ import {
   Image,
   ImageBackground,
   SafeAreaView,
+  Text,
   View,
 } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
@@ -21,26 +22,31 @@ export default function Wrapper({
       icon: require('../../assets/images/toolbar/news.png'),
       screen: 'News',
       size: 'normal',
+      label: 'News',
     },
     {
       icon: require('../../assets/images/toolbar/leaderboard.png'),
       screen: 'Leaderboard',
       size: 'normal',
+      label: 'Leaderboards',
     },
     {
       icon: require('../../assets/images/toolbar/explore.png'),
       screen: 'Explore',
       size: 'large',
+      label: 'Explore',
     },
     {
       icon: require('../../assets/images/toolbar/social.png'),
       screen: 'Social',
       size: 'normal',
+      label: 'Social',
     },
     {
       icon: require('../../assets/images/toolbar/profile.png'),
       screen: 'Profile',
       size: 'normal',
+      label: 'Profile',
     },
   ];
 
@@ -102,6 +108,25 @@ export default function Wrapper({
                       source={item.icon}
                     />
                   </Button>
+                  <Text
+                    style={{
+                      paddingTop: 56,
+                      textAlign: 'center',
+                      fontFamily: 'Knockout',
+                      textTransform: 'uppercase',
+                      color: 'white',
+                      textShadowColor: 'rgba(0, 0, 0, .5)',
+                      textShadowOffset: {
+                        width: 2,
+                        height: 2,
+                      },
+                      textShadowRadius: 0,
+                    }}
+                    adjustsFontSizeToFit
+                    numberOfLines={1}
+                  >
+                    {item.label}
+                  </Text>
                 </View>
               );
             })}
