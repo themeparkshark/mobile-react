@@ -1,6 +1,6 @@
 import { InventoryType } from './inventory-type';
 import { ExperienceLevelType } from './experience-level-type';
-import {ParkType} from './park-type';
+import { ParkType } from './park-type';
 
 export interface UserType {
   readonly avatar_url: string;

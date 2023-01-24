@@ -1,7 +1,7 @@
 import { UserType } from '../models/user-type';
-import {Alert, Image, Text, View} from 'react-native';
-import {useContext} from 'react';
-import {AuthContext} from '../context/AuthProvider';
+import { Alert, Image, Text, View } from 'react-native';
+import { useContext } from 'react';
+import { AuthContext } from '../context/AuthProvider';
 import Button from './Button';
 import * as RootNavigation from '../RootNavigation';
 import unfriend from '../api/endpoints/me/users/unfriend';
@@ -73,11 +73,13 @@ export default function FriendsList({
                       paddingRight: 16,
                     }}
                   >
-                    <Button onPress={() => {
-                      RootNavigation.navigate('User', {
-                        user: user.id,
-                      });
-                    }}>
+                    <Button
+                      onPress={() => {
+                        RootNavigation.navigate('User', {
+                          user: user.id,
+                        });
+                      }}
+                    >
                       <Image
                         source={require('../../assets/images/screens/profile/view.png')}
                         style={{
@@ -150,16 +152,12 @@ export default function FriendsList({
                                 onPress: async () => {
                                   await sendFriendRequest(user);
 
-                                  Alert.alert(
-                                    '',
-                                    'Friend request sent.',
-                                    [
-                                      {
-                                        text: 'Ok',
-                                        style: 'cancel',
-                                      },
-                                    ]
-                                  );
+                                  Alert.alert('', 'Friend request sent.', [
+                                    {
+                                      text: 'Ok',
+                                      style: 'cancel',
+                                    },
+                                  ]);
                                 },
                               },
                             ]
@@ -214,7 +212,7 @@ export default function FriendsList({
                   )}
                 </View>
               </View>
-            )
+            );
           })}
         </View>
       )}

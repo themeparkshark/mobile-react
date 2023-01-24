@@ -1,15 +1,23 @@
-import {useCallback, useContext, useEffect, useState} from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Topbar from '../components/Topbar';
 import Loading from '../components/Loading';
-import {ImageBackground, Image, ScrollView, Text, TextInput, TouchableOpacity, View} from 'react-native';
-import {UserType} from '../models/user-type';
+import {
+  ImageBackground,
+  Image,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { UserType } from '../models/user-type';
 import getFriends from '../api/endpoints/me/friends';
 import FriendsList from '../components/FriendsList';
 import searchUsers from '../api/endpoints/users/all';
 import Button from '../components/Button';
-import {AuthContext} from '../context/AuthProvider';
+import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
 
 export default function FriendsScreen() {
@@ -131,9 +139,11 @@ export default function FriendsScreen() {
               </View>
             </View>
           </View>
-          <View style={{
-            flex: 1,
-          }}>
+          <View
+            style={{
+              flex: 1,
+            }}
+          >
             <View
               style={{
                 backgroundColor: 'rgba(255, 255, 255, .6)',

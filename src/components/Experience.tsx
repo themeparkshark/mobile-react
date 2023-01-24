@@ -1,10 +1,8 @@
-import {UserType} from '../models/user-type';
-import {Text, View} from 'react-native';
+import { UserType } from '../models/user-type';
+import { Text, View } from 'react-native';
 import Progress from './Progress';
 
-export default function Experience({ user } : {
-  readonly user: UserType;
-}) {
+export default function Experience({ user }: { readonly user: UserType }) {
   return (
     <>
       <Text
@@ -25,9 +23,7 @@ export default function Experience({ user } : {
         }}
       >
         <Progress
-          progress={
-            (user.experience / user.experience_level.experience) * 100
-          }
+          progress={(user.experience / user.experience_level.experience) * 100}
         />
       </View>
       <Text

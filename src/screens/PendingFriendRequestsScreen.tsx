@@ -1,10 +1,10 @@
-import {useCallback, useEffect, useState} from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Topbar from '../components/Topbar';
 import Loading from '../components/Loading';
-import {ImageBackground, ScrollView, View} from 'react-native';
-import {UserType} from '../models/user-type';
+import { ImageBackground, ScrollView, View } from 'react-native';
+import { UserType } from '../models/user-type';
 import FriendsList from '../components/FriendsList';
 import getFriendRequests from '../api/endpoints/me/pending-requests';
 
@@ -47,9 +47,11 @@ export default function PendingFriendRequestsScreen() {
           }}
           source={require('../../assets/images/seaweed_background.png')}
         >
-          <View style={{
-            flex: 1,
-          }}>
+          <View
+            style={{
+              flex: 1,
+            }}
+          >
             <View
               style={{
                 backgroundColor: 'rgba(255, 255, 255, .6)',

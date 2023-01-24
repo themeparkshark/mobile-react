@@ -1,10 +1,8 @@
-import {UserType} from '../models/user-type';
-import {Text, View} from 'react-native';
+import { UserType } from '../models/user-type';
+import { Text, View } from 'react-native';
 import config from '../config';
 
-export default function Activity({ user } : {
-  readonly user: UserType;
-}) {
+export default function Activity({ user }: { readonly user: UserType }) {
   const activities = [
     {
       label: 'Parks Visited',
@@ -17,7 +15,7 @@ export default function Activity({ user } : {
     {
       label: 'Total XP',
       value: user.total_experience,
-    }
+    },
   ];
 
   return (

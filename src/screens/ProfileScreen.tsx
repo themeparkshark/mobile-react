@@ -52,9 +52,12 @@ export default function NewsScreen({ navigation }) {
     }, [])
   );
 
-  const requestFriends = async () => setFriends(await getFriends({
-    limit: 5,
-  }));
+  const requestFriends = async () =>
+    setFriends(
+      await getFriends({
+        limit: 5,
+      })
+    );
 
   useEffect(() => {
     (async () => {
@@ -181,8 +184,8 @@ export default function NewsScreen({ navigation }) {
                               button.text === 'Pins'
                                 ? button.image
                                 : {
-                                  uri: button.image,
-                                }
+                                    uri: button.image,
+                                  }
                             }
                             style={{
                               width: 80,
@@ -217,7 +220,7 @@ export default function NewsScreen({ navigation }) {
                       onUnfriend={async () => await requestFriends()}
                       users={friends}
                     />
-                    <View style={{ alignItems: 'center', marginTop: 32}}>
+                    <View style={{ alignItems: 'center', marginTop: 32 }}>
                       <YellowButton
                         onPress={() => {
                           RootNavigation.navigate('Friends');
@@ -239,7 +242,7 @@ export default function NewsScreen({ navigation }) {
                     >
                       You don't have any friends yet.
                     </Text>
-                    <View style={{ alignItems: 'center', marginTop: 32}}>
+                    <View style={{ alignItems: 'center', marginTop: 32 }}>
                       <YellowButton
                         onPress={() => {
                           RootNavigation.navigate('Friends');

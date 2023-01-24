@@ -43,7 +43,7 @@ export default function Topbar({
         position: 'relative',
       }}
     >
-      {false && <Broadcasts />}
+      <Broadcasts />
       <ImageBackground
         source={
           purple

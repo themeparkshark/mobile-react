@@ -4,7 +4,7 @@ import { UserType } from '../../../models/user-type';
 
 export default async function getFriendRequests(): Promise<UserType[]> {
   const { data } = await client.get<ApiResponseType<UserType[]>>(
-    '/me/friend-requests',
+    '/me/friend-requests'
   );
 
   return data.data;
