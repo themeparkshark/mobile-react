@@ -13,7 +13,7 @@ export default function Button({
 }: {
   children: ReactNode;
   onPress: () => void;
-  onPressSound: any;
+  onPressSound?: any;
   showRedCircle?: boolean;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);

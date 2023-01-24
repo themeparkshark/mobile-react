@@ -2,12 +2,12 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
-  Image,
   ImageBackground,
   Pressable,
   ScrollView,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useContext, useEffect, useState, useRef, useCallback } from 'react';
 import Playercard from '../components/Playercard';
 import getItemTypes from '../api/endpoints/item-types/item-types';

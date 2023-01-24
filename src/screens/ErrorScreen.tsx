@@ -1,4 +1,5 @@
-import { Dimensions, Image } from 'react-native';
+import { Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useContext, useEffect } from 'react';
 import recordActivity from '../api/endpoints/activities/create';

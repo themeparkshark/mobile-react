@@ -1,4 +1,5 @@
-import { Image, ImageBackground, Pressable, View } from 'react-native';
+import { ImageBackground, Pressable, View } from 'react-native';
+import { Image } from 'expo-image';
 import updateInventory from '../api/endpoints/me/inventory/update-inventory';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';

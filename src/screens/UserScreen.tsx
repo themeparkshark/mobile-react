@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Dimensions, Image,
-  ScrollView, Text,
+  Dimensions,
+  ScrollView,
   View,
 } from 'react-native';
 import getUser from '../api/endpoints/users/get';

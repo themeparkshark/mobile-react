@@ -1,5 +1,6 @@
 import { UserType } from '../models/user-type';
-import { Image, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import LeaderboardAvatar from './LeaderboardAvatar';
 
 export default function LeaderboardUser({

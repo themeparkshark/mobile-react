@@ -3,9 +3,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Topbar from '../components/Topbar';
 import Loading from '../components/Loading';
+import { Image } from 'expo-image';
 import {
   ImageBackground,
-  Image,
   ScrollView,
   Text,
   TextInput,

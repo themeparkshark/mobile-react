@@ -1,7 +1,6 @@
 import {
   Button,
   Dimensions,
-  Image,
   ImageBackground,
   Text,
   TextInput,
@@ -10,6 +9,7 @@ import {
   Animated,
   Easing,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import updateUser from '../api/endpoints/me/update-user';
 import { AuthContext } from '../context/AuthProvider';

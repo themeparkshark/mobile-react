@@ -1,4 +1,5 @@
-import { Dimensions, Image } from 'react-native';
+import { Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';

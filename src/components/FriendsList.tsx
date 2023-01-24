@@ -1,5 +1,6 @@
 import { UserType } from '../models/user-type';
-import { Alert, Image, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useContext } from 'react';
 import { AuthContext } from '../context/AuthProvider';
 import Button from './Button';

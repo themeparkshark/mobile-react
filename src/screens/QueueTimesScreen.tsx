@@ -5,9 +5,9 @@ import {
   Text,
   RefreshControl,
   ImageBackground,
-  Image,
   Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Chevron } from 'react-native-shapes';
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';

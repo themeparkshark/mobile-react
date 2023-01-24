@@ -2,10 +2,10 @@ import Topbar from '../components/Topbar';
 import {
   Dimensions,
   FlatList,
-  Image,
   ImageBackground,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import all from '../api/endpoints/pin-collections/all';
 import { useCallback, useEffect, useState } from 'react';
 import PinCollectionModal from '../components/PinCollectionModal';

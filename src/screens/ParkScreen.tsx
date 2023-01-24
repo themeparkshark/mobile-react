@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import {
-  Image,
   ImageBackground,
   ScrollView,
   Text,

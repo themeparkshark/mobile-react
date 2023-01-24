@@ -4,11 +4,11 @@ import {
   ScrollView,
   View,
   Text,
-  Image,
   Button,
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useCallback, useEffect, useState } from 'react';
 import allAnnouncements from '../api/endpoints/announcements/all';
 import Announcement from '../components/Announcement';

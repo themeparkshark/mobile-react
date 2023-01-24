@@ -1,6 +1,6 @@
+import { Image } from 'expo-image';
 import {
   Dimensions,
-  Image,
   ImageBackground,
   SafeAreaView,
   Text,
@@ -28,7 +28,7 @@ export default function Wrapper({
       icon: require('../../assets/images/toolbar/leaderboard.png'),
       screen: 'Leaderboard',
       size: 'normal',
-      label: 'Leaderboards',
+      label: 'Standings',
     },
     {
       icon: require('../../assets/images/toolbar/explore.png'),
@@ -107,26 +107,27 @@ export default function Wrapper({
                       }}
                       source={item.icon}
                     />
+                    <Text
+                      style={{
+                        paddingTop: 52,
+                        textAlign: 'center',
+                        fontFamily: 'Shark',
+                        textTransform: 'uppercase',
+                        color: 'white',
+                        fontSize: 16,
+                        textShadowColor: 'rgba(0, 0, 0, .5)',
+                        textShadowOffset: {
+                          width: 1,
+                          height: 1,
+                        },
+                        textShadowRadius: 0,
+                      }}
+                      adjustsFontSizeToFit
+                      numberOfLines={1}
+                    >
+                      {item.label}
+                    </Text>
                   </Button>
-                  <Text
-                    style={{
-                      paddingTop: 56,
-                      textAlign: 'center',
-                      fontFamily: 'Knockout',
-                      textTransform: 'uppercase',
-                      color: 'white',
-                      textShadowColor: 'rgba(0, 0, 0, .5)',
-                      textShadowOffset: {
-                        width: 2,
-                        height: 2,
-                      },
-                      textShadowRadius: 0,
-                    }}
-                    adjustsFontSizeToFit
-                    numberOfLines={1}
-                  >
-                    {item.label}
-                  </Text>
                 </View>
               );
             })}

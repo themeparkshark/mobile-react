@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import {
   Dimensions,
-  Image,
   Pressable,
   ScrollView,
   Text,

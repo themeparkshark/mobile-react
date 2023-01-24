@@ -1,7 +1,5 @@
-import { Image, ImageBackground, Pressable, Text, View } from 'react-native';
-import coins from '../../../assets/images/coins.png';
-import gradient from '../../../assets/images/screens/store/gradient.png';
-import shark from '../../../assets/images/screens/inventory/shark.png';
+import { ImageBackground, Pressable, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import purchaseItem from '../../helpers/purchase-item';
 import { AuthContext } from '../../context/AuthProvider';
 import { useContext } from 'react';
@@ -32,7 +30,7 @@ export default function Item({ item }) {
         }}
       >
         <ImageBackground
-          source={gradient}
+          source={require('../../../assets/images/screens/store/gradient.png')}
           resizeMode={'cover'}
           style={{
             borderRadius: 3,
@@ -47,7 +45,7 @@ export default function Item({ item }) {
           >
             {item.item_type.name === 'Body item' ? (
               <ImageBackground
-                source={shark}
+                source={require('../../../assets/images/screens/inventory/shark.png')}
                 style={{
                   margin: -12,
                 }}
@@ -87,7 +85,7 @@ export default function Item({ item }) {
             }}
           >
             <Image
-              source={coins}
+              source={require('../../../assets/images/coins.png')}
               style={{
                 width: 15,
                 height: 15,

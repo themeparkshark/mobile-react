@@ -6,8 +6,8 @@ import {
   Dimensions,
   View,
   Text,
-  Image,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { AuthContext } from '../../context/AuthProvider';
 import { MusicContext } from '../../context/MusicProvider';
 

@@ -1,4 +1,5 @@
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import dayjs from '../../helpers/dayjs';
 import * as RootNavigation from '../../RootNavigation';
 import { EntryType } from '../../models/entry-type';

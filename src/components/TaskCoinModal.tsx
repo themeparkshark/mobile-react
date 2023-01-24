@@ -1,6 +1,7 @@
 import { TaskType } from '../models/task-type';
 import { SecretTaskType } from '../models/secret-task-type';
-import { Dimensions, Image, Pressable, Text, View } from 'react-native';
+import { Dimensions, Pressable, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
 import { useState } from 'react';
 import config from '../config';

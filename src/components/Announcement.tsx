@@ -1,6 +1,6 @@
+import { Image } from 'expo-image';
 import {
   Dimensions,
-  Image,
   ImageBackground,
   Pressable,
   SafeAreaView,

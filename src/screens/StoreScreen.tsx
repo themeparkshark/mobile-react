@@ -1,11 +1,11 @@
 import {
   ActivityIndicator,
   Dimensions,
-  Image,
   ImageBackground,
   ScrollView,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import getStore from '../api/endpoints/stores/get';
 import getCatalog from '../api/endpoints/catalogs/get';
 import { useCallback, useContext, useEffect, useState } from 'react';

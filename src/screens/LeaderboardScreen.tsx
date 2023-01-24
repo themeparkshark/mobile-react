@@ -11,8 +11,8 @@ import {
   Text,
   View,
   ImageBackground,
-  Image,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Chevron } from 'react-native-shapes';
 import { ParkType } from '../models/park-type';
 import { LeaderboardType } from '../models/leaderboard-type';

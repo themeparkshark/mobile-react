@@ -1,11 +1,11 @@
 import {
   ActivityIndicator,
   Dimensions,
-  Image,
   ScrollView,
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import RenderHtml from 'react-native-render-html';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
