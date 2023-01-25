@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  ScrollView,
-  View,
-} from 'react-native';
+import { Dimensions, ScrollView, View } from 'react-native';
 import getUser from '../api/endpoints/users/get';
 import Topbar from '../components/Topbar';
 import Playercard from '../components/Playercard';

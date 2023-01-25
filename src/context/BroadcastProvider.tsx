@@ -29,8 +29,6 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
       if (!user) {
         return;
       }
-
-
     })();
   }, [user]);
 

@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Image } from 'expo-image';
-import {
-  ImageBackground,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { ImageBackground, ScrollView, Text, View } from 'react-native';
 import getPark from '../api/endpoints/parks/getPark';
 import getTasks from '../api/endpoints/parks/getTasks';
 import Topbar from '../components/Topbar';

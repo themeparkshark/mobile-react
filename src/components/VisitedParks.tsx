@@ -1,9 +1,11 @@
-import {ParkType} from '../models/park-type';
-import {Image, Text, TouchableOpacity, View} from 'react-native';
+import { ParkType } from '../models/park-type';
+import { Image, Text, TouchableOpacity, View } from 'react-native';
 import Progress from './Progress';
 import * as RootNavigation from '../RootNavigation';
 
-export default function VisitedParks({ parks } : {
+export default function VisitedParks({
+  parks,
+}: {
   readonly parks: ParkType[];
 }) {
   return (

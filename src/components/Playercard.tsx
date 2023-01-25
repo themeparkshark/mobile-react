@@ -98,7 +98,11 @@ export default function Playercard({
           >
             {inventory?.skin_item && (
               <Image
-                source={animate ? inventory.skin_item.no_eye_url : inventory.skin_item.paper_url}
+                source={
+                  animate
+                    ? inventory.skin_item.no_eye_url
+                    : inventory.skin_item.paper_url
+                }
                 style={styles.image}
                 contentFit="contain"
               />
@@ -112,7 +116,7 @@ export default function Playercard({
             )}
             {inventory?.face_item && (
               <Image
-                source={ inventory.face_item.paper_url}
+                source={inventory.face_item.paper_url}
                 style={styles.image}
                 contentFit="contain"
               />

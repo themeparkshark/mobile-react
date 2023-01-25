@@ -149,16 +149,16 @@ export default function App() {
   const { user, setUser } = useContext(AuthContext);
 
   useEffect(() => {
-    mobileAds().setRequestConfiguration({
-      maxAdContentRating: MaxAdContentRating.PG,
-      tagForChildDirectedTreatment: true,
-      tagForUnderAgeOfConsent: true,
-      testDeviceIdentifiers: ['EMULATOR'],
-    });
-
-    mobileAds().initialize();
-
-    InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
+    // mobileAds().setRequestConfiguration({
+    //   maxAdContentRating: MaxAdContentRating.PG,
+    //   tagForChildDirectedTreatment: true,
+    //   tagForUnderAgeOfConsent: true,
+    //   testDeviceIdentifiers: ['EMULATOR'],
+    // });
+    //
+    // mobileAds().initialize();
+    //
+    // InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
 
     Storage.getItem({ key: 'user' }).then((userString: string) => {
       if (userString) {
