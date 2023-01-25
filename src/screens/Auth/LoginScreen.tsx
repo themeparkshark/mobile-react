@@ -33,7 +33,6 @@ export default function LoginScreen() {
       <SafeAreaView
         style={{
           flex: 1,
-          position: 'relative',
         }}
       >
         <View
@@ -43,47 +42,54 @@ export default function LoginScreen() {
         >
           <Image
             source={require('../../../assets/images/screens/login/logo.png')}
-            resizeMode={'contain'}
             style={{
               width: '100%',
               height: 100,
             }}
+            contentFit="contain"
           />
         </View>
         <View
           style={{
-            backgroundColor: 'rgba(255, 255, 255, .8)',
-            marginTop: 300,
-            marginLeft: 'auto',
-            marginRight: 'auto',
-            padding: 20,
-            borderRadius: 5,
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          <AppleAuthentication.AppleAuthenticationButton
-            buttonType={
-              AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-            }
-            buttonStyle={
-              AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-            }
-            cornerRadius={5}
-            style={{ width: 200, height: 44 }}
-            onPress={async () => {
-              const credential = await AppleAuthentication.signInAsync({
-                requestedScopes: [
-                  AppleAuthentication.AppleAuthenticationScope.EMAIL,
-                ],
-              });
-
-              login(credential);
+          <View
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, .6)',
+              marginLeft: 'auto',
+              marginRight: 'auto',
+              padding: 15,
+              borderRadius: 5,
             }}
-          />
+          >
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={
+                AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+              }
+              buttonStyle={
+                AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+              }
+              cornerRadius={5}
+              style={{ width: 200, height: 44 }}
+              onPress={async () => {
+                const credential = await AppleAuthentication.signInAsync({
+                  requestedScopes: [
+                    AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                  ],
+                });
+
+                login(credential);
+              }}
+            />
+          </View>
         </View>
         <Text
           style={{
             opacity: 0.5,
-            paddingTop: 75,
+            paddingBottom: 30,
             textAlign: 'center',
             fontSize: 12,
             marginTop: 'auto',

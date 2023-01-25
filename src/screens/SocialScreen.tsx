@@ -246,9 +246,7 @@ export default function SocialScreen() {
                         }}
                       >
                         <Image
-                          source={{
-                            uri: instagramStatus.image_url,
-                          }}
+                          source={instagramStatus.image_url}
                           style={{
                             aspectRatio: 1,
                           }}

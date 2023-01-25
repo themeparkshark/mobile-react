@@ -3,7 +3,6 @@ import {
   Dimensions,
   ImageBackground,
   SafeAreaView,
-  Text,
   View,
 } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
@@ -55,7 +54,7 @@ export default function Wrapper({
       <View style={{ flex: 1 }}>
         <SafeAreaView
           style={{
-            height: Dimensions.get('window').height - 82,
+            height: '101%',
           }}
         >
           {children}
@@ -89,45 +88,32 @@ export default function Wrapper({
                   key={key}
                   style={{
                     flex: 1,
+                    flexDirection: 'column',
                   }}
                 >
-                  <Button
-                    onPress={() => {
-                      RootNavigation.navigate(item.screen);
+                  <View
+                    style={{
+                      position: 'absolute',
+                      width: '100%',
+                      top: item.size === 'normal' ? 0 : -45,
                     }}
                   >
-                    <Image
-                      style={{
-                        width: item.size === 'normal' ? 50 : 100,
-                        height: item.size === 'normal' ? 50 : 100,
-                        resizeMode: 'contain',
-                        alignSelf: 'center',
-                        position: 'absolute',
-                        top: item.size === 'normal' ? 0 : -45,
+                    <Button
+                      onPress={() => {
+                        RootNavigation.navigate(item.screen);
                       }}
-                      source={item.icon}
-                    />
-                    <Text
-                      style={{
-                        paddingTop: 52,
-                        textAlign: 'center',
-                        fontFamily: 'Shark',
-                        textTransform: 'uppercase',
-                        color: 'white',
-                        fontSize: 16,
-                        textShadowColor: 'rgba(0, 0, 0, .5)',
-                        textShadowOffset: {
-                          width: 1,
-                          height: 1,
-                        },
-                        textShadowRadius: 0,
-                      }}
-                      adjustsFontSizeToFit
-                      numberOfLines={1}
                     >
-                      {item.label}
-                    </Text>
-                  </Button>
+                      <Image
+                        style={{
+                          width: item.size === 'normal' ? 50 : 100,
+                          height: item.size === 'normal' ? 50 : 100,
+                          alignSelf: 'center',
+                        }}
+                        source={item.icon}
+                        contentFit="contain"
+                      />
+                    </Button>
+                  </View>
                 </View>
               );
             })}

@@ -43,10 +43,10 @@ export default function EntryScreen({ route }) {
             <Image
               style={{
                 aspectRatio: 16 / 9,
-                resizeMode: 'cover',
                 borderRadius: 8,
               }}
               source={currentEntry.featured_image}
+              contentFit="cover"
             />
           </View>
           <Text

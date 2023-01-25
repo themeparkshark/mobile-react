@@ -89,24 +89,20 @@ export default function Item({
               }}
             >
               <Image
-                source={{
-                  uri: item.paper_url,
-                }}
+                source={item.paper_url}
                 style={{
                   aspectRatio: 1,
-                  resizeMode: 'contain',
                 }}
+                contentFit="contain"
               />
             </ImageBackground>
           ) : (
             <Image
-              source={{
-                uri: item.icon_url,
-              }}
+              source={item.icon_url}
               style={{
                 aspectRatio: 1,
-                resizeMode: 'contain',
               }}
+              contentFit="contain"
             />
           )}
         </View>

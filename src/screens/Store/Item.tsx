@@ -51,25 +51,21 @@ export default function Item({ item }) {
                 }}
               >
                 <Image
-                  source={{
-                    uri: item.paper_url,
-                  }}
+                  source={item.paper_url}
                   style={{
                     aspectRatio: 1,
-                    resizeMode: 'contain',
                   }}
+                  contentFit="contain"
                 />
               </ImageBackground>
             ) : (
               <Image
-                source={{
-                  uri: item.icon_url,
-                }}
+                source={item.icon_url}
                 style={{
                   width: '100%',
                   height: 80,
-                  resizeMode: 'contain',
                 }}
+                contentFit="contain"
               />
             )}
           </View>
@@ -89,9 +85,9 @@ export default function Item({ item }) {
               style={{
                 width: 15,
                 height: 15,
-                resizeMode: 'contain',
                 marginRight: 8,
               }}
+              contentFit="contain"
             />
             <Text
               style={{

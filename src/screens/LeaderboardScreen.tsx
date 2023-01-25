@@ -90,7 +90,7 @@ export default function LeaderboardScreen({ route }) {
       {!loading && (
         <View
           style={{
-            height: Dimensions.get('window').height - 188,
+            flex: 1,
             marginTop: -8,
           }}
         >
@@ -245,7 +245,7 @@ export default function LeaderboardScreen({ route }) {
                     position: 'absolute',
                     bottom: 0,
                   }}
-                  resizeMode={'cover'}
+                  contentFit="cover"
                   source={require('../../assets/images/screens/leaderboard/barrel.png')}
                 />
               </View>

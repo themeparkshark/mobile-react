@@ -18,9 +18,7 @@ export default function TaskCoinModal({
     <>
       <Button onPress={() => setVisible(true)}>
         <Image
-          source={{
-            uri: task.coin_url,
-          }}
+          source={task.coin_url}
           style={{
             width: 60,
             height: 60,
@@ -78,9 +76,7 @@ export default function TaskCoinModal({
               </Text>
             </View>
             <Image
-              source={{
-                uri: task.coin_url,
-              }}
+              source={task.coin_url}
               style={{
                 width: '80%',
                 aspectRatio: 1,

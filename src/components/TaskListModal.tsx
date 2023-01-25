@@ -35,9 +35,9 @@ export default function TaskListModal({
           style={{
             width: 80,
             height: 80,
-            resizeMode: 'contain',
           }}
           source={require('../../assets/images/screens/explore/list.png')}
+          contentFit="contain"
         />
       </Button>
       <Modal
@@ -83,7 +83,7 @@ export default function TaskListModal({
                 height: 195,
                 zIndex: 10,
               }}
-              resizeMode={'contain'}
+              contentFit="contain"
             >
               <Text
                 style={{

@@ -133,7 +133,7 @@ export default function FriendsScreen() {
                       width: 60,
                       height: 60,
                     }}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                 </Button>
               </View>

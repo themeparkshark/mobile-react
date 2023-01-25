@@ -98,16 +98,14 @@ export default function StoreScreen({ route }) {
                 }}
               >
                 <Image
-                  source={{
-                    uri: catalog?.promotion_image_url,
-                  }}
+                  source={catalog?.promotion_image_url}
                   style={{
                     width: Dimensions.get('window').width - 25,
                     height: '100%',
-                    resizeMode: 'contain',
                     marginLeft: 'auto',
                     marginRight: 'auto',
                   }}
+                  contentFit="contain"
                 />
               </View>
               {weeklyItems && (

@@ -41,7 +41,7 @@ export default function YellowButton({
             width: 190,
             height: 50,
           }}
-          resizeMode={'contain'}
+          contentFit="contain"
         >
           <View
             style={{

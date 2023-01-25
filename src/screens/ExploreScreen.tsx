@@ -164,9 +164,9 @@ export default function ExploreScreen() {
                     style={{
                       width: 70,
                       height: 84,
-                      resizeMode: 'contain',
                     }}
                     source={require('../../assets/images/screens/explore/queuetimes.png')}
+                    contentFit="contain"
                   />
                 </Button>
               </View>
@@ -264,7 +264,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/item_animation.gif')}
-                    resizeMode={'contain'}
+                    contentFit="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -292,7 +292,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/pin_animation.gif')}
-                    resizeMode={'contain'}
+                    contentFit="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -331,8 +331,8 @@ export default function ExploreScreen() {
                     style={{
                       width: 120,
                       height: 120,
-                      resizeMode: 'contain',
                     }}
+                    contentFit="contain"
                   />
                 </Tooltip>
               </Marker>

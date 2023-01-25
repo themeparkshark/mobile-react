@@ -72,16 +72,14 @@ export default function pinCollectionModal({
                   }}
                 >
                   <Image
-                    source={{
-                      uri: pinCollection.pin.item.icon_url,
-                    }}
+                    source={pinCollection.pin.item.icon_url}
                     style={{
                       width: '100%',
                       height: 80,
-                      resizeMode: 'contain',
                       marginLeft: 'auto',
                       marginRight: 'auto',
                     }}
+                    contentFit="contain"
                   />
                 </View>
               </ImageBackground>
@@ -110,8 +108,8 @@ export default function pinCollectionModal({
                           style={{
                             width: '100%',
                             height: 20,
-                            resizeMode: 'contain',
                           }}
+                          contentFit="contain"
                         />
                       </View>
                     );
@@ -137,8 +135,8 @@ export default function pinCollectionModal({
                         style={{
                           width: '100%',
                           height: 20,
-                          resizeMode: 'contain',
                         }}
+                        contentFit="contain"
                       />
                     </View>
                   );
@@ -252,9 +250,11 @@ export default function pinCollectionModal({
                     key={pin.item.id}
                     style={{
                       padding: 8,
+                      width: '30%',
                     }}
                   >
                     <Tooltip
+                      height="auto"
                       popover={
                         <Text
                           style={{
@@ -270,15 +270,13 @@ export default function pinCollectionModal({
                       pointerColor="white"
                     >
                       <Image
-                        source={{
-                          uri: pin.item.icon_url,
-                        }}
-                        resizeMode={'contain'}
+                        source={pin.item.icon_url}
                         style={{
-                          width: 70,
+                          width: '100%',
                           height: 70,
                           opacity: pin.item.has_purchased ? 1 : 0.4,
                         }}
+                        contentFit="contain"
                       />
                     </Tooltip>
                   </View>
@@ -317,8 +315,8 @@ export default function pinCollectionModal({
                           style={{
                             width: '100%',
                             height: 40,
-                            resizeMode: 'contain',
                           }}
+                          contentFit="contain"
                         />
                       </View>
                     );
@@ -344,8 +342,8 @@ export default function pinCollectionModal({
                         style={{
                           width: '100%',
                           height: 40,
-                          resizeMode: 'contain',
                         }}
+                        contentFit="contain"
                       />
                     </View>
                   );

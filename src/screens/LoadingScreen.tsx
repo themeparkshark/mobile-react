@@ -57,7 +57,7 @@ export default function LoadingScreen() {
   return (
     <Image
       source={require('../../assets/images/screens/login/background.png')}
-      resizeMode={'cover'}
+      contentFit="cover"
       style={{
         width: Dimensions.get('window').width,
         height: Dimensions.get('window').height,

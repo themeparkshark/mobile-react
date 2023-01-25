@@ -112,9 +112,9 @@ export default function NewsScreen({ navigation }) {
                 style={{
                   width: 50,
                   height: 50,
-                  resizeMode: 'contain',
                   alignSelf: 'center',
                 }}
+                contentFit="contain"
                 source={require('../../assets/images/screens/profile/settings.png')}
               />
             </Button>
@@ -183,20 +183,14 @@ export default function NewsScreen({ navigation }) {
                       >
                         <Button onPress={button.screen}>
                           <Image
-                            source={
-                              button.text === 'Pins'
-                                ? button.image
-                                : {
-                                    uri: button.image,
-                                  }
-                            }
+                            source={button.image}
                             style={{
                               width: 80,
                               height: 80,
                               marginLeft: 'auto',
                               marginRight: 'auto',
                             }}
-                            resizeMode="contain"
+                            contentFit="contain"
                           />
                         </Button>
                         <Text

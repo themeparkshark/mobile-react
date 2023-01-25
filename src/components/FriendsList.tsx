@@ -36,15 +36,13 @@ export default function FriendsList({
               >
                 <View>
                   <Image
-                    source={{
-                      uri: user.avatar_url,
-                    }}
+                    source={user.avatar_url}
                     style={{
                       width: 60,
                       height: 60,
                       borderRadius: 10,
                     }}
-                    resizeMode="cover"
+                    contentFit="cover"
                   />
                 </View>
                 <View
@@ -87,7 +85,7 @@ export default function FriendsList({
                           width: 50,
                           height: 50,
                         }}
-                        resizeMode="contain"
+                        contentFit="contain"
                       />
                     </Button>
                   </View>
@@ -131,7 +129,7 @@ export default function FriendsList({
                             width: 50,
                             height: 50,
                           }}
-                          resizeMode="contain"
+                          contentFit="contain"
                         />
                       </Button>
                     </View>
@@ -171,7 +169,7 @@ export default function FriendsList({
                             width: 50,
                             height: 50,
                           }}
-                          resizeMode="contain"
+                          contentFit="contain"
                         />
                       </Button>
                     </View>
@@ -206,7 +204,7 @@ export default function FriendsList({
                             width: 50,
                             height: 50,
                           }}
-                          resizeMode="contain"
+                          contentFit="contain"
                         />
                       </Button>
                     </View>

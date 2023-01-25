@@ -364,8 +364,8 @@ export default function RedeemModal({
                     style={{
                       width: 280,
                       height: 73,
-                      resizeMode: 'contain',
                     }}
+                    contentFit="contain"
                   />
                 </Button>
               </View>

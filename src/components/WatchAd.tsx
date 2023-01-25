@@ -38,8 +38,8 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
           style={{
             width: '100%',
             height: 20,
-            resizeMode: 'contain',
           }}
+          contentFit="contain"
         />
       </Button>
     </Animatable.View>

@@ -77,9 +77,9 @@ export default function ParkScreen({ route }) {
               style={{
                 width: 50,
                 height: 50,
-                resizeMode: 'contain',
                 alignSelf: 'center',
               }}
+              contentFit="contain"
               source={require('../../assets/images/toolbar/leaderboard.png')}
             />
           </Button>
@@ -219,12 +219,12 @@ export default function ParkScreen({ route }) {
                             height: '100%',
                             width: '100%',
                           }}
-                          resizeMode={'contain'}
+                          contentFit="contain"
                         />
                       </View>
                       <Image
                         source={require('../../assets/images/screens/park/trophyshelf.png')}
-                        resizeMode="contain"
+                        contentFit="contain"
                         style={{
                           width: '100%',
                           height: 50,
@@ -240,7 +240,7 @@ export default function ParkScreen({ route }) {
                         <View style={{ position: 'relative', height: 105 }}>
                           <Image
                             source={require('../../assets/images/screens/park/secretshelf.png')}
-                            resizeMode="contain"
+                            contentFit="contain"
                             style={{
                               width: '100%',
                               height: 55,
@@ -289,7 +289,7 @@ export default function ParkScreen({ route }) {
                       <View style={{ position: 'relative', height: 105 }}>
                         <Image
                           source={require('../../assets/images/screens/park/shelf.png')}
-                          resizeMode="contain"
+                          contentFit="contain"
                           style={{
                             width: '100%',
                             height: 55,

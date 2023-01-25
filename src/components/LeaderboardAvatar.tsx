@@ -37,9 +37,7 @@ export default function LeaderboardAvatar({
         }}
       >
         <Image
-          source={{
-            uri: user.avatar_url,
-          }}
+          source={user.avatar_url}
           style={{
             width: size,
             height: size,

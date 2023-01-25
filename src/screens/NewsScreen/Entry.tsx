@@ -33,10 +33,10 @@ export default function Entry({
         <Image
           style={{
             aspectRatio: 16 / 9,
-            resizeMode: 'cover',
             borderRadius: 8,
           }}
           source={entry.featured_image}
+          contentFit="cover"
         />
       </View>
       <View

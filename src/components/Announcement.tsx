@@ -65,8 +65,8 @@ export default function Announcement({
                     style={{
                       width: 35,
                       height: 35,
-                      resizeMode: 'contain',
                     }}
+                    contentFit="contain"
                   />
                 </Button>
               </View>

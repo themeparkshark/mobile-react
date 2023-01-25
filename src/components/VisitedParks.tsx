@@ -37,15 +37,13 @@ export default function VisitedParks({ parks } : {
                 }}
               >
                 <Image
-                  source={{
-                    uri: park.image_url,
-                  }}
+                  source={park.image_url}
                   style={{
                     width: 100,
                     height: 100,
-                    resizeMode: 'cover',
                     borderRadius: 20,
                   }}
+                  contentFit="cover"
                 />
                 <View
                   style={{

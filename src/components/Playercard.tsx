@@ -54,30 +54,26 @@ export default function Playercard({
       >
         {inventory?.background_item && showBackground && (
           <Image
-            source={{
-              uri: inventory.background_item.paper_url,
-            }}
+            source={inventory.background_item.paper_url}
             style={{
               width: '100%',
               height: '100%',
               position: 'absolute',
-              resizeMode: 'cover',
             }}
+            contentFit="cover"
           />
         )}
         {inventory?.pin_item && showBackground && (
           <Image
-            source={{
-              uri: inventory.pin_item.icon_url,
-            }}
+            source={inventory.pin_item.icon_url}
             style={{
               width: 40,
               height: 40,
               position: 'absolute',
               right: 20,
               top: 90,
-              resizeMode: 'contain',
             }}
+            contentFit="contain"
           />
         )}
         <Animated.View
@@ -102,58 +98,51 @@ export default function Playercard({
           >
             {inventory?.skin_item && (
               <Image
-                source={{
-                  uri: animate
-                    ? inventory.skin_item.no_eye_url
-                    : inventory.skin_item.paper_url,
-                }}
+                source={animate ? inventory.skin_item.no_eye_url : inventory.skin_item.paper_url}
                 style={styles.image}
+                contentFit="contain"
               />
             )}
             {animate && (
               <Image
                 source={require('../../assets/images/screens/inventory/blink.gif')}
                 style={styles.image}
+                contentFit="contain"
               />
             )}
             {inventory?.face_item && (
               <Image
-                source={{
-                  uri: inventory.face_item.paper_url,
-                }}
+                source={ inventory.face_item.paper_url}
                 style={styles.image}
+                contentFit="contain"
               />
             )}
             {inventory?.body_item && (
               <Image
-                source={{
-                  uri: inventory.body_item.paper_url,
-                }}
+                source={inventory.body_item.paper_url}
                 style={styles.image}
+                contentFit="contain"
               />
             )}
             {inventory?.neck_item && (
               <Image
-                source={{
-                  uri: inventory.neck_item.paper_url,
-                }}
+                source={inventory.neck_item.paper_url}
                 style={styles.image}
+                contentFit="contain"
               />
             )}
             {inventory?.hand_item && (
               <Image
-                source={{
-                  uri: inventory.hand_item.paper_url,
-                }}
+                source={inventory.hand_item.paper_url}
                 style={styles.image}
+                contentFit="contain"
               />
             )}
             {inventory?.head_item && (
               <Image
-                source={{
-                  uri: inventory.head_item.paper_url,
-                }}
+                source={inventory.head_item.paper_url}
                 style={styles.image}
+                contentFit="contain"
               />
             )}
           </View>
@@ -165,7 +154,6 @@ export default function Playercard({
 
 const styles = StyleSheet.create({
   image: {
-    resizeMode: 'contain',
     width: '100%',
     height: '100%',
     position: 'absolute',

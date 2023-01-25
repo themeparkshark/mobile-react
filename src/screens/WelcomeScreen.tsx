@@ -136,11 +136,11 @@ export default function WelcomeScreen({ navigation }) {
           />
           <Image
             source={require('../../assets/images/screens/welcome/shark.png')}
-            resizeMode="contain"
             style={{
               width: '100%',
               height: 300,
             }}
+            contentFit="contain"
           />
         </View>
       </SafeAreaView>

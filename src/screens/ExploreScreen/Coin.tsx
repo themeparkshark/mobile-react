@@ -66,8 +66,8 @@ export default function Coin({
           style={{
             width: 30,
             height: 30,
-            resizeMode: 'contain',
           }}
+          contentFit="contain"
         />
       </View>
     </View>

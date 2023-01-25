@@ -15,8 +15,8 @@ export default function Verified() {
           style={{
             width: 30,
             height: 30,
-            resizeMode: 'contain',
           }}
+          contentFit="contain"
         />
         <View
           style={{

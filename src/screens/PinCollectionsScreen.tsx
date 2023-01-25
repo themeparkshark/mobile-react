@@ -61,10 +61,10 @@ export default function PinCollectionsScreen() {
                 style={{
                   width: Dimensions.get('window').width - 25,
                   height: '100%',
-                  resizeMode: 'contain',
                   marginLeft: 'auto',
                   marginRight: 'auto',
                 }}
+                contentFit="contain"
               />
             </View>
             {collections && (

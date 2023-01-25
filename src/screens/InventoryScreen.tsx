@@ -118,11 +118,9 @@ export default function InventoryScreen() {
                         style={{
                           width: 60,
                           height: 60,
-                          resizeMode: 'contain',
                         }}
-                        source={{
-                          uri: itemType.image_url,
-                        }}
+                        source={itemType.image_url}
+                        contentFit="contain"
                       />
                     </Pressable>
                   </View>

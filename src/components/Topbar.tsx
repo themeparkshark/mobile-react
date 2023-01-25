@@ -90,8 +90,8 @@ export default function Topbar({
                       style={{
                         width: 35,
                         height: 35,
-                        resizeMode: 'contain',
                       }}
+                      contentFit="contain"
                     />
                   </Button>
                 )}
@@ -103,15 +103,13 @@ export default function Topbar({
                     }}
                   >
                     <Image
-                      source={{
-                        uri: parkCoin,
-                      }}
+                      source={parkCoin}
                       style={{
                         width: 30,
                         height: 30,
-                        resizeMode: 'contain',
                         marginRight: 8,
                       }}
+                      contentFit="contain"
                     />
                     <Text
                       style={{
@@ -201,8 +199,8 @@ export default function Topbar({
                       style={{
                         width: 30,
                         height: 30,
-                        resizeMode: 'contain',
                       }}
+                      contentFit="contain"
                     />
                   </View>
                 )}

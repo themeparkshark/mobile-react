@@ -102,10 +102,10 @@ export default function Box({
               style={{
                 width: '90%',
                 height: '90%',
-                resizeMode: 'contain',
                 marginLeft: 'auto',
                 marginRight: 'auto',
               }}
+              contentFit="contain"
             />
           </Animatable.View>
         )}
@@ -115,10 +115,10 @@ export default function Box({
             style={{
               width: '85%',
               height: '85%',
-              resizeMode: 'contain',
               marginLeft: 'auto',
               marginRight: 'auto',
             }}
+            contentFit="contain"
           />
         )}
         {number && (
