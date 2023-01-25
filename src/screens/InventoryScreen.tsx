@@ -1,14 +1,13 @@
 import {
   ActivityIndicator,
   Dimensions,
-  FlatList,
   ImageBackground,
   Pressable,
   ScrollView,
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { useContext, useEffect, useState, useCallback } from 'react';
 import Playercard from '../components/Playercard';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
@@ -20,15 +19,29 @@ import { ItemType } from '../models/item-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Loading from '../components/Loading';
+import { FlashList } from '@shopify/flash-list';
 
 export default function InventoryScreen() {
-  const [itemTypes, setItemTypes] = useState<ItemTypeType[]>();
+  const [itemTypes, setItemTypes] = useState<ItemTypeType[]>([]);
   const [currentItemType, setCurrentItemType] = useState<ItemTypeType>();
-  const [items, setItems] = useState<ItemType[]>();
+  const [items, setItems] = useState<ItemType[]>([]);
   const { inventory } = useContext(AuthContext);
-  const flatListRef = useRef();
   const [loading, setLoading] = useState<boolean>(true);
+  const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const { refreshUser } = useContext(AuthContext);
+  const [page, setPage] = useState<number>(1);
+
+  const requestItems = async (page: number) => {
+    if (!currentItemType) {
+      return;
+    }
+    
+    const response = await getItems(currentItemType.id, page);
+    setItems((prevState) => {
+      return [...prevState, ...response];
+    });
+    setItemsLoading(false);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -37,15 +50,29 @@ export default function InventoryScreen() {
   );
 
   useEffect(() => {
-    getItemTypes().then((response) => {
+    (async () => {
+      const response = await getItemTypes();
       setItemTypes(response);
       setCurrentItemType(response[0]);
-      getItems(response[0].id).then((response) => {
-        setItems(response);
-        setLoading(false);
-      });
-    });
+    })();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      if (currentItemType) {
+        await requestItems(page);
+        setLoading(false);
+      }
+    })();
+  }, [currentItemType]);
+
+  useEffect(() => {
+    if (page > 1) {
+      (async () => {
+        await requestItems(page);
+      })();
+    }
+  }, [page]);
 
   return (
     <>
@@ -55,7 +82,7 @@ export default function InventoryScreen() {
         text="Inventory"
       />
       {loading && <Loading />}
-      {!loading && (
+      {!loading && inventory && itemTypes && currentItemType && (
         <>
           <View
             style={{
@@ -65,17 +92,15 @@ export default function InventoryScreen() {
               position: 'relative',
             }}
           >
-            {inventory && (
-              <Playercard
-                inventory={inventory}
-                style={{
-                  position: 'absolute',
-                  width: Dimensions.get('window').width,
-                  height: 460,
-                  marginTop: -50,
-                }}
-              />
-            )}
+            <Playercard
+              inventory={inventory}
+              style={{
+                position: 'absolute',
+                width: Dimensions.get('window').width,
+                height: 460,
+                marginTop: -50,
+              }}
+            />
             <ScrollView
               style={{
                 position: 'absolute',
@@ -87,7 +112,7 @@ export default function InventoryScreen() {
               }}
               horizontal={true}
             >
-              {itemTypes?.map((itemType, key) => {
+              {itemTypes.map((itemType, key) => {
                 return (
                   <View
                     key={itemType.id}
@@ -104,14 +129,10 @@ export default function InventoryScreen() {
                   >
                     <Pressable
                       onPress={async () => {
-                        await getItems(itemType.id).then((response) =>
-                          setItems(response)
-                        );
+                        setItemsLoading(true);
                         setCurrentItemType(itemType);
-                        flatListRef.current.scrollToOffset({
-                          animated: true,
-                          offset: 0,
-                        });
+                        setItems([]);
+                        setPage(1);
                       }}
                     >
                       <Image
@@ -128,31 +149,48 @@ export default function InventoryScreen() {
               })}
             </ScrollView>
           </View>
-          {inventory && currentItemType && (
-            <ImageBackground
-              source={require('../../assets/images/shark_background.png')}
-              resizeMode="cover"
+          <ImageBackground
+            source={require('../../assets/images/shark_background.png')}
+            resizeMode="cover"
+            style={{
+              width: '100%',
+              flex: 1,
+            }}
+          >
+            <View
               style={{
-                width: '100%',
                 flex: 1,
+                paddingLeft: 4,
+                paddingRight: 4,
               }}
             >
-              <FlatList
-                ref={flatListRef}
-                style={{
-                  flex: 1,
-                  padding: 4,
-                }}
-                contentContainerStyle={{ paddingBottom: 8 }}
-                data={items}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <Item item={item} currentItemType={currentItemType} />
-                )}
-                numColumns={3}
-              />
-            </ImageBackground>
-          )}
+              {itemsLoading && (
+                <View
+                  style={{
+                    flex: 1,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <ActivityIndicator size="large" color="rgba(0, 0, 0, .5)" />
+                </View>
+              )}
+              {!itemsLoading && (
+                <FlashList
+                  data={items}
+                  renderItem={({ item }) => (
+                    <Item item={item} currentItemType={currentItemType} />
+                  )}
+                  estimatedItemSize={15}
+                  keyExtractor={(item) => item.id.toString()}
+                  numColumns={3}
+                  onEndReached={() => {
+                    setPage((prevState) => prevState + 1);
+                  }}
+                />
+              )}
+            </View>
+          </ImageBackground>
         </>
       )}
     </>

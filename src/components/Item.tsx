@@ -21,7 +21,7 @@ export default function Item({
   return (
     <View
       style={{
-        width: '33.333333%',
+        flex: 1,
         padding: 8,
       }}
     >
