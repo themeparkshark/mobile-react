@@ -1,5 +1,3 @@
-import 'dotenv/config';
-
 export default {
   name: 'Theme Park Shark',
   slug: 'mobile-react',
@@ -26,7 +24,6 @@ export default {
     favicon: './assets/favicon.png',
   },
   extra: {
-    apiUrl: process.env.API_URL,
     eas: {
       projectId: '38c3f46e-df32-43a2-8272-44b9556aaa36',
     },
