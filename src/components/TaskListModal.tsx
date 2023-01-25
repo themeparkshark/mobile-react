@@ -1,12 +1,12 @@
 import { useContext, useState } from 'react';
 import {
   Dimensions,
-  Image,
   ImageBackground,
   Pressable,
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
 import Button from './Button';
 import { RedeemablesType } from '../models/redeemables-type';
@@ -83,7 +83,7 @@ export default function TaskListModal({
                 height: 195,
                 zIndex: 10,
               }}
-              contentFit="contain"
+              resizeMode="contain"
             >
               <Text
                 style={{

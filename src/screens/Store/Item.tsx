@@ -31,7 +31,7 @@ export default function Item({ item }) {
       >
         <ImageBackground
           source={require('../../../assets/images/screens/store/gradient.png')}
-          resizeMode={'cover'}
+          resizeMode="cover"
           style={{
             borderRadius: 3,
             width: 100,

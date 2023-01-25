@@ -177,7 +177,7 @@ export default function ExploreScreen() {
                   }}
                 >
                   <ImageBackground
-                    resizeMode={'contain'}
+                    resizeMode="contain"
                     style={{
                       width: 70,
                       height: 84,

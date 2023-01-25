@@ -1,5 +1,6 @@
-import { Image, ImageBackground, Text, View } from 'react-native';
+import { ImageBackground, Text, View } from 'react-native';
 import { useEffect } from 'react';
+import { Image } from 'expo-image';
 import Countdown, { zeroPad } from 'react-countdown';
 import dayjs from 'dayjs';
 import { CoinType } from '../../models/coin-type';

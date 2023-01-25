@@ -21,7 +21,7 @@ export default function Section({
     >
       <ImageBackground
         source={title !== 'Monthly Items' ? yellow : purple}
-        resizeMode={'contain'}
+        resizeMode="contain"
         style={{
           width: Dimensions.get('window').width,
           height: 75,

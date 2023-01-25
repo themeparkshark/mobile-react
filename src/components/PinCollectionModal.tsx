@@ -61,7 +61,7 @@ export default function pinCollectionModal({
                     ? require('../../assets/images/screens/pin-collections/yellow_gradiant.png')
                     : require('../../assets/images/screens/store/gradient.png')
                 }
-                resizeMode={'cover'}
+                resizeMode="cover"
                 style={{
                   overflow: 'hidden',
                 }}

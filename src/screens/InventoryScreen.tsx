@@ -131,7 +131,7 @@ export default function InventoryScreen() {
           {inventory && currentItemType && (
             <ImageBackground
               source={require('../../assets/images/shark_background.png')}
-              resizeMode={'cover'}
+              resizeMode="cover"
               style={{
                 width: '100%',
                 flex: 1,

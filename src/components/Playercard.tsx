@@ -1,12 +1,11 @@
 import {
   Animated,
-  Image,
   StyleProp,
   StyleSheet,
-  Text,
   View,
   ViewStyle,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import { UserType } from '../models/user-type';
 import { InventoryType } from '../models/inventory-type';

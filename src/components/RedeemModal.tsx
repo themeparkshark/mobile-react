@@ -2,11 +2,11 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
-  Image,
   ImageBackground,
   Pressable,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import completeTask from '../api/endpoints/me/tasks/complete-task';
 import Button from './Button';
 import Lottie from 'lottie-react-native';

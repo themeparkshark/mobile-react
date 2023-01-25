@@ -16,6 +16,7 @@ import * as RootNavigation from '../RootNavigation';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import updateUser from '../api/endpoints/me/update-user';
+import Constants from 'expo-constants';
 
 export default function SettingsScreen() {
   const { user, logout, refreshUser } = useContext(AuthContext);
@@ -123,7 +124,7 @@ export default function SettingsScreen() {
               />
             </Section>
             <Section
-              footer={`© Theme Park Shark ${new Date().getFullYear()} v1.0`}
+              footer={`© Theme Park Shark ${new Date().getFullYear()} v${Constants.manifest.version}`}
             >
               <Cell
                 title="Deactivate My Account"

@@ -1,5 +1,4 @@
 import { Text, ImageBackground, View, Animated, Pressable } from 'react-native';
-import Button from './Button';
 
 export default function YellowButton({
   text,
@@ -41,7 +40,7 @@ export default function YellowButton({
             width: 190,
             height: 50,
           }}
-          contentFit="contain"
+          resizeMode="contain"
         >
           <View
             style={{
