@@ -24,7 +24,7 @@ export default {
     favicon: './assets/favicon.png',
   },
   extra: {
-    apiUrl: 'https://dev-app.themeparkshark.com/api',
+    apiUrl: 'https://prod-app.themeparkshark.com/api',
     eas: {
       projectId: '38c3f46e-df32-43a2-8272-44b9556aaa36',
     },
