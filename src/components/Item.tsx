@@ -8,6 +8,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
 import { InventoryType } from '../models/inventory-type';
+import {SoundEffectContext} from '../context/SoundEffectProvider';
 
 export default function Item({
   item,
@@ -17,6 +18,7 @@ export default function Item({
   readonly item: ItemType;
 }) {
   const { inventory, setInventory } = useContext(AuthContext);
+  const { playSound } = useContext(SoundEffectContext);
 
   return (
     <View
@@ -45,6 +47,8 @@ export default function Item({
           if (inventory && inventory.skin_item.id === item.id) {
             return false;
           }
+
+          playSound(require('../../assets/sounds/inventory_item_tap.mp3'));
 
           updateInventory(item).then((response: InventoryType) => {
             setInventory(response);

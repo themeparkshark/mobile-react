@@ -20,6 +20,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Loading from '../components/Loading';
 import { FlashList } from '@shopify/flash-list';
+import {SoundEffectContext} from '../context/SoundEffectProvider';
 
 export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>([]);
@@ -30,6 +31,7 @@ export default function InventoryScreen() {
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const { refreshUser } = useContext(AuthContext);
   const [page, setPage] = useState<number>(1);
+  const { playSound } = useContext(SoundEffectContext);
 
   const requestItems = async (page: number) => {
     if (!currentItemType) {
@@ -134,6 +136,8 @@ export default function InventoryScreen() {
                         if (itemType.id === currentItemType.id) {
                           return;
                         }
+
+                        playSound(require('../../assets/sounds/inventory_item_type_tap.mp3'));
 
                         setItemsLoading(true);
                         setCurrentItemType(itemType);
