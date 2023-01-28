@@ -26,7 +26,7 @@ export default function pinCollectionModal({
       <Pressable
         onPress={() => setModalVisible(true)}
         style={{
-          width: '33.333333%',
+          width: '100%',
           padding: 8,
         }}
       >
@@ -286,7 +286,7 @@ export default function pinCollectionModal({
             <View
               style={{
                 width: '100%',
-                bottom: 65,
+                bottom: '16%',
                 position: 'absolute',
               }}
             >

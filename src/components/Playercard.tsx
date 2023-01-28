@@ -1,23 +1,14 @@
-import {
-  Animated,
-  StyleProp,
-  StyleSheet,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { Animated, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
-import { UserType } from '../models/user-type';
 import { InventoryType } from '../models/inventory-type';
 
 export default function Playercard({
-  user,
   inventory,
   style,
   showBackground = true,
   animate = true,
 }: {
-  readonly user?: UserType;
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
   readonly showBackground?: boolean;
@@ -108,7 +99,7 @@ export default function Playercard({
             )}
             {animate && (
               <Image
-                source={require('../../assets/images/screens/inventory/blink.gif')}
+                source={require('../../assets/images/screens/inventory/blink.png')}
                 style={styles.image}
                 contentFit="contain"
               />

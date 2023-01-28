@@ -63,7 +63,7 @@ export default function Coin({
           />
         </ImageBackground>
         <Image
-          source={require('../../../assets/images/screens/explore/coin.gif')}
+          source={require('../../../assets/images/screens/explore/coin.png')}
           style={{
             width: 30,
             height: 30,

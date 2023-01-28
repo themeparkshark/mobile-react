@@ -1,10 +1,4 @@
-import {
-  Animated,
-  Easing,
-  ImageURISource,
-  Text,
-  View,
-} from 'react-native';
+import { Animated, Easing, ImageURISource, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import * as Animatable from 'react-native-animatable';

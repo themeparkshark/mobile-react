@@ -154,67 +154,50 @@ export default function ParkScreen({ route }) {
                 </View>
                 <View
                   style={{
-                    paddingTop: 16,
                     paddingLeft: 16,
                     paddingRight: 16,
                     paddingBottom: 32,
                   }}
                 >
                   <View style={{ paddingBottom: 16 }}>
-                    <View style={{ position: 'relative', height: 145 }}>
-                      <Image
-                        source={silver}
-                        style={{
-                          width: 90,
-                          height: 95,
-                          zIndex: 15,
-                          position: 'absolute',
-                          left: 45,
-                          top: 5,
-                          opacity: currentPark.park_coins_count >= 50 ? 1 : 0.6,
-                        }}
-                      />
-                      <Image
-                        source={gold}
-                        style={{
-                          width: 100,
-                          height: 140,
-                          zIndex: 15,
-                          position: 'absolute',
-                          left: 145,
-                          top: -40,
-                          opacity:
-                            currentPark.park_coins_count >= 100 ? 1 : 0.6,
-                        }}
-                      />
-                      <Image
-                        source={bronze}
-                        style={{
-                          width: 70,
-                          height: 75,
-                          zIndex: 15,
-                          position: 'absolute',
-                          left: 250,
-                          top: 25,
-                          opacity: currentPark.park_coins_count >= 12 ? 1 : 0.6,
-                        }}
-                      />
+                    <View style={{ position: 'relative', height: 185, }}>
                       <View
                         style={{
-                          display: 'none',
                           position: 'absolute',
                           zIndex: 10,
+                          marginTop: 4,
+                          flexDirection: 'row',
+                          alignItems: 'flex-end',
                           width: '100%',
-                          height: 100,
+                          justifyContent: 'center',
                         }}
                       >
                         <Image
-                          source={require('../../assets/images/screens/park/placeholder.png')}
+                          source={silver}
                           style={{
-                            height: '100%',
-                            width: '100%',
+                            width: 90,
+                            height: 95,
+                            opacity: currentPark.park_coins_count >= 50 ? 1 : 0.6,
                           }}
-                          contentFit="contain"
+                        />
+                        <Image
+                          source={gold}
+                          style={{
+                            width: 100,
+                            height: 140,
+                            marginLeft: 16,
+                            opacity:
+                              currentPark.park_coins_count >= 100 ? 1 : 0.6,
+                          }}
+                        />
+                        <Image
+                          source={bronze}
+                          style={{
+                            width: 70,
+                            height: 75,
+                            marginLeft: 16,
+                            opacity: currentPark.park_coins_count >= 12 ? 1 : 0.6,
+                          }}
                         />
                       </View>
                       <Image

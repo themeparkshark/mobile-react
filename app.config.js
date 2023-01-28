@@ -10,7 +10,7 @@ export default {
   owner: 'theme-park-shark',
   splash: {
     image: './assets/splash.png',
-    resizeMode: 'contain',
+    resizeMode: 'cover',
     backgroundColor: '#ffffff',
   },
   updates: {

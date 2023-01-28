@@ -124,7 +124,9 @@ export default function SettingsScreen() {
               />
             </Section>
             <Section
-              footer={`© Theme Park Shark ${new Date().getFullYear()} v${Constants.manifest.version}`}
+              footer={`© Theme Park Shark ${new Date().getFullYear()} v${
+                Constants.manifest.version
+              }`}
             >
               <Cell
                 title="Deactivate My Account"
