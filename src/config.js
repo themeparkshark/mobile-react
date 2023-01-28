@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
 
+console.log(Constants.manifest.extra);
+
 let Config = {
   apiUrl: Constants.manifest.extra.apiUrl,
   primary: '#09268f',

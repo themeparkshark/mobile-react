@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 export default {
   name: 'Theme Park Shark',
   slug: 'mobile-react',
