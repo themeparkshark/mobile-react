@@ -3,11 +3,14 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import Progress from './Progress';
 import { Image } from 'expo-image';
 import * as RootNavigation from '../RootNavigation';
+import {UserType} from '../models/user-type';
 
 export default function VisitedParks({
   parks,
+  user
 }: {
   readonly parks: ParkType[];
+  readonly user: UserType;
 }) {
   return (
     <View>
@@ -17,7 +20,6 @@ export default function VisitedParks({
             fontFamily: 'Knockout',
             fontSize: 20,
             textAlign: 'center',
-            paddingTop: 16,
           }}
         >
           You haven't visited any parks yet.
@@ -29,13 +31,15 @@ export default function VisitedParks({
             return (
               <TouchableOpacity
                 key={park.id}
-                onPress={() =>
-                  RootNavigation.navigate('Park', { park: park.id })
-                }
+                onPress={() => {
+                  RootNavigation.navigate('Park', {
+                    park: park.id,
+                    user: user.id,
+                  })
+                }}
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  paddingTop: 16,
                   paddingBottom: 16,
                 }}
               >

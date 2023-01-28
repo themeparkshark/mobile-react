@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Image } from 'expo-image';
 import { ImageBackground, ScrollView, Text, View } from 'react-native';
-import getPark from '../api/endpoints/parks/getPark';
-import getTasks from '../api/endpoints/parks/getTasks';
 import Topbar from '../components/Topbar';
 import { ParkType } from '../models/park-type';
 import { TaskType } from '../models/task-type';
@@ -14,16 +12,30 @@ import recordActivity from '../api/endpoints/activities/create';
 import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import { SecretTaskType } from '../models/secret-task-type';
-import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import Loading from '../components/Loading';
 import TaskCoinModal from '../components/TaskCoinModal';
+import getVisitedPark from '../api/endpoints/users/visited-parks/getPark';
+import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
+import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
+import getTasks from '../api/endpoints/parks/getTasks';
+import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
 
 export default function ParkScreen({ route }) {
-  const { park } = route.params;
+  const { park, user } = route.params;
   const [currentPark, setCurrentPark] = useState<ParkType>();
-  const [tasks, setTasks] = useState<TaskType[]>();
-  const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>();
+  const [tasks, setTasks] = useState<TaskType[]>([]);
+  const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<TaskType[]>([]);
+  const [completedSecretTasks, setCompletedSecretTasks] = useState<SecretTaskType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  const hasCompletedTask = (task: number) => {
+    return completedTasks.find((completedTask) => completedTask.id === task);
+  };
+
+  const hasCompletedSecretTask = (secretTask: number) => {
+    return completedSecretTasks.find((completedSecretTask) => completedSecretTask.id === secretTask);
+  };
 
   const silver =
     currentPark && currentPark.park_coins_count >= 50
@@ -42,15 +54,17 @@ export default function ParkScreen({ route }) {
 
   useFocusEffect(
     useCallback(() => {
-      recordActivity('Viewed the Park screen.');
+      recordActivity(`Viewed the Park screen${user ? ` for ${user.username}.` : '.'}`);
     }, [])
   );
 
   useEffect(() => {
     (async () => {
-      setCurrentPark(await getPark(park));
+      setCurrentPark(await getVisitedPark(park, user));
       setTasks(await getTasks(park));
       setSecretTasks(await getSecretTasks(park));
+      setCompletedTasks(await getCompletedTasks(park, user));
+      setCompletedSecretTasks(await getCompletedSecretTasks(park, user));
       setLoading(false);
     })();
   }, []);
@@ -242,19 +256,18 @@ export default function ParkScreen({ route }) {
                                   paddingLeft: index === 0 ? 0 : 12,
                                 }}
                               >
-                                {secretTask.has_completed && (
-                                  <TaskCoinModal task={secretTask} />
-                                )}
-                                {!secretTask.has_completed && (
-                                  <View
+                                {hasCompletedSecretTask(secretTask.id) ?
+                                  (
+                                    <TaskCoinModal task={secretTask} />
+                                  )
+                                  : <View
                                     style={{
                                       width: 60,
                                       height: 60,
                                       backgroundColor: 'rgba(0, 0, 0, .5)',
                                       borderRadius: 50,
                                     }}
-                                  />
-                                )}
+                                  />}
                               </View>
                             ))}
                           </View>
@@ -291,19 +304,18 @@ export default function ParkScreen({ route }) {
                                 paddingLeft: index === 0 ? 0 : 12,
                               }}
                             >
-                              {task.has_completed && (
-                                <TaskCoinModal task={task} />
-                              )}
-                              {!task.has_completed && (
-                                <View
+                              {hasCompletedTask(task.id) ?
+                                (
+                                  <TaskCoinModal task={task} />
+                                )
+                                : <View
                                   style={{
                                     width: 60,
                                     height: 60,
                                     backgroundColor: 'rgba(0, 0, 0, .5)',
                                     borderRadius: 50,
                                   }}
-                                />
-                              )}
+                                />}
                             </View>
                           ))}
                         </View>

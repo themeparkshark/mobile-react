@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import {
   Dimensions,
   ImageBackground,
+  NativeModules,
   SafeAreaView,
   Text,
   View,
@@ -11,6 +12,7 @@ import { ReactNode, useContext } from 'react';
 import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
 import Broadcasts from './Broadcasts';
+import Constants from 'expo-constants';
 
 export default function Topbar({
   button = null,
@@ -53,7 +55,7 @@ export default function Topbar({
         resizeMode="cover"
         style={{
           height: 120,
-          marginTop: -50,
+          marginTop: Constants.statusBarHeight - (Constants.statusBarHeight * 2 + 5),
           alignItems: 'center',
           justifyContent: 'flex-end',
         }}

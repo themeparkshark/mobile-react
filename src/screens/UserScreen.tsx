@@ -88,7 +88,7 @@ export default function UserScreen({ navigation, route }) {
               {parks.length > 0 && (
                 <>
                   <Heading text="Visited Parks" />
-                  <VisitedParks parks={parks} />
+                  <VisitedParks parks={parks} user={currentUser} />
                 </>
               )}
             </View>

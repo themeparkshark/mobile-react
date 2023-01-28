@@ -5,14 +5,12 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
-import Progress from '../components/Progress';
 import Playercard from '../components/Playercard';
 import Button from '../components/Button';
 import * as RootNavigation from '../RootNavigation';
@@ -63,7 +61,7 @@ export default function NewsScreen({ navigation }) {
 
   useEffect(() => {
     (async () => {
-      setParks(await getParks());
+      setParks(await getParks(user.id));
       setStores(await getStores());
       setInventory(await getInventory());
       await requestFriends();
@@ -141,18 +139,7 @@ export default function NewsScreen({ navigation }) {
                 }}
                 onPress={() => navigation.navigate('Inventory')}
               >
-                {inventory && (
-                  <Playercard
-                    user={user}
-                    inventory={inventory}
-                    style={{
-                      position: 'absolute',
-                      width: Dimensions.get('window').width,
-                      height: 455,
-                      marginTop: -55,
-                    }}
-                  />
-                )}
+
               </Pressable>
               <View
                 style={{
@@ -250,7 +237,7 @@ export default function NewsScreen({ navigation }) {
                   </>
                 )}
                 <Heading text="Your Parks" />
-                <VisitedParks parks={parks} />
+                <VisitedParks parks={parks} user={user} />
               </View>
             </View>
           </ScrollView>
