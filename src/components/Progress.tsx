@@ -11,7 +11,7 @@ export default function Progress({ progress }: { readonly progress: number }) {
         borderRadius: 10,
         borderWidth: 3,
         borderColor: config.primary,
-        backgroundColor: config.primary,
+        backgroundColor: 'white',
         overflow: 'hidden',
       }}
     >
@@ -20,7 +20,7 @@ export default function Progress({ progress }: { readonly progress: number }) {
           position: 'absolute',
           width: `${progress}%`,
           height: '100%',
-          backgroundColor: 'white',
+          backgroundColor: config.primary,
         }}
       />
     </View>
