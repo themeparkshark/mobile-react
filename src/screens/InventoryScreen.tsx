@@ -77,7 +77,9 @@ export default function InventoryScreen() {
   return (
     <>
       <Topbar
-        onBackButtonPress={() => refreshUser()}
+        onBackButtonPress={async () => {
+          await refreshUser();
+        }}
         showBackButton={true}
         text="Inventory"
       />
@@ -129,6 +131,10 @@ export default function InventoryScreen() {
                   >
                     <Pressable
                       onPress={async () => {
+                        if (itemType.id === currentItemType.id) {
+                          return;
+                        }
+
                         setItemsLoading(true);
                         setCurrentItemType(itemType);
                         setItems([]);

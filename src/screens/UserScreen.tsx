@@ -62,7 +62,6 @@ export default function UserScreen({ navigation, route }) {
               }}
             >
               <Playercard
-                user={currentUser}
                 inventory={currentUser.inventory}
                 style={{
                   position: 'absolute',
