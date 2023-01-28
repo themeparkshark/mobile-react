@@ -11,6 +11,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import EntryScreen from './screens/EntryScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import ErrorScreen from './screens/ErrorScreen';
+import LogoutScreen from './screens/LogoutScreen';
 import StoreScreen from './screens/StoreScreen';
 import UserScreen from './screens/UserScreen';
 import { Storage } from 'expo-storage';
@@ -44,6 +45,14 @@ const HomeStackNavigator = () => {
       <Stack.Screen
         name="Error"
         component={ErrorScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Logout"
+        component={LogoutScreen}
         options={{
           animation: 'none',
           gestureEnabled: false,

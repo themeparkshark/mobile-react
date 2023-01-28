@@ -8,6 +8,7 @@ import * as RootNavigation from '../RootNavigation';
 import unfriend from '../api/endpoints/me/users/unfriend';
 import sendFriendRequest from '../api/endpoints/me/users/send-friend-request';
 import acceptFriendRequest from '../api/endpoints/me/users/accept-friend-request';
+import Avatar from './Avatar';
 
 export default function FriendsList({
   users,
@@ -35,19 +36,11 @@ export default function FriendsList({
                 }}
               >
                 <View>
-                  <Image
-                    source={user.avatar_url}
-                    style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: 10,
-                    }}
-                    contentFit="cover"
-                  />
+                  <Avatar size={60} user={user} />
                 </View>
                 <View
                   style={{
-                    paddingLeft: 16,
+                    paddingLeft: 32,
                     flex: 1,
                   }}
                 >
@@ -67,28 +60,6 @@ export default function FriendsList({
                     flexDirection: 'row',
                   }}
                 >
-                  <View
-                    style={{
-                      paddingRight: 16,
-                    }}
-                  >
-                    <Button
-                      onPress={() => {
-                        RootNavigation.navigate('User', {
-                          user: user.id,
-                        });
-                      }}
-                    >
-                      <Image
-                        source={require('../../assets/images/screens/profile/view.png')}
-                        style={{
-                          width: 50,
-                          height: 50,
-                        }}
-                        contentFit="contain"
-                      />
-                    </Button>
-                  </View>
                   {user.is_friend && onUnfriend && (
                     <View>
                       <Button

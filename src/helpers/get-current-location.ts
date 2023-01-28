@@ -1,11 +1,13 @@
 import * as Location from 'expo-location';
 import { LocationType } from '../models/location-type';
-import { ParkType } from '../models/park-type';
+import * as RootNavigation from '../RootNavigation';
 
 export default async function (): Promise<LocationType> {
   const { status } = await Location.requestForegroundPermissionsAsync();
 
   if (status !== 'granted') {
+    RootNavigation.navigate('Error');
+
     return {
       latitude: 0,
       longitude: 0,

@@ -61,7 +61,7 @@ export default function LoginScreen() {
               backgroundColor: 'rgba(255, 255, 255, .6)',
               marginLeft: 'auto',
               marginRight: 'auto',
-              padding: 15,
+              padding: 16,
               borderRadius: 5,
             }}
           >

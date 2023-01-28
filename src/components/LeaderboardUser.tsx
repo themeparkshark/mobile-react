@@ -1,7 +1,7 @@
 import { UserType } from '../models/user-type';
 import { Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import LeaderboardAvatar from './LeaderboardAvatar';
+import Avatar from './Avatar';
 
 export default function LeaderboardUser({
   user,
@@ -24,7 +24,7 @@ export default function LeaderboardUser({
 
   return (
     <>
-      <LeaderboardAvatar size={avatar[size]} user={user} />
+      <Avatar size={avatar[size]} user={user} />
       <View
         style={{
           width: '50%',

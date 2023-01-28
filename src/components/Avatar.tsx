@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import Button from './Button';
 import * as RootNavigation from '../RootNavigation';
 
-export default function LeaderboardAvatar({
+export default function Avatar({
   user,
   size,
 }: {

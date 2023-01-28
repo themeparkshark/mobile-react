@@ -23,7 +23,7 @@ import { UserType } from '../models/user-type';
 import getUsers from '../api/endpoints/leaderboards/users';
 import Loading from '../components/Loading';
 import LeaderboardUser from '../components/LeaderboardUser';
-import LeaderboardAvatar from '../components/LeaderboardAvatar';
+import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 
 export default function LeaderboardScreen({ route }) {
@@ -297,7 +297,7 @@ export default function LeaderboardScreen({ route }) {
                             alignItems: 'center',
                           }}
                         >
-                          <LeaderboardAvatar size={50} user={user} />
+                          <Avatar size={50} user={user} />
                           <Text
                             style={{
                               fontSize: 24,
