@@ -254,6 +254,7 @@ export default function pinCollectionModal({
                     }}
                   >
                     <Tooltip
+                      actionType="press"
                       height="auto"
                       popover={
                         <Text

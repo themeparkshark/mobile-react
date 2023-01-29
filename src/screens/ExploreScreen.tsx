@@ -262,14 +262,14 @@ export default function ExploreScreen() {
                   tracksViewChanges={false}
                   stopPropagation={true}
                 >
-                  {/*<Image*/}
-                  {/*  source={require('../../assets/images/screens/explore/item_animation.png')}*/}
-                  {/*  contentFit="contain"*/}
-                  {/*  style={{*/}
-                  {/*    width: 70,*/}
-                  {/*    height: 70,*/}
-                  {/*  }}*/}
-                  {/*/>*/}
+                  <Image
+                    source={require('../../assets/images/screens/explore/item_animation.gif')}
+                    contentFit="contain"
+                    style={{
+                      width: 70,
+                      height: 70,
+                    }}
+                  />
                 </Marker>
               );
             })}
@@ -290,14 +290,14 @@ export default function ExploreScreen() {
                   tracksViewChanges={false}
                   stopPropagation={true}
                 >
-                  {/*<Image*/}
-                  {/*  source={require('../../assets/images/screens/explore/pin_animation.png')}*/}
-                  {/*  contentFit="contain"*/}
-                  {/*  style={{*/}
-                  {/*    width: 70,*/}
-                  {/*    height: 70,*/}
-                  {/*  }}*/}
-                  {/*/>*/}
+                  <Image
+                    source={require('../../assets/images/screens/explore/pin_animation.gif')}
+                    contentFit="contain"
+                    style={{
+                      width: 70,
+                      height: 70,
+                    }}
+                  />
                 </Marker>
               );
             })}
@@ -311,6 +311,7 @@ export default function ExploreScreen() {
                 }}
               >
                 <Tooltip
+                  actionType="press"
                   height="auto"
                   popover={
                     <Text
