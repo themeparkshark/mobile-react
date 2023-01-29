@@ -9,7 +9,6 @@ import {
   ScrollView,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { UserType } from '../models/user-type';
@@ -19,6 +18,7 @@ import searchUsers from '../api/endpoints/users/all';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
+import {FriendContext} from '../context/FriendProvider';
 
 export default function FriendsScreen() {
   const [loading, setLoading] = useState<boolean>(true);
@@ -26,6 +26,7 @@ export default function FriendsScreen() {
   const [searchResults, setSearchResults] = useState<UserType[]>([]);
   const [search, setSearch] = useState<string>('');
   const { user } = useContext(AuthContext);
+  const { refreshFriends } = useContext(FriendContext);
 
   const requestFriends = async () => {
     setFriends(await getFriends());
@@ -35,21 +36,39 @@ export default function FriendsScreen() {
     friends ? setLoading(false) : setLoading(true);
   }, [friends]);
 
-  useEffect(() => {
-    (async () => {
-      await requestFriends();
-    })();
-  }, []);
-
   useFocusEffect(
     useCallback(() => {
       recordActivity('Viewed the Friends screen.');
+
+      (async () => {
+        await requestFriends();
+      })();
     }, [])
   );
 
   return (
     <>
-      <Topbar text="Friends" showBackButton={true} />
+      <Topbar
+        text="Friends"
+        showBackButton={true}
+        button={
+          <Button
+            onPress={() => {
+              RootNavigation.navigate('PendingFriendRequests');
+            }}
+            showRedCircle={user?.has_pending_friend_requests}
+          >
+            <Image
+              source={require('../../assets/images/screens/friends/pending_requests.png')}
+              style={{
+                width: 60,
+                height: 60,
+              }}
+              contentFit="contain"
+            />
+          </Button>
+        }
+      />
       <View
         style={{
           marginTop: -8,
@@ -64,7 +83,10 @@ export default function FriendsScreen() {
         >
           <View
             style={{
-              padding: 16,
+              paddingLeft: 16,
+              paddingRight: 16,
+              paddingBottom: 16,
+              paddingTop: 24,
               alignItems: 'center',
             }}
           >
@@ -92,7 +114,7 @@ export default function FriendsScreen() {
                 onChangeText={setSearch}
                 value={search}
                 maxLength={12}
-                placeholder="Enter a username"
+                placeholder="Search for a user"
                 returnKeyType="search"
                 enablesReturnKeyAutomatically
                 onSubmitEditing={async ({ nativeEvent }) => {
@@ -105,38 +127,6 @@ export default function FriendsScreen() {
                   setLoading(false);
                 }}
               />
-              <TouchableOpacity
-                onPress={() => {
-                  setSearch('');
-                  setSearchResults([]);
-                }}
-                style={{
-                  marginLeft: 16,
-                }}
-              >
-                <Text>Clear</Text>
-              </TouchableOpacity>
-              <View
-                style={{
-                  marginLeft: 16,
-                }}
-              >
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('PendingFriendRequests');
-                  }}
-                  showRedCircle={user?.has_pending_friend_requests}
-                >
-                  <Image
-                    source={require('../../assets/images/screens/explore/base.png')}
-                    style={{
-                      width: 60,
-                      height: 60,
-                    }}
-                    contentFit="contain"
-                  />
-                </Button>
-              </View>
             </View>
           </View>
           <View
@@ -164,7 +154,10 @@ export default function FriendsScreen() {
                   >
                     <FriendsList
                       users={searchResults.length ? searchResults : friends}
-                      onUnfriend={() => requestFriends()}
+                      onSuccess={async () => {
+                        await requestFriends();
+                        await refreshFriends();
+                      }}
                     />
                     {!friends.length && !searchResults.length && (
                       <Text

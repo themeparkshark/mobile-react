@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import {useCallback, useContext, useEffect, useState} from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Topbar from '../components/Topbar';
@@ -7,10 +7,12 @@ import { ImageBackground, ScrollView, View } from 'react-native';
 import { UserType } from '../models/user-type';
 import FriendsList from '../components/FriendsList';
 import getFriendRequests from '../api/endpoints/me/pending-requests';
+import {FriendContext} from '../context/FriendProvider';
 
 export default function PendingFriendRequestsScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [friendRequests, setFriendRequests] = useState<UserType[]>([]);
+  const { refreshFriends } = useContext(FriendContext);
 
   const requestFriendRequests = async () => {
     setFriendRequests(await getFriendRequests());
@@ -70,7 +72,10 @@ export default function PendingFriendRequestsScreen() {
                   >
                     <FriendsList
                       users={friendRequests}
-                      onAccept={() => requestFriendRequests()}
+                      onSuccess={async () => {
+                        await requestFriendRequests();
+                        await refreshFriends();
+                      }}
                     />
                   </View>
                 </ScrollView>

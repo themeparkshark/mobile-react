@@ -12,12 +12,10 @@ import Avatar from './Avatar';
 
 export default function FriendsList({
   users,
-  onAccept,
-  onUnfriend,
+  onSuccess,
 }: {
   readonly users: UserType[];
-  readonly onAccept?: () => void;
-  readonly onUnfriend?: () => void;
+  readonly onSuccess?: () => void;
 }) {
   const { refreshUser } = useContext(AuthContext);
 
@@ -60,7 +58,7 @@ export default function FriendsList({
                     flexDirection: 'row',
                   }}
                 >
-                  {user.is_friend && onUnfriend && (
+                  {user.is_friend && onSuccess && (
                     <View>
                       <Button
                         onPress={async () => {
@@ -76,7 +74,7 @@ export default function FriendsList({
                                 text: 'Ok',
                                 onPress: async () => {
                                   await unfriend(user);
-                                  await onUnfriend();
+                                  await onSuccess();
 
                                   Alert.alert(
                                     '',
@@ -95,7 +93,7 @@ export default function FriendsList({
                         }}
                       >
                         <Image
-                          source={require('../../assets/images/screens/explore/base.png')}
+                          source={require('../../assets/images/screens/friends/remove_friend.png')}
                           style={{
                             width: 50,
                             height: 50,
@@ -145,7 +143,7 @@ export default function FriendsList({
                       </Button>
                     </View>
                   )}
-                  {user.has_friend_request_from && onAccept && (
+                  {user.has_friend_request_from && onSuccess && (
                     <View>
                       <Button
                         onPress={async () => {
@@ -162,7 +160,7 @@ export default function FriendsList({
                                 onPress: async () => {
                                   await acceptFriendRequest(user);
                                   await refreshUser();
-                                  await onAccept();
+                                  await onSuccess();
                                 },
                               },
                             ]

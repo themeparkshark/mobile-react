@@ -31,6 +31,7 @@ import Experience from '../components/Experience';
 import Activity from '../components/Activity';
 import VisitedParks from '../components/VisitedParks';
 import Verified from '../components/Verified';
+import {FriendContext} from '../context/FriendProvider';
 
 interface ButtonType {
   readonly image: any;
@@ -41,10 +42,10 @@ interface ButtonType {
 export default function NewsScreen({ navigation }) {
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
-  const [friends, setFriends] = useState<UserType[]>([]);
   const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const { user, inventory, setInventory } = useContext(AuthContext);
+  const { user, setInventory } = useContext(AuthContext);
+  const { friends, refreshFriends } = useContext(FriendContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -52,19 +53,12 @@ export default function NewsScreen({ navigation }) {
     }, [])
   );
 
-  const requestFriends = async () =>
-    setFriends(
-      await getFriends({
-        limit: 5,
-      })
-    );
-
   useEffect(() => {
     (async () => {
       setParks(await getParks(user.id));
       setStores(await getStores());
       setInventory(await getInventory());
-      await requestFriends();
+      await refreshFriends();
 
       setLoading(false);
     })();
@@ -209,7 +203,9 @@ export default function NewsScreen({ navigation }) {
                 {friends && friends.length > 0 && (
                   <>
                     <FriendsList
-                      onUnfriend={async () => await requestFriends()}
+                      onSuccess={async () => {
+                        await refreshFriends();
+                      }}
                       users={friends}
                     />
                     <View style={{ alignItems: 'center', marginTop: 32 }}>

@@ -4,6 +4,7 @@ import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import { MusicProvider } from './src/context/MusicProvider';
 import ErrorBoundary from 'react-native-error-boundary';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
+import {FriendProvider} from './src/context/FriendProvider';
 
 export default function App() {
   return (
@@ -12,7 +13,9 @@ export default function App() {
         <SoundEffectProvider>
           <MusicProvider>
             <BroadcastProvider>
-              <Root />
+              <FriendProvider>
+                <Root />
+              </FriendProvider>
             </BroadcastProvider>
           </MusicProvider>
         </SoundEffectProvider>
