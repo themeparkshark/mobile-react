@@ -55,7 +55,7 @@ export default function Topbar({
         resizeMode="cover"
         style={{
           height: 120,
-          marginTop: Constants.statusBarHeight - (Constants.statusBarHeight * 2 + 5),
+          marginTop: Constants.statusBarHeight - (Constants.statusBarHeight * 2 + 15),
           alignItems: 'center',
           justifyContent: 'flex-end',
         }}

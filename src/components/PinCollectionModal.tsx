@@ -12,6 +12,7 @@ import config from '../config';
 import { PinCollectionType } from '../models/pin-collection-type';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import Tooltip from 'rn-tooltip';
+import Button from './Button';
 
 export default function pinCollectionModal({
   pinCollection,
@@ -190,6 +191,21 @@ export default function pinCollectionModal({
             }}
             onPress={() => setModalVisible(false)}
           />
+          <View style={{
+            position: 'absolute',
+            top: '5%',
+            right: '5%',
+          }}>
+            <Button onPress={() => setModalVisible(false)}>
+              <Image
+                source={require('../../assets/images/screens/pin-collections/close.png')}
+                style={{
+                  width: 30,
+                  height: 30,
+                }}
+              />
+            </Button>
+          </View>
           <ImageBackground
             source={require('../../assets/images/redeem.png')}
             resizeMode="contain"

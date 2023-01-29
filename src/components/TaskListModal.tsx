@@ -4,6 +4,7 @@ import {
   ImageBackground,
   Pressable,
   Text,
+  ScrollView,
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -43,12 +44,11 @@ export default function TaskListModal({
       <Modal
         animationIn="slideInUp"
         animationOut="slideOutDown"
-        swipeDirection="down"
-        onSwipeComplete={() => setModalVisible(false)}
         isVisible={modalVisible}
         onModalWillHide={() => {
           playSound(require('../../assets/sounds/modal_close.mp3'));
         }}
+        propagateSwipe={true}
       >
         <View
           style={{
@@ -65,6 +65,21 @@ export default function TaskListModal({
             }}
             onPress={() => setModalVisible(false)}
           />
+          <View style={{
+            position: 'absolute',
+            top: '5%',
+            right: '5%',
+          }}>
+            <Button onPress={() => setModalVisible(false)}>
+              <Image
+                source={require('../../assets/images/screens/pin-collections/close.png')}
+                style={{
+                  width: 30,
+                  height: 30,
+                }}
+              />
+            </Button>
+          </View>
           <View
             style={{
               top: 0,
@@ -105,15 +120,11 @@ export default function TaskListModal({
                 Uncompleted Tasks
               </Text>
             </ImageBackground>
-            <View
+            <ScrollView
               style={{
                 marginTop: -30,
                 backgroundColor: 'white',
                 borderRadius: 20,
-                paddingTop: 55,
-                paddingLeft: 35,
-                paddingRight: 35,
-                paddingBottom: 35,
                 shadowColor: '#000',
                 shadowOffset: {
                   width: 0,
@@ -122,27 +133,36 @@ export default function TaskListModal({
                 shadowOpacity: 0.25,
                 shadowRadius: 4,
                 width: '80%',
+                height: '50%',
                 marginLeft: 'auto',
                 marginRight: 'auto',
               }}
             >
-              {redeemables?.tasks.map((task, index) => {
-                return (
-                  <View key={task.id}>
-                    <Text
-                      style={{
-                        textAlign: 'center',
-                        fontFamily: 'Knockout',
-                        fontSize: 20,
-                        paddingTop: index === 0 ? 0 : 16,
-                      }}
-                    >
-                      {task.name}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
+              <View style={{
+                paddingTop: 45,
+                paddingRight: 35,
+                paddingLeft: 35,
+                paddingBottom: 35,
+                flex: 1,
+              }}>
+                {redeemables?.tasks.map((task, index) => {
+                  return (
+                    <View key={task.id}>
+                      <Text
+                        style={{
+                          textAlign: 'center',
+                          fontFamily: 'Knockout',
+                          fontSize: 20,
+                          paddingTop: index === 0 ? 0 : 16,
+                        }}
+                      >
+                        {task.name}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
