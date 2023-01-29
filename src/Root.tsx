@@ -31,6 +31,7 @@ import mobileAds, {
 } from 'react-native-google-mobile-ads';
 import FriendsScreen from './screens/FriendsScreen';
 import PendingFriendRequestsScreen from './screens/PendingFriendRequestsScreen';
+import Pusher from 'pusher-js/react-native';
 
 const Stack = createNativeStackNavigator();
 
@@ -157,7 +158,17 @@ export default function App() {
   useKeepAwake();
   const { user, setUser } = useContext(AuthContext);
 
+  const pusher = new Pusher('1535176', {
+    cluster: 'mt1',
+  });
+  const channel = pusher.subscribe('private-App.Models.User.3');
+
+  channel.bind('Illuminate\Notifications\Events\BroadcastNotificationCreated', (data) => {
+    console.log(data);
+  });
+
   useEffect(() => {
+
     mobileAds().setRequestConfiguration({
       maxAdContentRating: MaxAdContentRating.PG,
       tagForChildDirectedTreatment: true,
