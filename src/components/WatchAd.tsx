@@ -1,12 +1,12 @@
 import { TestIds, useInterstitialAd } from 'react-native-google-mobile-ads';
 import { useEffect } from 'react';
 import Button from './Button';
-import { Image } from 'react-native';
+import { Image } from 'expo-image';
 import * as Animatable from 'react-native-animatable';
 
 export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
-  const { isClosed, load, show } = useInterstitialAd(
-    __DEV__ ? TestIds.INTERSTITIAL : 'ca-app-pub-3563490411426795~6359856531',
+  const { isLoaded, isClosed, load, show } = useInterstitialAd(
+    __DEV__ ? TestIds.INTERSTITIAL : 'ca-app-pub-3563490411426795/2357294352',
     {
       requestNonPersonalizedAdsOnly: true,
     }
@@ -32,7 +32,11 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
       iterationCount="infinite"
       direction="alternate"
     >
-      <Button onPress={() => show()}>
+      <Button
+        onPress={() => {
+          isLoaded ? show() : onClose();
+        }}
+      >
         <Image
           source={require('../../assets/images/screens/explore/watch.png')}
           style={{

@@ -14,7 +14,6 @@ import TaskListModal from '../components/TaskListModal';
 import Wrapper from '../components/Wrapper';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
-import getCurrentLocation from '../helpers/get-current-location';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
@@ -24,16 +23,13 @@ import Playercard from '../components/Playercard';
 import Coin from './ExploreScreen/Coin';
 import dayjs from 'dayjs';
 import { ParkType } from '../models/park-type';
-import { LocationType } from '../models/location-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import { RedeemableType } from '../models/redeemable-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
-import { faLocationArrow as clearArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faLocationArrow as solidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
-import config from '../config';
 import Tooltip from 'rn-tooltip';
+import { LocationType } from '../models/location-type';
+import getCurrentLocation from '../helpers/get-current-location';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -63,7 +59,7 @@ export default function ExploreScreen() {
 
     const interval = setInterval(() => {
       getCurrentLocation().then((response) => setLocation(response));
-    }, 10 * 5000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);
@@ -108,27 +104,6 @@ export default function ExploreScreen() {
       {!park && <NotAtPark />}
       {park && redeemables && (
         <>
-          <View
-            style={{
-              position: 'absolute',
-              top: 156,
-              right: 12,
-              zIndex: 10,
-            }}
-          >
-            <Pressable
-              onPress={() => setFollowingUser(true)}
-              style={{
-                padding: 12,
-              }}
-            >
-              <FontAwesomeIcon
-                icon={followingUser ? solidArrow : clearArrow}
-                size={30}
-                color={config.primary}
-              />
-            </Pressable>
-          </View>
           <View
             style={{
               position: 'absolute',
@@ -236,14 +211,13 @@ export default function ExploreScreen() {
           }}
           showsUserLocation={true}
           showsIndoors={false}
-          zoomEnabled={true}
+          zoomEnabled={false}
           rotateEnabled={false}
-          scrollEnabled={true}
-          followsUserLocation={followingUser}
+          scrollEnabled={false}
+          initialRegion={location}
           pitchEnabled={false}
           loadingEnabled={true}
           userInterfaceStyle={'light'}
-          onPanDrag={() => setFollowingUser(false)}
         >
           {redeemables?.items
             .filter((item) => !item.is_hidden)
