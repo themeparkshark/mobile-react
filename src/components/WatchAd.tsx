@@ -22,7 +22,7 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
     }
   }, [isClosed]);
 
-  if (isClosed || !load) {
+  if (isClosed || !isLoaded) {
     return <></>;
   }
 
@@ -34,7 +34,7 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
     >
       <Button
         onPress={() => {
-          isLoaded ? show() : onClose();
+          show();
         }}
       >
         <Image

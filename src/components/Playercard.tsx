@@ -1,5 +1,4 @@
-import { Animated, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
-import { Image } from 'expo-image';
+import { Animated, StyleProp, Image, StyleSheet, View, ViewStyle } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { InventoryType } from '../models/inventory-type';
 
@@ -17,20 +16,22 @@ export default function Playercard({
   const translate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(translate, {
-          toValue: animate ? 10 : 0,
-          duration: 2700,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translate, {
-          toValue: 0,
-          duration: 2700,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
+    if (animate) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(translate, {
+            toValue: 10,
+            duration: 2700,
+            useNativeDriver: true,
+          }),
+          Animated.timing(translate, {
+            toValue: 0,
+            duration: 2700,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    }
   }, []);
 
   return (
@@ -44,18 +45,22 @@ export default function Playercard({
       >
         {inventory?.background_item && showBackground && (
           <Image
-            source={inventory.background_item.paper_url}
+            source={{
+              uri: inventory.background_item.paper_url,
+            }}
             style={{
               width: '100%',
               height: '100%',
               position: 'absolute',
             }}
-            contentFit="cover"
+            resizeMode="cover"
           />
         )}
         {inventory?.pin_item && showBackground && (
           <Image
-            source={inventory.pin_item.icon_url}
+            source={{
+              uri: inventory.pin_item.icon_url
+            }}
             style={{
               width: 40,
               height: 40,
@@ -63,7 +68,7 @@ export default function Playercard({
               right: 20,
               top: 90,
             }}
-            contentFit="contain"
+            resizeMode="contain"
           />
         )}
         <Animated.View
@@ -88,55 +93,65 @@ export default function Playercard({
           >
             {inventory?.skin_item && (
               <Image
-                source={
-                  animate
+                source={{
+                  uri: animate
                     ? inventory.skin_item.no_eye_url
                     : inventory.skin_item.paper_url
-                }
+                }}
                 style={styles.image}
-                contentFit="contain"
+                resizeMode="contain"
               />
             )}
             {animate && (
               <Image
                 source={require('../../assets/images/screens/inventory/blink.png')}
                 style={styles.image}
-                contentFit="contain"
+                resizeMode="contain"
               />
             )}
             {inventory?.face_item && (
               <Image
-                source={inventory.face_item.paper_url}
+                source={{
+                  uri: inventory.face_item.paper_url
+                }}
                 style={styles.image}
-                contentFit="contain"
+                resizeMode="contain"
               />
             )}
             {inventory?.body_item && (
               <Image
-                source={inventory.body_item.paper_url}
+                source={{
+                  uri: inventory.body_item.paper_url
+                }}
                 style={styles.image}
-                contentFit="contain"
+                resizeMode="contain"
               />
             )}
             {inventory?.neck_item && (
               <Image
-                source={inventory.neck_item.paper_url}
+                source={{
+                  uri: inventory.neck_item.paper_url
+                }}
                 style={styles.image}
-                contentFit="contain"
+                resizeMode="contain"
               />
             )}
             {inventory?.hand_item && (
               <Image
-                source={inventory.hand_item.paper_url}
+                source={{
+                  uri: inventory.hand_item.paper_url
+                }}
                 style={styles.image}
-                contentFit="contain"
+                resizeMode="contain"
               />
             )}
             {inventory?.head_item && (
               <Image
-                source={inventory.head_item.paper_url}
+                source={{
+                  uri: inventory.head_item.paper_url
+                }}
                 style={styles.image}
-                contentFit="contain"
+                resizeMode="contain"
               />
             )}
           </View>

@@ -1,9 +1,8 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Image } from 'expo-image';
 import {
   Dimensions,
+  Image,
   ImageBackground,
-  Pressable,
   Text,
   View,
 } from 'react-native';
@@ -141,7 +140,7 @@ export default function ExploreScreen() {
                       height: 84,
                     }}
                     source={require('../../assets/images/screens/explore/queuetimes.png')}
-                    contentFit="contain"
+                    resizeMode="contain"
                   />
                 </Button>
               </View>
@@ -238,7 +237,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/item_animation.gif')}
-                    contentFit="contain"
+                    resizeMode="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -266,7 +265,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/pin_animation.gif')}
-                    contentFit="contain"
+                    resizeMode="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -302,12 +301,12 @@ export default function ExploreScreen() {
                   pointerColor="white"
                 >
                   <Image
-                    source={require('../../assets/images/screens/explore/task_animation.png')}
+                    source={require('../../assets/images/screens/explore/task_animation.gif')}
                     style={{
                       width: 120,
                       height: 120,
                     }}
-                    contentFit="contain"
+                    resizeMode="contain"
                   />
                 </Tooltip>
               </Marker>
