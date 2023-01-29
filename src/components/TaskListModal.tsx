@@ -65,11 +65,13 @@ export default function TaskListModal({
             }}
             onPress={() => setModalVisible(false)}
           />
-          <View style={{
-            position: 'absolute',
-            top: '5%',
-            right: '5%',
-          }}>
+          <View
+            style={{
+              position: 'absolute',
+              top: '5%',
+              right: '5%',
+            }}
+          >
             <Button onPress={() => setModalVisible(false)}>
               <Image
                 source={require('../../assets/images/screens/pin-collections/close.png')}
@@ -138,13 +140,15 @@ export default function TaskListModal({
                 marginRight: 'auto',
               }}
             >
-              <View style={{
-                paddingTop: 45,
-                paddingRight: 35,
-                paddingLeft: 35,
-                paddingBottom: 35,
-                flex: 1,
-              }}>
+              <View
+                style={{
+                  paddingTop: 45,
+                  paddingRight: 35,
+                  paddingLeft: 35,
+                  paddingBottom: 35,
+                  flex: 1,
+                }}
+              >
                 {redeemables?.tasks.map((task, index) => {
                   return (
                     <View key={task.id}>

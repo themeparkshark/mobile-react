@@ -1,12 +1,6 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { Image } from 'expo-image';
-import {
-  Dimensions,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, Pressable, ScrollView, Text, View } from 'react-native';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
 import Wrapper from '../components/Wrapper';
@@ -31,7 +25,7 @@ import Experience from '../components/Experience';
 import Activity from '../components/Activity';
 import VisitedParks from '../components/VisitedParks';
 import Verified from '../components/Verified';
-import {FriendContext} from '../context/FriendProvider';
+import { FriendContext } from '../context/FriendProvider';
 
 interface ButtonType {
   readonly image: any;

@@ -26,7 +26,9 @@ export default function ParkScreen({ route }) {
   const [tasks, setTasks] = useState<TaskType[]>([]);
   const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>([]);
   const [completedTasks, setCompletedTasks] = useState<TaskType[]>([]);
-  const [completedSecretTasks, setCompletedSecretTasks] = useState<SecretTaskType[]>([]);
+  const [completedSecretTasks, setCompletedSecretTasks] = useState<
+    SecretTaskType[]
+  >([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   const hasCompletedTask = (task: number) => {
@@ -34,7 +36,9 @@ export default function ParkScreen({ route }) {
   };
 
   const hasCompletedSecretTask = (secretTask: number) => {
-    return completedSecretTasks.find((completedSecretTask) => completedSecretTask.id === secretTask);
+    return completedSecretTasks.find(
+      (completedSecretTask) => completedSecretTask.id === secretTask
+    );
   };
 
   const silver =
@@ -54,7 +58,9 @@ export default function ParkScreen({ route }) {
 
   useFocusEffect(
     useCallback(() => {
-      recordActivity(`Viewed the Park screen${user ? ` for ${user.username}.` : '.'}`);
+      recordActivity(
+        `Viewed the Park screen${user ? ` for ${user.username}.` : '.'}`
+      );
     }, [])
   );
 
@@ -174,7 +180,7 @@ export default function ParkScreen({ route }) {
                   }}
                 >
                   <View style={{ paddingBottom: 16 }}>
-                    <View style={{ position: 'relative', height: 185, }}>
+                    <View style={{ position: 'relative', height: 185 }}>
                       <View
                         style={{
                           position: 'absolute',
@@ -191,7 +197,8 @@ export default function ParkScreen({ route }) {
                           style={{
                             width: 90,
                             height: 95,
-                            opacity: currentPark.park_coins_count >= 50 ? 1 : 0.6,
+                            opacity:
+                              currentPark.park_coins_count >= 50 ? 1 : 0.6,
                           }}
                         />
                         <Image
@@ -210,7 +217,8 @@ export default function ParkScreen({ route }) {
                             width: 70,
                             height: 75,
                             marginLeft: 16,
-                            opacity: currentPark.park_coins_count >= 12 ? 1 : 0.6,
+                            opacity:
+                              currentPark.park_coins_count >= 12 ? 1 : 0.6,
                           }}
                         />
                       </View>
@@ -256,18 +264,18 @@ export default function ParkScreen({ route }) {
                                   paddingLeft: index === 0 ? 0 : 12,
                                 }}
                               >
-                                {hasCompletedSecretTask(secretTask.id) ?
-                                  (
-                                    <TaskCoinModal task={secretTask} />
-                                  )
-                                  : <View
+                                {hasCompletedSecretTask(secretTask.id) ? (
+                                  <TaskCoinModal task={secretTask} />
+                                ) : (
+                                  <View
                                     style={{
                                       width: 60,
                                       height: 60,
                                       backgroundColor: 'rgba(0, 0, 0, .5)',
                                       borderRadius: 50,
                                     }}
-                                  />}
+                                  />
+                                )}
                               </View>
                             ))}
                           </View>
@@ -304,18 +312,18 @@ export default function ParkScreen({ route }) {
                                 paddingLeft: index === 0 ? 0 : 12,
                               }}
                             >
-                              {hasCompletedTask(task.id) ?
-                                (
-                                  <TaskCoinModal task={task} />
-                                )
-                                : <View
+                              {hasCompletedTask(task.id) ? (
+                                <TaskCoinModal task={task} />
+                              ) : (
+                                <View
                                   style={{
                                     width: 60,
                                     height: 60,
                                     backgroundColor: 'rgba(0, 0, 0, .5)',
                                     borderRadius: 50,
                                   }}
-                                />}
+                                />
+                              )}
                             </View>
                           ))}
                         </View>

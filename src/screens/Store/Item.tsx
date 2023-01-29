@@ -1,4 +1,4 @@
-import {Alert, ImageBackground, Pressable, Text, View} from 'react-native';
+import { Alert, ImageBackground, Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { AuthContext } from '../../context/AuthProvider';
 import { useContext } from 'react';
@@ -7,9 +7,7 @@ import purchase from '../../api/endpoints/me/inventory/purchase-item';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import { ItemType } from '../../models/item-type';
 
-export default function Item({ item } : {
-  readonly item: ItemType;
-}) {
+export default function Item({ item }: { readonly item: ItemType }) {
   const { user, refreshUser } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
 
@@ -62,7 +60,9 @@ export default function Item({ item } : {
             text: 'Cancel',
             style: 'cancel',
             onPress: async () => {
-              playSound(require('../../../assets/sounds/purchase_item_cancel.mp3'));
+              playSound(
+                require('../../../assets/sounds/purchase_item_cancel.mp3')
+              );
             },
           },
           {
@@ -71,14 +71,20 @@ export default function Item({ item } : {
               const response = await purchase(item);
               await refreshUser();
 
-              playSound(require('../../../assets/sounds/purchase_item_success.mp3'));
+              playSound(
+                require('../../../assets/sounds/purchase_item_success.mp3')
+              );
 
-              Alert.alert('', `${response.name} has been added to your inventory.`, [
-                {
-                  text: 'Ok',
-                  style: 'cancel',
-                },
-              ]);
+              Alert.alert(
+                '',
+                `${response.name} has been added to your inventory.`,
+                [
+                  {
+                    text: 'Ok',
+                    style: 'cancel',
+                  },
+                ]
+              );
             },
           },
         ]);

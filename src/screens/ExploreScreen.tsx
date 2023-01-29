@@ -1,11 +1,5 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  Image,
-  ImageBackground,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, Image, ImageBackground, Text, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import RedeemModal from '../components/RedeemModal';

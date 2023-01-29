@@ -1,16 +1,11 @@
 import { createContext, FC, ReactNode, useContext, useEffect } from 'react';
-import { useQueueState } from 'rooks';
+import { useQueueState, useIntervalWhen } from 'rooks';
 import { Pusher, PusherEvent } from '@pusher/pusher-websocket-react-native';
 import { AuthContext } from './AuthProvider';
-
-export interface BroadcastType {
-  readonly message: string;
-  readonly id: string;
-  readonly type: string;
-}
+import client from '../api/client';
 
 export interface BroadcastContextType {
-  readonly activeBroadcast: BroadcastType | null;
+  readonly activeBroadcast: string | undefined;
 }
 
 export const BroadcastContext = createContext<BroadcastContextType>(
@@ -20,34 +15,51 @@ export const BroadcastContext = createContext<BroadcastContextType>(
 export const BroadcastProvider: FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  const { user } = useContext(AuthContext);
-  const [list, { peek, enqueue, dequeue }] = useQueueState<BroadcastType[]>([]);
+  const [list, { enqueue, dequeue, peek, length }] = useQueueState<string>([]);
+  const { user, isReady } = useContext(AuthContext);
   const pusher = Pusher.getInstance();
 
   useEffect(() => {
-    (async () => {
-      if (!user) {
-        return;
-      }
-    })();
-  }, [user]);
-
-  useEffect(() => {
-    if (!list.length) {
+    if (!isReady) {
       return;
     }
 
-    const interval = setInterval(() => {
-      dequeue();
-    }, 5000);
+    (async () => {
+      await pusher.init({
+        apiKey: 'fa6a1b978c66821f97dc',
+        cluster: 'mt1',
+        onAuthorizer: async (channelName, socketId) => {
+          const { data } = await client.post('/broadcasting/auth', {
+            channel_name: channelName,
+            socket_id: socketId,
+          });
 
-    return () => clearInterval(interval);
-  }, [list]);
+          return data;
+        },
+      });
+
+      await pusher.connect();
+      await pusher.subscribe({
+        channelName: `private-App.Models.User.${user.id}`,
+        onEvent: (event: PusherEvent) => {
+          enqueue(JSON.parse(event.data).message);
+        },
+      });
+    })();
+  }, [isReady]);
+
+  useIntervalWhen(
+    () => {
+      dequeue();
+    },
+    5250,
+    !!length
+  );
 
   return (
     <BroadcastContext.Provider
       value={{
-        activeBroadcast: !!peek() ? peek()[0] : null,
+        activeBroadcast: peek(),
       }}
     >
       {children}

@@ -1,52 +1,86 @@
-import { View, Text, Dimensions } from 'react-native';
-import { useContext } from 'react';
+import { Animated, View, Text, Dimensions } from 'react-native';
+import { useContext, useEffect, useRef } from 'react';
 import { BroadcastContext } from '../context/BroadcastProvider';
 
 export default function Broadcasts() {
   const { activeBroadcast } = useContext(BroadcastContext);
+  const translate = useRef(new Animated.Value(0)).current;
+
+  const slideUp = () => {
+    Animated.timing(translate, {
+      toValue: -100,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const slideDown = () => {
+    Animated.timing(translate, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  useEffect(() => {
+    if (activeBroadcast) {
+      slideDown();
+
+      const timeout = setTimeout(() => {
+        slideUp();
+      }, 5000);
+
+      return () => clearInterval(timeout);
+    } else {
+      slideUp();
+    }
+  }, [activeBroadcast]);
 
   return (
-    activeBroadcast && (
+    <Animated.View
+      style={{
+        width: Dimensions.get('window').width,
+        position: 'absolute',
+        top: 52,
+        zIndex: 0,
+        alignItems: 'center',
+        transform: [
+          {
+            translateY: translate,
+          },
+        ],
+      }}
+    >
       <View
         style={{
-          width: Dimensions.get('window').width,
-          position: 'absolute',
-          top: 62,
-          zIndex: 0,
-          alignItems: 'center',
+          width: '80%',
+          backgroundColor: 'rgba(255, 255, 255, .8)',
+          borderBottomLeftRadius: 10,
+          borderBottomRightRadius: 10,
+          borderColor: 'white',
+          borderWidth: 3,
+          paddingTop: 16,
+          paddingBottom: 12,
+          paddingLeft: 12,
+          paddingRight: 12,
+          shadowOffset: {
+            width: 0,
+            height: 0,
+          },
+          shadowOpacity: 0.4,
+          shadowRadius: 3,
         }}
       >
-        <View
+        <Text
           style={{
-            width: '80%',
-            backgroundColor: 'rgba(255, 255, 255, .8)',
-            borderBottomLeftRadius: 10,
-            borderBottomRightRadius: 10,
-            borderColor: 'white',
-            borderWidth: 3,
-            paddingTop: 16,
-            paddingBottom: 12,
-            paddingLeft: 12,
-            paddingRight: 12,
-            shadowOffset: {
-              width: 0,
-              height: 0,
-            },
-            shadowOpacity: 0.4,
-            shadowRadius: 3,
+            textAlign: 'center',
+            fontFamily: 'Knockout',
+            fontSize: 20,
           }}
         >
-          <Text
-            style={{
-              textAlign: 'center',
-              fontFamily: 'Knockout',
-              fontSize: 20,
-            }}
-          >
-            {activeBroadcast.message}
-          </Text>
-        </View>
+          {activeBroadcast}
+        </Text>
       </View>
-    )
+    </Animated.View>
   );
 }

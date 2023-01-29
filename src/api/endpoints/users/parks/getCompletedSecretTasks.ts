@@ -4,7 +4,7 @@ import { SecretTaskType } from '../../../../models/secret-task-type';
 
 export default async function getCompletedSecretTasks(
   park: number,
-  user: number,
+  user: number
 ): Promise<SecretTaskType[]> {
   const { data } = await client.get<ApiResponseType<SecretTaskType[]>>(
     `/users/${user}/parks/${park}/secret-tasks`

@@ -18,7 +18,7 @@ import searchUsers from '../api/endpoints/users/all';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
-import {FriendContext} from '../context/FriendProvider';
+import { FriendContext } from '../context/FriendProvider';
 
 export default function FriendsScreen() {
   const [loading, setLoading] = useState<boolean>(true);

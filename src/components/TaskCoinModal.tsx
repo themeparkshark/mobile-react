@@ -49,11 +49,13 @@ export default function TaskCoinModal({
             }}
             onPress={() => setVisible(false)}
           />
-          <View style={{
-            position: 'absolute',
-            top: '5%',
-            right: '5%',
-          }}>
+          <View
+            style={{
+              position: 'absolute',
+              top: '5%',
+              right: '5%',
+            }}
+          >
             <Button onPress={() => setVisible(false)}>
               <Image
                 source={require('../../assets/images/screens/pin-collections/close.png')}

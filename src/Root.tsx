@@ -158,7 +158,6 @@ export default function App() {
   const { user, setUser } = useContext(AuthContext);
 
   useEffect(() => {
-
     mobileAds().setRequestConfiguration({
       maxAdContentRating: MaxAdContentRating.PG,
       tagForChildDirectedTreatment: true,

@@ -1,4 +1,11 @@
-import { Animated, StyleProp, Image, StyleSheet, View, ViewStyle } from 'react-native';
+import {
+  Animated,
+  StyleProp,
+  Image,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { useEffect, useRef } from 'react';
 import { InventoryType } from '../models/inventory-type';
 
@@ -59,7 +66,7 @@ export default function Playercard({
         {inventory?.pin_item && showBackground && (
           <Image
             source={{
-              uri: inventory.pin_item.icon_url
+              uri: inventory.pin_item.icon_url,
             }}
             style={{
               width: 40,
@@ -96,7 +103,7 @@ export default function Playercard({
                 source={{
                   uri: animate
                     ? inventory.skin_item.no_eye_url
-                    : inventory.skin_item.paper_url
+                    : inventory.skin_item.paper_url,
                 }}
                 style={styles.image}
                 resizeMode="contain"
@@ -112,7 +119,7 @@ export default function Playercard({
             {inventory?.face_item && (
               <Image
                 source={{
-                  uri: inventory.face_item.paper_url
+                  uri: inventory.face_item.paper_url,
                 }}
                 style={styles.image}
                 resizeMode="contain"
@@ -121,7 +128,7 @@ export default function Playercard({
             {inventory?.body_item && (
               <Image
                 source={{
-                  uri: inventory.body_item.paper_url
+                  uri: inventory.body_item.paper_url,
                 }}
                 style={styles.image}
                 resizeMode="contain"
@@ -130,7 +137,7 @@ export default function Playercard({
             {inventory?.neck_item && (
               <Image
                 source={{
-                  uri: inventory.neck_item.paper_url
+                  uri: inventory.neck_item.paper_url,
                 }}
                 style={styles.image}
                 resizeMode="contain"
@@ -139,7 +146,7 @@ export default function Playercard({
             {inventory?.hand_item && (
               <Image
                 source={{
-                  uri: inventory.hand_item.paper_url
+                  uri: inventory.hand_item.paper_url,
                 }}
                 style={styles.image}
                 resizeMode="contain"
@@ -148,7 +155,7 @@ export default function Playercard({
             {inventory?.head_item && (
               <Image
                 source={{
-                  uri: inventory.head_item.paper_url
+                  uri: inventory.head_item.paper_url,
                 }}
                 style={styles.image}
                 resizeMode="contain"

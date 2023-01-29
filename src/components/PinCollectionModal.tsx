@@ -191,11 +191,13 @@ export default function pinCollectionModal({
             }}
             onPress={() => setModalVisible(false)}
           />
-          <View style={{
-            position: 'absolute',
-            top: '5%',
-            right: '5%',
-          }}>
+          <View
+            style={{
+              position: 'absolute',
+              top: '5%',
+              right: '5%',
+            }}
+          >
             <Button onPress={() => setModalVisible(false)}>
               <Image
                 source={require('../../assets/images/screens/pin-collections/close.png')}

@@ -8,7 +8,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
 import { InventoryType } from '../models/inventory-type';
-import {SoundEffectContext} from '../context/SoundEffectProvider';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
 
 export default function Item({
   item,

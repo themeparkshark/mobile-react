@@ -3,11 +3,11 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import Progress from './Progress';
 import { Image } from 'expo-image';
 import * as RootNavigation from '../RootNavigation';
-import {UserType} from '../models/user-type';
+import { UserType } from '../models/user-type';
 
 export default function VisitedParks({
   parks,
-  user
+  user,
 }: {
   readonly parks: ParkType[];
   readonly user: UserType;
@@ -35,7 +35,7 @@ export default function VisitedParks({
                   RootNavigation.navigate('Park', {
                     park: park.id,
                     user: user.id,
-                  })
+                  });
                 }}
                 style={{
                   flexDirection: 'row',
