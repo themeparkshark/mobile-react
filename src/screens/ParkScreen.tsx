@@ -19,6 +19,7 @@ import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
+import {useAsyncEffect} from 'rooks';
 
 export default function ParkScreen({ route }) {
   const { park, user } = route.params;
@@ -64,15 +65,13 @@ export default function ParkScreen({ route }) {
     }, [])
   );
 
-  useEffect(() => {
-    (async () => {
-      setCurrentPark(await getVisitedPark(park, user));
-      setTasks(await getTasks(park));
-      setSecretTasks(await getSecretTasks(park));
-      setCompletedTasks(await getCompletedTasks(park, user));
-      setCompletedSecretTasks(await getCompletedSecretTasks(park, user));
-      setLoading(false);
-    })();
+  useAsyncEffect(async () => {
+    setCurrentPark(await getVisitedPark(park, user));
+    setTasks(await getTasks(park));
+    setSecretTasks(await getSecretTasks(park));
+    setCompletedTasks(await getCompletedTasks(park, user));
+    setCompletedSecretTasks(await getCompletedSecretTasks(park, user));
+    setLoading(false);
   }, []);
 
   return (

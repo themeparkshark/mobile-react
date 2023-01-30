@@ -21,6 +21,7 @@ import recordActivity from '../api/endpoints/activities/create';
 import Loading from '../components/Loading';
 import { FlashList } from '@shopify/flash-list';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
+import {useAsyncEffect} from 'rooks';
 
 export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>([]);
@@ -51,28 +52,22 @@ export default function InventoryScreen() {
     }, [])
   );
 
-  useEffect(() => {
-    (async () => {
-      const response = await getItemTypes();
-      setItemTypes(response);
-      setCurrentItemType(response[0]);
-    })();
+  useAsyncEffect(async () => {
+    const response = await getItemTypes();
+    setItemTypes(response);
+    setCurrentItemType(response[0]);
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      if (currentItemType) {
-        await requestItems(page);
-        setLoading(false);
-      }
-    })();
+  useAsyncEffect(async () => {
+    if (currentItemType) {
+      await requestItems(page);
+      setLoading(false);
+    }
   }, [currentItemType]);
 
-  useEffect(() => {
+  useAsyncEffect(async () => {
     if (page > 1) {
-      (async () => {
-        await requestItems(page);
-      })();
+      await requestItems(page);
     }
   }, [page]);
 

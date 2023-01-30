@@ -25,6 +25,7 @@ import Loading from '../components/Loading';
 import LeaderboardUser from '../components/LeaderboardUser';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
+import {useAsyncEffect} from 'rooks';
 
 export default function LeaderboardScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);
@@ -42,10 +43,8 @@ export default function LeaderboardScreen({ route }) {
     }, [])
   );
 
-  useEffect(() => {
-    (async () => {
-      setParks(await allParks());
-    })();
+  useAsyncEffect(async () => {
+    setParks(await allParks());
   }, []);
 
   useEffect(() => {
@@ -64,23 +63,19 @@ export default function LeaderboardScreen({ route }) {
     }
   }, [leaderboards]);
 
-  useEffect(() => {
-    (async () => {
-      if (selectedLeaderboard) {
-        setUsers(await getUsers(selectedLeaderboard.id));
-        setLoading(false);
-      }
-    })();
+  useAsyncEffect(async () => {
+    if (selectedLeaderboard) {
+      setUsers(await getUsers(selectedLeaderboard.id));
+      setLoading(false);
+    }
   }, [selectedLeaderboard]);
 
-  useEffect(() => {
-    (async () => {
-      if (!selectedPark) {
-        return;
-      }
+  useAsyncEffect(async () => {
+    if (!selectedPark) {
+      return;
+    }
 
-      setLeaderboards(await getLeaderboards(selectedPark));
-    })();
+    setLeaderboards(await getLeaderboards(selectedPark));
   }, [selectedPark]);
 
   return (

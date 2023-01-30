@@ -19,6 +19,7 @@ import RNPickerSelect from 'react-native-picker-select';
 import { ParkType } from '../models/park-type';
 import allParks from '../api/endpoints/parks/allParks';
 import Loading from '../components/Loading';
+import {useAsyncEffect} from 'rooks';
 
 export default function QueueTimesScreen({ route }) {
   const [queueTimes, setQueueTimes] = useState<QueueTimeType[]>();
@@ -37,12 +38,10 @@ export default function QueueTimesScreen({ route }) {
     setQueueTimes(await get(selectedPark));
   };
 
-  useEffect(() => {
-    (async () => {
-      setParks(await allParks());
-      await requestQueueTimes();
-      setLoading(false);
-    })();
+  useAsyncEffect(async () => {
+    setParks(await allParks());
+    await requestQueueTimes();
+    setLoading(false);
   }, []);
 
   const onRefresh = useCallback(() => {

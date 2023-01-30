@@ -7,6 +7,7 @@ import getInventory from '../api/endpoints/me/inventory';
 import recordActivity from '../api/endpoints/activities/create';
 import { MusicContext } from '../context/MusicProvider';
 import { useFonts } from 'expo-font';
+import {useAsyncEffect} from 'rooks';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
@@ -23,7 +24,7 @@ export default function LoadingScreen() {
     Knockout: require('../../assets/fonts/knockout.otf'),
   });
 
-  useEffect(() => {
+  useAsyncEffect(async () => {
     if (!isReady) {
       return;
     }
@@ -31,10 +32,7 @@ export default function LoadingScreen() {
     recordActivity('Viewed the Loading screen.');
 
     refreshUser();
-
-    (async () => {
-      setInventory(await getInventory());
-    })();
+    setInventory(await getInventory());
   }, [isReady]);
 
   useEffect(() => {

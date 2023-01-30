@@ -26,6 +26,7 @@ import Activity from '../components/Activity';
 import VisitedParks from '../components/VisitedParks';
 import Verified from '../components/Verified';
 import { FriendContext } from '../context/FriendProvider';
+import {useAsyncEffect} from 'rooks';
 
 interface ButtonType {
   readonly image: any;
@@ -47,15 +48,13 @@ export default function NewsScreen({ navigation }) {
     }, [])
   );
 
-  useEffect(() => {
-    (async () => {
-      setParks(await getParks(user.id));
-      setStores(await getStores());
-      setInventory(await getInventory());
-      await refreshFriends();
+  useAsyncEffect(async () => {
+    setParks(await getParks(user.id));
+    setStores(await getStores());
+    setInventory(await getInventory());
+    await refreshFriends();
 
-      setLoading(false);
-    })();
+    setLoading(false);
   }, []);
 
   useEffect(() => {

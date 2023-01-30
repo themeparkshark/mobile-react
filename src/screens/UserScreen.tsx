@@ -16,6 +16,7 @@ import getVisitedParks from '../api/endpoints/users/visited-parks';
 import Tooltip from 'rn-tooltip';
 import VisitedParks from '../components/VisitedParks';
 import Verified from '../components/Verified';
+import {useAsyncEffect} from 'rooks';
 
 export default function UserScreen({ navigation, route }) {
   const { user } = route.params;
@@ -29,13 +30,11 @@ export default function UserScreen({ navigation, route }) {
     }, [])
   );
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setCurrentUser(await getUser(user));
-      setParks(await getVisitedParks(user));
-      setLoading(false);
-    })();
+  useAsyncEffect(async () => {
+    setLoading(true);
+    setCurrentUser(await getUser(user));
+    setParks(await getVisitedParks(user));
+    setLoading(false);
   }, []);
 
   return (

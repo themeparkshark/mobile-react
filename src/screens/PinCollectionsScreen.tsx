@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Loading from '../components/Loading';
 import { FlashList } from '@shopify/flash-list';
+import {useAsyncEffect} from 'rooks';
 
 export default function PinCollectionsScreen() {
   const [collections, setCollections] = useState<PinCollectionType[]>([]);
@@ -34,14 +35,12 @@ export default function PinCollectionsScreen() {
     }, [])
   );
 
-  useEffect(() => {
-    (async () => {
-      await requestCollections(page);
+  useAsyncEffect(async () => {
+    await requestCollections(page);
 
-      if (page === 1) {
-        setLoading(false);
-      }
-    })();
+    if (page === 1) {
+      setLoading(false);
+    }
   }, [page]);
 
   return (
