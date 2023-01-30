@@ -21,7 +21,7 @@ import recordActivity from '../api/endpoints/activities/create';
 import Loading from '../components/Loading';
 import { FlashList } from '@shopify/flash-list';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
-import {useAsyncEffect} from 'rooks';
+import { useAsyncEffect } from 'rooks';
 
 export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>([]);

@@ -51,7 +51,7 @@ export default function FriendsScreen() {
       <Topbar
         text="Friends"
         showBackButton={true}
-        button={
+        rightButton={
           <Button
             onPress={() => {
               RootNavigation.navigate('PendingFriendRequests');

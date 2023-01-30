@@ -7,7 +7,7 @@ import getInventory from '../api/endpoints/me/inventory';
 import recordActivity from '../api/endpoints/activities/create';
 import { MusicContext } from '../context/MusicProvider';
 import { useFonts } from 'expo-font';
-import {useAsyncEffect} from 'rooks';
+import { useAsyncEffect } from 'rooks';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);

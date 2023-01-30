@@ -19,7 +19,7 @@ import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
-import {useAsyncEffect} from 'rooks';
+import { useAsyncEffect } from 'rooks';
 
 export default function ParkScreen({ route }) {
   const { park, user } = route.params;
@@ -79,7 +79,7 @@ export default function ParkScreen({ route }) {
       <Topbar
         showBackButton={true}
         text={currentPark?.name}
-        button={
+        rightButton={
           <Button
             onPress={() => {
               RootNavigation.navigate('Leaderboard', {

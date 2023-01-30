@@ -15,7 +15,7 @@ import { EntryType } from '../models/entry-type';
 import client from '../api/client-cms';
 import dayjs from '../helpers/dayjs';
 import Loading from '../components/Loading';
-import {useAsyncEffect} from 'rooks';
+import { useAsyncEffect } from 'rooks';
 
 export default function EntryScreen({ route }) {
   const { entry } = route.params;

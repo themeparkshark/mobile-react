@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import {
   Dimensions,
   ImageBackground,
-  NativeModules,
   SafeAreaView,
   Text,
   View,
@@ -15,17 +14,18 @@ import Broadcasts from './Broadcasts';
 import Constants from 'expo-constants';
 
 export default function Topbar({
-  button = null,
+  leftButton = null,
+  rightButton = null,
   text = null,
   showBackButton = false,
-  showBroadcasts = false,
   showCoins = false,
   parkCoin = null,
   parkCoins = null,
   purple = false,
   onBackButtonPress,
 }: {
-  readonly button?: ReactNode | null;
+  readonly rightButton?: ReactNode | null;
+  readonly leftButton?: ReactNode | null;
   readonly text?: string | null;
   readonly purple?: boolean;
   readonly showBackButton?: boolean;
@@ -72,12 +72,17 @@ export default function Topbar({
               height: 80,
             }}
           >
-            {(parkCoins !== null || showBackButton || showCoins || button) && (
+            {(parkCoins !== null ||
+              showBackButton ||
+              showCoins ||
+              leftButton ||
+              rightButton) && (
               <View
                 style={{
                   width,
                 }}
               >
+                {leftButton}
                 {showBackButton && (
                   <Button
                     onPress={async () => {
@@ -162,13 +167,17 @@ export default function Topbar({
                 {text}
               </Text>
             </View>
-            {(parkCoins !== null || showBackButton || showCoins || button) && (
+            {(parkCoins !== null ||
+              showBackButton ||
+              showCoins ||
+              leftButton ||
+              rightButton) && (
               <View
                 style={{
                   width,
                 }}
               >
-                {button}
+                {rightButton}
                 {showCoins && (
                   <View
                     style={{

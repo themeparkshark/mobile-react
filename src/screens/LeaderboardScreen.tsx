@@ -25,7 +25,7 @@ import Loading from '../components/Loading';
 import LeaderboardUser from '../components/LeaderboardUser';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
-import {useAsyncEffect} from 'rooks';
+import { useAsyncEffect } from 'rooks';
 
 export default function LeaderboardScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);

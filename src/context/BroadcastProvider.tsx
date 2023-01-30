@@ -1,9 +1,16 @@
-import {createContext, FC, ReactNode, useContext, useEffect, useState} from 'react';
+import {
+  createContext,
+  FC,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import { useQueueState, useIntervalWhen, useAsyncEffect } from 'rooks';
 import { Pusher, PusherEvent } from '@pusher/pusher-websocket-react-native';
 import { AuthContext } from './AuthProvider';
 import client from '../api/client';
-import {Button, Text, View} from 'react-native';
+import { Button, Text, View } from 'react-native';
 import { delay } from 'lodash';
 
 export interface BroadcastContextType {

@@ -14,6 +14,7 @@ import ErrorScreen from './screens/ErrorScreen';
 import LogoutScreen from './screens/LogoutScreen';
 import StoreScreen from './screens/StoreScreen';
 import UserScreen from './screens/UserScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
 import { Storage } from 'expo-storage';
 import SettingsScreen from './screens/SettingsScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
@@ -124,6 +125,7 @@ const HomeStackNavigator = () => {
       />
       <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
       <Stack.Screen name="Friends" component={FriendsScreen} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen
         name="PendingFriendRequests"
         component={PendingFriendRequestsScreen}

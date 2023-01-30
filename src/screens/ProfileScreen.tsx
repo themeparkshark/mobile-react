@@ -26,7 +26,7 @@ import Activity from '../components/Activity';
 import VisitedParks from '../components/VisitedParks';
 import Verified from '../components/Verified';
 import { FriendContext } from '../context/FriendProvider';
-import {useAsyncEffect} from 'rooks';
+import { useAsyncEffect } from 'rooks';
 
 interface ButtonType {
   readonly image: any;
@@ -87,7 +87,24 @@ export default function NewsScreen({ navigation }) {
       <Wrapper>
         <Topbar
           text={user.screen_name}
-          button={
+          leftButton={
+            <Button
+              onPress={() => {
+                RootNavigation.navigate('Notifications');
+              }}
+            >
+              <Image
+                style={{
+                  width: 50,
+                  height: 50,
+                  alignSelf: 'center',
+                }}
+                contentFit="contain"
+                source={require('../../assets/images/screens/profile/settings.png')}
+              />
+            </Button>
+          }
+          rightButton={
             <Button
               onPress={() => {
                 RootNavigation.navigate('Settings');

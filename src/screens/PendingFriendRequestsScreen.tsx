@@ -8,7 +8,7 @@ import { UserType } from '../models/user-type';
 import FriendsList from '../components/FriendsList';
 import getFriendRequests from '../api/endpoints/me/pending-requests';
 import { FriendContext } from '../context/FriendProvider';
-import {useAsyncEffect} from 'rooks';
+import { useAsyncEffect } from 'rooks';
 
 export default function PendingFriendRequestsScreen() {
   const [loading, setLoading] = useState<boolean>(true);

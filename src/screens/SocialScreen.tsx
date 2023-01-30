@@ -21,7 +21,7 @@ import twitter from '../api/endpoints/social-posts/twitter';
 import instagram from '../api/endpoints/social-posts/instagram';
 import dayjs from '../helpers/dayjs';
 import * as WebBrowser from 'expo-web-browser';
-import {useAsyncEffect} from 'rooks';
+import { useAsyncEffect } from 'rooks';
 
 export default function SocialScreen() {
   const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
