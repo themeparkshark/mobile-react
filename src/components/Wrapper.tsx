@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
-import { ReactNode } from 'react';
+import { ReactNode, useContext } from 'react';
+import { BroadcastContext } from '../context/BroadcastProvider';
 
 export default function Wrapper({
   showBar = true,
@@ -17,6 +18,7 @@ export default function Wrapper({
       screen: 'News',
       size: 'normal',
       label: 'News',
+      showRedCircle: true,
     },
     {
       icon: require('../../assets/images/toolbar/leaderboard.png'),

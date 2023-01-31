@@ -1,5 +1,5 @@
 import { RefreshControl, ScrollView, View } from 'react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import Wrapper from '../components/Wrapper';
 import client from '../api/client-cms';
 import Topbar from '../components/Topbar';
@@ -8,8 +8,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import { EntryType } from '../models/entry-type';
 import Loading from '../components/Loading';
+import Announcement from '../components/Announcement';
+import allAnnouncements from '../api/endpoints/announcements/all';
+import { useAsyncEffect } from 'rooks';
+import { AnnouncementType } from '../models/announcement-type';
+import { BroadcastContext } from '../context/BroadcastProvider';
 
 export default function NewsScreen() {
+  const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
   const [entries, setEntries] = useState<EntryType[]>();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -20,19 +26,25 @@ export default function NewsScreen() {
     }, [])
   );
 
-  const fetchEntries = () => {
+  const fetchEntries = async () => {
     return client
       .get('/entries')
       .then((response) => setEntries(response.data.data));
   };
 
-  useEffect(() => {
-    fetchEntries().then(() => setLoading(false));
+  useAsyncEffect(async () => {
+    setAnnouncements(await allAnnouncements());
+    await fetchEntries();
+    setLoading(false);
   }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchEntries().then(() => setRefreshing(false));
+    async () => {
+      await fetchEntries();
+      setAnnouncements(await allAnnouncements());
+    };
+    setRefreshing(false);
   }, []);
 
   return (
@@ -56,6 +68,20 @@ export default function NewsScreen() {
               paddingBottom: 32,
             }}
           >
+            <View style={{ marginBottom: 32 }}>
+              <ScrollView horizontal={true}>
+                {announcements?.map((announcement, index) => {
+                  return (
+                    <View
+                      key={index}
+                      style={{ marginLeft: index === 0 ? 0 : 16 }}
+                    >
+                      <Announcement announcement={announcement} />
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
             {entries.map((entry, key) => {
               return (
                 <Entry key={entry.id} entry={entry} horizontal={key > 0} />

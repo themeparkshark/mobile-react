@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   ScrollView,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useContext, useState } from 'react';
@@ -103,7 +104,7 @@ export default function Announcement({
           </SafeAreaView>
         </View>
       </Modal>
-      <Pressable
+      <TouchableOpacity
         onPress={() => setModalVisible(true)}
         style={{
           position: 'relative',
@@ -149,11 +150,11 @@ export default function Announcement({
                 textTransform: 'uppercase',
               }}
             >
-              Learn more
+              Read more
             </Text>
           </View>
         </ImageBackground>
-      </Pressable>
+      </TouchableOpacity>
     </View>
   );
 }

@@ -29,7 +29,7 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
         style={{
           width: '100%',
           height: 20,
-          opacity: .5,
+          opacity: 0.5,
         }}
         contentFit="contain"
       />

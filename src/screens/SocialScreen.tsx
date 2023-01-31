@@ -9,10 +9,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import allAnnouncements from '../api/endpoints/announcements/all';
-import Announcement from '../components/Announcement';
-import { AnnouncementType } from '../models/announcement-type';
 import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
 import Loading from '../components/Loading';
@@ -24,7 +22,6 @@ import * as WebBrowser from 'expo-web-browser';
 import { useAsyncEffect } from 'rooks';
 
 export default function SocialScreen() {
-  const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
   const [twitterStatuses, setTwitterStatuses] = useState<SocialPostType[]>();
   const [instagramStatuses, setInstagramStatuses] =
     useState<SocialPostType[]>();
@@ -38,7 +35,6 @@ export default function SocialScreen() {
   );
 
   useAsyncEffect(async () => {
-    setAnnouncements(await allAnnouncements());
     setTwitterStatuses(await twitter());
     setInstagramStatuses(await instagram());
 
@@ -48,7 +44,6 @@ export default function SocialScreen() {
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     (async () => {
-      setAnnouncements(await allAnnouncements());
       setTwitterStatuses(await twitter());
       setInstagramStatuses(await instagram());
     })();
@@ -76,23 +71,7 @@ export default function SocialScreen() {
               paddingBottom: 32,
             }}
           >
-            <ScrollView horizontal={true}>
-              {announcements?.map((announcement, index) => {
-                return (
-                  <View
-                    key={index}
-                    style={{ marginLeft: index === 0 ? 0 : 16 }}
-                  >
-                    <Announcement announcement={announcement} />
-                  </View>
-                );
-              })}
-            </ScrollView>
-            <View
-              style={{
-                marginTop: 32,
-              }}
-            >
+            <View>
               <Text
                 style={{
                   paddingBottom: 16,

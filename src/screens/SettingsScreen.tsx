@@ -108,7 +108,7 @@ export default function SettingsScreen() {
                 onPress={() => {
                   WebBrowser.openBrowserAsync(
                     'https://themeparkshark.com/info/terms-of-service'
-                  )
+                  );
                 }}
               />
               <Cell
@@ -119,7 +119,7 @@ export default function SettingsScreen() {
                 onPress={() => {
                   WebBrowser.openBrowserAsync(
                     'https://themeparkshark.com/info/privacy-policy'
-                  )
+                  );
                 }}
               />
             </Section>

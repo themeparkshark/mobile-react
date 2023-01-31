@@ -1,4 +1,4 @@
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import dayjs from '../../helpers/dayjs';
 import * as RootNavigation from '../../RootNavigation';
@@ -17,8 +17,7 @@ export default function Entry({
       : dayjs(entry.published_at).startOf('second').fromNow();
 
   return (
-    <Pressable
-      key={entry.id}
+    <TouchableOpacity
       style={{
         marginBottom: 32,
         flexDirection: horizontal ? 'row' : 'column',
@@ -61,6 +60,6 @@ export default function Entry({
           {date}
         </Text>
       </View>
-    </Pressable>
+    </TouchableOpacity>
   );
 }
