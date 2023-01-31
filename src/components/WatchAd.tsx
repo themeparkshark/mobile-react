@@ -23,7 +23,17 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
   }, [isClosed]);
 
   if (isClosed || !isLoaded) {
-    return <></>;
+    return (
+      <Image
+        source={require('../../assets/images/screens/explore/watch.png')}
+        style={{
+          width: '100%',
+          height: 20,
+          opacity: .5,
+        }}
+        contentFit="contain"
+      />
+    );
   }
 
   return (

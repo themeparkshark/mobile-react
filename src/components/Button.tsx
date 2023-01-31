@@ -57,13 +57,22 @@ export default function Button({
       {showRedCircle && (
         <View
           style={{
-            width: 10,
-            height: 10,
+            width: 15,
+            height: 15,
             backgroundColor: 'red',
-            borderRadius: 5,
+            borderRadius: 8,
             position: 'absolute',
-            right: 10,
+            borderColor: 'white',
+            borderWidth: 2,
+            right: 15,
             zIndex: 10,
+            shadowColor: '#000',
+            shadowOffset: {
+              width: 1,
+              height: 1,
+            },
+            shadowRadius: 0,
+            shadowOpacity: 0.4,
           }}
         />
       )}

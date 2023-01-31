@@ -105,27 +105,27 @@ export default function SettingsScreen() {
                 titleTextStyle={{
                   color: PlatformColor('systemBlue'),
                 }}
-                onPress={() =>
+                onPress={() => {
                   WebBrowser.openBrowserAsync(
                     'https://themeparkshark.com/info/terms-of-service'
                   )
-                }
+                }}
               />
               <Cell
                 title="Privacy Policy"
                 titleTextStyle={{
                   color: PlatformColor('systemBlue'),
                 }}
-                onPress={() =>
+                onPress={() => {
                   WebBrowser.openBrowserAsync(
                     'https://themeparkshark.com/info/privacy-policy'
                   )
-                }
+                }}
               />
             </Section>
             <Section
               footer={`© Theme Park Shark ${new Date().getFullYear()} v${
-                Constants.manifest.version
+                Constants.manifest?.version
               }`}
             >
               <Cell

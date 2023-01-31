@@ -53,7 +53,7 @@ export default function YellowButton({
               adjustsFontSizeToFit={true}
               style={{
                 textAlign: 'center',
-                fontSize: 28,
+                fontSize: 72,
                 color: 'white',
                 fontFamily: 'Shark',
                 textTransform: 'uppercase',

@@ -35,6 +35,7 @@ export default function Wrapper({
       screen: 'Social',
       size: 'normal',
       label: 'Social',
+      showRedCircle: true,
     },
     {
       icon: require('../../assets/images/toolbar/profile.png'),
@@ -97,6 +98,7 @@ export default function Wrapper({
                       onPress={() => {
                         RootNavigation.navigate(item.screen);
                       }}
+                      showRedCircle={item.showRedCircle}
                     >
                       <Image
                         style={{

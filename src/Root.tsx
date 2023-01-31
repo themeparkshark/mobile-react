@@ -96,7 +96,9 @@ const HomeStackNavigator = () => {
       />
       <Stack.Screen name="User" component={UserScreen} />
       <Stack.Screen name="Park" component={ParkScreen} />
-      <Stack.Screen name="Inventory" component={InventoryScreen} />
+      <Stack.Screen name="Inventory" component={InventoryScreen} options={{
+        gestureEnabled: false,
+      }} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen
         name="UpdateEmail"
