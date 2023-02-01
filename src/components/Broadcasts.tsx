@@ -8,7 +8,7 @@ export default function Broadcasts() {
 
   const slideUp = () => {
     Animated.timing(translate, {
-      toValue: -100,
+      toValue: 0,
       duration: 250,
       useNativeDriver: true,
     }).start();
@@ -16,7 +16,7 @@ export default function Broadcasts() {
 
   const slideDown = () => {
     Animated.timing(translate, {
-      toValue: 0,
+      toValue: 50,
       duration: 250,
       useNativeDriver: true,
     }).start();
@@ -31,8 +31,6 @@ export default function Broadcasts() {
       }, 5000);
 
       return () => clearInterval(timeout);
-    } else {
-      slideUp();
     }
   }, [activeBroadcast]);
 
@@ -41,7 +39,7 @@ export default function Broadcasts() {
       style={{
         width: Dimensions.get('window').width,
         position: 'absolute',
-        top: 52,
+        top: 0,
         zIndex: 0,
         alignItems: 'center',
         transform: [
