@@ -1,4 +1,4 @@
-import { Text, ImageBackground, View, Animated, Pressable } from 'react-native';
+import { Animated, ImageBackground, Pressable, Text, View } from 'react-native';
 
 export default function YellowButton({
   text,

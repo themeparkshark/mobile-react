@@ -1,10 +1,10 @@
-import { NotificationType } from '../models/notification-type';
-import { Text, TouchableOpacity, View } from 'react-native';
-import { useState } from 'react';
 import { Image } from 'expo-image';
-import dayjs from '../helpers/dayjs';
-import config from '../config';
+import { useState } from 'react';
+import { Text, TouchableOpacity, View } from 'react-native';
 import markAsRead from '../api/endpoints/me/notifications/markAsRead';
+import config from '../config';
+import dayjs from '../helpers/dayjs';
+import { NotificationType } from '../models/notification-type';
 import * as RootNavigation from '../RootNavigation';
 
 export default function Notification({

@@ -1,3 +1,4 @@
+import { Audio } from 'expo-av';
 import {
   createContext,
   FC,
@@ -6,7 +7,6 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { Audio } from 'expo-av';
 import { AuthContext } from './AuthProvider';
 
 export interface SoundEffectContextType {

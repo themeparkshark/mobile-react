@@ -1,5 +1,5 @@
-import { Animated, View, Text, Dimensions } from 'react-native';
 import { useContext, useEffect, useRef } from 'react';
+import { Animated, Dimensions, Text, View } from 'react-native';
 import { BroadcastContext } from '../context/BroadcastProvider';
 
 export default function Broadcasts() {

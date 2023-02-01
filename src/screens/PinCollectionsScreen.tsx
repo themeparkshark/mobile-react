@@ -1,4 +1,7 @@
-import Topbar from '../components/Topbar';
+import { useFocusEffect } from '@react-navigation/native';
+import { FlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -6,16 +9,13 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-import { Image } from 'expo-image';
-import all from '../api/endpoints/pin-collections/all';
-import { useCallback, useEffect, useState } from 'react';
-import PinCollectionModal from '../components/PinCollectionModal';
-import { PinCollectionType } from '../models/pin-collection-type';
-import { useFocusEffect } from '@react-navigation/native';
-import recordActivity from '../api/endpoints/activities/create';
-import Loading from '../components/Loading';
-import { FlashList } from '@shopify/flash-list';
 import { useAsyncEffect } from 'rooks';
+import recordActivity from '../api/endpoints/activities/create';
+import all from '../api/endpoints/pin-collections/all';
+import Loading from '../components/Loading';
+import PinCollectionModal from '../components/PinCollectionModal';
+import Topbar from '../components/Topbar';
+import { PinCollectionType } from '../models/pin-collection-type';
 
 export default function PinCollectionsScreen() {
   const [collections, setCollections] = useState<PinCollectionType[]>([]);

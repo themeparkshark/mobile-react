@@ -1,6 +1,6 @@
-import client from '../../client';
 import { ApiResponseType } from '../../../models/api-response-type';
 import { NotificationType } from '../../../models/notification-type';
+import client from '../../client';
 
 export default async function getNotifications(
   page: number

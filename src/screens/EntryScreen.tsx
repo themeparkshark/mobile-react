@@ -1,21 +1,14 @@
-import {
-  ActivityIndicator,
-  Dimensions,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
 import { Image } from 'expo-image';
+import { useState } from 'react';
+import { Dimensions, ScrollView, Text, View } from 'react-native';
 import RenderHtml from 'react-native-render-html';
+import { useAsyncEffect } from 'rooks';
+import client from '../api/client-cms';
+import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
-import { UserType } from '../models/user-type';
-import { useEffect, useState } from 'react';
-import { EntryType } from '../models/entry-type';
-import client from '../api/client-cms';
 import dayjs from '../helpers/dayjs';
-import Loading from '../components/Loading';
-import { useAsyncEffect } from 'rooks';
+import { EntryType } from '../models/entry-type';
 
 export default function EntryScreen({ route }) {
   const { entry } = route.params;

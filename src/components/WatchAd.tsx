@@ -1,8 +1,8 @@
-import { TestIds, useInterstitialAd } from 'react-native-google-mobile-ads';
-import { useEffect } from 'react';
-import Button from './Button';
 import { Image } from 'expo-image';
+import { useEffect } from 'react';
 import * as Animatable from 'react-native-animatable';
+import { TestIds, useInterstitialAd } from 'react-native-google-mobile-ads';
+import Button from './Button';
 
 export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
   const { isLoaded, isClosed, load, show } = useInterstitialAd(

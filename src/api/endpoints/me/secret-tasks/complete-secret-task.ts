@@ -1,7 +1,6 @@
-import client from '../../../client';
-import { TaskType } from '../../../../models/task-type';
 import { ApiResponseType } from '../../../../models/api-response-type';
 import { SecretTaskType } from '../../../../models/secret-task-type';
+import client from '../../../client';
 
 export default async function completeSecretTask(
   secretTask: SecretTaskType,

@@ -1,13 +1,13 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { Image } from 'expo-image';
 import { useContext, useEffect } from 'react';
 import {
+  Dimensions,
   ImageBackground,
   SafeAreaView,
-  Dimensions,
-  View,
   Text,
+  View,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { AuthContext } from '../../context/AuthProvider';
 import { MusicContext } from '../../context/MusicProvider';
 

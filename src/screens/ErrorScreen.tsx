@@ -1,15 +1,15 @@
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 import {
   Dimensions,
   ImageBackground,
+  Linking,
   SafeAreaView,
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
 import recordActivity from '../api/endpoints/activities/create';
 import YellowButton from '../components/YellowButton';
-import { Linking } from 'react-native';
 
 export default function ErrorScreen() {
   useFocusEffect(

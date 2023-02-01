@@ -1,14 +1,14 @@
-import { useCallback, useContext, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import recordActivity from '../api/endpoints/activities/create';
-import Topbar from '../components/Topbar';
-import Loading from '../components/Loading';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { ImageBackground, ScrollView, View } from 'react-native';
-import { UserType } from '../models/user-type';
-import FriendsList from '../components/FriendsList';
-import getFriendRequests from '../api/endpoints/me/pending-requests';
-import { FriendContext } from '../context/FriendProvider';
 import { useAsyncEffect } from 'rooks';
+import recordActivity from '../api/endpoints/activities/create';
+import getFriendRequests from '../api/endpoints/me/pending-requests';
+import FriendsList from '../components/FriendsList';
+import Loading from '../components/Loading';
+import Topbar from '../components/Topbar';
+import { FriendContext } from '../context/FriendProvider';
+import { UserType } from '../models/user-type';
 
 export default function PendingFriendRequestsScreen() {
   const [loading, setLoading] = useState<boolean>(true);

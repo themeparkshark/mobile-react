@@ -1,6 +1,6 @@
-import client from '../../../client';
-import { ParkType } from '../../../../models/park-type';
 import { ApiResponseType } from '../../../../models/api-response-type';
+import { ParkType } from '../../../../models/park-type';
+import client from '../../../client';
 
 export default async function getVisitedPark(
   park: number,

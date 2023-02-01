@@ -1,5 +1,5 @@
-import { createContext, FC, ReactNode, useContext, useState } from 'react';
 import { Audio } from 'expo-av';
+import { createContext, FC, ReactNode, useContext, useState } from 'react';
 import { AuthContext } from './AuthProvider';
 
 export interface MusicContextType {

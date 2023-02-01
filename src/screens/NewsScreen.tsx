@@ -1,18 +1,17 @@
-import { RefreshControl, ScrollView, View } from 'react-native';
-import { useCallback, useContext, useEffect, useState } from 'react';
-import Wrapper from '../components/Wrapper';
-import client from '../api/client-cms';
-import Topbar from '../components/Topbar';
-import Entry from './NewsScreen/Entry';
 import { useFocusEffect } from '@react-navigation/native';
-import recordActivity from '../api/endpoints/activities/create';
-import { EntryType } from '../models/entry-type';
-import Loading from '../components/Loading';
-import Announcement from '../components/Announcement';
-import allAnnouncements from '../api/endpoints/announcements/all';
+import { useCallback, useState } from 'react';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import client from '../api/client-cms';
+import recordActivity from '../api/endpoints/activities/create';
+import allAnnouncements from '../api/endpoints/announcements/all';
+import Announcement from '../components/Announcement';
+import Loading from '../components/Loading';
+import Topbar from '../components/Topbar';
+import Wrapper from '../components/Wrapper';
 import { AnnouncementType } from '../models/announcement-type';
-import { BroadcastContext } from '../context/BroadcastProvider';
+import { EntryType } from '../models/entry-type';
+import Entry from './NewsScreen/Entry';
 
 export default function NewsScreen() {
   const [announcements, setAnnouncements] = useState<AnnouncementType[]>();

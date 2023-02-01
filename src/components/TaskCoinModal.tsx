@@ -1,11 +1,11 @@
-import { TaskType } from '../models/task-type';
-import { SecretTaskType } from '../models/secret-task-type';
-import { Dimensions, Pressable, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import Modal from 'react-native-modal';
 import { useState } from 'react';
-import config from '../config';
+import { Dimensions, Pressable, Text, View } from 'react-native';
+import Modal from 'react-native-modal';
 import Button from '../components/Button';
+import config from '../config';
+import { SecretTaskType } from '../models/secret-task-type';
+import { TaskType } from '../models/task-type';
 
 export default function TaskCoinModal({
   task,

@@ -1,4 +1,6 @@
+import Constants from 'expo-constants';
 import { Image } from 'expo-image';
+import { ReactNode, useContext } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -6,12 +8,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { AuthContext } from '../context/AuthProvider';
-import { ReactNode, useContext } from 'react';
 import Button from '../components/Button';
+import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
 import Broadcasts from './Broadcasts';
-import Constants from 'expo-constants';
 
 export default function Topbar({
   leftButton = null,

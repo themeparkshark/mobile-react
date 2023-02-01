@@ -1,20 +1,20 @@
+import { Image } from 'expo-image';
 import { useContext, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
   Pressable,
-  Text,
   ScrollView,
+  Text,
   View,
 } from 'react-native';
-import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
-import Button from './Button';
-import { RedeemablesType } from '../models/redeemables-type';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
+import { RedeemablesType } from '../models/redeemables-type';
+import Button from './Button';
 
 export default function TaskListModal({
   redeemables,

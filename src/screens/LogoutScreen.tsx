@@ -1,6 +1,6 @@
-import { Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { useContext, useEffect } from 'react';
+import { Dimensions } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 
 export default function LogoutScreen() {

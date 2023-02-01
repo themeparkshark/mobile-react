@@ -1,3 +1,6 @@
+import dayjs from 'dayjs';
+import { Image } from 'expo-image';
+import Lottie from 'lottie-react-native';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -6,28 +9,25 @@ import {
   Pressable,
   View,
 } from 'react-native';
-import { Image } from 'expo-image';
-import completeTask from '../api/endpoints/me/tasks/complete-task';
-import Button from './Button';
-import Lottie from 'lottie-react-native';
-import { ParkType } from '../models/park-type';
-import { RedeemableType } from '../models/redeemable-type';
-import { TaskType } from '../models/task-type';
+import Modal from 'react-native-modal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
-import { CoinType } from '../models/coin-type';
-import YellowButton from './YellowButton';
-import dayjs from 'dayjs';
-import { SecretTaskType } from '../models/secret-task-type';
+import redeemItem from '../api/endpoints/me/items/redeem-item';
 import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
+import completeTask from '../api/endpoints/me/tasks/complete-task';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
+import { CoinType } from '../models/coin-type';
 import { ItemType } from '../models/item-type';
+import { ParkType } from '../models/park-type';
+import { RedeemableType } from '../models/redeemable-type';
+import { SecretTaskType } from '../models/secret-task-type';
+import { TaskType } from '../models/task-type';
+import Button from './Button';
 import Box from './RedeemModal/Box';
-import Modal from 'react-native-modal';
-import redeemItem from '../api/endpoints/me/items/redeem-item';
 import WatchAd from './WatchAd';
+import YellowButton from './YellowButton';
 
 export default function RedeemModal({
   redeemable,

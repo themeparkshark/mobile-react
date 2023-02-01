@@ -1,8 +1,8 @@
-import { UserType } from '../models/user-type';
-import { View } from 'react-native';
 import { Image } from 'expo-image';
-import Button from './Button';
+import { View } from 'react-native';
+import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
+import Button from './Button';
 
 export default function Avatar({
   user,

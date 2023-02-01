@@ -1,25 +1,24 @@
-import Wrapper from '../components/Wrapper';
-import Topbar from '../components/Topbar';
-import {
-  ScrollView,
-  View,
-  Text,
-  Button,
-  TouchableOpacity,
-  RefreshControl,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { useCallback, useState } from 'react';
-import allAnnouncements from '../api/endpoints/announcements/all';
 import { useFocusEffect } from '@react-navigation/native';
-import recordActivity from '../api/endpoints/activities/create';
-import Loading from '../components/Loading';
-import { SocialPostType } from '../models/social-post-type';
-import twitter from '../api/endpoints/social-posts/twitter';
-import instagram from '../api/endpoints/social-posts/instagram';
-import dayjs from '../helpers/dayjs';
+import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
+import { useCallback, useState } from 'react';
+import {
+  Button,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import recordActivity from '../api/endpoints/activities/create';
+import instagram from '../api/endpoints/social-posts/instagram';
+import twitter from '../api/endpoints/social-posts/twitter';
+import Loading from '../components/Loading';
+import Topbar from '../components/Topbar';
+import Wrapper from '../components/Wrapper';
+import dayjs from '../helpers/dayjs';
+import { SocialPostType } from '../models/social-post-type';
 
 export default function SocialScreen() {
   const [twitterStatuses, setTwitterStatuses] = useState<SocialPostType[]>();

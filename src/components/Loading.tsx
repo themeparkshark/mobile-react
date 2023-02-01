@@ -1,5 +1,5 @@
-import { ActivityIndicator, Text, View } from 'react-native';
 import { useEffect, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 export default function Loading() {
   const [showText, setShowText] = useState<boolean>(false);

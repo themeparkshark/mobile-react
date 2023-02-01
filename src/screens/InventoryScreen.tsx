@@ -1,3 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
+import { FlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
+import { useCallback, useContext, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -6,22 +10,18 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { useContext, useEffect, useState, useCallback } from 'react';
-import Playercard from '../components/Playercard';
+import { useAsyncEffect } from 'rooks';
+import recordActivity from '../api/endpoints/activities/create';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
+import Item from '../components/Item';
+import Loading from '../components/Loading';
+import Playercard from '../components/Playercard';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
-import Item from '../components/Item';
-import { ItemTypeType } from '../models/item-type-type';
-import { ItemType } from '../models/item-type';
-import { useFocusEffect } from '@react-navigation/native';
-import recordActivity from '../api/endpoints/activities/create';
-import Loading from '../components/Loading';
-import { FlashList } from '@shopify/flash-list';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
-import { useAsyncEffect } from 'rooks';
+import { ItemType } from '../models/item-type';
+import { ItemTypeType } from '../models/item-type-type';
 
 export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>([]);

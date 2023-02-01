@@ -1,14 +1,13 @@
-import { UserType } from '../models/user-type';
-import { Alert, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useContext } from 'react';
-import { AuthContext } from '../context/AuthProvider';
-import Button from './Button';
-import * as RootNavigation from '../RootNavigation';
-import unfriend from '../api/endpoints/me/users/unfriend';
-import sendFriendRequest from '../api/endpoints/me/users/send-friend-request';
+import { Alert, Text, View } from 'react-native';
 import acceptFriendRequest from '../api/endpoints/me/users/accept-friend-request';
+import sendFriendRequest from '../api/endpoints/me/users/send-friend-request';
+import unfriend from '../api/endpoints/me/users/unfriend';
+import { AuthContext } from '../context/AuthProvider';
+import { UserType } from '../models/user-type';
 import Avatar from './Avatar';
+import Button from './Button';
 
 export default function FriendsList({
   users,

@@ -1,6 +1,6 @@
-import { UserType } from '../models/user-type';
 import { Text, View } from 'react-native';
 import config from '../config';
+import { UserType } from '../models/user-type';
 
 export default function Activity({ user }: { readonly user: UserType }) {
   const activities = [

@@ -1,8 +1,8 @@
-import { Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
+import { Text, TouchableOpacity, View } from 'react-native';
 import dayjs from '../../helpers/dayjs';
-import * as RootNavigation from '../../RootNavigation';
 import { EntryType } from '../../models/entry-type';
+import * as RootNavigation from '../../RootNavigation';
 
 export default function Entry({
   entry,

@@ -1,14 +1,14 @@
-import { ImageBackground, Pressable, View } from 'react-native';
-import { Image } from 'expo-image';
-import updateInventory from '../api/endpoints/me/inventory/update-inventory';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { Image } from 'expo-image';
 import { useContext } from 'react';
+import { ImageBackground, Pressable, View } from 'react-native';
+import updateInventory from '../api/endpoints/me/inventory/update-inventory';
 import { AuthContext } from '../context/AuthProvider';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
+import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
-import { InventoryType } from '../models/inventory-type';
-import { SoundEffectContext } from '../context/SoundEffectProvider';
 
 export default function Item({
   item,

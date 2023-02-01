@@ -4,11 +4,11 @@ import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 // @ts-ignore
-import Storage from 'expo-storage';
-import { UserType } from '../models/user-type';
-import { InventoryType } from '../models/inventory-type';
 import { AppleAuthenticationCredential } from 'expo-apple-authentication';
+import Storage from 'expo-storage';
 import recordActivity from '../api/endpoints/activities/create';
+import { InventoryType } from '../models/inventory-type';
+import { UserType } from '../models/user-type';
 
 export interface AuthContextType {
   readonly inventory: InventoryType | null;

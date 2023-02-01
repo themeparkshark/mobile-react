@@ -1,10 +1,10 @@
-import { ImageBackground, Text, View } from 'react-native';
-import { useEffect } from 'react';
-import { Image } from 'expo-image';
-import Countdown, { zeroPad } from 'react-countdown';
 import dayjs from 'dayjs';
-import { CoinType } from '../../models/coin-type';
+import { Image } from 'expo-image';
+import { useEffect } from 'react';
+import Countdown, { zeroPad } from 'react-countdown';
+import { ImageBackground, Text, View } from 'react-native';
 import config from '../../config';
+import { CoinType } from '../../models/coin-type';
 
 export default function Coin({
   coin,

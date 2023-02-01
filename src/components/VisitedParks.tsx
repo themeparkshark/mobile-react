@@ -1,9 +1,9 @@
-import { ParkType } from '../models/park-type';
-import { Text, TouchableOpacity, View } from 'react-native';
-import Progress from './Progress';
 import { Image } from 'expo-image';
-import * as RootNavigation from '../RootNavigation';
+import { Text, TouchableOpacity, View } from 'react-native';
+import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
+import * as RootNavigation from '../RootNavigation';
+import Progress from './Progress';
 
 export default function VisitedParks({
   parks,

@@ -1,4 +1,8 @@
-import Topbar from '../components/Topbar';
+import { useFocusEffect } from '@react-navigation/native';
+import dayjs from 'dayjs';
+import Constants from 'expo-constants';
+import * as WebBrowser from 'expo-web-browser';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   Alert,
   PlatformColor,
@@ -6,17 +10,13 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
-import { AuthContext } from '../context/AuthProvider';
-import { useCallback, useContext, useEffect, useState } from 'react';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
-import dayjs from 'dayjs';
-import * as WebBrowser from 'expo-web-browser';
-import deleteUser from '../api/endpoints/me/delete';
-import * as RootNavigation from '../RootNavigation';
-import { useFocusEffect } from '@react-navigation/native';
 import recordActivity from '../api/endpoints/activities/create';
+import deleteUser from '../api/endpoints/me/delete';
 import updateUser from '../api/endpoints/me/update-user';
-import Constants from 'expo-constants';
+import Topbar from '../components/Topbar';
+import { AuthContext } from '../context/AuthProvider';
+import * as RootNavigation from '../RootNavigation';
 
 export default function SettingsScreen() {
   const { user, logout, refreshUser } = useContext(AuthContext);

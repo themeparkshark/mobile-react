@@ -1,19 +1,18 @@
 import { Image } from 'expo-image';
+import { useContext, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
-  Pressable,
   SafeAreaView,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useContext, useState } from 'react';
-import Button from './Button';
 import Modal from 'react-native-modal';
-import { AnnouncementType } from '../models/announcement-type';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
+import { AnnouncementType } from '../models/announcement-type';
+import Button from './Button';
 
 export default function Announcement({
   announcement,

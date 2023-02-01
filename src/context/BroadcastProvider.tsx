@@ -1,3 +1,5 @@
+import { Pusher, PusherEvent } from '@pusher/pusher-websocket-react-native';
+import { delay } from 'lodash';
 import {
   createContext,
   FC,
@@ -6,12 +8,9 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { useQueueState, useIntervalWhen, useAsyncEffect } from 'rooks';
-import { Pusher, PusherEvent } from '@pusher/pusher-websocket-react-native';
-import { AuthContext } from './AuthProvider';
+import { useAsyncEffect, useIntervalWhen, useQueueState } from 'rooks';
 import client from '../api/client';
-import { Button, Text, View } from 'react-native';
-import { delay } from 'lodash';
+import { AuthContext } from './AuthProvider';
 
 export interface BroadcastContextType {
   readonly activeBroadcast: string | undefined;

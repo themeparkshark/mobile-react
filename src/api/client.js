@@ -1,7 +1,7 @@
 import axios from 'axios';
+import * as Device from 'expo-device';
 import config from '../config';
 import * as RootNavigation from '../RootNavigation';
-import * as Device from 'expo-device';
 
 const client = axios.create({
   baseURL: config.apiUrl,

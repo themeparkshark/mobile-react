@@ -1,5 +1,5 @@
-import { Animated, Pressable, View } from 'react-native';
 import { ReactNode, useContext, useState } from 'react';
+import { Animated, Pressable, View } from 'react-native';
 import {
   SoundEffectContext,
   SoundEffectContextType,

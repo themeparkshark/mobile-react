@@ -1,5 +1,5 @@
-import { useState, useContext } from 'react';
 import { Image } from 'expo-image';
+import { useContext, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -8,10 +8,10 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import config from '../config';
-import { PinCollectionType } from '../models/pin-collection-type';
-import { SoundEffectContext } from '../context/SoundEffectProvider';
 import Tooltip from 'rn-tooltip';
+import config from '../config';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
+import { PinCollectionType } from '../models/pin-collection-type';
 import Button from './Button';
 
 export default function pinCollectionModal({

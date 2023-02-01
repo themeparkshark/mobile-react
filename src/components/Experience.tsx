@@ -1,5 +1,5 @@
-import { UserType } from '../models/user-type';
 import { Text, View } from 'react-native';
+import { UserType } from '../models/user-type';
 import Progress from './Progress';
 
 export default function Experience({ user }: { readonly user: UserType }) {

@@ -1,25 +1,25 @@
-import Topbar from '../components/Topbar';
-import {
-  ScrollView,
-  View,
-  Text,
-  RefreshControl,
-  ImageBackground,
-  Dimensions,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { Chevron } from 'react-native-shapes';
-import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import recordActivity from '../api/endpoints/activities/create';
-import get from '../api/endpoints/parks/queue-times/get';
-import { QueueTimeType } from '../models/queue-time-type';
-import dayjs from '../helpers/dayjs';
+import { Image } from 'expo-image';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Dimensions,
+  ImageBackground,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import RNPickerSelect from 'react-native-picker-select';
-import { ParkType } from '../models/park-type';
-import allParks from '../api/endpoints/parks/allParks';
-import Loading from '../components/Loading';
+import { Chevron } from 'react-native-shapes';
 import { useAsyncEffect } from 'rooks';
+import recordActivity from '../api/endpoints/activities/create';
+import allParks from '../api/endpoints/parks/allParks';
+import get from '../api/endpoints/parks/queue-times/get';
+import Loading from '../components/Loading';
+import Topbar from '../components/Topbar';
+import dayjs from '../helpers/dayjs';
+import { ParkType } from '../models/park-type';
+import { QueueTimeType } from '../models/queue-time-type';
 
 export default function QueueTimesScreen({ route }) {
   const [queueTimes, setQueueTimes] = useState<QueueTimeType[]>();

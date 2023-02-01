@@ -1,6 +1,6 @@
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
-import Item from './Item';
 import { ItemType } from '../../models/item-type';
+import Item from './Item';
 
 const yellow = require('../../../assets/images/screens/store/yellow.png');
 const purple = require('../../../assets/images/screens/store/purple.png');

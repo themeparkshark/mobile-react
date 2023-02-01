@@ -1,12 +1,12 @@
+import { useEffect, useRef } from 'react';
 import {
   Animated,
-  StyleProp,
   Image,
+  StyleProp,
   StyleSheet,
   View,
   ViewStyle,
 } from 'react-native';
-import { useEffect, useRef } from 'react';
 import { InventoryType } from '../models/inventory-type';
 
 export default function Playercard({

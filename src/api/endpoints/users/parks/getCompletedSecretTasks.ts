@@ -1,6 +1,6 @@
-import client from '../../../client';
 import { ApiResponseType } from '../../../../models/api-response-type';
 import { SecretTaskType } from '../../../../models/secret-task-type';
+import client from '../../../client';
 
 export default async function getCompletedSecretTasks(
   park: number,

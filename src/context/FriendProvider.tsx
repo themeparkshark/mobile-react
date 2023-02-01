@@ -1,6 +1,6 @@
 import { createContext, FC, ReactNode, useState } from 'react';
-import { UserType } from '../models/user-type';
 import getFriends from '../api/endpoints/me/friends';
+import { UserType } from '../models/user-type';
 
 export interface FriendContextType {
   readonly friends: UserType[];

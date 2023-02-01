@@ -1,22 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Dimensions, ScrollView, View } from 'react-native';
-import getUser from '../api/endpoints/users/get';
-import Topbar from '../components/Topbar';
-import Playercard from '../components/Playercard';
-import { ParkType } from '../models/park-type';
-import { UserType } from '../models/user-type';
-import config from '../config';
 import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useState } from 'react';
+import { Dimensions, ScrollView, View } from 'react-native';
+import { useAsyncEffect } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
-import Loading from '../components/Loading';
+import getUser from '../api/endpoints/users/get';
+import getVisitedParks from '../api/endpoints/users/visited-parks';
+import Activity from '../components/Activity';
 import Experience from '../components/Experience';
 import Heading from '../components/Heading';
-import Activity from '../components/Activity';
-import getVisitedParks from '../api/endpoints/users/visited-parks';
-import Tooltip from 'rn-tooltip';
-import VisitedParks from '../components/VisitedParks';
+import Loading from '../components/Loading';
+import Playercard from '../components/Playercard';
+import Topbar from '../components/Topbar';
 import Verified from '../components/Verified';
-import { useAsyncEffect } from 'rooks';
+import VisitedParks from '../components/VisitedParks';
+import config from '../config';
+import { ParkType } from '../models/park-type';
+import { UserType } from '../models/user-type';
 
 export default function UserScreen({ navigation, route }) {
   const { user } = route.params;

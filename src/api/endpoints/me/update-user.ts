@@ -1,7 +1,7 @@
-import client from '../../client';
 import { Alert } from 'react-native';
-import { UserType } from '../../../models/user-type';
 import { ApiResponseType } from '../../../models/api-response-type';
+import { UserType } from '../../../models/user-type';
+import client from '../../client';
 
 export default async function updateUser(payload: {
   readonly enabled_music?: boolean;

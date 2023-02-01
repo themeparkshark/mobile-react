@@ -1,13 +1,13 @@
-import { Dimensions } from 'react-native';
+import { useFonts } from 'expo-font';
 import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
-import * as RootNavigation from '../RootNavigation';
-import { AuthContext } from '../context/AuthProvider';
-import getInventory from '../api/endpoints/me/inventory';
-import recordActivity from '../api/endpoints/activities/create';
-import { MusicContext } from '../context/MusicProvider';
-import { useFonts } from 'expo-font';
+import { Dimensions } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import recordActivity from '../api/endpoints/activities/create';
+import getInventory from '../api/endpoints/me/inventory';
+import { AuthContext } from '../context/AuthProvider';
+import { MusicContext } from '../context/MusicProvider';
+import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);

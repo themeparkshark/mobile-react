@@ -1,31 +1,31 @@
-import Wrapper from '../components/Wrapper';
-import Topbar from '../components/Topbar';
-import RNPickerSelect from 'react-native-picker-select';
-import allParks from '../api/endpoints/parks/allParks';
-import getLeaderboards from '../api/endpoints/parks/leaderboards/get';
+import { useFocusEffect } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { AuthContext } from '../context/AuthProvider';
 import {
   Dimensions,
+  ImageBackground,
   ScrollView,
   Text,
   View,
-  ImageBackground,
 } from 'react-native';
-import { Image } from 'expo-image';
+import RNPickerSelect from 'react-native-picker-select';
 import { Chevron } from 'react-native-shapes';
-import { ParkType } from '../models/park-type';
-import { LeaderboardType } from '../models/leaderboard-type';
-import { useFocusEffect } from '@react-navigation/native';
+import { useAsyncEffect } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
-import config from '../config';
-import { UserType } from '../models/user-type';
 import getUsers from '../api/endpoints/leaderboards/users';
-import Loading from '../components/Loading';
-import LeaderboardUser from '../components/LeaderboardUser';
+import allParks from '../api/endpoints/parks/allParks';
+import getLeaderboards from '../api/endpoints/parks/leaderboards/get';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
-import { useAsyncEffect } from 'rooks';
+import LeaderboardUser from '../components/LeaderboardUser';
+import Loading from '../components/Loading';
+import Topbar from '../components/Topbar';
+import Wrapper from '../components/Wrapper';
+import config from '../config';
+import { AuthContext } from '../context/AuthProvider';
+import { LeaderboardType } from '../models/leaderboard-type';
+import { ParkType } from '../models/park-type';
+import { UserType } from '../models/user-type';
 
 export default function LeaderboardScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);

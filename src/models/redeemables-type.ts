@@ -1,6 +1,6 @@
+import { CoinType } from './coin-type';
 import { ItemType } from './item-type';
 import { TaskType } from './task-type';
-import { CoinType } from './coin-type';
 
 export interface RedeemablesType {
   readonly coins: CoinType[];

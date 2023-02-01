@@ -1,15 +1,15 @@
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
-import { useCallback, useEffect, useState } from 'react';
-import Wrapper from '../components/Wrapper';
-import Topbar from '../components/Topbar';
 import { useFocusEffect } from '@react-navigation/native';
-import recordActivity from '../api/endpoints/activities/create';
-import Loading from '../components/Loading';
-import getNotifications from '../api/endpoints/me/notifications';
-import { NotificationType } from '../models/notification-type';
 import { FlashList } from '@shopify/flash-list';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import recordActivity from '../api/endpoints/activities/create';
+import getNotifications from '../api/endpoints/me/notifications';
+import Loading from '../components/Loading';
 import Notification from '../components/Notification';
+import Topbar from '../components/Topbar';
+import Wrapper from '../components/Wrapper';
+import { NotificationType } from '../models/notification-type';
 
 export default function NewsScreen() {
   const [notifications, setNotifications] = useState<NotificationType[]>([]);

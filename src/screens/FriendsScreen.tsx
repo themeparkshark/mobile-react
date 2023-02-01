@@ -1,9 +1,6 @@
-import { useCallback, useContext, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import recordActivity from '../api/endpoints/activities/create';
-import Topbar from '../components/Topbar';
-import Loading from '../components/Loading';
 import { Image } from 'expo-image';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   ImageBackground,
   ScrollView,
@@ -11,14 +8,17 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { UserType } from '../models/user-type';
+import recordActivity from '../api/endpoints/activities/create';
 import getFriends from '../api/endpoints/me/friends';
-import FriendsList from '../components/FriendsList';
 import searchUsers from '../api/endpoints/users/all';
 import Button from '../components/Button';
+import FriendsList from '../components/FriendsList';
+import Loading from '../components/Loading';
+import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
-import * as RootNavigation from '../RootNavigation';
 import { FriendContext } from '../context/FriendProvider';
+import { UserType } from '../models/user-type';
+import * as RootNavigation from '../RootNavigation';
 
 export default function FriendsScreen() {
   const [loading, setLoading] = useState<boolean>(true);

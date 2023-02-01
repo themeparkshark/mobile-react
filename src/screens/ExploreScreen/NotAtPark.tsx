@@ -1,6 +1,6 @@
-import { Dimensions, Text } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useEffect, useState } from 'react';
+import { Dimensions, Text } from 'react-native';
 
 export default function NotAtPark() {
   const [seconds, setSeconds] = useState<number>(5);

@@ -1,23 +1,16 @@
-import {
-  ActivityIndicator,
-  Dimensions,
-  ImageBackground,
-  ScrollView,
-  View,
-} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import getStore from '../api/endpoints/stores/get';
+import { useCallback, useEffect, useState } from 'react';
+import { Dimensions, ImageBackground, ScrollView, View } from 'react-native';
+import recordActivity from '../api/endpoints/activities/create';
 import getCatalog from '../api/endpoints/catalogs/get';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import getStore from '../api/endpoints/stores/get';
+import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
-import Section from './Store/Section';
-import { StoreType } from '../models/store-type';
 import { CatalogType } from '../models/catalog-type';
 import { ItemType } from '../models/item-type';
-import { useFocusEffect } from '@react-navigation/native';
-import recordActivity from '../api/endpoints/activities/create';
-import { MusicContext } from '../context/MusicProvider';
-import Loading from '../components/Loading';
+import { StoreType } from '../models/store-type';
+import Section from './Store/Section';
 
 export default function StoreScreen({ route }) {
   const { store } = route.params;

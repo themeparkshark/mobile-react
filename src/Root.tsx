@@ -1,37 +1,37 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { navigationRef } from './RootNavigation';
-import LoginScreen from './screens/Auth/LoginScreen';
-import ExploreScreen from './screens/ExploreScreen';
-import InventoryScreen from './screens/InventoryScreen';
-import WelcomeScreen from './screens/WelcomeScreen';
-import NewsScreen from './screens/NewsScreen';
-import ParkScreen from './screens/ParkScreen';
-import ProfileScreen from './screens/ProfileScreen';
-import EntryScreen from './screens/EntryScreen';
-import LoadingScreen from './screens/LoadingScreen';
-import ErrorScreen from './screens/ErrorScreen';
-import LogoutScreen from './screens/LogoutScreen';
-import StoreScreen from './screens/StoreScreen';
-import UserScreen from './screens/UserScreen';
-import NotificationsScreen from './screens/NotificationsScreen';
-import { Storage } from 'expo-storage';
-import SettingsScreen from './screens/SettingsScreen';
-import LeaderboardScreen from './screens/LeaderboardScreen';
-import PinCollectionScreen from './screens/PinCollectionsScreen';
-import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
-import SocialScreen from './screens/SocialScreen';
 import { useKeepAwake } from 'expo-keep-awake';
-import QueueTimesScreen from './screens/QueueTimesScreen';
+import { Storage } from 'expo-storage';
 import { useContext, useEffect } from 'react';
-import { AuthContext } from './context/AuthProvider';
 import mobileAds, {
   InterstitialAd,
   MaxAdContentRating,
   TestIds,
 } from 'react-native-google-mobile-ads';
+import { AuthContext } from './context/AuthProvider';
+import { navigationRef } from './RootNavigation';
+import LoginScreen from './screens/Auth/LoginScreen';
+import EntryScreen from './screens/EntryScreen';
+import ErrorScreen from './screens/ErrorScreen';
+import ExploreScreen from './screens/ExploreScreen';
 import FriendsScreen from './screens/FriendsScreen';
+import InventoryScreen from './screens/InventoryScreen';
+import LeaderboardScreen from './screens/LeaderboardScreen';
+import LoadingScreen from './screens/LoadingScreen';
+import LogoutScreen from './screens/LogoutScreen';
+import NewsScreen from './screens/NewsScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
+import ParkScreen from './screens/ParkScreen';
 import PendingFriendRequestsScreen from './screens/PendingFriendRequestsScreen';
+import PinCollectionScreen from './screens/PinCollectionsScreen';
+import ProfileScreen from './screens/ProfileScreen';
+import QueueTimesScreen from './screens/QueueTimesScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
+import SocialScreen from './screens/SocialScreen';
+import StoreScreen from './screens/StoreScreen';
+import UserScreen from './screens/UserScreen';
+import WelcomeScreen from './screens/WelcomeScreen';
 
 const Stack = createNativeStackNavigator();
 

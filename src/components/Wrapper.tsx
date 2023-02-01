@@ -1,9 +1,8 @@
 import { Image } from 'expo-image';
+import { ReactNode } from 'react';
 import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
-import { ReactNode, useContext } from 'react';
-import { BroadcastContext } from '../context/BroadcastProvider';
 
 export default function Wrapper({
   showBar = true,
