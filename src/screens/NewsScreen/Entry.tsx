@@ -4,13 +4,7 @@ import dayjs from '../../helpers/dayjs';
 import { EntryType } from '../../models/entry-type';
 import * as RootNavigation from '../../RootNavigation';
 
-export default function Entry({
-  entry,
-  horizontal = true,
-}: {
-  readonly entry: EntryType;
-  readonly horizontal?: boolean;
-}) {
+export default function Entry({ entry }: { readonly entry: EntryType }) {
   const date =
     dayjs().diff(dayjs(entry.published_at), 'day') >= 7
       ? dayjs(entry.published_at).format('MMM D, YYYY')
@@ -20,7 +14,7 @@ export default function Entry({
     <TouchableOpacity
       style={{
         marginBottom: 32,
-        flexDirection: horizontal ? 'row' : 'column',
+        flexDirection: 'row',
       }}
       onPress={() => RootNavigation.navigate('Entry', { entry: entry.id })}
     >
@@ -41,12 +35,11 @@ export default function Entry({
       <View
         style={{
           flex: 1,
-          marginLeft: horizontal ? 16 : 0,
+          marginLeft: 16,
         }}
       >
         <Text
           style={{
-            marginTop: horizontal ? 0 : 16,
             fontSize: 18,
           }}
         >

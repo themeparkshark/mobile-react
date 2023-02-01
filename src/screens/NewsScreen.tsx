@@ -1,4 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
+import { FlashList } from '@shopify/flash-list';
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
@@ -15,7 +16,7 @@ import Entry from './NewsScreen/Entry';
 
 export default function NewsScreen() {
   const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
-  const [entries, setEntries] = useState<EntryType[]>();
+  const [entries, setEntries] = useState<EntryType[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -81,11 +82,18 @@ export default function NewsScreen() {
                 })}
               </ScrollView>
             </View>
-            {entries.map((entry, key) => {
-              return (
-                <Entry key={entry.id} entry={entry} horizontal={key > 0} />
-              );
-            })}
+            <View style={{ height: '100%' }}>
+              {entries.length && (
+                <FlashList
+                  data={entries}
+                  renderItem={({ item }) => (
+                    <Entry key={item.id} entry={item} />
+                  )}
+                  estimatedItemSize={15}
+                  keyExtractor={(item) => item.id.toString()}
+                />
+              )}
+            </View>
           </View>
         </ScrollView>
       )}

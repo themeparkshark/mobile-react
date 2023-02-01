@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Dimensions, ScrollView, Text, View } from 'react-native';
 import RenderHtml from 'react-native-render-html';
@@ -28,41 +27,40 @@ export default function EntryScreen({ route }) {
       {!loading && currentEntry && (
         <ScrollView
           style={{
-            padding: 16,
+            marginTop: -8,
           }}
         >
-          <View style={{ marginBottom: 16 }}>
-            <Image
+          <View
+            style={{
+              padding: 16,
+            }}
+          >
+            <Text
               style={{
-                aspectRatio: 16 / 9,
-                borderRadius: 8,
+                fontSize: 24,
               }}
-              source={currentEntry.featured_image}
-              contentFit="cover"
-            />
-          </View>
-          <Text
-            style={{
-              fontSize: 24,
-            }}
-          >
-            {currentEntry.full_headline}
-          </Text>
-          <Text
-            style={{
-              marginTop: 8,
-            }}
-          >
-            By {currentEntry.author.name} |{' '}
-            {dayjs(currentEntry.published_at).format('MMM D, YYYY')}
-          </Text>
-          <View>
-            <RenderHtml
-              contentWidth={Dimensions.get('window').width - 32}
-              source={{
-                html: currentEntry.content,
+            >
+              {currentEntry.full_headline}
+            </Text>
+            <Text
+              style={{
+                marginTop: 8,
               }}
-            />
+            >
+              By {currentEntry.author.name} |{' '}
+              {dayjs(currentEntry.published_at).format('MMM D, YYYY')}
+            </Text>
+            <View>
+              <RenderHtml
+                baseStyle={{
+                  fontSize: 16,
+                }}
+                contentWidth={Dimensions.get('window').width - 32}
+                source={{
+                  html: currentEntry.content,
+                }}
+              />
+            </View>
           </View>
         </ScrollView>
       )}

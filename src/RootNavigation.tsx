@@ -5,7 +5,6 @@ export const navigationRef = createNavigationContainerRef();
 
 export function navigate(name: string, params?: ParamListBase) {
   if (navigationRef.isReady()) {
-    // @ts-ignore
     navigationRef.navigate(name, params);
   }
 }
