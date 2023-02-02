@@ -65,7 +65,10 @@
     "react-native-web": "~0.18.7",
     "rn-tooltip": "^3.0.3",
     "rooks": "^7.4.3",
-    "url": "^0.11.0"
+    "url": "^0.11.0",
+    "sentry-expo": "~6.0.0",
+    "expo-application": "~5.0.1",
+    "@sentry/react-native": "4.9.0"
   },
   "devDependencies": {
     "@babel/core": "^7.19.3",

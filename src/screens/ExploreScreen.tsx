@@ -34,7 +34,6 @@ export default function ExploreScreen() {
   >();
   const [location, setLocation] = useState<LocationType>();
   const { inventory, refreshUser, user } = useContext(AuthContext);
-  const [followingUser, setFollowingUser] = useState<boolean>(true);
 
   useFocusEffect(
     useCallback(() => {
