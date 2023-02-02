@@ -1,9 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
+import { FlashList } from '@shopify/flash-list';
+import { truncate } from 'lodash';
 import { useCallback, useState } from 'react';
 import {
-  Button,
   RefreshControl,
   ScrollView,
   Text,
@@ -12,20 +11,23 @@ import {
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
-import instagram from '../api/endpoints/social-posts/instagram';
-import twitter from '../api/endpoints/social-posts/twitter';
+import getThreads from '../api/endpoints/threads/getThreads';
+import Avatar from '../components/Avatar';
 import Loading from '../components/Loading';
+import Tag from '../components/Tag';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
-import { SocialPostType } from '../models/social-post-type';
+import { ThreadType } from '../models/thread-type';
+import * as RootNavigation from '../RootNavigation';
+import {Image} from 'expo-image';
+import Button from '../components/Button';
 
-export default function SocialScreen() {
-  const [twitterStatuses, setTwitterStatuses] = useState<SocialPostType[]>();
-  const [instagramStatuses, setInstagramStatuses] =
-    useState<SocialPostType[]>();
+export default function SocialScreen({ navigation }) {
+  const [threads, setThreads] = useState<ThreadType[]>();
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [page, setPage] = useState<number>(1);
 
   useFocusEffect(
     useCallback(() => {
@@ -34,27 +36,47 @@ export default function SocialScreen() {
   );
 
   useAsyncEffect(async () => {
-    setTwitterStatuses(await twitter());
-    setInstagramStatuses(await instagram());
-
+    setThreads(await getThreads(1));
     setLoading(false);
   }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     (async () => {
-      setTwitterStatuses(await twitter());
-      setInstagramStatuses(await instagram());
+      setThreads(await getThreads(1));
     })();
     setRefreshing(false);
   }, []);
 
+  useAsyncEffect(async () => {
+    if (page > 1) {
+      await getThreads(page);
+    }
+  }, [page]);
+
   return (
     <Wrapper>
-      <Topbar text="Social" />
+      <Topbar text="Social" rightButton={<Button
+        onPress={() => {
+
+        }}
+      >
+        <Image
+          style={{
+            width: 50,
+            height: 50,
+            alignSelf: 'center',
+          }}
+          contentFit="contain"
+          source={require('../../assets/images/screens/profile/settings.png')}
+        />
+      </Button>} />
       {loading && <Loading />}
       {!loading && (
         <ScrollView
+          contentContainerStyle={{
+            flex: 1,
+          }}
           style={{
             marginTop: -8,
           }}
@@ -64,184 +86,112 @@ export default function SocialScreen() {
         >
           <View
             style={{
-              paddingLeft: 16,
-              paddingRight: 16,
-              paddingTop: 32,
-              paddingBottom: 32,
+              padding: 16,
+              flex: 1,
             }}
           >
-            <View>
-              <Text
-                style={{
-                  paddingBottom: 16,
-                  fontFamily: 'Knockout',
-                  fontSize: 24,
-                }}
-              >
-                Twitter
-              </Text>
-              {twitterStatuses?.map((twitterStatus) => {
-                const date = dayjs(twitterStatus.status_created_at)
-                  .startOf('second')
-                  .fromNow();
-
-                return (
+            <Text>Sort by: Oldest, Newest, Hot</Text>
+            <FlashList
+              data={threads}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  key={item.id}
+                  onPress={() => {
+                    navigation.navigate('Thread', {
+                      thread: item.id,
+                    });
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    paddingTop: 32,
+                  }}
+                >
+                  <View>
+                    <Avatar size={60} user={item.user} />
+                  </View>
                   <View
-                    key={twitterStatus.id}
                     style={{
-                      marginBottom: 24,
+                      paddingLeft: 16,
+                      flex: 1,
                     }}
                   >
-                    <TouchableOpacity
+                    <View
                       style={{
                         flexDirection: 'row',
-                      }}
-                      onPress={() => {
-                        WebBrowser.openBrowserAsync(twitterStatus.permalink);
+                        flexWrap: 'wrap',
                       }}
                     >
-                      <View
-                        style={{
-                          width: 50,
-                          height: 50,
-                          borderRadius: 10,
-                          overflow: 'hidden',
-                        }}
-                      >
-                        <Image
-                          source={require('../../assets/icon.png')}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                          }}
-                        />
-                      </View>
-                      <View
-                        style={{
-                          flex: 1,
-                          paddingLeft: 16,
-                        }}
-                      >
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                          }}
-                        >
-                          <View
-                            style={{
-                              flex: 1,
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontWeight: 'bold',
-                                fontSize: 16,
-                                paddingRight: 4,
-                              }}
-                            >
-                              Theme Park Shark
-                            </Text>
-                            <Text
-                              style={{
-                                fontSize: 14,
-                                opacity: 0.5,
-                              }}
-                            >
-                              @themeparkshark
-                            </Text>
-                          </View>
-                          <View>
-                            <Text
-                              style={{
-                                fontSize: 14,
-                                opacity: 0.5,
-                              }}
-                            >
-                              {date}
-                            </Text>
-                          </View>
-                        </View>
+                      {item.tags.map((tag) => (
+                        <Tag key={tag.id} tag={tag} />
+                      ))}
+                    </View>
+                    <Text
+                      style={{
+                        fontFamily: 'Knockout',
+                        fontSize: 22,
+                        paddingBottom: 8,
+                      }}
+                    >
+                      {item.title}
+                    </Text>
+                    {item.latest_comment && (
+                      <>
                         <Text
                           style={{
-                            fontSize: 16,
+                            paddingBottom: 8,
                           }}
                         >
-                          {twitterStatus.status}
+                          {item.latest_comment.user.screen_name} replied{' '}
+                          {dayjs(item.latest_comment.updated_at)
+                            .startOf('second')
+                            .fromNow()}{' '}
+                          ago
                         </Text>
-                      </View>
-                    </TouchableOpacity>
+                        <Text
+                          style={{
+                            opacity: 0.5,
+                          }}
+                        >
+                          {truncate(item.latest_comment.content, {
+                            length: 100,
+                          })}
+                        </Text>
+                      </>
+                    )}
                   </View>
-                );
-              })}
-              <Button
-                title="Follow Theme Park Shark on Twitter"
-                onPress={() =>
-                  WebBrowser.openBrowserAsync(
-                    'https://twitter.com/themeparkshark'
-                  )
-                }
-              />
-            </View>
-            <View
-              style={{
-                marginTop: 32,
-              }}
-            >
-              <Text
-                style={{
-                  paddingBottom: 16,
-                  fontFamily: 'Knockout',
-                  fontSize: 24,
-                }}
-              >
-                Instagram
-              </Text>
-              <View
-                style={{
-                  borderRadius: 10,
-                  overflow: 'hidden',
-                  flexWrap: 'wrap',
-                  flexDirection: 'row',
-                  marginBottom: 24,
-                }}
-              >
-                {instagramStatuses?.map((instagramStatus) => {
-                  return (
+                  <View
+                    style={{
+                      paddingLeft: 16,
+                    }}
+                  >
                     <View
-                      key={instagramStatus.id}
                       style={{
-                        width: '33.33333333%',
+                        width: 32,
+                        height: 32,
+                        backgroundColor: 'rgba(0, 0, 0, .05)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 16,
                       }}
                     >
-                      <TouchableOpacity
-                        onPress={() => {
-                          WebBrowser.openBrowserAsync(
-                            instagramStatus.permalink
-                          );
+                      <Text
+                        style={{
+                          fontFamily: 'Knockout',
+                          fontSize: 18,
                         }}
                       >
-                        <Image
-                          source={instagramStatus.image_url}
-                          style={{
-                            aspectRatio: 1,
-                          }}
-                        />
-                      </TouchableOpacity>
+                        {item.comments_count}
+                      </Text>
                     </View>
-                  );
-                })}
-              </View>
-              <Button
-                title="Follow Theme Park Shark on Instagram"
-                onPress={() =>
-                  WebBrowser.openBrowserAsync(
-                    'https://instagram.com/themeparkshark'
-                  )
-                }
-              />
-            </View>
+                  </View>
+                </TouchableOpacity>
+              )}
+              estimatedItemSize={15}
+              keyExtractor={(item) => item.id.toString()}
+              onEndReached={() => {
+                //setPage((prevState) => prevState + 1);
+              }}
+            />
           </View>
         </ScrollView>
       )}

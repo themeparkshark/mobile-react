@@ -30,6 +30,7 @@ import SettingsScreen from './screens/SettingsScreen';
 import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import SocialScreen from './screens/SocialScreen';
 import StoreScreen from './screens/StoreScreen';
+import ThreadScreen from './screens/ThreadScreen';
 import UserScreen from './screens/UserScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
 
@@ -136,6 +137,7 @@ const HomeStackNavigator = () => {
         name="PendingFriendRequests"
         component={PendingFriendRequestsScreen}
       />
+      <Stack.Screen name="Thread" component={ThreadScreen} />
       <Stack.Screen
         name="Loading"
         component={LoadingScreen}
