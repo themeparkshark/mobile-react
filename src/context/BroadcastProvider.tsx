@@ -40,7 +40,7 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
     }
 
     await pusher.init({
-      apiKey: 'fa6a1b978c66821f97dc',
+      apiKey: process.env.PUSHER_KEY ?? '',
       cluster: 'mt1',
       onAuthorizer: async (channelName, socketId) => {
         const { data } = await client.post('/broadcasting/auth', {
