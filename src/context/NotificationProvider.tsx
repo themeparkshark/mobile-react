@@ -16,7 +16,7 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => {
     const interval = setInterval(async () => {
       await refreshNotificationCount();
-    }, 1000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, []);
