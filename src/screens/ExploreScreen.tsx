@@ -1,9 +1,20 @@
+import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
+import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, Image, ImageBackground, Text, View } from 'react-native';
+import {
+  Dimensions,
+  Image,
+  ImageBackground,
+  Pressable,
+  Text,
+  View,
+} from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import Tooltip from 'rn-tooltip';
+import { useTimeoutWhen } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Button from '../components/Button';
@@ -12,6 +23,7 @@ import RedeemModal from '../components/RedeemModal';
 import TaskListModal from '../components/TaskListModal';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
+import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
@@ -34,6 +46,16 @@ export default function ExploreScreen() {
   >();
   const [location, setLocation] = useState<LocationType>();
   const { inventory, refreshUser, user } = useContext(AuthContext);
+  const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
+  const [mapReady, setMapReady] = useState<boolean>(false);
+
+  useTimeoutWhen(
+    () => {
+      setFocusedOnUser(true);
+    },
+    1000,
+    mapReady
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -95,6 +117,27 @@ export default function ExploreScreen() {
       {!park && <NotAtPark />}
       {park && redeemables && (
         <>
+          <View
+            style={{
+              position: 'absolute',
+              top: 200,
+              right: 16,
+              zIndex: 10,
+            }}
+          >
+            <Pressable
+              onPress={() => setFocusedOnUser(true)}
+              style={{
+                padding: 12,
+              }}
+            >
+              <FontAwesomeIcon
+                icon={focusedOnUser ? faSolidArrow : faLocationArrow}
+                size={30}
+                color={config.primary}
+              />
+            </Pressable>
+          </View>
           <View
             style={{
               position: 'absolute',
@@ -202,13 +245,14 @@ export default function ExploreScreen() {
           }}
           showsUserLocation={true}
           showsIndoors={false}
-          zoomEnabled={false}
           rotateEnabled={false}
-          scrollEnabled={false}
+          region={focusedOnUser ? location : undefined}
           initialRegion={location}
           pitchEnabled={false}
           loadingEnabled={true}
-          userInterfaceStyle={'light'}
+          userInterfaceStyle="light"
+          onMapReady={() => setMapReady(true)}
+          onRegionChangeComplete={() => setFocusedOnUser(false)}
         >
           {redeemables?.items
             .filter((item) => !item.is_hidden)

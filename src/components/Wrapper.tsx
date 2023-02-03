@@ -1,10 +1,9 @@
 import { Image } from 'expo-image';
-import { ReactNode } from 'react';
+import { ReactNode, useContext } from 'react';
 import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
+import { NotificationContext } from '../context/NotificationProvider';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
-import { useContext } from 'react';
-import {NotificationContext} from '../context/NotificationProvider';
 
 export default function Wrapper({
   showBar = true,

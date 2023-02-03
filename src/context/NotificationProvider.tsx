@@ -1,4 +1,4 @@
-import {createContext, FC, ReactNode, useEffect, useState} from 'react';
+import { createContext, FC, ReactNode, useEffect, useState } from 'react';
 import unreadNotificationsCount from '../api/endpoints/me/unread-notifications-count';
 
 export interface NotificationContextType {
@@ -10,7 +10,9 @@ export const NotificationContext = createContext<NotificationContextType>(
   {} as NotificationContextType
 );
 
-export const NotificationProvider: FC<{ children: ReactNode }> = ({ children }) => {
+export const NotificationProvider: FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   const [notificationCount, setNotificationCount] = useState<number>(0);
 
   useEffect(() => {

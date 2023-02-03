@@ -22,10 +22,10 @@ import YellowButton from '../components/YellowButton';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { FriendContext } from '../context/FriendProvider';
+import { NotificationContext } from '../context/NotificationProvider';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import * as RootNavigation from '../RootNavigation';
-import {NotificationContext} from '../context/NotificationProvider';
 
 interface ButtonType {
   readonly image: any;

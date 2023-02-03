@@ -45,13 +45,13 @@ export default {
   hooks: {
     postPublish: [
       {
-        file: "sentry-expo/upload-sourcemaps",
+        file: 'sentry-expo/upload-sourcemaps',
         config: {
           organization: 'theme-park-shark',
           project: 'mobile-react',
           authToken: process.env.SENTRY_AUTH_TOKEN,
-        }
-      }
-    ]
-  }
+        },
+      },
+    ],
+  },
 };
