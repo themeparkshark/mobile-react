@@ -90,8 +90,7 @@ export default function ExploreScreen() {
       <Topbar
         parkCoin={park?.coin_url}
         showCoins
-        parkCoins={user.park_coins}
-        showBroadcasts
+        parkCoins={park?.park_coins_count}
       />
       {!park && <NotAtPark />}
       {park && redeemables && (

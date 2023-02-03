@@ -1,11 +1,12 @@
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import {useContext, useState} from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import markAsRead from '../api/endpoints/me/notifications/markAsRead';
 import config from '../config';
 import dayjs from '../helpers/dayjs';
 import { NotificationType } from '../models/notification-type';
 import * as RootNavigation from '../RootNavigation';
+import {NotificationContext} from '../context/NotificationProvider';
 
 export default function Notification({
   notification,
@@ -13,6 +14,7 @@ export default function Notification({
   readonly notification: NotificationType;
 }) {
   const [hasRead, setHasRead] = useState<boolean>(!!notification.read_at);
+  const { refreshNotificationCount } = useContext(NotificationContext);
 
   return (
     <TouchableOpacity
@@ -24,6 +26,7 @@ export default function Notification({
       onPress={async () => {
         if (!hasRead) {
           await markAsRead(notification.id);
+          await refreshNotificationCount();
           setHasRead(true);
         }
 

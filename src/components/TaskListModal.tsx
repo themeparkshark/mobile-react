@@ -68,7 +68,7 @@ export default function TaskListModal({
           <View
             style={{
               position: 'absolute',
-              top: '5%',
+              bottom: '5%',
               right: '5%',
             }}
           >
@@ -108,7 +108,7 @@ export default function TaskListModal({
                   textTransform: 'uppercase',
                   color: 'white',
                   fontSize: 30,
-                  marginTop: 128,
+                  marginTop: 125,
                   marginLeft: 'auto',
                   marginRight: 'auto',
                   textShadowColor: 'rgba(0, 0, 0, .5)',

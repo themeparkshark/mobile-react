@@ -29,7 +29,6 @@ export default function Topbar({
   readonly text?: string | null;
   readonly purple?: boolean;
   readonly showBackButton?: boolean;
-  readonly showBroadcasts?: boolean;
   readonly showCoins?: boolean;
   readonly parkCoin?: string | null;
   readonly parkCoins?: number | null;

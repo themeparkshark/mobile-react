@@ -40,7 +40,7 @@ export default function Activity({ user }: { readonly user: UserType }) {
                   flex: 1,
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
-                  fontSize: 16,
+                  fontSize: 18,
                 }}
               >
                 {activity.label}
@@ -49,7 +49,7 @@ export default function Activity({ user }: { readonly user: UserType }) {
                 style={{
                   fontFamily: 'Knockout',
                   textTransform: 'uppercase',
-                  fontSize: 16,
+                  fontSize: 18,
                   color: config.primary,
                 }}
               >

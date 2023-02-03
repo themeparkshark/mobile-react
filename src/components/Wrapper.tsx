@@ -3,6 +3,8 @@ import { ReactNode } from 'react';
 import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
+import { useContext } from 'react';
+import {NotificationContext} from '../context/NotificationProvider';
 
 export default function Wrapper({
   showBar = true,
@@ -11,6 +13,8 @@ export default function Wrapper({
   readonly showBar?: boolean;
   readonly children: ReactNode[];
 }) {
+  const { notificationCount } = useContext(NotificationContext);
+
   const items = [
     {
       icon: require('../../assets/images/toolbar/news.png'),
@@ -43,6 +47,7 @@ export default function Wrapper({
       screen: 'Profile',
       size: 'normal',
       label: 'Profile',
+      showRedCircle: !!notificationCount,
     },
   ];
 

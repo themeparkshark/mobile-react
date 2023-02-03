@@ -25,6 +25,7 @@ import { FriendContext } from '../context/FriendProvider';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import * as RootNavigation from '../RootNavigation';
+import {NotificationContext} from '../context/NotificationProvider';
 
 interface ButtonType {
   readonly image: any;
@@ -39,6 +40,7 @@ export default function NewsScreen({ navigation }) {
   const [loading, setLoading] = useState<boolean>(true);
   const { user, setInventory } = useContext(AuthContext);
   const { friends, refreshFriends } = useContext(FriendContext);
+  const { notificationCount } = useContext(NotificationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -90,6 +92,7 @@ export default function NewsScreen({ navigation }) {
               onPress={() => {
                 RootNavigation.navigate('Notifications');
               }}
+              showRedCircle={!!notificationCount}
             >
               <Image
                 style={{
@@ -161,7 +164,6 @@ export default function NewsScreen({ navigation }) {
                 }}
               >
                 <Experience user={user} />
-                {user.verified_at && <Verified />}
                 <View
                   style={{
                     paddingTop: 24,
@@ -205,6 +207,7 @@ export default function NewsScreen({ navigation }) {
                     );
                   })}
                 </View>
+                {user.verified_at && <Verified />}
                 <Heading text="Total Activity" />
                 <Activity user={user} />
                 <Heading text="Your Friends" />

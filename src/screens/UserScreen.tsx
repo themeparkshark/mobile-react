@@ -17,7 +17,7 @@ import config from '../config';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
 
-export default function UserScreen({ navigation, route }) {
+export default function UserScreen({ route }) {
   const { user } = route.params;
   const [loading, setLoading] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<UserType>();
