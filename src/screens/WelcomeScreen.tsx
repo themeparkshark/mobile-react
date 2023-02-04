@@ -17,7 +17,7 @@ import { AuthContext } from '../context/AuthProvider';
 
 export default function WelcomeScreen({ navigation }) {
   const [username, setUsername] = useState<string>('');
-  const { refreshUser } = useContext(AuthContext);
+  const { user, refreshUser } = useContext(AuthContext);
   const rotate = useRef(new Animated.Value(0)).current;
 
   const spin = rotate.interpolate({
@@ -41,6 +41,10 @@ export default function WelcomeScreen({ navigation }) {
       recordActivity('Viewed the Welcome screen.');
     }, [])
   );
+
+  if (!user) {
+    return <></>;
+  }
 
   return (
     <ImageBackground
@@ -108,6 +112,23 @@ export default function WelcomeScreen({ navigation }) {
             navigation.navigate('Explore');
           }}
         />
+        <Text
+          style={{
+            paddingTop: 32,
+            textAlign: 'center',
+            color: 'white',
+            fontFamily: 'Knockout',
+            fontSize: 18,
+            textShadowColor: 'rgba(0, 0, 0, .5)',
+            textShadowOffset: {
+              width: 1,
+              height: 1,
+            },
+            textShadowRadius: 0,
+          }}
+        >
+          Your username will appear as P{user.id} until approved.
+        </Text>
         <View
           style={{
             width: '100%',
