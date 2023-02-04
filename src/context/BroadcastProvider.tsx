@@ -39,6 +39,8 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
       return;
     }
 
+    console.log(process.env);
+
     await pusher.init({
       apiKey: process.env.PUSHER_KEY ?? '',
       cluster: 'mt1',
@@ -47,6 +49,8 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
           channel_name: channelName,
           socket_id: socketId,
         });
+
+        console.log(data);
 
         return data;
       },

@@ -33,6 +33,7 @@ export default function Wrapper({
       screen: 'Explore',
       size: 'large',
       label: 'Explore',
+      sound: require('../../assets/sounds/explore_button_press.mp3')
     },
     {
       icon: require('../../assets/images/toolbar/social.png'),
@@ -104,6 +105,7 @@ export default function Wrapper({
                         RootNavigation.navigate(item.screen);
                       }}
                       showRedCircle={item.showRedCircle}
+                      onPressSound={item.sound}
                     >
                       <Image
                         style={{

@@ -17,7 +17,7 @@ export const FriendProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const refreshFriends = async () => {
     setFriends(
       await getFriends({
-        limit: 5,
+        limit: 3,
       })
     );
   };

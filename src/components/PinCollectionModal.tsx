@@ -13,6 +13,8 @@ import config from '../config';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { PinCollectionType } from '../models/pin-collection-type';
 import Button from './Button';
+import Pin from './Pin';
+import Stars from './Stars';
 
 export default function pinCollectionModal({
   pinCollection,
@@ -93,55 +95,7 @@ export default function pinCollectionModal({
                   backgroundColor: config.secondary,
                 }}
               >
-                {[...Array(pinCollection.collected_pins_count)].map(
-                  (element, index) => {
-                    return (
-                      <View
-                        key={index}
-                        style={{
-                          paddingLeft: 1,
-                          paddingRight: 1,
-                          width: '20%',
-                        }}
-                      >
-                        <Image
-                          source={require('../../assets/images/screens/pin-collections/star.png')}
-                          style={{
-                            width: '100%',
-                            height: 20,
-                          }}
-                          contentFit="contain"
-                        />
-                      </View>
-                    );
-                  }
-                )}
-                {[
-                  ...Array(
-                    pinCollection.pins.length -
-                      pinCollection.collected_pins_count
-                  ),
-                ].map((element, index) => {
-                  return (
-                    <View
-                      key={index}
-                      style={{
-                        paddingLeft: 1,
-                        paddingRight: 1,
-                        width: '20%',
-                      }}
-                    >
-                      <Image
-                        source={require('../../assets/images/screens/pin-collections/darkstar.png')}
-                        style={{
-                          width: '100%',
-                          height: 20,
-                        }}
-                        contentFit="contain"
-                      />
-                    </View>
-                  );
-                })}
+                <Stars size={20} active={pinCollection.collected_pins_count} total={pinCollection.pins.length} />
               </View>
               <View
                 style={{
@@ -262,45 +216,7 @@ export default function pinCollectionModal({
                 justifyContent: 'center',
               }}
             >
-              {pinCollection.pins.map((pin) => {
-                return (
-                  <View
-                    key={pin.item.id}
-                    style={{
-                      padding: 8,
-                      width: '30%',
-                    }}
-                  >
-                    <Tooltip
-                      actionType="press"
-                      height="auto"
-                      popover={
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 20,
-                          }}
-                        >
-                          {pin.item.name}
-                        </Text>
-                      }
-                      withOverlay={false}
-                      backgroundColor="white"
-                      pointerColor="white"
-                    >
-                      <Image
-                        source={pin.item.icon_url}
-                        style={{
-                          width: '100%',
-                          height: 70,
-                          opacity: pin.item.has_purchased ? 1 : 0.4,
-                        }}
-                        contentFit="contain"
-                      />
-                    </Tooltip>
-                  </View>
-                );
-              })}
+              {pinCollection.pins.map((pin) => <Pin key={pin.id} pin={pin} />)}
             </View>
             <View
               style={{
@@ -318,55 +234,7 @@ export default function pinCollectionModal({
                   justifyContent: 'center',
                 }}
               >
-                {[...Array(pinCollection.collected_pins_count)].map(
-                  (element, index) => {
-                    return (
-                      <View
-                        key={index}
-                        style={{
-                          paddingLeft: 1,
-                          paddingRight: 1,
-                          width: '20%',
-                        }}
-                      >
-                        <Image
-                          source={require('../../assets/images/screens/pin-collections/star.png')}
-                          style={{
-                            width: '100%',
-                            height: 40,
-                          }}
-                          contentFit="contain"
-                        />
-                      </View>
-                    );
-                  }
-                )}
-                {[
-                  ...Array(
-                    pinCollection.pins.length -
-                      pinCollection.collected_pins_count
-                  ),
-                ].map((element, index) => {
-                  return (
-                    <View
-                      key={index}
-                      style={{
-                        paddingLeft: 1,
-                        paddingRight: 1,
-                        width: '20%',
-                      }}
-                    >
-                      <Image
-                        source={require('../../assets/images/screens/pin-collections/darkstar.png')}
-                        style={{
-                          width: '100%',
-                          height: 40,
-                        }}
-                        contentFit="contain"
-                      />
-                    </View>
-                  );
-                })}
+                <Stars size={40} active={pinCollection.collected_pins_count} total={pinCollection.pins.length} />
               </View>
             </View>
           </ImageBackground>
