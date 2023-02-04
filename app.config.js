@@ -33,7 +33,6 @@ export default {
     pusherKey: process.env.PUSHER_KEY,
   },
   plugins: [
-    'sentry-expo',
     [
       'expo-build-properties',
       {
@@ -43,16 +42,4 @@ export default {
       },
     ],
   ],
-  hooks: {
-    postPublish: [
-      {
-        file: 'sentry-expo/upload-sourcemaps',
-        config: {
-          organization: 'theme-park-shark',
-          project: 'mobile-react',
-          authToken: process.env.SENTRY_AUTH_TOKEN,
-        },
-      },
-    ],
-  },
 };

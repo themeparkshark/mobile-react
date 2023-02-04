@@ -40,6 +40,8 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
       return;
     }
 
+    console.log(config);
+
     await pusher.init({
       apiKey: config.pusherKey ?? '',
       cluster: 'mt1',
