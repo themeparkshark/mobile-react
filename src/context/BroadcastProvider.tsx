@@ -11,6 +11,7 @@ import {
 import { useAsyncEffect, useIntervalWhen, useQueueState } from 'rooks';
 import client from '../api/client';
 import { AuthContext } from './AuthProvider';
+import config from '../config';
 
 export interface BroadcastContextType {
   readonly activeBroadcast: string | undefined;
@@ -40,7 +41,7 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
     }
 
     await pusher.init({
-      apiKey: process.env.PUSHER_KEY ?? '',
+      apiKey: config.pusherKey ?? '',
       cluster: 'mt1',
       onAuthorizer: async (channelName, socketId) => {
         const { data } = await client.post('/broadcasting/auth', {
