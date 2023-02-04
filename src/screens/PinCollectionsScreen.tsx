@@ -60,7 +60,11 @@ export default function PinCollectionsScreen() {
             }}
             source={require('../../assets/images/water_background.png')}
           >
-            <ScrollView>
+            <ScrollView
+              contentContainerStyle={{
+                flexGrow: 1,
+              }}
+            >
               <View
                 style={{
                   height: 300,
