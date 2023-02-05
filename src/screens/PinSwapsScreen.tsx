@@ -6,6 +6,7 @@ import { useAsyncEffect } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
 import getPinSwaps from '../api/endpoints/pin-swaps/all';
 import Loading from '../components/Loading';
+import PinSwap from '../components/PinSwap';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import { PinSwapType } from '../models/pin-swap-type';
@@ -74,9 +75,18 @@ export default function PinSwapsScreen() {
             {!!pinSwaps.length && (
               <FlashList
                 data={pinSwaps}
-                renderItem={({ item }) => <Text>{item.id}</Text>}
+                renderItem={({ item }) => (
+                  <PinSwap
+                    pinSwap={item}
+                    onClose={async () => {
+                      setPinSwaps(await getPinSwaps(1));
+                      setPage(1);
+                    }}
+                  />
+                )}
                 estimatedItemSize={15}
                 keyExtractor={(item) => item.id.toString()}
+                numColumns={3}
                 onEndReached={() => {
                   setPage((prevState) => prevState + 1);
                 }}

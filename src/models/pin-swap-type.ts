@@ -1,6 +1,8 @@
-import { ItemType } from './item-type';
+import { PinType } from './pin-type';
 
 export interface PinSwapType {
   readonly id: number;
-  readonly item: ItemType;
+  readonly pin: PinType;
+  readonly held_from: string;
+  readonly held_to: string;
 }
