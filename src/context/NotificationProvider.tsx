@@ -1,5 +1,7 @@
-import { createContext, FC, ReactNode, useEffect, useState } from 'react';
+import {createContext, FC, ReactNode, useContext, useEffect, useState} from 'react';
 import unreadNotificationsCount from '../api/endpoints/me/unread-notifications-count';
+import {useIntervalWhen} from 'rooks';
+import {AuthContext} from './AuthProvider';
 
 export interface NotificationContextType {
   readonly notificationCount: number;
@@ -14,14 +16,11 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [notificationCount, setNotificationCount] = useState<number>(0);
+  const { isReady } = useContext(AuthContext);
 
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      await refreshNotificationCount();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, []);
+  useIntervalWhen(async () => {
+    await refreshNotificationCount();
+  }, 30000, isReady);
 
   const refreshNotificationCount = async () => {
     const response = await unreadNotificationsCount();
