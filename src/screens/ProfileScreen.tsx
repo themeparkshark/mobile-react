@@ -65,7 +65,7 @@ export default function NewsScreen({ navigation }) {
           screen: () => {
             RootNavigation.navigate('PinCollections');
           },
-          text: 'Pins',
+          text: 'Pin Packs',
         },
         ...stores.map((store) => {
           return {

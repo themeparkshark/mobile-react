@@ -33,7 +33,7 @@ export default function Wrapper({
       screen: 'Explore',
       size: 'large',
       label: 'Explore',
-      sound: require('../../assets/sounds/explore_button_press.mp3')
+      sound: require('../../assets/sounds/explore_button_press.mp3'),
     },
     {
       icon: require('../../assets/images/toolbar/social.png'),

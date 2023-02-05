@@ -1,11 +1,9 @@
-import {PinType} from '../models/pin-type';
+import { Image } from 'expo-image';
+import { Text, View } from 'react-native';
 import Tooltip from 'rn-tooltip';
-import {Text, View} from 'react-native';
-import {Image} from 'expo-image';
+import { PinType } from '../models/pin-type';
 
-export default function Pin({ pin } : {
-  readonly pin: PinType;
-}) {
+export default function Pin({ pin }: { readonly pin: PinType }) {
   return (
     <View
       key={pin.item.id}

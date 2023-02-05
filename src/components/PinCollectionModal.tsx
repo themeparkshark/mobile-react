@@ -8,7 +8,6 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import Tooltip from 'rn-tooltip';
 import config from '../config';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { PinCollectionType } from '../models/pin-collection-type';
@@ -95,7 +94,11 @@ export default function pinCollectionModal({
                   backgroundColor: config.secondary,
                 }}
               >
-                <Stars size={20} active={pinCollection.collected_pins_count} total={pinCollection.pins.length} />
+                <Stars
+                  size={20}
+                  active={pinCollection.collected_pins_count}
+                  total={pinCollection.pins.length}
+                />
               </View>
               <View
                 style={{
@@ -216,7 +219,9 @@ export default function pinCollectionModal({
                 justifyContent: 'center',
               }}
             >
-              {pinCollection.pins.map((pin) => <Pin key={pin.id} pin={pin} />)}
+              {pinCollection.pins.map((pin) => (
+                <Pin key={pin.id} pin={pin} />
+              ))}
             </View>
             <View
               style={{
@@ -234,7 +239,11 @@ export default function pinCollectionModal({
                   justifyContent: 'center',
                 }}
               >
-                <Stars size={40} active={pinCollection.collected_pins_count} total={pinCollection.pins.length} />
+                <Stars
+                  size={40}
+                  active={pinCollection.collected_pins_count}
+                  total={pinCollection.pins.length}
+                />
               </View>
             </View>
           </ImageBackground>
