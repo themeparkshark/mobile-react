@@ -117,24 +117,6 @@ export default function QueueTimesScreen({ route }) {
               </View>
               <View
                 style={{
-                  height: 100,
-                  borderBottomWidth: 5,
-                  borderBottomColor: '#fff',
-                }}
-              >
-                <Image
-                  source={require('../../assets/images/screens/pin-collections/shark.png')}
-                  style={{
-                    width: Dimensions.get('window').width - 25,
-                    height: '100%',
-                    marginLeft: 'auto',
-                    marginRight: 'auto',
-                  }}
-                  contentFit="contain"
-                />
-              </View>
-              <View
-                style={{
                   backgroundColor: 'rgba(255, 255, 255, .6)',
                   borderTopWidth: 5,
                   borderTopColor: '#fff',
