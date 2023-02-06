@@ -1,13 +1,13 @@
 import dayjs from 'dayjs';
-import { useEffect, useState } from 'react';
+import {useContext, useEffect, useState} from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import {
   Alert,
   Dimensions,
   Image,
+  ImageBackground,
   Pressable,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
@@ -23,6 +23,12 @@ import {FlashList} from '@shopify/flash-list';
 import Loading from './Loading';
 import deleteUser from '../api/endpoints/me/delete';
 import * as RootNavigation from '../RootNavigation';
+import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
+import {faCircleCheck} from '@fortawesome/pro-light-svg-icons/faCircleCheck';
+import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
+import getPins from '../api/endpoints/me/pins';
+import {AuthContext} from '../context/AuthProvider';
+import getInventory from '../api/endpoints/me/inventory';
 
 export default function PinSwap({
   pinSwap,
@@ -37,9 +43,10 @@ export default function PinSwap({
   const [page, setPage] = useState<number>(1);
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const [selectedPin, setSelectedPin] = useState<ItemType>();
+  const { setInventory } = useContext(AuthContext);
 
   const requestItems = async (page: number) => {
-    const response = await getItems(8, page);
+    const response = await getPins(page);
     setItems((prevState) => {
       return [...prevState, ...response];
     });
@@ -122,8 +129,6 @@ export default function PinSwap({
       <Modal
         animationIn="zoomIn"
         animationOut="zoomOut"
-        swipeDirection="down"
-        onSwipeComplete={() => setModalVisible(false)}
         isVisible={modalVisible}
         hideModalContentWhileAnimating={true}
       >
@@ -163,94 +168,147 @@ export default function PinSwap({
             style={{
               backgroundColor: 'white',
               width: Dimensions.get('window').width - 40,
-              padding: 32,
               borderRadius: 20,
             }}
           >
-            <Countdown
-              date={Date.parse(heldTo)}
-              renderer={({ minutes, seconds }) => {
-                return (
-                  <Text
-                    style={{
-                      textAlign: 'center',
-                      fontFamily: 'Knockout',
-                      fontSize: 24,
-                    }}
-                  >
-                    Your trade will expire in {minutes}:{zeroPad(seconds)}
-                  </Text>
-                );
-              }}
-            />
-            <Text
-              style={{
-                paddingTop: 16,
-                fontSize: 24,
-                fontFamily: 'Knockout',
-                textAlign: 'center',
-              }}
-            >
-              Please select a pin to trade for the {pinSwap.pin.item.name}.
-            </Text>
             <View
               style={{
-                height: 300,
-                paddingTop: 32,
-                paddingBottom: 32,
+                padding: 32,
               }}
             >
-              {itemsLoading && <Loading />}
-              {!itemsLoading && (
-                <FlashList
-                  data={items.filter((item) => item.id !== pinSwap.pin.item.id)}
-                  renderItem={({ item }) => (
-                    <View>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setSelectedPin(item);
-                        }}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <View>
-                          <Text>
-                            {selectedPin?.id === item.id ? <Text>Checked</Text> : <Text>Unchecked</Text>}
-                          </Text>
-                        </View>
-                        <View>
-                          <Image
-                            source={{
-                              uri: item.icon_url,
-                            }}
-                            resizeMode="contain"
-                            style={{
-                              width: 50,
-                              height: 50,
-                            }}
-                          />
-                        </View>
-                        <View>
-                          <Text>{item.name}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  estimatedItemSize={15}
-                  keyExtractor={(item) => item.id.toString()}
-                  onEndReached={() => {
-                    setPage((prevState) => prevState + 1);
-                  }}
-                />
-              )}
+              <Countdown
+                date={Date.parse(heldTo)}
+                renderer={({ minutes, seconds }) => {
+                  return (
+                    <Text
+                      style={{
+                        textAlign: 'center',
+                        fontFamily: 'Knockout',
+                        fontSize: 24,
+                      }}
+                    >
+                      Your trade will expire in {minutes}:{zeroPad(seconds)}
+                    </Text>
+                  );
+                }}
+              />
+              <Text
+                style={{
+                  paddingTop: 16,
+                  fontSize: 24,
+                  fontFamily: 'Knockout',
+                  textAlign: 'center',
+                }}
+              >
+                Please select a pin to trade for the {pinSwap.pin.item.name}.
+              </Text>
             </View>
-            <View style={{
-              alignItems: 'center',
-            }}>
+            <ImageBackground
+              source={require('../../assets/images/shark_background.png')}
+              resizeMode="cover"
+              style={{
+                width: '100%',
+                height: 300,
+              }}
+            >
+              <View style={{ padding: 8, flex: 1 }}>
+                {itemsLoading && <Loading />}
+                {!itemsLoading && (
+                  <FlashList
+                    data={items.filter((item) => item.id !== pinSwap.pin.item.id)}
+                    renderItem={({ item }) => (
+                      <View key={item.id} style={{
+                        padding: 8,
+                        width: '100%',
+                      }}>
+                        <Pressable
+                          onPress={() => {
+                            setSelectedPin(item);
+                          }}
+                          style={{
+                            backgroundColor: 'lightblue',
+                            borderWidth: 6,
+                            borderColor: 'white',
+                            borderRadius: 10,
+                            alignSelf: 'center',
+                            shadowOffset: {
+                              width: 0,
+                              height: 3,
+                            },
+                            shadowOpacity: 0.4,
+                            shadowRadius: 0,
+                            position: 'relative',
+                            width: '100%',
+                          }}
+                        >
+                          <View
+                            style={{
+                              position: 'absolute',
+                              display: selectedPin?.id === item.id ? 'flex' : 'none',
+                              backgroundColor: 'rgba(0, 0, 0, .6)',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              width: '100%',
+                              height: '100%',
+                              zIndex: 10,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: 4,
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faCircleCheck} size={56} color={'white'} />
+                          </View>
+                          <View
+                            style={{
+                              padding: 12,
+                            }}
+                          >
+                            <Image
+                              source={{
+                                uri: item.icon_url,
+                              }}
+                              style={{
+                                aspectRatio: 1,
+                              }}
+                              resizeMode="contain"
+                            />
+                          </View>
+                        </Pressable>
+                      </View>
+                    )}
+                    numColumns={3}
+                    estimatedItemSize={15}
+                    keyExtractor={(item) => item.id.toString()}
+                    onEndReached={() => {
+                      setPage((prevState) => prevState + 1);
+                    }}
+                  />
+                )}
+              </View>
+            </ImageBackground>
+            <View
+              style={{
+                alignItems: 'center',
+                padding: 32,
+              }}
+            >
               <YellowButton
                 onPress={() => {
+                  if (!selectedPin) {
+                    Alert.alert(
+                      'You must select a pin to trade.',
+                      '',
+                      [
+                        {
+                          text: 'Ok',
+                        },
+                      ]);
+
+                    return;
+                  }
+
                   Alert.alert(
                     'Are you sure you want to trade pins?',
                     '',
@@ -262,7 +320,21 @@ export default function PinSwap({
                       {
                         text: 'Ok',
                         onPress: async () => {
+                          if (!selectedPin) {
+                            return;
+                          }
 
+                          await acceptPinSwap(pinSwap.id, selectedPin.id);
+
+                          Alert.alert('You have successfully traded pins.', '', [
+                            {
+                              text: 'Ok',
+                            }
+                          ]);
+
+                          setModalVisible(false);
+
+                          setInventory(await getInventory());
                         },
                       },
                     ]
