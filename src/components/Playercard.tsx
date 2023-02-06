@@ -116,19 +116,19 @@ export default function Playercard({
                 resizeMode="contain"
               />
             )}
-            {inventory?.face_item && (
+            {inventory?.body_item && (
               <Image
                 source={{
-                  uri: inventory.face_item.paper_url,
+                  uri: inventory.body_item.paper_url,
                 }}
                 style={styles.image}
                 resizeMode="contain"
               />
             )}
-            {inventory?.body_item && (
+            {inventory?.face_item && (
               <Image
                 source={{
-                  uri: inventory.body_item.paper_url,
+                  uri: inventory.face_item.paper_url,
                 }}
                 style={styles.image}
                 resizeMode="contain"
