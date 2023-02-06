@@ -10,8 +10,8 @@ import {
 } from 'react';
 import { useAsyncEffect, useIntervalWhen, useQueueState } from 'rooks';
 import client from '../api/client';
-import { AuthContext } from './AuthProvider';
 import config from '../config';
+import { AuthContext } from './AuthProvider';
 
 export interface BroadcastContextType {
   readonly activeBroadcast: string | undefined;

@@ -1,5 +1,4 @@
 import ErrorBoundary from 'react-native-error-boundary';
-import * as Sentry from 'sentry-expo';
 import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { FriendProvider } from './src/context/FriendProvider';
