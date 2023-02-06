@@ -1,14 +1,12 @@
-import {Text, TouchableOpacity, View} from 'react-native';
-import Avatar from './Avatar';
-import dayjs from '../helpers/dayjs';
-import {truncate} from 'lodash';
-import {ThreadType} from '../models/thread-type';
-import * as RootNavigation from '../RootNavigation';
+import { truncate } from 'lodash';
+import { Text, TouchableOpacity, View } from 'react-native';
 import config from '../config';
+import dayjs from '../helpers/dayjs';
+import { ThreadType } from '../models/thread-type';
+import * as RootNavigation from '../RootNavigation';
+import Avatar from './Avatar';
 
-export default function Thread({ thread } : {
-  readonly thread: ThreadType;
-}) {
+export default function Thread({ thread }: { readonly thread: ThreadType }) {
   return (
     <TouchableOpacity
       key={thread.id}
@@ -53,8 +51,8 @@ export default function Thread({ thread } : {
             >
               {thread.latest_comment.user.screen_name} replied{' '}
               {dayjs(thread.latest_comment.updated_at)
-              .startOf('second')
-              .fromNow()}{' '}
+                .startOf('second')
+                .fromNow()}{' '}
               ago
             </Text>
             <Text

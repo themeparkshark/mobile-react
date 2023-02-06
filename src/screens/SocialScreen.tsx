@@ -1,26 +1,17 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { truncate } from 'lodash';
 import { useCallback, useState } from 'react';
-import {
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
 import getThreads from '../api/endpoints/threads/getThreads';
-import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Loading from '../components/Loading';
+import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
-import dayjs from '../helpers/dayjs';
 import { ThreadType } from '../models/thread-type';
-import Thread from '../components/Thread';
 
 export default function SocialScreen() {
   const [threads, setThreads] = useState<ThreadType[]>([]);

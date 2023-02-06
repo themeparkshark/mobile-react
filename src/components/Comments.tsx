@@ -1,6 +1,8 @@
+import { faReply } from '@fortawesome/pro-light-svg-icons/faReply';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import { useState } from 'react';
-import {Text, TouchableOpacity, View} from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getComments from '../api/endpoints/comments/getComments';
 import dayjs from '../helpers/dayjs';
@@ -8,8 +10,6 @@ import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
 import Avatar from './Avatar';
 import Loading from './Loading';
-import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
-import {faReply} from '@fortawesome/pro-light-svg-icons/faReply';
 
 export default function Comments({ thread }: { readonly thread: ThreadType }) {
   const [comments, setComments] = useState<CommentType[]>([]);
