@@ -125,7 +125,7 @@ export default function StoreScreen({ route }) {
                       paddingLeft: 16,
                     }}
                   >
-                    {currentThread.comments_count}
+                    {currentThread.reactions_count}
                   </Text>
                 </TouchableOpacity>
               </View>

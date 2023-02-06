@@ -7,6 +7,7 @@ export interface ThreadType {
   readonly created_at: string;
   readonly content: string;
   readonly id: number;
+  readonly reactions_count: number;
   readonly user: UserType;
   readonly comments_count: number;
   readonly title: string;
