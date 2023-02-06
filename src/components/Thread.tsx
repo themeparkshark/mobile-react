@@ -37,7 +37,6 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
           style={{
             fontFamily: 'Knockout',
             fontSize: 22,
-            paddingBottom: 8,
           }}
         >
           {thread.title}
@@ -46,6 +45,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
           <>
             <Text
               style={{
+                paddingTop: 8,
                 paddingBottom: 8,
               }}
             >

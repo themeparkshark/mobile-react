@@ -127,7 +127,7 @@ export default function WelcomeScreen({ navigation }) {
             textShadowRadius: 0,
           }}
         >
-          Your username will appear as P{user.id} until approved.
+          Your username will appear as P{user.id} until approved. Once approved, your username cannot be updated.
         </Text>
         <View
           style={{
