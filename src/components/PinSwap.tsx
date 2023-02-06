@@ -11,10 +11,18 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import { useTimeoutWhen } from 'rooks';
+import {useAsyncEffect, useTimeoutWhen} from 'rooks';
 import holdPinSwap from '../api/endpoints/pin-swaps/hold';
 import { PinSwapType } from '../models/pin-swap-type';
 import Button from './Button';
+import YellowButton from './YellowButton';
+import {ItemType} from '../models/item-type';
+import getItems from '../api/endpoints/me/inventory/items';
+import Item from './Item';
+import {FlashList} from '@shopify/flash-list';
+import Loading from './Loading';
+import deleteUser from '../api/endpoints/me/delete';
+import * as RootNavigation from '../RootNavigation';
 
 export default function PinSwap({
   pinSwap,
@@ -25,6 +33,26 @@ export default function PinSwap({
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [heldTo, setHeldTo] = useState<string>('');
+  const [items, setItems] = useState<ItemType[]>([]);
+  const [page, setPage] = useState<number>(1);
+  const [itemsLoading, setItemsLoading] = useState<boolean>(true);
+  const [selectedPin, setSelectedPin] = useState<ItemType>();
+
+  const requestItems = async (page: number) => {
+    const response = await getItems(8, page);
+    setItems((prevState) => {
+      return [...prevState, ...response];
+    });
+    setItemsLoading(false);
+  };
+
+  useAsyncEffect(async () => {
+    if (!modalVisible) {
+      return;
+    }
+
+    await requestItems(page);
+  }, [modalVisible]);
 
   const hold = async () => {
     try {
@@ -136,6 +164,7 @@ export default function PinSwap({
               backgroundColor: 'white',
               width: Dimensions.get('window').width - 40,
               padding: 32,
+              borderRadius: 20,
             }}
           >
             <Countdown
@@ -159,13 +188,89 @@ export default function PinSwap({
                 paddingTop: 16,
                 fontSize: 24,
                 fontFamily: 'Knockout',
+                textAlign: 'center',
               }}
             >
               Please select a pin to trade for the {pinSwap.pin.item.name}.
             </Text>
-            <TouchableOpacity>
-              <Text>Trade Pin button</Text>
-            </TouchableOpacity>
+            <View
+              style={{
+                height: 300,
+                paddingTop: 32,
+                paddingBottom: 32,
+              }}
+            >
+              {itemsLoading && <Loading />}
+              {!itemsLoading && (
+                <FlashList
+                  data={items.filter((item) => item.id !== pinSwap.pin.item.id)}
+                  renderItem={({ item }) => (
+                    <View>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedPin(item);
+                        }}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <View>
+                          <Text>
+                            {selectedPin?.id === item.id ? <Text>Checked</Text> : <Text>Unchecked</Text>}
+                          </Text>
+                        </View>
+                        <View>
+                          <Image
+                            source={{
+                              uri: item.icon_url,
+                            }}
+                            resizeMode="contain"
+                            style={{
+                              width: 50,
+                              height: 50,
+                            }}
+                          />
+                        </View>
+                        <View>
+                          <Text>{item.name}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  estimatedItemSize={15}
+                  keyExtractor={(item) => item.id.toString()}
+                  onEndReached={() => {
+                    setPage((prevState) => prevState + 1);
+                  }}
+                />
+              )}
+            </View>
+            <View style={{
+              alignItems: 'center',
+            }}>
+              <YellowButton
+                onPress={() => {
+                  Alert.alert(
+                    'Are you sure you want to trade pins?',
+                    '',
+                    [
+                      {
+                        text: 'Cancel',
+                        style: 'cancel',
+                      },
+                      {
+                        text: 'Ok',
+                        onPress: async () => {
+
+                        },
+                      },
+                    ]
+                  );
+                }}
+                text="Trade Pin"
+              />
+            </View>
           </View>
         </View>
       </Modal>

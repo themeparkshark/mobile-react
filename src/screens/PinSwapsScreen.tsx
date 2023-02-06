@@ -1,7 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, Text, View, ImageBackground } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
 import getPinSwaps from '../api/endpoints/pin-swaps/all';
@@ -10,6 +10,7 @@ import PinSwap from '../components/PinSwap';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import { PinSwapType } from '../models/pin-swap-type';
+import {ItemType} from '../models/item-type';
 
 export default function PinSwapsScreen() {
   const [pinSwaps, setPinSwaps] = useState<PinSwapType[]>([]);
@@ -52,59 +53,54 @@ export default function PinSwapsScreen() {
       <Topbar text="Trading Board" showBackButton />
       {loading && <Loading />}
       {!loading && (
-        <ScrollView
+        <ImageBackground
+          source={require('../../assets/images/screens/pin-swaps/corkboard.png')}
           style={{
             marginTop: -8,
+            width: '100%',
+            height: '100%',
           }}
-          contentContainerStyle={{
-            flexGrow: 1,
-          }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
         >
-          <View
-            style={{
-              paddingLeft: 16,
-              paddingRight: 16,
-              paddingTop: 32,
-              paddingBottom: 32,
-              flex: 1,
+          <ScrollView
+            contentContainerStyle={{
+              flexGrow: 1,
             }}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
           >
-            {!!pinSwaps.length && (
-              <FlashList
-                data={pinSwaps}
-                renderItem={({ item }) => (
-                  <PinSwap
-                    pinSwap={item}
-                    onClose={async () => {
-                      setPinSwaps(await getPinSwaps(1));
-                      setPage(1);
-                    }}
-                  />
-                )}
-                estimatedItemSize={15}
-                keyExtractor={(item) => item.id.toString()}
-                numColumns={3}
-                onEndReached={() => {
-                  setPage((prevState) => prevState + 1);
-                }}
-              />
-            )}
-            {!pinSwaps.length && !refreshing && (
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontFamily: 'Knockout',
-                  textAlign: 'center',
-                }}
-              >
-                There are no pins available.
-              </Text>
-            )}
-          </View>
-        </ScrollView>
+            <View
+              style={{
+                paddingLeft: 16,
+                paddingRight: 16,
+                paddingTop: 32,
+                paddingBottom: 32,
+                flex: 1,
+              }}
+            >
+              {!!pinSwaps.length && (
+                <FlashList
+                  data={pinSwaps}
+                  renderItem={({ item }) => (
+                    <PinSwap
+                      pinSwap={item}
+                      onClose={async () => {
+                        setPinSwaps(await getPinSwaps(1));
+                        setPage(1);
+                      }}
+                    />
+                  )}
+                  estimatedItemSize={15}
+                  keyExtractor={(item) => item.id.toString()}
+                  numColumns={3}
+                  onEndReached={() => {
+                    setPage((prevState) => prevState + 1);
+                  }}
+                />
+              )}
+            </View>
+          </ScrollView>
+        </ImageBackground>
       )}
     </Wrapper>
   );
