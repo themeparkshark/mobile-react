@@ -3,6 +3,7 @@ import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { FriendProvider } from './src/context/FriendProvider';
 import { MusicProvider } from './src/context/MusicProvider';
+import { NotificationProvider } from './src/context/NotificationProvider';
 import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import Root from './src/Root';
 
@@ -14,7 +15,9 @@ export default function App() {
           <MusicProvider>
             <BroadcastProvider>
               <FriendProvider>
-                <Root />
+                <NotificationProvider>
+                  <Root />
+                </NotificationProvider>
               </FriendProvider>
             </BroadcastProvider>
           </MusicProvider>

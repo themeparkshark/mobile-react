@@ -113,7 +113,7 @@ export default function FriendsScreen() {
                 autoCapitalize="none"
                 onChangeText={setSearch}
                 value={search}
-                maxLength={12}
+                maxLength={14}
                 placeholder="Search for a user"
                 returnKeyType="search"
                 enablesReturnKeyAutomatically

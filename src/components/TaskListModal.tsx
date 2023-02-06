@@ -68,7 +68,7 @@ export default function TaskListModal({
           <View
             style={{
               position: 'absolute',
-              top: '5%',
+              bottom: '5%',
               right: '5%',
             }}
           >
@@ -108,7 +108,7 @@ export default function TaskListModal({
                   textTransform: 'uppercase',
                   color: 'white',
                   fontSize: 30,
-                  marginTop: 128,
+                  marginTop: 125,
                   marginLeft: 'auto',
                   marginRight: 'auto',
                   textShadowColor: 'rgba(0, 0, 0, .5)',
@@ -123,6 +123,9 @@ export default function TaskListModal({
               </Text>
             </ImageBackground>
             <ScrollView
+              contentContainerStyle={{
+                flexGrow: 1,
+              }}
               style={{
                 marginTop: -30,
                 backgroundColor: 'white',
@@ -135,7 +138,7 @@ export default function TaskListModal({
                 shadowOpacity: 0.25,
                 shadowRadius: 4,
                 width: '80%',
-                height: '50%',
+                height: '40%',
                 marginLeft: 'auto',
                 marginRight: 'auto',
               }}
@@ -145,8 +148,9 @@ export default function TaskListModal({
                   paddingTop: 45,
                   paddingRight: 35,
                   paddingLeft: 35,
-                  paddingBottom: 35,
+                  paddingBottom: 15,
                   flex: 1,
+                  justifyContent: 'center',
                 }}
               >
                 {redeemables?.tasks.map((task, index) => {

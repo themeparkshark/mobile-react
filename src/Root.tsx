@@ -24,6 +24,7 @@ import NotificationsScreen from './screens/NotificationsScreen';
 import ParkScreen from './screens/ParkScreen';
 import PendingFriendRequestsScreen from './screens/PendingFriendRequestsScreen';
 import PinCollectionScreen from './screens/PinCollectionsScreen';
+import PinSwapsScreen from './screens/PinSwapsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import QueueTimesScreen from './screens/QueueTimesScreen';
 import SettingsScreen from './screens/SettingsScreen';
@@ -138,6 +139,7 @@ const HomeStackNavigator = () => {
         component={PendingFriendRequestsScreen}
       />
       <Stack.Screen name="Thread" component={ThreadScreen} />
+      <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
       <Stack.Screen
         name="Loading"
         component={LoadingScreen}

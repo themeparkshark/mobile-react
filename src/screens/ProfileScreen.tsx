@@ -22,6 +22,7 @@ import YellowButton from '../components/YellowButton';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { FriendContext } from '../context/FriendProvider';
+import { NotificationContext } from '../context/NotificationProvider';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import * as RootNavigation from '../RootNavigation';
@@ -39,6 +40,7 @@ export default function NewsScreen({ navigation }) {
   const [loading, setLoading] = useState<boolean>(true);
   const { user, setInventory } = useContext(AuthContext);
   const { friends, refreshFriends } = useContext(FriendContext);
+  const { notificationCount } = useContext(NotificationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -63,7 +65,7 @@ export default function NewsScreen({ navigation }) {
           screen: () => {
             RootNavigation.navigate('PinCollections');
           },
-          text: 'Pins',
+          text: 'Pin Packs',
         },
         ...stores.map((store) => {
           return {
@@ -90,6 +92,7 @@ export default function NewsScreen({ navigation }) {
               onPress={() => {
                 RootNavigation.navigate('Notifications');
               }}
+              showRedCircle={!!notificationCount}
             >
               <Image
                 style={{
@@ -161,7 +164,6 @@ export default function NewsScreen({ navigation }) {
                 }}
               >
                 <Experience user={user} />
-                {user.verified_at && <Verified />}
                 <View
                   style={{
                     paddingTop: 24,
@@ -205,6 +207,7 @@ export default function NewsScreen({ navigation }) {
                     );
                   })}
                 </View>
+                {user.verified_at && <Verified />}
                 <Heading text="Total Activity" />
                 <Activity user={user} />
                 <Heading text="Your Friends" />

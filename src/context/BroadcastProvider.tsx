@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useAsyncEffect, useIntervalWhen, useQueueState } from 'rooks';
 import client from '../api/client';
+import config from '../config';
 import { AuthContext } from './AuthProvider';
 
 export interface BroadcastContextType {
@@ -40,7 +41,7 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
     }
 
     await pusher.init({
-      apiKey: 'fa6a1b978c66821f97dc',
+      apiKey: config.pusherKey,
       cluster: 'mt1',
       onAuthorizer: async (channelName, socketId) => {
         const { data } = await client.post('/broadcasting/auth', {

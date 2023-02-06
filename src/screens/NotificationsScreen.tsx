@@ -36,7 +36,9 @@ export default function NewsScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    setNotifications([]);
     fetchNotifications(1).then(() => setRefreshing(false));
+    setPage(1);
   }, []);
 
   useAsyncEffect(async () => {
@@ -53,7 +55,9 @@ export default function NewsScreen() {
         <ScrollView
           style={{
             marginTop: -8,
-            flex: 1,
+          }}
+          contentContainerStyle={{
+            flexGrow: 1,
           }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -68,7 +72,7 @@ export default function NewsScreen() {
               flex: 1,
             }}
           >
-            {notifications.length ? (
+            {!!notifications.length && (
               <FlashList
                 data={notifications}
                 renderItem={({ item }) => <Notification notification={item} />}
@@ -78,7 +82,8 @@ export default function NewsScreen() {
                   setPage((prevState) => prevState + 1);
                 }}
               />
-            ) : (
+            )}
+            {!notifications.length && !refreshing && (
               <Text
                 style={{
                   fontSize: 18,

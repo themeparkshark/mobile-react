@@ -1,8 +1,8 @@
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useEffect } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import { ImageBackground, Text, View } from 'react-native';
+import { useTimeoutWhen } from 'rooks';
 import config from '../../config';
 import { CoinType } from '../../models/coin-type';
 
@@ -13,13 +13,13 @@ export default function Coin({
   readonly coin: CoinType;
   readonly onExpire: () => void;
 }) {
-  useEffect(() => {
-    const interval = setInterval(async () => {
+  useTimeoutWhen(
+    () => {
       onExpire();
-    }, dayjs(coin.active_to).diff(dayjs()));
-
-    return () => clearInterval(interval);
-  }, [coin.id]);
+    },
+    dayjs(coin.active_to).diff(dayjs()),
+    !!coin.id
+  );
 
   return (
     <View

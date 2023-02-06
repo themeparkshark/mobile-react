@@ -175,7 +175,7 @@ export default function RedeemModal({
             <View
               style={{
                 position: 'absolute',
-                top: '5%',
+                bottom: '5%',
                 right: '5%',
               }}
             >
