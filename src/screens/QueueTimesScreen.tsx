@@ -1,8 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { Image } from 'expo-image';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Dimensions,
   ImageBackground,
   RefreshControl,
   ScrollView,

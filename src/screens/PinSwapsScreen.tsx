@@ -1,7 +1,12 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View, ImageBackground } from 'react-native';
+import {
+  ImageBackground,
+  RefreshControl,
+  ScrollView,
+  View,
+} from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
 import getPinSwaps from '../api/endpoints/pin-swaps/all';
@@ -10,7 +15,6 @@ import PinSwap from '../components/PinSwap';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import { PinSwapType } from '../models/pin-swap-type';
-import {ItemType} from '../models/item-type';
 
 export default function PinSwapsScreen() {
   const [pinSwaps, setPinSwaps] = useState<PinSwapType[]>([]);

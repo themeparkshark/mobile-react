@@ -23,8 +23,8 @@ export default function Avatar({
         style={{
           shadowColor: '#000',
           shadowOffset: {
-            width: 3,
-            height: 3,
+            width: 2,
+            height: 2,
           },
           shadowRadius: 0,
           shadowOpacity: 0.4,

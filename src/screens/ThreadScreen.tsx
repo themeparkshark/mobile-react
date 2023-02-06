@@ -1,9 +1,22 @@
+import { faComments } from '@fortawesome/pro-light-svg-icons/faComments';
+import { faFaceSmile } from '@fortawesome/pro-light-svg-icons/faFaceSmile';
+import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
+import { faShare } from '@fortawesome/pro-light-svg-icons/faShare';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
+import {
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThread from '../api/endpoints/threads/getThread';
 import Avatar from '../components/Avatar';
+import Comments from '../components/Comments';
 import Loading from '../components/Loading';
+import Tag from '../components/Tag';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
@@ -71,19 +84,120 @@ export default function StoreScreen({ route }) {
             >
               {currentThread.title}
             </Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+              }}
+            >
+              {currentThread.tags.map((tag) => (
+                <Tag key={tag.id} tag={tag} />
+              ))}
+            </View>
             <Text
               style={{
+                paddingTop: 16,
                 fontSize: 16,
               }}
             >
               {currentThread.content}
             </Text>
-            <Text>
-              Comment - {currentThread.comments_count}, Reactions, Share, Report
-            </Text>
-            <Text>
-              Sort by: Oldest, Newest, Most Reactions
-            </Text>
+            <View
+              style={{
+                marginTop: 16,
+                marginBottom: 16,
+                flexDirection: 'row',
+              }}
+            >
+              <View
+                style={{
+                  flex: 1,
+                }}
+              >
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                  }}
+                >
+                  <FontAwesomeIcon icon={faFaceSmile} size={16} color="black" />
+                  <Text
+                    style={{
+                      paddingLeft: 16,
+                    }}
+                  >
+                    {currentThread.comments_count}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                }}
+              >
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                  }}
+                >
+                  <FontAwesomeIcon icon={faComments} size={16} color="black" />
+                  <Text
+                    style={{
+                      paddingLeft: 16,
+                    }}
+                  >
+                    {currentThread.comments_count}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                }}
+              >
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                  }}
+                >
+                  <FontAwesomeIcon icon={faShare} size={16} color="black" />
+                  <Text
+                    style={{
+                      paddingLeft: 16,
+                    }}
+                  >
+                    Share
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                }}
+              >
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                  }}
+                >
+                  <FontAwesomeIcon icon={faFlag} size={16} color="black" />
+                  <Text
+                    style={{
+                      paddingLeft: 16,
+                    }}
+                  >
+                    Report
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View
+              style={{
+                paddingTop: 16,
+                flex: 1,
+              }}
+            >
+              <Comments thread={currentThread} />
+            </View>
           </View>
         </ScrollView>
       )}

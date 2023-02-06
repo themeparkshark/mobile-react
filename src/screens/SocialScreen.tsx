@@ -1,5 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
 import { truncate } from 'lodash';
 import { useCallback, useState } from 'react';
 import {
@@ -13,20 +14,17 @@ import { useAsyncEffect } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
 import getThreads from '../api/endpoints/threads/getThreads';
 import Avatar from '../components/Avatar';
+import Button from '../components/Button';
 import Loading from '../components/Loading';
-import Tag from '../components/Tag';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
 import { ThreadType } from '../models/thread-type';
-import * as RootNavigation from '../RootNavigation';
-import {Image} from 'expo-image';
-import Button from '../components/Button';
 
 export default function SocialScreen({ navigation }) {
-  const [threads, setThreads] = useState<ThreadType[]>();
-  const [loading, setLoading] = useState<boolean>(true);
+  const [threads, setThreads] = useState<ThreadType[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
 
   useFocusEffect(
@@ -35,42 +33,49 @@ export default function SocialScreen({ navigation }) {
     }, [])
   );
 
+  const fetchThreads = async (page: number) => {
+    const response = await getThreads(page);
+    setThreads((prevState) => {
+      return [...prevState, ...response];
+    });
+  };
+
   useAsyncEffect(async () => {
-    setThreads(await getThreads(1));
+    await fetchThreads(page);
     setLoading(false);
   }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    (async () => {
-      setThreads(await getThreads(1));
-    })();
-    setRefreshing(false);
+    setThreads([]);
+    fetchThreads(1).then(() => setRefreshing(false));
+    setPage(1);
   }, []);
 
   useAsyncEffect(async () => {
     if (page > 1) {
-      await getThreads(page);
+      await fetchThreads(page);
     }
   }, [page]);
 
   return (
     <Wrapper>
-      <Topbar text="Social" rightButton={<Button
-        onPress={() => {
-
-        }}
-      >
-        <Image
-          style={{
-            width: 50,
-            height: 50,
-            alignSelf: 'center',
-          }}
-          contentFit="contain"
-          source={require('../../assets/images/screens/profile/settings.png')}
-        />
-      </Button>} />
+      <Topbar
+        text="Social"
+        rightButton={
+          <Button onPress={() => {}}>
+            <Image
+              style={{
+                width: 50,
+                height: 50,
+                alignSelf: 'center',
+              }}
+              contentFit="contain"
+              source={require('../../assets/images/screens/profile/settings.png')}
+            />
+          </Button>
+        }
+      />
       {loading && <Loading />}
       {!loading && (
         <ScrollView
@@ -90,7 +95,6 @@ export default function SocialScreen({ navigation }) {
               flex: 1,
             }}
           >
-            <Text>Sort by: Oldest, Newest, Hot</Text>
             <FlashList
               data={threads}
               renderItem={({ item }) => (
@@ -115,16 +119,6 @@ export default function SocialScreen({ navigation }) {
                       flex: 1,
                     }}
                   >
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      {item.tags.map((tag) => (
-                        <Tag key={tag.id} tag={tag} />
-                      ))}
-                    </View>
                     <Text
                       style={{
                         fontFamily: 'Knockout',
@@ -189,7 +183,7 @@ export default function SocialScreen({ navigation }) {
               estimatedItemSize={15}
               keyExtractor={(item) => item.id.toString()}
               onEndReached={() => {
-                //setPage((prevState) => prevState + 1);
+                setPage((prevState) => prevState + 1);
               }}
             />
           </View>

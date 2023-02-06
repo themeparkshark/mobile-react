@@ -1,5 +1,8 @@
+import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { FlashList } from '@shopify/flash-list';
 import dayjs from 'dayjs';
-import {useContext, useEffect, useState} from 'react';
+import { useContext, useEffect, useState } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import {
   Alert,
@@ -11,24 +14,17 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import {useAsyncEffect, useTimeoutWhen} from 'rooks';
+import { useAsyncEffect, useTimeoutWhen } from 'rooks';
+import getInventory from '../api/endpoints/me/inventory';
+import getPins from '../api/endpoints/me/pins';
+import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
 import holdPinSwap from '../api/endpoints/pin-swaps/hold';
+import { AuthContext } from '../context/AuthProvider';
+import { ItemType } from '../models/item-type';
 import { PinSwapType } from '../models/pin-swap-type';
 import Button from './Button';
-import YellowButton from './YellowButton';
-import {ItemType} from '../models/item-type';
-import getItems from '../api/endpoints/me/inventory/items';
-import Item from './Item';
-import {FlashList} from '@shopify/flash-list';
 import Loading from './Loading';
-import deleteUser from '../api/endpoints/me/delete';
-import * as RootNavigation from '../RootNavigation';
-import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
-import {faCircleCheck} from '@fortawesome/pro-light-svg-icons/faCircleCheck';
-import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
-import getPins from '../api/endpoints/me/pins';
-import {AuthContext} from '../context/AuthProvider';
-import getInventory from '../api/endpoints/me/inventory';
+import YellowButton from './YellowButton';
 
 export default function PinSwap({
   pinSwap,
@@ -215,12 +211,17 @@ export default function PinSwap({
                 {itemsLoading && <Loading />}
                 {!itemsLoading && (
                   <FlashList
-                    data={items.filter((item) => item.id !== pinSwap.pin.item.id)}
+                    data={items.filter(
+                      (item) => item.id !== pinSwap.pin.item.id
+                    )}
                     renderItem={({ item }) => (
-                      <View key={item.id} style={{
-                        padding: 8,
-                        width: '100%',
-                      }}>
+                      <View
+                        key={item.id}
+                        style={{
+                          padding: 8,
+                          width: '100%',
+                        }}
+                      >
                         <Pressable
                           onPress={() => {
                             setSelectedPin(item);
@@ -244,7 +245,8 @@ export default function PinSwap({
                           <View
                             style={{
                               position: 'absolute',
-                              display: selectedPin?.id === item.id ? 'flex' : 'none',
+                              display:
+                                selectedPin?.id === item.id ? 'flex' : 'none',
                               backgroundColor: 'rgba(0, 0, 0, .6)',
                               top: 0,
                               left: 0,
@@ -258,7 +260,11 @@ export default function PinSwap({
                               borderRadius: 4,
                             }}
                           >
-                            <FontAwesomeIcon icon={faCircleCheck} size={56} color={'white'} />
+                            <FontAwesomeIcon
+                              icon={faCircleCheck}
+                              size={56}
+                              color={'white'}
+                            />
                           </View>
                           <View
                             style={{
@@ -297,48 +303,41 @@ export default function PinSwap({
               <YellowButton
                 onPress={() => {
                   if (!selectedPin) {
-                    Alert.alert(
-                      'You must select a pin to trade.',
-                      '',
-                      [
-                        {
-                          text: 'Ok',
-                        },
-                      ]);
+                    Alert.alert('You must select a pin to trade.', '', [
+                      {
+                        text: 'Ok',
+                      },
+                    ]);
 
                     return;
                   }
 
-                  Alert.alert(
-                    'Are you sure you want to trade pins?',
-                    '',
-                    [
-                      {
-                        text: 'Cancel',
-                        style: 'cancel',
+                  Alert.alert('Are you sure you want to trade pins?', '', [
+                    {
+                      text: 'Cancel',
+                      style: 'cancel',
+                    },
+                    {
+                      text: 'Ok',
+                      onPress: async () => {
+                        if (!selectedPin) {
+                          return;
+                        }
+
+                        await acceptPinSwap(pinSwap.id, selectedPin.id);
+
+                        Alert.alert('You have successfully traded pins.', '', [
+                          {
+                            text: 'Ok',
+                          },
+                        ]);
+
+                        setModalVisible(false);
+
+                        setInventory(await getInventory());
                       },
-                      {
-                        text: 'Ok',
-                        onPress: async () => {
-                          if (!selectedPin) {
-                            return;
-                          }
-
-                          await acceptPinSwap(pinSwap.id, selectedPin.id);
-
-                          Alert.alert('You have successfully traded pins.', '', [
-                            {
-                              text: 'Ok',
-                            }
-                          ]);
-
-                          setModalVisible(false);
-
-                          setInventory(await getInventory());
-                        },
-                      },
-                    ]
-                  );
+                    },
+                  ]);
                 }}
                 text="Trade Pin"
               />
