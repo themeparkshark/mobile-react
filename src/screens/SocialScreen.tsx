@@ -20,9 +20,11 @@ import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
 import { ThreadType } from '../models/thread-type';
+import Thread from '../components/Thread';
 
-export default function SocialScreen({ navigation }) {
+export default function SocialScreen() {
   const [threads, setThreads] = useState<ThreadType[]>([]);
+  const [pinnedThreads, setPinnedThreads] = useState<ThreadType[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
@@ -38,6 +40,8 @@ export default function SocialScreen({ navigation }) {
     setThreads((prevState) => {
       return [...prevState, ...response];
     });
+
+    setPinnedThreads(await getThreads(1, true));
   };
 
   useAsyncEffect(async () => {
@@ -91,94 +95,31 @@ export default function SocialScreen({ navigation }) {
         >
           <View
             style={{
-              padding: 16,
+              paddingLeft: 16,
+              paddingRight: 16,
+              paddingBottom: 16,
               flex: 1,
             }}
           >
+            {pinnedThreads.map((pinnedThread) => (
+              <View
+                style={{
+                  paddingTop: 32,
+                }}
+              >
+                <Thread thread={pinnedThread} />
+              </View>
+            ))}
             <FlashList
               data={threads}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  key={item.id}
-                  onPress={() => {
-                    navigation.navigate('Thread', {
-                      thread: item.id,
-                    });
-                  }}
+                <View
                   style={{
-                    flexDirection: 'row',
                     paddingTop: 32,
                   }}
                 >
-                  <View>
-                    <Avatar size={60} user={item.user} />
-                  </View>
-                  <View
-                    style={{
-                      paddingLeft: 16,
-                      flex: 1,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontFamily: 'Knockout',
-                        fontSize: 22,
-                        paddingBottom: 8,
-                      }}
-                    >
-                      {item.title}
-                    </Text>
-                    {item.latest_comment && (
-                      <>
-                        <Text
-                          style={{
-                            paddingBottom: 8,
-                          }}
-                        >
-                          {item.latest_comment.user.screen_name} replied{' '}
-                          {dayjs(item.latest_comment.updated_at)
-                            .startOf('second')
-                            .fromNow()}{' '}
-                          ago
-                        </Text>
-                        <Text
-                          style={{
-                            opacity: 0.5,
-                          }}
-                        >
-                          {truncate(item.latest_comment.content, {
-                            length: 100,
-                          })}
-                        </Text>
-                      </>
-                    )}
-                  </View>
-                  <View
-                    style={{
-                      paddingLeft: 16,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 32,
-                        height: 32,
-                        backgroundColor: 'rgba(0, 0, 0, .05)',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: 16,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 18,
-                        }}
-                      >
-                        {item.comments_count}
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
+                  <Thread thread={item} />
+                </View>
               )}
               estimatedItemSize={15}
               keyExtractor={(item) => item.id.toString()}

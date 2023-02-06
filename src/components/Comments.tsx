@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import {Text, TouchableOpacity, View} from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getComments from '../api/endpoints/comments/getComments';
 import dayjs from '../helpers/dayjs';
@@ -8,6 +8,8 @@ import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
 import Avatar from './Avatar';
 import Loading from './Loading';
+import {FontAwesomeIcon} from '@fortawesome/react-native-fontawesome';
+import {faReply} from '@fortawesome/pro-light-svg-icons/faReply';
 
 export default function Comments({ thread }: { readonly thread: ThreadType }) {
   const [comments, setComments] = useState<CommentType[]>([]);
@@ -53,7 +55,7 @@ export default function Comments({ thread }: { readonly thread: ThreadType }) {
               <View style={{ paddingLeft: 16 }}>
                 <Text>
                   {item.user.screen_name} -{' '}
-                  {dayjs(item.created_at).startOf('second').fromNow()}
+                  {dayjs(item.updated_at).startOf('second').fromNow()}
                 </Text>
               </View>
             </View>
@@ -67,10 +69,23 @@ export default function Comments({ thread }: { readonly thread: ThreadType }) {
               <Text
                 style={{
                   fontSize: 16,
+                  paddingBottom: 16,
                 }}
               >
                 {item.content}
               </Text>
+              <View>
+                <View>
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'flex-end',
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faReply} size={16} color="black" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           </View>
         )}
