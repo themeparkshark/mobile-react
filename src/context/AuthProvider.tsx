@@ -8,6 +8,7 @@ import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 import { InventoryType } from '../models/inventory-type';
 import { UserType } from '../models/user-type';
+import {useAsyncEffect} from 'rooks';
 
 export interface AuthContextType {
   readonly inventory: InventoryType | null;
@@ -39,6 +40,12 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   }, [token]);
 
+  useAsyncEffect(async () => {
+    if (isReady) {
+      await refreshUser();
+    }
+  }, [isReady]);
+
   useEffect(() => {
     SecureStore.getItemAsync('token').then((_token) => {
       if (_token) {
@@ -59,14 +66,13 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  const refreshUser = () => {
-    getMe().then((_user) => {
-      setUser(_user);
+  const refreshUser = async () => {
+    const response = await getMe();
+    setUser(response);
 
-      Storage.setItem({
-        key: 'user',
-        value: JSON.stringify({ ..._user }),
-      });
+    Storage.setItem({
+      key: 'user',
+      value: JSON.stringify({ ...response }),
     });
   };
 

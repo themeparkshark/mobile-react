@@ -1,5 +1,6 @@
 import { Pusher, PusherEvent } from '@pusher/pusher-websocket-react-native';
 import { delay } from 'lodash';
+import { useEffectOnceWhen } from 'rooks';
 import {
   createContext,
   FC,
@@ -35,11 +36,7 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
     }
   }, [message]);
 
-  useAsyncEffect(async () => {
-    if (!isReady) {
-      return;
-    }
-
+  useEffectOnceWhen(async () => {
     await pusher.init({
       apiKey: config.pusherKey,
       cluster: 'mt1',
@@ -55,14 +52,14 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
 
     await pusher.connect();
     await pusher.subscribe({
-      channelName: `private-App.Models.User.${user.id}`,
+      channelName: `private-App.Models.User.${user?.id}`,
       onEvent: (event: PusherEvent) => {
         delay(() => {
           setMessage(JSON.parse(event.data).message);
         }, 1000);
       },
     });
-  }, [isReady]);
+  }, !!(isReady && user));
 
   useIntervalWhen(
     () => {
