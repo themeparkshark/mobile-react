@@ -313,32 +313,14 @@ export default function ExploreScreen() {
                   longitude: task.longitude,
                 }}
               >
-                <Tooltip
-                  actionType="press"
-                  height="auto"
-                  popover={
-                    <Text
-                      style={{
-                        fontFamily: 'Knockout',
-                        fontSize: 20,
-                      }}
-                    >
-                      {task.name}
-                    </Text>
-                  }
-                  withOverlay={false}
-                  backgroundColor="white"
-                  pointerColor="white"
-                >
-                  <Image
-                    source={require('../../assets/images/screens/explore/task_animation.gif')}
-                    style={{
-                      width: 120,
-                      height: 120,
-                    }}
-                    resizeMode="contain"
-                  />
-                </Tooltip>
+                <Image
+                  source={require('../../assets/images/screens/explore/task_animation.gif')}
+                  style={{
+                    width: 120,
+                    height: 120,
+                  }}
+                  resizeMode="contain"
+                />
               </Marker>
             );
           })}
