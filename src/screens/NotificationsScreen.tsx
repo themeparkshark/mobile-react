@@ -17,12 +17,6 @@ export default function NewsScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Notifications screen.');
-    }, [])
-  );
-
   const fetchNotifications = async (page: number) => {
     const response = await getNotifications(page);
     setNotifications((prevState) => {

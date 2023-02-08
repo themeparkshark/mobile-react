@@ -1,107 +1,76 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View, ImageBackground } from 'react-native';
-import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
+import { useState } from 'react';
+import {View, ImageBackground} from 'react-native';
 import getPinSwaps from '../api/endpoints/pin-swaps/all';
-import Loading from '../components/Loading';
 import PinSwap from '../components/PinSwap';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import { PinSwapType } from '../models/pin-swap-type';
-import {ItemType} from '../models/item-type';
+import Loading from '../components/Loading';
+import {useAsyncEffect} from 'rooks';
 
 export default function PinSwapsScreen() {
   const [pinSwaps, setPinSwaps] = useState<PinSwapType[]>([]);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [page, setPage] = useState<number>(1);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Pin Swaps screen.');
-    }, [])
-  );
-
-  const fetchPinSwaps = async (page: number) => {
-    const response = await getPinSwaps(page);
-    setPinSwaps((prevState) => {
-      return [...prevState, ...response];
-    });
-  };
-
-  useEffect(() => {
-    fetchPinSwaps(page).then(() => setLoading(false));
-  }, []);
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setPinSwaps([]);
-    fetchPinSwaps(1).then(() => setRefreshing(false));
-    setPage(1);
-  }, []);
+  const [loading, setLoading] = useState<boolean>(false);
 
   useAsyncEffect(async () => {
-    if (page > 1) {
-      await fetchPinSwaps(page);
-    }
-  }, [page]);
+    setLoading(true);
+    setPinSwaps(await getPinSwaps());
+    setLoading(false);
+  }, []);
 
   return (
     <Wrapper>
       <Topbar text="Trading Board" showBackButton />
-      {loading && <Loading />}
-      {!loading && (
+      <View
+        style={{
+          marginTop: -8,
+          flex: 1,
+        }}
+      >
         <ImageBackground
           source={require('../../assets/images/screens/pin-swaps/corkboard.png')}
           style={{
-            marginTop: -8,
             width: '100%',
             height: '100%',
           }}
         >
-          <ScrollView
-            contentContainerStyle={{
-              flexGrow: 1,
+          <View
+            style={{
+              flex: 1,
+              justifyContent: 'center',
             }}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
           >
-            <View
-              style={{
-                paddingLeft: 16,
-                paddingRight: 16,
-                paddingTop: 32,
-                paddingBottom: 32,
-                flex: 1,
-              }}
-            >
-              {!!pinSwaps.length && (
-                <FlashList
-                  data={pinSwaps}
-                  renderItem={({ item }) => (
-                    <PinSwap
-                      pinSwap={item}
-                      onClose={async () => {
-                        setPinSwaps(await getPinSwaps(1));
-                        setPage(1);
+            {loading && <Loading />}
+            {!loading && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                }}
+              >
+                {pinSwaps.map((pinSwap) => {
+                  return (
+                    <View
+                      key={pinSwap.id}
+                      style={{
+                        width: '33.3333333%',
                       }}
-                    />
-                  )}
-                  estimatedItemSize={15}
-                  keyExtractor={(item) => item.id.toString()}
-                  numColumns={3}
-                  onEndReached={() => {
-                    setPage((prevState) => prevState + 1);
-                  }}
-                />
-              )}
-            </View>
-          </ScrollView>
+                    >
+                      <PinSwap
+                        pinSwap={pinSwap}
+                        onClose={async () => {
+                          setPinSwaps(await getPinSwaps());
+                        }}
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
         </ImageBackground>
-      )}
+      </View>
     </Wrapper>
   );
 }

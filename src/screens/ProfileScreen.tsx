@@ -42,12 +42,6 @@ export default function NewsScreen({ navigation }) {
   const { friends, refreshFriends } = useContext(FriendContext);
   const { notificationCount } = useContext(NotificationContext);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Profile screen.');
-    }, [])
-  );
-
   useAsyncEffect(async () => {
     setParks(await getParks(user.id));
     setStores(await getStores());

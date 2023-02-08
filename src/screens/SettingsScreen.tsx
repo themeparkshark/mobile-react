@@ -28,12 +28,6 @@ export default function SettingsScreen() {
     setEnabledSoundEffects(user?.enabled_sound_effects);
   }, [user]);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Settings screen.');
-    }, [])
-  );
-
   if (!user) {
     return;
   }

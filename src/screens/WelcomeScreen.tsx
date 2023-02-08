@@ -36,12 +36,6 @@ export default function WelcomeScreen({ navigation }) {
     ).start();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Welcome screen.');
-    }, [])
-  );
-
   if (!user) {
     return <></>;
   }

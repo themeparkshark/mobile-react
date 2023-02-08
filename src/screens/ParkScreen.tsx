@@ -57,14 +57,6 @@ export default function ParkScreen({ route }) {
       ? require('../../assets/images/screens/park/bronze.png')
       : require('../../assets/images/screens/park/bronze_placeholder.png');
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity(
-        `Viewed the Park screen${user ? ` for ${user.username}.` : '.'}`
-      );
-    }, [])
-  );
-
   useAsyncEffect(async () => {
     setCurrentPark(await getVisitedPark(park, user));
     setTasks(await getTasks(park));

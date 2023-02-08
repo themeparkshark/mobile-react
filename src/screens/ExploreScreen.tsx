@@ -57,12 +57,6 @@ export default function ExploreScreen() {
     mapReady
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Explore screen.');
-    }, [])
-  );
-
   const getRedeemables = () => {
     setActiveRedeemable(undefined);
     currentRedeemables().then((response) => setRedeemables(response));

@@ -31,12 +31,6 @@ export default function PinCollectionsScreen() {
     setCollectionsLoading(false);
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Pin Collections screen.');
-    }, [])
-  );
-
   useAsyncEffect(async () => {
     await requestCollections(page);
 

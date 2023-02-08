@@ -28,12 +28,6 @@ export default function QueueTimesScreen({ route }) {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedPark, setSelectedPark] = useState<number>(route.params.park);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Queue Times screen.');
-    }, [])
-  );
-
   const requestQueueTimes = async () => {
     setQueueTimes(await get(selectedPark));
   };

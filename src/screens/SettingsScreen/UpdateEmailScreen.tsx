@@ -8,13 +8,7 @@ import { AuthContext } from '../../context/AuthProvider';
 
 export default function UpdateEmailScreen({ navigation }) {
   const { user } = useContext(AuthContext);
-  const [email, setEmail] = useState(user.email);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Update Email screen.');
-    }, [])
-  );
+  const [email, setEmail] = useState(user?.email);
 
   useLayoutEffect(() => {
     navigation.setOptions({

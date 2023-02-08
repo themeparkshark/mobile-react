@@ -83,30 +83,17 @@ export default function PinSwap({
   useTimeoutWhen(
     () => {
       setModalVisible(false);
+      onClose();
     },
     dayjs(heldTo).diff(dayjs()),
     modalVisible
   );
 
-  useTimeoutWhen(
-    () => {
-      setModalVisible(false);
-    },
-    Date.parse(heldTo),
-    modalVisible
-  );
-
-  useEffect(() => {
-    if (!modalVisible) {
-      onClose();
-    }
-  }, [modalVisible]);
-
   return (
     <>
       <View
         style={{
-          width: '100%',
+          padding: 16,
         }}
       >
         <Button
@@ -145,7 +132,10 @@ export default function PinSwap({
               height: '100%',
               position: 'absolute',
             }}
-            onPress={() => setModalVisible(false)}
+            onPress={() => {
+              setModalVisible(false);
+              onClose();
+            }}
           />
           <View
             style={{
@@ -154,7 +144,10 @@ export default function PinSwap({
               right: '5%',
             }}
           >
-            <Button onPress={() => setModalVisible(false)}>
+            <Button onPress={() => {
+              setModalVisible(false);
+              onClose();
+            }}>
               <Image
                 source={require('../../assets/images/screens/pin-collections/close.png')}
                 style={{
@@ -333,6 +326,7 @@ export default function PinSwap({
                           ]);
 
                           setModalVisible(false);
+                          onClose();
 
                           setInventory(await getInventory());
                         },

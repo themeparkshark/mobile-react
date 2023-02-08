@@ -40,17 +40,12 @@ export default function InventoryScreen() {
     }
 
     const response = await getItems(currentItemType.id, page);
+    console.log('response');
     setItems((prevState) => {
       return [...prevState, ...response];
     });
     setItemsLoading(false);
   };
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Inventory screen.');
-    }, [])
-  );
 
   useAsyncEffect(async () => {
     const response = await getItemTypes();

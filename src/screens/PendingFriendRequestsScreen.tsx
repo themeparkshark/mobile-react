@@ -27,12 +27,6 @@ export default function PendingFriendRequestsScreen() {
     await requestFriendRequests();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Pending Friend Requests screen.');
-    }, [])
-  );
-
   return (
     <>
       <Topbar text="Pending Friend Requests" showBackButton={true} />

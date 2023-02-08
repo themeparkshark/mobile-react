@@ -20,12 +20,6 @@ export default function NewsScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the News screen.');
-    }, [])
-  );
-
   const fetchEntries = async () => {
     return client
       .get('/entries')

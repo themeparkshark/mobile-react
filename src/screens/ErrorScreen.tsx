@@ -12,12 +12,6 @@ import recordActivity from '../api/endpoints/activities/create';
 import YellowButton from '../components/YellowButton';
 
 export default function ErrorScreen() {
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Error screen.');
-    }, [])
-  );
-
   return (
     <ImageBackground
       source={require('../../assets/images/screens/login/background.png')}

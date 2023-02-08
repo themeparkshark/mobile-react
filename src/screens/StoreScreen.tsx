@@ -21,12 +21,6 @@ export default function StoreScreen({ route }) {
   const [items, setItems] = useState<ItemType[]>();
   const [loading, setLoading] = useState<boolean>(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Store screen.');
-    }, [])
-  );
-
   useEffect(() => {
     getStore(store).then((response) => setCurrentStore(response));
   }, []);

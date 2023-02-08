@@ -23,12 +23,6 @@ export default function UserScreen({ route }) {
   const [currentUser, setCurrentUser] = useState<UserType>();
   const [parks, setParks] = useState<ParkType[]>([]);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the User screen.');
-    }, [])
-  );
-
   useAsyncEffect(async () => {
     setLoading(true);
     setCurrentUser(await getUser(user));

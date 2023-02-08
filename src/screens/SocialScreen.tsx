@@ -27,12 +27,6 @@ export default function SocialScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Social screen.');
-    }, [])
-  );
-
   useAsyncEffect(async () => {
     setTwitterStatuses(await twitter());
     setInstagramStatuses(await instagram());

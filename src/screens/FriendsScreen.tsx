@@ -38,8 +38,6 @@ export default function FriendsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      recordActivity('Viewed the Friends screen.');
-
       (async () => {
         await requestFriends();
       })();

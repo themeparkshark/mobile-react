@@ -37,12 +37,6 @@ export default function LeaderboardScreen({ route }) {
   const [users, setUsers] = useState<UserType[]>([]);
   const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>();
 
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Leaderboard screen.');
-    }, [])
-  );
-
   useAsyncEffect(async () => {
     setParks(await allParks());
   }, []);
