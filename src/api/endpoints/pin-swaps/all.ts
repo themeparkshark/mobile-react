@@ -4,7 +4,7 @@ import client from '../../client';
 
 export default async function getPinSwaps(): Promise<PinSwapType[]> {
   const { data } = await client.get<ApiResponseType<PinSwapType[]>>(
-    '/pin-swaps',
+    '/pin-swaps'
   );
 
   return data.data;

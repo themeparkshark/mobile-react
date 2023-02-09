@@ -1,13 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
-import {useTimeoutWhen} from 'rooks';
+import { useTimeoutWhen } from 'rooks';
 
 export default function Loading() {
   const [showText, setShowText] = useState<boolean>(false);
 
-  useTimeoutWhen(() => {
-    setShowText(true);
-  }, 3000, true);
+  useTimeoutWhen(
+    () => {
+      setShowText(true);
+    },
+    3000,
+    true
+  );
 
   return (
     <View

@@ -8,7 +8,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import recordActivity from '../api/endpoints/activities/create';
 import getFriends from '../api/endpoints/me/friends';
 import searchUsers from '../api/endpoints/users/all';
 import Button from '../components/Button';

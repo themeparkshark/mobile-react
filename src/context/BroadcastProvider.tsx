@@ -1,6 +1,5 @@
 import { Pusher, PusherEvent } from '@pusher/pusher-websocket-react-native';
 import { delay } from 'lodash';
-import { useEffectOnceWhen } from 'rooks';
 import {
   createContext,
   FC,
@@ -9,7 +8,7 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { useAsyncEffect, useIntervalWhen, useQueueState } from 'rooks';
+import { useEffectOnceWhen, useIntervalWhen, useQueueState } from 'rooks';
 import client from '../api/client';
 import config from '../config';
 import { AuthContext } from './AuthProvider';

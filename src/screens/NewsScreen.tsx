@@ -1,10 +1,8 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import client from '../api/client-cms';
-import recordActivity from '../api/endpoints/activities/create';
 import allAnnouncements from '../api/endpoints/announcements/all';
 import Announcement from '../components/Announcement';
 import Loading from '../components/Loading';

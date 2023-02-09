@@ -1,21 +1,17 @@
 import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
   Image,
   ImageBackground,
   Pressable,
-  Text,
   View,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import Tooltip from 'rn-tooltip';
 import { useTimeoutWhen } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Button from '../components/Button';
 import Playercard from '../components/Playercard';

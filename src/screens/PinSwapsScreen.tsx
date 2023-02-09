@@ -1,12 +1,17 @@
-import {useCallback, useState} from 'react';
-import {View, ImageBackground, RefreshControl, ScrollView} from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  ImageBackground,
+  RefreshControl,
+  ScrollView,
+  View,
+} from 'react-native';
+import { useAsyncEffect } from 'rooks';
 import getPinSwaps from '../api/endpoints/pin-swaps/all';
+import Loading from '../components/Loading';
 import PinSwap from '../components/PinSwap';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import { PinSwapType } from '../models/pin-swap-type';
-import Loading from '../components/Loading';
-import { useAsyncEffect } from 'rooks';
 
 export default function PinSwapsScreen() {
   const [pinSwaps, setPinSwaps] = useState<PinSwapType[]>([]);
@@ -51,7 +56,10 @@ export default function PinSwapsScreen() {
             {!loading && (
               <ScrollView
                 refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                  />
                 }
                 contentContainerStyle={{
                   justifyContent: 'center',

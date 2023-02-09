@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef } from 'react';
 import { Animated, Dimensions, Text, View } from 'react-native';
+import { useTimeoutWhen } from 'rooks';
 import { BroadcastContext } from '../context/BroadcastProvider';
-import {useTimeoutWhen} from 'rooks';
 
 export default function Broadcasts() {
   const { activeBroadcast } = useContext(BroadcastContext);
@@ -29,9 +29,13 @@ export default function Broadcasts() {
     }
   }, [activeBroadcast]);
 
-  useTimeoutWhen(() => {
-    slideUp();
-  }, 5000, !!activeBroadcast);
+  useTimeoutWhen(
+    () => {
+      slideUp();
+    },
+    5000,
+    !!activeBroadcast
+  );
 
   return (
     <Animated.View

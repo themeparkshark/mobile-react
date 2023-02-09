@@ -1,7 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -10,7 +9,6 @@ import {
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import all from '../api/endpoints/pin-collections/all';
 import Button from '../components/Button';
 import Loading from '../components/Loading';

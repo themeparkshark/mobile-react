@@ -1,8 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Dimensions, ImageBackground, ScrollView, View } from 'react-native';
-import recordActivity from '../api/endpoints/activities/create';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getStore from '../api/endpoints/stores/get';
 import Loading from '../components/Loading';

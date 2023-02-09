@@ -1,18 +1,22 @@
 import { BlurView } from 'expo-blur';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Dimensions, Text } from 'react-native';
-import {useIntervalWhen} from 'rooks';
+import { useIntervalWhen } from 'rooks';
 
 export default function NotAtPark() {
   const [seconds, setSeconds] = useState<number>(5);
 
-  useIntervalWhen(() => {
-    if (seconds === 1) {
-      setSeconds(5);
-    } else {
-      setSeconds(seconds - 1);
-    }
-  }, 1000, !!seconds);
+  useIntervalWhen(
+    () => {
+      if (seconds === 1) {
+        setSeconds(5);
+      } else {
+        setSeconds(seconds - 1);
+      }
+    },
+    1000,
+    !!seconds
+  );
 
   return (
     <BlurView

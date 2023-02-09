@@ -2,13 +2,13 @@ import { AppleAuthenticationCredential } from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
 import Storage from 'expo-storage';
 import { createContext, FC, ReactNode, useEffect, useState } from 'react';
+import { useAsyncEffect } from 'rooks';
 import client from '../api/client';
 import recordActivity from '../api/endpoints/activities/create';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 import { InventoryType } from '../models/inventory-type';
 import { UserType } from '../models/user-type';
-import {useAsyncEffect} from 'rooks';
 
 export interface AuthContextType {
   readonly inventory: InventoryType | null;

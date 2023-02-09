@@ -1,5 +1,3 @@
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -8,7 +6,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import recordActivity from '../api/endpoints/activities/create';
 import YellowButton from '../components/YellowButton';
 
 export default function ErrorScreen() {

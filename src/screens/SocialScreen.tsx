@@ -1,4 +1,3 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
@@ -11,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import instagram from '../api/endpoints/social-posts/instagram';
 import twitter from '../api/endpoints/social-posts/twitter';
 import Loading from '../components/Loading';
