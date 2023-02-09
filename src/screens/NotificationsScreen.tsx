@@ -1,9 +1,7 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import getNotifications from '../api/endpoints/me/notifications';
 import Loading from '../components/Loading';
 import Notification from '../components/Notification';
@@ -16,12 +14,6 @@ export default function NewsScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Notifications screen.');
-    }, [])
-  );
 
   const fetchNotifications = async (page: number) => {
     const response = await getNotifications(page);

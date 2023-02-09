@@ -1,10 +1,8 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import client from '../api/client-cms';
-import recordActivity from '../api/endpoints/activities/create';
 import allAnnouncements from '../api/endpoints/announcements/all';
 import Announcement from '../components/Announcement';
 import Loading from '../components/Loading';
@@ -19,12 +17,6 @@ export default function NewsScreen() {
   const [entries, setEntries] = useState<EntryType[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the News screen.');
-    }, [])
-  );
 
   const fetchEntries = async () => {
     return client

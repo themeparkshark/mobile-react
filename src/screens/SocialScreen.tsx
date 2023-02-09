@@ -105,6 +105,7 @@ export default function SocialScreen() {
               data={threads}
               renderItem={({ item }) => (
                 <View
+                  key={item.id}
                   style={{
                     paddingTop: 32,
                   }}

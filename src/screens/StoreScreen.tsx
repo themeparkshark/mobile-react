@@ -1,8 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Dimensions, ImageBackground, ScrollView, View } from 'react-native';
-import recordActivity from '../api/endpoints/activities/create';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getStore from '../api/endpoints/stores/get';
 import Loading from '../components/Loading';
@@ -20,12 +18,6 @@ export default function StoreScreen({ route }) {
   const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
   const [items, setItems] = useState<ItemType[]>();
   const [loading, setLoading] = useState<boolean>(true);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Store screen.');
-    }, [])
-  );
 
   useEffect(() => {
     getStore(store).then((response) => setCurrentStore(response));

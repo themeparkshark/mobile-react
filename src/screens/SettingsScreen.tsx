@@ -1,8 +1,7 @@
-import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import {
   Alert,
   PlatformColor,
@@ -11,7 +10,6 @@ import {
   Switch,
 } from 'react-native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
-import recordActivity from '../api/endpoints/activities/create';
 import deleteUser from '../api/endpoints/me/delete';
 import updateUser from '../api/endpoints/me/update-user';
 import Topbar from '../components/Topbar';
@@ -27,12 +25,6 @@ export default function SettingsScreen() {
     setEnabledMusic(user?.enabled_music);
     setEnabledSoundEffects(user?.enabled_sound_effects);
   }, [user]);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Settings screen.');
-    }, [])
-  );
 
   if (!user) {
     return;

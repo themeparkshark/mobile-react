@@ -1,8 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { ImageBackground, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import getFriendRequests from '../api/endpoints/me/pending-requests';
 import FriendsList from '../components/FriendsList';
 import Loading from '../components/Loading';
@@ -26,12 +24,6 @@ export default function PendingFriendRequestsScreen() {
   useAsyncEffect(async () => {
     await requestFriendRequests();
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Pending Friend Requests screen.');
-    }, [])
-  );
 
   return (
     <>

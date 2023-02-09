@@ -1,9 +1,7 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import getInventory from '../api/endpoints/me/inventory';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
@@ -41,12 +39,6 @@ export default function NewsScreen({ navigation }) {
   const { user, setInventory } = useContext(AuthContext);
   const { friends, refreshFriends } = useContext(FriendContext);
   const { notificationCount } = useContext(NotificationContext);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Profile screen.');
-    }, [])
-  );
 
   useAsyncEffect(async () => {
     setParks(await getParks(user.id));

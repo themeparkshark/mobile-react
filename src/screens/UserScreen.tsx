@@ -1,8 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import getUser from '../api/endpoints/users/get';
 import getVisitedParks from '../api/endpoints/users/visited-parks';
 import Activity from '../components/Activity';
@@ -22,12 +20,6 @@ export default function UserScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<UserType>();
   const [parks, setParks] = useState<ParkType[]>([]);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the User screen.');
-    }, [])
-  );
 
   useAsyncEffect(async () => {
     setLoading(true);

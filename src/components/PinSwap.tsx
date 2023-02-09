@@ -2,7 +2,9 @@ import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import dayjs from 'dayjs';
-import { useContext, useEffect, useState } from 'react';
+
+import { useContext, useState } from 'react';
+
 import Countdown, { zeroPad } from 'react-countdown';
 import {
   Alert,
@@ -19,6 +21,9 @@ import getInventory from '../api/endpoints/me/inventory';
 import getPins from '../api/endpoints/me/pins';
 import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
 import holdPinSwap from '../api/endpoints/pin-swaps/hold';
+
+import unHoldPinSwap from '../api/endpoints/pin-swaps/unhold';
+
 import { AuthContext } from '../context/AuthProvider';
 import { ItemType } from '../models/item-type';
 import { PinSwapType } from '../models/pin-swap-type';
@@ -79,30 +84,17 @@ export default function PinSwap({
   useTimeoutWhen(
     () => {
       setModalVisible(false);
+      onClose();
     },
     dayjs(heldTo).diff(dayjs()),
     modalVisible
   );
 
-  useTimeoutWhen(
-    () => {
-      setModalVisible(false);
-    },
-    Date.parse(heldTo),
-    modalVisible
-  );
-
-  useEffect(() => {
-    if (!modalVisible) {
-      onClose();
-    }
-  }, [modalVisible]);
-
   return (
     <>
       <View
         style={{
-          width: '100%',
+          padding: 16,
         }}
       >
         <Button
@@ -141,7 +133,10 @@ export default function PinSwap({
               height: '100%',
               position: 'absolute',
             }}
-            onPress={() => setModalVisible(false)}
+            onPress={async () => {
+              await unHoldPinSwap(pinSwap.id);
+              setModalVisible(false);
+            }}
           />
           <View
             style={{
@@ -150,7 +145,12 @@ export default function PinSwap({
               right: '5%',
             }}
           >
-            <Button onPress={() => setModalVisible(false)}>
+            <Button
+              onPress={async () => {
+                await unHoldPinSwap(pinSwap.id);
+                setModalVisible(false);
+              }}
+            >
               <Image
                 source={require('../../assets/images/screens/pin-collections/close.png')}
                 style={{
@@ -333,7 +333,7 @@ export default function PinSwap({
                         ]);
 
                         setModalVisible(false);
-
+                        onClose();
                         setInventory(await getInventory());
                       },
                     },

@@ -1,4 +1,3 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ImageBackground,
@@ -10,7 +9,6 @@ import {
 import RNPickerSelect from 'react-native-picker-select';
 import { Chevron } from 'react-native-shapes';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import allParks from '../api/endpoints/parks/allParks';
 import get from '../api/endpoints/parks/queue-times/get';
 import Loading from '../components/Loading';
@@ -25,12 +23,6 @@ export default function QueueTimesScreen({ route }) {
   const [parks, setParks] = useState<ParkType[]>();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedPark, setSelectedPark] = useState<number>(route.params.park);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Queue Times screen.');
-    }, [])
-  );
 
   const requestQueueTimes = async () => {
     setQueueTimes(await get(selectedPark));

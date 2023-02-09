@@ -1,10 +1,8 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { chunk } from 'lodash';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { ImageBackground, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
@@ -56,14 +54,6 @@ export default function ParkScreen({ route }) {
     currentPark && currentPark.park_coins_count >= 12
       ? require('../../assets/images/screens/park/bronze.png')
       : require('../../assets/images/screens/park/bronze_placeholder.png');
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity(
-        `Viewed the Park screen${user ? ` for ${user.username}.` : '.'}`
-      );
-    }, [])
-  );
 
   useAsyncEffect(async () => {
     setCurrentPark(await getVisitedPark(park, user));

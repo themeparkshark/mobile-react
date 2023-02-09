@@ -1,7 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -11,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
 import Item from '../components/Item';
@@ -40,17 +38,12 @@ export default function InventoryScreen() {
     }
 
     const response = await getItems(currentItemType.id, page);
+    console.log('response');
     setItems((prevState) => {
       return [...prevState, ...response];
     });
     setItemsLoading(false);
   };
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Inventory screen.');
-    }, [])
-  );
 
   useAsyncEffect(async () => {
     const response = await getItemTypes();

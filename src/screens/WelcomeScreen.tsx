@@ -1,6 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -11,7 +10,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import recordActivity from '../api/endpoints/activities/create';
 import updateUser from '../api/endpoints/me/update-user';
 import { AuthContext } from '../context/AuthProvider';
 
@@ -35,12 +33,6 @@ export default function WelcomeScreen({ navigation }) {
       })
     ).start();
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Welcome screen.');
-    }, [])
-  );
 
   if (!user) {
     return <></>;
@@ -127,7 +119,8 @@ export default function WelcomeScreen({ navigation }) {
             textShadowRadius: 0,
           }}
         >
-          Your username will appear as P{user.id} until approved. Once approved, your username cannot be updated.
+          Your username will appear as P{user.id} until approved. Once approved,
+          your username cannot be updated.
         </Text>
         <View
           style={{

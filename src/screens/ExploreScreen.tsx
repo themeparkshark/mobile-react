@@ -1,21 +1,17 @@
 import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
   Image,
   ImageBackground,
   Pressable,
-  Text,
   View,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import Tooltip from 'rn-tooltip';
 import { useTimeoutWhen } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Button from '../components/Button';
 import Playercard from '../components/Playercard';
@@ -55,12 +51,6 @@ export default function ExploreScreen() {
     },
     1000,
     mapReady
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Explore screen.');
-    }, [])
   );
 
   const getRedeemables = () => {
@@ -319,32 +309,14 @@ export default function ExploreScreen() {
                   longitude: task.longitude,
                 }}
               >
-                <Tooltip
-                  actionType="press"
-                  height="auto"
-                  popover={
-                    <Text
-                      style={{
-                        fontFamily: 'Knockout',
-                        fontSize: 20,
-                      }}
-                    >
-                      {task.name}
-                    </Text>
-                  }
-                  withOverlay={false}
-                  backgroundColor="white"
-                  pointerColor="white"
-                >
-                  <Image
-                    source={require('../../assets/images/screens/explore/task_animation.gif')}
-                    style={{
-                      width: 120,
-                      height: 120,
-                    }}
-                    resizeMode="contain"
-                  />
-                </Tooltip>
+                <Image
+                  source={require('../../assets/images/screens/explore/task_animation.gif')}
+                  style={{
+                    width: 120,
+                    height: 120,
+                  }}
+                  resizeMode="contain"
+                />
               </Marker>
             );
           })}

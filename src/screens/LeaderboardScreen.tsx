@@ -1,6 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -11,7 +10,6 @@ import {
 import RNPickerSelect from 'react-native-picker-select';
 import { Chevron } from 'react-native-shapes';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import getUsers from '../api/endpoints/leaderboards/users';
 import allParks from '../api/endpoints/parks/allParks';
 import getLeaderboards from '../api/endpoints/parks/leaderboards/get';
@@ -36,12 +34,6 @@ export default function LeaderboardScreen({ route }) {
     useState<LeaderboardType>();
   const [users, setUsers] = useState<UserType[]>([]);
   const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>();
-
-  useFocusEffect(
-    useCallback(() => {
-      recordActivity('Viewed the Leaderboard screen.');
-    }, [])
-  );
 
   useAsyncEffect(async () => {
     setParks(await allParks());

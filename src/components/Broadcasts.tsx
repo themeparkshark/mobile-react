@@ -26,16 +26,16 @@ export default function Broadcasts() {
   useEffect(() => {
     if (activeBroadcast) {
       slideDown();
-
-      useTimeoutWhen(
-        () => {
-          slideUp();
-        },
-        5000,
-        true
-      );
     }
   }, [activeBroadcast]);
+
+  useTimeoutWhen(
+    () => {
+      slideUp();
+    },
+    5000,
+    !!activeBroadcast
+  );
 
   return (
     <Animated.View

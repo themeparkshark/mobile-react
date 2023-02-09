@@ -8,7 +8,7 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { useAsyncEffect, useIntervalWhen, useQueueState } from 'rooks';
+import { useEffectOnceWhen, useIntervalWhen, useQueueState } from 'rooks';
 import client from '../api/client';
 import config from '../config';
 import { AuthContext } from './AuthProvider';
@@ -35,11 +35,7 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
     }
   }, [message]);
 
-  useAsyncEffect(async () => {
-    if (!isReady) {
-      return;
-    }
-
+  useEffectOnceWhen(async () => {
     await pusher.init({
       apiKey: config.pusherKey,
       cluster: 'mt1',
@@ -55,14 +51,14 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
 
     await pusher.connect();
     await pusher.subscribe({
-      channelName: `private-App.Models.User.${user.id}`,
+      channelName: `private-App.Models.User.${user?.id}`,
       onEvent: (event: PusherEvent) => {
         delay(() => {
           setMessage(JSON.parse(event.data).message);
         }, 1000);
       },
     });
-  }, [isReady]);
+  }, !!(isReady && user));
 
   useIntervalWhen(
     () => {
