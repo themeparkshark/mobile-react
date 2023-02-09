@@ -1,17 +1,23 @@
-import { FlashList } from '@shopify/flash-list';
-import { useState } from 'react';
-import {View, ImageBackground} from 'react-native';
+import {useCallback, useState} from 'react';
+import {View, ImageBackground, RefreshControl, ScrollView} from 'react-native';
 import getPinSwaps from '../api/endpoints/pin-swaps/all';
 import PinSwap from '../components/PinSwap';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import { PinSwapType } from '../models/pin-swap-type';
 import Loading from '../components/Loading';
-import {useAsyncEffect} from 'rooks';
+import { useAsyncEffect } from 'rooks';
 
 export default function PinSwapsScreen() {
   const [pinSwaps, setPinSwaps] = useState<PinSwapType[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setPinSwaps(await getPinSwaps());
+    setRefreshing(false);
+  }, []);
 
   useAsyncEffect(async () => {
     setLoading(true);
@@ -43,30 +49,40 @@ export default function PinSwapsScreen() {
           >
             {loading && <Loading />}
             {!loading && (
-              <View
-                style={{
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
+              <ScrollView
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                contentContainerStyle={{
+                  justifyContent: 'center',
+                  flexGrow: 1,
                 }}
               >
-                {pinSwaps.map((pinSwap) => {
-                  return (
-                    <View
-                      key={pinSwap.id}
-                      style={{
-                        width: '33.3333333%',
-                      }}
-                    >
-                      <PinSwap
-                        pinSwap={pinSwap}
-                        onClose={async () => {
-                          setPinSwaps(await getPinSwaps());
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  {pinSwaps.map((pinSwap) => {
+                    return (
+                      <View
+                        key={pinSwap.id}
+                        style={{
+                          width: '33.3333333%',
                         }}
-                      />
-                    </View>
-                  );
-                })}
-              </View>
+                      >
+                        <PinSwap
+                          pinSwap={pinSwap}
+                          onClose={async () => {
+                            setPinSwaps(await getPinSwaps());
+                          }}
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
             )}
           </View>
         </ImageBackground>

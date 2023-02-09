@@ -29,6 +29,7 @@ import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
 import getPins from '../api/endpoints/me/pins';
 import {AuthContext} from '../context/AuthProvider';
 import getInventory from '../api/endpoints/me/inventory';
+import unHoldPinSwap from '../api/endpoints/pin-swaps/unhold';
 
 export default function PinSwap({
   pinSwap,
@@ -132,9 +133,9 @@ export default function PinSwap({
               height: '100%',
               position: 'absolute',
             }}
-            onPress={() => {
+            onPress={async () => {
+              await unHoldPinSwap(pinSwap.id);
               setModalVisible(false);
-              onClose();
             }}
           />
           <View
@@ -144,9 +145,9 @@ export default function PinSwap({
               right: '5%',
             }}
           >
-            <Button onPress={() => {
+            <Button onPress={async () => {
+              await unHoldPinSwap(pinSwap.id);
               setModalVisible(false);
-              onClose();
             }}>
               <Image
                 source={require('../../assets/images/screens/pin-collections/close.png')}
