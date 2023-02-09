@@ -1,12 +1,11 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
-import { Image } from 'expo-image';
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import recordActivity from '../api/endpoints/activities/create';
 import getThreads from '../api/endpoints/threads/getThreads';
-import Button from '../components/Button';
+import CreateThreadModal from '../components/CreateThreadModal';
 import Loading from '../components/Loading';
 import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
@@ -58,17 +57,12 @@ export default function SocialScreen() {
       <Topbar
         text="Social"
         rightButton={
-          <Button onPress={() => {}}>
-            <Image
-              style={{
-                width: 50,
-                height: 50,
-                alignSelf: 'center',
-              }}
-              contentFit="contain"
-              source={require('../../assets/images/screens/profile/settings.png')}
-            />
-          </Button>
+          <CreateThreadModal
+            onSubmit={async () => {
+              setPage(1);
+              await fetchThreads(1);
+            }}
+          />
         }
       />
       {loading && <Loading />}
@@ -94,6 +88,7 @@ export default function SocialScreen() {
           >
             {pinnedThreads.map((pinnedThread) => (
               <View
+                key={pinnedThread.id}
                 style={{
                   paddingTop: 32,
                 }}

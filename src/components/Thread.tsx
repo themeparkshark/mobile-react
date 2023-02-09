@@ -33,8 +33,13 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
           flex: 1,
         }}
       >
+        <Text>
+          {thread.user.screen_name} -{' '}
+          {dayjs(thread.created_at).startOf('second').fromNow()}
+        </Text>
         <Text
           style={{
+            paddingTop: 8,
             fontFamily: 'Knockout',
             fontSize: 22,
           }}

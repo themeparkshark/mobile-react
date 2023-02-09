@@ -11,10 +11,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useAsyncEffect } from 'rooks';
+import { useAsyncEffect, useTimeoutWhen } from 'rooks';
 import getThread from '../api/endpoints/threads/getThread';
 import Avatar from '../components/Avatar';
 import Comments from '../components/Comments';
+import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
 import Tag from '../components/Tag';
 import Topbar from '../components/Topbar';
@@ -22,16 +23,19 @@ import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
 import { ThreadType } from '../models/thread-type';
 
-export default function StoreScreen({ route }) {
+export default function ThreadScreen({ route }) {
   const { thread } = route.params;
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [submitted, setSubmitted] = useState<boolean>(false);
   const [currentThread, setCurrentThread] = useState<ThreadType>();
 
   useAsyncEffect(async () => {
-    setCurrentThread(await getThread(thread));
-    setLoading(false);
-  }, []);
+    if (loading) {
+      setCurrentThread(await getThread(thread));
+      setLoading(false);
+    }
+  }, [loading]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -40,6 +44,15 @@ export default function StoreScreen({ route }) {
     })();
     setRefreshing(false);
   }, []);
+
+  useTimeoutWhen(
+    () => {
+      setLoading(false);
+      setSubmitted(false);
+    },
+    500,
+    submitted
+  );
 
   return (
     <Wrapper>
@@ -94,14 +107,16 @@ export default function StoreScreen({ route }) {
                 <Tag key={tag.id} tag={tag} />
               ))}
             </View>
-            <Text
-              style={{
-                paddingTop: 16,
-                fontSize: 16,
-              }}
-            >
-              {currentThread.content}
-            </Text>
+            {currentThread.content && (
+              <Text
+                style={{
+                  paddingTop: 16,
+                  fontSize: 16,
+                }}
+              >
+                {currentThread.content}
+              </Text>
+            )}
             <View
               style={{
                 marginTop: 16,
@@ -190,6 +205,13 @@ export default function StoreScreen({ route }) {
                 </TouchableOpacity>
               </View>
             </View>
+            <CreateReply
+              thread={currentThread}
+              onSubmit={() => {
+                setLoading(true);
+                setSubmitted(true);
+              }}
+            />
             <View
               style={{
                 paddingTop: 16,

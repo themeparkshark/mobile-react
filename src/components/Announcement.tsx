@@ -54,7 +54,7 @@ export default function Announcement({
             <SafeAreaView>
               <View
                 style={{
-                  marginRight: 12,
+                  marginRight: 16,
                   flexDirection: 'row',
                   justifyContent: 'flex-end',
                 }}
