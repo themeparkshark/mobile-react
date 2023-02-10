@@ -27,15 +27,13 @@ export default function Broadcasts() {
     if (activeBroadcast) {
       slideDown();
     }
-  }, [activeBroadcast]);
 
-  useTimeoutWhen(
-    () => {
+    const timeout = setTimeout(() => {
       slideUp();
-    },
-    5000,
-    !!activeBroadcast
-  );
+    }, 5000);
+
+    return () => clearTimeout(timeout);
+  }, [activeBroadcast]);
 
   return (
     <Animated.View
