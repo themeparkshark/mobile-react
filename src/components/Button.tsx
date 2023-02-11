@@ -43,7 +43,7 @@ export default function Button({
 
         setHasPressed(true);
         playSound(
-          onPressSound ?? require('../../assets/sounds/button-press.mp3')
+          onPressSound ?? require('../../assets/sounds/button_press.mp3')
         );
         await onPress();
         setHasPressed(false);
