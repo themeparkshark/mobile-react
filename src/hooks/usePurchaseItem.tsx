@@ -1,6 +1,5 @@
-import { useCallback, useContext, useState } from 'react';
+import { useContext } from 'react';
 import { Alert } from 'react-native';
-import { useAsyncEffect } from 'rooks';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
 import search from '../api/endpoints/me/inventory/search';
 import { AuthContext } from '../context/AuthProvider';
@@ -10,10 +9,9 @@ import { ItemType } from '../models/item-type';
 export default function usePurchaseItem() {
   const { playSound } = useContext(SoundEffectContext);
   const { user, isReady, refreshUser } = useContext(AuthContext);
-  const [item, setItem] = useState<ItemType>();
 
-  useAsyncEffect(async () => {
-    if (!item || !isReady || !user) {
+  const purchaseItem = async (item: ItemType) => {
+    if (!isReady || !user) {
       return;
     }
 
@@ -83,11 +81,9 @@ export default function usePurchaseItem() {
         },
       },
     ]);
-  }, [item]);
+  };
 
   return {
-    purchaseItem: useCallback((item: ItemType) => {
-      setItem(item);
-    }, []),
+    purchaseItem,
   };
 }

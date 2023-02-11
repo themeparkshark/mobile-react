@@ -22,6 +22,7 @@ import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { FriendContext } from '../context/FriendProvider';
 import { NotificationContext } from '../context/NotificationProvider';
+import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import * as RootNavigation from '../RootNavigation';

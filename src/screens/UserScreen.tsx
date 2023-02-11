@@ -31,18 +31,17 @@ export default function UserScreen({ route }) {
     setLoading(false);
   }, []);
 
-  const buttons = [
-    {
-      image: require('../../assets/images/screens/user/gift.png'),
-      onPress: () => {
-        if (!currentUser) {
-          return;
-        }
-
-        purchaseItem(currentUser.mascot.item);
-      },
-    },
-  ];
+  const buttons = currentUser
+    ? [
+        {
+          image: require('../../assets/images/screens/user/gift.png'),
+          onPress: () => {
+            purchaseItem(currentUser.mascot.item);
+          },
+          show: currentUser.mascot,
+        },
+      ]
+    : [];
 
   return (
     <>
