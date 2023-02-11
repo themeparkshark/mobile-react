@@ -48,11 +48,10 @@ export default function Avatar({
           <Image
             source={user.avatar_url}
             style={{
-              width: size,
-              height: size,
+              width: size * 1.4,
+              height: size * 1.4,
               position: 'absolute',
-              top: 0,
-              left: 0,
+              left: '-10%',
             }}
           />
         </View>
