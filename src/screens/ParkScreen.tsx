@@ -79,8 +79,8 @@ export default function ParkScreen({ route }) {
           >
             <Image
               style={{
-                width: 50,
-                height: 50,
+                width: 35,
+                height: 35,
                 alignSelf: 'center',
               }}
               contentFit="contain"

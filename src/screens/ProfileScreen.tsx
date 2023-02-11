@@ -84,12 +84,12 @@ export default function NewsScreen({ navigation }) {
             >
               <Image
                 style={{
-                  width: 50,
-                  height: 50,
+                  width: 35,
+                  height: 35,
                   alignSelf: 'center',
                 }}
                 contentFit="contain"
-                source={require('../../assets/images/screens/profile/settings.png')}
+                source={require('../../assets/images/screens/profile/notifications.png')}
               />
             </Button>
           }
@@ -101,8 +101,8 @@ export default function NewsScreen({ navigation }) {
             >
               <Image
                 style={{
-                  width: 50,
-                  height: 50,
+                  width: 35,
+                  height: 35,
                   alignSelf: 'center',
                 }}
                 contentFit="contain"

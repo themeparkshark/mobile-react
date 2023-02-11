@@ -94,8 +94,8 @@ export default function FriendsList({
                         <Image
                           source={require('../../assets/images/screens/friends/remove_friend.png')}
                           style={{
-                            width: 50,
-                            height: 50,
+                            width: 35,
+                            height: 35,
                           }}
                           contentFit="contain"
                         />
@@ -134,8 +134,8 @@ export default function FriendsList({
                         <Image
                           source={require('../../assets/images/screens/explore/base.png')}
                           style={{
-                            width: 50,
-                            height: 50,
+                            width: 35,
+                            height: 35,
                           }}
                           contentFit="contain"
                         />
@@ -169,8 +169,8 @@ export default function FriendsList({
                         <Image
                           source={require('../../assets/images/screens/explore/base.png')}
                           style={{
-                            width: 50,
-                            height: 50,
+                            width: 35,
+                            height: 35,
                           }}
                           contentFit="contain"
                         />
