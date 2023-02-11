@@ -11,7 +11,6 @@ import Modal from 'react-native-modal';
 import config from '../config';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { PinCollectionType } from '../models/pin-collection-type';
-import Button from './Button';
 import Pin from './Pin';
 import Stars from './Stars';
 

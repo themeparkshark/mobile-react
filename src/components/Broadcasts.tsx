@@ -1,6 +1,5 @@
 import { useContext, useEffect, useRef } from 'react';
 import { Animated, Dimensions, Text, View } from 'react-native';
-import { useTimeoutWhen } from 'rooks';
 import { BroadcastContext } from '../context/BroadcastProvider';
 
 export default function Broadcasts() {

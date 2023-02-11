@@ -1,5 +1,6 @@
 import { ExperienceLevelType } from './experience-level-type';
 import { InventoryType } from './inventory-type';
+import { MascotType } from './mascot-type';
 
 export interface UserType {
   readonly avatar_url: string;
@@ -16,6 +17,7 @@ export interface UserType {
   readonly id: number;
   readonly inventory: InventoryType;
   readonly is_friend: boolean;
+  readonly mascot: MascotType;
   readonly name: string;
   readonly park_coins: number;
   readonly purple_diamonds: number;

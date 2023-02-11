@@ -13,6 +13,7 @@ import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import Topbar from '../components/Topbar';
+import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import Wrapper from '../components/Wrapper';
@@ -24,12 +25,6 @@ import { NotificationContext } from '../context/NotificationProvider';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import * as RootNavigation from '../RootNavigation';
-
-interface ButtonType {
-  readonly image: any;
-  readonly screen: () => void;
-  readonly text: string;
-}
 
 export default function NewsScreen({ navigation }) {
   const [parks, setParks] = useState<ParkType[]>([]);
@@ -54,7 +49,7 @@ export default function NewsScreen({ navigation }) {
       setButtons([
         {
           image: require('../../assets/images/screens/profile/pin_collections.png'),
-          screen: () => {
+          onPress: () => {
             RootNavigation.navigate('PinCollections');
           },
           text: 'Pin Packs',
@@ -62,7 +57,7 @@ export default function NewsScreen({ navigation }) {
         ...stores.map((store) => {
           return {
             image: store.icon_url,
-            screen: () => {
+            onPress: () => {
               RootNavigation.navigate('Store', {
                 store: store.id,
               });
@@ -156,49 +151,7 @@ export default function NewsScreen({ navigation }) {
                 }}
               >
                 <Experience user={user} />
-                <View
-                  style={{
-                    paddingTop: 24,
-                    flexDirection: 'row',
-                    justifyContent: 'center',
-                  }}
-                >
-                  {buttons?.map((button, index) => {
-                    return (
-                      <Pressable
-                        key={index}
-                        style={{
-                          paddingLeft: 16,
-                          paddingRight: 16,
-                        }}
-                      >
-                        <Button onPress={button.screen}>
-                          <Image
-                            source={button.image}
-                            style={{
-                              width: 80,
-                              height: 80,
-                              marginLeft: 'auto',
-                              marginRight: 'auto',
-                            }}
-                            contentFit="contain"
-                          />
-                        </Button>
-                        <Text
-                          style={{
-                            paddingTop: 8,
-                            textAlign: 'center',
-                            fontFamily: 'Knockout',
-                            textTransform: 'uppercase',
-                            fontSize: 20,
-                          }}
-                        >
-                          {button.text}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <UserButtons buttons={buttons} />
                 {user.verified_at && <Verified />}
                 <Heading text="Total Activity" />
                 <Activity user={user} />
