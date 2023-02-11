@@ -79,6 +79,7 @@ export default function Topbar({
               <View
                 style={{
                   width,
+                  alignItems: 'flex-start',
                 }}
               >
                 {leftButton}
@@ -174,6 +175,7 @@ export default function Topbar({
               <View
                 style={{
                   width,
+                  alignItems: 'flex-end',
                 }}
               >
                 {rightButton}

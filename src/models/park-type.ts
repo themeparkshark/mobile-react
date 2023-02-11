@@ -1,3 +1,5 @@
+import {StoreType} from './store-type';
+
 export interface ParkType {
   readonly catalog_id: number;
   readonly coin_url: string;
@@ -9,5 +11,6 @@ export interface ParkType {
   readonly name: string;
   readonly park_coins_count: number;
   readonly secret_tasks_count: number;
+  readonly store: StoreType;
   readonly tasks_count: number;
 }
