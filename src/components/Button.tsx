@@ -64,7 +64,7 @@ export default function Button({
             position: 'absolute',
             borderColor: 'white',
             borderWidth: 2,
-            right: 15,
+            right: '20%',
             zIndex: 10,
             shadowColor: '#000',
             shadowOffset: {
