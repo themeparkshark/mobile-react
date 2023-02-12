@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
-import { Dimensions, Pressable, ScrollView, Text, View } from 'react-native';
+import { Dimensions, ImageBackground, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getInventory from '../api/endpoints/me/inventory';
 import getParks from '../api/endpoints/me/visited-parks';
@@ -32,7 +32,7 @@ export default function NewsScreen({ navigation }) {
   const [stores, setStores] = useState<StoreType[]>([]);
   const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const { user, setInventory } = useContext(AuthContext);
+  const { user, inventory, setInventory } = useContext(AuthContext);
   const { friends, refreshFriends } = useContext(FriendContext);
   const { notificationCount } = useContext(NotificationContext);
 
@@ -124,24 +124,31 @@ export default function NewsScreen({ navigation }) {
                 paddingBottom: 32,
               }}
             >
-              <Pressable
+              <ImageBackground
+                source={{
+                  uri: inventory?.background_item.paper_url,
+                }}
                 style={{
                   height: 315,
                   overflow: 'hidden',
                   position: 'relative',
                 }}
-                onPress={() => navigation.navigate('Inventory')}
               >
-                <Playercard
-                  inventory={user.inventory}
-                  style={{
-                    position: 'absolute',
-                    width: Dimensions.get('window').width,
-                    height: 455,
-                    marginTop: -55,
-                  }}
-                />
-              </Pressable>
+                <Button
+                  onPress={() => navigation.navigate('Inventory')}
+                >
+                  <Playercard
+                    showBackground={false}
+                    inventory={user.inventory}
+                    style={{
+                      position: 'absolute',
+                      width: Dimensions.get('window').width,
+                      height: 455,
+                      marginTop: -55,
+                    }}
+                  />
+                </Button>
+              </ImageBackground>
               <View
                 style={{
                   borderTopWidth: 5,
