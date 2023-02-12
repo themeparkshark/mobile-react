@@ -311,7 +311,7 @@ export default function LeaderboardScreen({ route }) {
                               color: 'black',
                             }}
                           >
-                            {user.park_coins} park coins
+                            {user.park_coins} park coin{user.park_coins === 1 ? '' : 's'}
                           </Text>
                         </View>
                       </View>
