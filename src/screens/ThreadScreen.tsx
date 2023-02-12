@@ -37,11 +37,9 @@ export default function ThreadScreen({ route }) {
     }
   }, [loading]);
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    (async () => {
-      setCurrentThread(await getThread(thread));
-    })();
+    setCurrentThread(await getThread(thread));
     setRefreshing(false);
   }, []);
 

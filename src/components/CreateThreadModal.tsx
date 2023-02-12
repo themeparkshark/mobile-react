@@ -35,8 +35,8 @@ export default function CreateThreadModal({
       <Button onPress={() => setModalVisible(true)}>
         <Image
           style={{
-            width: 50,
-            height: 50,
+            width: 35,
+            height: 35,
             alignSelf: 'center',
           }}
           contentFit="contain"
