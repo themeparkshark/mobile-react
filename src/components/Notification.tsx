@@ -22,6 +22,8 @@ export default function Notification({
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 24,
+        paddingLeft: 16,
+        paddingRight: 16,
       }}
       onPress={async () => {
         if (!hasRead) {

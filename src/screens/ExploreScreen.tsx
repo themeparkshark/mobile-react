@@ -152,6 +152,24 @@ export default function ExploreScreen() {
                   marginBottom: 8,
                 }}
               >
+                {park.store && (
+                  <Button
+                    onPress={() => {
+                      RootNavigation.navigate('Store', {
+                        store: park.store.id,
+                      });
+                    }}
+                  >
+                    <Image
+                      style={{
+                        width: 70,
+                        height: 84,
+                      }}
+                      source={require('../../assets/images/screens/explore/catalog.png')}
+                      resizeMode="contain"
+                    />
+                  </Button>
+                )}
                 <Button
                   onPress={() => {
                     RootNavigation.navigate('QueueTimes', {

@@ -51,8 +51,8 @@ export default function PinCollectionsScreen() {
             <Image
               source={require('../../assets/images/screens/explore/base.png')}
               style={{
-                width: 60,
-                height: 60,
+                width: 35,
+                height: 35,
               }}
               contentFit="contain"
             />

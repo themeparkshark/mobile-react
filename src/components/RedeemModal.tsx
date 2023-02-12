@@ -172,23 +172,6 @@ export default function RedeemModal({
                 }}
               />
             </Pressable>
-            <View
-              style={{
-                position: 'absolute',
-                bottom: '5%',
-                right: '5%',
-              }}
-            >
-              <Button onPress={() => setModalVisible(false)}>
-                <Image
-                  source={require('../../assets/images/screens/pin-collections/close.png')}
-                  style={{
-                    width: 30,
-                    height: 30,
-                  }}
-                />
-              </Button>
-            </View>
             <ImageBackground
               source={backgrounds[redeemable.type as keyof typeof backgrounds]}
               resizeMode="contain"

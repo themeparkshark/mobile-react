@@ -43,7 +43,7 @@ export default function Button({
 
         setHasPressed(true);
         playSound(
-          onPressSound ?? require('../../assets/sounds/button-press.mp3')
+          onPressSound ?? require('../../assets/sounds/button_press.mp3')
         );
         await onPress();
         setHasPressed(false);
@@ -64,7 +64,7 @@ export default function Button({
             position: 'absolute',
             borderColor: 'white',
             borderWidth: 2,
-            right: 15,
+            right: '20%',
             zIndex: 10,
             shadowColor: '#000',
             shadowOffset: {

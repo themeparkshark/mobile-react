@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getNotifications from '../api/endpoints/me/notifications';
 import Loading from '../components/Loading';
@@ -26,13 +26,6 @@ export default function NewsScreen() {
     fetchNotifications(page).then(() => setLoading(false));
   }, []);
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setNotifications([]);
-    fetchNotifications(1).then(() => setRefreshing(false));
-    setPage(1);
-  }, []);
-
   useAsyncEffect(async () => {
     if (page > 1) {
       await fetchNotifications(page);
@@ -44,38 +37,40 @@ export default function NewsScreen() {
       <Topbar text="Notifications" showBackButton />
       {loading && <Loading />}
       {!loading && (
-        <ScrollView
+        <View
           style={{
             marginTop: -8,
+            flex: 1,
           }}
-          contentContainerStyle={{
-            flexGrow: 1,
-          }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
         >
-          <View
-            style={{
-              paddingLeft: 16,
-              paddingRight: 16,
-              paddingTop: 32,
-              paddingBottom: 32,
-              flex: 1,
-            }}
-          >
-            {!!notifications.length && (
-              <FlashList
-                data={notifications}
-                renderItem={({ item }) => <Notification notification={item} />}
-                estimatedItemSize={15}
-                keyExtractor={(item) => item.id}
-                onEndReached={() => {
-                  setPage((prevState) => prevState + 1);
-                }}
-              />
-            )}
-            {!notifications.length && !refreshing && (
+          {!!notifications.length && (
+            <FlashList
+              contentContainerStyle={{
+                paddingTop: 32,
+                paddingBottom: 32,
+              }}
+              onRefresh={() => {
+                setRefreshing(true);
+                setNotifications([]);
+                fetchNotifications(1).then(() => setRefreshing(false));
+                setPage(1);
+              }}
+              refreshing={refreshing}
+              data={notifications}
+              renderItem={({ item }) => <Notification notification={item} />}
+              estimatedItemSize={80}
+              keyExtractor={(item) => item.id}
+              onEndReached={() => {
+                setPage((prevState) => prevState + 1);
+              }}
+            />
+          )}
+          {!notifications.length && !refreshing && (
+            <View
+              style={{
+                paddingTop: 32,
+              }}
+            >
               <Text
                 style={{
                   fontSize: 18,
@@ -85,9 +80,9 @@ export default function NewsScreen() {
               >
                 You have no new notifications.
               </Text>
-            )}
-          </View>
-        </ScrollView>
+            </View>
+          )}
+        </View>
       )}
     </Wrapper>
   );

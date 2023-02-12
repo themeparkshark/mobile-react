@@ -33,16 +33,15 @@ export default function StoreScreen({ route }) {
 
   useEffect(() => {
     if (catalog && currentStore) {
-      if (!currentStore.is_secret_store) {
-        setWeeklyItems(
-          catalog.items.filter((item) => item.section === 'weekly')
-        );
-        setMonthlyItems(
-          catalog.items.filter((item) => item.section === 'monthly')
-        );
-      } else {
-        setItems(catalog.items);
-      }
+      setWeeklyItems(
+        catalog.items.filter((item) => item.section === 'weekly')
+      );
+      setMonthlyItems(
+        catalog.items.filter((item) => item.section === 'monthly')
+      );
+      setItems(
+        catalog.items.filter((item) => !item.section)
+      );
 
       setLoading(false);
     }
@@ -93,13 +92,13 @@ export default function StoreScreen({ route }) {
                   contentFit="contain"
                 />
               </View>
-              {weeklyItems && (
+              {weeklyItems.length > 0 && (
                 <Section title="Weekly Items" items={weeklyItems} />
               )}
-              {monthlyItems && (
+              {monthlyItems.length > 0 && (
                 <Section title="Monthly Items" items={monthlyItems} />
               )}
-              {items && <Section title="Items" items={items} />}
+              {items.length > 0 && <Section title="Items" items={items} />}
             </ScrollView>
           </ImageBackground>
         </View>

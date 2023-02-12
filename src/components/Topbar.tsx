@@ -79,6 +79,7 @@ export default function Topbar({
               <View
                 style={{
                   width,
+                  alignItems: 'flex-start',
                 }}
               >
                 {leftButton}
@@ -112,8 +113,8 @@ export default function Topbar({
                     <Image
                       source={parkCoin}
                       style={{
-                        width: 30,
-                        height: 30,
+                        width: 35,
+                        height: 35,
                         marginRight: 8,
                       }}
                       contentFit="contain"
@@ -174,6 +175,7 @@ export default function Topbar({
               <View
                 style={{
                   width,
+                  alignItems: 'flex-end',
                 }}
               >
                 {rightButton}
@@ -208,8 +210,8 @@ export default function Topbar({
                     <Image
                       source={require('../../assets/images/coins.png')}
                       style={{
-                        width: 30,
-                        height: 30,
+                        width: 35,
+                        height: 35,
                       }}
                       contentFit="contain"
                     />

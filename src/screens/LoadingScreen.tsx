@@ -3,7 +3,6 @@ import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
 import { Dimensions } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import recordActivity from '../api/endpoints/activities/create';
 import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
@@ -28,8 +27,6 @@ export default function LoadingScreen() {
     if (!isReady) {
       return;
     }
-
-    recordActivity('Viewed the Loading screen.');
 
     refreshUser();
     setInventory(await getInventory());

@@ -9,9 +9,11 @@ import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import Topbar from '../components/Topbar';
+import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
+import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
 
@@ -20,6 +22,7 @@ export default function UserScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<UserType>();
   const [parks, setParks] = useState<ParkType[]>([]);
+  const { purchaseItem } = usePurchaseItem();
 
   useAsyncEffect(async () => {
     setLoading(true);
@@ -27,6 +30,18 @@ export default function UserScreen({ route }) {
     setParks(await getVisitedParks(user));
     setLoading(false);
   }, []);
+
+  const buttons = currentUser
+    ? [
+        {
+          image: require('../../assets/images/screens/user/gift.png'),
+          onPress: () => {
+            purchaseItem(currentUser.mascot.item);
+          },
+          show: currentUser.mascot,
+        },
+      ]
+    : [];
 
   return (
     <>
@@ -71,6 +86,7 @@ export default function UserScreen({ route }) {
               }}
             >
               <Experience user={currentUser} />
+              <UserButtons buttons={buttons} />
               {currentUser.verified_at && <Verified />}
               <Heading text="Total Activity" />
               <Activity user={currentUser} />

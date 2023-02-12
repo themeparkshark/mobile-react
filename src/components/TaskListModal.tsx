@@ -67,23 +67,6 @@ export default function TaskListModal({
           />
           <View
             style={{
-              position: 'absolute',
-              bottom: '5%',
-              right: '5%',
-            }}
-          >
-            <Button onPress={() => setModalVisible(false)}>
-              <Image
-                source={require('../../assets/images/screens/pin-collections/close.png')}
-                style={{
-                  width: 30,
-                  height: 30,
-                }}
-              />
-            </Button>
-          </View>
-          <View
-            style={{
               top: 0,
               bottom: 0,
               left: 0,

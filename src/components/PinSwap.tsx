@@ -140,28 +140,6 @@ export default function PinSwap({
           />
           <View
             style={{
-              position: 'absolute',
-              bottom: '5%',
-              right: '5%',
-            }}
-          >
-            <Button
-              onPress={async () => {
-                await unHoldPinSwap(pinSwap.id);
-                setModalVisible(false);
-              }}
-            >
-              <Image
-                source={require('../../assets/images/screens/pin-collections/close.png')}
-                style={{
-                  width: 30,
-                  height: 30,
-                }}
-              />
-            </Button>
-          </View>
-          <View
-            style={{
               backgroundColor: 'white',
               width: Dimensions.get('window').width - 40,
               borderRadius: 20,
