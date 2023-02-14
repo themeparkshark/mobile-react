@@ -1,7 +1,6 @@
 import { Image } from 'expo-image';
-import { ReactNode, useContext } from 'react';
+import { ReactNode } from 'react';
 import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
-import { NotificationContext } from '../context/NotificationProvider';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
 
@@ -12,14 +11,11 @@ export default function Wrapper({
   readonly showBar?: boolean;
   readonly children: ReactNode[];
 }) {
-  const { notificationCount } = useContext(NotificationContext);
-
   const items = [
     {
       icon: require('../../assets/images/toolbar/news.png'),
       screen: 'News',
       size: 'normal',
-      showRedCircle: true,
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
     },
     {
@@ -38,14 +34,12 @@ export default function Wrapper({
       icon: require('../../assets/images/toolbar/social.png'),
       screen: 'Social',
       size: 'normal',
-      showRedCircle: true,
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
     },
     {
       icon: require('../../assets/images/toolbar/profile.png'),
       screen: 'Profile',
       size: 'normal',
-      showRedCircle: !!notificationCount,
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
     },
   ];
@@ -103,7 +97,6 @@ export default function Wrapper({
                       onPress={() => {
                         RootNavigation.navigate(item.screen);
                       }}
-                      showRedCircle={item.showRedCircle}
                       onPressSound={item.sound}
                     >
                       <Image
