@@ -165,7 +165,9 @@ export default function ExploreScreen() {
                         width: 70,
                         height: 84,
                       }}
-                      source={require('../../assets/images/screens/explore/catalog.png')}
+                      source={{
+                        uri: park.store.icon_url,
+                      }}
                       resizeMode="contain"
                     />
                   </Button>

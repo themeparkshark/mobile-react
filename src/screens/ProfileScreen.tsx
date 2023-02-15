@@ -54,6 +54,7 @@ export default function NewsScreen({ navigation }) {
             RootNavigation.navigate('PinCollections');
           },
           text: 'Pin Packs',
+          show: true,
         },
         ...stores.map((store) => {
           return {
@@ -64,6 +65,7 @@ export default function NewsScreen({ navigation }) {
               });
             },
             text: store.name,
+            show: true,
           };
         }),
       ]);
