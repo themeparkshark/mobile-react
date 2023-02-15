@@ -85,7 +85,7 @@ export default function Item({
             padding: 12,
           }}
         >
-          {currentItemType.name === 'Body item' ? (
+          {currentItemType.name === 'Body item' && (
             <ImageBackground
               source={require('../../assets/images/screens/inventory/shark.png')}
               style={{
@@ -100,7 +100,8 @@ export default function Item({
                 contentFit="contain"
               />
             </ImageBackground>
-          ) : (
+          )}
+          {currentItemType.name !== 'Body item' && currentItemType.name !== 'Background item' && (
             <Image
               source={item.icon_url}
               style={{
@@ -108,6 +109,46 @@ export default function Item({
               }}
               contentFit="contain"
             />
+          )}
+          {currentItemType.name === 'Background item' && (
+            <View
+              style={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                aspectRatio: 1,
+              }}
+            >
+              <Image
+                source={require('../../assets/images/screens/inventory/background.png')}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  position: 'absolute',
+                  zIndex: 10,
+                }}
+                contentFit="contain"
+              />
+              <View
+                style={{
+                  aspectRatio: 1,
+                  width: '75%',
+                  position: 'absolute',
+                  top: '10%',
+                  left: '15%',
+                  transform: [{skewX: '10deg'}, {skewY: '-7deg'}],
+                }}
+              >
+                <Image
+                  source={item.icon_url}
+                  contentFit="contain"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                  }}
+                />
+              </View>
+            </View>
           )}
         </View>
       </Pressable>
