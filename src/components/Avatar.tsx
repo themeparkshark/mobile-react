@@ -1,5 +1,5 @@
-import { View } from 'react-native';
 import { Image } from 'expo-image';
+import { View } from 'react-native';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';

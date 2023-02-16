@@ -1,6 +1,7 @@
-import {useContext, useState, useEffect} from 'react';
-import {Alert, Dimensions, ScrollView, View} from 'react-native';
+import { useContext, useEffect, useState } from 'react';
+import { Alert, Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import createCompliment from '../api/endpoints/compliments/create';
 import getUser from '../api/endpoints/users/get';
 import getVisitedParks from '../api/endpoints/users/visited-parks';
 import Activity from '../components/Activity';
@@ -13,15 +14,11 @@ import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
+import { AuthContext, AuthContextType } from '../context/AuthProvider';
+import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
-import createCompliment from '../api/endpoints/compliments/create';
-import sendFriendRequest from '../api/endpoints/me/users/send-friend-request';
-import {AuthContext, AuthContextType} from '../context/AuthProvider';
-import unfriend from '../api/endpoints/me/users/unfriend';
-import {FriendContext} from '../context/FriendProvider';
-import useFriends from '../hooks/useFriends';
 
 export default function UserScreen({ route, navigation }) {
   const { user } = route.params;
@@ -53,8 +50,7 @@ export default function UserScreen({ route, navigation }) {
   }, [currentUser]);
 
   const buttons = currentUser
-    ?
-      [
+    ? [
         {
           image: require('../../assets/images/screens/user/gift.png'),
           onPress: () => {
@@ -109,7 +105,7 @@ export default function UserScreen({ route, navigation }) {
             );
           },
           show: true,
-        }
+        },
       ]
     : [];
 

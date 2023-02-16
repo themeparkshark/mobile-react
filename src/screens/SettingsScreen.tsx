@@ -5,7 +5,6 @@ import { useContext, useEffect, useState } from 'react';
 import {
   Alert,
   PlatformColor,
-  Linking,
   SafeAreaView,
   ScrollView,
   Switch,
@@ -115,9 +114,7 @@ export default function SettingsScreen() {
                   );
                 }}
               />
-              <Cell
-                title="Email support: contact@themeparkshark.com"
-              />
+              <Cell title="Email support: contact@themeparkshark.com" />
             </Section>
             <Section
               footer={`© Theme Park Shark ${new Date().getFullYear()} v${

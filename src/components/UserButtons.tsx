@@ -20,12 +20,15 @@ export default function UserButtons({
         ?.filter((button) => button.show)
         .map((button, index) => {
           return (
-            <View key={index} style={{
-              maxWidth: '25%',
-              flex: 1,
-              paddingLeft: 8,
-              paddingRight: 8,
-            }}>
+            <View
+              key={index}
+              style={{
+                maxWidth: '25%',
+                flex: 1,
+                paddingLeft: 8,
+                paddingRight: 8,
+              }}
+            >
               <Pressable>
                 <Button onPress={button.onPress}>
                   <Image

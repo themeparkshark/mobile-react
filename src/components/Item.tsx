@@ -101,15 +101,16 @@ export default function Item({
               />
             </ImageBackground>
           )}
-          {currentItemType.name !== 'Body item' && currentItemType.name !== 'Background item' && (
-            <Image
-              source={item.icon_url}
-              style={{
-                aspectRatio: 1,
-              }}
-              contentFit="contain"
-            />
-          )}
+          {currentItemType.name !== 'Body item' &&
+            currentItemType.name !== 'Background item' && (
+              <Image
+                source={item.icon_url}
+                style={{
+                  aspectRatio: 1,
+                }}
+                contentFit="contain"
+              />
+            )}
           {currentItemType.name === 'Background item' && (
             <View
               style={{
@@ -136,7 +137,7 @@ export default function Item({
                   position: 'absolute',
                   top: '10%',
                   left: '15%',
-                  transform: [{skewX: '10deg'}, {skewY: '-7deg'}],
+                  transform: [{ skewX: '10deg' }, { skewY: '-7deg' }],
                 }}
               >
                 <Image

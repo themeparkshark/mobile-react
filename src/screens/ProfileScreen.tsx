@@ -1,6 +1,12 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
-import { Dimensions, ImageBackground, ScrollView, Text, View } from 'react-native';
+import {
+  Dimensions,
+  ImageBackground,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getInventory from '../api/endpoints/me/inventory';
 import getParks from '../api/endpoints/me/visited-parks';
@@ -136,9 +142,7 @@ export default function NewsScreen({ navigation }) {
                   position: 'relative',
                 }}
               >
-                <Button
-                  onPress={() => navigation.navigate('Inventory')}
-                >
+                <Button onPress={() => navigation.navigate('Inventory')}>
                   <Playercard
                     showBackground={false}
                     inventory={user.inventory}

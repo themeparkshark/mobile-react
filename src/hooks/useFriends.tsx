@@ -1,10 +1,10 @@
-import {Alert} from 'react-native';
-import unfriend from '../api/endpoints/me/users/unfriend';
-import {UserType} from '../models/user-type';
-import {useContext} from 'react';
-import {FriendContext} from '../context/FriendProvider';
-import sendFriendRequest from '../api/endpoints/me/users/send-friend-request';
+import { useContext } from 'react';
+import { Alert } from 'react-native';
 import acceptFriendRequest from '../api/endpoints/me/users/accept-friend-request';
+import sendFriendRequest from '../api/endpoints/me/users/send-friend-request';
+import unfriend from '../api/endpoints/me/users/unfriend';
+import { FriendContext } from '../context/FriendProvider';
+import { UserType } from '../models/user-type';
 
 export default function useFriends() {
   const { refreshFriends } = useContext(FriendContext);

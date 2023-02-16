@@ -33,15 +33,11 @@ export default function StoreScreen({ route }) {
 
   useEffect(() => {
     if (catalog && currentStore) {
-      setWeeklyItems(
-        catalog.items.filter((item) => item.section === 'weekly')
-      );
+      setWeeklyItems(catalog.items.filter((item) => item.section === 'weekly'));
       setMonthlyItems(
         catalog.items.filter((item) => item.section === 'monthly')
       );
-      setItems(
-        catalog.items.filter((item) => !item.section)
-      );
+      setItems(catalog.items.filter((item) => !item.section));
 
       setLoading(false);
     }

@@ -1,9 +1,11 @@
+import { Alert } from 'react-native';
 import { ApiResponseType } from '../../../models/api-response-type';
+import { ComplimentType } from '../../../models/compliment-type';
 import client from '../../client';
-import {ComplimentType} from '../../../models/compliment-type';
-import {Alert} from 'react-native';
 
-export default async function createCompliment(user: number): Promise<ComplimentType> {
+export default async function createCompliment(
+  user: number
+): Promise<ComplimentType> {
   try {
     const response = await client.post<ApiResponseType<ComplimentType>>(
       `/compliments/${user}`
@@ -19,5 +21,4 @@ export default async function createCompliment(user: number): Promise<Compliment
 
     throw error;
   }
-
 }
