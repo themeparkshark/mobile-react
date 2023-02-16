@@ -261,6 +261,7 @@ export default function LeaderboardScreen({ route }) {
                       >
                         <View
                           style={{
+                            width: '20%',
                             paddingLeft: 16,
                             paddingRight: 16,
                           }}
@@ -272,7 +273,7 @@ export default function LeaderboardScreen({ route }) {
                               color: 'black',
                             }}
                           >
-                            {index + 4}
+                            4444
                           </Text>
                         </View>
                         <View
@@ -311,7 +312,7 @@ export default function LeaderboardScreen({ route }) {
                               color: 'black',
                             }}
                           >
-                            {user.park_coins} park coins
+                            {user.park_coins}
                           </Text>
                         </View>
                       </View>

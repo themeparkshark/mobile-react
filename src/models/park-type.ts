@@ -1,4 +1,4 @@
-import {StoreType} from './store-type';
+import { StoreType } from './store-type';
 
 export interface ParkType {
   readonly catalog_id: number;

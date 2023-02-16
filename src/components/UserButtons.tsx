@@ -17,42 +17,47 @@ export default function UserButtons({
       }}
     >
       {buttons
-        ?.filter((button) => button.show !== null)
+        ?.filter((button) => button.show)
         .map((button, index) => {
           return (
-            <Pressable
+            <View
               key={index}
               style={{
-                paddingLeft: 16,
-                paddingRight: 16,
+                maxWidth: '25%',
+                flex: 1,
+                paddingLeft: 8,
+                paddingRight: 8,
               }}
             >
-              <Button onPress={button.onPress}>
-                <Image
-                  source={button.image}
-                  style={{
-                    width: 80,
-                    height: 80,
-                    marginLeft: 'auto',
-                    marginRight: 'auto',
-                  }}
-                  contentFit="contain"
-                />
-              </Button>
-              {button.text && (
-                <Text
-                  style={{
-                    paddingTop: 8,
-                    textAlign: 'center',
-                    fontFamily: 'Knockout',
-                    textTransform: 'uppercase',
-                    fontSize: 20,
-                  }}
-                >
-                  {button.text}
-                </Text>
-              )}
-            </Pressable>
+              <Pressable>
+                <Button onPress={button.onPress}>
+                  <Image
+                    source={button.image}
+                    style={{
+                      width: '100%',
+                      maxWidth: 80,
+                      height: 80,
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
+                    }}
+                    contentFit="contain"
+                  />
+                </Button>
+                {button.text && (
+                  <Text
+                    style={{
+                      paddingTop: 8,
+                      textAlign: 'center',
+                      fontFamily: 'Knockout',
+                      textTransform: 'uppercase',
+                      fontSize: 20,
+                    }}
+                  >
+                    {button.text}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
           );
         })}
     </View>

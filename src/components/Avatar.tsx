@@ -35,25 +35,49 @@ export default function Avatar({
           marginRight: size === 50 ? 0 : 'auto',
         }}
       >
+        <Image
+          source={require('../../assets/images/screens/profile/verified.png')}
+          style={{
+            width: size / 4,
+            height: size / 4,
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            zIndex: 10,
+          }}
+          contentFit="cover"
+        />
         <View
           style={{
-            borderWidth: 3,
-            borderColor: 'white',
-            overflow: 'hidden',
-            borderRadius: 50,
-            width: size,
-            height: size,
+            shadowColor: '#000',
+            shadowOffset: {
+              width: 2,
+              height: 2,
+            },
+            shadowRadius: 0,
+            shadowOpacity: 0.4,
           }}
         >
-          <Image
-            source={user.avatar_url}
+          <View
             style={{
-              width: size * 1.4,
-              height: size * 1.4,
-              position: 'absolute',
-              left: '-10%',
+              borderWidth: 3,
+              borderColor: 'white',
+              overflow: 'hidden',
+              borderRadius: 50,
+              width: size,
+              height: size,
             }}
-          />
+          >
+            <Image
+              source={user.avatar_url}
+              style={{
+                width: size * 1.4,
+                height: size * 1.4,
+                position: 'absolute',
+                left: '-10%',
+              }}
+            />
+          </View>
         </View>
       </View>
     </Button>

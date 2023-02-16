@@ -114,6 +114,7 @@ export default function SettingsScreen() {
                   );
                 }}
               />
+              <Cell title="Email support: contact@themeparkshark.com" />
             </Section>
             <Section
               footer={`© Theme Park Shark ${new Date().getFullYear()} v${

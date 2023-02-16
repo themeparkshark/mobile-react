@@ -24,7 +24,7 @@ export default function usePurchaseItem() {
         '',
         `You have already ${
           item.cost === 0 ? 'redeemed' : 'purchased'
-        } this item.`,
+        } the ${item.name}.`,
         [
           {
             text: 'Ok',
