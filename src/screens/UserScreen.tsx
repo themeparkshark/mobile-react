@@ -61,8 +61,7 @@ export default function UserScreen({ route, navigation }) {
         {
           image: require('../../assets/images/screens/friends/remove_friend.png'),
           onPress: () => {
-            removeFriend(currentUser);
-            setIsFriend(false);
+            removeFriend(currentUser, () => setIsFriend(false));
           },
           show: isFriend,
         },

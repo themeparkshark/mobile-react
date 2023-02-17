@@ -60,7 +60,7 @@ export default function useFriends() {
         ]
       );
     },
-    removeFriend: (user: UserType) => {
+    removeFriend: (user: UserType, onPress: () => void) => {
       Alert.alert(
         '',
         `Would you like to remove ${user.screen_name} from your friends list?`,
@@ -74,6 +74,7 @@ export default function useFriends() {
             onPress: async () => {
               await unfriend(user);
               await refreshFriends();
+              await onPress();
 
               Alert.alert(
                 '',
