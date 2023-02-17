@@ -77,28 +77,30 @@ export default function Announcement({
               flex: 1,
             }}
           >
-            <ScrollView
-              style={{
-                padding: 32,
-              }}
-            >
-              <Text
+            <ScrollView>
+              <View
                 style={{
-                  fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
-                  fontSize: 32,
-                  paddingBottom: 16,
+                  padding: 32,
                 }}
               >
-                {announcement.title}
-              </Text>
-              <Text
-                style={{
-                  paddingBottom: 8,
-                }}
-              >
-                {announcement.content}
-              </Text>
+                <Text
+                  style={{
+                    fontFamily: 'Knockout',
+                    textTransform: 'uppercase',
+                    fontSize: 32,
+                    paddingBottom: 16,
+                  }}
+                >
+                  {announcement.title}
+                </Text>
+                <Text
+                  style={{
+                    paddingBottom: 8,
+                  }}
+                >
+                  {announcement.content}
+                </Text>
+              </View>
             </ScrollView>
           </SafeAreaView>
         </View>

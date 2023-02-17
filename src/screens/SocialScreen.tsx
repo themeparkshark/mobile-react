@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
 import {
-  Button,
   RefreshControl,
   ScrollView,
   Text,
@@ -12,13 +11,14 @@ import {
 import { useAsyncEffect } from 'rooks';
 import instagram from '../api/endpoints/social-posts/instagram';
 import twitter from '../api/endpoints/social-posts/twitter';
+import Button from '../components/Button';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
 import { SocialPostType } from '../models/social-post-type';
 
-export default function SocialScreen() {
+export default function SocialScreen({ navigation }) {
   const [twitterStatuses, setTwitterStatuses] = useState<SocialPostType[]>();
   const [instagramStatuses, setInstagramStatuses] =
     useState<SocialPostType[]>();
@@ -41,6 +41,15 @@ export default function SocialScreen() {
     setRefreshing(false);
   }, []);
 
+  const buttons = [
+    {
+      image: require('../../assets/images/screens/social/pin_swaps.png'),
+      onPress: () => {
+        navigation.navigate('PinSwaps');
+      },
+    },
+  ];
+
   return (
     <Wrapper>
       <Topbar text="Social" />
@@ -62,7 +71,62 @@ export default function SocialScreen() {
               paddingBottom: 32,
             }}
           >
-            <View>
+            <ScrollView horizontal>
+              {buttons.map((button, index) => {
+                return (
+                  <View
+                    key={index}
+                    style={{ marginLeft: index === 0 ? 0 : 16 }}
+                  >
+                    <Button onPress={button.onPress}>
+                      <Image
+                        source={button.image}
+                        style={{
+                          width: 56,
+                          height: 60,
+                          marginLeft: 'auto',
+                          marginRight: 'auto',
+                        }}
+                        contentFit="contain"
+                      />
+                    </Button>
+                  </View>
+                );
+              })}
+              {[...Array(5)].map((element) => {
+                return (
+                  <View
+                    key={element}
+                    style={{
+                      marginLeft: 16,
+                    }}
+                  >
+                    <View
+                      style={{
+                        backgroundColor: 'rgba(0, 0, 0, .8)',
+                        borderRadius: 99999,
+                        width: 56,
+                        height: 56,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: 'Knockout',
+                          textTransform: 'uppercase',
+                          fontSize: 32,
+                          color: 'white',
+                        }}
+                      >
+                        ?
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <View style={{ paddingTop: 32 }}>
               <Text
                 style={{
                   paddingBottom: 16,
