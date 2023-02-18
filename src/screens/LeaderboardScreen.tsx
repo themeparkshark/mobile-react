@@ -273,7 +273,7 @@ export default function LeaderboardScreen({ route }) {
                               color: 'black',
                             }}
                           >
-                            {index + 3}
+                            {index + 4}
                           </Text>
                         </View>
                         <View

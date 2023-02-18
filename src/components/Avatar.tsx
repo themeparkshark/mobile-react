@@ -28,18 +28,20 @@ export default function Avatar({
           marginRight: size === 50 ? 0 : 'auto',
         }}
       >
-        <Image
-          source={require('../../assets/images/screens/profile/verified.png')}
-          style={{
-            width: size / 4,
-            height: size / 4,
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            zIndex: 10,
-          }}
-          contentFit="cover"
-        />
+        {!!user.verified_at && (
+          <Image
+            source={require('../../assets/images/screens/profile/verified.png')}
+            style={{
+              width: size / 4,
+              height: size / 4,
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              zIndex: 10,
+            }}
+            contentFit="cover"
+          />
+        )}
         <View
           style={{
             shadowColor: '#000',
