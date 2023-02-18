@@ -21,13 +21,6 @@ export default function Avatar({
     >
       <View
         style={{
-          shadowColor: '#000',
-          shadowOffset: {
-            width: 2,
-            height: 2,
-          },
-          shadowRadius: 0,
-          shadowOpacity: 0.4,
           width: size,
           height: size,
           position: 'relative',

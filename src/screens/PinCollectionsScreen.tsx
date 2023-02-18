@@ -10,12 +10,10 @@ import {
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import all from '../api/endpoints/pin-collections/all';
-import Button from '../components/Button';
 import Loading from '../components/Loading';
 import PinCollectionModal from '../components/PinCollectionModal';
 import Topbar from '../components/Topbar';
 import { PinCollectionType } from '../models/pin-collection-type';
-import * as RootNavigation from '../RootNavigation';
 
 export default function PinCollectionsScreen() {
   const [collections, setCollections] = useState<PinCollectionType[]>([]);
@@ -39,26 +37,7 @@ export default function PinCollectionsScreen() {
 
   return (
     <>
-      <Topbar
-        text={'Pin Packs'}
-        showBackButton={true}
-        rightButton={
-          <Button
-            onPress={() => {
-              RootNavigation.navigate('PinSwaps');
-            }}
-          >
-            <Image
-              source={require('../../assets/images/screens/explore/base.png')}
-              style={{
-                width: 35,
-                height: 35,
-              }}
-              contentFit="contain"
-            />
-          </Button>
-        }
-      />
+      <Topbar text={'Pin Packs'} showBackButton={true} />
       {loading && <Loading />}
       {!loading && (
         <View

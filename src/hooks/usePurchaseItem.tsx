@@ -22,9 +22,9 @@ export default function usePurchaseItem() {
 
       return Alert.alert(
         '',
-        `You have already ${
-          item.cost === 0 ? 'redeemed' : 'purchased'
-        } the ${item.name}.`,
+        `You have already ${item.cost === 0 ? 'redeemed' : 'purchased'} the ${
+          item.name
+        }.`,
         [
           {
             text: 'Ok',
