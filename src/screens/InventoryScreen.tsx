@@ -38,7 +38,6 @@ export default function InventoryScreen() {
     }
 
     const response = await getItems(currentItemType.id, page);
-    console.log('response');
     setItems((prevState) => {
       return [...prevState, ...response];
     });
