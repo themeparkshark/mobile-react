@@ -20,9 +20,8 @@ import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
 
-export default function UserScreen({ route, navigation }) {
+export default function UserScreen({ route }) {
   const { user } = route.params;
-  const authContext = useContext<AuthContextType>(AuthContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<UserType>();
   const [parks, setParks] = useState<ParkType[]>([]);
@@ -31,10 +30,6 @@ export default function UserScreen({ route, navigation }) {
   const { addFriend, removeFriend, acceptFriend } = useFriends();
 
   useAsyncEffect(async () => {
-    if (authContext.isReady && authContext.user.id === user) {
-      return navigation.navigate('Profile');
-    }
-
     setLoading(true);
     setCurrentUser(await getUser(user));
     setParks(await getVisitedParks(user));
