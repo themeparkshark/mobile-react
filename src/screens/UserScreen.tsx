@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import createCompliment from '../api/endpoints/compliments/create';
@@ -14,7 +14,6 @@ import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
-import { AuthContext, AuthContextType } from '../context/AuthProvider';
 import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';

@@ -1,31 +1,23 @@
 import { faComments } from '@fortawesome/pro-light-svg-icons/faComments';
 import { faFaceSmile } from '@fortawesome/pro-light-svg-icons/faFaceSmile';
 import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
+import { faReply } from '@fortawesome/pro-light-svg-icons/faReply';
 import { faShare } from '@fortawesome/pro-light-svg-icons/faShare';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import {useCallback, useEffect, useState} from 'react';
-import {
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { useAsyncEffect, useTimeoutWhen } from 'rooks';
+import { FlashList } from '@shopify/flash-list';
+import { useState } from 'react';
+import { Text, TouchableOpacity, View } from 'react-native';
+import { useAsyncEffect } from 'rooks';
+import getComments from '../api/endpoints/comments/getComments';
 import getThread from '../api/endpoints/threads/getThread';
 import Avatar from '../components/Avatar';
-import Comments from '../components/Comments';
 import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
 import Tag from '../components/Tag';
 import Topbar from '../components/Topbar';
-import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
+import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
-import {FlashList} from '@shopify/flash-list';
-import getComments from '../api/endpoints/comments/getComments';
-import {CommentType} from '../models/comment-type';
-import {faReply} from '@fortawesome/pro-light-svg-icons/faReply';
 
 export default function ThreadScreen({ route }) {
   const { thread } = route.params;
@@ -65,7 +57,7 @@ export default function ThreadScreen({ route }) {
   }, [page]);
 
   return (
-    <Wrapper>
+    <>
       <Topbar showBackButton />
       {loading && <Loading />}
       {!loading && currentThread && (
@@ -77,13 +69,8 @@ export default function ThreadScreen({ route }) {
         >
           <FlashList
             data={comments}
-            ListFooterComponent={
-              <View style={{ height: 48 }} />
-            }
             ListHeaderComponent={
-              <View
-                style={{ padding: 16 }}
-              >
+              <View style={{ padding: 16 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View>
                     <Avatar size={50} user={currentThread.user} />
@@ -91,7 +78,9 @@ export default function ThreadScreen({ route }) {
                   <View style={{ paddingLeft: 16 }}>
                     <Text>
                       {currentThread.user.screen_name} -{' '}
-                      {dayjs(currentThread.created_at).startOf('second').fromNow()}
+                      {dayjs(currentThread.created_at)
+                        .startOf('second')
+                        .fromNow()}
                     </Text>
                   </View>
                 </View>
@@ -142,7 +131,11 @@ export default function ThreadScreen({ route }) {
                         flexDirection: 'row',
                       }}
                     >
-                      <FontAwesomeIcon icon={faFaceSmile} size={16} color="black" />
+                      <FontAwesomeIcon
+                        icon={faFaceSmile}
+                        size={16}
+                        color="black"
+                      />
                       <Text
                         style={{
                           paddingLeft: 16,
@@ -162,7 +155,11 @@ export default function ThreadScreen({ route }) {
                         flexDirection: 'row',
                       }}
                     >
-                      <FontAwesomeIcon icon={faComments} size={16} color="black" />
+                      <FontAwesomeIcon
+                        icon={faComments}
+                        size={16}
+                        color="black"
+                      />
                       <Text
                         style={{
                           paddingLeft: 16,
@@ -213,12 +210,6 @@ export default function ThreadScreen({ route }) {
                     </TouchableOpacity>
                   </View>
                 </View>
-                <CreateReply
-                  thread={currentThread}
-                  onSubmit={() => {
-                    setLoading(true);
-                  }}
-                />
               </View>
             }
             renderItem={({ item }) => {
@@ -228,7 +219,7 @@ export default function ThreadScreen({ route }) {
                   style={{
                     paddingRight: 16,
                     paddingLeft: 16,
-                    paddingBottom: 8,
+                    paddingBottom: 16,
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -265,7 +256,11 @@ export default function ThreadScreen({ route }) {
                             justifyContent: 'flex-end',
                           }}
                         >
-                          <FontAwesomeIcon icon={faReply} size={16} color="black" />
+                          <FontAwesomeIcon
+                            icon={faReply}
+                            size={16}
+                            color="black"
+                          />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -279,8 +274,16 @@ export default function ThreadScreen({ route }) {
               setPage((prevState) => prevState + 1);
             }}
           />
+          <CreateReply
+            thread={currentThread}
+            onSubmit={async () => {
+              setComments(await getComments(currentThread.id, 1));
+              setCurrentThread(await getThread(thread));
+              setPage(1);
+            }}
+          />
         </View>
       )}
-    </Wrapper>
+    </>
   );
 }

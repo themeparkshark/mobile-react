@@ -1,15 +1,10 @@
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, View } from 'react-native';
+import { Image, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
-import CreateThreadModal from '../components/CreateThreadModal';
-import {
-  Image,
-  Text,
-  TouchableOpacity,
-} from 'react-native';
 import Button from '../components/Button';
+import CreateThreadModal from '../components/CreateThreadModal';
 import Loading from '../components/Loading';
 import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
@@ -94,9 +89,7 @@ export default function SocialScreen({ navigation }) {
                 paddingBottom: 16,
               }}
             >
-              <ScrollView
-                horizontal
-              >
+              <ScrollView horizontal>
                 {buttons.map((button, index) => {
                   return (
                     <View
