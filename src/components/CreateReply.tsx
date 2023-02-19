@@ -1,24 +1,24 @@
 import { useState } from 'react';
 import {
-  Button,
   Dimensions,
-  Keyboard,
-  KeyboardAvoidingView,
   SafeAreaView,
-  ScrollView,
-  TextInput, TouchableOpacity,
   Text,
-  View
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { ThreadType } from '../models/thread-type';
-import {useKeyboardHeight} from '../hooks/useKeyboardHeight';
-import config from '../config';
 import createComment from '../api/endpoints/comments/create';
+import config from '../config';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
+import { CommentType } from '../models/comment-type';
+import { ThreadType } from '../models/thread-type';
 
 export default function CreateReply({
+  comment,
   thread,
   onSubmit,
 }: {
+  readonly comment?: CommentType;
   readonly thread: ThreadType;
   readonly onSubmit: () => void;
 }) {
@@ -33,9 +33,11 @@ export default function CreateReply({
         width: Dimensions.get('window').width,
       }}
     >
-      <View style={{
-        padding: 16,
-      }}>
+      <View
+        style={{
+          padding: 16,
+        }}
+      >
         <TextInput
           style={{
             fontSize: 16,
@@ -77,7 +79,9 @@ export default function CreateReply({
               }}
             >
               <View>
-                <Text style={{ textAlign: 'center', color: 'white' }}>Reply</Text>
+                <Text style={{ textAlign: 'center', color: 'white' }}>
+                  Reply
+                </Text>
               </View>
             </TouchableOpacity>
           </View>

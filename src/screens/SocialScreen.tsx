@@ -111,10 +111,10 @@ export default function SocialScreen({ navigation }) {
                     </View>
                   );
                 })}
-                {[...Array(5)].map((element) => {
+                {[...Array(5)].map((element, index) => {
                   return (
                     <View
-                      key={element}
+                      key={index}
                       style={{
                         marginLeft: 16,
                       }}

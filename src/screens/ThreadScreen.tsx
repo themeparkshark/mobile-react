@@ -1,7 +1,6 @@
 import { faComments } from '@fortawesome/pro-light-svg-icons/faComments';
 import { faFaceSmile } from '@fortawesome/pro-light-svg-icons/faFaceSmile';
 import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
-import { faReply } from '@fortawesome/pro-light-svg-icons/faReply';
 import { faShare } from '@fortawesome/pro-light-svg-icons/faShare';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
@@ -11,6 +10,7 @@ import { useAsyncEffect } from 'rooks';
 import getComments from '../api/endpoints/comments/getComments';
 import getThread from '../api/endpoints/threads/getThread';
 import Avatar from '../components/Avatar';
+import Comment from '../components/Comment';
 import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
 import Tag from '../components/Tag';
@@ -25,6 +25,7 @@ export default function ThreadScreen({ route }) {
   const [currentThread, setCurrentThread] = useState<ThreadType>();
   const [page, setPage] = useState<number>(1);
   const [comments, setComments] = useState<CommentType[]>([]);
+  const [comment, setComment] = useState<CommentType>();
 
   const fetchComments = async (page: number) => {
     if (!currentThread) {
@@ -214,58 +215,12 @@ export default function ThreadScreen({ route }) {
             }
             renderItem={({ item }) => {
               return (
-                <View
-                  key={item.id}
-                  style={{
-                    paddingRight: 16,
-                    paddingLeft: 16,
-                    paddingBottom: 16,
+                <Comment
+                  comment={item}
+                  onReplyPress={(comment) => {
+                    setComment(comment);
                   }}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View>
-                      <Avatar size={40} user={item.user} />
-                    </View>
-                    <View style={{ paddingLeft: 16 }}>
-                      <Text>
-                        {item.user.screen_name} -{' '}
-                        {dayjs(item.updated_at).startOf('second').fromNow()}
-                      </Text>
-                    </View>
-                  </View>
-                  <View
-                    style={{
-                      paddingTop: 16,
-                      paddingLeft: 3,
-                      paddingRight: 3,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        paddingBottom: 16,
-                      }}
-                    >
-                      {item.content}
-                    </Text>
-                    <View>
-                      <View>
-                        <TouchableOpacity
-                          style={{
-                            flexDirection: 'row',
-                            justifyContent: 'flex-end',
-                          }}
-                        >
-                          <FontAwesomeIcon
-                            icon={faReply}
-                            size={16}
-                            color="black"
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                </View>
+                />
               );
             }}
             estimatedItemSize={100}
@@ -276,6 +231,7 @@ export default function ThreadScreen({ route }) {
           />
           <CreateReply
             thread={currentThread}
+            comment={comment}
             onSubmit={async () => {
               setComments(await getComments(currentThread.id, 1));
               setCurrentThread(await getThread(thread));
