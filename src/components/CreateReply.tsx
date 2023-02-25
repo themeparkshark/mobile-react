@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import {useContext, useEffect, useRef, useState} from 'react';
 import {
   Dimensions,
   SafeAreaView,
@@ -12,18 +12,27 @@ import config from '../config';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
+import {ForumContext} from '../context/ForumProvider';
 
 export default function CreateReply({
-  comment,
   thread,
   onSubmit,
 }: {
-  readonly comment?: CommentType;
   readonly thread: ThreadType;
   readonly onSubmit: () => void;
 }) {
+  const { activeComment, setActiveComment } = useContext(ForumContext);
   const [content, setContent] = useState<string>('');
   const keyboardHeight = useKeyboardHeight();
+  const refInput = useRef(null);
+
+  useEffect(() => {
+    if (!activeComment || !refInput) {
+      return;
+    }
+
+    refInput.current.focus()
+  }, [activeComment, refInput]);
 
   return (
     <SafeAreaView
@@ -39,6 +48,7 @@ export default function CreateReply({
         }}
       >
         <TextInput
+          ref={refInput}
           style={{
             fontSize: 16,
             width: '100%',
@@ -55,6 +65,7 @@ export default function CreateReply({
           value={content}
           placeholder="Add a comment"
           multiline
+          onBlur={() => setActiveComment(undefined)}
         />
         <View
           style={{

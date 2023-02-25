@@ -4,7 +4,7 @@ import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
 import { faShare } from '@fortawesome/pro-light-svg-icons/faShare';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
-import { useState } from 'react';
+import {useContext, useState} from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getComments from '../api/endpoints/comments/getComments';
@@ -18,9 +18,11 @@ import Topbar from '../components/Topbar';
 import dayjs from '../helpers/dayjs';
 import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
+import {ForumContext} from '../context/ForumProvider';
 
 export default function ThreadScreen({ route }) {
   const { thread } = route.params;
+  const { setActiveComment } = useContext(ForumContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [currentThread, setCurrentThread] = useState<ThreadType>();
   const [page, setPage] = useState<number>(1);
@@ -59,7 +61,10 @@ export default function ThreadScreen({ route }) {
 
   return (
     <>
-      <Topbar showBackButton />
+      <Topbar
+        showBackButton
+        onBackButtonPress={() => setActiveComment(undefined)}
+      />
       {loading && <Loading />}
       {!loading && currentThread && (
         <View

@@ -6,6 +6,7 @@ import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
 import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import Root from './src/Root';
+import {ForumProvider} from './src/context/ForumProvider';
 
 export default function App() {
   return (
@@ -16,7 +17,9 @@ export default function App() {
             <BroadcastProvider>
               <FriendProvider>
                 <NotificationProvider>
-                  <Root />
+                  <ForumProvider>
+                    <Root />
+                  </ForumProvider>
                 </NotificationProvider>
               </FriendProvider>
             </BroadcastProvider>

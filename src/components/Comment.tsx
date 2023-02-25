@@ -1,12 +1,13 @@
 import { faReply } from '@fortawesome/pro-light-svg-icons/faReply';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { useState } from 'react';
+import {useContext, useState} from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getChildren from '../api/endpoints/comments/getChildren';
 import dayjs from '../helpers/dayjs';
 import { CommentType } from '../models/comment-type';
 import Avatar from './Avatar';
+import {ForumContext} from '../context/ForumProvider';
 
 export default function Comment({
   comment,
@@ -16,7 +17,7 @@ export default function Comment({
   readonly onReplyPress: (comment: CommentType) => void;
 }) {
   const childrenLimit = 8;
-  const [isSelected, setIsSelected] = useState<boolean>(false);
+  const { activeComment, setActiveComment } = useContext(ForumContext);
   const [page, setPage] = useState<number>(1);
   const [children, setChildren] = useState<CommentType[]>(comment.children);
   const [canLoadMore, setCanLoadMore] = useState<boolean>(
@@ -37,7 +38,7 @@ export default function Comment({
     <>
       <View
         style={{
-          backgroundColor: isSelected ? 'rgba(0, 0, 0, .05)' : 'transparent',
+          backgroundColor: activeComment?.id === comment.id ? 'rgba(0, 0, 0, .05)' : 'transparent',
           paddingTop: 16,
           paddingRight: 16,
           paddingLeft: 16,
@@ -78,7 +79,7 @@ export default function Comment({
                   justifyContent: 'flex-end',
                 }}
                 onPress={() => {
-                  setIsSelected(true);
+                  setActiveComment(comment);
                   onReplyPress(comment);
                 }}
               >
