@@ -55,7 +55,7 @@ export default function Topbar({
         style={{
           height: 120,
           marginTop:
-            Constants.statusBarHeight - (Constants.statusBarHeight * 2 + 15),
+            Constants.statusBarHeight - (Constants.statusBarHeight * 2 + 5),
           alignItems: 'center',
           justifyContent: 'flex-end',
         }}
