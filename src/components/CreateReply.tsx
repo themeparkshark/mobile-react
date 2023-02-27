@@ -1,4 +1,4 @@
-import {useContext, useEffect, useRef, useState} from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
   SafeAreaView,
@@ -9,10 +9,9 @@ import {
 } from 'react-native';
 import createComment from '../api/endpoints/comments/create';
 import config from '../config';
+import { ForumContext } from '../context/ForumProvider';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
-import {ForumContext} from '../context/ForumProvider';
 
 export default function CreateReply({
   thread,
@@ -21,7 +20,8 @@ export default function CreateReply({
   readonly thread: ThreadType;
   readonly onSubmit: () => void;
 }) {
-  const { activeComment, setActiveComment } = useContext(ForumContext);
+  const { activeComment, setActiveComment, setRecentlyAddedComment } =
+    useContext(ForumContext);
   const [content, setContent] = useState<string>('');
   const keyboardHeight = useKeyboardHeight();
   const refInput = useRef(null);
@@ -31,7 +31,7 @@ export default function CreateReply({
       return;
     }
 
-    refInput.current.focus()
+    refInput.current.focus();
   }, [activeComment, refInput]);
 
   return (
@@ -84,7 +84,12 @@ export default function CreateReply({
                 paddingRight: 16,
               }}
               onPress={async () => {
-                await createComment(thread.id, content);
+                const response = await createComment(
+                  thread.id,
+                  content,
+                  activeComment?.id
+                );
+                setRecentlyAddedComment(response);
                 setContent('');
                 await onSubmit();
               }}

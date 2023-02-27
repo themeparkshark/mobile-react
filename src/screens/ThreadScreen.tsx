@@ -4,7 +4,7 @@ import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
 import { faShare } from '@fortawesome/pro-light-svg-icons/faShare';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
-import {useContext, useState} from 'react';
+import { useContext, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getComments from '../api/endpoints/comments/getComments';
@@ -15,10 +15,10 @@ import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
 import Tag from '../components/Tag';
 import Topbar from '../components/Topbar';
+import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
 import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
-import {ForumContext} from '../context/ForumProvider';
 
 export default function ThreadScreen({ route }) {
   const { thread } = route.params;
@@ -236,7 +236,6 @@ export default function ThreadScreen({ route }) {
           />
           <CreateReply
             thread={currentThread}
-            comment={comment}
             onSubmit={async () => {
               setComments(await getComments(currentThread.id, 1));
               setCurrentThread(await getThread(thread));

@@ -1,13 +1,13 @@
 import { faReply } from '@fortawesome/pro-light-svg-icons/faReply';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import {useContext, useState} from 'react';
+import { useContext, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getChildren from '../api/endpoints/comments/getChildren';
+import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
 import { CommentType } from '../models/comment-type';
 import Avatar from './Avatar';
-import {ForumContext} from '../context/ForumProvider';
 
 export default function Comment({
   comment,
@@ -38,7 +38,10 @@ export default function Comment({
     <>
       <View
         style={{
-          backgroundColor: activeComment?.id === comment.id ? 'rgba(0, 0, 0, .05)' : 'transparent',
+          backgroundColor:
+            activeComment?.id === comment.id
+              ? 'rgba(0, 0, 0, .05)'
+              : 'transparent',
           paddingTop: 16,
           paddingRight: 16,
           paddingLeft: 16,

@@ -5,12 +5,14 @@ import client from '../../client';
 
 export default async function createComment(
   thread: number,
-  comment: string
+  comment: string,
+  parent?: number | null
 ): Promise<CommentType> {
   try {
     const { data } = await client.post<ApiResponseType<CommentType>>(
       `/threads/${thread}/comments`,
       {
+        comment_id: parent,
         content: comment,
       }
     );
