@@ -31,7 +31,7 @@ export default function PinSwapsScreen() {
   }, []);
 
   return (
-    <Wrapper>
+    <>
       <Topbar text="Trading Board" showBackButton />
       <View
         style={{
@@ -95,6 +95,6 @@ export default function PinSwapsScreen() {
           </View>
         </ImageBackground>
       </View>
-    </Wrapper>
+    </>
   );
 }

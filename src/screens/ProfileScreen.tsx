@@ -88,7 +88,7 @@ export default function NewsScreen({ navigation }) {
               onPress={() => {
                 RootNavigation.navigate('Notifications');
               }}
-              showRedCircle
+              showRedCircle={!!notificationCount}
             >
               <Image
                 style={{

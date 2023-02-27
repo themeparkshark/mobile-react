@@ -42,7 +42,7 @@ export default function Wrapper({
       screen: 'Profile',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
-      text: 'Me',
+      text: 'Profile',
     },
   ];
 
