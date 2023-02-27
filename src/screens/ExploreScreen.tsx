@@ -31,6 +31,7 @@ import { RedeemablesType } from '../models/redeemables-type';
 import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import NotAtPark from './ExploreScreen/NotAtPark';
+import Avatar from '../components/Avatar';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -195,28 +196,7 @@ export default function ExploreScreen() {
                     RootNavigation.navigate('Inventory');
                   }}
                 >
-                  <ImageBackground
-                    resizeMode="contain"
-                    style={{
-                      width: 70,
-                      height: 84,
-                      position: 'relative',
-                    }}
-                    source={require('../../assets/images/screens/explore/base.png')}
-                  >
-                    <Playercard
-                      showBackground={false}
-                      animate={false}
-                      inventory={inventory}
-                      style={{
-                        position: 'absolute',
-                        width: 100,
-                        height: 100,
-                        left: -14,
-                        top: -15,
-                      }}
-                    />
-                  </ImageBackground>
+                  <Avatar user={user} size={70} />
                 </Button>
               </View>
             </View>

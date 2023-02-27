@@ -57,6 +57,7 @@ export default function UserScreen({ route, navigation }) {
             purchaseItem(currentUser.mascot.item);
           },
           show: !!currentUser.mascot,
+          text: 'Gift',
         },
         {
           image: require('../../assets/images/screens/friends/remove_friend.png'),
@@ -64,6 +65,7 @@ export default function UserScreen({ route, navigation }) {
             removeFriend(currentUser, () => setIsFriend(false));
           },
           show: isFriend,
+          text: 'Remove friend',
         },
         {
           image: require('../../assets/images/screens/friends/add_friend.png'),
@@ -75,13 +77,14 @@ export default function UserScreen({ route, navigation }) {
             }
           },
           show: !isFriend,
+          text: 'Add friend',
         },
         {
           image: require('../../assets/images/screens/user/compliment.png'),
           onPress: async () => {
             Alert.alert(
               '',
-              `Would you like to send ${currentUser.screen_name} a compliment?`,
+              `Would you like to compliment ${currentUser.screen_name}'s outfit and send 5 Shark Coins?`,
               [
                 {
                   text: 'Cancel',
@@ -104,6 +107,7 @@ export default function UserScreen({ route, navigation }) {
             );
           },
           show: true,
+          text: 'Compliment',
         },
       ]
     : [];

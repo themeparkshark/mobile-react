@@ -1,8 +1,7 @@
 import { Image } from 'expo-image';
 import { View } from 'react-native';
 import { UserType } from '../models/user-type';
-import * as RootNavigation from '../RootNavigation';
-import Button from './Button';
+import config from '../config';
 
 export default function Avatar({
   user,
@@ -12,69 +11,61 @@ export default function Avatar({
   readonly user: UserType;
 }) {
   return (
-    <Button
-      onPress={() =>
-        RootNavigation.navigate('User', {
-          user: user.id,
-        })
-      }
+    <View
+      style={{
+        width: size,
+        height: size,
+        position: 'relative',
+        marginLeft: size === 50 ? 0 : 'auto',
+        marginRight: size === 50 ? 0 : 'auto',
+      }}
     >
+      {!!user.verified_at && (
+        <Image
+          source={require('../../assets/images/screens/profile/verified.png')}
+          style={{
+            width: size / 4,
+            height: size / 4,
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            zIndex: 10,
+          }}
+          contentFit="cover"
+        />
+      )}
       <View
         style={{
-          width: size,
-          height: size,
-          position: 'relative',
-          marginLeft: size === 50 ? 0 : 'auto',
-          marginRight: size === 50 ? 0 : 'auto',
+          shadowColor: '#000',
+          shadowOffset: {
+            width: 0,
+            height: 4,
+          },
+          shadowRadius: 0,
+          shadowOpacity: 0.4,
         }}
       >
-        {!!user.verified_at && (
-          <Image
-            source={require('../../assets/images/screens/profile/verified.png')}
-            style={{
-              width: size / 4,
-              height: size / 4,
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              zIndex: 10,
-            }}
-            contentFit="cover"
-          />
-        )}
         <View
           style={{
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 2,
-              height: 2,
-            },
-            shadowRadius: 0,
-            shadowOpacity: 0.4,
+            borderWidth: 4,
+            borderColor: config.lightBlue,
+            overflow: 'hidden',
+            borderRadius: 50,
+            width: size,
+            height: size,
           }}
         >
-          <View
+          <Image
+            source={user.avatar_url}
             style={{
-              borderWidth: 3,
-              borderColor: 'white',
-              overflow: 'hidden',
-              borderRadius: 50,
-              width: size,
-              height: size,
+              width: size * 1.2,
+              height: size * 1.2,
+              position: 'absolute',
+              left: '-10%',
             }}
-          >
-            <Image
-              source={user.avatar_url}
-              style={{
-                width: size * 1.4,
-                height: size * 1.4,
-                position: 'absolute',
-                left: '-10%',
-              }}
-            />
-          </View>
+          />
         </View>
       </View>
-    </Button>
+    </View>
   );
 }

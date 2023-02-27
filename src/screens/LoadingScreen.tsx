@@ -39,14 +39,16 @@ export default function LoadingScreen() {
   }, [user, inventory, isReady, fontsLoaded]);
 
   useEffect(() => {
-    if (!loading) {
-      if (!user?.username) {
-        RootNavigation.navigate('Welcome');
-        return;
-      }
-
-      RootNavigation.navigate('Explore');
+    if (loading) {
+      return;
     }
+
+    if (!user?.username) {
+      RootNavigation.navigate('Welcome');
+      return;
+    }
+
+    RootNavigation.navigate('Explore');
   }, [loading]);
 
   return (

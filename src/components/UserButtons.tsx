@@ -50,7 +50,7 @@ export default function UserButtons({
                       textAlign: 'center',
                       fontFamily: 'Knockout',
                       textTransform: 'uppercase',
-                      fontSize: 20,
+                      fontSize: 16,
                     }}
                   >
                     {button.text}

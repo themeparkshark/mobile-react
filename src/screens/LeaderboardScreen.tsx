@@ -24,6 +24,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { LeaderboardType } from '../models/leaderboard-type';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
+import * as RootNavigation from '../RootNavigation';
 
 export default function LeaderboardScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);
@@ -285,7 +286,15 @@ export default function LeaderboardScreen({ route }) {
                             alignItems: 'center',
                           }}
                         >
-                          <Avatar size={50} user={user} />
+                          <Button
+                            onPress={() =>
+                              RootNavigation.navigate('User', {
+                                user: user.id,
+                              })
+                            }
+                          >
+                            <Avatar size={50} user={user} />
+                          </Button>
                           <Text
                             style={{
                               fontSize: 24,
