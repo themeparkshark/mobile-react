@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { ReactNode } from 'react';
-import { Dimensions, ImageBackground, View } from 'react-native';
+import { Dimensions, ImageBackground, View, Text } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
 
@@ -15,12 +15,14 @@ export default function Wrapper({
       screen: 'News',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+      text: 'News',
     },
     {
       icon: require('../../assets/images/toolbar/leaderboard.png'),
       screen: 'Leaderboard',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+      text: 'Standings',
     },
     {
       icon: require('../../assets/images/toolbar/explore.png'),
@@ -33,12 +35,14 @@ export default function Wrapper({
       screen: 'Social',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+      text: 'Social',
     },
     {
       icon: require('../../assets/images/toolbar/profile.png'),
       screen: 'Profile',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+      text: 'Me',
     },
   ];
 
@@ -106,6 +110,22 @@ export default function Wrapper({
                         contentFit="contain"
                       />
                     </Button>
+                    <Text
+                      style={{
+                        fontFamily: 'Shark',
+                        color: 'white',
+                        textAlign: 'center',
+                        textTransform: 'uppercase',
+                        textShadowColor: 'rgba(0, 0, 0, .5)',
+                        textShadowOffset: {
+                          width: 2,
+                          height: 2,
+                        },
+                        textShadowRadius: 0,
+                      }}
+                    >
+                      {item.text}
+                    </Text>
                   </View>
                 </View>
               );

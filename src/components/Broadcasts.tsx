@@ -16,7 +16,7 @@ export default function Broadcasts() {
 
   const slideDown = () => {
     Animated.timing(translate, {
-      toValue: 50,
+      toValue: 60,
       duration: 250,
       useNativeDriver: true,
     }).start();
