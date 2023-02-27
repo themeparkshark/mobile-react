@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Pressable, Text, View } from 'react-native';
+import {Pressable, ScrollView, Text, View} from 'react-native';
 import { ButtonType } from '../models/button-type';
 import Button from './Button';
 
@@ -9,11 +9,14 @@ export default function UserButtons({
   readonly buttons: ButtonType[];
 }) {
   return (
-    <View
+    <ScrollView
+      horizontal
       style={{
-        paddingTop: 24,
-        flexDirection: 'row',
-        justifyContent: 'center',
+        marginTop: 24,
+      }}
+      contentContainerStyle={{
+        flexGrow: 1,
+        justifyContent: 'center'
       }}
     >
       {buttons
@@ -23,7 +26,6 @@ export default function UserButtons({
             <View
               key={index}
               style={{
-                maxWidth: '25%',
                 flex: 1,
                 paddingLeft: 8,
                 paddingRight: 8,
@@ -34,9 +36,8 @@ export default function UserButtons({
                   <Image
                     source={button.image}
                     style={{
-                      width: '100%',
-                      maxWidth: 80,
-                      height: 80,
+                      width: 70,
+                      aspectRatio: 1,
                       marginLeft: 'auto',
                       marginRight: 'auto',
                     }}
@@ -60,6 +61,6 @@ export default function UserButtons({
             </View>
           );
         })}
-    </View>
+    </ScrollView>
   );
 }

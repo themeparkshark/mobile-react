@@ -52,6 +52,38 @@ export default function SocialScreen({ navigation }) {
       text: 'Pin Trading',
       show: true,
     },
+    {
+      image: require('../../assets/images/screens/explore/base.png'),
+      onPress: () => {
+
+      },
+      text: '?',
+      show: true,
+    },
+    {
+      image: require('../../assets/images/screens/explore/base.png'),
+      onPress: () => {
+
+      },
+      text: '?',
+      show: true,
+    },
+    {
+      image: require('../../assets/images/screens/explore/base.png'),
+      onPress: () => {
+
+      },
+      text: '?',
+      show: true,
+    },
+    {
+      image: require('../../assets/images/screens/explore/base.png'),
+      onPress: () => {
+
+      },
+      text: '?',
+      show: true,
+    },
   ];
 
   return (
@@ -71,7 +103,6 @@ export default function SocialScreen({ navigation }) {
             style={{
               paddingLeft: 16,
               paddingRight: 16,
-              paddingTop: 32,
               paddingBottom: 32,
             }}
           >
