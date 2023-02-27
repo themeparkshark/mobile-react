@@ -20,7 +20,6 @@ export interface UserType {
   readonly mascot: MascotType;
   readonly name: string;
   readonly park_coins: number;
-  readonly purple_diamonds: number;
   readonly screen_name: string;
   readonly total_coins: number;
   readonly total_experience: number;

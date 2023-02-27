@@ -5,10 +5,8 @@ import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
 
 export default function Wrapper({
-  showBar = true,
   children,
 }: {
-  readonly showBar?: boolean;
   readonly children: ReactNode[];
 }) {
   const items = [
@@ -47,26 +45,25 @@ export default function Wrapper({
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
-        <SafeAreaView
+        <View
           style={{
             height: '101%',
           }}
         >
           {children}
-        </SafeAreaView>
+        </View>
       </View>
-      <SafeAreaView
+      <View
         style={{
           width: Dimensions.get('window').width,
-          marginBottom: -45,
-          display: showBar ? 'flex' : 'none',
         }}
       >
         <ImageBackground
           source={require('../../assets/images/screens/explore/bottombar.png')}
           resizeMode="cover"
           style={{
-            height: 100,
+            width: '100%',
+            aspectRatio: 5.3
           }}
         >
           <View
@@ -115,7 +112,7 @@ export default function Wrapper({
             })}
           </View>
         </ImageBackground>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

@@ -21,7 +21,7 @@ export default function EntryScreen({ route }) {
   }, []);
 
   return (
-    <Wrapper showBar={false}>
+    <>
       <Topbar showBackButton={true} />
       {loading && <Loading />}
       {!loading && currentEntry && (
@@ -64,6 +64,6 @@ export default function EntryScreen({ route }) {
           </View>
         </ScrollView>
       )}
-    </Wrapper>
+    </>
   );
 }

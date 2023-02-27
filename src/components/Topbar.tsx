@@ -38,13 +38,21 @@ export default function Topbar({
   const width = text ? (showCoins ? '20%' : '15%') : '50%';
 
   return (
-    <SafeAreaView
+    <View
       style={{
-        zIndex: 20,
+        width: Dimensions.get('window').width,
+        zIndex: 10,
         position: 'relative',
       }}
     >
-      <Broadcasts />
+      <SafeAreaView
+        style={{
+          marginTop: Constants.statusBarHeight,
+          position: 'absolute',
+        }}
+      >
+        <Broadcasts />
+      </SafeAreaView>
       <ImageBackground
         source={
           purple
@@ -53,9 +61,7 @@ export default function Topbar({
         }
         resizeMode="cover"
         style={{
-          height: 120,
-          marginTop:
-            Constants.statusBarHeight - (Constants.statusBarHeight * 2 + 15),
+          height: 70 + Constants.statusBarHeight,
           alignItems: 'center',
           justifyContent: 'flex-end',
         }}
@@ -222,6 +228,6 @@ export default function Topbar({
           </View>
         </SafeAreaView>
       </ImageBackground>
-    </SafeAreaView>
+    </View>
   );
 }
