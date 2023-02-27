@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
 import { Alert, Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import { vsprintf } from 'sprintf-js';
 import createCompliment from '../api/endpoints/compliments/create';
 import getUser from '../api/endpoints/users/get';
 import getVisitedParks from '../api/endpoints/users/visited-parks';
@@ -15,6 +16,7 @@ import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
 import { AuthContext, AuthContextType } from '../context/AuthProvider';
+import { CrumbContext } from '../context/CrumbProvider';
 import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
@@ -29,6 +31,7 @@ export default function UserScreen({ route, navigation }) {
   const { purchaseItem } = usePurchaseItem();
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
+  const { crumbs } = useContext(CrumbContext);
 
   useAsyncEffect(async () => {
     if (authContext.isReady && authContext.user.id === user) {
@@ -84,7 +87,7 @@ export default function UserScreen({ route, navigation }) {
           onPress: async () => {
             Alert.alert(
               '',
-              `Would you like to compliment ${currentUser.screen_name}'s outfit and send 5 Shark Coins?`,
+              vsprintf(crumbs.prompts.compliment, [currentUser?.screen_name]),
               [
                 {
                   text: 'Cancel',
@@ -93,9 +96,17 @@ export default function UserScreen({ route, navigation }) {
                 {
                   text: 'Ok',
                   onPress: async () => {
-                    await createCompliment(currentUser.id);
+                    try {
+                      await createCompliment(currentUser.id);
+                    } catch {
+                      Alert.alert('', crumbs.errors.max_compliments_created, [
+                        {
+                          text: 'Ok',
+                        },
+                      ]);
+                    }
 
-                    Alert.alert('', 'Compliment sent.', [
+                    Alert.alert('', crumbs.messages.compliment_created, [
                       {
                         text: 'Ok',
                         style: 'cancel',

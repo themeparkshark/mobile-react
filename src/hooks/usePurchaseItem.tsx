@@ -1,13 +1,16 @@
 import { useContext } from 'react';
 import { Alert } from 'react-native';
+import { vsprintf } from 'sprintf-js';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
 import search from '../api/endpoints/me/inventory/search';
 import { AuthContext } from '../context/AuthProvider';
+import { CrumbContext } from '../context/CrumbProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 
 export default function usePurchaseItem() {
   const { playSound } = useContext(SoundEffectContext);
+  const { crumbs } = useContext(CrumbContext);
   const { user, isReady, refreshUser } = useContext(AuthContext);
 
   const purchaseItem = async (item: ItemType) => {
@@ -22,9 +25,9 @@ export default function usePurchaseItem() {
 
       return Alert.alert(
         '',
-        `You have already ${item.cost === 0 ? 'redeemed' : 'purchased'} the ${
-          item.name
-        }.`,
+        response.cost
+          ? vsprintf(crumbs.errors.item_purchased, [response.name])
+          : vsprintf(crumbs.errors.item_redeemed, [response.name]),
         [
           {
             text: 'Ok',
@@ -37,7 +40,7 @@ export default function usePurchaseItem() {
     if (user.coins < item.cost) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
-      return Alert.alert('', 'You need more coins.', [
+      return Alert.alert('', crumbs.errors.not_enough_coins, [
         {
           text: 'Ok',
           style: 'cancel',
@@ -47,8 +50,12 @@ export default function usePurchaseItem() {
 
     const text =
       item.cost === 0
-        ? `You have found a ${item.name}. Would you like to pick it up?`
-        : `Would you like to buy the ${item.name} for ${item.cost} coins? You currently have ${user.coins} coins.`;
+        ? vsprintf(crumbs.prompts.redeem_item, [item.name])
+        : vsprintf(crumbs.prompts.purchase_item, [
+            item.name,
+            item.cost,
+            user.coins,
+          ]);
 
     playSound(require('../../assets/sounds/purchase_item_prompt.mp3'));
 
@@ -70,7 +77,7 @@ export default function usePurchaseItem() {
 
           Alert.alert(
             '',
-            `${response.name} has been added to your inventory.`,
+            vsprintf(crumbs.messages.item_purchased, [item.name]),
             [
               {
                 text: 'Ok',

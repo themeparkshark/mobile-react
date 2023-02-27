@@ -21,6 +21,7 @@ import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
 import holdPinSwap from '../api/endpoints/pin-swaps/hold';
 import unHoldPinSwap from '../api/endpoints/pin-swaps/unhold';
 import { AuthContext } from '../context/AuthProvider';
+import { CrumbContext } from '../context/CrumbProvider';
 import { ItemType } from '../models/item-type';
 import { PinSwapType } from '../models/pin-swap-type';
 import Button from './Button';
@@ -41,6 +42,7 @@ export default function PinSwap({
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const [selectedPin, setSelectedPin] = useState<ItemType>();
   const { setInventory } = useContext(AuthContext);
+  const { crumbs } = useContext(CrumbContext);
 
   const requestItems = async (page: number) => {
     const response = await getPins(page);
@@ -65,7 +67,7 @@ export default function PinSwap({
 
       setModalVisible(true);
     } catch {
-      Alert.alert('', 'Sorry, this pin is unavailable right now.', [
+      Alert.alert('', crumbs.errors.pin_swap_unavailable, [
         {
           text: 'Ok',
           onPress: () => {
@@ -277,7 +279,7 @@ export default function PinSwap({
               <YellowButton
                 onPress={() => {
                   if (!selectedPin) {
-                    Alert.alert('You must select a pin to trade.', '', [
+                    Alert.alert(crumbs.errors.pin_required, '', [
                       {
                         text: 'Ok',
                       },
@@ -286,7 +288,7 @@ export default function PinSwap({
                     return;
                   }
 
-                  Alert.alert('Are you sure you want to trade pins?', '', [
+                  Alert.alert(crumbs.prompts.pin_swap, '', [
                     {
                       text: 'Cancel',
                       style: 'cancel',
@@ -300,7 +302,7 @@ export default function PinSwap({
 
                         await acceptPinSwap(pinSwap.id, selectedPin.id);
 
-                        Alert.alert('You have successfully traded pins.', '', [
+                        Alert.alert(crumbs.messages.pin_swap_created, '', [
                           {
                             text: 'Ok',
                           },

@@ -5,7 +5,6 @@ import { useAsyncEffect } from 'rooks';
 import client from '../api/client-cms';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
-import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
 import { EntryType } from '../models/entry-type';
 

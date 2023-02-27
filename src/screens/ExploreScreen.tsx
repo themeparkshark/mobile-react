@@ -3,18 +3,12 @@ import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArro
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import dayjs from 'dayjs';
 import { useContext, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  Image,
-  ImageBackground,
-  Pressable,
-  View,
-} from 'react-native';
+import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
+import Avatar from '../components/Avatar';
 import Button from '../components/Button';
-import Playercard from '../components/Playercard';
 import RedeemModal from '../components/RedeemModal';
 import TaskListModal from '../components/TaskListModal';
 import Topbar from '../components/Topbar';
@@ -31,7 +25,6 @@ import { RedeemablesType } from '../models/redeemables-type';
 import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import NotAtPark from './ExploreScreen/NotAtPark';
-import Avatar from '../components/Avatar';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 

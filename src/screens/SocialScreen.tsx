@@ -14,11 +14,10 @@ import twitter from '../api/endpoints/social-posts/twitter';
 import Button from '../components/Button';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
+import UserButtons from '../components/UserButtons';
 import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
 import { SocialPostType } from '../models/social-post-type';
-import UserButtons from '../components/UserButtons';
-import * as RootNavigation from '../RootNavigation';
 
 export default function SocialScreen({ navigation }) {
   const [twitterStatuses, setTwitterStatuses] = useState<SocialPostType[]>();
@@ -54,33 +53,25 @@ export default function SocialScreen({ navigation }) {
     },
     {
       image: require('../../assets/images/screens/explore/base.png'),
-      onPress: () => {
-
-      },
+      onPress: () => {},
       text: '?',
       show: true,
     },
     {
       image: require('../../assets/images/screens/explore/base.png'),
-      onPress: () => {
-
-      },
+      onPress: () => {},
       text: '?',
       show: true,
     },
     {
       image: require('../../assets/images/screens/explore/base.png'),
-      onPress: () => {
-
-      },
+      onPress: () => {},
       text: '?',
       show: true,
     },
     {
       image: require('../../assets/images/screens/explore/base.png'),
-      onPress: () => {
-
-      },
+      onPress: () => {},
       text: '?',
       show: true,
     },

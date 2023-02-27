@@ -101,7 +101,7 @@ export default function Item({
               />
             </ImageBackground>
           )}
-          {currentItemType.name !== 'Body item' &&
+          {currentItemType.name !== 'Body item' && (
             <Image
               source={item.icon_url}
               style={{
@@ -109,7 +109,7 @@ export default function Item({
               }}
               contentFit="contain"
             />
-          }
+          )}
         </View>
       </Pressable>
     </View>

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { ReactNode } from 'react';
-import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
+import { Dimensions, ImageBackground, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
 
@@ -63,7 +63,7 @@ export default function Wrapper({
           resizeMode="cover"
           style={{
             width: '100%',
-            aspectRatio: 5.3
+            aspectRatio: 5.3,
           }}
         >
           <View

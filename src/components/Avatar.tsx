@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { View } from 'react-native';
-import { UserType } from '../models/user-type';
 import config from '../config';
+import { UserType } from '../models/user-type';
 
 export default function Avatar({
   user,

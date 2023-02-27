@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import {Pressable, ScrollView, Text, View} from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { ButtonType } from '../models/button-type';
 import Button from './Button';
 
@@ -16,7 +16,7 @@ export default function UserButtons({
       }}
       contentContainerStyle={{
         flexGrow: 1,
-        justifyContent: 'center'
+        justifyContent: 'center',
       }}
     >
       {buttons

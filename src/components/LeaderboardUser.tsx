@@ -1,8 +1,8 @@
 import { Text, View } from 'react-native';
 import { UserType } from '../models/user-type';
+import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
 import Button from './Button';
-import * as RootNavigation from '../RootNavigation';
 
 export default function LeaderboardUser({
   user,
