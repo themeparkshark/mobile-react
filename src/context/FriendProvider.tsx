@@ -15,11 +15,7 @@ export const FriendProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [friends, setFriends] = useState<UserType[]>([]);
 
   const refreshFriends = async () => {
-    setFriends(
-      await getFriends({
-        limit: 3,
-      })
-    );
+    setFriends(await getFriends(1, 3));
   };
 
   return (

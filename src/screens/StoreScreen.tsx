@@ -103,7 +103,9 @@ export default function StoreScreen({ route }) {
               {!!monthlyItems && monthlyItems.length > 0 && (
                 <Section title="Monthly Items" items={monthlyItems} />
               )}
-              {!!items && items.length > 0 && <Section title="Items" items={items} />}
+              {!!items && items.length > 0 && (
+                <Section title="Items" items={items} />
+              )}
             </ScrollView>
           </ImageBackground>
         </View>

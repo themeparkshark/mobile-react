@@ -2,7 +2,7 @@ import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import dayjs from 'dayjs';
-import {useContext, useEffect, useState} from 'react';
+import { useContext, useEffect, useState } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import {
   Alert,
@@ -21,13 +21,13 @@ import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
 import holdPinSwap from '../api/endpoints/pin-swaps/hold';
 import unHoldPinSwap from '../api/endpoints/pin-swaps/unhold';
 import { AuthContext } from '../context/AuthProvider';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ItemType } from '../models/item-type';
 import { PinSwapType } from '../models/pin-swap-type';
 import Button from './Button';
 import Loading from './Loading';
 import YellowButton from './YellowButton';
-import {SoundEffectContext} from '../context/SoundEffectProvider';
 
 export default function PinSwap({
   pinSwap,
@@ -290,7 +290,9 @@ export default function PinSwap({
               <YellowButton
                 onPress={() => {
                   if (!selectedPin) {
-                    playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
+                    playSound(
+                      require('../../assets/sounds/purchase_item_cancel.mp3')
+                    );
 
                     Alert.alert(errors.pin_required, '', [
                       {
@@ -301,14 +303,18 @@ export default function PinSwap({
                     return;
                   }
 
-                  playSound(require('../../assets/sounds/pin_swap_confirm.mp3'));
+                  playSound(
+                    require('../../assets/sounds/pin_swap_confirm.mp3')
+                  );
 
                   Alert.alert(prompts.pin_swap, '', [
                     {
                       text: 'Cancel',
                       style: 'cancel',
                       onPress: () => {
-                        playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
+                        playSound(
+                          require('../../assets/sounds/purchase_item_cancel.mp3')
+                        );
                       },
                     },
                     {
@@ -320,7 +326,9 @@ export default function PinSwap({
 
                         await acceptPinSwap(pinSwap.id, selectedPin.id);
 
-                        playSound(require('../../assets/sounds/pin_swap_complete.mp3'));
+                        playSound(
+                          require('../../assets/sounds/pin_swap_complete.mp3')
+                        );
 
                         Alert.alert(messages.pin_swap_created, '', [
                           {

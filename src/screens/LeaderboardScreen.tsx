@@ -73,7 +73,7 @@ export default function LeaderboardScreen({ route }) {
 
   return (
     <Wrapper>
-      <Topbar text="Leaderboards" />
+      <Topbar text="Standings" />
       {loading && <Loading />}
       {!loading && (
         <View

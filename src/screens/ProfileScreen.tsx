@@ -1,4 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import {
@@ -15,7 +16,7 @@ import getStores from '../api/endpoints/stores/stores';
 import Activity from '../components/Activity';
 import Button from '../components/Button';
 import Experience from '../components/Experience';
-import FriendsList from '../components/FriendsList';
+import FriendUser from '../components/FriendUser';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
@@ -185,11 +186,21 @@ export default function ProfileScreen() {
                 <Heading text="Your Friends" />
                 {friends && friends.length > 0 && (
                   <>
-                    <FriendsList
-                      onSuccess={async () => {
-                        await refreshFriends();
+                    <FlashList
+                      contentContainerStyle={{ paddingBottom: 8 }}
+                      data={friends}
+                      keyExtractor={(user) => user.id.toString()}
+                      renderItem={({ item }) => {
+                        return (
+                          <FriendUser
+                            user={item}
+                            onRemove={async () => {
+                              await refreshFriends();
+                            }}
+                          />
+                        );
                       }}
-                      users={friends}
+                      estimatedItemSize={15}
                     />
                     <View style={{ alignItems: 'center', marginTop: 32 }}>
                       <YellowButton

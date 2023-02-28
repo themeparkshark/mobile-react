@@ -1,27 +1,29 @@
-import { useContext } from 'react';
+import { FlashList } from '@shopify/flash-list';
+import { useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { AuthContext } from '../context/AuthProvider';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
 
 export default function FriendsList({
   users,
-  onSuccess,
 }: {
   readonly users: UserType[];
   readonly onSuccess?: () => void;
 }) {
-  const { refreshUser } = useContext(AuthContext);
+  const [page, setPage] = useState<number>(1);
 
   return (
     <View>
       {users.length > 0 && (
         <View>
-          {users.map((user) => {
-            return (
+          <FlashList
+            contentContainerStyle={{ paddingBottom: 8 }}
+            data={users}
+            keyExtractor={(user) => user.id.toString()}
+            renderItem={({ item }) => (
               <TouchableOpacity
-                key={user.id}
+                key={item.id}
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -29,12 +31,12 @@ export default function FriendsList({
                 }}
                 onPress={() => {
                   RootNavigation.navigate('User', {
-                    user: user.id,
+                    user: item.id,
                   });
                 }}
               >
                 <View>
-                  <Avatar size={60} user={user} />
+                  <Avatar size={60} user={item} />
                 </View>
                 <View
                   style={{
@@ -48,12 +50,16 @@ export default function FriendsList({
                       fontSize: 18,
                     }}
                   >
-                    {user.screen_name}
+                    {item.screen_name}
                   </Text>
                 </View>
               </TouchableOpacity>
-            );
-          })}
+            )}
+            estimatedItemSize={15}
+            onEndReached={() => {
+              setPage((prevState) => prevState + 1);
+            }}
+          />
         </View>
       )}
     </View>

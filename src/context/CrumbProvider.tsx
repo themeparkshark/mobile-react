@@ -29,6 +29,7 @@ export interface CrumbContextType {
     };
     readonly warnings: {
       readonly no_friends: string;
+      readonly no_friend_suggestions: string;
       readonly no_notifications: string;
       readonly no_visited_parks: string;
     };

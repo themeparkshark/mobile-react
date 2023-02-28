@@ -264,7 +264,10 @@ export default function ParkScreen({ route }) {
                                 }}
                               >
                                 {hasCompletedSecretTask(secretTask.id) ? (
-                                  <TaskCoinModal task={secretTask} isSecretTask />
+                                  <TaskCoinModal
+                                    task={secretTask}
+                                    isSecretTask
+                                  />
                                 ) : (
                                   <View
                                     style={{
