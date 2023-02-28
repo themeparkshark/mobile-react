@@ -1,8 +1,9 @@
 import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useTimeoutWhen } from 'rooks';
@@ -15,6 +16,7 @@ import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
+import { MusicContext } from '../context/MusicProvider';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
@@ -38,6 +40,13 @@ export default function ExploreScreen() {
   const { inventory, refreshUser, user } = useContext(AuthContext);
   const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
   const [mapReady, setMapReady] = useState<boolean>(false);
+  const { playMusic } = useContext(MusicContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
+    }, [])
+  );
 
   useTimeoutWhen(
     () => {

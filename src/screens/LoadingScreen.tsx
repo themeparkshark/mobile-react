@@ -12,20 +12,17 @@ import getCrumbs from '../api/endpoints/crumbs/getCrumbs';
 import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
-import { MusicContext } from '../context/MusicProvider';
 import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
   const { inventory, setInventory, isReady, user, refreshUser } =
     useContext(AuthContext);
-  const { playMusic } = useContext(MusicContext);
   const { crumbs, setCrumbs } = useContext(CrumbContext);
   const [loadingText, setLoadingText] = useState<string>('Loading Interface');
 
   useEffect(() => {
     setLoadingText('Loading Music');
-    playMusic(require('../../assets/sounds/music/track5.mp3'));
   }, []);
 
   const [fontsLoaded] = useFonts({

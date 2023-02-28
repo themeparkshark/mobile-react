@@ -1,10 +1,12 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { Dimensions, ImageBackground, ScrollView, View } from 'react-native';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getStore from '../api/endpoints/stores/get';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
+import { MusicContext } from '../context/MusicProvider';
 import { CatalogType } from '../models/catalog-type';
 import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
@@ -18,6 +20,13 @@ export default function StoreScreen({ route }) {
   const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
   const [items, setItems] = useState<ItemType[]>();
   const [loading, setLoading] = useState<boolean>(true);
+  const { playMusic } = useContext(MusicContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track3.mp3'));
+    }, [])
+  );
 
   useEffect(() => {
     getStore(store).then((response) => setCurrentStore(response));

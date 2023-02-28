@@ -1,5 +1,6 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -27,6 +28,7 @@ import YellowButton from '../components/YellowButton';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { FriendContext } from '../context/FriendProvider';
+import { MusicContext } from '../context/MusicProvider';
 import { NotificationContext } from '../context/NotificationProvider';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
@@ -41,6 +43,13 @@ export default function NewsScreen({ navigation }) {
   const { user, inventory, setInventory } = useContext(AuthContext);
   const { friends, refreshFriends } = useContext(FriendContext);
   const { notificationCount } = useContext(NotificationContext);
+  const { playMusic } = useContext(MusicContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
+    }, [])
+  );
 
   useAsyncEffect(async () => {
     setParks(await getParks(user.id));
