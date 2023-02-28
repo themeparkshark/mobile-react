@@ -9,7 +9,9 @@ import { TaskType } from '../models/task-type';
 
 export default function TaskCoinModal({
   task,
+  isSecretTask = false,
 }: {
+  readonly isSecretTask?: boolean;
   readonly task: TaskType | SecretTaskType;
 }) {
   const [visible, setVisible] = useState<boolean>(false);
@@ -72,7 +74,7 @@ export default function TaskCoinModal({
                   textAlign: 'center',
                 }}
               >
-                {task.name}
+                {task.name} {isSecretTask ? 'secret coin' : ''}
               </Text>
             </View>
             <Image
