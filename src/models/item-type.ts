@@ -12,4 +12,5 @@ export interface ItemType {
   readonly longitude: number;
   readonly section: string;
   readonly is_hidden: boolean;
+  readonly is_clearance: boolean;
 }

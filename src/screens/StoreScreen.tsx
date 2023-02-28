@@ -97,13 +97,13 @@ export default function StoreScreen({ route }) {
                   contentFit="contain"
                 />
               </View>
-              {weeklyItems.length > 0 && (
+              {!!weeklyItems && weeklyItems.length > 0 && (
                 <Section title="Weekly Items" items={weeklyItems} />
               )}
-              {monthlyItems.length > 0 && (
+              {!!monthlyItems && monthlyItems.length > 0 && (
                 <Section title="Monthly Items" items={monthlyItems} />
               )}
-              {items.length > 0 && <Section title="Items" items={items} />}
+              {!!items && items.length > 0 && <Section title="Items" items={items} />}
             </ScrollView>
           </ImageBackground>
         </View>

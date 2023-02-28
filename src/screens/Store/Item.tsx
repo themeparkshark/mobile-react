@@ -16,9 +16,62 @@ export default function Item({ item }: { readonly item: ItemType }) {
           return;
         }
 
-        purchaseItem(item);
+        await purchaseItem(item);
+      }}
+      style={{
+        position: 'relative',
       }}
     >
+      {item.item_type.id === 8 && (
+        <Image
+          source={require('../../../assets/images/screens/store/pin_badge.png')}
+          style={{
+            width: 25,
+            height: 25,
+            zIndex: 10,
+            position: 'absolute',
+            top: -10,
+            right: -10,
+          }}
+          contentFit="contain"
+        />
+      )}
+      {item.is_clearance && (
+        <View
+          style={{
+            backgroundColor: 'red',
+            borderColor: 'white',
+            borderWidth: 3,
+            borderRadius: 12,
+            position: 'absolute',
+            padding: 4,
+            zIndex: 10,
+            left: '-5%',
+            top: -10,
+            transform: [
+              {
+                rotate: '-15deg',
+              },
+            ],
+            shadowOffset: {
+              width: 0,
+              height: 3,
+            },
+            shadowOpacity: 0.4,
+            shadowRadius: 0,
+          }}
+        >
+          <Text
+            style={{
+              color: 'white',
+              fontFamily: 'Shark',
+              textTransform: 'uppercase',
+            }}
+          >
+            Clearance
+          </Text>
+        </View>
+      )}
       <View
         style={{
           borderRadius: 6,
