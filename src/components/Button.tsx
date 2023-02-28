@@ -50,43 +50,46 @@ export default function Button({
       }}
       onPressIn={zoomOut}
       onPressOut={zoomIn}
-      style={{
-        position: 'relative',
-      }}
     >
-      {showRedCircle && (
-        <View
-          style={{
-            width: 12,
-            height: 12,
-            backgroundColor: 'red',
-            borderRadius: 8,
-            position: 'absolute',
-            borderColor: 'white',
-            borderWidth: 2,
-            right: 0,
-            zIndex: 10,
-            shadowColor: '#000',
-            shadowOffset: {
-              width: 1,
-              height: 1,
-            },
-            shadowRadius: 0,
-            shadowOpacity: 0.4,
-          }}
-        />
-      )}
-      <Animated.View
+      <View
         style={{
-          transform: [
-            {
-              scale: animated,
-            },
-          ],
+          position: 'relative',
         }}
       >
-        {children}
-      </Animated.View>
+        {showRedCircle && (
+          <View
+            style={{
+              width: 12,
+              height: 12,
+              backgroundColor: 'red',
+              borderRadius: 8,
+              position: 'absolute',
+              borderColor: 'white',
+              borderWidth: 2,
+              right: 0,
+              zIndex: 10,
+              shadowColor: '#000',
+              shadowOffset: {
+                width: 1,
+                height: 1,
+              },
+              shadowRadius: 0,
+              shadowOpacity: 0.4,
+            }}
+          />
+        )}
+        <Animated.View
+          style={{
+            transform: [
+              {
+                scale: animated,
+              },
+            ],
+          }}
+        >
+          {children}
+        </Animated.View>
+      </View>
     </Pressable>
   );
 }
