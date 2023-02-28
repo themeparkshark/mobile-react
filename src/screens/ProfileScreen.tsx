@@ -35,7 +35,7 @@ import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import * as RootNavigation from '../RootNavigation';
 
-export default function NewsScreen({ navigation }) {
+export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
   const [buttons, setButtons] = useState<ButtonType[]>([]);
@@ -151,7 +151,11 @@ export default function NewsScreen({ navigation }) {
                   position: 'relative',
                 }}
               >
-                <Button onPress={() => navigation.navigate('Inventory')}>
+                <Button
+                  onPress={() => {
+                    RootNavigation.navigate('Inventory');
+                  }}
+                >
                   <Playercard
                     showBackground={false}
                     inventory={user.inventory}

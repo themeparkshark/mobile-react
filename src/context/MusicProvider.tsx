@@ -28,6 +28,7 @@ export const MusicProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
     const { sound } = await Audio.Sound.createAsync(currentSound);
     await sound.playAsync();
+    await sound.setIsLoopingAsync(true);
     setPlayingSound(sound);
 
     return sound
