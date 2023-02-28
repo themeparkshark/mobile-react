@@ -21,7 +21,7 @@ import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
 import holdPinSwap from '../api/endpoints/pin-swaps/hold';
 import unHoldPinSwap from '../api/endpoints/pin-swaps/unhold';
 import { AuthContext } from '../context/AuthProvider';
-import { CrumbContext } from '../context/CrumbProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { ItemType } from '../models/item-type';
 import { PinSwapType } from '../models/pin-swap-type';
 import Button from './Button';
@@ -42,7 +42,7 @@ export default function PinSwap({
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const [selectedPin, setSelectedPin] = useState<ItemType>();
   const { setInventory } = useContext(AuthContext);
-  const { crumbs } = useContext(CrumbContext);
+  const { errors, messages, prompts } = useCrumbs();
 
   const requestItems = async (page: number) => {
     const response = await getPins(page);
@@ -67,7 +67,7 @@ export default function PinSwap({
 
       setModalVisible(true);
     } catch {
-      Alert.alert('', crumbs.errors.pin_swap_unavailable, [
+      Alert.alert('', errors.pin_swap_unavailable, [
         {
           text: 'Ok',
           onPress: () => {
@@ -279,7 +279,7 @@ export default function PinSwap({
               <YellowButton
                 onPress={() => {
                   if (!selectedPin) {
-                    Alert.alert(crumbs.errors.pin_required, '', [
+                    Alert.alert(errors.pin_required, '', [
                       {
                         text: 'Ok',
                       },
@@ -288,7 +288,7 @@ export default function PinSwap({
                     return;
                   }
 
-                  Alert.alert(crumbs.prompts.pin_swap, '', [
+                  Alert.alert(prompts.pin_swap, '', [
                     {
                       text: 'Cancel',
                       style: 'cancel',
@@ -302,7 +302,7 @@ export default function PinSwap({
 
                         await acceptPinSwap(pinSwap.id, selectedPin.id);
 
-                        Alert.alert(crumbs.messages.pin_swap_created, '', [
+                        Alert.alert(messages.pin_swap_created, '', [
                           {
                             text: 'Ok',
                           },

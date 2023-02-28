@@ -10,7 +10,6 @@ import getPinSwaps from '../api/endpoints/pin-swaps/all';
 import Loading from '../components/Loading';
 import PinSwap from '../components/PinSwap';
 import Topbar from '../components/Topbar';
-import Wrapper from '../components/Wrapper';
 import { PinSwapType } from '../models/pin-swap-type';
 
 export default function PinSwapsScreen() {

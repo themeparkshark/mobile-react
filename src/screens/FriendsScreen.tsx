@@ -15,8 +15,8 @@ import FriendsList from '../components/FriendsList';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
-import { CrumbContext } from '../context/CrumbProvider';
 import { FriendContext } from '../context/FriendProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
 
@@ -27,7 +27,7 @@ export default function FriendsScreen() {
   const [search, setSearch] = useState<string>('');
   const { user } = useContext(AuthContext);
   const { refreshFriends } = useContext(FriendContext);
-  const { crumbs } = useContext(CrumbContext);
+  const { warnings } = useCrumbs();
 
   const requestFriends = async () => {
     setFriends(await getFriends());
@@ -167,7 +167,7 @@ export default function FriendsScreen() {
                           paddingTop: 32,
                         }}
                       >
-                        {crumbs.warnings.no_friends}
+                        {warnings.no_friends}
                       </Text>
                     )}
                   </View>

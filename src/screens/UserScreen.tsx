@@ -16,7 +16,7 @@ import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
 import { AuthContext, AuthContextType } from '../context/AuthProvider';
-import { CrumbContext } from '../context/CrumbProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
@@ -31,7 +31,7 @@ export default function UserScreen({ route, navigation }) {
   const { purchaseItem } = usePurchaseItem();
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
-  const { crumbs } = useContext(CrumbContext);
+  const { errors, messages, prompts } = useCrumbs();
 
   useAsyncEffect(async () => {
     if (authContext.isReady && authContext.user.id === user) {
@@ -87,7 +87,7 @@ export default function UserScreen({ route, navigation }) {
           onPress: async () => {
             Alert.alert(
               '',
-              vsprintf(crumbs.prompts.compliment, [currentUser?.screen_name]),
+              vsprintf(prompts.compliment, [currentUser?.screen_name]),
               [
                 {
                   text: 'Cancel',
@@ -99,14 +99,16 @@ export default function UserScreen({ route, navigation }) {
                     try {
                       await createCompliment(currentUser.id);
                     } catch {
-                      Alert.alert('', crumbs.errors.max_compliments_created, [
+                      Alert.alert('', errors.max_compliments_created, [
                         {
                           text: 'Ok',
                         },
                       ]);
+
+                      return;
                     }
 
-                    Alert.alert('', crumbs.messages.compliment_created, [
+                    Alert.alert('', messages.compliment_created, [
                       {
                         text: 'Ok',
                         style: 'cancel',

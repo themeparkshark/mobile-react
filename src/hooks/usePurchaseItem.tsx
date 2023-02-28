@@ -4,13 +4,13 @@ import { vsprintf } from 'sprintf-js';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
 import search from '../api/endpoints/me/inventory/search';
 import { AuthContext } from '../context/AuthProvider';
-import { CrumbContext } from '../context/CrumbProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
+import useCrumbs from './useCrumbs';
 
 export default function usePurchaseItem() {
   const { playSound } = useContext(SoundEffectContext);
-  const { crumbs } = useContext(CrumbContext);
+  const { errors, messages, prompts } = useCrumbs();
   const { user, isReady, refreshUser } = useContext(AuthContext);
 
   const purchaseItem = async (item: ItemType) => {
@@ -26,8 +26,8 @@ export default function usePurchaseItem() {
       return Alert.alert(
         '',
         response.cost
-          ? vsprintf(crumbs.errors.item_purchased, [response.name])
-          : vsprintf(crumbs.errors.item_redeemed, [response.name]),
+          ? vsprintf(errors.item_purchased, [response.name])
+          : vsprintf(errors.item_redeemed, [response.name]),
         [
           {
             text: 'Ok',
@@ -40,7 +40,7 @@ export default function usePurchaseItem() {
     if (user.coins < item.cost) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
-      return Alert.alert('', crumbs.errors.not_enough_coins, [
+      return Alert.alert('', errors.not_enough_coins, [
         {
           text: 'Ok',
           style: 'cancel',
@@ -50,12 +50,8 @@ export default function usePurchaseItem() {
 
     const text =
       item.cost === 0
-        ? vsprintf(crumbs.prompts.redeem_item, [item.name])
-        : vsprintf(crumbs.prompts.purchase_item, [
-            item.name,
-            item.cost,
-            user.coins,
-          ]);
+        ? vsprintf(prompts.redeem_item, [item.name])
+        : vsprintf(prompts.purchase_item, [item.name, item.cost, user.coins]);
 
     playSound(require('../../assets/sounds/purchase_item_prompt.mp3'));
 
@@ -70,21 +66,17 @@ export default function usePurchaseItem() {
       {
         text: 'Ok',
         onPress: async () => {
-          const response = await purchase(item);
+          await purchase(item);
           await refreshUser();
 
           playSound(require('../../assets/sounds/purchase_item_success.mp3'));
 
-          Alert.alert(
-            '',
-            vsprintf(crumbs.messages.item_purchased, [item.name]),
-            [
-              {
-                text: 'Ok',
-                style: 'cancel',
-              },
-            ]
-          );
+          Alert.alert('', vsprintf(messages.item_purchased, [item.name]), [
+            {
+              text: 'Ok',
+              style: 'cancel',
+            },
+          ]);
         },
       },
     ]);

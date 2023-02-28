@@ -1,7 +1,6 @@
 import { Image } from 'expo-image';
-import { useContext } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import { CrumbContext } from '../context/CrumbProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
@@ -14,7 +13,7 @@ export default function VisitedParks({
   readonly parks: ParkType[];
   readonly user: UserType;
 }) {
-  const { crumbs } = useContext(CrumbContext);
+  const { warnings } = useCrumbs();
 
   return (
     <View>
@@ -26,7 +25,7 @@ export default function VisitedParks({
             textAlign: 'center',
           }}
         >
-          {crumbs.warnings.no_visited_parks}
+          {warnings.no_visited_parks}
         </Text>
       )}
       {parks.length > 0 && (

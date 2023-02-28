@@ -1,5 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getNotifications from '../api/endpoints/me/notifications';
@@ -7,7 +7,7 @@ import Loading from '../components/Loading';
 import Notification from '../components/Notification';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
-import { CrumbContext } from '../context/CrumbProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { NotificationType } from '../models/notification-type';
 
 export default function NewsScreen() {
@@ -15,7 +15,7 @@ export default function NewsScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
-  const { crumbs } = useContext(CrumbContext);
+  const { warnings } = useCrumbs();
 
   const fetchNotifications = async (page: number) => {
     const response = await getNotifications(page);
@@ -80,7 +80,7 @@ export default function NewsScreen() {
                   textAlign: 'center',
                 }}
               >
-                {crumbs.warnings.no_notifications}
+                {warnings.no_notifications}
               </Text>
             </View>
           )}

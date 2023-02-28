@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { ReactNode } from 'react';
-import { Dimensions, ImageBackground, View, Text } from 'react-native';
+import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
 
