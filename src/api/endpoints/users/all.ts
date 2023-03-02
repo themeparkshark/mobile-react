@@ -1,24 +1,13 @@
-import { Alert } from 'react-native';
 import { ApiResponseType } from '../../../models/api-response-type';
 import { UserType } from '../../../models/user-type';
 import client from '../../client';
 
-export default async function searchUsers(query: string): Promise<UserType[]> {
-  try {
-    const { data } = await client.get<ApiResponseType<UserType[]>>('/users', {
-      params: {
-        query,
-      },
-    });
+export default async function all(page: number): Promise<UserType[]> {
+  const { data } = await client.get<ApiResponseType<UserType[]>>('/users', {
+    params: {
+      page: page,
+    }
+  });
 
-    return data.data;
-  } catch (error) {
-    Alert.alert('', error.response.data.errors.query[0], [
-      {
-        text: 'Ok',
-      },
-    ]);
-
-    throw error;
-  }
+  return data.data;
 }

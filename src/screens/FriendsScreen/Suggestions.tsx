@@ -1,13 +1,13 @@
 import { FlashList } from '@shopify/flash-list';
 import { useEffect, useState } from 'react';
-import {Text, TextInput, View} from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getFriendSuggestions from '../../api/endpoints/me/getFriendSuggestions';
+import searchUsers from '../../api/endpoints/users/all';
 import FriendUser from '../../components/FriendUser';
 import Loading from '../../components/Loading';
 import useCrumbs from '../../hooks/useCrumbs';
 import { UserType } from '../../models/user-type';
-import searchUsers from '../../api/endpoints/users/all';
 
 export default function Suggestions() {
   const [users, setUsers] = useState<UserType[]>([]);
@@ -41,7 +41,7 @@ export default function Suggestions() {
   }, [page]);
 
   return (
-    <View>
+    <View style={{ padding: 16 }}>
       {loading && <Loading />}
       {!loading && (
         <>

@@ -35,7 +35,7 @@ export default function YourList() {
   }, [page]);
 
   return (
-    <View>
+    <View style={{ padding: 16 }}>
       {loading && <Loading />}
       {!loading && (
         <>

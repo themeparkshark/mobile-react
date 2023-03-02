@@ -61,7 +61,7 @@ export default function Tabs({
                     flexGrow: 1,
                   }}
                 >
-                  <View style={{ padding: 16 }}>{view}</View>
+                  <View>{view}</View>
                 </ScrollView>
               </TabView.Item>
             );
