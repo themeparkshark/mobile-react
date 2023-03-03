@@ -1,13 +1,21 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, ImageBackground, ScrollView, View } from 'react-native';
+import {
+  Dimensions,
+  ImageBackground,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getStore from '../api/endpoints/stores/get';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
+import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import { CatalogType } from '../models/catalog-type';
+import { InformationModalEnums } from '../models/information-modal-enums';
 import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
 import Section from './Store/Section';
@@ -21,6 +29,7 @@ export default function StoreScreen({ route }) {
   const [items, setItems] = useState<ItemType[]>();
   const [loading, setLoading] = useState<boolean>(true);
   const { playMusic } = useContext(MusicContext);
+  const { user } = useContext(AuthContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -57,8 +66,8 @@ export default function StoreScreen({ route }) {
       <Topbar
         purple={currentStore?.is_secret_store ?? false}
         showBackButton={true}
-        showCoins={true}
         text={currentStore?.name}
+        informationModalId={InformationModalEnums.StoreScreen}
       />
       {loading && <Loading />}
       {!loading && (
@@ -83,7 +92,54 @@ export default function StoreScreen({ route }) {
             >
               <View
                 style={{
-                  height: 300,
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
+                }}
+              >
+                <View
+                  style={{
+                    backgroundColor: 'rgba(0, 0, 0, .5)',
+                    paddingLeft: 12,
+                    paddingRight: 12,
+                    paddingTop: 6,
+                    paddingBottom: 6,
+                    borderRadius: 6,
+                    borderColor: 'rgba(255, 255, 255, .4)',
+                    borderWidth: 2,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    margin: 12,
+                  }}
+                >
+                  <Image
+                    source={require('../../assets/images/coins.png')}
+                    style={{
+                      width: 35,
+                      height: 35,
+                    }}
+                    contentFit="contain"
+                  />
+                  <Text
+                    style={{
+                      color: '#fff',
+                      textShadowColor: 'rgba(0, 0, 0, .5)',
+                      textShadowOffset: {
+                        width: 2,
+                        height: 2,
+                      },
+                      textShadowRadius: 0,
+                      fontFamily: 'Knockout',
+                      fontSize: 18,
+                      marginLeft: 8,
+                    }}
+                  >
+                    You currently have {user.coins} coins
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={{
+                  height: 250,
                 }}
               >
                 <Image

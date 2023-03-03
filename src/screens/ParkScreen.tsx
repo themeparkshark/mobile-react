@@ -9,17 +9,16 @@ import getTasks from '../api/endpoints/parks/getTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
 import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
 import getVisitedPark from '../api/endpoints/users/visited-parks/getPark';
-import Button from '../components/Button';
 import Loading from '../components/Loading';
 import Progress from '../components/Progress';
 import TaskCoinModal from '../components/TaskCoinModal';
 import Topbar from '../components/Topbar';
 import config from '../config';
 import { MusicContext } from '../context/MusicProvider';
+import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
-import * as RootNavigation from '../RootNavigation';
 
 export default function ParkScreen({ route }) {
   const { park, user } = route.params;
@@ -78,25 +77,7 @@ export default function ParkScreen({ route }) {
       <Topbar
         showBackButton={true}
         text={currentPark?.name}
-        rightButton={
-          <Button
-            onPress={() => {
-              RootNavigation.navigate('Leaderboard', {
-                park: currentPark?.id,
-              });
-            }}
-          >
-            <Image
-              style={{
-                width: 35,
-                height: 35,
-                alignSelf: 'center',
-              }}
-              contentFit="contain"
-              source={require('../../assets/images/toolbar/leaderboard.png')}
-            />
-          </Button>
-        }
+        informationModalId={InformationModalEnums.ParkScreen}
       />
       {loading && <Loading />}
       {!loading && (

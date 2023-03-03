@@ -1,16 +1,13 @@
-import {Text, TouchableOpacity, View} from 'react-native';
-import {useEffect, useState} from 'react';
-import Loading from '../../components/Loading';
-import {UserType} from '../../models/user-type';
-import getFriendSuggestions from '../../api/endpoints/me/getFriendSuggestions';
-import {useAsyncEffect} from 'rooks';
-import FriendUser from '../../components/FriendUser';
-import {FlashList} from '@shopify/flash-list';
-import * as RootNavigation from '../../RootNavigation';
+import { FlashList } from '@shopify/flash-list';
+import { useEffect, useState } from 'react';
+import { Text, View } from 'react-native';
+import { useAsyncEffect } from 'rooks';
+import all from '../../api/endpoints/users/all';
 import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
-import {Image} from 'expo-image';
-import all from '../../api/endpoints/users/all';
+import Loading from '../../components/Loading';
+import { UserType } from '../../models/user-type';
+import * as RootNavigation from '../../RootNavigation';
 
 export default function Experience() {
   const [loading, setLoading] = useState<boolean>(true);

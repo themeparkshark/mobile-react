@@ -6,7 +6,7 @@ export default async function all(page: number): Promise<UserType[]> {
   const { data } = await client.get<ApiResponseType<UserType[]>>('/users', {
     params: {
       page: page,
-    }
+    },
   });
 
   return data.data;

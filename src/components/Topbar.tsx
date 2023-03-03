@@ -12,8 +12,10 @@ import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
 import Broadcasts from './Broadcasts';
+import InformationModal from './InformationModal';
 
 export default function Topbar({
+  informationModalId = null,
   leftButton = null,
   rightButton = null,
   text = null,
@@ -24,6 +26,7 @@ export default function Topbar({
   purple = false,
   onBackButtonPress,
 }: {
+  readonly informationModalId?: number | null;
   readonly rightButton?: ReactNode | null;
   readonly leftButton?: ReactNode | null;
   readonly text?: string | null;
@@ -81,7 +84,8 @@ export default function Topbar({
               showBackButton ||
               showCoins ||
               leftButton ||
-              rightButton) && (
+              rightButton ||
+              informationModalId) && (
               <View
                 style={{
                   width,
@@ -177,7 +181,8 @@ export default function Topbar({
               showBackButton ||
               showCoins ||
               leftButton ||
-              rightButton) && (
+              rightButton ||
+              informationModalId) && (
               <View
                 style={{
                   width,
@@ -185,6 +190,9 @@ export default function Topbar({
                 }}
               >
                 {rightButton}
+                {informationModalId && (
+                  <InformationModal id={informationModalId} />
+                )}
                 {showCoins && (
                   <View
                     style={{
