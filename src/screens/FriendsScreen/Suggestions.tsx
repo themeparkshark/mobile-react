@@ -8,21 +8,24 @@ import FriendUser from '../../components/FriendUser';
 import Loading from '../../components/Loading';
 import useCrumbs from '../../hooks/useCrumbs';
 import { UserType } from '../../models/user-type';
+import { useDebounce } from 'rooks';
 
 export default function Suggestions() {
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const { warnings } = useCrumbs();
-  const [search, setSearch] = useState<string>();
+  const [search, setSearch] = useState<string>('');
+  const setSearchDebounced = useDebounce(setSearch, 500);
   const [searchResults, setSearchResults] = useState<UserType[]>([]);
 
   useAsyncEffect(async () => {
-    setSearchResults(search ? await searchUsers(search) : []);
-
-    if (!search) {
+    if (search.length < 3) {
       setPage(1);
+      return;
     }
+
+    setSearchResults(search ? await searchUsers(search) : []);
   }, [search]);
 
   const fetchUsers = async (page: number) => {
@@ -68,26 +71,25 @@ export default function Suggestions() {
                 textAlign: 'center',
               }}
               autoCapitalize="none"
-              onChangeText={setSearch}
-              value={search}
+              onChangeText={(text) => {
+                setLoading(true);
+                setSearchDebounced(text);
+                setLoading(false);
+              }}
               maxLength={14}
               placeholder="Search for a user"
               returnKeyType="search"
               enablesReturnKeyAutomatically
-              onSubmitEditing={async ({ nativeEvent }) => {
-                setLoading(true);
-                setSearch(nativeEvent.text);
-                setLoading(false);
-              }}
+              autoCorrect={false}
             />
           </View>
-          {!searchResults.length && users.length && (
+          {!search.length && (
             <FlashList
               contentContainerStyle={{ paddingBottom: 8 }}
               data={users}
               keyExtractor={(user) => user.id.toString()}
               renderItem={({ item }) => {
-                return <FriendUser user={item} isSuggestion />;
+                return <FriendUser user={item} />;
               }}
               estimatedItemSize={15}
               onEndReached={() => {
@@ -95,7 +97,7 @@ export default function Suggestions() {
               }}
             />
           )}
-          {users.length && !searchResults.length && (
+          {!!searchResults.length && (
             <FlashList
               contentContainerStyle={{ paddingBottom: 8 }}
               data={searchResults}
@@ -104,17 +106,15 @@ export default function Suggestions() {
                 return <FriendUser user={item} isSuggestion />;
               }}
               estimatedItemSize={15}
-              onEndReached={() => {
-                setPage((prevState) => prevState + 1);
-              }}
             />
           )}
-          {!users.length && !searchResults.length && (
+          {!searchResults.length && !!search.length && (
             <Text
               style={{
                 textAlign: 'center',
                 fontSize: 24,
                 fontFamily: 'Knockout',
+                paddingTop: 16,
               }}
             >
               {warnings.no_friend_suggestions}
