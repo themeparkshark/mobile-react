@@ -186,22 +186,28 @@ export default function ProfileScreen() {
                 <Heading text="Your Friends" />
                 {friends && friends.length > 0 && (
                   <>
-                    <FlashList
-                      contentContainerStyle={{ paddingBottom: 8 }}
-                      data={friends}
-                      keyExtractor={(user) => user.id.toString()}
-                      renderItem={({ item }) => {
-                        return (
-                          <FriendUser
-                            user={item}
-                            onRemove={async () => {
-                              await refreshFriends();
-                            }}
-                          />
-                        );
+                    <View
+                      style={{
+                        minHeight: 200,
                       }}
-                      estimatedItemSize={15}
-                    />
+                    >
+                      <FlashList
+                        contentContainerStyle={{ paddingBottom: 8 }}
+                        data={friends}
+                        keyExtractor={(user) => user.id.toString()}
+                        renderItem={({ item }) => {
+                          return (
+                            <FriendUser
+                              user={item}
+                              onRemove={async () => {
+                                await refreshFriends();
+                              }}
+                            />
+                          );
+                        }}
+                        estimatedItemSize={80}
+                      />
+                    </View>
                     <View style={{ alignItems: 'center', marginTop: 32 }}>
                       <YellowButton
                         onPress={() => {

@@ -32,10 +32,14 @@ export default function Experience() {
   }, [page]);
 
   return (
-    <View>
+    <View style={{ flex: 1, }}>
       {loading && <Loading />}
       {!loading && (
-        <View>
+        <View
+          style={{
+            flex: 1,
+          }}
+        >
           <FlashList
             contentContainerStyle={{ paddingBottom: 8 }}
             data={users}
@@ -124,7 +128,7 @@ export default function Experience() {
                 </View>
               );
             }}
-            estimatedItemSize={15}
+            estimatedItemSize={100}
             onEndReached={() => {
               setPage((prevState) => prevState + 1);
             }}

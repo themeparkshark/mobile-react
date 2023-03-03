@@ -1,14 +1,13 @@
 import { FlashList } from '@shopify/flash-list';
 import { useEffect, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
-import { useAsyncEffect } from 'rooks';
+import { useAsyncEffect, useDebounce } from 'rooks';
 import getFriendSuggestions from '../../api/endpoints/me/getFriendSuggestions';
 import searchUsers from '../../api/endpoints/users/search';
 import FriendUser from '../../components/FriendUser';
 import Loading from '../../components/Loading';
 import useCrumbs from '../../hooks/useCrumbs';
 import { UserType } from '../../models/user-type';
-import { useDebounce } from 'rooks';
 
 export default function Suggestions() {
   const [users, setUsers] = useState<UserType[]>([]);
@@ -46,10 +45,14 @@ export default function Suggestions() {
   }, [page]);
 
   return (
-    <View style={{ padding: 16 }}>
+    <View style={{ padding: 16, flex: 1 }}>
       {loading && <Loading />}
       {!loading && (
-        <>
+        <View
+          style={{
+            flex: 1,
+          }}
+        >
           <View
             style={{
               width: '100%',
@@ -91,7 +94,7 @@ export default function Suggestions() {
               renderItem={({ item }) => {
                 return <FriendUser user={item} />;
               }}
-              estimatedItemSize={15}
+              estimatedItemSize={80}
               onEndReached={() => {
                 setPage((prevState) => prevState + 1);
               }}
@@ -120,7 +123,7 @@ export default function Suggestions() {
               {warnings.no_friend_suggestions}
             </Text>
           )}
-        </>
+        </View>
       )}
     </View>
   );

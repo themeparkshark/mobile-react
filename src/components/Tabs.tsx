@@ -61,7 +61,7 @@ export default function Tabs({
                     flexGrow: 1,
                   }}
                 >
-                  <View>{view}</View>
+                  {view}
                 </ScrollView>
               </TabView.Item>
             );

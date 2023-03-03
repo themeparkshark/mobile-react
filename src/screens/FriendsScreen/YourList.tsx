@@ -35,10 +35,14 @@ export default function YourList() {
   }, [page]);
 
   return (
-    <View style={{ padding: 16 }}>
+    <View style={{ padding: 16, flex: 1 }}>
       {loading && <Loading />}
       {!loading && (
-        <>
+        <View
+          style={{
+            flex: 1,
+          }}
+        >
           <FlashList
             contentContainerStyle={{ paddingBottom: 8 }}
             data={friends}
@@ -62,7 +66,7 @@ export default function YourList() {
                 />
               );
             }}
-            estimatedItemSize={15}
+            estimatedItemSize={80}
             onEndReached={() => {
               setPage((prevState) => prevState + 1);
             }}
@@ -78,7 +82,7 @@ export default function YourList() {
               {warnings.no_friends}
             </Text>
           )}
-        </>
+        </View>
       )}
     </View>
   );
