@@ -32,7 +32,7 @@ export default function Experience() {
   }, [page]);
 
   return (
-    <View style={{ flex: 1, }}>
+    <View style={{ flex: 1 }}>
       {loading && <Loading />}
       {!loading && (
         <View
