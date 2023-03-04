@@ -6,7 +6,6 @@ import getNotifications from '../api/endpoints/me/notifications';
 import Loading from '../components/Loading';
 import Notification from '../components/Notification';
 import Topbar from '../components/Topbar';
-import Wrapper from '../components/Wrapper';
 import useCrumbs from '../hooks/useCrumbs';
 import { NotificationType } from '../models/notification-type';
 
@@ -35,7 +34,7 @@ export default function NewsScreen() {
   }, [page]);
 
   return (
-    <Wrapper>
+    <>
       <Topbar text="Notifications" showBackButton />
       {loading && <Loading />}
       {!loading && (
@@ -86,6 +85,6 @@ export default function NewsScreen() {
           )}
         </View>
       )}
-    </Wrapper>
+    </>
   );
 }
