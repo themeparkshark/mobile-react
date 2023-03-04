@@ -21,8 +21,6 @@ import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
-import Activity from '../components/Activity';
-import getActivities from '../api/endpoints/activities/get';
 
 export default function UserScreen({ route, navigation }) {
   const { user } = route.params;
@@ -34,7 +32,6 @@ export default function UserScreen({ route, navigation }) {
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
   const { errors, messages, prompts } = useCrumbs();
-  const [activities, setActivities] = useState<ActivityType[]>([]);
 
   useAsyncEffect(async () => {
     if (authContext.isReady && authContext.user.id === user) {
@@ -44,7 +41,6 @@ export default function UserScreen({ route, navigation }) {
     setLoading(true);
     setCurrentUser(await getUser(user));
     setParks(await getVisitedParks(user));
-    setActivities(await getActivities(user));
     setLoading(false);
   }, []);
 
@@ -115,7 +111,6 @@ export default function UserScreen({ route, navigation }) {
                     Alert.alert('', messages.compliment_created, [
                       {
                         text: 'Ok',
-                        style: 'cancel',
                       },
                     ]);
                   },
@@ -176,8 +171,6 @@ export default function UserScreen({ route, navigation }) {
               {currentUser.verified_at && <Verified />}
               <Heading text="Statistics" />
               <Stats user={currentUser} />
-              <Heading text="Recent Activity" />
-              <Activity activities={activities} />
               {parks.length > 0 && (
                 <>
                   <Heading text="Visited Parks" />

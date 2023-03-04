@@ -30,7 +30,6 @@ export default function useFriends() {
               Alert.alert('', messages.friend_request_sent, [
                 {
                   text: 'Ok',
-                  style: 'cancel',
                 },
               ]);
             },
@@ -55,7 +54,6 @@ export default function useFriends() {
               Alert.alert('', messages.friend_request_accepted, [
                 {
                   text: 'Ok',
-                  style: 'cancel',
                 },
               ]);
             },
@@ -82,7 +80,6 @@ export default function useFriends() {
               [
                 {
                   text: 'Ok',
-                  style: 'cancel',
                 },
               ]
             );
