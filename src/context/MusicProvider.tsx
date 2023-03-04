@@ -1,5 +1,5 @@
 import { Audio } from 'expo-av';
-import {createContext, FC, ReactNode, useContext, useEffect, useState} from 'react';
+import { createContext, FC, ReactNode, useContext, useState } from 'react';
 import { useAsyncEffect } from 'rooks';
 import { AuthContext } from './AuthProvider';
 
@@ -50,7 +50,7 @@ export const MusicProvider: FC<{ children: ReactNode }> = ({ children }) => {
     <MusicContext.Provider
       value={{
         currentSound,
-        playMusic: async (pendingMusic: any, name: string) => {
+        playMusic: async (pendingMusic: any) => {
           if (isReady && !user?.enabled_music) {
             return;
           }
