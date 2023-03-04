@@ -5,7 +5,7 @@ import { vsprintf } from 'sprintf-js';
 import createCompliment from '../api/endpoints/compliments/create';
 import getUser from '../api/endpoints/users/get';
 import getVisitedParks from '../api/endpoints/users/visited-parks';
-import Activity from '../components/Activity';
+import Stats from '../components/Stats';
 import Experience from '../components/Experience';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
@@ -21,6 +21,8 @@ import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
+import Activity from '../components/Activity';
+import getActivities from '../api/endpoints/activities/get';
 
 export default function UserScreen({ route, navigation }) {
   const { user } = route.params;
@@ -32,6 +34,7 @@ export default function UserScreen({ route, navigation }) {
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
   const { errors, messages, prompts } = useCrumbs();
+  const [activities, setActivities] = useState<ActivityType[]>([]);
 
   useAsyncEffect(async () => {
     if (authContext.isReady && authContext.user.id === user) {
@@ -41,6 +44,7 @@ export default function UserScreen({ route, navigation }) {
     setLoading(true);
     setCurrentUser(await getUser(user));
     setParks(await getVisitedParks(user));
+    setActivities(await getActivities(user));
     setLoading(false);
   }, []);
 
@@ -170,8 +174,10 @@ export default function UserScreen({ route, navigation }) {
               <Experience user={currentUser} />
               <UserButtons buttons={buttons} />
               {currentUser.verified_at && <Verified />}
-              <Heading text="Total Activity" />
-              <Activity user={currentUser} />
+              <Heading text="Statistics" />
+              <Stats user={currentUser} />
+              <Heading text="Recent Activity" />
+              <Activity activities={activities} />
               {parks.length > 0 && (
                 <>
                   <Heading text="Visited Parks" />
