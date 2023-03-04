@@ -10,6 +10,10 @@ export interface CrumbContextType {
       readonly pin_swap_unavailable: string;
       readonly pin_required: string;
     };
+    readonly labels: {
+      readonly checking_again: string;
+      readonly verified_user: string;
+    };
     readonly messages: {
       readonly compliment_created: string;
       readonly friend_removed: string;
@@ -32,6 +36,7 @@ export interface CrumbContextType {
       readonly no_friend_suggestions: string;
       readonly no_notifications: string;
       readonly no_visited_parks: string;
+      readonly not_at_a_park: string;
     };
   };
   readonly setCrumbs: Dispatch<any>;

@@ -1,7 +1,10 @@
 import { Image } from 'expo-image';
 import { Text, View } from 'react-native';
+import useCrumbs from '../hooks/useCrumbs';
 
 export default function Verified() {
+  const { labels } = useCrumbs();
+
   return (
     <View
       style={{
@@ -31,7 +34,7 @@ export default function Verified() {
             fontSize: 16,
           }}
         >
-          This is a notable and verified user.
+          {labels.verified_user}
         </Text>
       </View>
     </View>

@@ -2,9 +2,12 @@ import { BlurView } from 'expo-blur';
 import { useState } from 'react';
 import { Dimensions, Text } from 'react-native';
 import { useIntervalWhen } from 'rooks';
+import { vsprintf } from 'sprintf-js';
+import useCrumbs from '../../hooks/useCrumbs';
 
 export default function NotAtPark() {
   const [seconds, setSeconds] = useState<number>(5);
+  const { labels, warnings } = useCrumbs();
 
   useIntervalWhen(
     () => {
@@ -49,7 +52,7 @@ export default function NotAtPark() {
           textAlign: 'center',
         }}
       >
-        You are not at a park right now.
+        {warnings.not_at_a_park}
       </Text>
       <Text
         style={{
@@ -65,7 +68,10 @@ export default function NotAtPark() {
           textShadowRadius: 0,
         }}
       >
-        Checking again in {seconds} second{seconds === 1 ? '' : 's'}...
+        {vsprintf(labels.checking_again, [
+          seconds,
+          `second${seconds === 1 ? '' : 's'}`,
+        ])}
       </Text>
     </BlurView>
   );
