@@ -2,6 +2,7 @@ import ErrorBoundary from 'react-native-error-boundary';
 import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { ForumProvider } from './src/context/ForumProvider';
+import { CrumbProvider } from './src/context/CrumbProvider';
 import { FriendProvider } from './src/context/FriendProvider';
 import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
@@ -18,7 +19,9 @@ export default function App() {
               <FriendProvider>
                 <NotificationProvider>
                   <ForumProvider>
-                    <Root />
+                    <CrumbProvider>
+                      <Root />
+                    </CrumbProvider>
                   </ForumProvider>
                 </NotificationProvider>
               </FriendProvider>

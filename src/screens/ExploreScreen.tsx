@@ -1,26 +1,22 @@
 import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { useContext, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  Image,
-  ImageBackground,
-  Pressable,
-  View,
-} from 'react-native';
+import { useCallback, useContext, useEffect, useState } from 'react';
+import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
+import Avatar from '../components/Avatar';
 import Button from '../components/Button';
-import Playercard from '../components/Playercard';
 import RedeemModal from '../components/RedeemModal';
 import TaskListModal from '../components/TaskListModal';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
+import { MusicContext } from '../context/MusicProvider';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import getCurrentLocation from '../helpers/get-current-location';
@@ -44,6 +40,13 @@ export default function ExploreScreen() {
   const { inventory, refreshUser, user } = useContext(AuthContext);
   const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
   const [mapReady, setMapReady] = useState<boolean>(false);
+  const { playMusic } = useContext(MusicContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
+    }, [])
+  );
 
   useTimeoutWhen(
     () => {
@@ -195,28 +198,7 @@ export default function ExploreScreen() {
                     RootNavigation.navigate('Inventory');
                   }}
                 >
-                  <ImageBackground
-                    resizeMode="contain"
-                    style={{
-                      width: 70,
-                      height: 84,
-                      position: 'relative',
-                    }}
-                    source={require('../../assets/images/screens/explore/base.png')}
-                  >
-                    <Playercard
-                      showBackground={false}
-                      animate={false}
-                      inventory={inventory}
-                      style={{
-                        position: 'absolute',
-                        width: 100,
-                        height: 100,
-                        left: -14,
-                        top: -15,
-                      }}
-                    />
-                  </ImageBackground>
+                  <Avatar user={user} size={70} />
                 </Button>
               </View>
             </View>

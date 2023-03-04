@@ -1,13 +1,16 @@
 import { useContext } from 'react';
 import { Alert } from 'react-native';
+import { vsprintf } from 'sprintf-js';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
 import search from '../api/endpoints/me/inventory/search';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
+import useCrumbs from './useCrumbs';
 
 export default function usePurchaseItem() {
   const { playSound } = useContext(SoundEffectContext);
+  const { errors, messages, prompts } = useCrumbs();
   const { user, isReady, refreshUser } = useContext(AuthContext);
 
   const purchaseItem = async (item: ItemType) => {
@@ -22,9 +25,9 @@ export default function usePurchaseItem() {
 
       return Alert.alert(
         '',
-        `You have already ${item.cost === 0 ? 'redeemed' : 'purchased'} the ${
-          item.name
-        }.`,
+        response.cost
+          ? vsprintf(errors.item_purchased, [response.name])
+          : vsprintf(errors.item_redeemed, [response.name]),
         [
           {
             text: 'Ok',
@@ -37,7 +40,7 @@ export default function usePurchaseItem() {
     if (user.coins < item.cost) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
-      return Alert.alert('', 'You need more coins.', [
+      return Alert.alert('', errors.not_enough_coins, [
         {
           text: 'Ok',
           style: 'cancel',
@@ -47,8 +50,8 @@ export default function usePurchaseItem() {
 
     const text =
       item.cost === 0
-        ? `You have found a ${item.name}. Would you like to pick it up?`
-        : `Would you like to buy the ${item.name} for ${item.cost} coins? You currently have ${user.coins} coins.`;
+        ? vsprintf(prompts.redeem_item, [item.name])
+        : vsprintf(prompts.purchase_item, [item.name, item.cost, user.coins]);
 
     playSound(require('../../assets/sounds/purchase_item_prompt.mp3'));
 
@@ -63,21 +66,17 @@ export default function usePurchaseItem() {
       {
         text: 'Ok',
         onPress: async () => {
-          const response = await purchase(item);
+          await purchase(item);
           await refreshUser();
 
           playSound(require('../../assets/sounds/purchase_item_success.mp3'));
 
-          Alert.alert(
-            '',
-            `${response.name} has been added to your inventory.`,
-            [
-              {
-                text: 'Ok',
-                style: 'cancel',
-              },
-            ]
-          );
+          Alert.alert('', vsprintf(messages.item_purchased, [item.name]), [
+            {
+              text: 'Ok',
+              style: 'cancel',
+            },
+          ]);
         },
       },
     ]);

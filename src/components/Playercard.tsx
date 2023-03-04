@@ -63,7 +63,7 @@ export default function Playercard({
             resizeMode="cover"
           />
         )}
-        {inventory?.pin_item && showBackground && (
+        {inventory?.pin_item && (
           <Image
             source={{
               uri: inventory.pin_item.icon_url,

@@ -1,6 +1,8 @@
 import { Text, View } from 'react-native';
 import { UserType } from '../models/user-type';
+import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
+import Button from './Button';
 
 export default function LeaderboardUser({
   user,
@@ -23,7 +25,15 @@ export default function LeaderboardUser({
 
   return (
     <>
-      <Avatar size={avatar[size]} user={user} />
+      <Button
+        onPress={() =>
+          RootNavigation.navigate('User', {
+            user: user.id,
+          })
+        }
+      >
+        <Avatar size={avatar[size]} user={user} />
+      </Button>
       <View
         style={{
           width: '50%',

@@ -1,6 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Image } from 'expo-image';
-import { useContext, useEffect } from 'react';
+import { useCallback, useContext } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -15,11 +16,13 @@ export default function LoginScreen() {
   const { user, isReady, login } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
 
-  useEffect(() => {
-    if (!user && isReady) {
-      playMusic(require('../../../assets/sounds/music/track1.mp3'));
-    }
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      if (!user && isReady) {
+        playMusic(require('../../../assets/sounds/music/track1.mp3'));
+      }
+    }, [])
+  );
 
   return (
     <ImageBackground

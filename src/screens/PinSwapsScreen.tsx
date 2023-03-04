@@ -10,7 +10,7 @@ import getPinSwaps from '../api/endpoints/pin-swaps/all';
 import Loading from '../components/Loading';
 import PinSwap from '../components/PinSwap';
 import Topbar from '../components/Topbar';
-import Wrapper from '../components/Wrapper';
+import { InformationModalEnums } from '../models/information-modal-enums';
 import { PinSwapType } from '../models/pin-swap-type';
 
 export default function PinSwapsScreen() {
@@ -31,8 +31,12 @@ export default function PinSwapsScreen() {
   }, []);
 
   return (
-    <Wrapper>
-      <Topbar text="Trading Board" showBackButton />
+    <>
+      <Topbar
+        text="Trading Board"
+        showBackButton
+        informationModalId={InformationModalEnums.PinSwapsScreen}
+      />
       <View
         style={{
           marginTop: -8,
@@ -95,6 +99,6 @@ export default function PinSwapsScreen() {
           </View>
         </ImageBackground>
       </View>
-    </Wrapper>
+    </>
   );
 }

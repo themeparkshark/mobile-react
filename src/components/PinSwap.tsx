@@ -2,9 +2,7 @@ import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import dayjs from 'dayjs';
-
-import { useContext, useState } from 'react';
-
+import { useContext, useState, useEffect } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import {
   Alert,
@@ -21,10 +19,10 @@ import getInventory from '../api/endpoints/me/inventory';
 import getPins from '../api/endpoints/me/pins';
 import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
 import holdPinSwap from '../api/endpoints/pin-swaps/hold';
-
 import unHoldPinSwap from '../api/endpoints/pin-swaps/unhold';
-
 import { AuthContext } from '../context/AuthProvider';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { ItemType } from '../models/item-type';
 import { PinSwapType } from '../models/pin-swap-type';
 import Button from './Button';
@@ -45,6 +43,8 @@ export default function PinSwap({
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const [selectedPin, setSelectedPin] = useState<ItemType>();
   const { setInventory } = useContext(AuthContext);
+  const { errors, messages, prompts } = useCrumbs();
+  const { playSound } = useContext(SoundEffectContext);
 
   const requestItems = async (page: number) => {
     const response = await getPins(page);
@@ -69,7 +69,7 @@ export default function PinSwap({
 
       setModalVisible(true);
     } catch {
-      Alert.alert('', 'Sorry, this pin is unavailable right now.', [
+      Alert.alert('', errors.pin_swap_unavailable, [
         {
           text: 'Ok',
           onPress: () => {
@@ -90,6 +90,14 @@ export default function PinSwap({
     modalVisible
   );
 
+  useEffect(() => {
+    if (!selectedPin) {
+      return;
+    }
+
+    playSound(require('../../assets/sounds/pin_swap_select_pin.mp3'));
+  }, [selectedPin]);
+
   return (
     <>
       <View
@@ -101,6 +109,7 @@ export default function PinSwap({
           onPress={async () => {
             await hold();
           }}
+          onPressSound={require('../../assets/sounds/pin_swap_confirm.mp3')}
         >
           <Image
             source={{
@@ -281,7 +290,11 @@ export default function PinSwap({
               <YellowButton
                 onPress={() => {
                   if (!selectedPin) {
-                    Alert.alert('You must select a pin to trade.', '', [
+                    playSound(
+                      require('../../assets/sounds/purchase_item_cancel.mp3')
+                    );
+
+                    Alert.alert(errors.pin_required, '', [
                       {
                         text: 'Ok',
                       },
@@ -290,10 +303,19 @@ export default function PinSwap({
                     return;
                   }
 
-                  Alert.alert('Are you sure you want to trade pins?', '', [
+                  playSound(
+                    require('../../assets/sounds/pin_swap_confirm.mp3')
+                  );
+
+                  Alert.alert(prompts.pin_swap, '', [
                     {
                       text: 'Cancel',
                       style: 'cancel',
+                      onPress: () => {
+                        playSound(
+                          require('../../assets/sounds/purchase_item_cancel.mp3')
+                        );
+                      },
                     },
                     {
                       text: 'Ok',
@@ -304,7 +326,11 @@ export default function PinSwap({
 
                         await acceptPinSwap(pinSwap.id, selectedPin.id);
 
-                        Alert.alert('You have successfully traded pins.', '', [
+                        playSound(
+                          require('../../assets/sounds/pin_swap_complete.mp3')
+                        );
+
+                        Alert.alert(messages.pin_swap_created, '', [
                           {
                             text: 'Ok',
                           },

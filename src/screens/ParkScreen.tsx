@@ -1,6 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { chunk } from 'lodash';
-import { useState } from 'react';
+import { useCallback, useContext, useState } from 'react';
 import { ImageBackground, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
@@ -8,16 +9,16 @@ import getTasks from '../api/endpoints/parks/getTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
 import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
 import getVisitedPark from '../api/endpoints/users/visited-parks/getPark';
-import Button from '../components/Button';
 import Loading from '../components/Loading';
 import Progress from '../components/Progress';
 import TaskCoinModal from '../components/TaskCoinModal';
 import Topbar from '../components/Topbar';
 import config from '../config';
+import { MusicContext } from '../context/MusicProvider';
+import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
-import * as RootNavigation from '../RootNavigation';
 
 export default function ParkScreen({ route }) {
   const { park, user } = route.params;
@@ -29,6 +30,13 @@ export default function ParkScreen({ route }) {
     SecretTaskType[]
   >([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const { playMusic } = useContext(MusicContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track6.mp3'));
+    }, [])
+  );
 
   const hasCompletedTask = (task: number) => {
     return completedTasks.find((completedTask) => completedTask.id === task);
@@ -69,25 +77,7 @@ export default function ParkScreen({ route }) {
       <Topbar
         showBackButton={true}
         text={currentPark?.name}
-        rightButton={
-          <Button
-            onPress={() => {
-              RootNavigation.navigate('Leaderboard', {
-                park: currentPark?.id,
-              });
-            }}
-          >
-            <Image
-              style={{
-                width: 35,
-                height: 35,
-                alignSelf: 'center',
-              }}
-              contentFit="contain"
-              source={require('../../assets/images/toolbar/leaderboard.png')}
-            />
-          </Button>
-        }
+        informationModalId={InformationModalEnums.ParkScreen}
       />
       {loading && <Loading />}
       {!loading && (
@@ -255,7 +245,10 @@ export default function ParkScreen({ route }) {
                                 }}
                               >
                                 {hasCompletedSecretTask(secretTask.id) ? (
-                                  <TaskCoinModal task={secretTask} />
+                                  <TaskCoinModal
+                                    task={secretTask}
+                                    isSecretTask
+                                  />
                                 ) : (
                                   <View
                                     style={{

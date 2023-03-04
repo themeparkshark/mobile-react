@@ -12,8 +12,10 @@ import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
 import Broadcasts from './Broadcasts';
+import InformationModal from './InformationModal';
 
 export default function Topbar({
+  informationModalId = null,
   leftButton = null,
   rightButton = null,
   text = null,
@@ -24,6 +26,7 @@ export default function Topbar({
   purple = false,
   onBackButtonPress,
 }: {
+  readonly informationModalId?: number | null;
   readonly rightButton?: ReactNode | null;
   readonly leftButton?: ReactNode | null;
   readonly text?: string | null;
@@ -38,13 +41,21 @@ export default function Topbar({
   const width = text ? (showCoins ? '20%' : '15%') : '50%';
 
   return (
-    <SafeAreaView
+    <View
       style={{
-        zIndex: 20,
+        width: Dimensions.get('window').width,
+        zIndex: 10,
         position: 'relative',
       }}
     >
-      <Broadcasts />
+      <SafeAreaView
+        style={{
+          marginTop: Constants.statusBarHeight,
+          position: 'absolute',
+        }}
+      >
+        <Broadcasts />
+      </SafeAreaView>
       <ImageBackground
         source={
           purple
@@ -53,9 +64,7 @@ export default function Topbar({
         }
         resizeMode="cover"
         style={{
-          height: 120,
-          marginTop:
-            Constants.statusBarHeight - (Constants.statusBarHeight * 2 + 5),
+          height: 70 + Constants.statusBarHeight,
           alignItems: 'center',
           justifyContent: 'flex-end',
         }}
@@ -75,7 +84,8 @@ export default function Topbar({
               showBackButton ||
               showCoins ||
               leftButton ||
-              rightButton) && (
+              rightButton ||
+              informationModalId) && (
               <View
                 style={{
                   width,
@@ -171,7 +181,8 @@ export default function Topbar({
               showBackButton ||
               showCoins ||
               leftButton ||
-              rightButton) && (
+              rightButton ||
+              informationModalId) && (
               <View
                 style={{
                   width,
@@ -179,6 +190,9 @@ export default function Topbar({
                 }}
               >
                 {rightButton}
+                {informationModalId && (
+                  <InformationModal id={informationModalId} />
+                )}
                 {showCoins && (
                   <View
                     style={{
@@ -222,6 +236,6 @@ export default function Topbar({
           </View>
         </SafeAreaView>
       </ImageBackground>
-    </SafeAreaView>
+    </View>
   );
 }

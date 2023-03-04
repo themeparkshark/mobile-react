@@ -2,14 +2,17 @@ import { ApiResponseType } from '../../../models/api-response-type';
 import { UserType } from '../../../models/user-type';
 import client from '../../client';
 
-export default async function getFriends(params?: {
-  readonly limit?: number;
-  readonly order_by?: string;
-}): Promise<UserType[]> {
+export default async function getFriends(
+  page: number,
+  perPage?: number
+): Promise<UserType[]> {
   const { data } = await client.get<ApiResponseType<UserType[]>>(
     '/me/friends',
     {
-      params,
+      params: {
+        page: page,
+        perPage: perPage ?? 15,
+      },
     }
   );
 

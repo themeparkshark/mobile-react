@@ -7,6 +7,7 @@ import Loading from '../components/Loading';
 import Notification from '../components/Notification';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
+import useCrumbs from '../hooks/useCrumbs';
 import { NotificationType } from '../models/notification-type';
 
 export default function NewsScreen() {
@@ -14,6 +15,7 @@ export default function NewsScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
+  const { warnings } = useCrumbs();
 
   const fetchNotifications = async (page: number) => {
     const response = await getNotifications(page);
@@ -78,7 +80,7 @@ export default function NewsScreen() {
                   textAlign: 'center',
                 }}
               >
-                You have no new notifications.
+                {warnings.no_notifications}
               </Text>
             </View>
           )}

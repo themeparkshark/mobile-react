@@ -1,14 +1,12 @@
 import { Image } from 'expo-image';
 import { ReactNode } from 'react';
-import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
+import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
 
 export default function Wrapper({
-  showBar = true,
   children,
 }: {
-  readonly showBar?: boolean;
   readonly children: ReactNode[];
 }) {
   const items = [
@@ -17,12 +15,14 @@ export default function Wrapper({
       screen: 'News',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+      text: 'News',
     },
     {
       icon: require('../../assets/images/toolbar/leaderboard.png'),
       screen: 'Leaderboard',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+      text: 'Standings',
     },
     {
       icon: require('../../assets/images/toolbar/explore.png'),
@@ -35,38 +35,39 @@ export default function Wrapper({
       screen: 'Social',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+      text: 'Social',
     },
     {
       icon: require('../../assets/images/toolbar/profile.png'),
       screen: 'Profile',
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+      text: 'Profile',
     },
   ];
 
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
-        <SafeAreaView
+        <View
           style={{
             height: '101%',
           }}
         >
           {children}
-        </SafeAreaView>
+        </View>
       </View>
-      <SafeAreaView
+      <View
         style={{
           width: Dimensions.get('window').width,
-          marginBottom: -45,
-          display: showBar ? 'flex' : 'none',
         }}
       >
         <ImageBackground
           source={require('../../assets/images/screens/explore/bottombar.png')}
           resizeMode="cover"
           style={{
-            height: 100,
+            width: '100%',
+            aspectRatio: 5.3,
           }}
         >
           <View
@@ -109,13 +110,29 @@ export default function Wrapper({
                         contentFit="contain"
                       />
                     </Button>
+                    <Text
+                      style={{
+                        fontFamily: 'Shark',
+                        color: 'white',
+                        textAlign: 'center',
+                        textTransform: 'uppercase',
+                        textShadowColor: 'rgba(0, 0, 0, .5)',
+                        textShadowOffset: {
+                          width: 2,
+                          height: 2,
+                        },
+                        textShadowRadius: 0,
+                      }}
+                    >
+                      {item.text}
+                    </Text>
                   </View>
                 </View>
               );
             })}
           </View>
         </ImageBackground>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }

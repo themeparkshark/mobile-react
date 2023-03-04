@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import { vsprintf } from 'sprintf-js';
 import createCompliment from '../api/endpoints/compliments/create';
 import getUser from '../api/endpoints/users/get';
 import getVisitedParks from '../api/endpoints/users/visited-parks';
@@ -14,6 +15,8 @@ import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
+import { AuthContext, AuthContextType } from '../context/AuthProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
@@ -27,6 +30,7 @@ export default function UserScreen({ route }) {
   const { purchaseItem } = usePurchaseItem();
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
+  const { errors, messages, prompts } = useCrumbs();
 
   useAsyncEffect(async () => {
     setLoading(true);
@@ -51,6 +55,7 @@ export default function UserScreen({ route }) {
             purchaseItem(currentUser.mascot.item);
           },
           show: !!currentUser.mascot,
+          text: 'Gift',
         },
         {
           image: require('../../assets/images/screens/friends/remove_friend.png'),
@@ -58,6 +63,7 @@ export default function UserScreen({ route }) {
             removeFriend(currentUser, () => setIsFriend(false));
           },
           show: isFriend,
+          text: 'Remove friend',
         },
         {
           image: require('../../assets/images/screens/friends/add_friend.png'),
@@ -69,13 +75,14 @@ export default function UserScreen({ route }) {
             }
           },
           show: !isFriend,
+          text: 'Add friend',
         },
         {
           image: require('../../assets/images/screens/user/compliment.png'),
           onPress: async () => {
             Alert.alert(
               '',
-              `Would you like to send ${currentUser.screen_name} a compliment?`,
+              vsprintf(prompts.compliment, [currentUser?.screen_name]),
               [
                 {
                   text: 'Cancel',
@@ -84,9 +91,19 @@ export default function UserScreen({ route }) {
                 {
                   text: 'Ok',
                   onPress: async () => {
-                    await createCompliment(currentUser.id);
+                    try {
+                      await createCompliment(currentUser.id);
+                    } catch {
+                      Alert.alert('', errors.max_compliments_created, [
+                        {
+                          text: 'Ok',
+                        },
+                      ]);
 
-                    Alert.alert('', 'Compliment sent.', [
+                      return;
+                    }
+
+                    Alert.alert('', messages.compliment_created, [
                       {
                         text: 'Ok',
                         style: 'cancel',
@@ -98,6 +115,7 @@ export default function UserScreen({ route }) {
             );
           },
           show: true,
+          text: 'Compliment',
         },
       ]
     : [];

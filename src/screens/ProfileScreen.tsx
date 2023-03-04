@@ -1,5 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -14,7 +16,7 @@ import getStores from '../api/endpoints/stores/stores';
 import Activity from '../components/Activity';
 import Button from '../components/Button';
 import Experience from '../components/Experience';
-import FriendsList from '../components/FriendsList';
+import FriendUser from '../components/FriendUser';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
@@ -27,13 +29,14 @@ import YellowButton from '../components/YellowButton';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { FriendContext } from '../context/FriendProvider';
+import { MusicContext } from '../context/MusicProvider';
 import { NotificationContext } from '../context/NotificationProvider';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import * as RootNavigation from '../RootNavigation';
 
-export default function NewsScreen({ navigation }) {
+export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
   const [buttons, setButtons] = useState<ButtonType[]>([]);
@@ -41,6 +44,13 @@ export default function NewsScreen({ navigation }) {
   const { user, inventory, setInventory } = useContext(AuthContext);
   const { friends, refreshFriends } = useContext(FriendContext);
   const { notificationCount } = useContext(NotificationContext);
+  const { playMusic } = useContext(MusicContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
+    }, [])
+  );
 
   useAsyncEffect(async () => {
     setParks(await getParks(user.id));
@@ -142,7 +152,11 @@ export default function NewsScreen({ navigation }) {
                   position: 'relative',
                 }}
               >
-                <Button onPress={() => navigation.navigate('Inventory')}>
+                <Button
+                  onPress={() => {
+                    RootNavigation.navigate('Inventory');
+                  }}
+                >
                   <Playercard
                     showBackground={false}
                     inventory={user.inventory}
@@ -172,12 +186,28 @@ export default function NewsScreen({ navigation }) {
                 <Heading text="Your Friends" />
                 {friends && friends.length > 0 && (
                   <>
-                    <FriendsList
-                      onSuccess={async () => {
-                        await refreshFriends();
+                    <View
+                      style={{
+                        minHeight: 200,
                       }}
-                      users={friends}
-                    />
+                    >
+                      <FlashList
+                        contentContainerStyle={{ paddingBottom: 8 }}
+                        data={friends}
+                        keyExtractor={(user) => user.id.toString()}
+                        renderItem={({ item }) => {
+                          return (
+                            <FriendUser
+                              user={item}
+                              onRemove={async () => {
+                                await refreshFriends();
+                              }}
+                            />
+                          );
+                        }}
+                        estimatedItemSize={80}
+                      />
+                    </View>
                     <View style={{ alignItems: 'center', marginTop: 32 }}>
                       <YellowButton
                         onPress={() => {

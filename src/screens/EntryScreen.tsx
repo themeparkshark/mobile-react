@@ -5,7 +5,6 @@ import { useAsyncEffect } from 'rooks';
 import client from '../api/client-cms';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
-import Wrapper from '../components/Wrapper';
 import dayjs from '../helpers/dayjs';
 import { EntryType } from '../models/entry-type';
 
@@ -21,7 +20,7 @@ export default function EntryScreen({ route }) {
   }, []);
 
   return (
-    <Wrapper showBar={false}>
+    <>
       <Topbar showBackButton={true} />
       {loading && <Loading />}
       {!loading && currentEntry && (
@@ -64,6 +63,6 @@ export default function EntryScreen({ route }) {
           </View>
         </ScrollView>
       )}
-    </Wrapper>
+    </>
   );
 }

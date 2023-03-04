@@ -1,19 +1,22 @@
 import { useContext } from 'react';
 import { Alert } from 'react-native';
+import { vsprintf } from 'sprintf-js';
 import acceptFriendRequest from '../api/endpoints/me/users/accept-friend-request';
 import sendFriendRequest from '../api/endpoints/me/users/send-friend-request';
 import unfriend from '../api/endpoints/me/users/unfriend';
 import { FriendContext } from '../context/FriendProvider';
 import { UserType } from '../models/user-type';
+import useCrumbs from './useCrumbs';
 
 export default function useFriends() {
   const { refreshFriends } = useContext(FriendContext);
+  const { messages, prompts } = useCrumbs();
 
   return {
     addFriend: (user: UserType) => {
       Alert.alert(
         '',
-        `Would you like to add ${user.screen_name} to your friends list?`,
+        vsprintf(prompts.send_friend_request, [user.screen_name]),
         [
           {
             text: 'Cancel',
@@ -24,7 +27,7 @@ export default function useFriends() {
             onPress: async () => {
               await sendFriendRequest(user);
 
-              Alert.alert('', 'Friend request sent.', [
+              Alert.alert('', messages.friend_request_sent, [
                 {
                   text: 'Ok',
                   style: 'cancel',
@@ -38,7 +41,7 @@ export default function useFriends() {
     acceptFriend: (user: UserType) => {
       Alert.alert(
         '',
-        `${user.screen_name} has asked to be your friend. Do you accept?`,
+        vsprintf(prompts.accept_friend_request, [user.screen_name]),
         [
           {
             text: 'Cancel',
@@ -49,7 +52,7 @@ export default function useFriends() {
             onPress: async () => {
               await acceptFriendRequest(user);
 
-              Alert.alert('', 'Friend request accepted.', [
+              Alert.alert('', messages.friend_request_accepted, [
                 {
                   text: 'Ok',
                   style: 'cancel',
@@ -61,35 +64,31 @@ export default function useFriends() {
       );
     },
     removeFriend: (user: UserType, onPress: () => void) => {
-      Alert.alert(
-        '',
-        `Would you like to remove ${user.screen_name} from your friends list?`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'Ok',
-            onPress: async () => {
-              await unfriend(user);
-              await refreshFriends();
-              await onPress();
+      Alert.alert('', vsprintf(prompts.remove_friend, [user.screen_name]), [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Ok',
+          onPress: async () => {
+            await unfriend(user);
+            await refreshFriends();
+            await onPress();
 
-              Alert.alert(
-                '',
-                `${user.screen_name} has been removed from your friends list.`,
-                [
-                  {
-                    text: 'Ok',
-                    style: 'cancel',
-                  },
-                ]
-              );
-            },
+            Alert.alert(
+              '',
+              vsprintf(messages.friend_removed, [user.screen_name]),
+              [
+                {
+                  text: 'Ok',
+                  style: 'cancel',
+                },
+              ]
+            );
           },
-        ]
-      );
+        },
+      ]);
     },
   };
 }
