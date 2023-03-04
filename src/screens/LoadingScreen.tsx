@@ -1,4 +1,5 @@
 import { useFonts } from 'expo-font';
+import { isEmpty } from 'lodash';
 import { useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -44,7 +45,7 @@ export default function LoadingScreen() {
   }, [isReady]);
 
   useEffect(() => {
-    if (isReady && inventory && user && fontsLoaded && crumbs) {
+    if (isReady && inventory && user && fontsLoaded && !isEmpty(crumbs)) {
       setLoading(false);
     }
   }, [user, inventory, isReady, fontsLoaded, crumbs]);

@@ -8,12 +8,14 @@ import {
   Text,
   View,
 } from 'react-native';
+import { vsprintf } from 'sprintf-js';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getStore from '../api/endpoints/stores/get';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { CatalogType } from '../models/catalog-type';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ItemType } from '../models/item-type';
@@ -30,6 +32,7 @@ export default function StoreScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);
   const { playMusic } = useContext(MusicContext);
   const { user } = useContext(AuthContext);
+  const { labels } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -133,7 +136,7 @@ export default function StoreScreen({ route }) {
                       marginLeft: 8,
                     }}
                   >
-                    You currently have {user.coins} coins
+                    {vsprintf(labels.coins, [user.coins])}
                   </Text>
                 </View>
               </View>

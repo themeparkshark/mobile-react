@@ -2,12 +2,14 @@ import { Image } from 'expo-image';
 import { useContext } from 'react';
 import { ImageBackground, Pressable, Text, View } from 'react-native';
 import { AuthContext } from '../../context/AuthProvider';
+import useCrumbs from '../../hooks/useCrumbs';
 import usePurchaseItem from '../../hooks/usePurchaseItem';
 import { ItemType } from '../../models/item-type';
 
 export default function Item({ item }: { readonly item: ItemType }) {
   const { user } = useContext(AuthContext);
   const { purchaseItem } = usePurchaseItem();
+  const { labels } = useCrumbs();
 
   return (
     <Pressable
@@ -68,7 +70,7 @@ export default function Item({ item }: { readonly item: ItemType }) {
               textTransform: 'uppercase',
             }}
           >
-            Clearance
+            {labels.clearance}
           </Text>
         </View>
       )}

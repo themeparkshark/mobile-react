@@ -12,6 +12,8 @@ export interface CrumbContextType {
     };
     readonly labels: {
       readonly checking_again: string;
+      readonly clearance: string;
+      readonly coins: string;
       readonly verified_user: string;
     };
     readonly messages: {
@@ -47,7 +49,7 @@ export const CrumbContext = createContext<CrumbContextType>(
 );
 
 export const CrumbProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [crumbs, setCrumbs] = useState<any>([]);
+  const [crumbs, setCrumbs] = useState<any>({});
 
   return (
     <CrumbContext.Provider
