@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, Image, Pressable, View } from 'react-native';
+import { Dimensions, Image, Pressable, Text, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
@@ -134,51 +134,57 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              bottom: 30,
-              left: 12,
+              bottom: 0,
               zIndex: 10,
+              width: '100%',
+              flexDirection: 'row',
+              alignItems: 'flex-end',
             }}
           >
-            <TaskListModal redeemables={redeemables} />
-          </View>
-          {inventory && (
             <View
               style={{
-                position: 'absolute',
-                bottom: 30,
-                right: 16,
-                zIndex: 10,
+                padding: 16,
               }}
             >
               <View
                 style={{
-                  marginBottom: 8,
+                  marginBottom: -4,
                 }}
               >
-                {park.store && (
-                  <Button
-                    onPress={() => {
-                      RootNavigation.navigate('Store', {
-                        store: park.store.id,
-                      });
-                    }}
-                  >
-                    <Image
-                      style={{
-                        width: 70,
-                        height: 84,
-                      }}
-                      source={{
-                        uri: park.store.icon_url,
-                      }}
-                      resizeMode="contain"
-                    />
-                  </Button>
-                )}
+                <TaskListModal redeemables={redeemables} />
+              </View>
+            </View>
+            <View
+              style={{
+                flex: 1,
+                padding: 16,
+              }}
+            >
+              <View
+                style={{
+                  paddingBottom: 48,
+                }}
+              >
+                <RedeemModal
+                  redeemable={activeRedeemable}
+                  park={park}
+                  onPress={() => {
+                    getRedeemables();
+                    refreshUser();
+                  }}
+                />
+              </View>
+            </View>
+            <View
+              style={{
+                padding: 16,
+              }}
+            >
+              {park.store && (
                 <Button
                   onPress={() => {
-                    RootNavigation.navigate('QueueTimes', {
-                      park: park.id,
+                    RootNavigation.navigate('Store', {
+                      store: park.store.id,
                     });
                   }}
                 >
@@ -187,12 +193,30 @@ export default function ExploreScreen() {
                       width: 70,
                       height: 84,
                     }}
-                    source={require('../../assets/images/screens/explore/queuetimes.png')}
+                    source={{
+                      uri: park.store.icon_url,
+                    }}
                     resizeMode="contain"
                   />
                 </Button>
-              </View>
-              <View>
+              )}
+              <Button
+                onPress={() => {
+                  RootNavigation.navigate('QueueTimes', {
+                    park: park.id,
+                  });
+                }}
+              >
+                <Image
+                  style={{
+                    width: 70,
+                    height: 84,
+                  }}
+                  source={require('../../assets/images/screens/explore/queuetimes.png')}
+                  resizeMode="contain"
+                />
+              </Button>
+              {inventory && (
                 <Button
                   onPress={() => {
                     RootNavigation.navigate('Inventory');
@@ -200,26 +224,8 @@ export default function ExploreScreen() {
                 >
                   <Avatar user={user} size={70} />
                 </Button>
-              </View>
+              )}
             </View>
-          )}
-          <View
-            style={{
-              bottom: 60,
-              position: 'absolute',
-              alignSelf: 'center',
-              flexDirection: 'row',
-              zIndex: 10,
-            }}
-          >
-            <RedeemModal
-              redeemable={activeRedeemable}
-              park={park}
-              onPress={() => {
-                getRedeemables();
-                refreshUser();
-              }}
-            />
           </View>
         </>
       )}

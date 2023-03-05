@@ -34,8 +34,8 @@ export default function TaskListModal({
       >
         <Image
           style={{
-            width: 80,
-            height: 80,
+            width: 70,
+            height: 70,
           }}
           source={require('../../assets/images/screens/explore/list.png')}
           contentFit="contain"
@@ -121,7 +121,7 @@ export default function TaskListModal({
                 shadowOpacity: 0.25,
                 shadowRadius: 4,
                 width: '80%',
-                height: '60%',
+                maxHeight: '60%',
                 marginLeft: 'auto',
                 marginRight: 'auto',
               }}
