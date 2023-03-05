@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, Image, Pressable, Text, View } from 'react-native';
+import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
