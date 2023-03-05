@@ -134,7 +134,7 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              bottom: 0,
+              bottom: 16,
               zIndex: 10,
               width: '100%',
               flexDirection: 'row',
