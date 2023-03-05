@@ -50,6 +50,7 @@ export default function FriendsScreen() {
           <View
             style={{
               flex: 1,
+              overflow: 'hidden',
             }}
           >
             <Tabs
