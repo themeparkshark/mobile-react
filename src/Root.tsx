@@ -131,7 +131,14 @@ const HomeStackNavigator = () => {
         }}
       />
       <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
-      <Stack.Screen name="Friends" component={FriendsScreen} />
+      <Stack.Screen
+        name="Friends"
+        component={FriendsScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen
         name="PendingFriendRequests"

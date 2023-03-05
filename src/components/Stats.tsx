@@ -1,5 +1,4 @@
 import { Text, View } from 'react-native';
-import config from '../config';
 import { UserType } from '../models/user-type';
 
 export default function Stats({ user }: { readonly user: UserType }) {
@@ -10,7 +9,7 @@ export default function Stats({ user }: { readonly user: UserType }) {
     },
     {
       label: 'Park coins',
-      value: user.park_coins_count
+      value: user.park_coins_count,
     },
     {
       label: 'Parks visited',

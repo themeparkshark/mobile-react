@@ -1,8 +1,10 @@
-import {ActivityType} from '../models/activity-type';
-import {View, Text} from 'react-native';
+import { Text, View } from 'react-native';
 import dayjs from '../helpers/dayjs';
+import { ActivityType } from '../models/activity-type';
 
-export default function Activity({ activities } : {
+export default function Activity({
+  activities,
+}: {
   readonly activities: ActivityType[];
 }) {
   return (
