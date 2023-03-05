@@ -157,7 +157,7 @@ export default function ExploreScreen() {
             <View
               style={{
                 flex: 1,
-                padding: 16,
+                padding: 8,
               }}
             >
               <View

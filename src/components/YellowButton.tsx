@@ -64,8 +64,10 @@ export default function YellowButton({
                   height: 1,
                 },
                 textShadowRadius: 0,
-                paddingLeft: 32,
-                paddingRight: 32,
+                paddingTop: 4,
+                paddingBottom: 4,
+                paddingLeft: 24,
+                paddingRight: 24,
               }}
             >
               {text}
