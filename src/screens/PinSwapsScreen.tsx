@@ -33,7 +33,7 @@ export default function PinSwapsScreen() {
   return (
     <>
       <Topbar
-        text="Trading Board"
+        text="Pin Trading"
         showBackButton
         informationModalId={InformationModalEnums.PinSwapsScreen}
       />

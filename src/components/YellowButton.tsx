@@ -37,15 +37,17 @@ export default function YellowButton({
         <ImageBackground
           source={require('../../assets/images/yellow_button.png')}
           style={{
-            width: 190,
-            height: 50,
+            maxWidth: 190,
+            width: '100%',
+            maxHeight: 50,
+            aspectRatio: 3.8,
           }}
           resizeMode="contain"
         >
           <View
             style={{
               justifyContent: 'center',
-              height: 40,
+              aspectRatio: 4.4,
             }}
           >
             <Text
@@ -63,9 +65,10 @@ export default function YellowButton({
                   height: 1,
                 },
                 textShadowRadius: 0,
-                paddingTop: 5,
-                paddingLeft: 32,
-                paddingRight: 32,
+                paddingTop: 4,
+                paddingBottom: 4,
+                paddingLeft: 24,
+                paddingRight: 24,
               }}
             >
               {text}

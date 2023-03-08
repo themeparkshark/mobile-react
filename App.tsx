@@ -8,6 +8,7 @@ import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
 import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import Root from './src/Root';
+import {LocationProvider} from './src/context/LocationProvider';
 
 export default function App() {
   return (
@@ -20,7 +21,9 @@ export default function App() {
                 <NotificationProvider>
                   <ForumProvider>
                     <CrumbProvider>
-                      <Root />
+                      <LocationProvider>
+                        <Root />
+                      </LocationProvider>
                     </CrumbProvider>
                   </ForumProvider>
                 </NotificationProvider>

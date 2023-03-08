@@ -6,6 +6,7 @@ export default function useCrumbs() {
 
   return {
     errors: crumbs.errors,
+    labels: crumbs.labels,
     messages: crumbs.messages,
     prompts: crumbs.prompts,
     warnings: crumbs.warnings,

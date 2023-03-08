@@ -31,7 +31,6 @@ export default function usePurchaseItem() {
         [
           {
             text: 'Ok',
-            style: 'cancel',
           },
         ]
       );
@@ -43,7 +42,6 @@ export default function usePurchaseItem() {
       return Alert.alert('', errors.not_enough_coins, [
         {
           text: 'Ok',
-          style: 'cancel',
         },
       ]);
     }
@@ -74,7 +72,6 @@ export default function usePurchaseItem() {
           Alert.alert('', vsprintf(messages.item_purchased, [item.name]), [
             {
               text: 'Ok',
-              style: 'cancel',
             },
           ]);
         },

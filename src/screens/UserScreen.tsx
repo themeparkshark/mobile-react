@@ -5,11 +5,11 @@ import { vsprintf } from 'sprintf-js';
 import createCompliment from '../api/endpoints/compliments/create';
 import getUser from '../api/endpoints/users/get';
 import getVisitedParks from '../api/endpoints/users/visited-parks';
-import Activity from '../components/Activity';
 import Experience from '../components/Experience';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
+import Stats from '../components/Stats';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
@@ -106,7 +106,6 @@ export default function UserScreen({ route }) {
                     Alert.alert('', messages.compliment_created, [
                       {
                         text: 'Ok',
-                        style: 'cancel',
                       },
                     ]);
                   },
@@ -165,8 +164,8 @@ export default function UserScreen({ route }) {
               <Experience user={currentUser} />
               <UserButtons buttons={buttons} />
               {currentUser.verified_at && <Verified />}
-              <Heading text="Total Activity" />
-              <Activity user={currentUser} />
+              <Heading text="Statistics" />
+              <Stats user={currentUser} />
               {parks.length > 0 && (
                 <>
                   <Heading text="Visited Parks" />

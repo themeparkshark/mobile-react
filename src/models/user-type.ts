@@ -5,6 +5,7 @@ import { MascotType } from './mascot-type';
 export interface UserType {
   readonly avatar_url: string;
   readonly coins: number;
+  readonly completed_tasks_count: number;
   readonly created_at: string;
   readonly current_park_id: number;
   readonly email: string;
@@ -12,6 +13,7 @@ export interface UserType {
   readonly enabled_sound_effects: boolean;
   readonly experience: number;
   readonly experience_level: ExperienceLevelType;
+  readonly friends_count: number;
   readonly has_friend_request_from: boolean;
   readonly has_pending_friend_requests: boolean;
   readonly id: number;
@@ -20,6 +22,7 @@ export interface UserType {
   readonly mascot: MascotType;
   readonly name: string;
   readonly park_coins: number;
+  readonly park_coins_count: number;
   readonly screen_name: string;
   readonly total_coins: number;
   readonly total_experience: number;

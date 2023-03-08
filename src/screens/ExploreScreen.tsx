@@ -19,14 +19,13 @@ import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
-import getCurrentLocation from '../helpers/get-current-location';
-import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
 import { RedeemableType } from '../models/redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import NotAtPark from './ExploreScreen/NotAtPark';
+import { LocationContext } from '../context/LocationProvider';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -36,11 +35,11 @@ export default function ExploreScreen() {
   const [activeRedeemable, setActiveRedeemable] = useState<
     RedeemableType | undefined
   >();
-  const [location, setLocation] = useState<LocationType>();
   const { inventory, refreshUser, user } = useContext(AuthContext);
   const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
   const [mapReady, setMapReady] = useState<boolean>(false);
   const { playMusic } = useContext(MusicContext);
+  const { location } = useContext(LocationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,26 +61,14 @@ export default function ExploreScreen() {
   };
 
   useEffect(() => {
-    getCurrentLocation().then((response) => setLocation(response));
+    checkForPark().then((response) => {
+      setPark(response);
 
-    const interval = setInterval(() => {
-      getCurrentLocation().then((response) => setLocation(response));
-    }, 7500);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (location) {
-      checkForPark().then((response) => {
-        setPark(response);
-
-        if (response === null) {
-          setRedeemables(null);
-          setActiveRedeemable(undefined);
-        }
-      });
-    }
+      if (response === null) {
+        setRedeemables(null);
+        setActiveRedeemable(undefined);
+      }
+    });
   }, [location?.latitude, location?.longitude]);
 
   useEffect(() => {
@@ -134,51 +121,57 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              bottom: 30,
-              left: 12,
+              bottom: 16,
               zIndex: 10,
+              width: '100%',
+              flexDirection: 'row',
+              alignItems: 'flex-end',
             }}
           >
-            <TaskListModal redeemables={redeemables} />
-          </View>
-          {inventory && (
             <View
               style={{
-                position: 'absolute',
-                bottom: 30,
-                right: 16,
-                zIndex: 10,
+                padding: 16,
               }}
             >
               <View
                 style={{
-                  marginBottom: 8,
+                  marginBottom: -4,
                 }}
               >
-                {park.store && (
-                  <Button
-                    onPress={() => {
-                      RootNavigation.navigate('Store', {
-                        store: park.store.id,
-                      });
-                    }}
-                  >
-                    <Image
-                      style={{
-                        width: 70,
-                        height: 84,
-                      }}
-                      source={{
-                        uri: park.store.icon_url,
-                      }}
-                      resizeMode="contain"
-                    />
-                  </Button>
-                )}
+                <TaskListModal redeemables={redeemables} />
+              </View>
+            </View>
+            <View
+              style={{
+                flex: 1,
+                padding: 16,
+              }}
+            >
+              <View
+                style={{
+                  paddingBottom: 48,
+                }}
+              >
+                <RedeemModal
+                  redeemable={activeRedeemable}
+                  park={park}
+                  onPress={() => {
+                    getRedeemables();
+                    refreshUser();
+                  }}
+                />
+              </View>
+            </View>
+            <View
+              style={{
+                padding: 16,
+              }}
+            >
+              {park.store && (
                 <Button
                   onPress={() => {
-                    RootNavigation.navigate('QueueTimes', {
-                      park: park.id,
+                    RootNavigation.navigate('Store', {
+                      store: park.store.id,
                     });
                   }}
                 >
@@ -187,12 +180,30 @@ export default function ExploreScreen() {
                       width: 70,
                       height: 84,
                     }}
-                    source={require('../../assets/images/screens/explore/queuetimes.png')}
+                    source={{
+                      uri: park.store.icon_url,
+                    }}
                     resizeMode="contain"
                   />
                 </Button>
-              </View>
-              <View>
+              )}
+              <Button
+                onPress={() => {
+                  RootNavigation.navigate('QueueTimes', {
+                    park: park.id,
+                  });
+                }}
+              >
+                <Image
+                  style={{
+                    width: 70,
+                    height: 84,
+                  }}
+                  source={require('../../assets/images/screens/explore/queuetimes.png')}
+                  resizeMode="contain"
+                />
+              </Button>
+              {inventory && (
                 <Button
                   onPress={() => {
                     RootNavigation.navigate('Inventory');
@@ -200,26 +211,8 @@ export default function ExploreScreen() {
                 >
                   <Avatar user={user} size={70} />
                 </Button>
-              </View>
+              )}
             </View>
-          )}
-          <View
-            style={{
-              bottom: 60,
-              position: 'absolute',
-              alignSelf: 'center',
-              flexDirection: 'row',
-              zIndex: 10,
-            }}
-          >
-            <RedeemModal
-              redeemable={activeRedeemable}
-              park={park}
-              onPress={() => {
-                getRedeemables();
-                refreshUser();
-              }}
-            />
           </View>
         </>
       )}

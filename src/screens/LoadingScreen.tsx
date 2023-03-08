@@ -1,4 +1,5 @@
 import { useFonts } from 'expo-font';
+import { isEmpty } from 'lodash';
 import { useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,13 +14,17 @@ import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
 import * as RootNavigation from '../RootNavigation';
+import { LocationContext } from '../context/LocationProvider';
+import {NotificationContext} from '../context/NotificationProvider';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
   const { inventory, setInventory, isReady, user, refreshUser } =
     useContext(AuthContext);
   const { crumbs, setCrumbs } = useContext(CrumbContext);
+  const { location, requestLocation } = useContext(LocationContext);
   const [loadingText, setLoadingText] = useState<string>('Loading Interface');
+  const { refreshNotificationCount } = useContext(NotificationContext);
 
   useEffect(() => {
     setLoadingText('Loading Music');
@@ -41,13 +46,17 @@ export default function LoadingScreen() {
     setInventory(await getInventory());
     setLoadingText('Loading Crumbs');
     setCrumbs(await getCrumbs());
+    setLoadingText('Loading Notifications');
+    await refreshNotificationCount();
+    setLoadingText('Loading Location');
+    await requestLocation();
   }, [isReady]);
 
   useEffect(() => {
-    if (isReady && inventory && user && fontsLoaded && crumbs) {
+    if (isReady && inventory && user && fontsLoaded && !isEmpty(crumbs) && !isEmpty(location)) {
       setLoading(false);
     }
-  }, [user, inventory, isReady, fontsLoaded, crumbs]);
+  }, [user, inventory, isReady, fontsLoaded, crumbs, location]);
 
   useEffect(() => {
     if (loading) {

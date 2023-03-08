@@ -13,13 +13,13 @@ import { useAsyncEffect } from 'rooks';
 import getInventory from '../api/endpoints/me/inventory';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
-import Activity from '../components/Activity';
 import Button from '../components/Button';
 import Experience from '../components/Experience';
 import FriendUser from '../components/FriendUser';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
+import Stats from '../components/Stats';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
@@ -181,8 +181,8 @@ export default function ProfileScreen() {
                 <Experience user={user} />
                 <UserButtons buttons={buttons} />
                 {user.verified_at && <Verified />}
-                <Heading text="Total Activity" />
-                <Activity user={user} />
+                <Heading text="Statistics" />
+                <Stats user={user} />
                 <Heading text="Your Friends" />
                 {friends && friends.length > 0 && (
                   <>

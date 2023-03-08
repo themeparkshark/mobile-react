@@ -18,7 +18,15 @@ export const MusicProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const { user, isReady } = useContext(AuthContext);
 
   useAsyncEffect(async () => {
-    if (!currentSound) {
+    if (isReady && !user?.enabled_music && playingSound) {
+      setCurrentSound(null);
+      await playingSound.stopAsync();
+      setPlayingSound(null);
+    }
+  }, [isReady, user?.enabled_music, playingSound]);
+
+  useAsyncEffect(async () => {
+    if (!currentSound || !user?.enabled_music) {
       return;
     }
 
@@ -36,13 +44,13 @@ export const MusicProvider: FC<{ children: ReactNode }> = ({ children }) => {
           sound.unloadAsync();
         }
       : undefined;
-  }, [currentSound]);
+  }, [currentSound, user?.enabled_music]);
 
   return (
     <MusicContext.Provider
       value={{
         currentSound,
-        playMusic: async (pendingMusic: any, name: string) => {
+        playMusic: async (pendingMusic: any) => {
           if (isReady && !user?.enabled_music) {
             return;
           }

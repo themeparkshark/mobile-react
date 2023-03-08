@@ -70,6 +70,7 @@ export default function SettingsScreen() {
                       await updateUser({
                         enabled_music: !user.enabled_music,
                       });
+                      await refreshUser();
                     }}
                     value={enabledMusic}
                   />
@@ -85,6 +86,7 @@ export default function SettingsScreen() {
                       await updateUser({
                         enabled_sound_effects: !user?.enabled_sound_effects,
                       });
+                      await refreshUser();
                     }}
                     value={enabledSoundEffects}
                   />

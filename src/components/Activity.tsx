@@ -1,64 +1,62 @@
 import { Text, View } from 'react-native';
-import config from '../config';
-import { UserType } from '../models/user-type';
+import dayjs from '../helpers/dayjs';
+import { ActivityType } from '../models/activity-type';
 
-export default function Activity({ user }: { readonly user: UserType }) {
-  const activities = [
-    {
-      label: 'Parks Visited',
-      value: user.visited_parks_count,
-    },
-    {
-      label: 'Shark coin balance',
-      value: user.coins,
-    },
-    {
-      label: 'Total XP',
-      value: user.total_experience,
-    },
-  ];
-
+export default function Activity({
+  activities,
+}: {
+  readonly activities: ActivityType[];
+}) {
   return (
-    <View
-      style={{
-        paddingLeft: 32,
-        paddingRight: 32,
-      }}
-    >
-      <View>
-        {activities.map((activity) => {
-          return (
+    <View>
+      {!activities.length && (
+        <Text
+          style={{
+            fontFamily: 'Knockout',
+            fontSize: 18,
+            textAlign: 'center',
+          }}
+        >
+          There is no recent activity.
+        </Text>
+      )}
+      {activities.map((activity, index) => {
+        return (
+          <View
+            key={activity.id}
+            style={{
+              flexDirection: 'row',
+              paddingBottom: index !== activities.length ? 8 : 0,
+            }}
+          >
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text
+                style={{
+                  fontFamily: 'Knockout',
+                  fontSize: 18,
+                }}
+              >
+                {activity.body}
+              </Text>
+            </View>
             <View
-              key={activity.label}
               style={{
-                flexDirection: 'row',
+                width: '20%',
               }}
             >
               <Text
                 style={{
-                  paddingRight: 12,
-                  flex: 1,
                   fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
                   fontSize: 18,
+                  textAlign: 'right',
                 }}
               >
-                {activity.label}
-              </Text>
-              <Text
-                style={{
-                  fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
-                  fontSize: 18,
-                  color: config.primary,
-                }}
-              >
-                {activity.value}
+                {dayjs(activity.created_at).fromNow()} ago
               </Text>
             </View>
-          );
-        })}
-      </View>
+          </View>
+        );
+      })}
     </View>
   );
 }
