@@ -68,8 +68,8 @@ export default function PinSwap({
       setHeldTo(response.held_to);
 
       setModalVisible(true);
-    } catch {
-      Alert.alert('', errors.pin_swap_unavailable, [
+    } catch (error) {
+      Alert.alert('', error.response.data.message, [
         {
           text: 'Ok',
           onPress: () => {
