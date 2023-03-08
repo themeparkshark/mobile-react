@@ -44,7 +44,7 @@ export default function Topbar({
     <View
       style={{
         width: Dimensions.get('window').width,
-        zIndex: 10,
+        zIndex: 20,
         position: 'relative',
       }}
     >
