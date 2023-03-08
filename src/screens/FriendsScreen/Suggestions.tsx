@@ -1,5 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { useAsyncEffect, useDebounce } from 'rooks';
 import getFriendSuggestions from '../../api/endpoints/me/getFriendSuggestions';
@@ -12,7 +12,6 @@ import { UserType } from '../../models/user-type';
 export default function Suggestions() {
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [page, setPage] = useState<number>(1);
   const { warnings } = useCrumbs();
   const [search, setSearch] = useState<string>('');
   const setSearchDebounced = useDebounce(setSearch, 500);
@@ -20,29 +19,16 @@ export default function Suggestions() {
 
   useAsyncEffect(async () => {
     if (search.length < 3) {
-      setPage(1);
       return;
     }
 
     setSearchResults(search ? await searchUsers(search) : []);
   }, [search]);
 
-  const fetchUsers = async (page: number) => {
-    const response = await getFriendSuggestions(page);
-    setUsers((prevState) => {
-      return [...prevState, ...response];
-    });
-  };
-
-  useEffect(() => {
-    fetchUsers(page).then(() => setLoading(false));
-  }, []);
-
   useAsyncEffect(async () => {
-    if (page > 1) {
-      await fetchUsers(page);
-    }
-  }, [page]);
+    setUsers(await getFriendSuggestions());
+    setLoading(false);
+  }, []);
 
   return (
     <View style={{ padding: 16, flex: 1 }}>
@@ -95,9 +81,6 @@ export default function Suggestions() {
                 return <FriendUser user={item} isSuggestion />;
               }}
               estimatedItemSize={80}
-              onEndReached={() => {
-                setPage((prevState) => prevState + 1);
-              }}
             />
           )}
           {!!searchResults.length && (

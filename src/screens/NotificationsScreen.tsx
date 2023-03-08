@@ -74,7 +74,7 @@ export default function NewsScreen() {
             >
               <Text
                 style={{
-                  fontSize: 18,
+                  fontSize: 24,
                   fontFamily: 'Knockout',
                   textAlign: 'center',
                 }}

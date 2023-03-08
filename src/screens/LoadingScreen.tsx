@@ -15,6 +15,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
 import * as RootNavigation from '../RootNavigation';
 import { LocationContext } from '../context/LocationProvider';
+import {NotificationContext} from '../context/NotificationProvider';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
@@ -23,6 +24,7 @@ export default function LoadingScreen() {
   const { crumbs, setCrumbs } = useContext(CrumbContext);
   const { location, requestLocation } = useContext(LocationContext);
   const [loadingText, setLoadingText] = useState<string>('Loading Interface');
+  const { refreshNotificationCount } = useContext(NotificationContext);
 
   useEffect(() => {
     setLoadingText('Loading Music');
@@ -44,6 +46,8 @@ export default function LoadingScreen() {
     setInventory(await getInventory());
     setLoadingText('Loading Crumbs');
     setCrumbs(await getCrumbs());
+    setLoadingText('Loading Notifications');
+    await refreshNotificationCount();
     setLoadingText('Loading Location');
     await requestLocation();
   }, [isReady]);
