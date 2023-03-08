@@ -19,14 +19,13 @@ import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
-import getCurrentLocation from '../helpers/get-current-location';
-import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
 import { RedeemableType } from '../models/redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import NotAtPark from './ExploreScreen/NotAtPark';
+import { LocationContext } from '../context/LocationProvider';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -36,11 +35,11 @@ export default function ExploreScreen() {
   const [activeRedeemable, setActiveRedeemable] = useState<
     RedeemableType | undefined
   >();
-  const [location, setLocation] = useState<LocationType>();
   const { inventory, refreshUser, user } = useContext(AuthContext);
   const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
   const [mapReady, setMapReady] = useState<boolean>(false);
   const { playMusic } = useContext(MusicContext);
+  const { location } = useContext(LocationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,26 +61,14 @@ export default function ExploreScreen() {
   };
 
   useEffect(() => {
-    getCurrentLocation().then((response) => setLocation(response));
+    checkForPark().then((response) => {
+      setPark(response);
 
-    const interval = setInterval(() => {
-      getCurrentLocation().then((response) => setLocation(response));
-    }, 7500);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (location) {
-      checkForPark().then((response) => {
-        setPark(response);
-
-        if (response === null) {
-          setRedeemables(null);
-          setActiveRedeemable(undefined);
-        }
-      });
-    }
+      if (response === null) {
+        setRedeemables(null);
+        setActiveRedeemable(undefined);
+      }
+    });
   }, [location?.latitude, location?.longitude]);
 
   useEffect(() => {
