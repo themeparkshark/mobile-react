@@ -18,14 +18,12 @@ import { ParkType } from '../../models/park-type';
 import { UserType } from '../../models/user-type';
 import * as RootNavigation from '../../RootNavigation';
 
-export default function ParkCoins({ route }) {
+export default function ParkCoins() {
   const [loading, setLoading] = useState<boolean>(true);
   const { user } = useContext(AuthContext);
-
   const [parks, setParks] = useState<ParkType[]>([]);
   const [selectedPark, setSelectedPark] = useState<number>();
-  const [selectedLeaderboard, setSelectedLeaderboard] =
-    useState<LeaderboardType>();
+  const [selectedLeaderboard, setSelectedLeaderboard] = useState<number>();
   const [users, setUsers] = useState<UserType[]>([]);
   const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>();
 
@@ -34,24 +32,22 @@ export default function ParkCoins({ route }) {
   }, []);
 
   useEffect(() => {
-    if (route.params?.park) {
-      setSelectedPark(route.params?.park);
-    } else if (user?.current_park_id) {
+    if (user?.current_park_id) {
       setSelectedPark(user.current_park_id);
     } else if (parks.length) {
       setSelectedPark(parks[0].id);
     }
-  }, [route.params?.park, parks, user]);
+  }, [parks, user]);
 
   useEffect(() => {
     if (leaderboards) {
-      setSelectedLeaderboard(leaderboards[0]);
+      setSelectedLeaderboard(leaderboards[0].id);
     }
   }, [leaderboards]);
 
   useAsyncEffect(async () => {
     if (selectedLeaderboard) {
-      setUsers(await getUsers(selectedLeaderboard.id));
+      setUsers(await getUsers(selectedLeaderboard));
       setLoading(false);
     }
   }, [selectedLeaderboard]);

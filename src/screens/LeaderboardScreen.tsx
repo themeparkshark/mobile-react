@@ -5,7 +5,7 @@ import Wrapper from '../components/Wrapper';
 import Experience from './LeaderboardsScreen/Experience';
 import ParkCoins from './LeaderboardsScreen/ParkCoins';
 
-export default function LeaderboardScreen({ route }) {
+export default function LeaderboardScreen() {
   return (
     <Wrapper>
       <Topbar text="Standings" />
@@ -28,7 +28,7 @@ export default function LeaderboardScreen({ route }) {
           >
             <Tabs
               items={['Park Coins', 'Experience']}
-              views={[<ParkCoins route={route} />, <Experience />]}
+              views={[<ParkCoins />, <Experience />]}
             />
           </View>
         </ImageBackground>
