@@ -12,8 +12,8 @@ import config from '../config';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { PinCollectionType } from '../models/pin-collection-type';
 import Pin from './Pin';
-import Stars from './Stars';
 import Ribbon from './Ribbon';
+import Stars from './Stars';
 
 export default function pinCollectionModal({
   pinCollection,
@@ -218,8 +218,7 @@ export default function pinCollectionModal({
                     bottom: '16%',
                     position: 'absolute',
                   }}
-                >
-                </View>
+                ></View>
               </View>
               <View
                 style={{

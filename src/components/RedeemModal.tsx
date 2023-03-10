@@ -1,12 +1,7 @@
 import dayjs from 'dayjs';
 import Lottie from 'lottie-react-native';
 import { useContext, useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  Dimensions,
-  Pressable,
-  View,
-} from 'react-native';
+import { Animated, Dimensions, Pressable, View } from 'react-native';
 import Modal from 'react-native-modal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
@@ -23,9 +18,9 @@ import { RedeemableType } from '../models/redeemable-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 import Box from './RedeemModal/Box';
+import Ribbon from './Ribbon';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
-import Ribbon from './Ribbon';
 
 export default function RedeemModal({
   redeemable,
@@ -186,7 +181,8 @@ export default function RedeemModal({
               <Ribbon text="Congratulations" />
               <View
                 style={{
-                  backgroundColor: backgrounds[redeemable.type as keyof typeof backgrounds],
+                  backgroundColor:
+                    backgrounds[redeemable.type as keyof typeof backgrounds],
                   borderRadius: 16,
                   marginTop: '-10%',
                   width: '85%',
@@ -281,9 +277,9 @@ export default function RedeemModal({
                         text={
                           doubleXP
                             ? (redeemable.model as TaskType | SecretTaskType)
-                            .experience * 2
+                                .experience * 2
                             : (redeemable.model as TaskType | SecretTaskType)
-                              .experience
+                                .experience
                         }
                         small
                         type={redeemable.type}
@@ -310,9 +306,9 @@ export default function RedeemModal({
                           text={
                             doubleCoins
                               ? (redeemable.model as TaskType | SecretTaskType)
-                              .coins * 2
+                                  .coins * 2
                               : (redeemable.model as TaskType | SecretTaskType)
-                                .coins
+                                  .coins
                           }
                           small
                           type={redeemable.type}
@@ -366,7 +362,10 @@ export default function RedeemModal({
                           doubleCoins
                         );
                       } else if (redeemable.type === 'coin') {
-                        await redeemCoin(redeemable.model as CoinType, doubleXP);
+                        await redeemCoin(
+                          redeemable.model as CoinType,
+                          doubleXP
+                        );
                       } else if (
                         redeemable.type === 'item' ||
                         redeemable.type === 'pin'

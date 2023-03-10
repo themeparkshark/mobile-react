@@ -1,8 +1,6 @@
-import {ImageBackground, Text, View} from 'react-native';
+import { ImageBackground, Text, View } from 'react-native';
 
-export default function Ribbon({ text } : {
-  readonly text: string;
-}) {
+export default function Ribbon({ text }: { readonly text: string }) {
   return (
     <ImageBackground
       source={require('../../assets/images/ribbon.png')}
