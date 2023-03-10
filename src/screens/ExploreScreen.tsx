@@ -127,6 +127,7 @@ export default function ExploreScreen() {
               flexDirection: 'row',
               alignItems: 'flex-end',
             }}
+            pointerEvents="box-none"
           >
             <View
               style={{

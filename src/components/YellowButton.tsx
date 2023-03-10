@@ -37,9 +37,7 @@ export default function YellowButton({
         <ImageBackground
           source={require('../../assets/images/yellow_button.png')}
           style={{
-            maxWidth: 190,
             width: '100%',
-            maxHeight: 50,
             aspectRatio: 3.8,
           }}
           resizeMode="contain"

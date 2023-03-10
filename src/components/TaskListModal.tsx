@@ -121,7 +121,7 @@ export default function TaskListModal({
                 shadowOpacity: 0.25,
                 shadowRadius: 4,
                 width: '80%',
-                maxHeight: '60%',
+                maxHeight: '80%',
                 marginLeft: 'auto',
                 marginRight: 'auto',
               }}
