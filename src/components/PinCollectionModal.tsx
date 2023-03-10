@@ -13,6 +13,7 @@ import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { PinCollectionType } from '../models/pin-collection-type';
 import Pin from './Pin';
 import Stars from './Stars';
+import Ribbon from './Ribbon';
 
 export default function pinCollectionModal({
   pinCollection,
@@ -147,74 +148,82 @@ export default function pinCollectionModal({
             }}
             onPress={() => setModalVisible(false)}
           />
-          <ImageBackground
-            source={require('../../assets/images/redeem.png')}
-            resizeMode="contain"
+          <View
             style={{
               width: Dimensions.get('window').width - 40,
-              height: 500,
               top: 0,
               bottom: 0,
               left: 0,
               right: 0,
               margin: 'auto',
               position: 'relative',
-              zIndex: 20,
+              zIndex: 10,
+              alignItems: 'center',
             }}
           >
+            <Ribbon text={pinCollection.name} />
             <View
               style={{
-                top: 50,
-                marginLeft: 'auto',
-                marginRight: 'auto',
-                width: '80%',
-              }}
-            >
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                style={{
-                  fontSize: 28,
-                  alignSelf: 'center',
-                  textTransform: 'uppercase',
-                  fontFamily: 'Knockout',
-                  color: 'white',
-                  textShadowColor: 'rgba(0, 0, 0, .5)',
-                  textShadowOffset: {
-                    width: 2,
-                    height: 2,
-                  },
-                  textShadowRadius: 0,
-                }}
-              >
-                {pinCollection.name}
-              </Text>
-            </View>
-            <View
-              style={{
-                flexDirection: 'row',
-                top: 130,
-                marginLeft: 'auto',
-                marginRight: 'auto',
-                width: '70%',
-                flexWrap: 'wrap',
-                justifyContent: 'center',
-              }}
-            >
-              {pinCollection.pins.map((pin) => (
-                <Pin key={pin.id} pin={pin} />
-              ))}
-            </View>
-            <View
-              style={{
-                width: '100%',
-                bottom: '16%',
-                position: 'absolute',
+                backgroundColor: '#0788e4',
+                borderRadius: 16,
+                marginTop: '-10%',
+                width: '85%',
+                zIndex: 10,
+                paddingTop: 16,
+                paddingLeft: 16,
+                paddingRight: 16,
+                paddingBottom: 8,
+                shadowColor: '#000',
+                shadowOffset: {
+                  width: 2,
+                  height: 2,
+                },
+                shadowRadius: 0,
+                shadowOpacity: 0.4,
+                borderColor: 'rgba(0, 0, 0, .4)',
+                borderWidth: 2,
               }}
             >
               <View
                 style={{
-                  width: '70%',
+                  paddingTop: 32,
+                  paddingBottom: 32,
+                  paddingLeft: 16,
+                  paddingRight: 16,
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  borderColor: 'rgba(0, 0, 0, .6)',
+                  borderLeftWidth: 2,
+                  borderRightWidth: 2,
+                  borderBottomWidth: 2,
+                  borderBottomLeftRadius: 16,
+                  borderBottomRightRadius: 16,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    marginLeft: 'auto',
+                    marginRight: 'auto',
+                    flexWrap: 'wrap',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {pinCollection.pins.map((pin) => (
+                    <Pin key={pin.id} pin={pin} />
+                  ))}
+                </View>
+                <View
+                  style={{
+                    width: '100%',
+                    bottom: '16%',
+                    position: 'absolute',
+                  }}
+                >
+                </View>
+              </View>
+              <View
+                style={{
+                  padding: 16,
                   marginLeft: 'auto',
                   marginRight: 'auto',
                   flexDirection: 'row',
@@ -228,7 +237,7 @@ export default function pinCollectionModal({
                 />
               </View>
             </View>
-          </ImageBackground>
+          </View>
         </View>
       </Modal>
     </>

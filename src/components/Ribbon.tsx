@@ -17,6 +17,7 @@ export default function Ribbon({ text } : {
     >
       <View
         style={{
+          width: '80%',
           height: '50%',
           marginTop: '-4%',
           justifyContent: 'center',
@@ -27,13 +28,14 @@ export default function Ribbon({ text } : {
             fontFamily: 'Shark',
             textTransform: 'uppercase',
             color: 'white',
-            fontSize: 36,
+            fontSize: 32,
             textShadowColor: 'rgba(0, 0, 0, .5)',
             textShadowOffset: {
               width: 2,
               height: 2,
             },
             textShadowRadius: 0,
+            textAlign: 'center',
           }}
           adjustsFontSizeToFit
           numberOfLines={1}
