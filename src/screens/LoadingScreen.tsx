@@ -13,9 +13,9 @@ import getCrumbs from '../api/endpoints/crumbs/getCrumbs';
 import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
-import * as RootNavigation from '../RootNavigation';
 import { LocationContext } from '../context/LocationProvider';
-import {NotificationContext} from '../context/NotificationProvider';
+import { NotificationContext } from '../context/NotificationProvider';
+import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
@@ -53,7 +53,14 @@ export default function LoadingScreen() {
   }, [isReady]);
 
   useEffect(() => {
-    if (isReady && inventory && user && fontsLoaded && !isEmpty(crumbs) && !isEmpty(location)) {
+    if (
+      isReady &&
+      inventory &&
+      user &&
+      fontsLoaded &&
+      !isEmpty(crumbs) &&
+      !isEmpty(location)
+    ) {
       setLoading(false);
     }
   }, [user, inventory, isReady, fontsLoaded, crumbs, location]);

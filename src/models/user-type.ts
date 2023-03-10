@@ -19,6 +19,7 @@ export interface UserType {
   readonly id: number;
   readonly inventory: InventoryType;
   readonly is_friend: boolean;
+  readonly last_read_notifications_at: string;
   readonly mascot: MascotType;
   readonly name: string;
   readonly park_coins: number;

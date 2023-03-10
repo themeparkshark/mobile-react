@@ -3,11 +3,11 @@ import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { CrumbProvider } from './src/context/CrumbProvider';
 import { FriendProvider } from './src/context/FriendProvider';
+import { LocationProvider } from './src/context/LocationProvider';
 import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
 import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import Root from './src/Root';
-import {LocationProvider} from './src/context/LocationProvider';
 
 export default function App() {
   return (

@@ -1,7 +1,7 @@
-import {createContext, Dispatch, FC, ReactNode, useState} from 'react';
-import {LocationType} from '../models/location-type';
+import { createContext, Dispatch, FC, ReactNode, useState } from 'react';
+import { useAsyncEffect } from 'rooks';
 import getCurrentLocation from '../helpers/get-current-location';
-import {useAsyncEffect} from 'rooks';
+import { LocationType } from '../models/location-type';
 
 export interface LocationContextType {
   readonly location?: LocationType;

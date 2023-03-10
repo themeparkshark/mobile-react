@@ -16,6 +16,7 @@ import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
+import { LocationContext } from '../context/LocationProvider';
 import { MusicContext } from '../context/MusicProvider';
 import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
@@ -25,7 +26,6 @@ import { RedeemablesType } from '../models/redeemables-type';
 import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import NotAtPark from './ExploreScreen/NotAtPark';
-import { LocationContext } from '../context/LocationProvider';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
