@@ -194,7 +194,7 @@ export default function Topbar({
                   }}
                 >
                   <Image
-                    source={parkCoin}
+                    source={require('../../assets/images/keys.png')}
                     style={{
                       width: 35,
                       height: 35,
