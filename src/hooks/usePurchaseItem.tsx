@@ -7,6 +7,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import useCrumbs from './useCrumbs';
+import {CurrencyEnum} from '../models/currency-enum';
 
 export default function usePurchaseItem() {
   const { playSound } = useContext(SoundEffectContext);
@@ -36,7 +37,10 @@ export default function usePurchaseItem() {
       );
     }
 
-    if (user.coins < item.cost) {
+    if (
+      item.currency.id === CurrencyEnum.SharkCoins
+      && user.coins < item.cost
+    ) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
       return Alert.alert('', errors.not_enough_coins, [
@@ -46,10 +50,29 @@ export default function usePurchaseItem() {
       ]);
     }
 
+    if (
+      item.currency.id === CurrencyEnum.Keys
+      && user.keys < item.cost
+    ) {
+      playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
+
+      return Alert.alert('', errors.not_enough_keys, [
+        {
+          text: 'Ok',
+        },
+      ]);
+    }
+
     const text =
       item.cost === 0
         ? vsprintf(prompts.redeem_item, [item.name])
-        : vsprintf(prompts.purchase_item, [item.name, item.cost, user.coins]);
+        : vsprintf(prompts.purchase_item, [
+          item.name,
+          item.cost,
+          item.currency.name,
+          item.currency.id === CurrencyEnum.SharkCoins ? user.coins : user.keys,
+          item.currency.name
+        ]);
 
     playSound(require('../../assets/sounds/purchase_item_prompt.mp3'));
 

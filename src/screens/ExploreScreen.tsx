@@ -4,7 +4,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, Image, Pressable, View } from 'react-native';
+import { Dimensions, Pressable, View } from 'react-native';
+import { Image } from 'expo-image';
 import MapView, { Marker } from 'react-native-maps';
 import { useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
@@ -185,7 +186,7 @@ export default function ExploreScreen() {
                     source={{
                       uri: park.store.icon_url,
                     }}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                 </Button>
               )}
@@ -202,7 +203,7 @@ export default function ExploreScreen() {
                     height: 84,
                   }}
                   source={require('../../assets/images/screens/explore/queuetimes.png')}
-                  resizeMode="contain"
+                  contentFit="contain"
                 />
               </Button>
               {inventory && (
@@ -260,7 +261,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/item_animation.gif')}
-                    resizeMode="contain"
+                    contentFit="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -288,7 +289,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/pin_animation.gif')}
-                    resizeMode="contain"
+                    contentFit="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -312,7 +313,7 @@ export default function ExploreScreen() {
                     width: 120,
                     height: 120,
                   }}
-                  resizeMode="contain"
+                  contentFit="contain"
                 />
               </Marker>
             );
@@ -337,6 +338,26 @@ export default function ExploreScreen() {
                 </Marker>
               );
             })}
+          {redeemables?.vaults.map((vault) => {
+            return (
+              <Marker
+                key={vault.id}
+                coordinate={{
+                  latitude: vault.latitude,
+                  longitude: vault.longitude,
+                }}
+              >
+                <Image
+                  source={require('../../assets/images/screens/explore/vault.png')}
+                  style={{
+                    width: 120,
+                    height: 120,
+                  }}
+                  contentFit="contain"
+                />
+              </Marker>
+            );
+          })}
         </MapView>
       </View>
     </Wrapper>

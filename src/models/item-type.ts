@@ -1,4 +1,5 @@
 import { ItemTypeType } from './item-type-type';
+import {CurrencyType} from './currency-type';
 
 export interface ItemType {
   readonly id: number;
@@ -13,4 +14,5 @@ export interface ItemType {
   readonly section: string;
   readonly is_hidden: boolean;
   readonly is_clearance: boolean;
+  readonly currency: CurrencyType;
 }
