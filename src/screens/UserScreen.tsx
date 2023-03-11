@@ -22,6 +22,7 @@ import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
 import {useFocusEffect} from '@react-navigation/native';
+import {MusicContext} from '../context/MusicProvider';
 
 export default function UserScreen({ route, navigation }) {
   const { user } = route.params;
@@ -33,6 +34,7 @@ export default function UserScreen({ route, navigation }) {
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
   const { errors, messages, prompts } = useCrumbs();
+  const { playMusic } = useContext(MusicContext);
 
   useFocusEffect(
     useCallback(() => {
