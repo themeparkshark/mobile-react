@@ -92,6 +92,7 @@ export default function ExploreScreen() {
       <Topbar
         parkCoin={park?.coin_url}
         showCoins
+        showKeys
         parkCoins={park?.park_coins_count}
       />
       {!park && <NotAtPark />}

@@ -107,7 +107,7 @@ export default function Box({
               source={image}
               style={{
                 width: '100%',
-                height: 80,
+                aspectRatio: 1,
                 marginLeft: 'auto',
                 marginRight: 'auto',
               }}

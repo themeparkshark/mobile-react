@@ -19,6 +19,7 @@ export interface UserType {
   readonly id: number;
   readonly inventory: InventoryType;
   readonly is_friend: boolean;
+  readonly keys: number;
   readonly last_read_notifications_at: string;
   readonly mascot: MascotType;
   readonly name: string;
@@ -27,6 +28,7 @@ export interface UserType {
   readonly screen_name: string;
   readonly total_coins: number;
   readonly total_experience: number;
+  readonly total_keys: number;
   readonly username: string;
   readonly verified_at: string;
   readonly visited_parks_count: number;

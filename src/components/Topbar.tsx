@@ -21,6 +21,7 @@ export default function Topbar({
   text = null,
   showBackButton = false,
   showCoins = false,
+  showKeys = false,
   parkCoin = null,
   parkCoins = null,
   purple = false,
@@ -33,12 +34,13 @@ export default function Topbar({
   readonly purple?: boolean;
   readonly showBackButton?: boolean;
   readonly showCoins?: boolean;
+  readonly showKeys?: boolean;
   readonly parkCoin?: string | null;
   readonly parkCoins?: number | null;
   readonly onBackButtonPress?: () => void;
 }) {
   const { user } = useContext(AuthContext);
-  const width = text ? (showCoins ? '20%' : '15%') : '50%';
+  const width = text ? (showCoins ? '20%' : '15%') : '33.3333333%';
 
   return (
     <View
@@ -89,7 +91,6 @@ export default function Topbar({
               <View
                 style={{
                   width,
-                  alignItems: 'flex-start',
                 }}
               >
                 {leftButton}
@@ -113,7 +114,7 @@ export default function Topbar({
                     />
                   </Button>
                 )}
-                {parkCoins !== null && parkCoin && (
+                {!!parkCoins && (
                   <View
                     style={{
                       flexDirection: 'row',
@@ -150,33 +151,77 @@ export default function Topbar({
                 )}
               </View>
             )}
-            <View
-              style={{
-                flex: 1,
-              }}
-            >
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit={true}
+            {text && (
+              <View
                 style={{
-                  textAlign: 'center',
-                  fontSize: showCoins ? 28 : 38,
-                  color: 'white',
-                  fontFamily: 'Shark',
-                  textTransform: 'uppercase',
-                  textShadowColor: 'rgba(0, 0, 0, .5)',
-                  textShadowOffset: {
-                    width: 2,
-                    height: 2,
-                  },
-                  textShadowRadius: 0,
-                  paddingLeft: 12,
-                  paddingRight: 12,
+                  flex: 1,
                 }}
               >
-                {text}
-              </Text>
-            </View>
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit={true}
+                  style={{
+                    textAlign: 'center',
+                    fontSize: showCoins ? 28 : 38,
+                    color: 'white',
+                    fontFamily: 'Shark',
+                    textTransform: 'uppercase',
+                    textShadowColor: 'rgba(0, 0, 0, .5)',
+                    textShadowOffset: {
+                      width: 2,
+                      height: 2,
+                    },
+                    textShadowRadius: 0,
+                    paddingLeft: 12,
+                    paddingRight: 12,
+                  }}
+                >
+                  {text}
+                </Text>
+              </View>
+            )}
+            {showKeys && (
+              <View
+                style={{
+                  width,
+                  alignItems: 'center',
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Image
+                    source={parkCoin}
+                    style={{
+                      width: 35,
+                      height: 35,
+                      marginRight: 8,
+                    }}
+                    contentFit="contain"
+                  />
+                  <Text
+                    style={{
+                      textAlign: 'center',
+                      fontSize: 24,
+                      color: 'white',
+                      fontFamily: 'Shark',
+                      textTransform: 'uppercase',
+                      textShadowColor: 'rgba(0, 0, 0, .5)',
+                      textShadowOffset: {
+                        width: 2,
+                        height: 2,
+                      },
+                      textShadowRadius: 0,
+                    }}
+                  >
+                    {user?.keys}
+                  </Text>
+                </View>
+              </View>
+            )}
             {(parkCoins !== null ||
               showBackButton ||
               showCoins ||
@@ -201,6 +246,14 @@ export default function Topbar({
                       justifyContent: 'flex-end',
                     }}
                   >
+                    <Image
+                      source={require('../../assets/images/coins.png')}
+                      style={{
+                        width: 35,
+                        height: 35,
+                      }}
+                      contentFit="contain"
+                    />
                     <Text
                       style={{
                         textAlign: 'center',
@@ -214,21 +267,13 @@ export default function Topbar({
                           height: 2,
                         },
                         textShadowRadius: 0,
-                        marginRight: 8,
+                        marginLeft: 8,
                       }}
                       adjustsFontSizeToFit
                       numberOfLines={1}
                     >
                       {user?.coins}
                     </Text>
-                    <Image
-                      source={require('../../assets/images/coins.png')}
-                      style={{
-                        width: 35,
-                        height: 35,
-                      }}
-                      contentFit="contain"
-                    />
                   </View>
                 )}
               </View>
