@@ -3,9 +3,9 @@ import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArro
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
+import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { Dimensions, Pressable, View } from 'react-native';
-import { Image } from 'expo-image';
 import MapView, { Marker } from 'react-native-maps';
 import { useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';

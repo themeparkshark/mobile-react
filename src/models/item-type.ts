@@ -1,5 +1,5 @@
+import { CurrencyType } from './currency-type';
 import { ItemTypeType } from './item-type-type';
-import {CurrencyType} from './currency-type';
 
 export interface ItemType {
   readonly id: number;
