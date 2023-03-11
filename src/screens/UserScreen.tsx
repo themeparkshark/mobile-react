@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react';
+import {useCallback, useContext, useEffect, useState} from 'react';
 import { Alert, Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
@@ -21,6 +21,7 @@ import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
+import {useFocusEffect} from '@react-navigation/native';
 
 export default function UserScreen({ route, navigation }) {
   const { user } = route.params;
@@ -32,6 +33,12 @@ export default function UserScreen({ route, navigation }) {
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
   const { errors, messages, prompts } = useCrumbs();
+
+  useFocusEffect(
+    useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
+    }, [])
+  );
 
   useAsyncEffect(async () => {
     if (authContext.isReady && authContext.user.id === user) {
