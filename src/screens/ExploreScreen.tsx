@@ -5,7 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, Pressable, View } from 'react-native';
+import { Dimensions, Pressable, View, Text } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
@@ -27,6 +27,7 @@ import { RedeemablesType } from '../models/redeemables-type';
 import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import NotAtPark from './ExploreScreen/NotAtPark';
+import Key from './ExploreScreen/Key';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -358,6 +359,26 @@ export default function ExploreScreen() {
               </Marker>
             );
           })}
+          {redeemables?.keys
+            .filter((key) => {
+              return dayjs().isBetween(
+                dayjs(key.active_from),
+                dayjs(key.active_to)
+              );
+            })
+            .map((key) => {
+              return (
+                <Marker
+                  key={key.id}
+                  coordinate={{
+                    latitude: key.latitude,
+                    longitude: key.longitude,
+                  }}
+                >
+                  <Key keyModel={key} onExpire={() => getRedeemables()} />
+                </Marker>
+              );
+            })}
         </MapView>
       </View>
     </Wrapper>
