@@ -3,9 +3,8 @@ import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArro
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, Pressable, View } from 'react-native';
+import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
@@ -158,7 +157,7 @@ export default function ExploreScreen() {
                       source={{
                         uri: park.store.icon_url,
                       }}
-                      contentFit="contain"
+                      resizeMode="contain"
                     />
                   </Button>
                 )}
@@ -215,7 +214,7 @@ export default function ExploreScreen() {
                       height: 72,
                     }}
                     source={require('../../assets/images/screens/explore/queuetimes.png')}
-                    contentFit="contain"
+                    resizeMode="contain"
                   />
                 </Button>
               </View>
@@ -274,7 +273,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/item_animation.gif')}
-                    contentFit="contain"
+                    resizeMode="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -302,7 +301,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/pin_animation.gif')}
-                    contentFit="contain"
+                    resizeMode="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -326,7 +325,7 @@ export default function ExploreScreen() {
                     width: 120,
                     height: 120,
                   }}
-                  contentFit="contain"
+                  resizeMode="contain"
                 />
               </Marker>
             );
