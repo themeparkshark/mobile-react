@@ -1,4 +1,5 @@
-import {useCallback, useContext, useEffect, useState} from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { Alert, Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
@@ -16,13 +17,12 @@ import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
 import { AuthContext, AuthContextType } from '../context/AuthProvider';
+import { MusicContext } from '../context/MusicProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
-import {useFocusEffect} from '@react-navigation/native';
-import {MusicContext} from '../context/MusicProvider';
 
 export default function UserScreen({ route, navigation }) {
   const { user } = route.params;

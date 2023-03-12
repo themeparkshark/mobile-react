@@ -238,7 +238,15 @@ export default function ProfileScreen() {
                     >
                       You don't have any friends yet.
                     </Text>
-                    <View style={{ alignItems: 'center', marginTop: 32, width: 190, marginLeft: 'auto', marginRight: 'auto' }}>
+                    <View
+                      style={{
+                        alignItems: 'center',
+                        marginTop: 32,
+                        width: 190,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                      }}
+                    >
                       <YellowButton
                         onPress={() => {
                           RootNavigation.navigate('Friends');
