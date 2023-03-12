@@ -123,111 +123,96 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              bottom: 16,
+              left: 16,
+              bottom: 32,
               zIndex: 10,
-              width: '100%',
-              flexDirection: 'row',
-              alignItems: 'flex-end',
             }}
-            pointerEvents="box-none"
           >
             <View
               style={{
-                padding: 16,
+                marginBottom: 8,
               }}
             >
-              <View
-                style={{
-                  marginBottom: 8,
-                }}
-              >
-                {park.store && (
-                  <Button
-                    onPress={() => {
-                      RootNavigation.navigate('Store', {
-                        store: park.store.id,
-                      });
-                    }}
-                  >
-                    <Image
-                      style={{
-                        width: 70,
-                        height: 75,
-                      }}
-                      source={{
-                        uri: park.store.icon_url,
-                      }}
-                      resizeMode="contain"
-                    />
-                  </Button>
-                )}
-              </View>
-              <View
-                style={{
-                  marginBottom: -4,
-                }}
-              >
-                <TaskListModal redeemables={redeemables} />
-              </View>
-            </View>
-            <View
-              style={{
-                flex: 1,
-                padding: 16,
-              }}
-            >
-              <View
-                style={{
-                  paddingBottom: 48,
-                }}
-              >
-                <RedeemModal
-                  redeemable={activeRedeemable}
-                  park={park}
-                  onPress={() => {
-                    getRedeemables();
-                    refreshUser();
-                  }}
-                />
-              </View>
-            </View>
-            <View
-              style={{
-                padding: 16,
-              }}
-            >
-              <View
-                style={{
-                  marginBottom: 8,
-                }}
-              >
+              {park.store && (
                 <Button
                   onPress={() => {
-                    RootNavigation.navigate('QueueTimes', {
-                      park: park.id,
+                    RootNavigation.navigate('Store', {
+                      store: park.store.id,
                     });
                   }}
                 >
                   <Image
                     style={{
                       width: 70,
-                      height: 72,
+                      height: 75,
                     }}
-                    source={require('../../assets/images/screens/explore/queuetimes.png')}
+                    source={{
+                      uri: park.store.icon_url,
+                    }}
                     resizeMode="contain"
                   />
                 </Button>
-              </View>
-              {inventory && (
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('Inventory');
-                  }}
-                >
-                  <Avatar user={user} size={70} />
-                </Button>
               )}
             </View>
+            <TaskListModal redeemables={redeemables} />
+          </View>
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 70,
+              zIndex: 10,
+              left: '25%',
+              width: '50%',
+            }}
+          >
+            <RedeemModal
+              redeemable={activeRedeemable}
+              park={park}
+              onPress={() => {
+                getRedeemables();
+                refreshUser();
+              }}
+            />
+          </View>
+          <View
+            style={{
+              position: 'absolute',
+              right: 16,
+              bottom: 32,
+              zIndex: 10,
+            }}
+          >
+            <View
+              style={{
+                marginBottom: 8,
+              }}
+            >
+              <Button
+                onPress={() => {
+                  RootNavigation.navigate('QueueTimes', {
+                    park: park.id,
+                  });
+                }}
+              >
+                <Image
+                  style={{
+                    width: 70,
+                    height: 72,
+                  }}
+                  source={require('../../assets/images/screens/explore/queuetimes.png')}
+                  resizeMode="contain"
+                />
+              </Button>
+            </View>
+            {inventory && (
+              <Button
+                onPress={() => {
+                  RootNavigation.navigate('Inventory');
+                }}
+              >
+                <Avatar user={user} size={70} />
+              </Button>
+            )}
           </View>
         </>
       )}

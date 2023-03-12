@@ -40,7 +40,7 @@ export default function RedeemModal({
 
   const slideUp = () => {
     Animated.timing(animated, {
-      toValue: 20,
+      toValue: 0,
       duration: 500,
       useNativeDriver: true,
     }).start();
