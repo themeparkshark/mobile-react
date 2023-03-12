@@ -139,6 +139,32 @@ export default function ExploreScreen() {
             >
               <View
                 style={{
+                  marginBottom: 8,
+                }}
+              >
+                {park.store && (
+                  <Button
+                    onPress={() => {
+                      RootNavigation.navigate('Store', {
+                        store: park.store.id,
+                      });
+                    }}
+                  >
+                    <Image
+                      style={{
+                        width: 70,
+                        height: 75,
+                      }}
+                      source={{
+                        uri: park.store.icon_url,
+                      }}
+                      contentFit="contain"
+                    />
+                  </Button>
+                )}
+              </View>
+              <View
+                style={{
                   marginBottom: -4,
                 }}
               >
@@ -171,42 +197,28 @@ export default function ExploreScreen() {
                 padding: 16,
               }}
             >
-              {park.store && (
+              <View
+                style={{
+                  marginBottom: 8,
+                }}
+              >
                 <Button
                   onPress={() => {
-                    RootNavigation.navigate('Store', {
-                      store: park.store.id,
+                    RootNavigation.navigate('QueueTimes', {
+                      park: park.id,
                     });
                   }}
                 >
                   <Image
                     style={{
                       width: 70,
-                      height: 84,
+                      height: 72,
                     }}
-                    source={{
-                      uri: park.store.icon_url,
-                    }}
+                    source={require('../../assets/images/screens/explore/queuetimes.png')}
                     contentFit="contain"
                   />
                 </Button>
-              )}
-              <Button
-                onPress={() => {
-                  RootNavigation.navigate('QueueTimes', {
-                    park: park.id,
-                  });
-                }}
-              >
-                <Image
-                  style={{
-                    width: 70,
-                    height: 84,
-                  }}
-                  source={require('../../assets/images/screens/explore/queuetimes.png')}
-                  contentFit="contain"
-                />
-              </Button>
+              </View>
               {inventory && (
                 <Button
                   onPress={() => {
