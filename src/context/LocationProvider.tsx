@@ -1,9 +1,9 @@
 import { createContext, Dispatch, FC, ReactNode, useState } from 'react';
 import { useAsyncEffect } from 'rooks';
+import checkForPark from '../helpers/check-for-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
-import checkForPark from '../helpers/check-for-park';
-import {ParkType} from '../models/park-type';
+import { ParkType } from '../models/park-type';
 
 export interface LocationContextType {
   readonly location?: LocationType;

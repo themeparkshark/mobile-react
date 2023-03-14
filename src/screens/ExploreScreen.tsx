@@ -3,10 +3,10 @@ import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArro
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useState } from 'react';
 import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import {useAsyncEffect, useTimeoutWhen} from 'rooks';
+import { useAsyncEffect, useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
@@ -18,9 +18,7 @@ import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { MusicContext } from '../context/MusicProvider';
-import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
-import { ParkType } from '../models/park-type';
 import { RedeemableType } from '../models/redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import * as RootNavigation from '../RootNavigation';
@@ -42,7 +40,7 @@ export default function ExploreScreen() {
   const { location, park } = useContext(LocationContext);
 
   useFocusEffect(
-    useCallback( () => {
+    useCallback(() => {
       playMusic(require('../../assets/sounds/music/track5.mp3'));
     }, [])
   );
