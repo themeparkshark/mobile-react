@@ -22,7 +22,7 @@ export default function LoadingScreen() {
   const { inventory, setInventory, isReady, user, refreshUser } =
     useContext(AuthContext);
   const { crumbs, setCrumbs } = useContext(CrumbContext);
-  const { location, requestLocation } = useContext(LocationContext);
+  const { location, requestLocation, requestPark } = useContext(LocationContext);
   const [loadingText, setLoadingText] = useState<string>('Loading Interface');
   const { refreshNotificationCount } = useContext(NotificationContext);
 
@@ -41,7 +41,7 @@ export default function LoadingScreen() {
     }
 
     setLoadingText('Loading User');
-    refreshUser();
+    await refreshUser();
     setLoadingText('Loading Inventory');
     setInventory(await getInventory());
     setLoadingText('Loading Crumbs');
@@ -50,6 +50,8 @@ export default function LoadingScreen() {
     await refreshNotificationCount();
     setLoadingText('Loading Location');
     await requestLocation();
+    setLoadingText('Loading Park');
+    await requestPark();
   }, [isReady]);
 
   useEffect(() => {

@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { useTimeoutWhen } from 'rooks';
+import {useAsyncEffect, useTimeoutWhen} from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
@@ -31,7 +31,6 @@ import NotAtPark from './ExploreScreen/NotAtPark';
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
 export default function ExploreScreen() {
-  const [park, setPark] = useState<ParkType>();
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   const [activeRedeemable, setActiveRedeemable] = useState<
     RedeemableType | undefined
@@ -40,10 +39,10 @@ export default function ExploreScreen() {
   const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
   const [mapReady, setMapReady] = useState<boolean>(false);
   const { playMusic } = useContext(MusicContext);
-  const { location } = useContext(LocationContext);
+  const { location, park } = useContext(LocationContext);
 
   useFocusEffect(
-    useCallback(() => {
+    useCallback( () => {
       playMusic(require('../../assets/sounds/music/track5.mp3'));
     }, [])
   );
@@ -56,32 +55,30 @@ export default function ExploreScreen() {
     mapReady
   );
 
-  const getRedeemables = () => {
+  const getRedeemables = async () => {
     setActiveRedeemable(undefined);
-    currentRedeemables().then((response) => setRedeemables(response));
+    const response = await currentRedeemables();
+    setRedeemables(response);
   };
 
-  useEffect(() => {
-    checkForPark().then((response) => {
-      setPark(response);
+  useAsyncEffect(async () => {
+    if (!park) {
+      setRedeemables(null);
+      setActiveRedeemable(undefined);
 
-      if (response === null) {
-        setRedeemables(null);
-        setActiveRedeemable(undefined);
-      }
-    });
-  }, [location?.latitude, location?.longitude]);
-
-  useEffect(() => {
-    if (park) {
-      getRedeemables();
+      return;
     }
+
+    await getRedeemables();
   }, [park?.id]);
 
-  useEffect(() => {
-    if (location && redeemables) {
-      checkForRedeemable().then((response) => setActiveRedeemable(response));
+  useAsyncEffect(async () => {
+    if (!location || !redeemables) {
+      return;
     }
+
+    const response = await checkForRedeemable();
+    setActiveRedeemable(response);
   }, [location?.latitude, location?.longitude, redeemables]);
 
   if (!user) {
@@ -168,9 +165,9 @@ export default function ExploreScreen() {
             <RedeemModal
               redeemable={activeRedeemable}
               park={park}
-              onPress={() => {
-                getRedeemables();
-                refreshUser();
+              onPress={async () => {
+                await getRedeemables();
+                await refreshUser();
               }}
             />
           </View>

@@ -74,7 +74,6 @@ export default function PinSwap({
           text: 'Ok',
           onPress: () => {
             setModalVisible(false);
-            onClose();
           },
         },
       ]);
@@ -84,7 +83,6 @@ export default function PinSwap({
   useTimeoutWhen(
     () => {
       setModalVisible(false);
-      onClose();
     },
     dayjs(heldTo).diff(dayjs()),
     modalVisible
@@ -283,8 +281,10 @@ export default function PinSwap({
             </ImageBackground>
             <View
               style={{
-                alignItems: 'center',
                 padding: 32,
+                width: 240,
+                marginLeft: 'auto',
+                marginRight: 'auto',
               }}
             >
               <YellowButton
