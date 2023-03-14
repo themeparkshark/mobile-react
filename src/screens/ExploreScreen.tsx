@@ -345,7 +345,7 @@ export default function ExploreScreen() {
                     width: 120,
                     height: 120,
                   }}
-                  contentFit="contain"
+                  resizeMode="contain"
                 />
               </Marker>
             );
