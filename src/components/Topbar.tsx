@@ -91,6 +91,7 @@ export default function Topbar({
               <View
                 style={{
                   width,
+                  alignItems: 'flex-start',
                 }}
               >
                 {leftButton}
