@@ -22,7 +22,7 @@ export default function LoadingScreen() {
   const { inventory, setInventory, isReady, user, refreshUser } =
     useContext(AuthContext);
   const { crumbs, setCrumbs } = useContext(CrumbContext);
-  const { location, requestLocation, requestPark, park } =
+  const { location, requestLocation, requestPark, parkLoaded } =
     useContext(LocationContext);
   const [loadingText, setLoadingText] = useState<string>('Loading Interface');
   const { refreshNotificationCount } = useContext(NotificationContext);
@@ -63,11 +63,11 @@ export default function LoadingScreen() {
       fontsLoaded &&
       !isEmpty(crumbs) &&
       !isEmpty(location) &&
-      park
+      parkLoaded
     ) {
       setLoading(false);
     }
-  }, [user, inventory, isReady, fontsLoaded, crumbs, location, park]);
+  }, [user, inventory, isReady, fontsLoaded, crumbs, location, parkLoaded]);
 
   useEffect(() => {
     if (loading) {

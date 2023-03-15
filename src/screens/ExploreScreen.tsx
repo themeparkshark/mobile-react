@@ -154,7 +154,7 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              bottom: 70,
+              bottom: -50,
               zIndex: 10,
               left: '25%',
               width: '50%',

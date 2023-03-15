@@ -1,5 +1,5 @@
-import { createContext, Dispatch, FC, ReactNode, useState } from 'react';
-import { useAsyncEffect } from 'rooks';
+import {createContext, Dispatch, FC, ReactNode, useEffect, useState} from 'react';
+import {useAsyncEffect, useEffectOnceWhen} from 'rooks';
 import checkForPark from '../helpers/check-for-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
@@ -11,6 +11,7 @@ export interface LocationContextType {
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
   readonly park?: ParkType;
+  readonly parkLoaded: boolean;
 }
 
 export const LocationContext = createContext<LocationContextType>(
@@ -20,6 +21,7 @@ export const LocationContext = createContext<LocationContextType>(
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
   const [park, setPark] = useState<ParkType>();
+  const [parkLoaded, setParkLoaded] = useState<boolean>(false);
 
   const requestLocation = async () => {
     setLocation(await getCurrentLocation());
@@ -27,13 +29,14 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const requestPark = async () => {
     setPark(await checkForPark());
+    setParkLoaded(true);
   };
 
   useAsyncEffect(async () => {
     const interval = setInterval(async () => {
       await requestLocation();
       await requestPark();
-    }, 7500);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);
@@ -46,6 +49,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         requestLocation,
         requestPark,
         park,
+        parkLoaded,
       }}
     >
       {children}

@@ -40,14 +40,14 @@ export default function RedeemModal({
 
   const slideUp = () => {
     Animated.timing(animated, {
-      toValue: 0,
+      toValue: -120,
       duration: 500,
       useNativeDriver: true,
     }).start();
   };
   const slideDown = () => {
     Animated.timing(animated, {
-      toValue: 120,
+      toValue: 0,
       duration: 500,
       useNativeDriver: true,
     }).start();
@@ -84,18 +84,16 @@ export default function RedeemModal({
   }, [modalVisible]);
 
   useEffect(() => {
-    const isCoin =
+    console.log(redeemable);
+    const isActive = (
       redeemable?.type === 'coin' &&
       dayjs().isBetween(
         dayjs((redeemable?.model as CoinType).active_from),
         dayjs((redeemable?.model as CoinType).active_to)
-      );
-    const isItem = redeemable?.type === 'item';
-    const isPin = redeemable?.type === 'pin';
-    const isTask = redeemable?.type === 'task';
-    const isSecretTask = redeemable?.type === 'secret_task';
+      )
+    ) || !!redeemable?.type;
 
-    if (redeemable && (isCoin || isItem || isTask || isSecretTask || isPin)) {
+    if (redeemable && isActive) {
       playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
       slideUp();
     } else {

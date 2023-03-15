@@ -64,7 +64,7 @@ export default function Key({
           />
         </ImageBackground>
         <Image
-          source={require('../../../assets/images/screens/explore/key.png')}
+          source={require('../../../assets/images/screens/explore/key.gif')}
           style={{
             width: 30,
             height: 30,
