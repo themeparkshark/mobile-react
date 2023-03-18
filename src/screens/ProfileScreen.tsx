@@ -210,8 +210,7 @@ export default function ProfileScreen() {
                     </View>
                     <View
                       style={{
-                        alignItems: 'center',
-                        marginTop: 32,
+                        alignItems: 'center', marginTop: 32,
                         width: 190,
                         marginLeft: 'auto',
                         marginRight: 'auto',

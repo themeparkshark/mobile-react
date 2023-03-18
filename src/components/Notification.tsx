@@ -44,7 +44,7 @@ export default function Notification({
         style={{
           shadowColor: '#000',
           shadowOffset: {
-            width: 3,
+            width: 0,
             height: 3,
           },
           shadowRadius: 0,

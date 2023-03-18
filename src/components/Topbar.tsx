@@ -152,7 +152,7 @@ export default function Topbar({
                 )}
               </View>
             )}
-            {text && (
+            {!showKeys && (
               <View
                 style={{
                   flex: 1,

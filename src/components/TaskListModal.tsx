@@ -110,7 +110,7 @@ export default function TaskListModal({
                 flexGrow: 1,
               }}
               style={{
-                marginTop: -30,
+                marginTop: '-15%',
                 backgroundColor: 'white',
                 borderRadius: 20,
                 shadowColor: '#000',
