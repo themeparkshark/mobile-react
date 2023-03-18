@@ -78,7 +78,7 @@ export default function Suggestions() {
               data={users}
               keyExtractor={(user) => user.id.toString()}
               renderItem={({ item }) => {
-                return <FriendUser user={item} isSuggestion />;
+                return <FriendUser user={item} />;
               }}
               estimatedItemSize={80}
             />
@@ -89,7 +89,7 @@ export default function Suggestions() {
               data={searchResults}
               keyExtractor={(user) => user.id.toString()}
               renderItem={({ item }) => {
-                return <FriendUser user={item} isSuggestion />;
+                return <FriendUser user={item} />;
               }}
               estimatedItemSize={80}
             />

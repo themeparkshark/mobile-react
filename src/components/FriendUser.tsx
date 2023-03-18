@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { Text, TouchableOpacity, View } from 'react-native';
+import useCompliment from '../hooks/useCompliment';
 import useFriends from '../hooks/useFriends';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
@@ -7,15 +8,14 @@ import Avatar from './Avatar';
 import Button from './Button';
 
 export default function FriendUser({
-  isSuggestion = false,
   onRemove,
   user,
 }: {
-  readonly isSuggestion?: boolean;
   readonly onRemove?: () => void;
   readonly user: UserType;
 }) {
   const { addFriend, removeFriend } = useFriends();
+  const { complimentUser } = useCompliment();
 
   return (
     <TouchableOpacity
@@ -49,10 +49,34 @@ export default function FriendUser({
           {user.screen_name}
         </Text>
       </View>
-      <View>
+      <View
+        style={{
+          flexDirection: 'row',
+        }}
+      >
+        <View
+          style={{
+            paddingRight: 8,
+          }}
+        >
+          <Button
+            onPress={() => {
+              complimentUser(user);
+            }}
+          >
+            <Image
+              source={require('../../assets/images/screens/user/compliment.png')}
+              style={{
+                width: 40,
+                aspectRatio: 1,
+              }}
+              contentFit="contain"
+            />
+          </Button>
+        </View>
         <Button
           onPress={() => {
-            if (isSuggestion) {
+            if (!user.is_friend) {
               addFriend(user);
               return;
             }
@@ -64,7 +88,7 @@ export default function FriendUser({
         >
           <Image
             source={
-              isSuggestion
+              !user.is_friend
                 ? require('../../assets/images/screens/friends/add_friend.png')
                 : require('../../assets/images/screens/friends/remove_friend.png')
             }

@@ -21,7 +21,7 @@ export default async function (): Promise<LocationType> {
   return {
     latitude: location.coords.latitude,
     longitude: location.coords.longitude,
-    latitudeDelta: 0.00070,
-    longitudeDelta: 0.00070,
+    latitudeDelta: 0.0007,
+    longitudeDelta: 0.0007,
   };
 }

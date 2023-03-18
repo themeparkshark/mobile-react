@@ -85,13 +85,13 @@ export default function RedeemModal({
 
   useEffect(() => {
     console.log(redeemable);
-    const isActive = (
-      redeemable?.type === 'coin' &&
-      dayjs().isBetween(
-        dayjs((redeemable?.model as CoinType).active_from),
-        dayjs((redeemable?.model as CoinType).active_to)
-      )
-    ) || !!redeemable?.type;
+    const isActive =
+      (redeemable?.type === 'coin' &&
+        dayjs().isBetween(
+          dayjs((redeemable?.model as CoinType).active_from),
+          dayjs((redeemable?.model as CoinType).active_to)
+        )) ||
+      !!redeemable?.type;
 
     if (redeemable && isActive) {
       playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
