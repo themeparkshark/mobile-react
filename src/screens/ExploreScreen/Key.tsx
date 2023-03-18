@@ -3,21 +3,23 @@ import Countdown, { zeroPad } from 'react-countdown';
 import { Image, ImageBackground, Text, View } from 'react-native';
 import { useTimeoutWhen } from 'rooks';
 import config from '../../config';
-import { CoinType } from '../../models/coin-type';
+import { KeyType } from '../../models/key-type';
 
-export default function Coin({
-  coin,
+export default function Key({
+  keyModel,
   onExpire,
 }: {
-  readonly coin: CoinType;
+  readonly keyModel: KeyType;
   readonly onExpire: () => void;
 }) {
+  const key = keyModel;
+
   useTimeoutWhen(
     () => {
       onExpire();
     },
-    dayjs(coin.active_to).diff(dayjs()),
-    !!coin.id
+    dayjs(key.active_to).diff(dayjs()),
+    !!key.id
   );
 
   return (
@@ -42,7 +44,7 @@ export default function Coin({
           source={require('../../../assets/images/screens/explore/cloud.png')}
         >
           <Countdown
-            date={Date.parse(coin.active_to)}
+            date={Date.parse(key.active_to)}
             renderer={({ minutes, seconds }) => {
               return (
                 <Text
@@ -62,7 +64,7 @@ export default function Coin({
           />
         </ImageBackground>
         <Image
-          source={require('../../../assets/images/screens/explore/coin.gif')}
+          source={require('../../../assets/images/screens/explore/key.gif')}
           style={{
             width: 30,
             height: 30,

@@ -7,6 +7,7 @@ export interface CrumbContextType {
       readonly item_redeemed: string;
       readonly max_compliments_created: string;
       readonly not_enough_coins: string;
+      readonly not_enough_keys: string;
       readonly pin_swap_unavailable: string;
       readonly pin_required: string;
     };

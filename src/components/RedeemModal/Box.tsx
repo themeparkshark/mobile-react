@@ -58,7 +58,6 @@ export default function Box({
   return (
     <View
       style={{
-        height: '100%',
         backgroundColor: backgrounds[type as keyof typeof backgrounds],
         borderRadius: 10,
         alignItems: 'center',
@@ -75,7 +74,6 @@ export default function Box({
     >
       <View
         style={{
-          flex: 1,
           width: '100%',
           borderTopLeftRadius: 6,
           borderTopRightRadius: 6,
@@ -89,13 +87,13 @@ export default function Box({
             animation="pulse"
             iterationCount="infinite"
             direction="alternate"
-            style={{ justifyContent: 'center' }}
+            style={{ justifyContent: 'center', padding: 16 }}
           >
             <Image
               source={image}
               style={{
-                width: '90%',
-                height: '90%',
+                width: 120,
+                height: 120,
                 marginLeft: 'auto',
                 marginRight: 'auto',
               }}
@@ -104,16 +102,18 @@ export default function Box({
           </Animatable.View>
         )}
         {!pulse && (
-          <Image
-            source={image}
-            style={{
-              width: '85%',
-              height: '85%',
-              marginLeft: 'auto',
-              marginRight: 'auto',
-            }}
-            contentFit="contain"
-          />
+          <View style={{ padding: 8 }}>
+            <Image
+              source={image}
+              style={{
+                width: '100%',
+                aspectRatio: 1,
+                marginLeft: 'auto',
+                marginRight: 'auto',
+              }}
+              contentFit="contain"
+            />
+          </View>
         )}
         {number && (
           <View
@@ -161,9 +161,9 @@ export default function Box({
       {text && (
         <View
           style={{
-            backgroundColor: 'rgba(0, 0, 0, .6)',
-            borderBottomLeftRadius: 6,
-            borderBottomRightRadius: 6,
+            backgroundColor: 'rgba(0, 0, 0, .7)',
+            borderBottomLeftRadius: 7,
+            borderBottomRightRadius: 7,
             padding: 4,
             width: '100%',
           }}

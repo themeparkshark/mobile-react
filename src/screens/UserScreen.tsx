@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Alert, Dimensions, ScrollView, View } from 'react-native';
+import { Dimensions, ScrollView, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { useAsyncEffect } from 'rooks';
-import { vsprintf } from 'sprintf-js';
-import createCompliment from '../api/endpoints/compliments/create';
 import getUser from '../api/endpoints/users/get';
 import getVisitedParks from '../api/endpoints/users/visited-parks';
 import Experience from '../components/Experience';
@@ -15,8 +14,8 @@ import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
-import { AuthContext, AuthContextType } from '../context/AuthProvider';
-import useCrumbs from '../hooks/useCrumbs';
+import { MusicContext } from '../context/MusicProvider';
+import useCompliment from '../hooks/useCompliment';
 import useFriends from '../hooks/useFriends';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
@@ -30,7 +29,14 @@ export default function UserScreen({ route }) {
   const { purchaseItem } = usePurchaseItem();
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
-  const { errors, messages, prompts } = useCrumbs();
+  const { playMusic } = useContext(MusicContext);
+  const { complimentUser } = useCompliment();
+
+  useFocusEffect(
+    useCallback(() => {
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
+    }, [])
+  );
 
   useAsyncEffect(async () => {
     setLoading(true);
@@ -80,38 +86,7 @@ export default function UserScreen({ route }) {
         {
           image: require('../../assets/images/screens/user/compliment.png'),
           onPress: async () => {
-            Alert.alert(
-              '',
-              vsprintf(prompts.compliment, [currentUser?.screen_name]),
-              [
-                {
-                  text: 'Cancel',
-                  style: 'cancel',
-                },
-                {
-                  text: 'Ok',
-                  onPress: async () => {
-                    try {
-                      await createCompliment(currentUser.id);
-                    } catch {
-                      Alert.alert('', errors.max_compliments_created, [
-                        {
-                          text: 'Ok',
-                        },
-                      ]);
-
-                      return;
-                    }
-
-                    Alert.alert('', messages.compliment_created, [
-                      {
-                        text: 'Ok',
-                      },
-                    ]);
-                  },
-                },
-              ]
-            );
+            complimentUser(currentUser);
           },
           show: true,
           text: 'Compliment',

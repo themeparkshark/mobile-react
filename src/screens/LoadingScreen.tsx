@@ -13,16 +13,17 @@ import getCrumbs from '../api/endpoints/crumbs/getCrumbs';
 import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
-import * as RootNavigation from '../RootNavigation';
 import { LocationContext } from '../context/LocationProvider';
-import {NotificationContext} from '../context/NotificationProvider';
+import { NotificationContext } from '../context/NotificationProvider';
+import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
   const { inventory, setInventory, isReady, user, refreshUser } =
     useContext(AuthContext);
   const { crumbs, setCrumbs } = useContext(CrumbContext);
-  const { location, requestLocation } = useContext(LocationContext);
+  const { location, requestLocation, requestPark, parkLoaded } =
+    useContext(LocationContext);
   const [loadingText, setLoadingText] = useState<string>('Loading Interface');
   const { refreshNotificationCount } = useContext(NotificationContext);
 
@@ -41,7 +42,7 @@ export default function LoadingScreen() {
     }
 
     setLoadingText('Loading User');
-    refreshUser();
+    await refreshUser();
     setLoadingText('Loading Inventory');
     setInventory(await getInventory());
     setLoadingText('Loading Crumbs');
@@ -50,13 +51,23 @@ export default function LoadingScreen() {
     await refreshNotificationCount();
     setLoadingText('Loading Location');
     await requestLocation();
+    setLoadingText('Loading Park');
+    await requestPark();
   }, [isReady]);
 
   useEffect(() => {
-    if (isReady && inventory && user && fontsLoaded && !isEmpty(crumbs) && !isEmpty(location)) {
+    if (
+      isReady &&
+      inventory &&
+      user &&
+      fontsLoaded &&
+      !isEmpty(crumbs) &&
+      !isEmpty(location) &&
+      parkLoaded
+    ) {
       setLoading(false);
     }
-  }, [user, inventory, isReady, fontsLoaded, crumbs, location]);
+  }, [user, inventory, isReady, fontsLoaded, crumbs, location, parkLoaded]);
 
   useEffect(() => {
     if (loading) {

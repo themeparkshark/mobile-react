@@ -7,7 +7,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "resourceClass": "m1-medium"
       },
       "env": {
         "API_URL": "https://dev-app.themeparkshark.com/api"
@@ -17,11 +18,17 @@
       "distribution": "internal",
       "env": {
         "API_URL": "https://dev-app.themeparkshark.com/api"
+      },
+      "ios": {
+        "resourceClass": "m1-medium"
       }
     },
     "production": {
       "env": {
         "API_URL": "https://prod-app.themeparkshark.com/api"
+      },
+      "ios": {
+        "resourceClass": "m1-medium"
       }
     }
   },

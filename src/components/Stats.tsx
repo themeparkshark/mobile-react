@@ -8,6 +8,10 @@ export default function Stats({ user }: { readonly user: UserType }) {
       value: user.friends_count,
     },
     {
+      label: 'Key balance',
+      value: user.keys,
+    },
+    {
       label: 'Park coins',
       value: user.park_coins_count,
     },

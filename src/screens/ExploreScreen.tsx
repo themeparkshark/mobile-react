@@ -3,10 +3,10 @@ import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArro
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useState } from 'react';
 import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { useTimeoutWhen } from 'rooks';
+import { useAsyncEffect, useTimeoutWhen } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
@@ -16,21 +16,19 @@ import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
+import { LocationContext } from '../context/LocationProvider';
 import { MusicContext } from '../context/MusicProvider';
-import checkForPark from '../helpers/check-for-park';
 import checkForRedeemable from '../helpers/check-for-redeemable';
-import { ParkType } from '../models/park-type';
 import { RedeemableType } from '../models/redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
+import Key from './ExploreScreen/Key';
 import NotAtPark from './ExploreScreen/NotAtPark';
-import { LocationContext } from '../context/LocationProvider';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
 export default function ExploreScreen() {
-  const [park, setPark] = useState<ParkType>();
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   const [activeRedeemable, setActiveRedeemable] = useState<
     RedeemableType | undefined
@@ -39,7 +37,7 @@ export default function ExploreScreen() {
   const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
   const [mapReady, setMapReady] = useState<boolean>(false);
   const { playMusic } = useContext(MusicContext);
-  const { location } = useContext(LocationContext);
+  const { location, park } = useContext(LocationContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -55,32 +53,30 @@ export default function ExploreScreen() {
     mapReady
   );
 
-  const getRedeemables = () => {
+  const getRedeemables = async () => {
     setActiveRedeemable(undefined);
-    currentRedeemables().then((response) => setRedeemables(response));
+    const response = await currentRedeemables();
+    setRedeemables(response);
   };
 
-  useEffect(() => {
-    checkForPark().then((response) => {
-      setPark(response);
+  useAsyncEffect(async () => {
+    if (!park) {
+      setRedeemables(null);
+      setActiveRedeemable(undefined);
 
-      if (response === null) {
-        setRedeemables(null);
-        setActiveRedeemable(undefined);
-      }
-    });
-  }, [location?.latitude, location?.longitude]);
-
-  useEffect(() => {
-    if (park) {
-      getRedeemables();
+      return;
     }
+
+    await getRedeemables();
   }, [park?.id]);
 
-  useEffect(() => {
-    if (location && redeemables) {
-      checkForRedeemable().then((response) => setActiveRedeemable(response));
+  useAsyncEffect(async () => {
+    if (!location || !redeemables) {
+      return;
     }
+
+    const response = await checkForRedeemable();
+    setActiveRedeemable(response);
   }, [location?.latitude, location?.longitude, redeemables]);
 
   if (!user) {
@@ -92,6 +88,7 @@ export default function ExploreScreen() {
       <Topbar
         parkCoin={park?.coin_url}
         showCoins
+        showKeys
         parkCoins={park?.park_coins_count}
       />
       {!park && <NotAtPark />}
@@ -121,50 +118,14 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              bottom: 16,
+              left: 16,
+              bottom: 32,
               zIndex: 10,
-              width: '100%',
-              flexDirection: 'row',
-              alignItems: 'flex-end',
             }}
           >
             <View
               style={{
-                padding: 16,
-              }}
-            >
-              <View
-                style={{
-                  marginBottom: -4,
-                }}
-              >
-                <TaskListModal redeemables={redeemables} />
-              </View>
-            </View>
-            <View
-              style={{
-                flex: 1,
-                padding: 16,
-              }}
-            >
-              <View
-                style={{
-                  paddingBottom: 48,
-                }}
-              >
-                <RedeemModal
-                  redeemable={activeRedeemable}
-                  park={park}
-                  onPress={() => {
-                    getRedeemables();
-                    refreshUser();
-                  }}
-                />
-              </View>
-            </View>
-            <View
-              style={{
-                padding: 16,
+                marginBottom: 8,
               }}
             >
               {park.store && (
@@ -178,7 +139,7 @@ export default function ExploreScreen() {
                   <Image
                     style={{
                       width: 70,
-                      height: 84,
+                      height: 75,
                     }}
                     source={{
                       uri: park.store.icon_url,
@@ -187,6 +148,40 @@ export default function ExploreScreen() {
                   />
                 </Button>
               )}
+            </View>
+            <TaskListModal redeemables={redeemables} />
+          </View>
+          <View
+            style={{
+              position: 'absolute',
+              bottom: -50,
+              zIndex: 10,
+              left: '25%',
+              width: '50%',
+            }}
+          >
+            <RedeemModal
+              redeemable={activeRedeemable}
+              park={park}
+              onPress={async () => {
+                await getRedeemables();
+                await refreshUser();
+              }}
+            />
+          </View>
+          <View
+            style={{
+              position: 'absolute',
+              right: 16,
+              bottom: 32,
+              zIndex: 10,
+            }}
+          >
+            <View
+              style={{
+                marginBottom: 8,
+              }}
+            >
               <Button
                 onPress={() => {
                   RootNavigation.navigate('QueueTimes', {
@@ -197,22 +192,22 @@ export default function ExploreScreen() {
                 <Image
                   style={{
                     width: 70,
-                    height: 84,
+                    height: 72,
                   }}
                   source={require('../../assets/images/screens/explore/queuetimes.png')}
                   resizeMode="contain"
                 />
               </Button>
-              {inventory && (
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('Inventory');
-                  }}
-                >
-                  <Avatar user={user} size={70} />
-                </Button>
-              )}
             </View>
+            {inventory && (
+              <Button
+                onPress={() => {
+                  RootNavigation.navigate('Inventory');
+                }}
+              >
+                <Avatar user={user} size={70} />
+              </Button>
+            )}
           </View>
         </>
       )}
@@ -332,6 +327,46 @@ export default function ExploreScreen() {
                   }}
                 >
                   <Coin coin={coin} onExpire={() => getRedeemables()} />
+                </Marker>
+              );
+            })}
+          {redeemables?.vaults.map((vault) => {
+            return (
+              <Marker
+                key={vault.id}
+                coordinate={{
+                  latitude: vault.latitude,
+                  longitude: vault.longitude,
+                }}
+              >
+                <Image
+                  source={require('../../assets/images/screens/explore/vault.gif')}
+                  style={{
+                    width: 120,
+                    height: 120,
+                  }}
+                  resizeMode="contain"
+                />
+              </Marker>
+            );
+          })}
+          {redeemables?.keys
+            .filter((key) => {
+              return dayjs().isBetween(
+                dayjs(key.active_from),
+                dayjs(key.active_to)
+              );
+            })
+            .map((key) => {
+              return (
+                <Marker
+                  key={key.id}
+                  coordinate={{
+                    latitude: key.latitude,
+                    longitude: key.longitude,
+                  }}
+                >
+                  <Key keyModel={key} onExpire={() => getRedeemables()} />
                 </Marker>
               );
             })}

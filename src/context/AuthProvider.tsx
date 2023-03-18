@@ -59,7 +59,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       setToken(response.token);
 
       await SecureStore.setItemAsync('token', response.token);
-      refreshUser();
+      await refreshUser();
     } catch (error) {
       console.log(error);
     }

@@ -208,7 +208,14 @@ export default function ProfileScreen() {
                         estimatedItemSize={80}
                       />
                     </View>
-                    <View style={{ alignItems: 'center', marginTop: 32 }}>
+                    <View
+                      style={{
+                        alignItems: 'center', marginTop: 32,
+                        width: 190,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                      }}
+                    >
                       <YellowButton
                         onPress={() => {
                           RootNavigation.navigate('Friends');
@@ -230,7 +237,15 @@ export default function ProfileScreen() {
                     >
                       You don't have any friends yet.
                     </Text>
-                    <View style={{ alignItems: 'center', marginTop: 32 }}>
+                    <View
+                      style={{
+                        alignItems: 'center',
+                        marginTop: 32,
+                        width: 190,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                      }}
+                    >
                       <YellowButton
                         onPress={() => {
                           RootNavigation.navigate('Friends');

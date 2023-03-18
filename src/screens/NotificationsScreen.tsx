@@ -1,20 +1,27 @@
 import { FlashList } from '@shopify/flash-list';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getNotifications from '../api/endpoints/me/notifications';
+import updateLastReadNotificationsAt from '../api/endpoints/me/update-last-read-notifications-at';
 import Loading from '../components/Loading';
 import Notification from '../components/Notification';
 import Topbar from '../components/Topbar';
+import { NotificationContext } from '../context/NotificationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { NotificationType } from '../models/notification-type';
 
 export default function NewsScreen() {
+  const { refreshNotificationCount } = useContext(NotificationContext);
   const [notifications, setNotifications] = useState<NotificationType[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const { warnings } = useCrumbs();
+
+  useLayoutEffect(() => {
+    updateLastReadNotificationsAt().then(() => refreshNotificationCount());
+  }, []);
 
   const fetchNotifications = async (page: number) => {
     const response = await getNotifications(page);

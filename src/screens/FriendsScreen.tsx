@@ -54,7 +54,7 @@ export default function FriendsScreen() {
             }}
           >
             <Tabs
-              items={['Your list', 'Everyone']}
+              items={['Your friends', 'Search Everyone']}
               views={[<YourList />, <Suggestions />]}
             />
           </View>

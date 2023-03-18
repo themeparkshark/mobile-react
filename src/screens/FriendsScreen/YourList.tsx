@@ -43,34 +43,36 @@ export default function YourList() {
             flex: 1,
           }}
         >
-          <FlashList
-            contentContainerStyle={{ paddingBottom: 8 }}
-            data={friends}
-            onRefresh={() => {
-              setRefreshing(true);
-              setFriends([]);
-              fetchFriends(1).then(() => setRefreshing(false));
-              setPage(1);
-            }}
-            refreshing={refreshing}
-            keyExtractor={(user) => user.id.toString()}
-            renderItem={({ item }) => {
-              return (
-                <FriendUser
-                  user={item}
-                  onRemove={async () => {
-                    setFriends([]);
-                    await fetchFriends(1);
-                    await refreshFriends();
-                  }}
-                />
-              );
-            }}
-            estimatedItemSize={80}
-            onEndReached={() => {
-              setPage((prevState) => prevState + 1);
-            }}
-          />
+          {!!friends.length && (
+            <FlashList
+              contentContainerStyle={{ paddingBottom: 8 }}
+              data={friends}
+              onRefresh={() => {
+                setRefreshing(true);
+                setFriends([]);
+                fetchFriends(1).then(() => setRefreshing(false));
+                setPage(1);
+              }}
+              refreshing={refreshing}
+              keyExtractor={(user) => user.id.toString()}
+              renderItem={({ item }) => {
+                return (
+                  <FriendUser
+                    user={item}
+                    onRemove={async () => {
+                      setFriends([]);
+                      await fetchFriends(1);
+                      await refreshFriends();
+                    }}
+                  />
+                );
+              }}
+              estimatedItemSize={80}
+              onEndReached={() => {
+                setPage((prevState) => prevState + 1);
+              }}
+            />
+          )}
           {!friends.length && (
             <Text
               style={{

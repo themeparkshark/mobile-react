@@ -36,8 +36,16 @@ export default function StoreScreen({ route }) {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track3.mp3'));
-    }, [])
+      if (!currentStore) {
+        return;
+      }
+
+      playMusic(
+        currentStore.is_secret_store
+          ? require('../../assets/sounds/music/track4.mp3')
+          : require('../../assets/sounds/music/track3.mp3')
+      );
+    }, [currentStore?.id])
   );
 
   useEffect(() => {
