@@ -28,13 +28,14 @@ import Wrapper from '../components/Wrapper';
 import YellowButton from '../components/YellowButton';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
-import { FriendContext } from '../context/FriendProvider';
 import { MusicContext } from '../context/MusicProvider';
 import { NotificationContext } from '../context/NotificationProvider';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import * as RootNavigation from '../RootNavigation';
+import getFriends from '../api/endpoints/me/friends';
+import { UserType } from '../models/user-type';
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
@@ -42,13 +43,18 @@ export default function ProfileScreen() {
   const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { user, inventory, setInventory } = useContext(AuthContext);
-  const { friends, refreshFriends } = useContext(FriendContext);
+  const [friends, setFriends] = useState<UserType[]>([]);
   const { notificationCount } = useContext(NotificationContext);
   const { playMusic } = useContext(MusicContext);
+
+  const requestFriends = () => {
+    getFriends(1, 3).then((response) => setFriends(response));
+  };
 
   useFocusEffect(
     useCallback(() => {
       playMusic(require('../../assets/sounds/music/track5.mp3'));
+      requestFriends();
     }, [])
   );
 
@@ -56,7 +62,7 @@ export default function ProfileScreen() {
     setParks(await getParks(user.id));
     setStores(await getStores());
     setInventory(await getInventory());
-    await refreshFriends();
+    requestFriends();
 
     setLoading(false);
   }, []);
@@ -199,8 +205,9 @@ export default function ProfileScreen() {
                           return (
                             <FriendUser
                               user={item}
-                              onRemove={async () => {
-                                await refreshFriends();
+                              isFriend
+                              onRemove={() => {
+                                requestFriends();
                               }}
                             />
                           );

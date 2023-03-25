@@ -84,7 +84,6 @@ export default function RedeemModal({
   }, [modalVisible]);
 
   useEffect(() => {
-    console.log(redeemable);
     const isActive =
       (redeemable?.type === 'coin' &&
         dayjs().isBetween(

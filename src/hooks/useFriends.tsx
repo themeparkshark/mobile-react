@@ -9,7 +9,6 @@ import { UserType } from '../models/user-type';
 import useCrumbs from './useCrumbs';
 
 export default function useFriends() {
-  const { refreshFriends } = useContext(FriendContext);
   const { messages, prompts } = useCrumbs();
 
   return {
@@ -37,7 +36,7 @@ export default function useFriends() {
         ]
       );
     },
-    acceptFriend: (user: UserType) => {
+    acceptFriend: (user: UserType, onPress: () => void) => {
       Alert.alert(
         '',
         vsprintf(prompts.accept_friend_request, [user.screen_name]),
@@ -50,6 +49,7 @@ export default function useFriends() {
             text: 'Ok',
             onPress: async () => {
               await acceptFriendRequest(user);
+              await onPress();
 
               Alert.alert('', messages.friend_request_accepted, [
                 {
@@ -71,7 +71,6 @@ export default function useFriends() {
           text: 'Ok',
           onPress: async () => {
             await unfriend(user);
-            await refreshFriends();
             await onPress();
 
             Alert.alert(

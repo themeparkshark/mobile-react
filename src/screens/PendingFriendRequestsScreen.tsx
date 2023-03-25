@@ -5,13 +5,13 @@ import getFriendRequests from '../api/endpoints/me/pending-requests';
 import FriendsList from '../components/FriendsList';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
-import { FriendContext } from '../context/FriendProvider';
 import { UserType } from '../models/user-type';
+import FriendUser from '../components/FriendUser';
+import {FlashList} from '@shopify/flash-list';
 
 export default function PendingFriendRequestsScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [friendRequests, setFriendRequests] = useState<UserType[]>([]);
-  const { refreshFriends } = useContext(FriendContext);
 
   const requestFriendRequests = async () => {
     setFriendRequests(await getFriendRequests());
@@ -61,12 +61,14 @@ export default function PendingFriendRequestsScreen() {
                       paddingBottom: 32,
                     }}
                   >
-                    <FriendsList
-                      users={friendRequests}
-                      onSuccess={async () => {
-                        await requestFriendRequests();
-                        await refreshFriends();
-                      }}
+                    <FlashList
+                      contentContainerStyle={{ paddingBottom: 8 }}
+                      data={friendRequests}
+                      keyExtractor={(user) => user.id.toString()}
+                      renderItem={({ item }) => (
+                        <FriendUser isPending user={item} />
+                      )}
+                      estimatedItemSize={80}
                     />
                   </View>
                 </ScrollView>

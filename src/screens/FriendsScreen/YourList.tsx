@@ -5,7 +5,6 @@ import { useAsyncEffect } from 'rooks';
 import getFriends from '../../api/endpoints/me/friends';
 import FriendUser from '../../components/FriendUser';
 import Loading from '../../components/Loading';
-import { FriendContext } from '../../context/FriendProvider';
 import useCrumbs from '../../hooks/useCrumbs';
 import { UserType } from '../../models/user-type';
 
@@ -15,7 +14,6 @@ export default function YourList() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
   const { warnings } = useCrumbs();
-  const { refreshFriends } = useContext(FriendContext);
 
   const fetchFriends = async (page: number) => {
     const response = await getFriends(page);
@@ -59,10 +57,10 @@ export default function YourList() {
                 return (
                   <FriendUser
                     user={item}
+                    isFriend
                     onRemove={async () => {
                       setFriends([]);
                       await fetchFriends(1);
-                      await refreshFriends();
                     }}
                   />
                 );
