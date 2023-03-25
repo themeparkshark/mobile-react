@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import getFriends from '../api/endpoints/me/friends';
 import getInventory from '../api/endpoints/me/inventory';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
@@ -33,9 +34,8 @@ import { NotificationContext } from '../context/NotificationProvider';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
-import * as RootNavigation from '../RootNavigation';
-import getFriends from '../api/endpoints/me/friends';
 import { UserType } from '../models/user-type';
+import * as RootNavigation from '../RootNavigation';
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
@@ -217,7 +217,8 @@ export default function ProfileScreen() {
                     </View>
                     <View
                       style={{
-                        alignItems: 'center', marginTop: 32,
+                        alignItems: 'center',
+                        marginTop: 32,
                         width: 190,
                         marginLeft: 'auto',
                         marginRight: 'auto',

@@ -1,13 +1,12 @@
-import { useContext, useEffect, useState } from 'react';
+import { FlashList } from '@shopify/flash-list';
+import { useEffect, useState } from 'react';
 import { ImageBackground, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getFriendRequests from '../api/endpoints/me/pending-requests';
-import FriendsList from '../components/FriendsList';
+import FriendUser from '../components/FriendUser';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import { UserType } from '../models/user-type';
-import FriendUser from '../components/FriendUser';
-import {FlashList} from '@shopify/flash-list';
 
 export default function PendingFriendRequestsScreen() {
   const [loading, setLoading] = useState<boolean>(true);

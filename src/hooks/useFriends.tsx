@@ -1,10 +1,8 @@
-import { useContext } from 'react';
 import { Alert } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import acceptFriendRequest from '../api/endpoints/me/users/accept-friend-request';
 import sendFriendRequest from '../api/endpoints/me/users/send-friend-request';
 import unfriend from '../api/endpoints/me/users/unfriend';
-import { FriendContext } from '../context/FriendProvider';
 import { UserType } from '../models/user-type';
 import useCrumbs from './useCrumbs';
 

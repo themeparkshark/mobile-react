@@ -1,5 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
-import { useContext, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getFriends from '../../api/endpoints/me/friends';
