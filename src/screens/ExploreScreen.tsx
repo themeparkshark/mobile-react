@@ -342,8 +342,8 @@ export default function ExploreScreen() {
                 <Image
                   source={require('../../assets/images/screens/explore/vault.gif')}
                   style={{
-                    width: 120,
-                    height: 120,
+                    width: 70,
+                    height: 70,
                   }}
                   resizeMode="contain"
                 />
