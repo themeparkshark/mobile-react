@@ -66,8 +66,8 @@ export default function Key({
         <Image
           source={require('../../../assets/images/screens/explore/key.gif')}
           style={{
-            width: 30,
-            height: 30,
+            width: 40,
+            height: 40,
           }}
           resizeMode="contain"
         />
