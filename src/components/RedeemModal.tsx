@@ -1,10 +1,12 @@
 import dayjs from 'dayjs';
+import { Image } from 'expo-image';
 import Lottie from 'lottie-react-native';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Pressable, View } from 'react-native';
+import { Animated, Dimensions, Pressable, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
+import redeemKey from '../api/endpoints/me/keys/redeem-key';
 import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
 import completeTask from '../api/endpoints/me/tasks/complete-task';
 import {
@@ -13,6 +15,7 @@ import {
 } from '../context/SoundEffectProvider';
 import { CoinType } from '../models/coin-type';
 import { ItemType } from '../models/item-type';
+import { KeyType } from '../models/key-type';
 import { ParkType } from '../models/park-type';
 import { RedeemableType } from '../models/redeemable-type';
 import { SecretTaskType } from '../models/secret-task-type';
@@ -37,6 +40,7 @@ export default function RedeemModal({
   const animated = useRef(new Animated.Value(0)).current;
   const [doubleXP, setDoubleXP] = useState<boolean>(false);
   const [doubleCoins, setDoubleCoins] = useState<boolean>(false);
+  const [doubleKey, setDoubleKey] = useState<boolean>(false);
 
   const slideUp = () => {
     Animated.timing(animated, {
@@ -45,6 +49,7 @@ export default function RedeemModal({
       useNativeDriver: true,
     }).start();
   };
+
   const slideDown = () => {
     Animated.timing(animated, {
       toValue: 0,
@@ -90,6 +95,11 @@ export default function RedeemModal({
           dayjs((redeemable?.model as CoinType).active_from),
           dayjs((redeemable?.model as CoinType).active_to)
         )) ||
+      (redeemable?.type === 'key' &&
+        dayjs().isBetween(
+          dayjs((redeemable?.model as KeyType).active_from),
+          dayjs((redeemable?.model as KeyType).active_to)
+        )) ||
       !!redeemable?.type;
 
     if (redeemable && isActive) {
@@ -119,273 +129,402 @@ export default function RedeemModal({
         />
       </Animated.View>
       {redeemable && (
-        <Modal
-          animationIn="zoomIn"
-          animationOut="zoomOut"
-          swipeDirection="down"
-          isVisible={modalVisible}
-          onSwipeComplete={() => setModalVisible(false)}
-          onModalWillHide={() => {
-            playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
-          }}
-        >
-          <View
-            style={{
-              flex: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Pressable
-              style={{
-                width: '100%',
-                height: '100%',
-                position: 'absolute',
-              }}
-              onPress={() => {
+        <>
+          {redeemable?.type !== 'key' ? (
+            <Modal
+              animationIn="zoomIn"
+              animationOut="zoomOut"
+              swipeDirection="down"
+              isVisible={modalVisible}
+              onSwipeComplete={() => setModalVisible(false)}
+              onModalWillHide={() => {
                 playSound(
                   require('../../assets/sounds/redeem_modal_close.mp3')
                 );
-                setModalVisible(false);
               }}
             >
-              <Lottie
-                source={require('../../assets/animations/confetti.json')}
-                progress={progress}
-                style={{
-                  position: 'absolute',
-                  width: 900,
-                  height: 400,
-                  top: 15,
-                  zIndex: 20,
-                  left: -80,
-                }}
-              />
-            </Pressable>
-            <View
-              style={{
-                width: Dimensions.get('window').width - 40,
-                top: 0,
-                bottom: 0,
-                left: 0,
-                right: 0,
-                margin: 'auto',
-                position: 'relative',
-                zIndex: 10,
-                alignItems: 'center',
-              }}
-            >
-              <Ribbon text="Congratulations" />
               <View
                 style={{
-                  backgroundColor:
-                    backgrounds[redeemable.type as keyof typeof backgrounds],
-                  borderRadius: 16,
-                  marginTop: '-10%',
-                  width: '85%',
-                  zIndex: 10,
-                  paddingTop: 16,
-                  paddingLeft: 16,
-                  paddingRight: 16,
-                  paddingBottom: 8,
-                  shadowColor: '#000',
-                  shadowOffset: {
-                    width: 2,
-                    height: 2,
-                  },
-                  shadowRadius: 0,
-                  shadowOpacity: 0.4,
-                  borderColor: 'rgba(0, 0, 0, .4)',
-                  borderWidth: 2,
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                <View
+                <Pressable
                   style={{
-                    paddingTop: 16,
-                    paddingBottom: 16,
-                    paddingLeft: 16,
-                    paddingRight: 16,
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    borderColor: 'rgba(0, 0, 0, .6)',
-                    borderLeftWidth: 2,
-                    borderRightWidth: 2,
-                    borderBottomWidth: 2,
-                    borderBottomLeftRadius: 16,
-                    borderBottomRightRadius: 16,
+                    width: '100%',
+                    height: '100%',
+                    position: 'absolute',
+                  }}
+                  onPress={() => {
+                    playSound(
+                      require('../../assets/sounds/redeem_modal_close.mp3')
+                    );
+                    setModalVisible(false);
                   }}
                 >
-                  <Box
-                    background={require('../../assets/images/screens/explore/starburst.png')}
-                    image={
-                      {
-                        task: {
-                          uri: (redeemable.model as SecretTaskType | TaskType)
-                            .coin_url,
-                        },
-                        secret_task: {
-                          uri: (redeemable.model as SecretTaskType | TaskType)
-                            .coin_url,
-                        },
-                        item: {
-                          uri: (redeemable.model as ItemType).icon_url,
-                        },
-                        pin: {
-                          uri: (redeemable.model as ItemType).icon_url,
-                        },
-                        coin: require('../../assets/images/screens/explore/coins.png'),
-                      }[redeemable.type]
-                    }
-                    text={
-                      {
-                        task: (redeemable.model as SecretTaskType | TaskType)
-                          .name,
-                        secret_task: (
-                          redeemable.model as SecretTaskType | TaskType
-                        ).name,
-                        coin: `${
-                          (redeemable.model as CoinType).coins
-                        } Shark Coins`,
-                        item: (redeemable.model as ItemType).name,
-                        pin: (redeemable.model as ItemType).name,
-                      }[redeemable.type]
-                    }
-                    type={redeemable.type}
-                    pulse
+                  <Lottie
+                    source={require('../../assets/animations/confetti.json')}
+                    progress={progress}
+                    style={{
+                      position: 'absolute',
+                      width: 900,
+                      height: 400,
+                      top: 15,
+                      zIndex: 20,
+                      left: -80,
+                    }}
                   />
+                </Pressable>
+                <View
+                  style={{
+                    width: Dimensions.get('window').width - 40,
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    margin: 'auto',
+                    position: 'relative',
+                    zIndex: 10,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Ribbon text="Congratulations" />
                   <View
                     style={{
-                      marginLeft: -4,
-                      marginRight: -4,
-                      marginTop: 8,
-                      flexDirection: 'row',
-                      justifyContent: 'center',
+                      backgroundColor:
+                        backgrounds[
+                          redeemable.type as keyof typeof backgrounds
+                        ],
+                      borderRadius: 16,
+                      marginTop: '-10%',
+                      width: '85%',
+                      zIndex: 10,
+                      paddingTop: 16,
+                      paddingLeft: 16,
+                      paddingRight: 16,
+                      paddingBottom: 8,
+                      shadowColor: '#000',
+                      shadowOffset: {
+                        width: 2,
+                        height: 2,
+                      },
+                      shadowRadius: 0,
+                      shadowOpacity: 0.4,
+                      borderColor: 'rgba(0, 0, 0, .4)',
+                      borderWidth: 2,
                     }}
                   >
                     <View
                       style={{
-                        width: '33.3333333%',
-                        paddingLeft: 4,
-                        paddingRight: 4,
+                        paddingTop: 16,
+                        paddingBottom: 16,
+                        paddingLeft: 16,
+                        paddingRight: 16,
+                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        borderColor: 'rgba(0, 0, 0, .6)',
+                        borderLeftWidth: 2,
+                        borderRightWidth: 2,
+                        borderBottomWidth: 2,
+                        borderBottomLeftRadius: 16,
+                        borderBottomRightRadius: 16,
                       }}
                     >
                       <Box
-                        backgroundColor="#4cdcff"
-                        image={require('../../assets/images/screens/explore/xp.png')}
-                        text={
-                          doubleXP
-                            ? (redeemable.model as TaskType | SecretTaskType)
-                                .experience * 2
-                            : (redeemable.model as TaskType | SecretTaskType)
-                                .experience
+                        background={require('../../assets/images/screens/explore/starburst.png')}
+                        image={
+                          {
+                            task: {
+                              uri: (
+                                redeemable.model as SecretTaskType | TaskType
+                              ).coin_url,
+                            },
+                            secret_task: {
+                              uri: (
+                                redeemable.model as SecretTaskType | TaskType
+                              ).coin_url,
+                            },
+                            item: {
+                              uri: (redeemable.model as ItemType).icon_url,
+                            },
+                            pin: {
+                              uri: (redeemable.model as ItemType).icon_url,
+                            },
+                            coin: require('../../assets/images/screens/explore/coins.png'),
+                          }[redeemable.type]
                         }
-                        small
+                        text={
+                          {
+                            task: (
+                              redeemable.model as SecretTaskType | TaskType
+                            ).name,
+                            secret_task: (
+                              redeemable.model as SecretTaskType | TaskType
+                            ).name,
+                            coin: `${
+                              (redeemable.model as CoinType).coins
+                            } Shark Coins`,
+                            item: (redeemable.model as ItemType).name,
+                            pin: (redeemable.model as ItemType).name,
+                          }[redeemable.type]
+                        }
                         type={redeemable.type}
+                        pulse
                       />
                       <View
                         style={{
+                          marginLeft: -4,
+                          marginRight: -4,
                           marginTop: 8,
+                          flexDirection: 'row',
+                          justifyContent: 'center',
                         }}
                       >
-                        <WatchAd onClose={() => setDoubleXP(true)} />
-                      </View>
-                    </View>
-                    {redeemable.type !== 'coin' && (
-                      <View
-                        style={{
-                          width: '33.3333333%',
-                          paddingLeft: 4,
-                          paddingRight: 4,
-                        }}
-                      >
-                        <Box
-                          backgroundColor="#4cdcff"
-                          image={require('../../assets/images/screens/explore/coins.png')}
-                          text={
-                            doubleCoins
-                              ? (redeemable.model as TaskType | SecretTaskType)
-                                  .coins * 2
-                              : (redeemable.model as TaskType | SecretTaskType)
-                                  .coins
-                          }
-                          small
-                          type={redeemable.type}
-                        />
                         <View
                           style={{
-                            marginTop: 8,
+                            width: '33.3333333%',
+                            paddingLeft: 4,
+                            paddingRight: 4,
                           }}
                         >
-                          <WatchAd onClose={() => setDoubleCoins(true)} />
+                          <Box
+                            backgroundColor="#4cdcff"
+                            image={require('../../assets/images/screens/explore/xp.png')}
+                            text={
+                              doubleXP
+                                ? (
+                                    redeemable.model as
+                                      | TaskType
+                                      | SecretTaskType
+                                  ).experience * 2
+                                : (
+                                    redeemable.model as
+                                      | TaskType
+                                      | SecretTaskType
+                                  ).experience
+                            }
+                            small
+                            type={redeemable.type}
+                          />
+                          <View
+                            style={{
+                              marginTop: 8,
+                            }}
+                          >
+                            <WatchAd onClose={() => setDoubleXP(true)} />
+                          </View>
+                        </View>
+                        {redeemable.type !== 'coin' && (
+                          <View
+                            style={{
+                              width: '33.3333333%',
+                              paddingLeft: 4,
+                              paddingRight: 4,
+                            }}
+                          >
+                            <Box
+                              backgroundColor="#4cdcff"
+                              image={require('../../assets/images/screens/explore/coins.png')}
+                              text={
+                                doubleCoins
+                                  ? (
+                                      redeemable.model as
+                                        | TaskType
+                                        | SecretTaskType
+                                    ).coins * 2
+                                  : (
+                                      redeemable.model as
+                                        | TaskType
+                                        | SecretTaskType
+                                    ).coins
+                              }
+                              small
+                              type={redeemable.type}
+                            />
+                            <View
+                              style={{
+                                marginTop: 8,
+                              }}
+                            >
+                              <WatchAd onClose={() => setDoubleCoins(true)} />
+                            </View>
+                          </View>
+                        )}
+                        <View
+                          style={{
+                            width: '33.3333333%',
+                            paddingLeft: 4,
+                            paddingRight: 4,
+                          }}
+                        >
+                          <Box
+                            backgroundColor="#4cdcff"
+                            image={{
+                              uri: park.coin_url,
+                            }}
+                            text={1}
+                            small
+                            type={redeemable.type}
+                          />
                         </View>
                       </View>
-                    )}
+                    </View>
                     <View
                       style={{
-                        width: '33.3333333%',
-                        paddingLeft: 4,
-                        paddingRight: 4,
+                        marginTop: 8,
                       }}
                     >
-                      <Box
-                        backgroundColor="#4cdcff"
-                        image={{
-                          uri: park.coin_url,
+                      <YellowButton
+                        text="Collect"
+                        onPress={async () => {
+                          if (redeemable.type === 'task') {
+                            await completeTask(
+                              redeemable.model as TaskType,
+                              doubleXP,
+                              doubleCoins
+                            );
+                          } else if (redeemable.type === 'secret_task') {
+                            await completeSecretTask(
+                              redeemable.model as SecretTaskType,
+                              doubleXP,
+                              doubleCoins
+                            );
+                          } else if (redeemable.type === 'coin') {
+                            await redeemCoin(
+                              redeemable.model as CoinType,
+                              doubleXP
+                            );
+                          } else if (
+                            redeemable.type === 'item' ||
+                            redeemable.type === 'pin'
+                          ) {
+                            await redeemItem(
+                              redeemable.model as ItemType,
+                              doubleXP,
+                              doubleCoins
+                            );
+                          }
+
+                          onPress();
+                          playSound(
+                            require('../../assets/sounds/redeem_modal_close.mp3')
+                          );
+                          setModalVisible(false);
                         }}
-                        text={1}
-                        small
-                        type={redeemable.type}
                       />
                     </View>
                   </View>
                 </View>
+              </View>
+            </Modal>
+          ) : (
+            <Modal
+              animationIn="zoomIn"
+              animationOut="zoomOut"
+              swipeDirection="down"
+              isVisible={modalVisible}
+              onSwipeComplete={() => setModalVisible(false)}
+              onModalWillHide={() => {
+                playSound(
+                  require('../../assets/sounds/redeem_modal_close.mp3')
+                );
+              }}
+            >
+              <View
+                style={{
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Pressable
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    position: 'absolute',
+                  }}
+                  onPress={() => {
+                    playSound(
+                      require('../../assets/sounds/redeem_modal_close.mp3')
+                    );
+                    setModalVisible(false);
+                  }}
+                />
                 <View
                   style={{
-                    marginTop: 8,
+                    width: Dimensions.get('window').width - 40,
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    margin: 'auto',
+                    position: 'relative',
+                    zIndex: 10,
+                    alignItems: 'center',
                   }}
                 >
-                  <YellowButton
-                    text="Collect"
-                    onPress={async () => {
-                      if (redeemable.type === 'task') {
-                        await completeTask(
-                          redeemable.model as TaskType,
-                          doubleXP,
-                          doubleCoins
-                        );
-                      } else if (redeemable.type === 'secret_task') {
-                        await completeSecretTask(
-                          redeemable.model as SecretTaskType,
-                          doubleXP,
-                          doubleCoins
-                        );
-                      } else if (redeemable.type === 'coin') {
-                        await redeemCoin(
-                          redeemable.model as CoinType,
-                          doubleXP
-                        );
-                      } else if (
-                        redeemable.type === 'item' ||
-                        redeemable.type === 'pin'
-                      ) {
-                        await redeemItem(
-                          redeemable.model as ItemType,
-                          doubleXP,
-                          doubleCoins
-                        );
-                      }
-
-                      onPress();
-                      playSound(
-                        require('../../assets/sounds/redeem_modal_close.mp3')
-                      );
-                      setModalVisible(false);
+                  <View
+                    style={{
+                      width: '80%',
                     }}
-                  />
+                  >
+                    <Text
+                      style={{
+                        fontFamily: 'Shark',
+                        textTransform: 'uppercase',
+                        fontSize: 42,
+                        color: 'white',
+                        textShadowColor: 'rgba(0, 0, 0, .5)',
+                        textShadowOffset: {
+                          width: 1,
+                          height: 1,
+                        },
+                        textShadowRadius: 0,
+                        textAlign: 'center',
+                        paddingBottom: 32,
+                      }}
+                    >
+                      1 Shark Key
+                    </Text>
+                    <Image
+                      source={require('../../assets/images/keys.png')}
+                      style={{
+                        width: '60%',
+                        aspectRatio: 1.23,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                        marginBottom: 32,
+                      }}
+                      contentFit="contain"
+                    />
+                    <YellowButton
+                      text="Collect"
+                      onPress={async () => {
+                        await redeemKey(redeemable.model as KeyType, doubleKey);
+
+                        onPress();
+                        playSound(
+                          require('../../assets/sounds/redeem_modal_close.mp3')
+                        );
+                        setModalVisible(false);
+                      }}
+                    />
+                    <View
+                      style={{
+                        width: '60%',
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                        marginTop: 16,
+                      }}
+                    >
+                      <WatchAd onClose={() => setDoubleKey(true)} />
+                    </View>
+                  </View>
                 </View>
               </View>
-            </View>
-          </View>
-        </Modal>
+            </Modal>
+          )}
+        </>
       )}
     </>
   );

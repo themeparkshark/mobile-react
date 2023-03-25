@@ -1,8 +1,8 @@
-import { Image } from 'expo-image';
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import * as Animatable from 'react-native-animatable';
 import { TestIds, useInterstitialAd } from 'react-native-google-mobile-ads';
-import Button from './Button';
+import RedButton from './RedButton';
 
 export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
   const { isLoaded, isClosed, load, show } = useInterstitialAd(
@@ -24,15 +24,18 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
 
   if (isClosed || !isLoaded) {
     return (
-      <Image
-        source={require('../../assets/images/screens/explore/watch.png')}
+      <View
         style={{
-          width: '100%',
-          height: 20,
           opacity: 0.5,
         }}
-        contentFit="contain"
-      />
+      >
+        <RedButton
+          text="X2 WATCH AD >"
+          onPress={() => {
+            show();
+          }}
+        />
+      </View>
     );
   }
 
@@ -42,20 +45,12 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
       iterationCount="infinite"
       direction="alternate"
     >
-      <Button
+      <RedButton
+        text="X2 WATCH AD >"
         onPress={() => {
           show();
         }}
-      >
-        <Image
-          source={require('../../assets/images/screens/explore/watch.png')}
-          style={{
-            width: '100%',
-            height: 20,
-          }}
-          contentFit="contain"
-        />
-      </Button>
+      />
     </Animatable.View>
   );
 }
