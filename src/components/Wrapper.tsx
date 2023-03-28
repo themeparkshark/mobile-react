@@ -118,8 +118,8 @@ export default function Wrapper({
                         textTransform: 'uppercase',
                         textShadowColor: 'rgba(0, 0, 0, .5)',
                         textShadowOffset: {
-                          width: 2,
-                          height: 2,
+                          width: 1,
+                          height: 1,
                         },
                         textShadowRadius: 0,
                       }}
