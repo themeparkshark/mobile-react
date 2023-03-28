@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import Lottie from 'lottie-react-native';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Pressable, Text, View } from 'react-native';
+import { Animated, Dimensions, ImageBackground, Pressable, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
@@ -429,6 +429,30 @@ export default function RedeemModal({
                   require('../../assets/sounds/redeem_modal_close.mp3')
                 );
               }}
+              backdropOpacity={.95}
+              customBackdrop={
+                <ImageBackground
+                  source={require('../../assets/images/screens/explore/gradient.png')}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    position: 'relative',
+                  }}
+                >
+                  <Lottie
+                    source={require('../../assets/animations/confetti.json')}
+                    progress={progress}
+                    style={{
+                      position: 'absolute',
+                      width: 900,
+                      height: 400,
+                      top: 15,
+                      zIndex: 20,
+                      left: -80,
+                    }}
+                  />
+                </ImageBackground>
+              }
             >
               <View
                 style={{
@@ -484,7 +508,7 @@ export default function RedeemModal({
                         paddingBottom: 32,
                       }}
                     >
-                      1 Shark Key
+                      {doubleKey ? '2 Shark Keys' : '1 Shark Key'}
                     </Text>
                     <Image
                       source={require('../../assets/images/keys.png')}
