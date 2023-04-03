@@ -15,6 +15,12 @@ export interface CrumbContextType {
       readonly checking_again: string;
       readonly clearance: string;
       readonly coins: string;
+      readonly copyright: string;
+      readonly park_tasks: string;
+      readonly read_more: string;
+      readonly slow_connectivity: string;
+      readonly task_list_modal_heading: string;
+      readonly username_approval: string;
       readonly verified_user: string;
     };
     readonly messages: {
@@ -38,6 +44,7 @@ export interface CrumbContextType {
       readonly no_friends: string;
       readonly no_friend_suggestions: string;
       readonly no_notifications: string;
+      readonly no_recent_activity: string;
       readonly no_visited_parks: string;
       readonly not_at_a_park: string;
     };

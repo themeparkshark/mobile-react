@@ -11,10 +11,12 @@ import {
 } from 'react-native';
 import { AuthContext } from '../../context/AuthProvider';
 import { MusicContext } from '../../context/MusicProvider';
+import useCrumbs from '../../hooks/useCrumbs';
 
 export default function LoginScreen() {
   const { user, isReady, login } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
+  const { labels } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -98,7 +100,7 @@ export default function LoginScreen() {
             marginTop: 'auto',
           }}
         >
-          {`© Theme Park Shark ${new Date().getFullYear()}`}
+          {labels.copyright}
         </Text>
       </SafeAreaView>
     </ImageBackground>

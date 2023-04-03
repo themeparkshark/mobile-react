@@ -6,20 +6,18 @@ import config from '../../config';
 import { KeyType } from '../../models/key-type';
 
 export default function Key({
-  keyModel,
+  model,
   onExpire,
 }: {
-  readonly keyModel: KeyType;
+  readonly model: KeyType;
   readonly onExpire: () => void;
 }) {
-  const key = keyModel;
-
   useTimeoutWhen(
     () => {
       onExpire();
     },
-    dayjs(key.active_to).diff(dayjs()),
-    !!key.id
+    dayjs(model.active_to).diff(dayjs()),
+    !!model.id
   );
 
   return (
@@ -44,7 +42,7 @@ export default function Key({
           source={require('../../../assets/images/screens/explore/cloud.png')}
         >
           <Countdown
-            date={Date.parse(key.active_to)}
+            date={Date.parse(model.active_to)}
             renderer={({ minutes, seconds }) => {
               return (
                 <Text

@@ -15,6 +15,7 @@ import {
 } from '../context/SoundEffectProvider';
 import { RedeemablesType } from '../models/redeemables-type';
 import Button from './Button';
+import useCrumbs from '../hooks/useCrumbs';
 
 export default function TaskListModal({
   redeemables,
@@ -23,6 +24,7 @@ export default function TaskListModal({
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const { labels } = useCrumbs();
 
   return (
     <>
@@ -122,7 +124,7 @@ export default function TaskListModal({
                   textShadowRadius: 0,
                 }}
               >
-                Uncompleted Tasks
+                {labels.task_list_modal_heading}
               </Text>
             </ImageBackground>
             <View

@@ -366,7 +366,7 @@ export default function ExploreScreen() {
                     longitude: key.longitude,
                   }}
                 >
-                  <Key keyModel={key} onExpire={() => getRedeemables()} />
+                  <Key model={key} onExpire={() => getRedeemables()} />
                 </Marker>
               );
             })}

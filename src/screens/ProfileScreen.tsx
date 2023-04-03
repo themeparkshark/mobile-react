@@ -36,6 +36,7 @@ import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
+import useCrumbs from '../hooks/useCrumbs';
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
@@ -46,6 +47,7 @@ export default function ProfileScreen() {
   const [friends, setFriends] = useState<UserType[]>([]);
   const { notificationCount } = useContext(NotificationContext);
   const { playMusic } = useContext(MusicContext);
+  const { warnings } = useCrumbs();
 
   const requestFriends = () => {
     getFriends(1, 3).then((response) => setFriends(response));
@@ -243,7 +245,7 @@ export default function ProfileScreen() {
                         paddingTop: 16,
                       }}
                     >
-                      You don't have any friends yet.
+                      {warnings.no_friends}
                     </Text>
                     <View
                       style={{

@@ -19,6 +19,8 @@ import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
+import useCrumbs from '../hooks/useCrumbs';
+import { vsprintf } from 'sprintf-js';
 
 export default function ParkScreen({ route }) {
   const { park, user } = route.params;
@@ -31,6 +33,7 @@ export default function ParkScreen({ route }) {
   >([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { playMusic } = useContext(MusicContext);
+  const { labels } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -140,14 +143,13 @@ export default function ParkScreen({ route }) {
                           textShadowRadius: 0,
                         }}
                       >
-                        {currentPark.completed_tasks_count +
-                          currentPark.completed_secret_tasks_count}{' '}
-                        of{' '}
-                        {currentPark.tasks_count +
-                          currentPark.secret_tasks_count}{' '}
-                        tasks completed - {currentPark.park_coins_count} park
-                        coin{currentPark.park_coins_count === 1 ? '' : 's'}{' '}
-                        earned
+                        {vsprintf(labels.park_tasks, [
+                          currentPark.completed_tasks_count +
+                          currentPark.completed_secret_tasks_count,
+                          currentPark.tasks_count + currentPark.secret_tasks_count,
+                          currentPark.park_coins_count,
+                          `coin${currentPark.park_coins_count === 1 ? '' : 's'}`,
+                        ])}
                       </Text>
                     </View>
                   </View>

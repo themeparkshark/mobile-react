@@ -20,7 +20,7 @@ import { CatalogType } from '../models/catalog-type';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
-import Section from './Store/Section';
+import Section from './StoreScreen/Section';
 
 export default function StoreScreen({ route }) {
   const { store } = route.params;

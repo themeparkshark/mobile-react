@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useTimeoutWhen } from 'rooks';
+import useCrumbs from '../hooks/useCrumbs';
 
 export default function Loading() {
   const [showText, setShowText] = useState<boolean>(false);
+  const { labels } = useCrumbs();
 
   useTimeoutWhen(
     () => {
@@ -31,8 +33,7 @@ export default function Loading() {
             paddingTop: 16,
           }}
         >
-          This is taking longer than usual, please check your internet
-          connectivity.
+          {labels.slow_connectivity}
         </Text>
       )}
     </View>

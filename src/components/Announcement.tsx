@@ -13,6 +13,7 @@ import Modal from 'react-native-modal';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { AnnouncementType } from '../models/announcement-type';
 import Button from './Button';
+import useCrumbs from '../hooks/useCrumbs';
 
 export default function Announcement({
   announcement,
@@ -21,6 +22,7 @@ export default function Announcement({
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const { playSound } = useContext(SoundEffectContext);
+  const { labels } = useCrumbs();
 
   return (
     <View>
@@ -151,7 +153,7 @@ export default function Announcement({
                 textTransform: 'uppercase',
               }}
             >
-              Read more
+              {labels.read_more}
             </Text>
           </View>
         </ImageBackground>

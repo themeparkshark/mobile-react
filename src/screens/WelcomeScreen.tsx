@@ -12,11 +12,14 @@ import {
 } from 'react-native';
 import updateUser from '../api/endpoints/me/update-user';
 import { AuthContext } from '../context/AuthProvider';
+import useCrumbs from '../hooks/useCrumbs';
+import { vsprintf } from 'sprintf-js';
 
 export default function WelcomeScreen({ navigation }) {
   const [username, setUsername] = useState<string>('');
   const { user, refreshUser } = useContext(AuthContext);
   const rotate = useRef(new Animated.Value(0)).current;
+  const { labels } = useCrumbs();
 
   const spin = rotate.interpolate({
     inputRange: [0, 1],
@@ -119,7 +122,7 @@ export default function WelcomeScreen({ navigation }) {
             textShadowRadius: 0,
           }}
         >
-          Your username will appear as P{user.id} until approved.
+          {vsprintf(labels.username_approval, [user.id])}
         </Text>
         <View
           style={{

@@ -1,12 +1,15 @@
 import { Text, View } from 'react-native';
 import dayjs from '../helpers/dayjs';
 import { ActivityType } from '../models/activity-type';
+import useCrumbs from '../hooks/useCrumbs';
 
 export default function Activity({
   activities,
 }: {
   readonly activities: ActivityType[];
 }) {
+  const { warnings } = useCrumbs();
+
   return (
     <View>
       {!activities.length && (
@@ -17,7 +20,7 @@ export default function Activity({
             textAlign: 'center',
           }}
         >
-          There is no recent activity.
+          {warnings.no_recent_activity}
         </Text>
       )}
       {activities.map((activity, index) => {
