@@ -20,7 +20,7 @@ import { RedeemableType } from '../models/redeemable-type';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
 
-export default function RedeemKeyModel({
+export default function RedeemKeyModal({
   open,
   close,
   redeemable,
