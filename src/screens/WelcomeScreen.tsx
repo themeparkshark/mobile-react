@@ -10,10 +10,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { vsprintf } from 'sprintf-js';
 import updateUser from '../api/endpoints/me/update-user';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
-import { vsprintf } from 'sprintf-js';
 
 export default function WelcomeScreen({ navigation }) {
   const [username, setUsername] = useState<string>('');

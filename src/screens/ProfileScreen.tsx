@@ -31,12 +31,12 @@ import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import { NotificationContext } from '../context/NotificationProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
-import useCrumbs from '../hooks/useCrumbs';
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);

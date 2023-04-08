@@ -1,12 +1,10 @@
 import dayjs from 'dayjs';
-import { Image } from 'expo-image';
 import Lottie from 'lottie-react-native';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, ImageBackground, Pressable, Text, View } from 'react-native';
+import { Animated, Dimensions, Pressable, View } from 'react-native';
 import Modal from 'react-native-modal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
-import redeemKey from '../api/endpoints/me/keys/redeem-key';
 import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
 import completeTask from '../api/endpoints/me/tasks/complete-task';
 import {
@@ -20,6 +18,7 @@ import { ParkType } from '../models/park-type';
 import { RedeemableType } from '../models/redeemable-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
+import RedeemKeyModel from './RedeemKeyModel';
 import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
 import WatchAd from './WatchAd';
@@ -40,7 +39,6 @@ export default function RedeemModal({
   const animated = useRef(new Animated.Value(0)).current;
   const [doubleXP, setDoubleXP] = useState<boolean>(false);
   const [doubleCoins, setDoubleCoins] = useState<boolean>(false);
-  const [doubleKey, setDoubleKey] = useState<boolean>(false);
 
   const slideUp = () => {
     Animated.timing(animated, {
@@ -130,7 +128,15 @@ export default function RedeemModal({
       </Animated.View>
       {redeemable && (
         <>
-          {redeemable?.type !== 'key' ? (
+          {redeemable?.type === 'key' && (
+            <RedeemKeyModel
+              open={modalVisible}
+              close={() => setModalVisible(false)}
+              redeemable={redeemable}
+              onPress={() => onPress()}
+            />
+          )}
+          {redeemable?.type !== 'key' && (
             <Modal
               animationIn="zoomIn"
               animationOut="zoomOut"
@@ -412,136 +418,6 @@ export default function RedeemModal({
                           setModalVisible(false);
                         }}
                       />
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </Modal>
-          ) : (
-            <Modal
-              animationIn="zoomIn"
-              animationOut="zoomOut"
-              swipeDirection="down"
-              isVisible={modalVisible}
-              onSwipeComplete={() => setModalVisible(false)}
-              onModalWillHide={() => {
-                playSound(
-                  require('../../assets/sounds/redeem_modal_close.mp3')
-                );
-              }}
-              backdropOpacity={.95}
-              customBackdrop={
-                <ImageBackground
-                  source={require('../../assets/images/screens/explore/gradient.png')}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    position: 'relative',
-                  }}
-                >
-                  <Lottie
-                    source={require('../../assets/animations/confetti.json')}
-                    progress={progress}
-                    style={{
-                      position: 'absolute',
-                      width: 900,
-                      height: 400,
-                      top: 15,
-                      zIndex: 20,
-                      left: -80,
-                    }}
-                  />
-                </ImageBackground>
-              }
-            >
-              <View
-                style={{
-                  flex: 1,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Pressable
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    position: 'absolute',
-                  }}
-                  onPress={() => {
-                    playSound(
-                      require('../../assets/sounds/redeem_modal_close.mp3')
-                    );
-                    setModalVisible(false);
-                  }}
-                />
-                <View
-                  style={{
-                    width: Dimensions.get('window').width - 40,
-                    top: 0,
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    margin: 'auto',
-                    position: 'relative',
-                    zIndex: 10,
-                    alignItems: 'center',
-                  }}
-                >
-                  <View
-                    style={{
-                      width: '80%',
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontFamily: 'Shark',
-                        textTransform: 'uppercase',
-                        fontSize: 42,
-                        color: 'white',
-                        textShadowColor: 'rgba(0, 0, 0, .5)',
-                        textShadowOffset: {
-                          width: 1,
-                          height: 1,
-                        },
-                        textShadowRadius: 0,
-                        textAlign: 'center',
-                        paddingBottom: 32,
-                      }}
-                    >
-                      {doubleKey ? '2 Shark Keys' : '1 Shark Key'}
-                    </Text>
-                    <Image
-                      source={require('../../assets/images/keys.png')}
-                      style={{
-                        width: '60%',
-                        aspectRatio: 1.23,
-                        marginLeft: 'auto',
-                        marginRight: 'auto',
-                        marginBottom: 32,
-                      }}
-                      contentFit="contain"
-                    />
-                    <YellowButton
-                      text="Collect"
-                      onPress={async () => {
-                        await redeemKey(redeemable.model as KeyType, doubleKey);
-
-                        onPress();
-                        playSound(
-                          require('../../assets/sounds/redeem_modal_close.mp3')
-                        );
-                        setModalVisible(false);
-                      }}
-                    />
-                    <View
-                      style={{
-                        width: '60%',
-                        marginLeft: 'auto',
-                        marginRight: 'auto',
-                        marginTop: 16,
-                      }}
-                    >
-                      <WatchAd onClose={() => setDoubleKey(true)} />
                     </View>
                   </View>
                 </View>

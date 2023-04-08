@@ -11,9 +11,9 @@ import {
 } from 'react-native';
 import Modal from 'react-native-modal';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { AnnouncementType } from '../models/announcement-type';
 import Button from './Button';
-import useCrumbs from '../hooks/useCrumbs';
 
 export default function Announcement({
   announcement,

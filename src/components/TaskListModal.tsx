@@ -13,9 +13,9 @@ import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { RedeemablesType } from '../models/redeemables-type';
 import Button from './Button';
-import useCrumbs from '../hooks/useCrumbs';
 
 export default function TaskListModal({
   redeemables,

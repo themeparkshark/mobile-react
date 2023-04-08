@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native';
 import dayjs from '../helpers/dayjs';
-import { ActivityType } from '../models/activity-type';
 import useCrumbs from '../hooks/useCrumbs';
+import { ActivityType } from '../models/activity-type';
 
 export default function Activity({
   activities,

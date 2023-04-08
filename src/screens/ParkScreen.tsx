@@ -4,6 +4,7 @@ import { chunk } from 'lodash';
 import { useCallback, useContext, useState } from 'react';
 import { ImageBackground, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import { vsprintf } from 'sprintf-js';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
@@ -15,12 +16,11 @@ import TaskCoinModal from '../components/TaskCoinModal';
 import Topbar from '../components/Topbar';
 import config from '../config';
 import { MusicContext } from '../context/MusicProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
-import useCrumbs from '../hooks/useCrumbs';
-import { vsprintf } from 'sprintf-js';
 
 export default function ParkScreen({ route }) {
   const { park, user } = route.params;
@@ -145,10 +145,13 @@ export default function ParkScreen({ route }) {
                       >
                         {vsprintf(labels.park_tasks, [
                           currentPark.completed_tasks_count +
-                          currentPark.completed_secret_tasks_count,
-                          currentPark.tasks_count + currentPark.secret_tasks_count,
+                            currentPark.completed_secret_tasks_count,
+                          currentPark.tasks_count +
+                            currentPark.secret_tasks_count,
                           currentPark.park_coins_count,
-                          `coin${currentPark.park_coins_count === 1 ? '' : 's'}`,
+                          `coin${
+                            currentPark.park_coins_count === 1 ? '' : 's'
+                          }`,
                         ])}
                       </Text>
                     </View>
