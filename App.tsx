@@ -2,7 +2,6 @@ import ErrorBoundary from 'react-native-error-boundary';
 import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { CrumbProvider } from './src/context/CrumbProvider';
-import { FriendProvider } from './src/context/FriendProvider';
 import { LocationProvider } from './src/context/LocationProvider';
 import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
@@ -16,15 +15,13 @@ export default function App() {
         <SoundEffectProvider>
           <MusicProvider>
             <BroadcastProvider>
-              <FriendProvider>
-                <NotificationProvider>
-                  <CrumbProvider>
-                    <LocationProvider>
-                      <Root />
-                    </LocationProvider>
-                  </CrumbProvider>
-                </NotificationProvider>
-              </FriendProvider>
+              <NotificationProvider>
+                <CrumbProvider>
+                  <LocationProvider>
+                    <Root />
+                  </LocationProvider>
+                </CrumbProvider>
+              </NotificationProvider>
             </BroadcastProvider>
           </MusicProvider>
         </SoundEffectProvider>

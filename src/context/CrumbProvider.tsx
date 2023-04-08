@@ -15,7 +15,6 @@ export interface CrumbContextType {
       readonly checking_again: string;
       readonly clearance: string;
       readonly coins: string;
-      readonly copyright: string;
       readonly park_tasks: string;
       readonly read_more: string;
       readonly slow_connectivity: string;
