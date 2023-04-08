@@ -340,7 +340,7 @@ export default function ExploreScreen() {
                 }}
               >
                 <Image
-                  source={require('../../assets/images/screens/explore/vault.gif')}
+                  source={require('../../assets/images/screens/explore/vault_animation.gif')}
                   style={{
                     width: 70,
                     height: 70,

@@ -15,11 +15,13 @@ export interface CrumbContextType {
       readonly checking_again: string;
       readonly clearance: string;
       readonly coins: string;
+      readonly keys: string;
       readonly park_tasks: string;
       readonly read_more: string;
       readonly slow_connectivity: string;
       readonly task_list_modal_heading: string;
       readonly username_approval: string;
+      readonly vault_cost: string;
       readonly verified_user: string;
     };
     readonly messages: {

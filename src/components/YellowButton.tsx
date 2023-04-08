@@ -1,14 +1,20 @@
 import { Animated, ImageBackground, Pressable, Text, View } from 'react-native';
 
 export default function YellowButton({
+  disabled = false,
   text,
   onPress,
 }: {
+  readonly disabled?: boolean;
   readonly text: string;
   readonly onPress?: () => void;
 }) {
   const animated = new Animated.Value(1);
   const zoomOut = () => {
+    if (disabled) {
+      return;
+    }
+
     Animated.timing(animated, {
       toValue: 0.95,
       duration: 25,
@@ -16,6 +22,10 @@ export default function YellowButton({
     }).start();
   };
   const zoomIn = () => {
+    if (disabled) {
+      return;
+    }
+
     Animated.timing(animated, {
       toValue: 1,
       duration: 25,
@@ -24,7 +34,17 @@ export default function YellowButton({
   };
 
   return (
-    <Pressable onPress={onPress} onPressIn={zoomOut} onPressOut={zoomIn}>
+    <Pressable
+      onPress={() => {
+        if (disabled) {
+          return;
+        }
+
+        onPress();
+      }}
+      onPressIn={zoomOut}
+      onPressOut={zoomIn}
+    >
       <Animated.View
         style={{
           transform: [
@@ -39,6 +59,7 @@ export default function YellowButton({
           style={{
             width: '100%',
             aspectRatio: 3.8,
+            opacity: disabled ? 0.5 : 1,
           }}
           resizeMode="contain"
         >

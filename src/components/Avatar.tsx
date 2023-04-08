@@ -42,7 +42,7 @@ export default function Avatar({
             height: 4,
           },
           shadowRadius: 0,
-          shadowOpacity: 0.4,
+          shadowOpacity: 0.35,
         }}
       >
         <View

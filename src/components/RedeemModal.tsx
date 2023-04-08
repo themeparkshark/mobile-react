@@ -11,6 +11,7 @@ import { ParkType } from '../models/park-type';
 import { RedeemableType } from '../models/redeemable-type';
 import RedeemKeyModal from './RedeemKeyModal';
 import RedeemRedeemableModal from './RedeemRedeemableModal';
+import RedeemVaultModal from './RedeemVaultModal';
 import YellowButton from './YellowButton';
 
 export default function RedeemModal({
@@ -92,9 +93,20 @@ export default function RedeemModal({
               onPress={() => onPress()}
             />
           )}
-          {redeemable?.type !== 'key' && (
+          {redeemable?.type === 'vault' && (
+            <RedeemVaultModal
+              open={modalVisible}
+              close={() => setModalVisible(false)}
+              redeemable={redeemable}
+              onPress={() => onPress()}
+            />
+          )}
+          {(redeemable?.type === 'coin' ||
+            redeemable?.type === 'task' ||
+            redeemable?.type === 'secret_task') && (
             <RedeemRedeemableModal
               open={modalVisible}
+              redeemable={redeemable}
               close={() => setModalVisible(false)}
               park={park}
               onPress={() => onPress()}

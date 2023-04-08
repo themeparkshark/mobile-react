@@ -31,12 +31,11 @@ export default function RedeemRedeemableModal({
   readonly close: () => void;
   readonly open?: boolean;
   readonly park: ParkType;
-  readonly redeemable?: RedeemableType;
+  readonly redeemable: RedeemableType;
   readonly onPress: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const progress = useRef(new Animated.Value(0)).current;
-  const animated = useRef(new Animated.Value(0)).current;
   const [doubleXP, setDoubleXP] = useState<boolean>(false);
   const [doubleCoins, setDoubleCoins] = useState<boolean>(false);
 

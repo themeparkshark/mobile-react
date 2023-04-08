@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import Lottie from 'lottie-react-native';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import {
   Animated,
   Dimensions,
@@ -11,17 +11,19 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import redeemKey from '../api/endpoints/me/keys/redeem-key';
+import { vsprintf } from 'sprintf-js';
+import redeemVault from '../api/endpoints/me/vaults/redeem-vault';
+import { AuthContext } from '../context/AuthProvider';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
-import { KeyType } from '../models/key-type';
+import useCrumbs from '../hooks/useCrumbs';
 import { RedeemableType } from '../models/redeemable-type';
-import WatchAd from './WatchAd';
+import { VaultType } from '../models/vault-type';
 import YellowButton from './YellowButton';
 
-export default function RedeemKeyModal({
+export default function RedeemVaultModal({
   open,
   close,
   redeemable,
@@ -32,14 +34,15 @@ export default function RedeemKeyModal({
   readonly redeemable: RedeemableType;
   readonly onPress: () => void;
 }) {
+  const { labels } = useCrumbs();
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const progress = useRef(new Animated.Value(0)).current;
   const rotate = useRef(new Animated.Value(0)).current;
-  const [doubleKey, setDoubleKey] = useState<boolean>(false);
   const spin = rotate.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
+  const { user } = useContext(AuthContext);
 
   useEffect(() => {
     if (open) {
@@ -179,7 +182,7 @@ export default function RedeemKeyModal({
                 paddingBottom: 32,
               }}
             >
-              {doubleKey ? '2 Shark Keys' : '1 Shark Key'}
+              {vsprintf(labels.vault_cost, [redeemable.model.item.cost])}
             </Text>
             <Image
               source={require('../../assets/images/keys.png')}
@@ -193,9 +196,10 @@ export default function RedeemKeyModal({
               contentFit="contain"
             />
             <YellowButton
-              text="Collect"
+              disabled
+              text="Unlock"
               onPress={async () => {
-                await redeemKey(redeemable.model as KeyType, doubleKey);
+                await redeemVault(redeemable.model as VaultType);
 
                 onPress();
                 playSound(
@@ -204,16 +208,24 @@ export default function RedeemKeyModal({
                 close();
               }}
             />
-            <View
+            <Text
               style={{
-                width: '60%',
-                marginLeft: 'auto',
-                marginRight: 'auto',
-                marginTop: 16,
+                fontFamily: 'Shark',
+                textTransform: 'uppercase',
+                fontSize: 20,
+                color: 'white',
+                textShadowColor: 'rgba(0, 0, 0, .5)',
+                textShadowOffset: {
+                  width: 1,
+                  height: 1,
+                },
+                textShadowRadius: 0,
+                textAlign: 'center',
+                paddingTop: 32,
               }}
             >
-              <WatchAd onClose={() => setDoubleKey(true)} />
-            </View>
+              {vsprintf(labels.keys, [user?.keys])}
+            </Text>
           </View>
         </View>
       </View>
