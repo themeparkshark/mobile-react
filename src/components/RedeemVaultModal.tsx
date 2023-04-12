@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import Lottie from 'lottie-react-native';
-import { useContext, useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -43,6 +43,7 @@ export default function RedeemVaultModal({
     outputRange: ['0deg', '360deg'],
   });
   const { user } = useContext(AuthContext);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (open) {
@@ -75,7 +76,7 @@ export default function RedeemVaultModal({
     }
   }, [open]);
 
-  if (!redeemable) {
+  if (!redeemable || !user) {
     return <></>;
   }
 
@@ -133,18 +134,35 @@ export default function RedeemVaultModal({
       <View
         style={{
           flex: 1,
+          position: 'relative',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
+        <Image
+          source={require('../../assets/images/screens/pin-collections/close.png')}
+          style={{
+            width: 50,
+            height: 53,
+            position: 'absolute',
+            bottom: 0,
+          }}
+          contentFit="contain"
+        />
         <Pressable
           style={{
             width: '100%',
             height: '100%',
             position: 'absolute',
           }}
-          onPress={() => {
+          onPress={async () => {
             playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
+
+            if (isOpen) {
+              await redeemVault(redeemable.model as VaultType);
+              onPress();
+            }
+
             close();
           }}
         />
@@ -182,50 +200,54 @@ export default function RedeemVaultModal({
                 paddingBottom: 32,
               }}
             >
-              {vsprintf(labels.vault_cost, [redeemable.model.item.cost])}
+              {vsprintf(labels.vault_cost, [
+                (redeemable.model as VaultType).item.cost,
+              ])}
             </Text>
-            <Image
-              source={require('../../assets/images/keys.png')}
-              style={{
-                width: '60%',
-                aspectRatio: 1.23,
-                marginLeft: 'auto',
-                marginRight: 'auto',
-                marginBottom: 32,
-              }}
-              contentFit="contain"
-            />
+            {isOpen ? (
+              <ImageBackground
+                source={require('../../assets/images/screens/explore/vault_opened.png')}
+                style={{
+                  maxWidth: 400,
+                  aspectRatio: 1,
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
+                  marginBottom: 32,
+                  justifyContent: 'center',
+                }}
+                resizeMode="contain"
+              >
+                <Image
+                  source={(redeemable.model as VaultType).item.icon_url}
+                  style={{
+                    width: 75,
+                    height: 75,
+                    marginLeft: 40,
+                  }}
+                />
+              </ImageBackground>
+            ) : (
+              <ImageBackground
+                source={require('../../assets/images/screens/explore/vault_closed.png')}
+                style={{
+                  maxWidth: 400,
+                  aspectRatio: 1,
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
+                  marginBottom: 32,
+                }}
+                resizeMode="contain"
+              />
+            )}
             <YellowButton
-              disabled
+              disabled={
+                (redeemable.model as VaultType).item.cost > user.keys || isOpen
+              }
               text="Unlock"
               onPress={async () => {
-                await redeemVault(redeemable.model as VaultType);
-
-                onPress();
-                playSound(
-                  require('../../assets/sounds/redeem_modal_close.mp3')
-                );
-                close();
+                setIsOpen(true);
               }}
             />
-            <Text
-              style={{
-                fontFamily: 'Shark',
-                textTransform: 'uppercase',
-                fontSize: 20,
-                color: 'white',
-                textShadowColor: 'rgba(0, 0, 0, .5)',
-                textShadowOffset: {
-                  width: 1,
-                  height: 1,
-                },
-                textShadowRadius: 0,
-                textAlign: 'center',
-                paddingTop: 32,
-              }}
-            >
-              {vsprintf(labels.keys, [user?.keys])}
-            </Text>
           </View>
         </View>
       </View>
