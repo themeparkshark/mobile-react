@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Modal from 'react-native-modal';
 import { useTimeoutWhen } from 'rooks';
+import update from '../api/endpoints/daily-gifts/update';
 import { DailyGiftType } from '../models/daily-gift-type';
 import Button from './Button';
 import Ribbon from './Ribbon';
@@ -89,6 +90,7 @@ export default function DailyGiftModal({
 
   const claimReward = async () => {
     setModalVisible(false);
+    await update(dailyGift.id);
   };
 
   return (
