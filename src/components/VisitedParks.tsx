@@ -23,6 +23,7 @@ export default function VisitedParks({
             fontFamily: 'Knockout',
             fontSize: 20,
             textAlign: 'center',
+            paddingBottom: 32,
           }}
         >
           {warnings.no_visited_parks}
