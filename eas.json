@@ -8,7 +8,7 @@
       "distribution": "internal",
       "ios": {
         "simulator": true,
-        "resourceClass": "m1-medium"
+        "resourceClass": "m-medium"
       },
       "env": {
         "API_URL": "https://dev-app.themeparkshark.com/api"
