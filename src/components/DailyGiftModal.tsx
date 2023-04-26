@@ -13,6 +13,7 @@ import update from '../api/endpoints/daily-gifts/update';
 import { DailyGiftType } from '../models/daily-gift-type';
 import Button from './Button';
 import Ribbon from './Ribbon';
+import useCrumbs from '../hooks/useCrumbs';
 
 function Chest({
   color,
@@ -79,6 +80,7 @@ export default function DailyGiftModal({
   readonly dailyGift: DailyGiftType;
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const { labels } = useCrumbs();
 
   useTimeoutWhen(
     () => {
@@ -181,7 +183,7 @@ export default function DailyGiftModal({
                       textShadowRadius: 0,
                     }}
                   >
-                    Choose one of the rewards below!
+                    {labels.choose_daily_gift}
                   </Text>
                   <View
                     style={{

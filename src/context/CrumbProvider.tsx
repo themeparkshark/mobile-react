@@ -13,6 +13,7 @@ export interface CrumbContextType {
     };
     readonly labels: {
       readonly checking_again: string;
+      readonly choose_daily_gift: string;
       readonly clearance: string;
       readonly coins: string;
       readonly keys: string;
