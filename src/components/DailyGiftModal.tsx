@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import {
   Dimensions,
   Image,
@@ -10,10 +10,11 @@ import {
 import Modal from 'react-native-modal';
 import { useTimeoutWhen } from 'rooks';
 import update from '../api/endpoints/daily-gifts/update';
+import { AuthContext } from '../context/AuthProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { DailyGiftType } from '../models/daily-gift-type';
 import Button from './Button';
 import Ribbon from './Ribbon';
-import useCrumbs from '../hooks/useCrumbs';
 
 function Chest({
   color,
@@ -81,6 +82,7 @@ export default function DailyGiftModal({
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const { labels } = useCrumbs();
+  const { refreshUser } = useContext(AuthContext);
 
   useTimeoutWhen(
     () => {
@@ -93,6 +95,7 @@ export default function DailyGiftModal({
   const claimReward = async () => {
     setModalVisible(false);
     await update(dailyGift.id);
+    await refreshUser();
   };
 
   return (
