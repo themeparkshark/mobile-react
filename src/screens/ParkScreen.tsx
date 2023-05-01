@@ -301,7 +301,10 @@ export default function ParkScreen({ route }) {
                               }}
                             >
                               {hasCompletedTask(task.id) ? (
-                                <TaskCoinModal task={task} />
+                                <TaskCoinModal
+                                  task={task}
+                                  timesCompleted={completedTasks.find((completedTask) => completedTask.id === task.id)?.times_completed ?? 0}
+                                />
                               ) : (
                                 <View
                                   style={{
