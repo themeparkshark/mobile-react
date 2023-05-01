@@ -8,13 +8,19 @@ import Avatar from './Avatar';
 import Button from './Button';
 
 export default function FriendUser({
+  isFriend,
+  isPending,
+  onAccept,
   onRemove,
   user,
 }: {
+  readonly isFriend?: boolean;
+  readonly isPending?: boolean;
+  readonly onAccept?: () => void;
   readonly onRemove?: () => void;
   readonly user: UserType;
 }) {
-  const { addFriend, removeFriend } = useFriends();
+  const { acceptFriend, addFriend, removeFriend } = useFriends();
   const { complimentUser } = useCompliment();
 
   return (
@@ -60,8 +66,8 @@ export default function FriendUser({
           }}
         >
           <Button
-            onPress={() => {
-              complimentUser(user);
+            onPress={async () => {
+              await complimentUser(user);
             }}
           >
             <Image
@@ -76,7 +82,14 @@ export default function FriendUser({
         </View>
         <Button
           onPress={() => {
-            if (!user.is_friend) {
+            if (isPending && !isFriend) {
+              acceptFriend(user, async () => {
+                await onAccept?.();
+              });
+              return;
+            }
+
+            if (!isFriend) {
               addFriend(user);
               return;
             }
@@ -88,7 +101,7 @@ export default function FriendUser({
         >
           <Image
             source={
-              !user.is_friend
+              !isFriend
                 ? require('../../assets/images/screens/friends/add_friend.png')
                 : require('../../assets/images/screens/friends/remove_friend.png')
             }

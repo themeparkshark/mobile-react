@@ -52,8 +52,8 @@ export default function LeaderboardUser({
             paddingBottom: 8,
             textShadowColor: 'rgba(0, 0, 0, .5)',
             textShadowOffset: {
-              width: 2,
-              height: 2,
+              width: 1,
+              height: 1,
             },
             textShadowRadius: 0,
           }}
@@ -81,8 +81,8 @@ export default function LeaderboardUser({
               fontSize: text[size] * 1.4,
               textShadowColor: 'rgba(0, 0, 0, .5)',
               textShadowOffset: {
-                width: 2,
-                height: 2,
+                width: 1,
+                height: 1,
               },
               textShadowRadius: 0,
               textAlign: 'center',

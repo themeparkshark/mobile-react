@@ -97,7 +97,7 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              top: 200,
+              top: 132,
               right: 16,
               zIndex: 10,
             }}
@@ -340,10 +340,10 @@ export default function ExploreScreen() {
                 }}
               >
                 <Image
-                  source={require('../../assets/images/screens/explore/vault.gif')}
+                  source={require('../../assets/images/screens/explore/vault_animation.gif')}
                   style={{
-                    width: 120,
-                    height: 120,
+                    width: 70,
+                    height: 70,
                   }}
                   resizeMode="contain"
                 />
@@ -366,7 +366,7 @@ export default function ExploreScreen() {
                     longitude: key.longitude,
                   }}
                 >
-                  <Key keyModel={key} onExpire={() => getRedeemables()} />
+                  <Key model={key} onExpire={() => getRedeemables()} />
                 </Marker>
               );
             })}

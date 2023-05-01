@@ -10,9 +10,11 @@ import {
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getCrumbs from '../api/endpoints/crumbs/getCrumbs';
+import getDailyGift from '../api/endpoints/daily-gifts/create';
 import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
+import { DailyGiftContext } from '../context/DailyGiftProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { NotificationContext } from '../context/NotificationProvider';
 import * as RootNavigation from '../RootNavigation';
@@ -22,6 +24,7 @@ export default function LoadingScreen() {
   const { inventory, setInventory, isReady, user, refreshUser } =
     useContext(AuthContext);
   const { crumbs, setCrumbs } = useContext(CrumbContext);
+  const { dailyGift, setDailyGift } = useContext(DailyGiftContext);
   const { location, requestLocation, requestPark, parkLoaded } =
     useContext(LocationContext);
   const [loadingText, setLoadingText] = useState<string>('Loading Interface');
@@ -42,17 +45,20 @@ export default function LoadingScreen() {
     }
 
     setLoadingText('Loading User');
-    await refreshUser();
+    refreshUser();
     setLoadingText('Loading Inventory');
     setInventory(await getInventory());
     setLoadingText('Loading Crumbs');
     setCrumbs(await getCrumbs());
     setLoadingText('Loading Notifications');
-    await refreshNotificationCount();
+    refreshNotificationCount();
+    setLoadingText('Loading Daily Gift');
+    setDailyGift(await getDailyGift());
     setLoadingText('Loading Location');
-    await requestLocation();
+    requestLocation();
     setLoadingText('Loading Park');
-    await requestPark();
+    requestPark();
+    setLoading(false);
   }, [isReady]);
 
   useEffect(() => {
@@ -63,11 +69,21 @@ export default function LoadingScreen() {
       fontsLoaded &&
       !isEmpty(crumbs) &&
       !isEmpty(location) &&
-      parkLoaded
+      parkLoaded &&
+      dailyGift
     ) {
       setLoading(false);
     }
-  }, [user, inventory, isReady, fontsLoaded, crumbs, location, parkLoaded]);
+  }, [
+    user,
+    inventory,
+    isReady,
+    fontsLoaded,
+    crumbs,
+    location,
+    parkLoaded,
+    dailyGift,
+  ]);
 
   useEffect(() => {
     if (loading) {

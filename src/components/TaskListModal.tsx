@@ -13,6 +13,7 @@ import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { RedeemablesType } from '../models/redeemables-type';
 import Button from './Button';
 
@@ -23,6 +24,7 @@ export default function TaskListModal({
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const { labels } = useCrumbs();
 
   return (
     <>
@@ -48,7 +50,6 @@ export default function TaskListModal({
         onModalWillHide={() => {
           playSound(require('../../assets/sounds/modal_close.mp3'));
         }}
-        propagateSwipe={true}
       >
         <View
           style={{
@@ -57,6 +58,16 @@ export default function TaskListModal({
             justifyContent: 'center',
           }}
         >
+          <Image
+            source={require('../../assets/images/screens/pin-collections/close.png')}
+            style={{
+              width: 50,
+              height: 53,
+              position: 'absolute',
+              bottom: 0,
+            }}
+            contentFit="contain"
+          />
           <Pressable
             style={{
               width: '100%',
@@ -71,17 +82,27 @@ export default function TaskListModal({
               bottom: 0,
               left: 0,
               right: 0,
-              margin: 'auto',
+              justifyContent: 'center',
               position: 'relative',
               width: Dimensions.get('window').width - 50,
+              height: '100%',
             }}
           >
+            <Pressable
+              style={{
+                width: '100%',
+                height: '100%',
+                position: 'absolute',
+              }}
+              onPress={() => setModalVisible(false)}
+            />
             <ImageBackground
               source={require('../../assets/images/screens/explore/tasklist.png')}
               style={{
                 width: '100%',
-                height: 195,
+                aspectRatio: 1.97,
                 zIndex: 10,
+                position: 'relative',
               }}
               resizeMode="contain"
             >
@@ -91,9 +112,10 @@ export default function TaskListModal({
                   textTransform: 'uppercase',
                   color: 'white',
                   fontSize: 30,
-                  marginTop: 125,
-                  marginLeft: 'auto',
-                  marginRight: 'auto',
+                  position: 'absolute',
+                  width: '100%',
+                  textAlign: 'center',
+                  bottom: '15%',
                   textShadowColor: 'rgba(0, 0, 0, .5)',
                   textShadowOffset: {
                     width: 2,
@@ -102,58 +124,62 @@ export default function TaskListModal({
                   textShadowRadius: 0,
                 }}
               >
-                Uncompleted Tasks
+                {labels.task_list_modal_heading}
               </Text>
             </ImageBackground>
-            <ScrollView
-              contentContainerStyle={{
-                flexGrow: 1,
-              }}
+            <View
               style={{
-                marginTop: '-15%',
-                backgroundColor: 'white',
-                borderRadius: 20,
-                shadowColor: '#000',
-                shadowOffset: {
-                  width: 0,
-                  height: 2,
-                },
-                shadowOpacity: 0.25,
-                shadowRadius: 4,
-                width: '80%',
-                maxHeight: '80%',
-                marginLeft: 'auto',
-                marginRight: 'auto',
+                maxHeight: '40%',
               }}
             >
-              <View
+              <ScrollView
+                contentContainerStyle={{
+                  flexGrow: 1,
+                }}
                 style={{
-                  paddingTop: 45,
-                  paddingRight: 35,
-                  paddingLeft: 35,
-                  paddingBottom: 15,
-                  flex: 1,
-                  justifyContent: 'center',
+                  marginTop: -25,
+                  backgroundColor: 'white',
+                  borderRadius: 20,
+                  shadowColor: '#000',
+                  shadowOffset: {
+                    width: 0,
+                    height: 2,
+                  },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 4,
+                  width: '80%',
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
                 }}
               >
-                {redeemables?.tasks.map((task, index) => {
-                  return (
-                    <View key={task.id}>
-                      <Text
-                        style={{
-                          textAlign: 'center',
-                          fontFamily: 'Knockout',
-                          fontSize: 20,
-                          paddingTop: index === 0 ? 0 : 16,
-                        }}
-                      >
-                        {task.name}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </ScrollView>
+                <View
+                  style={{
+                    paddingTop: 45,
+                    paddingRight: 35,
+                    paddingLeft: 35,
+                    paddingBottom: 30,
+                    justifyContent: 'center',
+                  }}
+                >
+                  {redeemables?.tasks.map((task, index) => {
+                    return (
+                      <View key={task.id}>
+                        <Text
+                          style={{
+                            textAlign: 'center',
+                            fontFamily: 'Knockout',
+                            fontSize: 20,
+                            paddingTop: index === 0 ? 0 : 16,
+                          }}
+                        >
+                          {task.name}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>

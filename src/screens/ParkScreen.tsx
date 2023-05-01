@@ -4,6 +4,7 @@ import { chunk } from 'lodash';
 import { useCallback, useContext, useState } from 'react';
 import { ImageBackground, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import { vsprintf } from 'sprintf-js';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
@@ -15,6 +16,7 @@ import TaskCoinModal from '../components/TaskCoinModal';
 import Topbar from '../components/Topbar';
 import config from '../config';
 import { MusicContext } from '../context/MusicProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
@@ -31,6 +33,7 @@ export default function ParkScreen({ route }) {
   >([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { playMusic } = useContext(MusicContext);
+  const { labels } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -134,20 +137,22 @@ export default function ParkScreen({ route }) {
                           textTransform: 'uppercase',
                           textShadowColor: 'rgba(0, 0, 0, .5)',
                           textShadowOffset: {
-                            width: 2,
-                            height: 2,
+                            width: 1,
+                            height: 1,
                           },
                           textShadowRadius: 0,
                         }}
                       >
-                        {currentPark.completed_tasks_count +
-                          currentPark.completed_secret_tasks_count}{' '}
-                        of{' '}
-                        {currentPark.tasks_count +
-                          currentPark.secret_tasks_count}{' '}
-                        tasks completed - {currentPark.park_coins_count} park
-                        coin{currentPark.park_coins_count === 1 ? '' : 's'}{' '}
-                        earned
+                        {vsprintf(labels.park_tasks, [
+                          currentPark.completed_tasks_count +
+                            currentPark.completed_secret_tasks_count,
+                          currentPark.tasks_count +
+                            currentPark.secret_tasks_count,
+                          currentPark.park_coins_count,
+                          `coin${
+                            currentPark.park_coins_count === 1 ? '' : 's'
+                          }`,
+                        ])}
                       </Text>
                     </View>
                   </View>

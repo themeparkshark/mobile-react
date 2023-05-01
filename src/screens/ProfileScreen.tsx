@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import getFriends from '../api/endpoints/me/friends';
 import getInventory from '../api/endpoints/me/inventory';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
@@ -28,12 +29,13 @@ import Wrapper from '../components/Wrapper';
 import YellowButton from '../components/YellowButton';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
-import { FriendContext } from '../context/FriendProvider';
 import { MusicContext } from '../context/MusicProvider';
 import { NotificationContext } from '../context/NotificationProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
+import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
 
 export default function ProfileScreen() {
@@ -42,13 +44,19 @@ export default function ProfileScreen() {
   const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { user, inventory, setInventory } = useContext(AuthContext);
-  const { friends, refreshFriends } = useContext(FriendContext);
+  const [friends, setFriends] = useState<UserType[]>([]);
   const { notificationCount } = useContext(NotificationContext);
   const { playMusic } = useContext(MusicContext);
+  const { warnings } = useCrumbs();
+
+  const requestFriends = () => {
+    getFriends(1, 3).then((response) => setFriends(response));
+  };
 
   useFocusEffect(
     useCallback(() => {
       playMusic(require('../../assets/sounds/music/track5.mp3'));
+      requestFriends();
     }, [])
   );
 
@@ -56,7 +64,7 @@ export default function ProfileScreen() {
     setParks(await getParks(user.id));
     setStores(await getStores());
     setInventory(await getInventory());
-    await refreshFriends();
+    requestFriends();
 
     setLoading(false);
   }, []);
@@ -199,8 +207,9 @@ export default function ProfileScreen() {
                           return (
                             <FriendUser
                               user={item}
-                              onRemove={async () => {
-                                await refreshFriends();
+                              isFriend
+                              onRemove={() => {
+                                requestFriends();
                               }}
                             />
                           );
@@ -210,7 +219,8 @@ export default function ProfileScreen() {
                     </View>
                     <View
                       style={{
-                        alignItems: 'center', marginTop: 32,
+                        alignItems: 'center',
+                        marginTop: 32,
                         width: 190,
                         marginLeft: 'auto',
                         marginRight: 'auto',
@@ -235,7 +245,7 @@ export default function ProfileScreen() {
                         paddingTop: 16,
                       }}
                     >
-                      You don't have any friends yet.
+                      {warnings.no_friends}
                     </Text>
                     <View
                       style={{

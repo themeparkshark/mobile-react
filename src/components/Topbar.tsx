@@ -115,7 +115,7 @@ export default function Topbar({
                     />
                   </Button>
                 )}
-                {!!parkCoins && (
+                {parkCoins !== null && (
                   <View
                     style={{
                       flexDirection: 'row',

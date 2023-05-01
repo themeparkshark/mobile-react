@@ -28,7 +28,6 @@ import PinSwapsScreen from './screens/PinSwapsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import QueueTimesScreen from './screens/QueueTimesScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import UpdateEmailScreen from './screens/SettingsScreen/UpdateEmailScreen';
 import SocialScreen from './screens/SocialScreen';
 import StoreScreen from './screens/StoreScreen';
 import ThreadScreen from './screens/ThreadScreen';
@@ -106,15 +105,6 @@ const HomeStackNavigator = () => {
         }}
       />
       <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen
-        name="UpdateEmail"
-        component={UpdateEmailScreen}
-        options={{
-          headerBackTitle: 'Settings',
-          title: 'Email',
-          headerShown: true,
-        }}
-      />
       <Stack.Screen
         name="Leaderboard"
         component={LeaderboardScreen}
