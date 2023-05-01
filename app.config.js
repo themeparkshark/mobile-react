@@ -42,4 +42,5 @@ export default {
       },
     ],
   ],
+  scheme: 'mobile-react',
 };
