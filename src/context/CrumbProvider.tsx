@@ -21,6 +21,7 @@ export interface CrumbContextType {
       readonly read_more: string;
       readonly slow_connectivity: string;
       readonly task_list_modal_heading: string;
+      readonly task_unlocks: string;
       readonly username_approval: string;
       readonly vault_cost: string;
       readonly verified_user: string;
