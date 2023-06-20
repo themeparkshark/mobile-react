@@ -2,12 +2,12 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Dimensions, Pressable, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
+import { vsprintf } from 'sprintf-js';
 import Button from '../components/Button';
 import config from '../config';
+import useCrumbs from '../hooks/useCrumbs';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
-import useCrumbs from '../hooks/useCrumbs';
-import { vsprintf } from 'sprintf-js';
 
 export default function TaskCoinModal({
   task,
@@ -110,7 +110,10 @@ export default function TaskCoinModal({
                     textAlign: 'center',
                   }}
                 >
-                  {vsprintf(labels.task_unlocks, [timesCompleted, (task as TaskType).completion_goal])}
+                  {vsprintf(labels.task_unlocks, [
+                    timesCompleted,
+                    (task as TaskType).completion_goal,
+                  ])}
                 </Text>
               </View>
             )}

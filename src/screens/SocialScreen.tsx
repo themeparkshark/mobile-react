@@ -1,16 +1,15 @@
+import { FlashList } from '@shopify/flash-list';
 import { useCallback, useState } from 'react';
-import { Image, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
-import Button from '../components/Button';
 import CreateThreadModal from '../components/CreateThreadModal';
 import Loading from '../components/Loading';
+import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Wrapper from '../components/Wrapper';
 import { ThreadType } from '../models/thread-type';
-import {FlashList} from '@shopify/flash-list';
-import Thread from '../components/Thread';
 
 export default function SocialScreen({ navigation }) {
   const [threads, setThreads] = useState<ThreadType[]>([]);

@@ -2,7 +2,7 @@ import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import dayjs from 'dayjs';
-import { useContext, useState, useEffect } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import {
   Alert,

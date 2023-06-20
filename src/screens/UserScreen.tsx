@@ -1,6 +1,6 @@
-import { Dimensions, ScrollView, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useContext, useEffect, useState } from 'react';
+import { Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getUser from '../api/endpoints/users/get';
 import getVisitedParks from '../api/endpoints/users/visited-parks';

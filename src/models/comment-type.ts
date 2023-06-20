@@ -6,6 +6,5 @@ export interface CommentType {
   readonly children_count: number;
   readonly user: UserType;
   readonly content: string;
-  readonly is_removed: boolean;
   readonly updated_at: string;
 }
