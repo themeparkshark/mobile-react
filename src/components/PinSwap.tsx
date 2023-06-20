@@ -338,7 +338,6 @@ export default function PinSwap({
 
                         setModalVisible(false);
                         onClose();
-
                         setInventory(await getInventory());
                       },
                     },

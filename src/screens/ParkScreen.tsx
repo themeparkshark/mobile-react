@@ -5,6 +5,7 @@ import { useCallback, useContext, useState } from 'react';
 import { ImageBackground, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
+import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
@@ -21,7 +22,6 @@ import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
-import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
 
 export default function ParkScreen({ route }) {
   const { park, user } = route.params;
@@ -306,7 +306,12 @@ export default function ParkScreen({ route }) {
                               {hasCompletedTask(task.id) ? (
                                 <TaskCoinModal
                                   task={task}
-                                  timesCompleted={completedTasks.find((completedTask) => completedTask.id === task.id)?.times_completed ?? 0}
+                                  timesCompleted={
+                                    completedTasks.find(
+                                      (completedTask) =>
+                                        completedTask.id === task.id
+                                    )?.times_completed ?? 0
+                                  }
                                 />
                               ) : (
                                 <View
@@ -324,56 +329,63 @@ export default function ParkScreen({ route }) {
                       </View>
                     </View>
                   ))}
-                  {chunk(archivedTasks, 5).map((tasks: TaskType[], index: number) => (
-                    <View key={index} style={{ paddingBottom: 16 }}>
-                      <View style={{ position: 'relative', height: 105 }}>
-                        <Image
-                          source={require('../../assets/images/screens/park/archivedshelf.png')}
-                          contentFit="contain"
-                          style={{
-                            width: '100%',
-                            height: 55,
-                            bottom: 0,
-                            position: 'absolute',
-                          }}
-                        />
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            justifyContent: 'center',
-                            position: 'absolute',
-                            top: 0,
-                            width: '100%',
-                          }}
-                        >
-                          {archivedTasks.map((archivedTask, index) => (
-                            <View
-                              key={archivedTask.id}
-                              style={{
-                                paddingLeft: index === 0 ? 0 : 12,
-                              }}
-                            >
-                              {hasCompletedTask(archivedTask.id) ? (
-                                <TaskCoinModal
-                                  task={archivedTask}
-                                  timesCompleted={completedTasks.find((completedTask) => completedTask.id === archivedTask.id)?.times_completed ?? 0}
-                                />
-                              ) : (
-                                <View
-                                  style={{
-                                    width: 60,
-                                    height: 60,
-                                    backgroundColor: 'rgba(0, 0, 0, .5)',
-                                    borderRadius: 50,
-                                  }}
-                                />
-                              )}
-                            </View>
-                          ))}
+                  {chunk(archivedTasks, 5).map(
+                    (tasks: TaskType[], index: number) => (
+                      <View key={index} style={{ paddingBottom: 16 }}>
+                        <View style={{ position: 'relative', height: 105 }}>
+                          <Image
+                            source={require('../../assets/images/screens/park/archivedshelf.png')}
+                            contentFit="contain"
+                            style={{
+                              width: '100%',
+                              height: 55,
+                              bottom: 0,
+                              position: 'absolute',
+                            }}
+                          />
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              justifyContent: 'center',
+                              position: 'absolute',
+                              top: 0,
+                              width: '100%',
+                            }}
+                          >
+                            {archivedTasks.map((archivedTask, index) => (
+                              <View
+                                key={archivedTask.id}
+                                style={{
+                                  paddingLeft: index === 0 ? 0 : 12,
+                                }}
+                              >
+                                {hasCompletedTask(archivedTask.id) ? (
+                                  <TaskCoinModal
+                                    task={archivedTask}
+                                    timesCompleted={
+                                      completedTasks.find(
+                                        (completedTask) =>
+                                          completedTask.id === archivedTask.id
+                                      )?.times_completed ?? 0
+                                    }
+                                  />
+                                ) : (
+                                  <View
+                                    style={{
+                                      width: 60,
+                                      height: 60,
+                                      backgroundColor: 'rgba(0, 0, 0, .5)',
+                                      borderRadius: 50,
+                                    }}
+                                  />
+                                )}
+                              </View>
+                            ))}
+                          </View>
                         </View>
                       </View>
-                    </View>
-                  ))}
+                    )
+                  )}
                 </View>
               </ScrollView>
             )}

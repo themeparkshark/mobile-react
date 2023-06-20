@@ -1,46 +1,49 @@
-import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
+import { FlashList } from '@shopify/flash-list';
 import { useCallback, useState } from 'react';
-import {
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import instagram from '../api/endpoints/social-posts/instagram';
-import twitter from '../api/endpoints/social-posts/twitter';
-import Button from '../components/Button';
+import getThreads from '../api/endpoints/threads/getThreads';
+import CreateThreadModal from '../components/CreateThreadModal';
 import Loading from '../components/Loading';
+import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Wrapper from '../components/Wrapper';
-import dayjs from '../helpers/dayjs';
-import { SocialPostType } from '../models/social-post-type';
+import { ThreadType } from '../models/thread-type';
 
 export default function SocialScreen({ navigation }) {
-  const [twitterStatuses, setTwitterStatuses] = useState<SocialPostType[]>();
-  const [instagramStatuses, setInstagramStatuses] =
-    useState<SocialPostType[]>();
-  const [loading, setLoading] = useState<boolean>(true);
+  const [threads, setThreads] = useState<ThreadType[]>([]);
+  const [pinnedThreads, setPinnedThreads] = useState<ThreadType[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [page, setPage] = useState<number>(1);
+
+  const fetchThreads = async (page: number) => {
+    const response = await getThreads(page);
+    setThreads((prevState) => {
+      return [...prevState, ...response];
+    });
+
+    setPinnedThreads(await getThreads(1, true));
+  };
 
   useAsyncEffect(async () => {
-    setTwitterStatuses(await twitter());
-    setInstagramStatuses(await instagram());
-
+    await fetchThreads(page);
     setLoading(false);
   }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    (async () => {
-      setTwitterStatuses(await twitter());
-      setInstagramStatuses(await instagram());
-    })();
-    setRefreshing(false);
+    setThreads([]);
+    fetchThreads(1).then(() => setRefreshing(false));
+    setPage(1);
   }, []);
+
+  useAsyncEffect(async () => {
+    if (page > 1) {
+      await fetchThreads(page);
+    }
+  }, [page]);
 
   const buttons = [
     {
@@ -79,199 +82,72 @@ export default function SocialScreen({ navigation }) {
 
   return (
     <Wrapper>
-      <Topbar text="Social" />
+      <Topbar
+        text="Social"
+        rightButton={
+          <CreateThreadModal
+            onSubmit={async () => {
+              setPage(1);
+              setThreads([]);
+              await fetchThreads(1);
+            }}
+          />
+        }
+      />
       {loading && <Loading />}
       {!loading && (
-        <ScrollView
+        <View
           style={{
             marginTop: -8,
+            flex: 1,
           }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
         >
-          <View
-            style={{
-              paddingLeft: 16,
-              paddingRight: 16,
-              paddingBottom: 32,
-            }}
-          >
-            <UserButtons buttons={buttons} />
-            <View style={{ paddingTop: 32 }}>
-              <Text
-                style={{
-                  paddingBottom: 16,
-                  fontFamily: 'Knockout',
-                  fontSize: 24,
-                }}
-              >
-                Twitter
-              </Text>
-              {twitterStatuses?.map((twitterStatus) => {
-                const date = dayjs(twitterStatus.status_created_at)
-                  .startOf('second')
-                  .fromNow();
-
-                return (
-                  <View
-                    key={twitterStatus.id}
-                    style={{
-                      marginBottom: 24,
-                    }}
-                  >
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: 'row',
-                      }}
-                      onPress={() => {
-                        WebBrowser.openBrowserAsync(twitterStatus.permalink);
-                      }}
-                    >
-                      <View
-                        style={{
-                          width: 50,
-                          height: 50,
-                          borderRadius: 10,
-                          overflow: 'hidden',
-                        }}
-                      >
-                        <Image
-                          source={require('../../assets/icon.png')}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                          }}
-                        />
-                      </View>
-                      <View
-                        style={{
-                          flex: 1,
-                          paddingLeft: 16,
-                        }}
-                      >
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                          }}
-                        >
-                          <View
-                            style={{
-                              flex: 1,
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontWeight: 'bold',
-                                fontSize: 16,
-                                paddingRight: 4,
-                              }}
-                            >
-                              Theme Park Shark
-                            </Text>
-                            <Text
-                              style={{
-                                fontSize: 14,
-                                opacity: 0.5,
-                              }}
-                            >
-                              @themeparkshark
-                            </Text>
-                          </View>
-                          <View>
-                            <Text
-                              style={{
-                                fontSize: 14,
-                                opacity: 0.5,
-                              }}
-                            >
-                              {date}
-                            </Text>
-                          </View>
-                        </View>
-                        <Text
-                          style={{
-                            fontSize: 16,
-                          }}
-                        >
-                          {twitterStatus.status}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
-              <Button
-                title="Follow Theme Park Shark on Twitter"
-                onPress={() =>
-                  WebBrowser.openBrowserAsync(
-                    'https://twitter.com/themeparkshark'
-                  )
-                }
-              />
-            </View>
-            <View
-              style={{
-                marginTop: 32,
-              }}
-            >
-              <Text
-                style={{
-                  paddingBottom: 16,
-                  fontFamily: 'Knockout',
-                  fontSize: 24,
-                }}
-              >
-                Instagram
-              </Text>
+          <FlashList
+            data={threads}
+            ListHeaderComponent={
               <View
                 style={{
-                  borderRadius: 10,
-                  overflow: 'hidden',
-                  flexWrap: 'wrap',
-                  flexDirection: 'row',
-                  marginBottom: 24,
+                  paddingLeft: 16,
+                  paddingRight: 16,
                 }}
               >
-                {instagramStatuses?.map((instagramStatus) => {
-                  return (
-                    <View
-                      key={instagramStatus.id}
-                      style={{
-                        width: '33.33333333%',
-                      }}
-                    >
-                      <TouchableOpacity
-                        onPress={() => {
-                          WebBrowser.openBrowserAsync(
-                            instagramStatus.permalink
-                          );
-                        }}
-                      >
-                        <Image
-                          source={instagramStatus.image_url}
-                          style={{
-                            aspectRatio: 1,
-                          }}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })}
+                <View>
+                  <UserButtons buttons={buttons} />
+                </View>
+                {pinnedThreads.map((pinnedThread) => (
+                  <View
+                    key={pinnedThread.id}
+                    style={{
+                      paddingTop: 32,
+                    }}
+                  >
+                    <Thread thread={pinnedThread} />
+                  </View>
+                ))}
               </View>
-              <Button
-                title="Follow Theme Park Shark on Instagram"
-                onPress={() =>
-                  WebBrowser.openBrowserAsync(
-                    'https://instagram.com/themeparkshark'
-                  )
-                }
-              />
-            </View>
-          </View>
-        </ScrollView>
+            }
+            ListFooterComponentStyle={{
+              height: 64,
+            }}
+            renderItem={({ item }) => (
+              <View
+                key={item.id}
+                style={{
+                  paddingTop: 32,
+                  paddingLeft: 16,
+                  paddingRight: 16,
+                }}
+              >
+                <Thread thread={item} />
+              </View>
+            )}
+            estimatedItemSize={100}
+            keyExtractor={(item) => item.id.toString()}
+            onEndReached={() => {
+              setPage((prevState) => prevState + 1);
+            }}
+          />
+        </View>
       )}
     </Wrapper>
   );

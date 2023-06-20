@@ -3,6 +3,7 @@ import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { CrumbProvider } from './src/context/CrumbProvider';
 import { DailyGiftProvider } from './src/context/DailyGiftProvider';
+import { ForumProvider } from './src/context/ForumProvider';
 import { LocationProvider } from './src/context/LocationProvider';
 import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
@@ -17,13 +18,15 @@ export default function App() {
           <MusicProvider>
             <BroadcastProvider>
               <NotificationProvider>
-                <CrumbProvider>
-                  <LocationProvider>
-                    <DailyGiftProvider>
-                      <Root />
-                    </DailyGiftProvider>
-                  </LocationProvider>
-                </CrumbProvider>
+                <ForumProvider>
+                  <CrumbProvider>
+                    <LocationProvider>
+                      <DailyGiftProvider>
+                        <Root />
+                      </DailyGiftProvider>
+                    </LocationProvider>
+                  </CrumbProvider>
+                </ForumProvider>
               </NotificationProvider>
             </BroadcastProvider>
           </MusicProvider>
