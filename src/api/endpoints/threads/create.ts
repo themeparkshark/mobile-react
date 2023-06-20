@@ -8,8 +8,8 @@ export default async function createThread(thread: {
   readonly content?: string;
 }): Promise<ThreadType> {
   try {
-    const { data } = await client.get<ApiResponseType<ThreadType>>(
-      `/threads/${thread}`
+    const { data } = await client.post<ApiResponseType<ThreadType>>(
+      '/threads', thread
     );
 
     return data.data;

@@ -88,6 +88,7 @@ export default function SocialScreen({ navigation }) {
           <CreateThreadModal
             onSubmit={async () => {
               setPage(1);
+              setThreads([]);
               await fetchThreads(1);
             }}
           />
