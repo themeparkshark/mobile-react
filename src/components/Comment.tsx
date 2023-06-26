@@ -16,7 +16,7 @@ export default function Comment({
   readonly comment: CommentType;
   readonly onReplyPress: (comment: CommentType) => void;
 }) {
-  const childrenLimit = 8;
+  const childrenLimit = 15;
   const { activeComment, setActiveComment } = useContext(ForumContext);
   const [page, setPage] = useState<number>(1);
   const [children, setChildren] = useState<CommentType[]>(comment.children);
@@ -31,7 +31,7 @@ export default function Comment({
 
     const response = await getChildren(comment.id, page);
     setChildren((prevState) => [...prevState, ...response.data]);
-    setCanLoadMore(response.meta.current_page !== response.meta.total);
+    setCanLoadMore(response.meta.total > response.meta.to);
   }, [page]);
 
   return (
@@ -113,6 +113,7 @@ export default function Comment({
                 marginLeft: 16,
                 marginRight: 16,
                 marginTop: 16,
+                marginBottom: 16,
                 padding: 8,
               }}
               onPress={() => {

@@ -115,6 +115,7 @@ export default function ThreadScreen({ route }) {
                     style={{
                       paddingTop: 16,
                       fontSize: 16,
+                      lineHeight: 1.2,
                     }}
                   >
                     {currentThread.content}

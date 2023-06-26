@@ -2,6 +2,7 @@ import { truncate } from 'lodash';
 import { Text, TouchableOpacity, View } from 'react-native';
 import config from '../config';
 import dayjs from '../helpers/dayjs';
+import shortenNumber from '../helpers/shorten-number';
 import { ThreadType } from '../models/thread-type';
 import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
@@ -77,12 +78,11 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
       >
         <View
           style={{
-            width: 32,
-            height: 32,
             backgroundColor: 'rgba(0, 0, 0, .05)',
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: 16,
+            padding: 8,
           }}
         >
           <Text
@@ -91,7 +91,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
               fontSize: 18,
             }}
           >
-            {thread.comments_count}
+            {shortenNumber(thread.comments_count)}
           </Text>
         </View>
       </View>

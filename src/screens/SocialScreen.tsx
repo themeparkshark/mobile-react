@@ -1,6 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useLayoutEffect, useState } from 'react';
-import { View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
 import CreateThreadModal from '../components/CreateThreadModal';
@@ -27,20 +28,25 @@ export default function SocialScreen({ navigation }) {
     setPinnedThreads(await getThreads(1, true));
   };
 
-  useLayoutEffect(() => {
-    (async () => {
-      await fetchThreads(page);
-      setLoading(false);
-    })();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        setLoading(true);
+        setThreads([]);
+        setPinnedThreads([]);
+        await fetchThreads(page);
+        setLoading(false);
+      })();
+    }, [])
+  );
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     setThreads([]);
-    fetchThreads(1).then(() => {
-      setRefreshing(false);
-      setPage(1);
-    });
+    setPinnedThreads([]);
+    await fetchThreads(1);
+    setRefreshing(false);
+    setPage(1);
   }, []);
 
   useAsyncEffect(async () => {
@@ -108,6 +114,9 @@ export default function SocialScreen({ navigation }) {
         >
           <FlashList
             data={threads}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
             ListHeaderComponent={
               <>
                 <View
@@ -157,7 +166,7 @@ export default function SocialScreen({ navigation }) {
             estimatedItemSize={100}
             keyExtractor={(item) => item.id.toString()}
             onEndReached={() => {
-              setPage((prevState) => prevState + 1);
+              //setPage((prevState) => prevState + 1);
             }}
           />
         </View>
