@@ -97,7 +97,7 @@ export default function Notification({
             fontSize: 16,
           }}
         >
-          {dayjs(notification.created_at).startOf('second').fromNow()} ago
+          {dayjs(notification.created_at).startOf('second').fromNow()}
         </Text>
       </View>
       <View

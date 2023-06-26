@@ -142,8 +142,7 @@ export default function QueueTimesScreen({ route }) {
                           {queueTimes &&
                             dayjs(queueTimes[0].last_check_at)
                               .startOf('second')
-                              .fromNow()}{' '}
-                          ago
+                              .fromNow()}
                         </Text>
                         {queueTimes?.map((queueTime) => {
                           return (

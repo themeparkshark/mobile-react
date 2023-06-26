@@ -1,5 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
@@ -27,16 +27,20 @@ export default function SocialScreen({ navigation }) {
     setPinnedThreads(await getThreads(1, true));
   };
 
-  useAsyncEffect(async () => {
-    await fetchThreads(page);
-    setLoading(false);
+  useLayoutEffect(() => {
+    (async () => {
+      await fetchThreads(page);
+      setLoading(false);
+    })();
   }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setThreads([]);
-    fetchThreads(1).then(() => setRefreshing(false));
-    setPage(1);
+    fetchThreads(1).then(() => {
+      setRefreshing(false);
+      setPage(1);
+    });
   }, []);
 
   useAsyncEffect(async () => {
@@ -105,26 +109,35 @@ export default function SocialScreen({ navigation }) {
           <FlashList
             data={threads}
             ListHeaderComponent={
-              <View
-                style={{
-                  paddingLeft: 16,
-                  paddingRight: 16,
-                }}
-              >
-                <View>
-                  <UserButtons buttons={buttons} />
-                </View>
-                {pinnedThreads.map((pinnedThread) => (
-                  <View
-                    key={pinnedThread.id}
-                    style={{
-                      paddingTop: 32,
-                    }}
-                  >
-                    <Thread thread={pinnedThread} />
+              <>
+                <View
+                  style={{
+                    paddingLeft: 16,
+                    paddingRight: 16,
+                  }}
+                >
+                  <View>
+                    <UserButtons buttons={buttons} />
                   </View>
-                ))}
-              </View>
+                </View>
+                <View
+                  style={{
+                    paddingLeft: 10,
+                    paddingRight: 16,
+                  }}
+                >
+                  {pinnedThreads.map((pinnedThread) => (
+                    <View
+                      key={pinnedThread.id}
+                      style={{
+                        paddingTop: 32,
+                      }}
+                    >
+                      <Thread thread={pinnedThread} />
+                    </View>
+                  ))}
+                </View>
+              </>
             }
             ListFooterComponentStyle={{
               height: 64,
@@ -134,7 +147,7 @@ export default function SocialScreen({ navigation }) {
                 key={item.id}
                 style={{
                   paddingTop: 32,
-                  paddingLeft: 16,
+                  paddingLeft: 10,
                   paddingRight: 16,
                 }}
               >

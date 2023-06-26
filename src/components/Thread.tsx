@@ -20,7 +20,6 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
         borderLeftWidth: 2,
         borderLeftColor: thread.pinned_at ? config.primary : 'transparent',
         paddingLeft: 16,
-        paddingRight: 16,
         alignItems: 'center',
       }}
     >
@@ -57,8 +56,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
               {thread.latest_comment.user.screen_name} replied{' '}
               {dayjs(thread.latest_comment.updated_at)
                 .startOf('second')
-                .fromNow()}{' '}
-              ago
+                .fromNow()}
             </Text>
             <Text
               style={{

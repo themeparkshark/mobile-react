@@ -54,7 +54,7 @@ export default function Activity({
                   textAlign: 'right',
                 }}
               >
-                {dayjs(activity.created_at).fromNow()} ago
+                {dayjs(activity.created_at).fromNow()}
               </Text>
             </View>
           </View>

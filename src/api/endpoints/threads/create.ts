@@ -9,7 +9,8 @@ export default async function createThread(thread: {
 }): Promise<ThreadType> {
   try {
     const { data } = await client.post<ApiResponseType<ThreadType>>(
-      '/threads', thread
+      '/threads',
+      thread
     );
 
     return data.data;
