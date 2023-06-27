@@ -55,7 +55,7 @@ export default function Comment({
           <View style={{ paddingLeft: 16 }}>
             <Text>
               {comment.user.screen_name} -{' '}
-              {dayjs(comment.updated_at).startOf('second').fromNow()}
+              {dayjs(comment.created_at).startOf('second').fromNow()}
             </Text>
           </View>
         </View>
@@ -70,6 +70,7 @@ export default function Comment({
             style={{
               fontSize: 16,
               paddingBottom: 16,
+              lineHeight: 24,
             }}
           >
             {comment.content}
@@ -98,7 +99,7 @@ export default function Comment({
             marginLeft: 16,
             borderLeftWidth: 1,
             borderStyle: 'solid',
-            borderLeftColor: 'rgba(0, 0, 0, .25)',
+            borderLeftColor: 'rgba(0, 0, 0, .10)',
           }}
         >
           {children.map((child) => {

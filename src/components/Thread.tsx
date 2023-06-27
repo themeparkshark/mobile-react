@@ -55,7 +55,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
               }}
             >
               {thread.latest_comment.user.screen_name} replied{' '}
-              {dayjs(thread.latest_comment.updated_at)
+              {dayjs(thread.latest_comment.created_at)
                 .startOf('second')
                 .fromNow()}
             </Text>

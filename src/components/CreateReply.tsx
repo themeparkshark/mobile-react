@@ -40,6 +40,12 @@ export default function CreateReply({
         bottom: keyboardHeight,
         backgroundColor: 'white',
         width: Dimensions.get('window').width,
+        shadowOffset: {
+          width: 0,
+          height: -4,
+        },
+        shadowOpacity: .2,
+        shadowRadius: 5,
       }}
     >
       <View

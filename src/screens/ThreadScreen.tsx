@@ -76,7 +76,7 @@ export default function ThreadScreen({ route }) {
           <FlashList
             data={comments}
             ListHeaderComponent={
-              <View style={{ padding: 16 }}>
+              <View style={{ padding: 16, backgroundColor: 'white' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View>
                     <Avatar size={50} user={currentThread.user} />
@@ -115,7 +115,7 @@ export default function ThreadScreen({ route }) {
                     style={{
                       paddingTop: 16,
                       fontSize: 16,
-                      lineHeight: 1.2,
+                      lineHeight: 24,
                     }}
                   >
                     {currentThread.content}
@@ -126,13 +126,10 @@ export default function ThreadScreen({ route }) {
                     marginTop: 16,
                     marginBottom: 16,
                     flexDirection: 'row',
+                    justifyContent: 'space-between',
                   }}
                 >
-                  <View
-                    style={{
-                      flex: 1,
-                    }}
-                  >
+                  <View>
                     <TouchableOpacity
                       style={{
                         flexDirection: 'row',
@@ -152,11 +149,7 @@ export default function ThreadScreen({ route }) {
                       </Text>
                     </TouchableOpacity>
                   </View>
-                  <View
-                    style={{
-                      flex: 1,
-                    }}
-                  >
+                  <View>
                     <TouchableOpacity
                       style={{
                         flexDirection: 'row',
@@ -176,31 +169,7 @@ export default function ThreadScreen({ route }) {
                       </Text>
                     </TouchableOpacity>
                   </View>
-                  <View
-                    style={{
-                      flex: 1,
-                    }}
-                  >
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: 'row',
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faShare} size={16} color="black" />
-                      <Text
-                        style={{
-                          paddingLeft: 16,
-                        }}
-                      >
-                        Share
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View
-                    style={{
-                      flex: 1,
-                    }}
-                  >
+                  <View>
                     <TouchableOpacity
                       style={{
                         flexDirection: 'row',
@@ -221,12 +190,19 @@ export default function ThreadScreen({ route }) {
             }
             renderItem={({ item }) => {
               return (
-                <Comment
-                  comment={item}
-                  onReplyPress={(comment) => {
-                    setComment(comment);
+                <View
+                  style={{
+                    backgroundColor: 'white',
+                    marginTop: 8,
                   }}
-                />
+                >
+                  <Comment
+                    comment={item}
+                    onReplyPress={(comment) => {
+                      setComment(comment);
+                    }}
+                  />
+                </View>
               );
             }}
             estimatedItemSize={100}
