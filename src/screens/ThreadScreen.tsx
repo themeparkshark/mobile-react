@@ -1,7 +1,6 @@
 import { faComments } from '@fortawesome/pro-light-svg-icons/faComments';
 import { faFaceSmile } from '@fortawesome/pro-light-svg-icons/faFaceSmile';
 import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
-import { faShare } from '@fortawesome/pro-light-svg-icons/faShare';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import { useContext, useState } from 'react';

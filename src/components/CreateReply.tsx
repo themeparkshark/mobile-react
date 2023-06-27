@@ -1,6 +1,9 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
+  Keyboard,
+  KeyboardEvent,
   SafeAreaView,
   Text,
   TextInput,
@@ -10,7 +13,6 @@ import {
 import createComment from '../api/endpoints/comments/create';
 import config from '../config';
 import { ForumContext } from '../context/ForumProvider';
-import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { ThreadType } from '../models/thread-type';
 
 export default function CreateReply({
@@ -23,8 +25,8 @@ export default function CreateReply({
   const { activeComment, setActiveComment, setRecentlyAddedComment } =
     useContext(ForumContext);
   const [content, setContent] = useState<string>('');
-  const keyboardHeight = useKeyboardHeight();
   const refInput = useRef(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(new Animated.Value(0));
 
   useEffect(() => {
     if (!activeComment || !refInput) {
@@ -34,81 +36,130 @@ export default function CreateReply({
     refInput.current.focus();
   }, [activeComment, refInput]);
 
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      'keyboardWillShow',
+      handleKeyboardWillShow
+    );
+    const keyboardWillHideListener = Keyboard.addListener(
+      'keyboardWillHide',
+      handleKeyboardWillHide
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
+
+  const handleKeyboardWillShow = (event: KeyboardEvent): void => {
+    const { duration, endCoordinates } = event;
+    const screenHeight = Dimensions.get('window').height;
+    const keyboardHeightValue = screenHeight - endCoordinates.screenY;
+    Animated.timing(keyboardHeight, {
+      duration: duration,
+      toValue: keyboardHeightValue,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const handleKeyboardWillHide = (event: KeyboardEvent): void => {
+    const { duration } = event;
+    Animated.timing(keyboardHeight, {
+      duration: duration,
+      toValue: 0,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const translateY = keyboardHeight.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -1],
+  });
+
   return (
-    <SafeAreaView
-      style={{
-        bottom: keyboardHeight,
-        backgroundColor: 'white',
-        width: Dimensions.get('window').width,
-        shadowOffset: {
-          width: 0,
-          height: -4,
-        },
-        shadowOpacity: .2,
-        shadowRadius: 5,
-      }}
-    >
-      <View
-        style={{
-          padding: 16,
-        }}
+    <SafeAreaView>
+      <Animated.View
+        style={[
+          {
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: 'white',
+            width: Dimensions.get('window').width,
+            shadowOffset: {
+              width: 0,
+              height: -4,
+            },
+            shadowOpacity: 0.2,
+            shadowRadius: 5,
+          },
+          { transform: [{ translateY }] },
+        ]}
       >
-        <TextInput
-          ref={refInput}
-          style={{
-            fontSize: 16,
-            width: '100%',
-            borderRadius: 4,
-            backgroundColor: 'rgba(0, 0, 0, .05)',
-            color: 'black',
-            paddingLeft: 16,
-            paddingRight: 16,
-            paddingTop: 12,
-            paddingBottom: 12,
-          }}
-          placeholderTextColor="rgba(0, 0, 0, .5)"
-          onChangeText={setContent}
-          value={content}
-          placeholder="Add a comment"
-          multiline
-          onBlur={() => setActiveComment(undefined)}
-        />
         <View
           style={{
-            alignItems: 'flex-end',
+            padding: 16,
           }}
         >
-          <View>
-            <TouchableOpacity
-              style={{
-                marginTop: 8,
-                backgroundColor: config.secondary,
-                borderRadius: 10,
-                paddingTop: 8,
-                paddingBottom: 8,
-                paddingLeft: 16,
-                paddingRight: 16,
-              }}
-              onPress={async () => {
-                const response = await createComment(
-                  thread.id,
-                  content,
-                  activeComment?.id
-                );
-                setRecentlyAddedComment(response);
-                setContent('');
-                await onSubmit();
-              }}
-            >
-              <View>
-                <Text style={{ textAlign: 'center', color: 'white' }}>
-                  Reply
-                </Text>
-              </View>
-            </TouchableOpacity>
+          <TextInput
+            ref={refInput}
+            style={{
+              fontSize: 16,
+              width: '100%',
+              borderRadius: 4,
+              backgroundColor: 'rgba(0, 0, 0, .05)',
+              color: 'black',
+              paddingLeft: 16,
+              paddingRight: 16,
+              paddingTop: 12,
+              paddingBottom: 12,
+            }}
+            placeholderTextColor="rgba(0, 0, 0, .5)"
+            onChangeText={setContent}
+            value={content}
+            placeholder="Add a comment"
+            multiline
+            onBlur={() => setActiveComment(undefined)}
+          />
+          <View
+            style={{
+              alignItems: 'flex-end',
+            }}
+          >
+            <View>
+              <TouchableOpacity
+                style={{
+                  marginTop: 8,
+                  backgroundColor: config.secondary,
+                  borderRadius: 10,
+                  paddingTop: 8,
+                  paddingBottom: 8,
+                  paddingLeft: 16,
+                  paddingRight: 16,
+                }}
+                onPress={async () => {
+                  const response = await createComment(
+                    thread.id,
+                    content,
+                    activeComment?.id
+                  );
+                  setRecentlyAddedComment(response);
+                  setContent('');
+                  await onSubmit();
+                }}
+              >
+                <View>
+                  <Text style={{ textAlign: 'center', color: 'white' }}>
+                    Reply
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
