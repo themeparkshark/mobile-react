@@ -103,6 +103,8 @@ export default function RedeemModal({
           )}
           {(redeemable?.type === 'coin' ||
             redeemable?.type === 'task' ||
+            redeemable?.type === 'item' ||
+            redeemable?.type === 'pin' ||
             redeemable?.type === 'secret_task') && (
             <RedeemRedeemableModal
               open={modalVisible}
