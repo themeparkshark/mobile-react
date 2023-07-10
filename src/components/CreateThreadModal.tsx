@@ -40,7 +40,7 @@ export default function CreateThreadModal({
             alignSelf: 'center',
           }}
           contentFit="contain"
-          source={require('../../assets/images/screens/profile/settings.png')}
+          source={require('../../assets/images/screens/social/create_thread.png')}
         />
       </Button>
       <Modal
