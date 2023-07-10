@@ -4,12 +4,16 @@ import client from '../../client';
 
 export default async function getThreads(
   page: number,
-  pinned: boolean = false
+  options: {
+    pinned?: boolean;
+    sort?: 'hottest'|'latest';
+  }
 ): Promise<ThreadType[]> {
   const { data } = await client.get<ApiResponseType<ThreadType[]>>('/threads', {
     params: {
       page,
-      pinned: pinned,
+      pinned: options.pinned ?? false,
+      sort: options.sort ?? 'latest',
     },
   });
 

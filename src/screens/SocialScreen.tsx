@@ -1,16 +1,27 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useState } from 'react';
+import {useCallback, useState} from 'react';
 import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
 import CreateThreadModal from '../components/CreateThreadModal';
 import Loading from '../components/Loading';
+import SortByDropdown, {SortOption} from '../components/SortByDropdown';
 import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Wrapper from '../components/Wrapper';
 import { ThreadType } from '../models/thread-type';
+
+const options = [
+  {
+    label: 'Hot',
+    value: 'hottest',
+  },
+  {
+    label: 'New',
+    value: 'latest',
+  },
+];
 
 export default function SocialScreen({ navigation }) {
   const [threads, setThreads] = useState<ThreadType[]>([]);
@@ -18,33 +29,44 @@ export default function SocialScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
+  const [filter, setFilter] = useState<SortOption>(options[0]);
+
+  const fetchPinnedThreads = async() => {
+    setPinnedThreads(await getThreads(1, {
+      pinned: true,
+    }));
+  }
 
   const fetchThreads = async (page: number) => {
-    const response = await getThreads(page);
+    const response = await getThreads(page, {
+      sort: filter.value,
+    });
     setThreads((prevState) => {
       return [...prevState, ...response];
     });
-
-    setPinnedThreads(await getThreads(1, true));
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        setLoading(true);
-        setThreads([]);
-        setPinnedThreads([]);
-        await fetchThreads(page);
-        setLoading(false);
-      })();
-    }, [])
-  );
+  useAsyncEffect(async () => {
+    if (loading) {
+      return;
+    }
+
+    await fetchThreads(page);
+  }, [filter]);
+
+  useAsyncEffect( async () => {
+    await fetchPinnedThreads();
+    await fetchThreads(1);
+    setPage(1);
+    setLoading(false);
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     setThreads([]);
     setPinnedThreads([]);
     await fetchThreads(1);
+    await fetchPinnedThreads();
     setRefreshing(false);
     setPage(1);
   }, []);
@@ -125,9 +147,22 @@ export default function SocialScreen({ navigation }) {
                     paddingRight: 16,
                   }}
                 >
-                  <View>
+                  <View
+                    style={{
+                      marginBottom: 32,
+                    }}
+                  >
                     <UserButtons buttons={buttons} />
                   </View>
+                  <SortByDropdown
+                    activeOption={filter}
+                    options={options}
+                    onChange={async (activeOption) => {
+                      setThreads([]);
+                      setFilter(activeOption);
+                    }}
+                    title="Sort posts by"
+                  />
                 </View>
                 <View
                   style={{
@@ -166,7 +201,7 @@ export default function SocialScreen({ navigation }) {
             estimatedItemSize={100}
             keyExtractor={(item) => item.id.toString()}
             onEndReached={() => {
-              //setPage((prevState) => prevState + 1);
+              setPage((prevState) => prevState + 1);
             }}
           />
         </View>

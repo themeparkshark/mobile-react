@@ -140,6 +140,10 @@ export default function CreateReply({
                   paddingRight: 16,
                 }}
                 onPress={async () => {
+                  if (!content) {
+                    return;
+                  }
+
                   const response = await createComment(
                     thread.id,
                     content,

@@ -113,6 +113,7 @@ export default function ThreadScreen({ route }) {
                   <Text
                     style={{
                       paddingTop: 16,
+                      paddingBottom: 16,
                       fontSize: 16,
                       lineHeight: 24,
                     }}
@@ -123,7 +124,6 @@ export default function ThreadScreen({ route }) {
                 <View
                   style={{
                     marginTop: 16,
-                    marginBottom: 16,
                     flexDirection: 'row',
                     justifyContent: 'space-between',
                   }}
@@ -149,7 +149,7 @@ export default function ThreadScreen({ route }) {
                     </TouchableOpacity>
                   </View>
                   <View>
-                    <TouchableOpacity
+                    <View
                       style={{
                         flexDirection: 'row',
                       }}
@@ -166,7 +166,7 @@ export default function ThreadScreen({ route }) {
                       >
                         {currentThread.comments_count}
                       </Text>
-                    </TouchableOpacity>
+                    </View>
                   </View>
                   <View>
                     <TouchableOpacity
