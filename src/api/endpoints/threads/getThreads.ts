@@ -6,7 +6,7 @@ export default async function getThreads(
   page: number,
   options: {
     pinned?: boolean;
-    sort?: 'hottest'|'latest';
+    sort?: 'hottest' | 'latest';
   }
 ): Promise<ThreadType[]> {
   const { data } = await client.get<ApiResponseType<ThreadType[]>>('/threads', {

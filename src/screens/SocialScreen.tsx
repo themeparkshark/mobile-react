@@ -1,11 +1,11 @@
 import { FlashList } from '@shopify/flash-list';
-import {useCallback, useState} from 'react';
+import { useCallback, useState } from 'react';
 import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
 import CreateThreadModal from '../components/CreateThreadModal';
 import Loading from '../components/Loading';
-import SortByDropdown, {SortOption} from '../components/SortByDropdown';
+import SortByDropdown, { SortOption } from '../components/SortByDropdown';
 import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
@@ -31,11 +31,13 @@ export default function SocialScreen({ navigation }) {
   const [page, setPage] = useState<number>(1);
   const [filter, setFilter] = useState<SortOption>(options[0]);
 
-  const fetchPinnedThreads = async() => {
-    setPinnedThreads(await getThreads(1, {
-      pinned: true,
-    }));
-  }
+  const fetchPinnedThreads = async () => {
+    setPinnedThreads(
+      await getThreads(1, {
+        pinned: true,
+      })
+    );
+  };
 
   const fetchThreads = async (page: number) => {
     const response = await getThreads(page, {
@@ -54,7 +56,7 @@ export default function SocialScreen({ navigation }) {
     await fetchThreads(page);
   }, [filter]);
 
-  useAsyncEffect( async () => {
+  useAsyncEffect(async () => {
     await fetchPinnedThreads();
     await fetchThreads(1);
     setPage(1);
