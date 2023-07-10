@@ -3,7 +3,7 @@ import 'dotenv/config';
 export default {
   name: 'Theme Park Shark',
   slug: 'mobile-react',
-  version: '1.0.14',
+  version: '1.0.15',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
