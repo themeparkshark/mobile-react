@@ -1,5 +1,6 @@
 import { useContext, useState } from 'react';
 import {
+  Alert,
   Dimensions,
   Image,
   ImageBackground,
@@ -43,7 +44,7 @@ function Chest({
     () => {
       onPress();
     },
-    3000,
+    1000,
     isOpen
   );
 
@@ -93,9 +94,16 @@ export default function DailyGiftModal({
   );
 
   const claimReward = async () => {
-    setModalVisible(false);
-    await update(dailyGift.id);
-    await refreshUser();
+    Alert.alert('', `You earned ${dailyGift.shark_coins} Shark Coins!`, [
+      {
+        text: 'Ok',
+        onPress: async () => {
+          setModalVisible(false);
+          await update(dailyGift.id);
+          await refreshUser();
+        },
+      },
+    ]);
   };
 
   return (
