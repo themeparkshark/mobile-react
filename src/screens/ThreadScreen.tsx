@@ -209,6 +209,9 @@ export default function ThreadScreen({ route }) {
             onEndReached={() => {
               setPage((prevState) => prevState + 1);
             }}
+            ListFooterComponentStyle={{
+              height: 120,
+            }}
           />
           <CreateReply
             thread={currentThread}
@@ -222,4 +225,4 @@ export default function ThreadScreen({ route }) {
       )}
     </>
   );
-}
+};

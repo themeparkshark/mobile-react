@@ -53,7 +53,8 @@ export default function SocialScreen({ navigation }) {
       return;
     }
 
-    await fetchThreads(page);
+    await fetchThreads(1);
+    setPage(1);
   }, [filter]);
 
   useAsyncEffect(async () => {
