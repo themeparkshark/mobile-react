@@ -86,7 +86,7 @@ export default function UserScreen({ route }) {
         {
           image: require('../../assets/images/screens/user/compliment.png'),
           onPress: async () => {
-            complimentUser(currentUser);
+            await complimentUser(currentUser);
           },
           show: true,
           text: 'Compliment',

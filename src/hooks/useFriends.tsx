@@ -34,7 +34,7 @@ export default function useFriends() {
         ]
       );
     },
-    acceptFriend: (user: UserType, onPress: () => void) => {
+    acceptFriend: (user: UserType, onPress?: () => void) => {
       Alert.alert(
         '',
         vsprintf(prompts.accept_friend_request, [user.screen_name]),
