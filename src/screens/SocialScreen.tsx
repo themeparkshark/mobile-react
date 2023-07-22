@@ -1,8 +1,10 @@
 import { FlashList } from '@shopify/flash-list';
+import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
-import { RefreshControl, View } from 'react-native';
+import { Image, RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
+import Button from '../components/Button';
 import CreateThreadModal from '../components/CreateThreadModal';
 import Loading from '../components/Loading';
 import SortByDropdown, { SortOption } from '../components/SortByDropdown';
@@ -91,14 +93,16 @@ export default function SocialScreen({ navigation }) {
     },
     {
       image: require('../../assets/images/screens/explore/base.png'),
-      onPress: () => {},
-      text: '?',
+      onPress: () => {
+        WebBrowser.openBrowserAsync('https://themeparkshark.com/shop');
+      },
+      text: 'Merch',
       show: true,
     },
     {
       image: require('../../assets/images/screens/explore/base.png'),
       onPress: () => {},
-      text: '?',
+      text: 'Membership',
       show: true,
     },
     {
@@ -119,7 +123,7 @@ export default function SocialScreen({ navigation }) {
     <Wrapper>
       <Topbar
         text="Social"
-        rightButton={
+        leftButton={
           <CreateThreadModal
             onSubmit={async () => {
               setPage(1);
@@ -127,6 +131,19 @@ export default function SocialScreen({ navigation }) {
               await fetchThreads(1);
             }}
           />
+        }
+        rightButton={
+          <Button onPress={() => {}}>
+            <Image
+              style={{
+                width: 35,
+                height: 35,
+                alignSelf: 'center',
+              }}
+              resizeMode="contain"
+              source={require('../../assets/images/faq.png')}
+            />
+          </Button>
         }
       />
       {loading && <Loading />}
