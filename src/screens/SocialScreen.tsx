@@ -138,6 +138,12 @@ export default function SocialScreen({ navigation }) {
                     <UserButtons
                       buttons={[
                         {
+                          image: require('../../assets/images/screens/social/arcade.png'),
+                          onPress: () => {},
+                          text: 'Arcade',
+                          show: true,
+                        },
+                        {
                           image: require('../../assets/images/screens/social/membership.png'),
                           onPress: () => {},
                           text: 'Membership',
