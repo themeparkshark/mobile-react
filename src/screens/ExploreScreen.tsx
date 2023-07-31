@@ -213,7 +213,6 @@ export default function ExploreScreen() {
       )}
       <View
         style={{
-          backgroundColor: 'red',
           flex: 1,
           marginTop: -8,
         }}

@@ -82,43 +82,6 @@ export default function SocialScreen({ navigation }) {
     }
   }, [page]);
 
-  const buttons = [
-    {
-      image: require('../../assets/images/screens/social/pin_swaps.png'),
-      onPress: () => {
-        navigation.navigate('PinSwaps');
-      },
-      text: 'Pin Trading',
-      show: true,
-    },
-    {
-      image: require('../../assets/images/screens/explore/base.png'),
-      onPress: () => {
-        WebBrowser.openBrowserAsync('https://themeparkshark.com/shop');
-      },
-      text: 'Merch',
-      show: true,
-    },
-    {
-      image: require('../../assets/images/screens/explore/base.png'),
-      onPress: () => {},
-      text: 'Membership',
-      show: true,
-    },
-    {
-      image: require('../../assets/images/screens/explore/base.png'),
-      onPress: () => {},
-      text: '?',
-      show: true,
-    },
-    {
-      image: require('../../assets/images/screens/explore/base.png'),
-      onPress: () => {},
-      text: '?',
-      show: true,
-    },
-  ];
-
   return (
     <Wrapper>
       <Topbar
@@ -172,7 +135,40 @@ export default function SocialScreen({ navigation }) {
                       marginBottom: 32,
                     }}
                   >
-                    <UserButtons buttons={buttons} />
+                    <UserButtons
+                      buttons={[
+                        {
+                          image: require('../../assets/images/screens/social/membership.png'),
+                          onPress: () => {},
+                          text: 'Membership',
+                          show: true,
+                        },
+                        {
+                          image: require('../../assets/images/screens/social/merch.png'),
+                          onPress: () => {
+                            WebBrowser.openBrowserAsync(
+                              'https://themeparkshark.com/shop'
+                            );
+                          },
+                          text: 'Merch',
+                          show: true,
+                        },
+                        {
+                          image: require('../../assets/images/screens/social/pin_swaps.png'),
+                          onPress: () => {
+                            navigation.navigate('PinSwaps');
+                          },
+                          text: 'Pin Trading',
+                          show: true,
+                        },
+                        {
+                          image: require('../../assets/images/screens/social/social_media.png'),
+                          onPress: () => {},
+                          text: 'Social',
+                          show: true,
+                        },
+                      ]}
+                    />
                   </View>
                   <SortByDropdown
                     activeOption={filter}
