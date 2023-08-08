@@ -12,6 +12,7 @@ import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Wrapper from '../components/Wrapper';
+import useCrumbs from '../hooks/useCrumbs';
 import { ThreadType } from '../models/thread-type';
 
 const options = [
@@ -32,6 +33,7 @@ export default function SocialScreen({ navigation }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const [filter, setFilter] = useState<SortOption>(options[0]);
+  const { urls } = useCrumbs();
 
   const fetchPinnedThreads = async () => {
     setPinnedThreads(
@@ -145,16 +147,16 @@ export default function SocialScreen({ navigation }) {
                         },
                         {
                           image: require('../../assets/images/screens/social/membership.png'),
-                          onPress: () => {},
+                          onPress: () => {
+                            navigation.navigate('Membership');
+                          },
                           text: 'Membership',
                           show: true,
                         },
                         {
                           image: require('../../assets/images/screens/social/merch.png'),
                           onPress: () => {
-                            WebBrowser.openBrowserAsync(
-                              'https://themeparkshark.com/shop'
-                            );
+                            WebBrowser.openBrowserAsync(urls.shop);
                           },
                           text: 'Merch',
                           show: true,

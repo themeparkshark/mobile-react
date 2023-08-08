@@ -14,12 +14,14 @@ import deleteUser from '../api/endpoints/me/delete';
 import updateUser from '../api/endpoints/me/update-user';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import * as RootNavigation from '../RootNavigation';
 
 export default function SettingsScreen() {
   const { user, logout, refreshUser } = useContext(AuthContext);
   const [enabledMusic, setEnabledMusic] = useState<boolean>();
   const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
+  const { urls } = useCrumbs();
 
   useEffect(() => {
     setEnabledMusic(user?.enabled_music);
@@ -100,9 +102,7 @@ export default function SettingsScreen() {
                   color: PlatformColor('systemBlue'),
                 }}
                 onPress={() => {
-                  WebBrowser.openBrowserAsync(
-                    'https://themeparkshark.com/info/terms-of-service'
-                  );
+                  WebBrowser.openBrowserAsync(urls.terms);
                 }}
               />
               <Cell
@@ -111,9 +111,7 @@ export default function SettingsScreen() {
                   color: PlatformColor('systemBlue'),
                 }}
                 onPress={() => {
-                  WebBrowser.openBrowserAsync(
-                    'https://themeparkshark.com/info/privacy-policy'
-                  );
+                  WebBrowser.openBrowserAsync(urls.privacy_policy);
                 }}
               />
               <Cell title="Email support: contact@themeparkshark.com" />

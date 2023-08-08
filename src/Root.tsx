@@ -19,6 +19,7 @@ import InventoryScreen from './screens/InventoryScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import LogoutScreen from './screens/LogoutScreen';
+import MembershipScreen from './screens/MembershipScreen';
 import NewsScreen from './screens/NewsScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ParkScreen from './screens/ParkScreen';
@@ -130,6 +131,7 @@ const HomeStackNavigator = () => {
       />
       <Stack.Screen name="Thread" component={ThreadScreen} />
       <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
+      <Stack.Screen name="Membership" component={MembershipScreen} />
       <Stack.Screen
         name="Loading"
         component={LoadingScreen}
