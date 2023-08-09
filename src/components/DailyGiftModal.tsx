@@ -4,7 +4,6 @@ import {
   Dimensions,
   Image,
   ImageBackground,
-  Pressable,
   Text,
   View,
 } from 'react-native';
@@ -115,16 +114,6 @@ export default function DailyGiftModal({
           justifyContent: 'center',
         }}
       >
-        <Pressable
-          style={{
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-          }}
-          onPress={() => {
-            setModalVisible(false);
-          }}
-        />
         <View
           style={{
             width: Dimensions.get('window').width - 40,
