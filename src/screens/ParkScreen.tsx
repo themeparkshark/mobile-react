@@ -82,7 +82,7 @@ export default function ParkScreen({ route }) {
     <>
       <Topbar
         showBackButton={true}
-        text={currentPark?.name}
+        text={currentPark?.display_name ?? currentPark?.name}
         informationModalId={InformationModalEnums.ParkScreen}
       />
       {loading && <Loading />}

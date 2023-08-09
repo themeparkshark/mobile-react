@@ -6,6 +6,7 @@ export interface ParkType {
   readonly completed_secret_tasks_count: number;
   readonly completed_tasks_count: number;
   readonly completion_rate: number;
+  readonly display_name: string;
   readonly id: number;
   readonly image_url: string;
   readonly name: string;
