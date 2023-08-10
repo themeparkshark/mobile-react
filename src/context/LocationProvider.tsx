@@ -22,20 +22,29 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
   const [park, setPark] = useState<ParkType>();
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
 
   const requestLocation = async () => {
     setLocation(await getCurrentLocation());
   };
 
   const requestPark = async () => {
+    setLoading(true);
     setPark(await checkForPark());
     setParkLoaded(true);
+    setLoading(false);
   };
 
   useAsyncEffect(async () => {
     const interval = setInterval(async () => {
+      if (loading) {
+        return;
+      }
+
+      setLoading(true);
       await requestLocation();
       await requestPark();
+      setLoading(false);
     }, 5000);
 
     return () => clearInterval(interval);
