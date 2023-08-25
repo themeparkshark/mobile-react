@@ -294,8 +294,8 @@ export default function ExploreScreen() {
               <Marker
                 key={task.id}
                 coordinate={{
-                  latitude: task.latitude,
-                  longitude: task.longitude,
+                  latitude: Number(task.latitude),
+                  longitude: Number(task.longitude),
                 }}
               >
                 <Image
@@ -310,19 +310,16 @@ export default function ExploreScreen() {
             );
           })}
           {redeemables?.coins
-            .filter((coin) => {
-              return dayjs().isBetween(
-                dayjs(coin.active_from),
-                dayjs(coin.active_to)
-              );
-            })
+            .filter((coin) =>
+              dayjs().isBetween(dayjs(coin.active_from), dayjs(coin.active_to))
+            )
             .map((coin) => {
               return (
                 <Marker
                   key={coin.id}
                   coordinate={{
-                    latitude: coin.latitude,
-                    longitude: coin.longitude,
+                    latitude: Number(coin.latitude),
+                    longitude: Number(coin.longitude),
                   }}
                 >
                   <Coin coin={coin} onExpire={() => getRedeemables()} />
@@ -334,8 +331,8 @@ export default function ExploreScreen() {
               <Marker
                 key={vault.id}
                 coordinate={{
-                  latitude: vault.latitude,
-                  longitude: vault.longitude,
+                  latitude: Number(vault.latitude),
+                  longitude: Number(vault.longitude),
                 }}
               >
                 <Image
@@ -350,19 +347,16 @@ export default function ExploreScreen() {
             );
           })}
           {redeemables?.keys
-            .filter((key) => {
-              return dayjs().isBetween(
-                dayjs(key.active_from),
-                dayjs(key.active_to)
-              );
-            })
+            .filter((key) =>
+              dayjs().isBetween(dayjs(key.active_from), dayjs(key.active_to))
+            )
             .map((key) => {
               return (
                 <Marker
                   key={key.id}
                   coordinate={{
-                    latitude: key.latitude,
-                    longitude: key.longitude,
+                    latitude: Number(key.latitude),
+                    longitude: Number(key.longitude),
                   }}
                 >
                   <Key model={key} onExpire={() => getRedeemables()} />
