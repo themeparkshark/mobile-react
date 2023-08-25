@@ -1,4 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
+import { useState } from 'react';
 import {
   ImageBackground,
   ScrollView,
@@ -6,12 +7,27 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Purchases, { PurchasesOffering } from 'react-native-purchases';
+import { useAsyncEffect } from 'rooks';
 import Topbar from '../components/Topbar';
 import YellowButton from '../components/YellowButton';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function MembershipScreen() {
   const { labels, urls } = useCrumbs();
+  const [currentOffering, setCurrentOffering] =
+    useState<PurchasesOffering | null>(null);
+
+  useAsyncEffect(async () => {
+    await Purchases.configure({
+      apiKey: 'appl_wcHooctBZNfblAdfttHPcqVphdp',
+    });
+
+    const offerings = await Purchases.getOfferings();
+    setCurrentOffering(offerings.current);
+  }, []);
+
+  console.log(currentOffering);
 
   return (
     <>

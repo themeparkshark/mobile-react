@@ -148,7 +148,7 @@ export default function SocialScreen({ navigation }) {
                         {
                           image: require('../../assets/images/screens/social/membership.png'),
                           onPress: () => {
-                            navigation.navigate('Membership');
+                            //navigation.navigate('Membership');
                           },
                           text: 'Membership',
                           show: true,
@@ -171,7 +171,9 @@ export default function SocialScreen({ navigation }) {
                         },
                         {
                           image: require('../../assets/images/screens/social/social_media.png'),
-                          onPress: () => {},
+                          onPress: () => {
+                            navigation.navigate('Watch');
+                          },
                           text: 'Social',
                           show: true,
                         },

@@ -1,7 +1,10 @@
 export interface SocialPostType {
-  readonly status: string;
   readonly id: number;
-  readonly permalink: string;
+  readonly post_id: number;
+  readonly source: string;
+  readonly title: string;
+  readonly description: string;
   readonly image_url: string;
-  readonly status_created_at: string;
+  readonly permalink: string;
+  readonly post_created_at: string;
 }

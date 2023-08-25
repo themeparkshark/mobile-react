@@ -33,6 +33,7 @@ import SocialScreen from './screens/SocialScreen';
 import StoreScreen from './screens/StoreScreen';
 import ThreadScreen from './screens/ThreadScreen';
 import UserScreen from './screens/UserScreen';
+import WatchScreen from './screens/WatchScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
 
 const Stack = createNativeStackNavigator();
@@ -132,6 +133,7 @@ const HomeStackNavigator = () => {
       <Stack.Screen name="Thread" component={ThreadScreen} />
       <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
       <Stack.Screen name="Membership" component={MembershipScreen} />
+      <Stack.Screen name="Watch" component={WatchScreen} />
       <Stack.Screen
         name="Loading"
         component={LoadingScreen}
