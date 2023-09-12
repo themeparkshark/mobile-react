@@ -27,7 +27,7 @@ export default {
     bundleIdentifier: 'com.tomhartley97.mobile-react',
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
-        "Theme Park Shark requires your mobile device's location permissions to be enabled in order to find tasks and other redeemables near you.",
+        'Theme Park Shark requires your mobile device's location permissions to be enabled in order to find tasks and other redeemables near you.',
     },
   },
   web: {
