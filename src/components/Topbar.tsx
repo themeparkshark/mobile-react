@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
+import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
 import Broadcasts from './Broadcasts';
 import InformationModal from './InformationModal';
@@ -41,6 +42,19 @@ export default function Topbar({
 }) {
   const { user } = useContext(AuthContext);
   const width = text ? (showCoins ? '20%' : '15%') : '33.3333333%';
+  const { theme } = useContext(ThemeContext);
+
+  let background;
+
+  if (purple) {
+    background = require('../../assets/images/screens/store/purple_topbar.png');
+  } else {
+    if (theme?.top_bar_url) {
+      background = { url: theme.top_bar_url };
+    } else {
+      background = require('../../assets/images/screens/explore/topbar.png');
+    }
+  }
 
   return (
     <View
@@ -59,11 +73,7 @@ export default function Topbar({
         <Broadcasts />
       </SafeAreaView>
       <ImageBackground
-        source={
-          purple
-            ? require('../../assets/images/screens/store/purple_topbar.png')
-            : require('../../assets/images/screens/explore/topbar.png')
-        }
+        source={background}
         resizeMode="cover"
         style={{
           height: 70 + Constants.statusBarHeight,

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getCrumbs from '../api/endpoints/crumbs/getCrumbs';
+import getCurrentTheme from '../api/endpoints/current-theme/get';
 import getDailyGift from '../api/endpoints/daily-gifts/create';
 import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
@@ -17,6 +18,7 @@ import { CrumbContext } from '../context/CrumbProvider';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { NotificationContext } from '../context/NotificationProvider';
+import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
@@ -25,6 +27,7 @@ export default function LoadingScreen() {
     useContext(AuthContext);
   const { crumbs, setCrumbs } = useContext(CrumbContext);
   const { dailyGift, setDailyGift } = useContext(DailyGiftContext);
+  const { theme, setTheme, themeLoaded } = useContext(ThemeContext);
   const { location, requestLocation, requestPark, parkLoaded } =
     useContext(LocationContext);
   const [loadingText, setLoadingText] = useState<string>('Loading Interface');
@@ -44,20 +47,14 @@ export default function LoadingScreen() {
       return;
     }
 
-    setLoadingText('Loading User');
     refreshUser();
-    setLoadingText('Loading Inventory');
     setInventory(await getInventory());
-    setLoadingText('Loading Crumbs');
     setCrumbs(await getCrumbs());
-    setLoadingText('Loading Notifications');
     refreshNotificationCount();
-    setLoadingText('Loading Daily Gift');
     setDailyGift(await getDailyGift());
-    setLoadingText('Loading Location');
-    requestLocation();
-    setLoadingText('Loading Park');
-    requestPark();
+    await requestLocation();
+    await requestPark();
+    setTheme(await getCurrentTheme());
     setLoading(false);
   }, [isReady]);
 
@@ -70,7 +67,8 @@ export default function LoadingScreen() {
       !isEmpty(crumbs) &&
       !isEmpty(location) &&
       parkLoaded &&
-      dailyGift
+      dailyGift &&
+      themeLoaded
     ) {
       setLoading(false);
     }
@@ -132,7 +130,7 @@ export default function LoadingScreen() {
               paddingTop: 16,
             }}
           >
-            {loadingText}...
+            Loading...
           </Text>
         </View>
       </View>

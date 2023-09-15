@@ -18,6 +18,7 @@ import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { MusicContext } from '../context/MusicProvider';
+import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { RedeemableType } from '../models/redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
@@ -38,6 +39,7 @@ export default function ExploreScreen() {
   const [mapReady, setMapReady] = useState<boolean>(false);
   const { playMusic } = useContext(MusicContext);
   const { location, park } = useContext(LocationContext);
+  const { theme } = useContext(ThemeContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -128,6 +130,26 @@ export default function ExploreScreen() {
                 marginBottom: 8,
               }}
             >
+              {theme.store && (
+                <Button
+                  onPress={() => {
+                    RootNavigation.navigate('Store', {
+                      store: theme.store.id,
+                    });
+                  }}
+                >
+                  <Image
+                    style={{
+                      width: 70,
+                      height: 75,
+                    }}
+                    source={{
+                      uri: theme.store.icon_url,
+                    }}
+                    resizeMode="contain"
+                  />
+                </Button>
+              )}
               {park.store && (
                 <Button
                   onPress={() => {
