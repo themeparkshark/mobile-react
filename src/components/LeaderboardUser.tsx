@@ -11,12 +11,6 @@ export default function LeaderboardUser({
   readonly size: number;
   readonly user: UserType;
 }) {
-  const avatar = {
-    1: 100,
-    2: 80,
-    3: 60,
-  };
-
   const text = {
     1: 26,
     2: 22,
@@ -32,7 +26,7 @@ export default function LeaderboardUser({
           });
         }}
       >
-        <Avatar user={user} />
+        <Avatar user={user} size="lg" />
       </Button>
       <View
         style={{
