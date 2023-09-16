@@ -7,7 +7,9 @@ import getChildren from '../api/endpoints/comments/getChildren';
 import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
 import { CommentType } from '../models/comment-type';
+import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
+import Button from './Button';
 
 export default function Comment({
   comment,
@@ -49,9 +51,15 @@ export default function Comment({
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View>
-            <Avatar size={40} user={comment.user} />
-          </View>
+          <Button
+            onPress={() => {
+              RootNavigation.navigate('User', {
+                user: comment.user.id,
+              });
+            }}
+          >
+            <Avatar size="sm" user={comment.user} />
+          </Button>
           <View style={{ paddingLeft: 16 }}>
             <Text>
               {comment.user.screen_name} -{' '}

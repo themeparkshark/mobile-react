@@ -83,17 +83,15 @@ export default function Experience() {
                       alignItems: 'center',
                     }}
                   >
-                    <View>
-                      <Button
-                        onPress={() =>
-                          RootNavigation.navigate('User', {
-                            user: item.id,
-                          })
-                        }
-                      >
-                        <Avatar size={50} user={item} />
-                      </Button>
-                    </View>
+                    <Button
+                      onPress={() => {
+                        RootNavigation.navigate('User', {
+                          user: item.id,
+                        });
+                      }}
+                    >
+                      <Avatar size="sm" user={item} />
+                    </Button>
                     <View style={{ flex: 1 }}>
                       <Text
                         style={{

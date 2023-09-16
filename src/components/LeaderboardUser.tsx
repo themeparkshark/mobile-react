@@ -26,13 +26,13 @@ export default function LeaderboardUser({
   return (
     <>
       <Button
-        onPress={() =>
+        onPress={() => {
           RootNavigation.navigate('User', {
             user: user.id,
-          })
-        }
+          });
+        }}
       >
-        <Avatar size={avatar[size]} user={user} />
+        <Avatar user={user} />
       </Button>
       <View
         style={{

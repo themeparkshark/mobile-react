@@ -9,6 +9,7 @@ import { useAsyncEffect } from 'rooks';
 import getComments from '../api/endpoints/comments/getComments';
 import getThread from '../api/endpoints/threads/getThread';
 import Avatar from '../components/Avatar';
+import Button from '../components/Button';
 import Comment from '../components/Comment';
 import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
@@ -18,6 +19,7 @@ import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
 import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
+import * as RootNavigation from '../RootNavigation';
 
 export default function ThreadScreen({ route }) {
   const { thread } = route.params;
@@ -78,7 +80,15 @@ export default function ThreadScreen({ route }) {
               <View style={{ padding: 16, backgroundColor: 'white' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View>
-                    <Avatar size={50} user={currentThread.user} />
+                    <Button
+                      onPress={() => {
+                        RootNavigation.navigate('User', {
+                          user: currentThread.user.id,
+                        });
+                      }}
+                    >
+                      <Avatar size="sm" user={currentThread.user} />
+                    </Button>
                   </View>
                   <View style={{ paddingLeft: 16 }}>
                     <Text>
@@ -225,4 +235,4 @@ export default function ThreadScreen({ route }) {
       )}
     </>
   );
-};
+}

@@ -8,7 +8,6 @@ import getUsers from '../../api/endpoints/leaderboards/users';
 import allParks from '../../api/endpoints/parks/allParks';
 import getLeaderboards from '../../api/endpoints/parks/leaderboards/get';
 import Avatar from '../../components/Avatar';
-import Button from '../../components/Button';
 import LeaderboardUser from '../../components/LeaderboardUser';
 import Loading from '../../components/Loading';
 import config from '../../config';
@@ -16,7 +15,6 @@ import { AuthContext } from '../../context/AuthProvider';
 import { LeaderboardType } from '../../models/leaderboard-type';
 import { ParkType } from '../../models/park-type';
 import { UserType } from '../../models/user-type';
-import * as RootNavigation from '../../RootNavigation';
 
 export default function ParkCoins() {
   const [loading, setLoading] = useState<boolean>(true);
@@ -250,15 +248,7 @@ export default function ParkCoins() {
                         alignItems: 'center',
                       }}
                     >
-                      <Button
-                        onPress={() =>
-                          RootNavigation.navigate('User', {
-                            user: user.id,
-                          })
-                        }
-                      >
-                        <Avatar size={50} user={user} />
-                      </Button>
+                      <Avatar user={user} />
                       <Text
                         style={{
                           fontSize: 24,
