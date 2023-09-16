@@ -8,6 +8,7 @@ import getUsers from '../../api/endpoints/leaderboards/users';
 import allParks from '../../api/endpoints/parks/allParks';
 import getLeaderboards from '../../api/endpoints/parks/leaderboards/get';
 import Avatar from '../../components/Avatar';
+import Button from '../../components/Button';
 import LeaderboardUser from '../../components/LeaderboardUser';
 import Loading from '../../components/Loading';
 import config from '../../config';
@@ -15,6 +16,7 @@ import { AuthContext } from '../../context/AuthProvider';
 import { LeaderboardType } from '../../models/leaderboard-type';
 import { ParkType } from '../../models/park-type';
 import { UserType } from '../../models/user-type';
+import * as RootNavigation from '../../RootNavigation';
 
 export default function ParkCoins() {
   const [loading, setLoading] = useState<boolean>(true);
@@ -79,7 +81,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[0] && <LeaderboardUser user={users[0]} size={1} />}
+                  {users[0] && <LeaderboardUser user={users[0]} />}
                 </View>
                 <View
                   style={{
@@ -90,7 +92,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[1] && <LeaderboardUser user={users[1]} size={2} />}
+                  {users[1] && <LeaderboardUser user={users[1]} />}
                 </View>
                 <View
                   style={{
@@ -101,7 +103,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[2] && <LeaderboardUser user={users[2]} size={3} />}
+                  {users[2] && <LeaderboardUser user={users[2]} />}
                 </View>
               </>
             )}
@@ -248,7 +250,15 @@ export default function ParkCoins() {
                         alignItems: 'center',
                       }}
                     >
-                      <Avatar user={user} />
+                      <Button
+                        onPress={() => {
+                          RootNavigation.navigate('User', {
+                            user: user.id,
+                          });
+                        }}
+                      >
+                        <Avatar user={user} />
+                      </Button>
                       <Text
                         style={{
                           fontSize: 24,

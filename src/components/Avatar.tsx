@@ -48,7 +48,7 @@ export default function Avatar({
           contentFit="cover"
         />
       )}
-      {user.inventory && (
+      {user.inventory && user.inventory.pin_item && (
         <Image
           source={{
             uri: user.inventory.pin_item.icon_url,

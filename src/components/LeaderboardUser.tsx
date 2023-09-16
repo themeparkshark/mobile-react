@@ -4,19 +4,7 @@ import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
 import Button from './Button';
 
-export default function LeaderboardUser({
-  user,
-  size,
-}: {
-  readonly size: number;
-  readonly user: UserType;
-}) {
-  const text = {
-    1: 26,
-    2: 22,
-    3: 18,
-  };
-
+export default function LeaderboardUser({ user }: { readonly user: UserType }) {
   return (
     <>
       <Button
@@ -41,7 +29,7 @@ export default function LeaderboardUser({
             fontFamily: 'Shark',
             textTransform: 'uppercase',
             color: 'white',
-            fontSize: text[size],
+            fontSize: 24,
             paddingTop: 8,
             paddingBottom: 8,
             textShadowColor: 'rgba(0, 0, 0, .5)',
@@ -72,7 +60,7 @@ export default function LeaderboardUser({
               fontFamily: 'Shark',
               textTransform: 'uppercase',
               color: 'white',
-              fontSize: text[size] * 1.4,
+              fontSize: 24,
               textShadowColor: 'rgba(0, 0, 0, .5)',
               textShadowOffset: {
                 width: 1,
