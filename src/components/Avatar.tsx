@@ -61,7 +61,7 @@ export default function Avatar({
             left: 0,
             zIndex: 10,
           }}
-          contentFit="cover"
+          contentFit="contain"
         />
       )}
       <View
