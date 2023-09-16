@@ -194,11 +194,7 @@ export default function ProfileScreen() {
                 <Heading text="Your Friends" />
                 {friends && friends.length > 0 && (
                   <>
-                    <View
-                      style={{
-                        minHeight: 200,
-                      }}
-                    >
+                    <View>
                       <FlashList
                         contentContainerStyle={{ paddingBottom: 8 }}
                         data={friends}

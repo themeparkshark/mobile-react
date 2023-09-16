@@ -38,7 +38,7 @@ export default function FriendUser({
       }}
     >
       <View>
-        <Avatar size={60} user={user} />
+        <Avatar size="md" user={user} />
       </View>
       <View
         style={{

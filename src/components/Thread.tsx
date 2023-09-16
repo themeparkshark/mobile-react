@@ -34,7 +34,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
         }}
       >
         <View>
-          <Avatar size={60} user={thread.user} />
+          <Avatar user={thread.user} />
         </View>
         <View
           style={{
