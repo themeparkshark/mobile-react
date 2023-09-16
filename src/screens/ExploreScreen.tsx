@@ -125,12 +125,12 @@ export default function ExploreScreen() {
               zIndex: 10,
             }}
           >
-            <View
-              style={{
-                marginBottom: 8,
-              }}
-            >
-              {theme.store && (
+            {theme.store && (
+              <View
+                style={{
+                  marginBottom: 8,
+                }}
+              >
                 <Button
                   onPress={() => {
                     RootNavigation.navigate('Store', {
@@ -149,8 +149,14 @@ export default function ExploreScreen() {
                     resizeMode="contain"
                   />
                 </Button>
-              )}
-              {park.store && (
+              </View>
+            )}
+            {park.store && (
+              <View
+                style={{
+                  marginBottom: 8,
+                }}
+              >
                 <Button
                   onPress={() => {
                     RootNavigation.navigate('Store', {
@@ -169,8 +175,8 @@ export default function ExploreScreen() {
                     resizeMode="contain"
                   />
                 </Button>
-              )}
-            </View>
+              </View>
+            )}
             <TaskListModal redeemables={redeemables} />
           </View>
           <View
