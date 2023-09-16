@@ -190,12 +190,7 @@ export default function SocialScreen({ navigation }) {
                     title="Sort posts by"
                   />
                 </View>
-                <View
-                  style={{
-                    paddingLeft: 10,
-                    paddingRight: 16,
-                  }}
-                >
+                <View>
                   {pinnedThreads.map((pinnedThread) => (
                     <View
                       key={pinnedThread.id}
@@ -216,9 +211,7 @@ export default function SocialScreen({ navigation }) {
               <View
                 key={item.id}
                 style={{
-                  paddingTop: 32,
-                  paddingLeft: 10,
-                  paddingRight: 16,
+                  paddingTop: 8,
                 }}
               >
                 <Thread thread={item} />

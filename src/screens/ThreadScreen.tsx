@@ -8,6 +8,7 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getComments from '../api/endpoints/comments/getComments';
 import getThread from '../api/endpoints/threads/getThread';
+import AttachmentModal from '../components/AttachmentModal';
 import Avatar from '../components/Avatar';
 import Comment from '../components/Comment';
 import CreateReply from '../components/CreateReply';
@@ -122,6 +123,26 @@ export default function ThreadScreen({ route }) {
                   </Text>
                 )}
                 <View
+                  style={{ margin: -8, flexWrap: 'wrap', flexDirection: 'row' }}
+                >
+                  {currentThread.attachments.map((attachment) => {
+                    return (
+                      <View
+                        key={attachment.id}
+                        style={{
+                          width:
+                            currentThread.attachments.length > 1
+                              ? '33.3333333%'
+                              : '100%',
+                          padding: 8,
+                        }}
+                      >
+                        <AttachmentModal attachment={attachment} />
+                      </View>
+                    );
+                  })}
+                </View>
+                <View
                   style={{
                     marginTop: 16,
                     flexDirection: 'row',
@@ -225,4 +246,4 @@ export default function ThreadScreen({ route }) {
       )}
     </>
   );
-};
+}
