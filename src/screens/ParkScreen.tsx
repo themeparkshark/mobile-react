@@ -11,6 +11,7 @@ import getTasks from '../api/endpoints/parks/getTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
 import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
 import getVisitedPark from '../api/endpoints/users/visited-parks/getPark';
+import HelpShiftButton from '../components/HelpShiftButton';
 import Loading from '../components/Loading';
 import Progress from '../components/Progress';
 import TaskCoinModal from '../components/TaskCoinModal';
@@ -18,7 +19,6 @@ import Topbar from '../components/Topbar';
 import config from '../config';
 import { MusicContext } from '../context/MusicProvider';
 import useCrumbs from '../hooks/useCrumbs';
-import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
@@ -35,7 +35,7 @@ export default function ParkScreen({ route }) {
   >([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { playMusic } = useContext(MusicContext);
-  const { labels } = useCrumbs();
+  const { labels, urls } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -83,7 +83,7 @@ export default function ParkScreen({ route }) {
       <Topbar
         showBackButton={true}
         text={currentPark?.display_name ?? currentPark?.name}
-        informationModalId={InformationModalEnums.ParkScreen}
+        rightButton={<HelpShiftButton url={urls.help.park_screen} />}
       />
       {loading && <Loading />}
       {!loading && (

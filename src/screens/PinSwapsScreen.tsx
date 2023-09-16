@@ -7,16 +7,18 @@ import {
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getPinSwaps from '../api/endpoints/pin-swaps/all';
+import HelpShiftButton from '../components/HelpShiftButton';
 import Loading from '../components/Loading';
 import PinSwap from '../components/PinSwap';
 import Topbar from '../components/Topbar';
-import { InformationModalEnums } from '../models/information-modal-enums';
+import useCrumbs from '../hooks/useCrumbs';
 import { PinSwapType } from '../models/pin-swap-type';
 
 export default function PinSwapsScreen() {
   const [pinSwaps, setPinSwaps] = useState<PinSwapType[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const { urls } = useCrumbs();
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -35,7 +37,7 @@ export default function PinSwapsScreen() {
       <Topbar
         text="Pin Trading"
         showBackButton
-        informationModalId={InformationModalEnums.PinSwapsScreen}
+        rightButton={<HelpShiftButton url={urls.help.pin_swaps_screen} />}
       />
       <View
         style={{
