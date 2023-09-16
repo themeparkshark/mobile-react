@@ -91,6 +91,7 @@ export default function ExploreScreen() {
         parkCoin={park?.coin_url}
         showCoins
         showKeys
+        showPumpkins={theme?.show_pumpkin_currency}
         parkCoins={park?.park_coins_count}
       />
       {!park && <NotAtPark />}
