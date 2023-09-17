@@ -89,7 +89,6 @@ export default function UserScreen({ route }) {
           onPress: async () => {
             await complimentUser(currentUser);
           },
-          show: true,
           text: 'Compliment',
         },
       ]
