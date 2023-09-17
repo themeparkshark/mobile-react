@@ -79,7 +79,6 @@ export default function ProfileScreen() {
             RootNavigation.navigate('PinCollections');
           },
           text: 'Pin Packs',
-          show: true,
         },
         ...stores.map((store) => {
           return {
@@ -90,7 +89,7 @@ export default function ProfileScreen() {
               });
             },
             text: store.name,
-            show: true,
+            disabled: store.is_secret_store,
           };
         }),
       ]);
