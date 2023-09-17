@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { ButtonType } from '../models/button-type';
 import Button from './Button';
 
@@ -20,7 +20,7 @@ export default function UserButtons({
       }}
     >
       {buttons
-        ?.filter((button) => button.show)
+        ?.filter((button) => !(button.hasOwnProperty('show') && !button.show))
         .map((button, index) => {
           return (
             <View
@@ -31,8 +31,8 @@ export default function UserButtons({
                 paddingRight: 8,
               }}
             >
-              <Pressable>
-                <Button onPress={button.onPress}>
+              {button.disabled ? (
+                <>
                   <Image
                     source={button.image}
                     style={{
@@ -40,24 +40,54 @@ export default function UserButtons({
                       aspectRatio: 1,
                       marginLeft: 'auto',
                       marginRight: 'auto',
+                      opacity: 0.3,
                     }}
                     contentFit="contain"
                   />
-                </Button>
-                {button.text && (
-                  <Text
-                    style={{
-                      paddingTop: 8,
-                      textAlign: 'center',
-                      fontFamily: 'Knockout',
-                      textTransform: 'uppercase',
-                      fontSize: 16,
-                    }}
-                  >
-                    {button.text}
-                  </Text>
-                )}
-              </Pressable>
+                  {button.text && (
+                    <Text
+                      style={{
+                        paddingTop: 8,
+                        textAlign: 'center',
+                        fontFamily: 'Knockout',
+                        textTransform: 'uppercase',
+                        fontSize: 16,
+                        opacity: 0.3,
+                      }}
+                    >
+                      {button.text}
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Button onPress={button.onPress}>
+                    <Image
+                      source={button.image}
+                      style={{
+                        width: 70,
+                        aspectRatio: 1,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                      }}
+                      contentFit="contain"
+                    />
+                  </Button>
+                  {button.text && (
+                    <Text
+                      style={{
+                        paddingTop: 8,
+                        textAlign: 'center',
+                        fontFamily: 'Knockout',
+                        textTransform: 'uppercase',
+                        fontSize: 16,
+                      }}
+                    >
+                      {button.text}
+                    </Text>
+                  )}
+                </>
+              )}
             </View>
           );
         })}
