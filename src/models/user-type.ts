@@ -4,6 +4,7 @@ import { MascotType } from './mascot-type';
 
 export interface UserType {
   readonly avatar_url: string;
+  readonly became_member_at: string;
   readonly coins: number;
   readonly completed_tasks_count: number;
   readonly created_at: string;

@@ -234,7 +234,7 @@ export default function ExploreScreen() {
                   RootNavigation.navigate('Inventory');
                 }}
               >
-                <Avatar user={user} size={70} />
+                <Avatar user={user} size="lg" />
               </Button>
             )}
           </View>

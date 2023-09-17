@@ -140,18 +140,11 @@ export default function SocialScreen({ navigation }) {
                     <UserButtons
                       buttons={[
                         {
-                          image: require('../../assets/images/screens/social/arcade.png'),
-                          onPress: () => {},
-                          text: 'Arcade',
-                          show: true,
-                        },
-                        {
                           image: require('../../assets/images/screens/social/membership.png'),
                           onPress: () => {
                             //navigation.navigate('Membership');
                           },
                           text: 'Membership',
-                          show: true,
                         },
                         {
                           image: require('../../assets/images/screens/social/merch.png'),
@@ -159,7 +152,6 @@ export default function SocialScreen({ navigation }) {
                             WebBrowser.openBrowserAsync(urls.shop);
                           },
                           text: 'Merch',
-                          show: true,
                         },
                         {
                           image: require('../../assets/images/screens/social/pin_swaps.png'),
@@ -167,7 +159,6 @@ export default function SocialScreen({ navigation }) {
                             navigation.navigate('PinSwaps');
                           },
                           text: 'Pin Trading',
-                          show: true,
                         },
                         {
                           image: require('../../assets/images/screens/social/social_media.png'),
@@ -175,7 +166,12 @@ export default function SocialScreen({ navigation }) {
                             navigation.navigate('Watch');
                           },
                           text: 'Social',
-                          show: true,
+                        },
+                        {
+                          image: require('../../assets/images/screens/social/arcade.png'),
+                          onPress: () => {},
+                          text: 'Arcade',
+                          disabled: true,
                         },
                       ]}
                     />
@@ -190,12 +186,7 @@ export default function SocialScreen({ navigation }) {
                     title="Sort posts by"
                   />
                 </View>
-                <View
-                  style={{
-                    paddingLeft: 10,
-                    paddingRight: 16,
-                  }}
-                >
+                <View>
                   {pinnedThreads.map((pinnedThread) => (
                     <View
                       key={pinnedThread.id}
@@ -216,9 +207,7 @@ export default function SocialScreen({ navigation }) {
               <View
                 key={item.id}
                 style={{
-                  paddingTop: 32,
-                  paddingLeft: 10,
-                  paddingRight: 16,
+                  paddingTop: 8,
                 }}
               >
                 <Thread thread={item} />
