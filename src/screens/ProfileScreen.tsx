@@ -21,6 +21,7 @@ import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
+import Subscribed from '../components/Subscribed';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
@@ -189,6 +190,7 @@ export default function ProfileScreen() {
                 <Experience user={user} />
                 <UserButtons buttons={buttons} />
                 {user.verified_at && <Verified />}
+                {user.became_member_at && <Subscribed />}
                 <Heading text="Statistics" />
                 <Stats user={user} />
                 <Heading text="Your Friends" />

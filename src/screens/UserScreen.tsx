@@ -9,6 +9,7 @@ import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
+import Subscribed from '../components/Subscribed';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
@@ -139,6 +140,7 @@ export default function UserScreen({ route }) {
               <Experience user={currentUser} />
               <UserButtons buttons={buttons} />
               {currentUser.verified_at && <Verified />}
+              {currentUser.became_member_at && <Subscribed />}
               <Heading text="Statistics" />
               <Stats user={currentUser} />
               {parks.length > 0 && (
