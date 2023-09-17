@@ -227,7 +227,7 @@ export default function Topbar({
                 }}
               >
                 <Currency
-                  image={require('../../assets/images/keys.png')}
+                  image={require('../../assets/images/pumpkins.png')}
                   count={user?.pumpkins ?? 0}
                 />
               </View>
