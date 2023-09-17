@@ -189,8 +189,8 @@ export default function ProfileScreen() {
               >
                 <Experience user={user} />
                 <UserButtons buttons={buttons} />
-                {user.verified_at && <Verified />}
                 {user.became_member_at && <Subscribed />}
+                {user.verified_at && <Verified />}
                 <Heading text="Statistics" />
                 <Stats user={user} />
                 <Heading text="Your Friends" />
