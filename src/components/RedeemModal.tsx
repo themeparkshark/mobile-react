@@ -8,8 +8,10 @@ import {
 import { CoinType } from '../models/coin-type';
 import { KeyType } from '../models/key-type';
 import { ParkType } from '../models/park-type';
+import { PumpkinType } from '../models/pumpkin-type';
 import { RedeemableType } from '../models/redeemable-type';
 import RedeemKeyModal from './RedeemKeyModal';
+import RedeemPumpkinModal from './RedeemPumpkinModal';
 import RedeemRedeemableModal from './RedeemRedeemableModal';
 import RedeemVaultModal from './RedeemVaultModal';
 import YellowButton from './YellowButton';
@@ -55,6 +57,11 @@ export default function RedeemModal({
           dayjs((redeemable?.model as KeyType).active_from),
           dayjs((redeemable?.model as KeyType).active_to)
         )) ||
+      (redeemable?.type === 'pumpkin' &&
+        dayjs().isBetween(
+          dayjs((redeemable?.model as PumpkinType).active_from),
+          dayjs((redeemable?.model as PumpkinType).active_to)
+        )) ||
       !!redeemable?.type;
 
     if (redeemable && isActive) {
@@ -85,6 +92,14 @@ export default function RedeemModal({
       </Animated.View>
       {redeemable && (
         <>
+          {redeemable?.type === 'pumpkin' && (
+            <RedeemPumpkinModal
+              open={modalVisible}
+              close={() => setModalVisible(false)}
+              redeemable={redeemable}
+              onPress={() => onPress()}
+            />
+          )}
           {redeemable?.type === 'key' && (
             <RedeemKeyModal
               open={modalVisible}

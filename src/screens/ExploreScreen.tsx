@@ -26,6 +26,7 @@ import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import Key from './ExploreScreen/Key';
 import NotAtPark from './ExploreScreen/NotAtPark';
+import Pumpkin from './ExploreScreen/Pumpkin';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -389,6 +390,26 @@ export default function ExploreScreen() {
                   }}
                 >
                   <Key model={key} onExpire={() => getRedeemables()} />
+                </Marker>
+              );
+            })}
+          {redeemables?.pumpkins
+            .filter((pumpkin) =>
+              dayjs().isBetween(
+                dayjs(pumpkin.active_from),
+                dayjs(pumpkin.active_to)
+              )
+            )
+            .map((pumpkin) => {
+              return (
+                <Marker
+                  key={pumpkin.id}
+                  coordinate={{
+                    latitude: Number(pumpkin.latitude),
+                    longitude: Number(pumpkin.longitude),
+                  }}
+                >
+                  <Pumpkin model={pumpkin} onExpire={() => getRedeemables()} />
                 </Marker>
               );
             })}
