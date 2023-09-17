@@ -8,6 +8,7 @@ import { LocationProvider } from './src/context/LocationProvider';
 import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
 import { SoundEffectProvider } from './src/context/SoundEffectProvider';
+import { ThemeProvider } from './src/context/ThemeProvider';
 import Root from './src/Root';
 
 export default function App() {
@@ -22,7 +23,9 @@ export default function App() {
                   <CrumbProvider>
                     <LocationProvider>
                       <DailyGiftProvider>
-                        <Root />
+                        <ThemeProvider>
+                          <Root />
+                        </ThemeProvider>
                       </DailyGiftProvider>
                     </LocationProvider>
                   </CrumbProvider>
