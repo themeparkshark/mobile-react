@@ -139,8 +139,8 @@ export default function UserScreen({ route }) {
             >
               <Experience user={currentUser} />
               <UserButtons buttons={buttons} />
-              {currentUser.verified_at && <Verified />}
               {currentUser.became_member_at && <Subscribed />}
+              {currentUser.verified_at && <Verified />}
               <Heading text="Statistics" />
               <Stats user={currentUser} />
               {parks.length > 0 && (
