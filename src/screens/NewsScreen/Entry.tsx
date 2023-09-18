@@ -1,14 +1,15 @@
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
+import { decode } from 'html-entities';
 import { Text, TouchableOpacity, View } from 'react-native';
 import dayjs from '../../helpers/dayjs';
 import { EntryType } from '../../models/entry-type';
 
 export default function Entry({ entry }: { readonly entry: EntryType }) {
   const date =
-    dayjs().diff(dayjs(entry.published_at), 'day') >= 7
-      ? dayjs(entry.published_at).format('MMM D, YYYY')
-      : dayjs(entry.published_at).startOf('second').fromNow();
+    dayjs().diff(dayjs(entry.date), 'day') >= 7
+      ? dayjs(entry.date).format('MMM D, YYYY')
+      : dayjs(entry.date).startOf('second').fromNow();
 
   return (
     <TouchableOpacity
@@ -16,7 +17,7 @@ export default function Entry({ entry }: { readonly entry: EntryType }) {
         marginBottom: 32,
         flexDirection: 'row',
       }}
-      onPress={() => WebBrowser.openBrowserAsync(entry.permalink)}
+      onPress={() => WebBrowser.openBrowserAsync(entry.url)}
     >
       <View
         style={{
@@ -43,7 +44,7 @@ export default function Entry({ entry }: { readonly entry: EntryType }) {
             fontSize: 18,
           }}
         >
-          {entry.headline ?? entry.full_headline}
+          {decode(entry.title)}
         </Text>
         <Text
           style={{

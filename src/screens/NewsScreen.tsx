@@ -1,8 +1,8 @@
 import { FlashList } from '@shopify/flash-list';
+import axios from 'axios';
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import client from '../api/client-cms';
 import allAnnouncements from '../api/endpoints/announcements/all';
 import Announcement from '../components/Announcement';
 import Loading from '../components/Loading';
@@ -19,9 +19,23 @@ export default function NewsScreen() {
   const [loading, setLoading] = useState<boolean>(true);
 
   const fetchEntries = async () => {
-    return client
-      .get('/entries')
-      .then((response) => setEntries(response.data.data));
+    return axios
+      .get('https://themeparkshark.com/wp-json/wp/v2/posts?_embed')
+      .then((response) => {
+        setEntries(
+          response.data.map((item: any) => {
+            return {
+              id: item.id,
+              date: item.date_gmt,
+              featured_image:
+                item._embedded['wp:featuredmedia'][0].media_details.sizes.medium
+                  .source_url,
+              title: item.title.rendered,
+              url: item.link,
+            };
+          })
+        );
+      });
   };
 
   useAsyncEffect(async () => {
