@@ -3,17 +3,13 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import client from '../api/client-cms';
-import allAnnouncements from '../api/endpoints/announcements/all';
-import Announcement from '../components/Announcement';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
-import { AnnouncementType } from '../models/announcement-type';
 import { EntryType } from '../models/entry-type';
 import Entry from './NewsScreen/Entry';
 
 export default function NewsScreen() {
-  const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
   const [entries, setEntries] = useState<EntryType[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
@@ -25,18 +21,13 @@ export default function NewsScreen() {
   };
 
   useAsyncEffect(async () => {
-    setAnnouncements(await allAnnouncements());
     await fetchEntries();
     setLoading(false);
   }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    async () => {
-      await fetchEntries();
-      setAnnouncements(await allAnnouncements());
-    };
-    setRefreshing(false);
+    fetchEntries().then(() => setRefreshing(false));
   }, []);
 
   return (
@@ -60,20 +51,6 @@ export default function NewsScreen() {
               paddingBottom: 32,
             }}
           >
-            <View style={{ marginBottom: 32 }}>
-              <ScrollView horizontal={true}>
-                {announcements?.map((announcement, index) => {
-                  return (
-                    <View
-                      key={index}
-                      style={{ marginLeft: index === 0 ? 0 : 16 }}
-                    >
-                      <Announcement announcement={announcement} />
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            </View>
             <View style={{ height: '100%' }}>
               {entries.length && (
                 <FlashList
