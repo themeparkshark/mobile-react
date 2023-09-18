@@ -1,8 +1,8 @@
 import { Image } from 'expo-image';
+import * as WebBrowser from 'expo-web-browser';
 import { Text, TouchableOpacity, View } from 'react-native';
 import dayjs from '../../helpers/dayjs';
 import { EntryType } from '../../models/entry-type';
-import * as RootNavigation from '../../RootNavigation';
 
 export default function Entry({ entry }: { readonly entry: EntryType }) {
   const date =
@@ -16,7 +16,7 @@ export default function Entry({ entry }: { readonly entry: EntryType }) {
         marginBottom: 32,
         flexDirection: 'row',
       }}
-      onPress={() => RootNavigation.navigate('Entry', { entry: entry.id })}
+      onPress={() => WebBrowser.openBrowserAsync(entry.permalink)}
     >
       <View
         style={{

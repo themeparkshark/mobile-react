@@ -1,4 +1,5 @@
 export interface EntryType {
+  readonly permalink: string;
   readonly category: {
     readonly id: number;
     readonly name: string;

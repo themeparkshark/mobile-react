@@ -81,7 +81,7 @@ export default function NewsScreen() {
                   renderItem={({ item }) => (
                     <Entry key={item.id} entry={item} />
                   )}
-                  estimatedItemSize={15}
+                  estimatedItemSize={80}
                   keyExtractor={(item) => item.id.toString()}
                 />
               )}
