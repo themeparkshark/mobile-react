@@ -232,7 +232,8 @@ export default function Topbar({
                 />
               </View>
             )}
-            {(parkCoins !== null ||
+            {(text ||
+              parkCoins !== null ||
               showBackButton ||
               showCoins ||
               leftButton ||
@@ -244,6 +245,7 @@ export default function Topbar({
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexDirection: 'row',
+                  minWidth: 35,
                 }}
               >
                 {rightButton}
