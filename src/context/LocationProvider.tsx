@@ -1,5 +1,5 @@
 import { createContext, Dispatch, FC, ReactNode, useState } from 'react';
-import { useAsyncEffect } from 'rooks';
+import { useIntervalWhen } from 'rooks';
 import checkForPark from '../helpers/check-for-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
@@ -35,8 +35,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     setLoading(false);
   };
 
-  useAsyncEffect(async () => {
-    const interval = setInterval(async () => {
+  useIntervalWhen(
+    async () => {
       if (loading) {
         return;
       }
@@ -45,10 +45,10 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       await requestLocation();
       await requestPark();
       setLoading(false);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
+    },
+    5000,
+    location
+  );
 
   return (
     <LocationContext.Provider
