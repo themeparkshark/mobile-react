@@ -8,6 +8,7 @@ import { vsprintf } from 'sprintf-js';
 import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
+import getCompletedArchivedTasks from '../api/endpoints/users/parks/getCompletedArchivedTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
 import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
 import getVisitedPark from '../api/endpoints/users/visited-parks/getPark';
@@ -28,6 +29,9 @@ export default function ParkScreen({ route }) {
   const [currentPark, setCurrentPark] = useState<ParkType>();
   const [archivedTasks, setArchivedTasks] = useState<TaskType[]>([]);
   const [tasks, setTasks] = useState<TaskType[]>([]);
+  const [completedArchivedTasks, setCompletedArchivedTasks] = useState<
+    TaskType[]
+  >([]);
   const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>([]);
   const [completedTasks, setCompletedTasks] = useState<TaskType[]>([]);
   const [completedSecretTasks, setCompletedSecretTasks] = useState<
@@ -53,6 +57,12 @@ export default function ParkScreen({ route }) {
     );
   };
 
+  const hasCompletedArchivedTask = (task: number) => {
+    return completedArchivedTasks.find(
+      (archivedTask) => archivedTask.id === task
+    );
+  };
+
   const silver =
     currentPark && currentPark.park_coins_count >= 50
       ? require('../../assets/images/screens/park/silver.png')
@@ -75,6 +85,7 @@ export default function ParkScreen({ route }) {
     setCompletedTasks(await getCompletedTasks(park, user));
     setCompletedSecretTasks(await getCompletedSecretTasks(park, user));
     setArchivedTasks(await getArchivedTasks(park));
+    setCompletedArchivedTasks(await getCompletedArchivedTasks(park, user));
     setLoading(false);
   }, []);
 
@@ -359,11 +370,11 @@ export default function ParkScreen({ route }) {
                                   paddingLeft: index === 0 ? 0 : 12,
                                 }}
                               >
-                                {hasCompletedTask(archivedTask.id) ? (
+                                {hasCompletedArchivedTask(archivedTask.id) ? (
                                   <TaskCoinModal
                                     task={archivedTask}
                                     timesCompleted={
-                                      completedTasks.find(
+                                      completedArchivedTasks.find(
                                         (completedTask) =>
                                           completedTask.id === archivedTask.id
                                       )?.times_completed ?? 0

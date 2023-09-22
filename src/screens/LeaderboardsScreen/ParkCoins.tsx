@@ -81,7 +81,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[0] && <LeaderboardUser user={users[0]} size={1} />}
+                  {users[0] && <LeaderboardUser user={users[0]} />}
                 </View>
                 <View
                   style={{
@@ -92,7 +92,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[1] && <LeaderboardUser user={users[1]} size={2} />}
+                  {users[1] && <LeaderboardUser user={users[1]} />}
                 </View>
                 <View
                   style={{
@@ -103,7 +103,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[2] && <LeaderboardUser user={users[2]} size={3} />}
+                  {users[2] && <LeaderboardUser user={users[2]} />}
                 </View>
               </>
             )}
@@ -251,13 +251,13 @@ export default function ParkCoins() {
                       }}
                     >
                       <Button
-                        onPress={() =>
+                        onPress={() => {
                           RootNavigation.navigate('User', {
                             user: user.id,
-                          })
-                        }
+                          });
+                        }}
                       >
-                        <Avatar size={50} user={user} />
+                        <Avatar user={user} />
                       </Button>
                       <Text
                         style={{

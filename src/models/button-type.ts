@@ -3,4 +3,5 @@ export interface ButtonType {
   readonly onPress: () => void;
   readonly text?: string;
   readonly show?: boolean;
+  readonly disabled?: boolean;
 }

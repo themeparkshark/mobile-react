@@ -9,92 +9,102 @@ import Avatar from './Avatar';
 
 export default function Thread({ thread }: { readonly thread: ThreadType }) {
   return (
-    <TouchableOpacity
-      key={thread.id}
-      onPress={() => {
-        RootNavigation.navigate('Thread', {
-          thread: thread.id,
-        });
-      }}
+    <View
       style={{
-        flexDirection: 'row',
-        borderLeftWidth: 2,
-        borderLeftColor: thread.pinned_at ? config.primary : 'transparent',
-        paddingLeft: 16,
-        alignItems: 'center',
+        paddingLeft: 10,
+        paddingRight: 16,
+        paddingTop: 12,
+        paddingBottom: 12,
+        backgroundColor: 'white',
       }}
     >
-      <View>
-        <Avatar size={60} user={thread.user} />
-      </View>
-      <View
+      <TouchableOpacity
+        key={thread.id}
+        onPress={() => {
+          RootNavigation.navigate('Thread', {
+            thread: thread.id,
+          });
+        }}
         style={{
+          flexDirection: 'row',
+          borderLeftWidth: 2,
+          borderLeftColor: thread.pinned_at ? config.primary : 'transparent',
           paddingLeft: 16,
-          flex: 1,
+          alignItems: 'center',
         }}
       >
-        <Text>
-          {thread.user.screen_name} -{' '}
-          {dayjs(thread.created_at).startOf('second').fromNow()}
-        </Text>
-        <Text
-          style={{
-            paddingTop: 8,
-            fontFamily: 'Knockout',
-            fontSize: 22,
-          }}
-        >
-          {thread.title}
-        </Text>
-        {thread.latest_comment && !thread.pinned_at && (
-          <>
-            <Text
-              style={{
-                paddingTop: 8,
-                paddingBottom: 8,
-              }}
-            >
-              {thread.latest_comment.user.screen_name} replied{' '}
-              {dayjs(thread.latest_comment.created_at)
-                .startOf('second')
-                .fromNow()}
-            </Text>
-            <Text
-              style={{
-                opacity: 0.5,
-              }}
-            >
-              {truncate(thread.latest_comment.content, {
-                length: 100,
-              })}
-            </Text>
-          </>
-        )}
-      </View>
-      <View
-        style={{
-          paddingLeft: 16,
-        }}
-      >
+        <View>
+          <Avatar user={thread.user} />
+        </View>
         <View
           style={{
-            backgroundColor: 'rgba(0, 0, 0, .05)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 16,
-            padding: 8,
+            paddingLeft: 16,
+            flex: 1,
           }}
         >
+          <Text>
+            {thread.user.screen_name} -{' '}
+            {dayjs(thread.created_at).startOf('second').fromNow()}
+          </Text>
           <Text
             style={{
+              paddingTop: 8,
               fontFamily: 'Knockout',
-              fontSize: 18,
+              fontSize: 22,
             }}
           >
-            {shortenNumber(thread.comments_count)}
+            {thread.title}
           </Text>
+          {thread.latest_comment && !thread.pinned_at && (
+            <>
+              <Text
+                style={{
+                  paddingTop: 8,
+                  paddingBottom: 8,
+                }}
+              >
+                {thread.latest_comment.user.screen_name} replied{' '}
+                {dayjs(thread.latest_comment.created_at)
+                  .startOf('second')
+                  .fromNow()}
+              </Text>
+              <Text
+                style={{
+                  opacity: 0.5,
+                }}
+              >
+                {truncate(thread.latest_comment.content, {
+                  length: 100,
+                })}
+              </Text>
+            </>
+          )}
         </View>
-      </View>
-    </TouchableOpacity>
+        <View
+          style={{
+            paddingLeft: 16,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, .05)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 16,
+              padding: 8,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: 'Knockout',
+                fontSize: 18,
+              }}
+            >
+              {shortenNumber(thread.comments_count)}
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 }

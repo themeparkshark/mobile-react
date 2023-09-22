@@ -93,7 +93,7 @@ export default function DailyGiftModal({
   );
 
   const claimReward = async () => {
-    Alert.alert('', `You earned ${dailyGift.shark_coins} Shark Coins!`, [
+    Alert.alert('', `You earned ${dailyGift.shark_coins} Coins!`, [
       {
         text: 'Ok',
         onPress: async () => {

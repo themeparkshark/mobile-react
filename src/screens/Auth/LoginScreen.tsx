@@ -18,7 +18,7 @@ export default function LoginScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!user && isReady) {
+      if (!user) {
         playMusic(require('../../../assets/sounds/music/track1.mp3'));
       }
     }, [])
