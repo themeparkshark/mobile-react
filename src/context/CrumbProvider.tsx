@@ -33,6 +33,7 @@ export interface CrumbContextType {
       readonly username_approval: string;
       readonly vault_cost: string;
       readonly verified_user: string;
+      readonly watch_social_posts: string;
     };
     readonly messages: {
       readonly compliment_created: string;
