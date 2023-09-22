@@ -7,6 +7,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { CurrencyEnum } from '../models/currency-enum';
 import { ItemType } from '../models/item-type';
+import { UserType } from '../models/user-type';
 import useCrumbs from './useCrumbs';
 
 export default function usePurchaseItem() {
@@ -67,9 +68,7 @@ export default function usePurchaseItem() {
             item.name,
             item.cost,
             item.currency.name,
-            item.currency.id === CurrencyEnum.SharkCoins
-              ? user.coins
-              : user.keys,
+            user[item.currency.name.toLowerCase() as keyof UserType],
             item.currency.name,
           ]);
 

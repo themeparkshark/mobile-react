@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
-import { ReactNode } from 'react';
+import { ReactNode, useContext } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
+import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
 
@@ -9,6 +10,8 @@ export default function Wrapper({
 }: {
   readonly children: ReactNode[];
 }) {
+  const { theme } = useContext(ThemeContext);
+
   const items = [
     {
       icon: require('../../assets/images/toolbar/news.png'),
@@ -46,6 +49,14 @@ export default function Wrapper({
     },
   ];
 
+  let background;
+
+  if (theme?.bottom_bar_url) {
+    background = { url: theme.bottom_bar_url };
+  } else {
+    background = require('../../assets/images/screens/explore/bottombar.png');
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
@@ -63,7 +74,7 @@ export default function Wrapper({
         }}
       >
         <ImageBackground
-          source={require('../../assets/images/screens/explore/bottombar.png')}
+          source={background}
           resizeMode="cover"
           style={{
             width: '100%',
