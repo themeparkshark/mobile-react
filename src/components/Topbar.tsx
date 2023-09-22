@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
+import { ThemeContext } from '../context/ThemeProvider';
+import shortenNumber from '../helpers/shorten-number';
 import * as RootNavigation from '../RootNavigation';
 import Broadcasts from './Broadcasts';
 import InformationModal from './InformationModal';
@@ -22,6 +24,7 @@ export default function Topbar({
   showBackButton = false,
   showCoins = false,
   showKeys = false,
+  showPumpkins = false,
   parkCoin = null,
   parkCoins = null,
   purple = false,
@@ -35,12 +38,74 @@ export default function Topbar({
   readonly showBackButton?: boolean;
   readonly showCoins?: boolean;
   readonly showKeys?: boolean;
+  readonly showPumpkins?: boolean;
   readonly parkCoin?: string | null;
   readonly parkCoins?: number | null;
   readonly onBackButtonPress?: () => void;
 }) {
   const { user } = useContext(AuthContext);
-  const width = text ? (showCoins ? '20%' : '15%') : '33.3333333%';
+  const { theme } = useContext(ThemeContext);
+
+  const BackButton = () => {
+    return (
+      <Button
+        onPress={async () => {
+          if (onBackButtonPress) {
+            await onBackButtonPress();
+          }
+
+          RootNavigation.goBack();
+        }}
+      >
+        <Image
+          source={require('../../assets/images/screens/explore/back.png')}
+          style={{
+            width: 35,
+            height: 35,
+          }}
+          contentFit="contain"
+        />
+      </Button>
+    );
+  };
+
+  const Currency = ({ image, count }: { image: any; count: number }) => {
+    return (
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}
+      >
+        <Image
+          source={image}
+          style={{
+            width: 35,
+            height: 35,
+            marginRight: 8,
+          }}
+          contentFit="contain"
+        />
+        <Text
+          style={{
+            textAlign: 'center',
+            fontSize: 24,
+            color: 'white',
+            fontFamily: 'Shark',
+            textTransform: 'uppercase',
+            textShadowColor: 'rgba(0, 0, 0, .5)',
+            textShadowOffset: {
+              width: 2,
+              height: 2,
+            },
+            textShadowRadius: 0,
+          }}
+        >
+          {shortenNumber(count)}
+        </Text>
+      </View>
+    );
+  };
 
   return (
     <View
@@ -62,6 +127,8 @@ export default function Topbar({
         source={
           purple
             ? require('../../assets/images/screens/store/purple_topbar.png')
+            : theme?.top_bar_url
+            ? { url: theme.top_bar_url }
             : require('../../assets/images/screens/explore/topbar.png')
         }
         resizeMode="cover"
@@ -90,65 +157,19 @@ export default function Topbar({
               informationModalId) && (
               <View
                 style={{
-                  width,
-                  alignItems: 'flex-start',
+                  flex: text ? 0 : 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
                 }}
               >
                 {leftButton}
-                {showBackButton && (
-                  <Button
-                    onPress={async () => {
-                      if (onBackButtonPress) {
-                        await onBackButtonPress();
-                      }
-
-                      RootNavigation.goBack();
-                    }}
-                  >
-                    <Image
-                      source={require('../../assets/images/screens/explore/back.png')}
-                      style={{
-                        width: 35,
-                        height: 35,
-                      }}
-                      contentFit="contain"
-                    />
-                  </Button>
-                )}
+                {showBackButton && <BackButton />}
                 {parkCoins !== null && (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Image
-                      source={parkCoin}
-                      style={{
-                        width: 35,
-                        height: 35,
-                        marginRight: 8,
-                      }}
-                      contentFit="contain"
-                    />
-                    <Text
-                      style={{
-                        textAlign: 'center',
-                        fontSize: 24,
-                        color: 'white',
-                        fontFamily: 'Shark',
-                        textTransform: 'uppercase',
-                        textShadowColor: 'rgba(0, 0, 0, .5)',
-                        textShadowOffset: {
-                          width: 2,
-                          height: 2,
-                        },
-                        textShadowRadius: 0,
-                      }}
-                    >
-                      {parkCoins}
-                    </Text>
-                  </View>
+                  <Currency
+                    image={parkCoin}
+                    count={user?.park_coins_count ?? 0}
+                  />
                 )}
               </View>
             )}
@@ -184,46 +205,35 @@ export default function Topbar({
             {showKeys && (
               <View
                 style={{
-                  width,
+                  flex: 1,
                   alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
                 }}
               >
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Image
-                    source={require('../../assets/images/keys.png')}
-                    style={{
-                      width: 35,
-                      height: 35,
-                      marginRight: 8,
-                    }}
-                    contentFit="contain"
-                  />
-                  <Text
-                    style={{
-                      textAlign: 'center',
-                      fontSize: 24,
-                      color: 'white',
-                      fontFamily: 'Shark',
-                      textTransform: 'uppercase',
-                      textShadowColor: 'rgba(0, 0, 0, .5)',
-                      textShadowOffset: {
-                        width: 2,
-                        height: 2,
-                      },
-                      textShadowRadius: 0,
-                    }}
-                  >
-                    {user?.keys}
-                  </Text>
-                </View>
+                <Currency
+                  image={require('../../assets/images/keys.png')}
+                  count={user?.keys ?? 0}
+                />
               </View>
             )}
-            {(parkCoins !== null ||
+            {showPumpkins && (
+              <View
+                style={{
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                }}
+              >
+                <Currency
+                  image={require('../../assets/images/pumpkins.png')}
+                  count={user?.pumpkins ?? 0}
+                />
+              </View>
+            )}
+            {(text ||
+              parkCoins !== null ||
               showBackButton ||
               showCoins ||
               leftButton ||
@@ -231,8 +241,11 @@ export default function Topbar({
               informationModalId) && (
               <View
                 style={{
-                  width,
-                  alignItems: 'flex-end',
+                  flex: text ? 0 : 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexDirection: 'row',
+                  minWidth: 35,
                 }}
               >
                 {rightButton}
@@ -240,42 +253,10 @@ export default function Topbar({
                   <InformationModal id={informationModalId} />
                 )}
                 {showCoins && (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'flex-end',
-                    }}
-                  >
-                    <Image
-                      source={require('../../assets/images/coins.png')}
-                      style={{
-                        width: 35,
-                        height: 35,
-                      }}
-                      contentFit="contain"
-                    />
-                    <Text
-                      style={{
-                        textAlign: 'center',
-                        fontSize: 24,
-                        color: 'white',
-                        fontFamily: 'Shark',
-                        textTransform: 'uppercase',
-                        textShadowColor: 'rgba(0, 0, 0, .5)',
-                        textShadowOffset: {
-                          width: 2,
-                          height: 2,
-                        },
-                        textShadowRadius: 0,
-                        marginLeft: 8,
-                      }}
-                      adjustsFontSizeToFit
-                      numberOfLines={1}
-                    >
-                      {user?.coins}
-                    </Text>
-                  </View>
+                  <Currency
+                    image={require('../../assets/images/coins.png')}
+                    count={user?.coins ?? 0}
+                  />
                 )}
               </View>
             )}

@@ -3,7 +3,7 @@ import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArro
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { useCallback, useContext, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useAsyncEffect, useTimeoutWhen } from 'rooks';
@@ -18,6 +18,7 @@ import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { MusicContext } from '../context/MusicProvider';
+import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { RedeemableType } from '../models/redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
@@ -25,6 +26,7 @@ import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import Key from './ExploreScreen/Key';
 import NotAtPark from './ExploreScreen/NotAtPark';
+import Pumpkin from './ExploreScreen/Pumpkin';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -38,6 +40,7 @@ export default function ExploreScreen() {
   const [mapReady, setMapReady] = useState<boolean>(false);
   const { playMusic } = useContext(MusicContext);
   const { location, park } = useContext(LocationContext);
+  const { theme } = useContext(ThemeContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -89,6 +92,7 @@ export default function ExploreScreen() {
         parkCoin={park?.coin_url}
         showCoins
         showKeys
+        showPumpkins={theme?.show_pumpkin_currency}
         parkCoins={park?.park_coins_count}
       />
       {!park && <NotAtPark />}
@@ -123,12 +127,38 @@ export default function ExploreScreen() {
               zIndex: 10,
             }}
           >
-            <View
-              style={{
-                marginBottom: 8,
-              }}
-            >
-              {park.store && (
+            {theme.store && (
+              <View
+                style={{
+                  marginBottom: 8,
+                }}
+              >
+                <Button
+                  onPress={() => {
+                    RootNavigation.navigate('Store', {
+                      store: theme.store.id,
+                    });
+                  }}
+                >
+                  <Image
+                    style={{
+                      width: 70,
+                      height: 75,
+                    }}
+                    source={{
+                      uri: theme.store.icon_url,
+                    }}
+                    resizeMode="contain"
+                  />
+                </Button>
+              </View>
+            )}
+            {park.store && (
+              <View
+                style={{
+                  marginBottom: 8,
+                }}
+              >
                 <Button
                   onPress={() => {
                     RootNavigation.navigate('Store', {
@@ -147,8 +177,8 @@ export default function ExploreScreen() {
                     resizeMode="contain"
                   />
                 </Button>
-              )}
-            </View>
+              </View>
+            )}
             <TaskListModal redeemables={redeemables} />
           </View>
           <View
@@ -205,7 +235,7 @@ export default function ExploreScreen() {
                   RootNavigation.navigate('Inventory');
                 }}
               >
-                <Avatar user={user} size={70} />
+                <Avatar user={user} size="lg" />
               </Button>
             )}
           </View>
@@ -360,6 +390,26 @@ export default function ExploreScreen() {
                   }}
                 >
                   <Key model={key} onExpire={() => getRedeemables()} />
+                </Marker>
+              );
+            })}
+          {redeemables?.pumpkins
+            .filter((pumpkin) =>
+              dayjs().isBetween(
+                dayjs(pumpkin.active_from),
+                dayjs(pumpkin.active_to)
+              )
+            )
+            .map((pumpkin) => {
+              return (
+                <Marker
+                  key={pumpkin.id}
+                  coordinate={{
+                    latitude: Number(pumpkin.latitude),
+                    longitude: Number(pumpkin.longitude),
+                  }}
+                >
+                  <Pumpkin model={pumpkin} onExpire={() => getRedeemables()} />
                 </Marker>
               );
             })}

@@ -12,7 +12,8 @@
       },
       "env": {
         "API_URL": "https://dev-app.themeparkshark.com/api"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
@@ -21,7 +22,8 @@
       },
       "ios": {
         "resourceClass": "m-medium"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "env": {
@@ -29,7 +31,8 @@
       },
       "ios": {
         "resourceClass": "m-medium"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {

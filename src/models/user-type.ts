@@ -4,6 +4,7 @@ import { MascotType } from './mascot-type';
 
 export interface UserType {
   readonly avatar_url: string;
+  readonly became_member_at: string;
   readonly coins: number;
   readonly completed_tasks_count: number;
   readonly created_at: string;
@@ -25,10 +26,12 @@ export interface UserType {
   readonly name: string;
   readonly park_coins: number;
   readonly park_coins_count: number;
+  readonly pumpkins: number;
   readonly screen_name: string;
   readonly total_coins: number;
   readonly total_experience: number;
   readonly total_keys: number;
+  readonly total_pumpkins: number;
   readonly username: string;
   readonly verified_at: string;
   readonly visited_parks_count: number;

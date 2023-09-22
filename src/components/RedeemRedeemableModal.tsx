@@ -193,7 +193,7 @@ export default function RedeemRedeemableModal({
                     task: (redeemable.model as SecretTaskType | TaskType).name,
                     secret_task: (redeemable.model as SecretTaskType | TaskType)
                       .name,
-                    coin: `${(redeemable.model as CoinType).coins} Shark Coins`,
+                    coin: `${(redeemable.model as CoinType).coins} Coins`,
                     item: (redeemable.model as ItemType).name,
                     pin: (redeemable.model as ItemType).name,
                   }[redeemable.type]

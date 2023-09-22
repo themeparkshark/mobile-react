@@ -15,12 +15,20 @@ export default {
   },
   updates: {
     fallbackToCacheTimeout: 0,
+    url: 'https://u.expo.dev/38c3f46e-df32-43a2-8272-44b9556aaa36',
+  },
+  runtimeVersion: {
+    policy: 'sdkVersion',
   },
   assetBundlePatterns: ['**/*'],
   ios: {
     bitcode: 'Debug',
     usesAppleSignIn: true,
     bundleIdentifier: 'com.tomhartley97.mobile-react',
+    infoPlist: {
+      NSLocationWhenInUseUsageDescription:
+        "Theme Park Shark requires your mobile device's location permissions to be enabled in order to find tasks and other redeemables near you.",
+    },
   },
   web: {
     favicon: './assets/favicon.png',

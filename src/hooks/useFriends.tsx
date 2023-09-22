@@ -47,7 +47,7 @@ export default function useFriends() {
             text: 'Ok',
             onPress: async () => {
               await acceptFriendRequest(user);
-              await onPress();
+              await onPress?.();
 
               Alert.alert('', messages.friend_request_accepted, [
                 {
