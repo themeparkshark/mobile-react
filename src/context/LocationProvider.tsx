@@ -12,6 +12,7 @@ export interface LocationContextType {
   readonly requestPark: () => void;
   readonly park?: ParkType;
   readonly parkLoaded: boolean;
+  readonly startTimer: () => void;
 }
 
 export const LocationContext = createContext<LocationContextType>(
@@ -23,6 +24,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [park, setPark] = useState<ParkType>();
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [startTimer, setStartTimer] = useState<boolean>(false);
 
   const requestLocation = async () => {
     setLocation(await getCurrentLocation());
@@ -36,6 +38,10 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   useAsyncEffect(async () => {
+    if (!startTimer) {
+      return;
+    }
+
     const interval = setInterval(async () => {
       if (loading) {
         return;
@@ -48,7 +54,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [startTimer]);
 
   return (
     <LocationContext.Provider
@@ -59,6 +65,9 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         requestPark,
         park,
         parkLoaded,
+        startTimer: () => {
+          setStartTimer(true);
+        },
       }}
     >
       {children}

@@ -123,7 +123,7 @@ export default function ParkCoins() {
                     value={selectedPark}
                     items={parks.map((item) => {
                       return {
-                        label: item.name,
+                        label: item.display_name,
                         value: item.id,
                       };
                     })}
