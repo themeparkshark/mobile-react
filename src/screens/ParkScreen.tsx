@@ -179,7 +179,12 @@ export default function ParkScreen({ route }) {
                   }}
                 >
                   <View style={{ paddingBottom: 16 }}>
-                    <View style={{ position: 'relative', height: 185 }}>
+                    <View
+                      style={{
+                        position: 'relative',
+                        height: 185,
+                      }}
+                    >
                       <View
                         style={{
                           position: 'absolute',
@@ -191,38 +196,59 @@ export default function ParkScreen({ route }) {
                           justifyContent: 'center',
                         }}
                       >
-                        <Image
-                          source={silver}
+                        <View
                           style={{
-                            width: 90,
-                            height: 95,
-                            opacity:
-                              currentPark.park_coins_count >= 50 ? 1 : 0.6,
+                            flex: 1,
+                            alignItems: 'flex-end',
                           }}
-                        />
-                        <Image
-                          source={gold}
+                        >
+                          <Image
+                            source={silver}
+                            style={{
+                              width: 90,
+                              height: 95,
+                              opacity:
+                                currentPark.park_coins_count >= 50 ? 1 : 0.6,
+                              marginRight: 16,
+                            }}
+                          />
+                        </View>
+                        <View
                           style={{
-                            width: 100,
-                            height: 140,
-                            marginLeft: 16,
-                            opacity:
-                              currentPark.park_coins_count >= 100 ? 1 : 0.6,
+                            flex: 1,
+                            alignItems: 'center',
                           }}
-                        />
-                        <Image
-                          source={bronze}
+                        >
+                          <Image
+                            source={gold}
+                            style={{
+                              width: 100,
+                              height: 140,
+                              opacity:
+                                currentPark.park_coins_count >= 100 ? 1 : 0.6,
+                            }}
+                          />
+                        </View>
+                        <View
                           style={{
-                            width: 70,
-                            height: 75,
-                            marginLeft: 16,
-                            opacity:
-                              currentPark.park_coins_count >= 12 ? 1 : 0.6,
+                            flex: 1,
+                            alignItems: 'flex-start',
                           }}
-                        />
+                        >
+                          <Image
+                            source={bronze}
+                            style={{
+                              width: 70,
+                              height: 75,
+                              opacity:
+                                currentPark.park_coins_count >= 12 ? 1 : 0.6,
+                              marginLeft: 16,
+                            }}
+                          />
+                        </View>
                       </View>
                       <Image
-                        source={require('../../assets/images/screens/park/trophyshelf.png')}
+                        source={require('../../assets/images/screens/park/shelf.png')}
                         contentFit="contain"
                         style={{
                           width: '100%',
