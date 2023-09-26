@@ -191,7 +191,7 @@ export default function SocialScreen({ navigation }) {
                     <View
                       key={pinnedThread.id}
                       style={{
-                        paddingTop: 32,
+                        paddingTop: 16,
                       }}
                     >
                       <Thread thread={pinnedThread} />
