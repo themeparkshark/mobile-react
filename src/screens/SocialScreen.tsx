@@ -165,7 +165,7 @@ export default function SocialScreen({ navigation }) {
                           onPress: () => {
                             navigation.navigate('Watch');
                           },
-                          text: 'Social',
+                          text: 'Watch',
                         },
                         {
                           image: require('../../assets/images/screens/social/arcade.png'),

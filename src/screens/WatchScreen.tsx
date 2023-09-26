@@ -24,7 +24,7 @@ export default function WatchScreen() {
 
   return (
     <Wrapper>
-      <Topbar text="Social" showBackButton />
+      <Topbar text="Watch" showBackButton />
       {loading && <Loading />}
       {!loading && (
         <View
