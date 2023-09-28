@@ -31,19 +31,24 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [isReady, setIsReady] = useState<boolean>(false);
 
   useEffect(() => {
+    if (!user) {
+      setIsReady(true);
+      return;
+    }
+
     const { headers } = client.defaults;
     headers.common.Authorization = `Bearer ${token}`;
 
     if (token) {
       setIsReady(true);
     }
-  }, [token]);
+  }, [token, user]);
 
   useAsyncEffect(async () => {
-    if (isReady) {
+    if (isReady && user) {
       await refreshUser();
     }
-  }, [isReady]);
+  }, [isReady, user]);
 
   useEffect(() => {
     SecureStore.getItemAsync('token').then((_token) => {

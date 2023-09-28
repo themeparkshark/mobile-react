@@ -13,6 +13,8 @@ import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Wrapper from '../components/Wrapper';
 import useCrumbs from '../hooks/useCrumbs';
+import usePermissions from '../hooks/usePermissions';
+import { PermissionEnums } from '../models/permission-enums';
 import { ThreadType } from '../models/thread-type';
 
 const options = [
@@ -34,6 +36,7 @@ export default function SocialScreen({ navigation }) {
   const [page, setPage] = useState<number>(1);
   const [filter, setFilter] = useState<SortOption>(options[0]);
   const { urls } = useCrumbs();
+  const { checkPermission } = usePermissions();
 
   const fetchPinnedThreads = async () => {
     setPinnedThreads(
@@ -142,7 +145,11 @@ export default function SocialScreen({ navigation }) {
                         {
                           image: require('../../assets/images/screens/social/membership.png'),
                           onPress: () => {
-                            //navigation.navigate('Membership');
+                            if (
+                              checkPermission(PermissionEnums.BecomeAMember)
+                            ) {
+                              //navigation.navigate('Membership');
+                            }
                           },
                           text: 'Membership',
                         },
@@ -156,14 +163,18 @@ export default function SocialScreen({ navigation }) {
                         {
                           image: require('../../assets/images/screens/social/pin_swaps.png'),
                           onPress: () => {
-                            navigation.navigate('PinSwaps');
+                            if (checkPermission(PermissionEnums.TradePins)) {
+                              navigation.navigate('PinSwaps');
+                            }
                           },
                           text: 'Pin Trading',
                         },
                         {
                           image: require('../../assets/images/screens/social/social_media.png'),
                           onPress: () => {
-                            navigation.navigate('Watch');
+                            if (checkPermission(PermissionEnums.WatchContent)) {
+                              navigation.navigate('Watch');
+                            }
                           },
                           text: 'Social',
                         },

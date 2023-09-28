@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import Modal from 'react-native-modal';
 import createThread from '../api/endpoints/threads/create';
+import usePermissions from '../hooks/usePermissions';
+import { PermissionEnums } from '../models/permission-enums';
 import Button from './Button';
 
 export default function CreateThreadModal({
@@ -22,6 +24,7 @@ export default function CreateThreadModal({
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [title, setTitle] = useState<string>('');
   const [content, setContent] = useState<string>('');
+  const { checkPermission } = usePermissions();
 
   useEffect(() => {
     if (!modalVisible) {
@@ -32,7 +35,13 @@ export default function CreateThreadModal({
 
   return (
     <>
-      <Button onPress={() => setModalVisible(true)}>
+      <Button
+        onPress={() => {
+          if (checkPermission(PermissionEnums.CreateThreads)) {
+            setModalVisible(true);
+          }
+        }}
+      >
         <Image
           style={{
             width: 35,
