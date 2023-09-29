@@ -1,5 +1,3 @@
-import { useFonts } from 'expo-font';
-import { isEmpty } from 'lodash';
 import { useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,24 +13,15 @@ import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { CrumbContext } from '../context/CrumbProvider';
 import { LocationContext } from '../context/LocationProvider';
-import { NotificationContext } from '../context/NotificationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
-  const { inventory, setInventory, isReady, user, refreshUser } =
-    useContext(AuthContext);
-  const { crumbs, setCrumbs } = useContext(CrumbContext);
-  const { theme, setTheme, themeLoaded } = useContext(ThemeContext);
-  const { location, requestLocation, requestPark, parkLoaded } =
-    useContext(LocationContext);
-  const { refreshNotificationCount } = useContext(NotificationContext);
-
-  const [fontsLoaded] = useFonts({
-    Shark: require('../../assets/fonts/shark-random-funnyness-2.ttf'),
-    Knockout: require('../../assets/fonts/knockout.otf'),
-  });
+  const { setInventory, isReady, user, refreshUser } = useContext(AuthContext);
+  const { setCrumbs } = useContext(CrumbContext);
+  const { setTheme } = useContext(ThemeContext);
+  const { requestLocation, requestPark } = useContext(LocationContext);
 
   useAsyncEffect(async () => {
     if (!isReady) {
@@ -42,27 +31,11 @@ export default function LoadingScreen() {
     refreshUser();
     setInventory(await getInventory());
     setCrumbs(await getCrumbs());
-    refreshNotificationCount();
     await requestLocation();
     await requestPark();
     setTheme(await getCurrentTheme());
     setLoading(false);
   }, [isReady]);
-
-  useEffect(() => {
-    if (
-      isReady &&
-      inventory &&
-      user &&
-      fontsLoaded &&
-      !isEmpty(crumbs) &&
-      !isEmpty(location) &&
-      parkLoaded &&
-      themeLoaded
-    ) {
-      setLoading(false);
-    }
-  }, [user, inventory, isReady, fontsLoaded, crumbs, location, parkLoaded]);
 
   useEffect(() => {
     if (loading) {

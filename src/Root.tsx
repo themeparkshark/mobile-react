@@ -1,5 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useFonts } from 'expo-font';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Storage } from 'expo-storage';
 import { useContext, useEffect } from 'react';
@@ -162,8 +163,16 @@ const AuthStackNavigator = () => {
 export default function App() {
   useKeepAwake();
   const { user, setUser } = useContext(AuthContext);
+  const [fontsLoaded] = useFonts({
+    Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
+    Knockout: require('../assets/fonts/knockout.otf'),
+  });
 
   useEffect(() => {
+    if (!fontsLoaded) {
+      return;
+    }
+
     mobileAds().setRequestConfiguration({
       maxAdContentRating: MaxAdContentRating.PG,
       tagForChildDirectedTreatment: true,
@@ -180,7 +189,7 @@ export default function App() {
         setUser({ ...JSON.parse(userString) });
       }
     });
-  }, []);
+  }, [fontsLoaded]);
 
   return (
     <>
