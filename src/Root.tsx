@@ -3,13 +3,18 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Storage } from 'expo-storage';
-import { useContext, useEffect } from 'react';
+import { useContext } from 'react';
 import mobileAds, {
   InterstitialAd,
   MaxAdContentRating,
   TestIds,
 } from 'react-native-google-mobile-ads';
+import { useAsyncEffect } from 'rooks';
+import getCrumbs from './api/endpoints/crumbs/getCrumbs';
+import getCurrentTheme from './api/endpoints/current-theme/get';
 import { AuthContext } from './context/AuthProvider';
+import { CrumbContext } from './context/CrumbProvider';
+import { ThemeContext } from './context/ThemeProvider';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import EntryScreen from './screens/EntryScreen';
@@ -163,26 +168,31 @@ const AuthStackNavigator = () => {
 export default function App() {
   useKeepAwake();
   const { user, setUser } = useContext(AuthContext);
+  const { setCrumbs } = useContext(CrumbContext);
+  const { setTheme } = useContext(ThemeContext);
   const [fontsLoaded] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),
   });
 
-  useEffect(() => {
+  useAsyncEffect(async () => {
     if (!fontsLoaded) {
       return;
     }
 
-    mobileAds().setRequestConfiguration({
+    await mobileAds().setRequestConfiguration({
       maxAdContentRating: MaxAdContentRating.PG,
       tagForChildDirectedTreatment: true,
       tagForUnderAgeOfConsent: true,
       testDeviceIdentifiers: ['EMULATOR'],
     });
 
-    mobileAds().initialize();
+    await mobileAds().initialize();
 
     InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
+
+    setCrumbs(await getCrumbs());
+    setTheme(await getCurrentTheme());
 
     Storage.getItem({ key: 'user' }).then((userString: string) => {
       if (userString) {

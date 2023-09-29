@@ -7,20 +7,13 @@ import {
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import getCrumbs from '../api/endpoints/crumbs/getCrumbs';
-import getCurrentTheme from '../api/endpoints/current-theme/get';
-import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
-import { CrumbContext } from '../context/CrumbProvider';
 import { LocationContext } from '../context/LocationProvider';
-import { ThemeContext } from '../context/ThemeProvider';
 import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
-  const { setInventory, isReady, user, refreshUser } = useContext(AuthContext);
-  const { setCrumbs } = useContext(CrumbContext);
-  const { setTheme } = useContext(ThemeContext);
+  const { isReady, user, refreshUser } = useContext(AuthContext);
   const { requestLocation, requestPark } = useContext(LocationContext);
 
   useAsyncEffect(async () => {
@@ -28,12 +21,8 @@ export default function LoadingScreen() {
       return;
     }
 
-    refreshUser();
-    setInventory(await getInventory());
-    setCrumbs(await getCrumbs());
     await requestLocation();
     await requestPark();
-    setTheme(await getCurrentTheme());
     setLoading(false);
   }, [isReady]);
 
