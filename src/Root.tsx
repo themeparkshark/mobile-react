@@ -36,6 +36,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import QueueTimesScreen from './screens/QueueTimesScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import SocialScreen from './screens/SocialScreen';
+import SplashScreen from './screens/SplashScreen';
 import StoreScreen from './screens/StoreScreen';
 import ThreadScreen from './screens/ThreadScreen';
 import UserScreen from './screens/UserScreen';
@@ -155,12 +156,14 @@ const HomeStackNavigator = () => {
 const AuthStackNavigator = () => {
   return (
     <Stack.Navigator
-      initialRouteName="Login"
+      initialRouteName="Splash"
       screenOptions={{
+        animation: 'none',
         headerShown: false,
       }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Splash" component={SplashScreen} />
     </Stack.Navigator>
   );
 };
@@ -208,7 +211,7 @@ export default function App() {
           <HomeStackNavigator />
         </NavigationContainer>
       ) : (
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
           <AuthStackNavigator />
         </NavigationContainer>
       )}
