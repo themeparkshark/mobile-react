@@ -1,4 +1,5 @@
-import { isEmpty } from 'ramda';
+import { useFonts } from 'expo-font';
+import { isEmpty } from 'lodash';
 import { useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -26,47 +27,43 @@ export default function LoadingScreen() {
     useContext(AuthContext);
   const { crumbs, setCrumbs } = useContext(CrumbContext);
   const { dailyGift, setDailyGift } = useContext(DailyGiftContext);
-  const { setTheme, themeLoaded } = useContext(ThemeContext);
+  const { theme, setTheme, themeLoaded } = useContext(ThemeContext);
   const { location, requestLocation, requestPark, parkLoaded } =
     useContext(LocationContext);
+  const [loadingText, setLoadingText] = useState<string>('Loading Interface');
   const { refreshNotificationCount } = useContext(NotificationContext);
 
+  useEffect(() => {
+    setLoadingText('Loading Music');
+  }, []);
+
+  const [fontsLoaded] = useFonts({
+    Shark: require('../../assets/fonts/shark-random-funnyness-2.ttf'),
+    Knockout: require('../../assets/fonts/knockout.otf'),
+  });
+
   useAsyncEffect(async () => {
-    console.log('isready');
-    console.log(isReady);
     if (!isReady) {
-      return;
-    }
-
-    console.log('test');
-
-    if (!user) {
-      setCrumbs(await getCrumbs());
-      setTheme(await getCurrentTheme());
-      setLoading(false);
-      console.log('finished');
       return;
     }
 
     refreshUser();
     setInventory(await getInventory());
+    setCrumbs(await getCrumbs());
     refreshNotificationCount();
     setDailyGift(await getDailyGift());
     await requestLocation();
     await requestPark();
+    setTheme(await getCurrentTheme());
     setLoading(false);
-  }, [isReady, user]);
+  }, [isReady]);
 
   useEffect(() => {
-    if (!user && !isEmpty(crumbs) && themeLoaded) {
-      setLoading(false);
-      return;
-    }
-
     if (
       isReady &&
       inventory &&
       user &&
+      fontsLoaded &&
       !isEmpty(crumbs) &&
       !isEmpty(location) &&
       parkLoaded &&
@@ -75,20 +72,29 @@ export default function LoadingScreen() {
     ) {
       setLoading(false);
     }
-  }, [user, inventory, isReady, crumbs, location, parkLoaded, dailyGift]);
+  }, [
+    user,
+    inventory,
+    isReady,
+    fontsLoaded,
+    crumbs,
+    location,
+    parkLoaded,
+    dailyGift,
+  ]);
 
   useEffect(() => {
     if (loading) {
       return;
     }
 
-    if (user && !user.username) {
+    if (!user?.username) {
       RootNavigation.navigate('Welcome');
       return;
     }
 
     RootNavigation.navigate('Explore');
-  }, [loading, user]);
+  }, [loading]);
 
   return (
     <ImageBackground
