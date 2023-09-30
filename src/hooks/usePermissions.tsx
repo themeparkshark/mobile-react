@@ -19,6 +19,11 @@ export default function usePermissions() {
   };
 
   return {
+    hasPermission: (permission: string) => {
+      return (
+        Boolean(permissions[permission as keyof typeof permissions]) ?? false
+      );
+    },
     checkPermission: (permission: string) => {
       const hasPermission = permissions[permission as keyof typeof permissions];
 

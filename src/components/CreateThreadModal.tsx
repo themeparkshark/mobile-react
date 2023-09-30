@@ -24,7 +24,7 @@ export default function CreateThreadModal({
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [title, setTitle] = useState<string>('');
   const [content, setContent] = useState<string>('');
-  const { checkPermission } = usePermissions();
+  const { checkPermission, hasPermission } = usePermissions();
 
   useEffect(() => {
     if (!modalVisible) {
@@ -36,6 +36,7 @@ export default function CreateThreadModal({
   return (
     <>
       <Button
+        hasPermission={hasPermission(PermissionEnums.CreateThreads)}
         onPress={() => {
           if (checkPermission(PermissionEnums.CreateThreads)) {
             setModalVisible(true);

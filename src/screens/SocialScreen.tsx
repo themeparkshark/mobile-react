@@ -152,6 +152,7 @@ export default function SocialScreen({ navigation }) {
                             }
                           },
                           text: 'Membership',
+                          permission: PermissionEnums.BecomeAMember,
                         },
                         {
                           image: require('../../assets/images/screens/social/merch.png'),
@@ -168,6 +169,7 @@ export default function SocialScreen({ navigation }) {
                             }
                           },
                           text: 'Pin Trading',
+                          permission: PermissionEnums.TradePins,
                         },
                         {
                           image: require('../../assets/images/screens/social/social_media.png'),
@@ -177,12 +179,14 @@ export default function SocialScreen({ navigation }) {
                             }
                           },
                           text: 'Social',
+                          permission: PermissionEnums.WatchContent,
                         },
                         {
                           image: require('../../assets/images/screens/social/arcade.png'),
                           onPress: () => {},
                           text: 'Arcade',
                           disabled: true,
+                          permission: PermissionEnums.ViewArcade,
                         },
                       ]}
                     />

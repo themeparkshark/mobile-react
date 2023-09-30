@@ -63,7 +63,7 @@ export default function LoginScreen({ navigation }) {
           <SignInButtons>
             <TouchableOpacity
               onPress={() => {
-                navigation.navigate('Loading');
+                navigation.navigate('Explore');
               }}
             >
               <Text

@@ -158,12 +158,46 @@ const AuthStackNavigator = () => {
     <Stack.Navigator
       initialRouteName="Splash"
       screenOptions={{
-        animation: 'none',
         headerShown: false,
       }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Splash" component={SplashScreen} />
+      <Stack.Screen
+        name="Leaderboard"
+        component={LeaderboardScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Social"
+        component={SocialScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Explore"
+        component={ExploreScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="News"
+        component={NewsScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen name="User" component={UserScreen} />
+      <Stack.Screen name="Park" component={ParkScreen} />
+      <Stack.Screen name="Thread" component={ThreadScreen} />
     </Stack.Navigator>
   );
 };
