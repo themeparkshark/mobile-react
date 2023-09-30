@@ -16,6 +16,7 @@ export interface CrumbContextType {
       readonly choose_daily_gift: string;
       readonly clearance: string;
       readonly coins: string;
+      readonly copyright: string;
       readonly free_trial: string;
       readonly keys: string;
       readonly membership: string;
