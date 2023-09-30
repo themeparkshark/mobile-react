@@ -46,7 +46,8 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const { user, inventory, setInventory } = useContext(AuthContext);
   const [friends, setFriends] = useState<UserType[]>([]);
-  const { notificationCount } = useContext(NotificationContext);
+  const { refreshNotificationCount, notificationCount } =
+    useContext(NotificationContext);
   const { playMusic } = useContext(MusicContext);
   const { warnings } = useCrumbs();
 
@@ -58,6 +59,7 @@ export default function ProfileScreen() {
     useCallback(() => {
       playMusic(require('../../assets/sounds/music/track5.mp3'));
       requestFriends();
+      refreshNotificationCount();
     }, [])
   );
 

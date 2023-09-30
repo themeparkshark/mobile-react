@@ -1,9 +1,17 @@
-import { createContext, Dispatch, FC, ReactNode, useState } from 'react';
+import {
+  createContext,
+  Dispatch,
+  FC,
+  ReactNode,
+  useContext,
+  useState,
+} from 'react';
 import { useAsyncEffect } from 'rooks';
 import checkForPark from '../helpers/check-for-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
+import { AuthContext } from './AuthProvider';
 
 export interface LocationContextType {
   readonly location?: LocationType;
@@ -25,6 +33,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [startTimer, setStartTimer] = useState<boolean>(false);
+  const { user, logout } = useContext(AuthContext);
 
   const requestLocation = async () => {
     setLocation(await getCurrentLocation());
@@ -38,7 +47,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   useAsyncEffect(async () => {
-    if (!startTimer) {
+    if (!startTimer || !user) {
       return;
     }
 
@@ -54,7 +63,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [startTimer]);
+  }, [user, startTimer]);
 
   return (
     <LocationContext.Provider
