@@ -9,12 +9,14 @@ import {
 import { useAsyncEffect } from 'rooks';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
   const { isReady, user, refreshUser } = useContext(AuthContext);
   const { requestLocation, requestPark } = useContext(LocationContext);
+  const { labels } = useCrumbs();
 
   useAsyncEffect(async () => {
     if (!isReady) {
@@ -73,7 +75,7 @@ export default function LoadingScreen() {
               paddingTop: 16,
             }}
           >
-            Loading...
+            {labels.loading}
           </Text>
         </View>
       </View>

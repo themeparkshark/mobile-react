@@ -161,8 +161,22 @@ const AuthStackNavigator = () => {
         headerShown: false,
       }}
     >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Splash" component={SplashScreen} />
+      <Stack.Screen
+        name="Login"
+        component={LoginScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Splash"
+        component={SplashScreen}
+        options={{
+          animation: 'none',
+          gestureEnabled: false,
+        }}
+      />
       <Stack.Screen
         name="Leaderboard"
         component={LeaderboardScreen}
@@ -198,6 +212,7 @@ const AuthStackNavigator = () => {
       <Stack.Screen name="User" component={UserScreen} />
       <Stack.Screen name="Park" component={ParkScreen} />
       <Stack.Screen name="Thread" component={ThreadScreen} />
+      <Stack.Screen name="Entry" component={EntryScreen} />
     </Stack.Navigator>
   );
 };

@@ -19,6 +19,7 @@ export interface CrumbContextType {
       readonly copyright: string;
       readonly free_trial: string;
       readonly keys: string;
+      readonly loading: string;
       readonly membership: string;
       readonly membership_benefits: string[];
       readonly membership_terms: string;
