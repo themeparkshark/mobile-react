@@ -9,9 +9,12 @@ export default function usePermissions() {
   const { prompts } = useCrumbs();
 
   const permissions = {
+    add_friends: user,
     become_a_member: user,
+    create_compliments: user,
     create_threads: user,
     redeem_coin_codes: user,
+    redeem_mascot_gifts: user,
     trade_pins: user,
     view_arcade: user,
     view_profile: user,

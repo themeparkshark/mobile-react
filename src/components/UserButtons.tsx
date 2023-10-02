@@ -29,7 +29,6 @@ export default function UserButtons({
             <View
               key={index}
               style={{
-                flex: 1,
                 paddingLeft: 8,
                 paddingRight: 8,
               }}
