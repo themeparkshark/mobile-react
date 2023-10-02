@@ -1,13 +1,16 @@
 import { BlurView } from 'expo-blur';
-import { useState } from 'react';
-import { Dimensions, Text } from 'react-native';
+import { useContext, useState } from 'react';
+import { Dimensions, Text, View } from 'react-native';
 import { useIntervalWhen } from 'rooks';
 import { vsprintf } from 'sprintf-js';
+import SignInButtons from '../../components/SignInButtons';
+import { AuthContext } from '../../context/AuthProvider';
 import useCrumbs from '../../hooks/useCrumbs';
 
 export default function NotAtPark() {
   const [seconds, setSeconds] = useState<number>(5);
   const { labels, warnings } = useCrumbs();
+  const { user } = useContext(AuthContext);
 
   useIntervalWhen(
     () => {
@@ -18,7 +21,7 @@ export default function NotAtPark() {
       }
     },
     1000,
-    !!seconds
+    Boolean(!!seconds && user)
   );
 
   return (
@@ -33,6 +36,8 @@ export default function NotAtPark() {
         height: Dimensions.get('window').height,
         alignItems: 'center',
         justifyContent: 'center',
+        paddingLeft: 48,
+        paddingRight: 48,
       }}
     >
       <Text
@@ -47,16 +52,15 @@ export default function NotAtPark() {
           },
           textShadowRadius: 0,
           fontSize: 32,
-          paddingLeft: 48,
-          paddingRight: 48,
           textAlign: 'center',
         }}
       >
-        {warnings.not_at_a_park}
+        {user ? warnings.not_at_a_park : warnings.not_signed_in}
       </Text>
       <Text
         style={{
           color: 'white',
+          textAlign: 'center',
           fontFamily: 'Knockout',
           fontSize: 20,
           paddingTop: 30,
@@ -68,11 +72,23 @@ export default function NotAtPark() {
           textShadowRadius: 0,
         }}
       >
-        {vsprintf(labels.checking_again, [
-          seconds,
-          `second${seconds === 1 ? '' : 's'}`,
-        ])}
+        {user
+          ? vsprintf(labels.checking_again, [
+              seconds,
+              `second${seconds === 1 ? '' : 's'}`,
+            ])
+          : warnings.must_be_signed_in}
       </Text>
+      {!user && (
+        <View
+          style={{
+            marginTop: 32,
+            width: '75%',
+          }}
+        >
+          <SignInButtons />
+        </View>
+      )}
     </BlurView>
   );
 }

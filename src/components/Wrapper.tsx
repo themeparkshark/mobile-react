@@ -2,6 +2,8 @@ import { Image } from 'expo-image';
 import { ReactNode, useContext } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import { ThemeContext } from '../context/ThemeProvider';
+import usePermissions from '../hooks/usePermissions';
+import { PermissionEnums } from '../models/permission-enums';
 import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
 
@@ -11,6 +13,7 @@ export default function Wrapper({
   readonly children: ReactNode[];
 }) {
   const { theme } = useContext(ThemeContext);
+  const { checkPermission, hasPermission } = usePermissions();
 
   const items = [
     {
@@ -46,6 +49,7 @@ export default function Wrapper({
       size: 'normal',
       sound: require('../../assets/sounds/wrapper_button_press.mp3'),
       text: 'Profile',
+      permission: PermissionEnums.ViewProfile,
     },
   ];
 
@@ -83,31 +87,34 @@ export default function Wrapper({
         >
           <View
             style={{
-              paddingLeft: 12,
-              paddingRight: 12,
-              display: 'flex',
+              paddingLeft: 32,
+              paddingRight: 32,
               flexDirection: 'row',
+              justifyContent: 'space-between',
             }}
           >
             {items.map((item, key) => {
               return (
-                <View
-                  key={key}
-                  style={{
-                    flex: 1,
-                    flexDirection: 'column',
-                  }}
-                >
+                <View key={key}>
                   <View
                     style={{
-                      position: 'absolute',
-                      width: '100%',
                       top: item.size === 'normal' ? 0 : -45,
                     }}
                   >
                     <Button
+                      hasPermission={
+                        item.permission !== undefined
+                          ? hasPermission(item.permission)
+                          : true
+                      }
                       onPress={() => {
-                        RootNavigation.navigate(item.screen);
+                        if (item.permission !== undefined) {
+                          if (checkPermission(item.permission)) {
+                            RootNavigation.navigate(item.screen);
+                          }
+                        } else {
+                          RootNavigation.navigate(item.screen);
+                        }
                       }}
                       onPressSound={item.sound}
                     >

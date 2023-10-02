@@ -3,7 +3,7 @@ import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArro
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useState } from 'react';
 import { Dimensions, Image, Pressable, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useAsyncEffect, useTimeoutWhen } from 'rooks';
@@ -81,10 +81,6 @@ export default function ExploreScreen() {
     const response = await checkForRedeemable();
     setActiveRedeemable(response);
   }, [location?.latitude, location?.longitude, redeemables]);
-
-  if (!user) {
-    return <></>;
-  }
 
   return (
     <Wrapper>

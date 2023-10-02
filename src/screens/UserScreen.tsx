@@ -18,8 +18,10 @@ import config from '../config';
 import { MusicContext } from '../context/MusicProvider';
 import useCompliment from '../hooks/useCompliment';
 import useFriends from '../hooks/useFriends';
+import usePermissions from '../hooks/usePermissions';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
+import { PermissionEnums } from '../models/permission-enums';
 import { UserType } from '../models/user-type';
 
 export default function UserScreen({ route }) {
@@ -32,6 +34,7 @@ export default function UserScreen({ route }) {
   const { addFriend, removeFriend, acceptFriend } = useFriends();
   const { playMusic } = useContext(MusicContext);
   const { complimentUser } = useCompliment();
+  const { checkPermission } = usePermissions();
 
   useFocusEffect(
     useCallback(() => {
@@ -58,11 +61,14 @@ export default function UserScreen({ route }) {
     ? [
         {
           image: require('../../assets/images/screens/user/gift.png'),
-          onPress: () => {
-            purchaseItem(currentUser.mascot.item);
+          onPress: async () => {
+            if (checkPermission(PermissionEnums.RedeemMascotGifts)) {
+              await purchaseItem(currentUser.mascot.item);
+            }
           },
           show: !!currentUser.mascot,
           text: 'Gift',
+          permission: PermissionEnums.RedeemMascotGifts,
         },
         {
           image: require('../../assets/images/screens/friends/remove_friend.png'),
@@ -74,22 +80,26 @@ export default function UserScreen({ route }) {
         },
         {
           image: require('../../assets/images/screens/friends/add_friend.png'),
-          onPress: () => {
-            if (currentUser?.has_friend_request_from) {
-              acceptFriend(currentUser);
-            } else {
-              addFriend(currentUser);
+          onPress: async () => {
+            if (checkPermission(PermissionEnums.AddFriends)) {
+              currentUser?.has_friend_request_from
+                ? acceptFriend(currentUser)
+                : addFriend(currentUser);
             }
           },
           show: !isFriend,
           text: 'Add friend',
+          permission: PermissionEnums.AddFriends,
         },
         {
           image: require('../../assets/images/screens/user/compliment.png'),
           onPress: async () => {
-            await complimentUser(currentUser);
+            if (checkPermission(PermissionEnums.CreateCompliments)) {
+              await complimentUser(currentUser);
+            }
           },
           text: 'Compliment',
+          permission: PermissionEnums.CreateCompliments,
         },
       ]
     : [];

@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { ScrollView, Text, View } from 'react-native';
+import usePermissions from '../hooks/usePermissions';
 import { ButtonType } from '../models/button-type';
 import Button from './Button';
 
@@ -8,6 +9,8 @@ export default function UserButtons({
 }: {
   readonly buttons: ButtonType[];
 }) {
+  const { hasPermission } = usePermissions();
+
   return (
     <ScrollView
       horizontal
@@ -26,7 +29,6 @@ export default function UserButtons({
             <View
               key={index}
               style={{
-                flex: 1,
                 paddingLeft: 8,
                 paddingRight: 8,
               }}
@@ -61,7 +63,14 @@ export default function UserButtons({
                 </>
               ) : (
                 <>
-                  <Button onPress={button.onPress}>
+                  <Button
+                    hasPermission={
+                      button.permission !== undefined
+                        ? hasPermission(button.permission)
+                        : true
+                    }
+                    onPress={button.onPress}
+                  >
                     <Image
                       source={button.image}
                       style={{
