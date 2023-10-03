@@ -22,6 +22,7 @@ export default function Topbar({
   rightButton = null,
   text = null,
   showBackButton = false,
+  showBroadcasts = false,
   showCoins = false,
   showKeys = false,
   showPumpkins = false,
@@ -36,6 +37,7 @@ export default function Topbar({
   readonly text?: string | null;
   readonly purple?: boolean;
   readonly showBackButton?: boolean;
+  readonly showBroadcasts?: boolean;
   readonly showCoins?: boolean;
   readonly showKeys?: boolean;
   readonly showPumpkins?: boolean;
@@ -115,14 +117,16 @@ export default function Topbar({
         position: 'relative',
       }}
     >
-      <SafeAreaView
-        style={{
-          marginTop: Constants.statusBarHeight,
-          position: 'absolute',
-        }}
-      >
-        <Broadcasts />
-      </SafeAreaView>
+      {showBroadcasts && (
+        <SafeAreaView
+          style={{
+            marginTop: Constants.statusBarHeight,
+            position: 'absolute',
+          }}
+        >
+          <Broadcasts />
+        </SafeAreaView>
+      )}
       <ImageBackground
         source={
           purple

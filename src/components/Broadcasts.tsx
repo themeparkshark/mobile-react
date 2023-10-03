@@ -1,10 +1,41 @@
-import { useContext, useEffect, useRef } from 'react';
+import { delay } from 'lodash';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Text, View } from 'react-native';
-import { BroadcastContext } from '../context/BroadcastProvider';
+import { useIntervalWhen, useQueueState } from 'rooks';
 
 export default function Broadcasts() {
-  const { activeBroadcast } = useContext(BroadcastContext);
   const translate = useRef(new Animated.Value(0)).current;
+  const [list, { enqueue, dequeue, peek, length }] = useQueueState<string>([]);
+  const [message, setMessage] = useState<string>();
+
+  useEffect(() => {
+    if (message) {
+      enqueue(message);
+    }
+  }, [message]);
+
+  useIntervalWhen(
+    () => {
+      dequeue();
+    },
+    5250,
+    !!length
+  );
+
+  useEffect(() => {
+    const messages = [
+      'You completed the Rollercoaster task!',
+      'You earned a Park Coin!',
+      'You earned 50 coins!',
+      'You earned 200 Experience!',
+    ];
+
+    messages.forEach((message) => {
+      delay(() => {
+        setMessage(message);
+      }, 1000);
+    });
+  }, []);
 
   const slideUp = () => {
     Animated.timing(translate, {
@@ -23,7 +54,7 @@ export default function Broadcasts() {
   };
 
   useEffect(() => {
-    if (activeBroadcast) {
+    if (peek()) {
       slideDown();
     }
 
@@ -32,7 +63,7 @@ export default function Broadcasts() {
     }, 5000);
 
     return () => clearTimeout(timeout);
-  }, [activeBroadcast]);
+  }, [peek()]);
 
   return (
     <Animated.View
@@ -76,7 +107,7 @@ export default function Broadcasts() {
             fontSize: 20,
           }}
         >
-          {activeBroadcast}
+          {peek()}
         </Text>
       </View>
     </Animated.View>
