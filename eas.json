@@ -16,7 +16,7 @@
       "channel": "development"
     },
     "preview": {
-      "distribution": "internal",
+      "distribution": "store",
       "env": {
         "API_URL": "https://dev-app.themeparkshark.com/api"
       },

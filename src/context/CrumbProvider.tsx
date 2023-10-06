@@ -16,8 +16,10 @@ export interface CrumbContextType {
       readonly choose_daily_gift: string;
       readonly clearance: string;
       readonly coins: string;
+      readonly copyright: string;
       readonly free_trial: string;
       readonly keys: string;
+      readonly loading: string;
       readonly membership: string;
       readonly membership_benefits: string[];
       readonly membership_terms: string;
@@ -27,11 +29,13 @@ export interface CrumbContextType {
       readonly read_more: string;
       readonly restore_purchases: string;
       readonly slow_connectivity: string;
+      readonly subscribed_user: string;
       readonly task_list_modal_heading: string;
       readonly task_unlocks: string;
       readonly username_approval: string;
       readonly vault_cost: string;
       readonly verified_user: string;
+      readonly watch_social_posts: string;
     };
     readonly messages: {
       readonly compliment_created: string;
@@ -49,6 +53,14 @@ export interface CrumbContextType {
       readonly redeem_item: string;
       readonly remove_friend: string;
       readonly send_friend_request: string;
+      readonly permissions: {
+        readonly create_threads: string;
+        readonly redeem_coin_codes: string;
+        readonly trade_pins: string;
+        readonly view_arcade: string;
+        readonly view_profile: string;
+        readonly watch_content: string;
+      };
     };
     readonly urls: {
       readonly privacy_policy: string;
@@ -56,12 +68,14 @@ export interface CrumbContextType {
       readonly terms: string;
     };
     readonly warnings: {
+      readonly must_be_signed_in: string;
       readonly no_friends: string;
       readonly no_friend_suggestions: string;
       readonly no_notifications: string;
       readonly no_recent_activity: string;
       readonly no_visited_parks: string;
       readonly not_at_a_park: string;
+      readonly not_signed_in: string;
     };
   };
   readonly setCrumbs: Dispatch<any>;

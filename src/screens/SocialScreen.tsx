@@ -13,6 +13,8 @@ import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Wrapper from '../components/Wrapper';
 import useCrumbs from '../hooks/useCrumbs';
+import usePermissions from '../hooks/usePermissions';
+import { PermissionEnums } from '../models/permission-enums';
 import { ThreadType } from '../models/thread-type';
 
 const options = [
@@ -34,6 +36,7 @@ export default function SocialScreen({ navigation }) {
   const [page, setPage] = useState<number>(1);
   const [filter, setFilter] = useState<SortOption>(options[0]);
   const { urls } = useCrumbs();
+  const { checkPermission } = usePermissions();
 
   const fetchPinnedThreads = async () => {
     setPinnedThreads(
@@ -140,18 +143,16 @@ export default function SocialScreen({ navigation }) {
                     <UserButtons
                       buttons={[
                         {
-                          image: require('../../assets/images/screens/social/arcade.png'),
-                          onPress: () => {},
-                          text: 'Arcade',
-                          show: true,
-                        },
-                        {
                           image: require('../../assets/images/screens/social/membership.png'),
                           onPress: () => {
-                            //navigation.navigate('Membership');
+                            if (
+                              checkPermission(PermissionEnums.BecomeAMember)
+                            ) {
+                              //navigation.navigate('Membership');
+                            }
                           },
                           text: 'Membership',
-                          show: true,
+                          permission: PermissionEnums.BecomeAMember,
                         },
                         {
                           image: require('../../assets/images/screens/social/merch.png'),
@@ -159,23 +160,33 @@ export default function SocialScreen({ navigation }) {
                             WebBrowser.openBrowserAsync(urls.shop);
                           },
                           text: 'Merch',
-                          show: true,
                         },
                         {
                           image: require('../../assets/images/screens/social/pin_swaps.png'),
                           onPress: () => {
-                            navigation.navigate('PinSwaps');
+                            if (checkPermission(PermissionEnums.TradePins)) {
+                              navigation.navigate('PinSwaps');
+                            }
                           },
                           text: 'Pin Trading',
-                          show: true,
+                          permission: PermissionEnums.TradePins,
                         },
                         {
                           image: require('../../assets/images/screens/social/social_media.png'),
                           onPress: () => {
-                            navigation.navigate('Watch');
+                            if (checkPermission(PermissionEnums.WatchContent)) {
+                              navigation.navigate('Watch');
+                            }
                           },
-                          text: 'Social',
-                          show: true,
+                          text: 'Watch',
+                          permission: PermissionEnums.WatchContent,
+                        },
+                        {
+                          image: require('../../assets/images/screens/social/arcade.png'),
+                          onPress: () => {},
+                          text: 'Arcade',
+                          disabled: true,
+                          permission: PermissionEnums.ViewArcade,
                         },
                       ]}
                     />
@@ -190,17 +201,12 @@ export default function SocialScreen({ navigation }) {
                     title="Sort posts by"
                   />
                 </View>
-                <View
-                  style={{
-                    paddingLeft: 10,
-                    paddingRight: 16,
-                  }}
-                >
+                <View>
                   {pinnedThreads.map((pinnedThread) => (
                     <View
                       key={pinnedThread.id}
                       style={{
-                        paddingTop: 32,
+                        paddingTop: 16,
                       }}
                     >
                       <Thread thread={pinnedThread} />
@@ -216,9 +222,7 @@ export default function SocialScreen({ navigation }) {
               <View
                 key={item.id}
                 style={{
-                  paddingTop: 32,
-                  paddingLeft: 10,
-                  paddingRight: 16,
+                  paddingTop: 8,
                 }}
               >
                 <Thread thread={item} />

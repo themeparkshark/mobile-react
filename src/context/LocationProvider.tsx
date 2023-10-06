@@ -1,5 +1,5 @@
 import { createContext, Dispatch, FC, ReactNode, useState } from 'react';
-import { useAsyncEffect } from 'rooks';
+import { useIntervalWhen } from 'rooks';
 import checkForPark from '../helpers/check-for-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
@@ -12,7 +12,6 @@ export interface LocationContextType {
   readonly requestPark: () => void;
   readonly park?: ParkType;
   readonly parkLoaded: boolean;
-  readonly startTimer: () => void;
 }
 
 export const LocationContext = createContext<LocationContextType>(
@@ -24,7 +23,6 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [park, setPark] = useState<ParkType>();
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
-  const [startTimer, setStartTimer] = useState<boolean>(false);
 
   const requestLocation = async () => {
     setLocation(await getCurrentLocation());
@@ -37,12 +35,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     setLoading(false);
   };
 
-  useAsyncEffect(async () => {
-    if (!startTimer) {
-      return;
-    }
-
-    const interval = setInterval(async () => {
+  useIntervalWhen(
+    async () => {
       if (loading) {
         return;
       }
@@ -51,10 +45,10 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       await requestLocation();
       await requestPark();
       setLoading(false);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [startTimer]);
+    },
+    5000,
+    Boolean(location)
+  );
 
   return (
     <LocationContext.Provider
@@ -65,9 +59,6 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         requestPark,
         park,
         parkLoaded,
-        startTimer: () => {
-          setStartTimer(true);
-        },
       }}
     >
       {children}

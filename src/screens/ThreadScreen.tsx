@@ -8,16 +8,20 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getComments from '../api/endpoints/comments/getComments';
 import getThread from '../api/endpoints/threads/getThread';
+import AttachmentModal from '../components/AttachmentModal';
 import Avatar from '../components/Avatar';
+import Button from '../components/Button';
 import Comment from '../components/Comment';
 import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
 import Tag from '../components/Tag';
 import Topbar from '../components/Topbar';
+import { AuthContext } from '../context/AuthProvider';
 import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
 import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
+import * as RootNavigation from '../RootNavigation';
 
 export default function ThreadScreen({ route }) {
   const { thread } = route.params;
@@ -27,6 +31,7 @@ export default function ThreadScreen({ route }) {
   const [page, setPage] = useState<number>(1);
   const [comments, setComments] = useState<CommentType[]>([]);
   const [comment, setComment] = useState<CommentType>();
+  const { user } = useContext(AuthContext);
 
   const fetchComments = async (page: number) => {
     if (!currentThread) {
@@ -78,7 +83,15 @@ export default function ThreadScreen({ route }) {
               <View style={{ padding: 16, backgroundColor: 'white' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View>
-                    <Avatar size={50} user={currentThread.user} />
+                    <Button
+                      onPress={() => {
+                        RootNavigation.navigate('User', {
+                          user: currentThread.user.id,
+                        });
+                      }}
+                    >
+                      <Avatar size="sm" user={currentThread.user} />
+                    </Button>
                   </View>
                   <View style={{ paddingLeft: 16 }}>
                     <Text>
@@ -121,6 +134,26 @@ export default function ThreadScreen({ route }) {
                     {currentThread.content}
                   </Text>
                 )}
+                <View
+                  style={{ margin: -8, flexWrap: 'wrap', flexDirection: 'row' }}
+                >
+                  {currentThread.attachments.map((attachment) => {
+                    return (
+                      <View
+                        key={attachment.id}
+                        style={{
+                          width:
+                            currentThread.attachments.length > 1
+                              ? '33.3333333%'
+                              : '100%',
+                          padding: 8,
+                        }}
+                      >
+                        <AttachmentModal attachment={attachment} />
+                      </View>
+                    );
+                  })}
+                </View>
                 <View
                   style={{
                     marginTop: 16,
@@ -210,19 +243,21 @@ export default function ThreadScreen({ route }) {
               setPage((prevState) => prevState + 1);
             }}
             ListFooterComponentStyle={{
-              height: 120,
+              height: user ? 120 : 40,
             }}
           />
-          <CreateReply
-            thread={currentThread}
-            onSubmit={async () => {
-              setComments(await getComments(currentThread.id, 1));
-              setCurrentThread(await getThread(thread));
-              setPage(1);
-            }}
-          />
+          {user && (
+            <CreateReply
+              thread={currentThread}
+              onSubmit={async () => {
+                setComments(await getComments(currentThread.id, 1));
+                setCurrentThread(await getThread(thread));
+                setPage(1);
+              }}
+            />
+          )}
         </View>
       )}
     </>
   );
-};
+}

@@ -21,6 +21,7 @@ import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
+import Subscribed from '../components/Subscribed';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
@@ -45,7 +46,8 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const { user, inventory, setInventory } = useContext(AuthContext);
   const [friends, setFriends] = useState<UserType[]>([]);
-  const { notificationCount } = useContext(NotificationContext);
+  const { refreshNotificationCount, notificationCount } =
+    useContext(NotificationContext);
   const { playMusic } = useContext(MusicContext);
   const { warnings } = useCrumbs();
 
@@ -57,6 +59,7 @@ export default function ProfileScreen() {
     useCallback(() => {
       playMusic(require('../../assets/sounds/music/track5.mp3'));
       requestFriends();
+      refreshNotificationCount();
     }, [])
   );
 
@@ -78,7 +81,6 @@ export default function ProfileScreen() {
             RootNavigation.navigate('PinCollections');
           },
           text: 'Pin Packs',
-          show: true,
         },
         ...stores.map((store) => {
           return {
@@ -89,7 +91,7 @@ export default function ProfileScreen() {
               });
             },
             text: store.name,
-            show: true,
+            disabled: store.is_secret_store,
           };
         }),
       ]);
@@ -188,17 +190,14 @@ export default function ProfileScreen() {
               >
                 <Experience user={user} />
                 <UserButtons buttons={buttons} />
+                {user.became_member_at && <Subscribed />}
                 {user.verified_at && <Verified />}
                 <Heading text="Statistics" />
                 <Stats user={user} />
                 <Heading text="Your Friends" />
                 {friends && friends.length > 0 && (
                   <>
-                    <View
-                      style={{
-                        minHeight: 200,
-                      }}
-                    >
+                    <View>
                       <FlashList
                         contentContainerStyle={{ paddingBottom: 8 }}
                         data={friends}

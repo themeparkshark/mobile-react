@@ -8,6 +8,7 @@ import { vsprintf } from 'sprintf-js';
 import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
+import getCompletedArchivedTasks from '../api/endpoints/users/parks/getCompletedArchivedTasks';
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
 import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
 import getVisitedPark from '../api/endpoints/users/visited-parks/getPark';
@@ -28,6 +29,9 @@ export default function ParkScreen({ route }) {
   const [currentPark, setCurrentPark] = useState<ParkType>();
   const [archivedTasks, setArchivedTasks] = useState<TaskType[]>([]);
   const [tasks, setTasks] = useState<TaskType[]>([]);
+  const [completedArchivedTasks, setCompletedArchivedTasks] = useState<
+    TaskType[]
+  >([]);
   const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>([]);
   const [completedTasks, setCompletedTasks] = useState<TaskType[]>([]);
   const [completedSecretTasks, setCompletedSecretTasks] = useState<
@@ -53,6 +57,12 @@ export default function ParkScreen({ route }) {
     );
   };
 
+  const hasCompletedArchivedTask = (task: number) => {
+    return completedArchivedTasks.find(
+      (archivedTask) => archivedTask.id === task
+    );
+  };
+
   const silver =
     currentPark && currentPark.park_coins_count >= 50
       ? require('../../assets/images/screens/park/silver.png')
@@ -75,6 +85,7 @@ export default function ParkScreen({ route }) {
     setCompletedTasks(await getCompletedTasks(park, user));
     setCompletedSecretTasks(await getCompletedSecretTasks(park, user));
     setArchivedTasks(await getArchivedTasks(park));
+    setCompletedArchivedTasks(await getCompletedArchivedTasks(park, user));
     setLoading(false);
   }, []);
 
@@ -168,7 +179,12 @@ export default function ParkScreen({ route }) {
                   }}
                 >
                   <View style={{ paddingBottom: 16 }}>
-                    <View style={{ position: 'relative', height: 185 }}>
+                    <View
+                      style={{
+                        position: 'relative',
+                        height: 185,
+                      }}
+                    >
                       <View
                         style={{
                           position: 'absolute',
@@ -180,38 +196,59 @@ export default function ParkScreen({ route }) {
                           justifyContent: 'center',
                         }}
                       >
-                        <Image
-                          source={silver}
+                        <View
                           style={{
-                            width: 90,
-                            height: 95,
-                            opacity:
-                              currentPark.park_coins_count >= 50 ? 1 : 0.6,
+                            flex: 1,
+                            alignItems: 'flex-end',
                           }}
-                        />
-                        <Image
-                          source={gold}
+                        >
+                          <Image
+                            source={silver}
+                            style={{
+                              width: 90,
+                              height: 95,
+                              opacity:
+                                currentPark.park_coins_count >= 50 ? 1 : 0.6,
+                              marginRight: 16,
+                            }}
+                          />
+                        </View>
+                        <View
                           style={{
-                            width: 100,
-                            height: 140,
-                            marginLeft: 16,
-                            opacity:
-                              currentPark.park_coins_count >= 100 ? 1 : 0.6,
+                            flex: 1,
+                            alignItems: 'center',
                           }}
-                        />
-                        <Image
-                          source={bronze}
+                        >
+                          <Image
+                            source={gold}
+                            style={{
+                              width: 100,
+                              height: 140,
+                              opacity:
+                                currentPark.park_coins_count >= 100 ? 1 : 0.6,
+                            }}
+                          />
+                        </View>
+                        <View
                           style={{
-                            width: 70,
-                            height: 75,
-                            marginLeft: 16,
-                            opacity:
-                              currentPark.park_coins_count >= 12 ? 1 : 0.6,
+                            flex: 1,
+                            alignItems: 'flex-start',
                           }}
-                        />
+                        >
+                          <Image
+                            source={bronze}
+                            style={{
+                              width: 70,
+                              height: 75,
+                              opacity:
+                                currentPark.park_coins_count >= 12 ? 1 : 0.6,
+                              marginLeft: 16,
+                            }}
+                          />
+                        </View>
                       </View>
                       <Image
-                        source={require('../../assets/images/screens/park/trophyshelf.png')}
+                        source={require('../../assets/images/screens/park/shelf.png')}
                         contentFit="contain"
                         style={{
                           width: '100%',
@@ -359,11 +396,11 @@ export default function ParkScreen({ route }) {
                                   paddingLeft: index === 0 ? 0 : 12,
                                 }}
                               >
-                                {hasCompletedTask(archivedTask.id) ? (
+                                {hasCompletedArchivedTask(archivedTask.id) ? (
                                   <TaskCoinModal
                                     task={archivedTask}
                                     timesCompleted={
-                                      completedTasks.find(
+                                      completedArchivedTasks.find(
                                         (completedTask) =>
                                           completedTask.id === archivedTask.id
                                       )?.times_completed ?? 0

@@ -1,8 +1,10 @@
+import { AttachmentType } from './attachment-type';
 import { CommentType } from './comment-type';
 import { TagType } from './tag-type';
 import { UserType } from './user-type';
 
 export interface ThreadType {
+  readonly attachments: AttachmentType[];
   readonly pinned_at: string;
   readonly created_at: string;
   readonly content: string;

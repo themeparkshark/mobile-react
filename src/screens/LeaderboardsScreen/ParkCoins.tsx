@@ -25,7 +25,7 @@ export default function ParkCoins() {
   const [selectedPark, setSelectedPark] = useState<number>();
   const [selectedLeaderboard, setSelectedLeaderboard] = useState<number>();
   const [users, setUsers] = useState<UserType[]>([]);
-  const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>();
+  const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>([]);
 
   useAsyncEffect(async () => {
     setParks(await allParks());
@@ -40,7 +40,7 @@ export default function ParkCoins() {
   }, [parks, user]);
 
   useEffect(() => {
-    if (leaderboards) {
+    if (leaderboards.length) {
       setSelectedLeaderboard(leaderboards[0].id);
     }
   }, [leaderboards]);
@@ -81,7 +81,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[0] && <LeaderboardUser user={users[0]} size={1} />}
+                  {users[0] && <LeaderboardUser user={users[0]} />}
                 </View>
                 <View
                   style={{
@@ -92,7 +92,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[1] && <LeaderboardUser user={users[1]} size={2} />}
+                  {users[1] && <LeaderboardUser user={users[1]} />}
                 </View>
                 <View
                   style={{
@@ -103,7 +103,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[2] && <LeaderboardUser user={users[2]} size={3} />}
+                  {users[2] && <LeaderboardUser user={users[2]} />}
                 </View>
               </>
             )}
@@ -116,15 +116,15 @@ export default function ParkCoins() {
               }}
             >
               <View style={{ flex: 1 }}>
-                {parks && (
+                {!!parks && (
                   <RNPickerSelect
                     placeholder={{}}
                     onValueChange={(value) => setSelectedPark(value)}
                     value={selectedPark}
-                    items={parks.map((item) => {
+                    items={parks.map((park) => {
                       return {
-                        label: item.display_name,
-                        value: item.id,
+                        label: park.display_name ?? park.name,
+                        value: park.id,
                       };
                     })}
                     style={{
@@ -251,13 +251,13 @@ export default function ParkCoins() {
                       }}
                     >
                       <Button
-                        onPress={() =>
+                        onPress={() => {
                           RootNavigation.navigate('User', {
                             user: user.id,
-                          })
-                        }
+                          });
+                        }}
                       >
-                        <Avatar size={50} user={user} />
+                        <Avatar user={user} />
                       </Button>
                       <Text
                         style={{

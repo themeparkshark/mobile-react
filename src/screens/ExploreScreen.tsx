@@ -1,23 +1,21 @@
-import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
-import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, Image, Pressable, View } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
-import { useAsyncEffect, useTimeoutWhen } from 'rooks';
+import { useCallback, useContext, useState } from 'react';
+import { Image, View } from 'react-native';
+import { Marker } from 'react-native-maps';
+import { useAsyncEffect } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
+import Map from '../components/Map';
 import RedeemModal from '../components/RedeemModal';
 import TaskListModal from '../components/TaskListModal';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
-import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { MusicContext } from '../context/MusicProvider';
+import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { RedeemableType } from '../models/redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
@@ -25,6 +23,7 @@ import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import Key from './ExploreScreen/Key';
 import NotAtPark from './ExploreScreen/NotAtPark';
+import Pumpkin from './ExploreScreen/Pumpkin';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -34,23 +33,14 @@ export default function ExploreScreen() {
     RedeemableType | undefined
   >();
   const { inventory, refreshUser, user } = useContext(AuthContext);
-  const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
-  const [mapReady, setMapReady] = useState<boolean>(false);
   const { playMusic } = useContext(MusicContext);
-  const { location, park, startTimer } = useContext(LocationContext);
+  const { location, park } = useContext(LocationContext);
+  const { theme } = useContext(ThemeContext);
 
   useFocusEffect(
     useCallback(() => {
       playMusic(require('../../assets/sounds/music/track5.mp3'));
     }, [])
-  );
-
-  useTimeoutWhen(
-    () => {
-      setFocusedOnUser(true);
-    },
-    1000,
-    mapReady
   );
 
   const getRedeemables = async () => {
@@ -79,20 +69,13 @@ export default function ExploreScreen() {
     setActiveRedeemable(response);
   }, [location?.latitude, location?.longitude, redeemables]);
 
-  useEffect(() => {
-    startTimer();
-  }, []);
-
-  if (!user) {
-    return <></>;
-  }
-
   return (
     <Wrapper>
       <Topbar
         parkCoin={park?.coin_url}
         showCoins
         showKeys
+        showPumpkins={theme?.show_pumpkin_currency}
         parkCoins={park?.park_coins_count}
       />
       {!park && <NotAtPark />}
@@ -101,38 +84,43 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              top: 132,
-              right: 16,
-              zIndex: 10,
-            }}
-          >
-            <Pressable
-              onPress={() => setFocusedOnUser(true)}
-              style={{
-                padding: 12,
-              }}
-            >
-              <FontAwesomeIcon
-                icon={focusedOnUser ? faSolidArrow : faLocationArrow}
-                size={30}
-                color={config.primary}
-              />
-            </Pressable>
-          </View>
-          <View
-            style={{
-              position: 'absolute',
               left: 16,
               bottom: 32,
               zIndex: 10,
             }}
           >
-            <View
-              style={{
-                marginBottom: 8,
-              }}
-            >
-              {park.store && (
+            {theme && theme.store && (
+              <View
+                style={{
+                  marginBottom: 8,
+                }}
+              >
+                <Button
+                  onPress={() => {
+                    RootNavigation.navigate('Store', {
+                      store: theme.store.id,
+                    });
+                  }}
+                >
+                  <Image
+                    style={{
+                      width: 70,
+                      height: 75,
+                    }}
+                    source={{
+                      uri: theme.store.icon_url,
+                    }}
+                    resizeMode="contain"
+                  />
+                </Button>
+              </View>
+            )}
+            {park.store && (
+              <View
+                style={{
+                  marginBottom: 8,
+                }}
+              >
                 <Button
                   onPress={() => {
                     RootNavigation.navigate('Store', {
@@ -151,8 +139,8 @@ export default function ExploreScreen() {
                     resizeMode="contain"
                   />
                 </Button>
-              )}
-            </View>
+              </View>
+            )}
             <TaskListModal redeemables={redeemables} />
           </View>
           <View
@@ -209,7 +197,7 @@ export default function ExploreScreen() {
                   RootNavigation.navigate('Inventory');
                 }}
               >
-                <Avatar user={user} size={70} />
+                <Avatar user={user} size="lg" />
               </Button>
             )}
           </View>
@@ -221,22 +209,7 @@ export default function ExploreScreen() {
           marginTop: -8,
         }}
       >
-        <MapView
-          style={{
-            width: Dimensions.get('window').width,
-            height: '100%',
-          }}
-          showsUserLocation={true}
-          showsIndoors={false}
-          rotateEnabled={false}
-          region={focusedOnUser ? location : undefined}
-          initialRegion={location}
-          pitchEnabled={false}
-          loadingEnabled={true}
-          userInterfaceStyle="light"
-          onMapReady={() => setMapReady(true)}
-          onRegionChangeComplete={() => setFocusedOnUser(false)}
-        >
+        <Map>
           {redeemables?.items
             .filter((item) => !item.is_hidden)
             .map((item) => {
@@ -367,7 +340,27 @@ export default function ExploreScreen() {
                 </Marker>
               );
             })}
-        </MapView>
+          {redeemables?.pumpkins
+            .filter((pumpkin) =>
+              dayjs().isBetween(
+                dayjs(pumpkin.active_from),
+                dayjs(pumpkin.active_to)
+              )
+            )
+            .map((pumpkin) => {
+              return (
+                <Marker
+                  key={pumpkin.id}
+                  coordinate={{
+                    latitude: Number(pumpkin.latitude),
+                    longitude: Number(pumpkin.longitude),
+                  }}
+                >
+                  <Pumpkin model={pumpkin} onExpire={() => getRedeemables()} />
+                </Marker>
+              );
+            })}
+        </Map>
       </View>
     </Wrapper>
   );
