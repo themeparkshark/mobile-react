@@ -4,11 +4,7 @@ import { useFonts } from 'expo-font';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Storage } from 'expo-storage';
 import { useContext } from 'react';
-import mobileAds, {
-  InterstitialAd,
-  MaxAdContentRating,
-  TestIds,
-} from 'react-native-google-mobile-ads';
+import mobileAds, { InterstitialAd, MaxAdContentRating, TestIds, } from 'react-native-google-mobile-ads';
 import { useAsyncEffect } from 'rooks';
 import getCrumbs from './api/endpoints/crumbs/getCrumbs';
 import getCurrentTheme from './api/endpoints/current-theme/get';
@@ -41,6 +37,7 @@ import ThreadScreen from './screens/ThreadScreen';
 import UserScreen from './screens/UserScreen';
 import WatchScreen from './screens/WatchScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
+import { useAxiosSetup } from "./hooks/useAxiosSetup";
 
 const Stack = createNativeStackNavigator();
 
@@ -223,6 +220,7 @@ export default function App() {
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),
   });
+  useAxiosSetup();
 
   useAsyncEffect(async () => {
     if (!fontsLoaded) {

@@ -1,13 +1,7 @@
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { ReactNode, useContext } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  SafeAreaView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, SafeAreaView, Text, View, } from 'react-native';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
@@ -22,7 +16,6 @@ export default function Topbar({
   rightButton = null,
   text = null,
   showBackButton = false,
-  showBroadcasts = false,
   showCoins = false,
   showKeys = false,
   showPumpkins = false,
@@ -37,7 +30,6 @@ export default function Topbar({
   readonly text?: string | null;
   readonly purple?: boolean;
   readonly showBackButton?: boolean;
-  readonly showBroadcasts?: boolean;
   readonly showCoins?: boolean;
   readonly showKeys?: boolean;
   readonly showPumpkins?: boolean;
@@ -117,16 +109,14 @@ export default function Topbar({
         position: 'relative',
       }}
     >
-      {showBroadcasts && (
-        <SafeAreaView
-          style={{
-            marginTop: Constants.statusBarHeight,
-            position: 'absolute',
-          }}
-        >
-          <Broadcasts />
-        </SafeAreaView>
-      )}
+      <SafeAreaView
+        style={{
+          marginTop: Constants.statusBarHeight,
+          position: 'absolute',
+        }}
+      >
+        <Broadcasts />
+      </SafeAreaView>
       <ImageBackground
         source={
           purple

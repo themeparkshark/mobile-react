@@ -1,4 +1,3 @@
-import { delay } from 'lodash';
 import { createContext, FC, ReactNode, useEffect, useState } from 'react';
 import { useIntervalWhen, useQueueState } from 'rooks';
 
@@ -28,7 +27,7 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
       dequeue();
     },
     5250,
-    !!length
+    Boolean(length)
   );
 
   return (
@@ -37,9 +36,7 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
         activeBroadcast: peek(),
         enqueue: (messages) => {
           messages.forEach((message) => {
-            delay(() => {
-              setMessage(message);
-            }, 1000);
+            setMessage(message);
           });
         },
       }}
