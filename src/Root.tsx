@@ -210,7 +210,6 @@ const AuthStackNavigator = () => {
       <Stack.Screen name="User" component={UserScreen} />
       <Stack.Screen name="Park" component={ParkScreen} />
       <Stack.Screen name="Thread" component={ThreadScreen} />
-      <Stack.Screen name="Entry" component={EntryScreen} />
     </Stack.Navigator>
   );
 };
