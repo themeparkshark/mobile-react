@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -105,26 +106,20 @@ export default function WelcomeScreen({ navigation }) {
 
             await refreshUser();
 
-            navigation.navigate('Explore');
+            Alert.alert('', vsprintf(labels.username_approval, [user.id]), [
+              {
+                text: 'Go back',
+                style: 'cancel',
+              },
+              {
+                text: 'Ok',
+                onPress: () => {
+                  navigation.navigate('Explore');
+                },
+              },
+            ]);
           }}
         />
-        <Text
-          style={{
-            paddingTop: 32,
-            textAlign: 'center',
-            color: 'white',
-            fontFamily: 'Knockout',
-            fontSize: 18,
-            textShadowColor: 'rgba(0, 0, 0, .5)',
-            textShadowOffset: {
-              width: 1,
-              height: 1,
-            },
-            textShadowRadius: 0,
-          }}
-        >
-          {vsprintf(labels.username_approval, [user.id])}
-        </Text>
         <View
           style={{
             width: '100%',

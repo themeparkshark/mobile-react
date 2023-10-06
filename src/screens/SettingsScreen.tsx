@@ -1,13 +1,7 @@
 import dayjs from 'dayjs';
 import * as WebBrowser from 'expo-web-browser';
 import { useContext, useEffect, useState } from 'react';
-import {
-  Alert,
-  PlatformColor,
-  SafeAreaView,
-  ScrollView,
-  Switch,
-} from 'react-native';
+import { Alert, PlatformColor, SafeAreaView, ScrollView, Switch, } from 'react-native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import deleteUser from '../api/endpoints/me/delete';
 import updateUser from '../api/endpoints/me/update-user';
@@ -149,7 +143,9 @@ export default function SettingsScreen() {
                 titleTextStyle={{
                   color: PlatformColor('systemBlue'),
                 }}
-                onPress={() => logout()}
+                onPress={() => {
+                  logout();
+                }}
               />
             </Section>
           </TableView>
