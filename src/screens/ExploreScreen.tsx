@@ -69,10 +69,6 @@ export default function ExploreScreen() {
     setActiveRedeemable(response);
   }, [location?.latitude, location?.longitude, redeemables]);
 
-  if (!user) {
-    return <></>;
-  }
-
   return (
     <Wrapper>
       <Topbar

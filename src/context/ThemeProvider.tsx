@@ -1,10 +1,9 @@
-import { createContext, FC, ReactNode, useEffect, useState } from 'react';
+import { createContext, FC, ReactNode, useState } from 'react';
 import { ThemeType } from '../models/theme-type';
 
 export interface ThemeContextType {
-  readonly theme: ThemeType | null;
-  readonly setTheme: (theme: ThemeType) => void;
-  readonly themeLoaded: boolean;
+  readonly theme: ThemeType | undefined;
+  readonly setTheme: (theme: ThemeType | undefined) => void;
 }
 
 export const ThemeContext = createContext<ThemeContextType>(
@@ -12,19 +11,13 @@ export const ThemeContext = createContext<ThemeContextType>(
 );
 
 export const ThemeProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<ThemeType | null>(null);
-  const [themeLoaded, setThemeLoaded] = useState<boolean>(false);
-
-  useEffect(() => {
-    setThemeLoaded(!!theme);
-  }, [theme]);
+  const [theme, setTheme] = useState<ThemeType | undefined>();
 
   return (
     <ThemeContext.Provider
       value={{
         theme,
         setTheme,
-        themeLoaded,
       }}
     >
       {children}

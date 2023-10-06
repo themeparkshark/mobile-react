@@ -82,18 +82,18 @@ export default function DailyGiftModal({
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const { labels } = useCrumbs();
-  const { refreshUser } = useContext(AuthContext);
+  const { user, refreshUser } = useContext(AuthContext);
 
   useTimeoutWhen(
     () => {
       setModalVisible(true);
     },
     5000,
-    !dailyGift.redeemed_at
+    !dailyGift.redeemed_at && user.username
   );
 
   const claimReward = async () => {
-    Alert.alert('', `You earned ${dailyGift.shark_coins} Coins!`, [
+    Alert.alert('', `You earned ${dailyGift.coins} Coins!`, [
       {
         text: 'Ok',
         onPress: async () => {

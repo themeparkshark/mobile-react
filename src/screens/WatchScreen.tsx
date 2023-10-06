@@ -9,11 +9,13 @@ import youtube from '../api/endpoints/social-posts/youtube';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
+import useCrumbs from '../hooks/useCrumbs';
 import { SocialPostType } from '../models/social-post-type';
 
 export default function WatchScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [videos, setVideos] = useState<SocialPostType[]>([]);
+  const { labels } = useCrumbs();
 
   useAsyncEffect(async () => {
     setVideos(await youtube());
@@ -22,7 +24,7 @@ export default function WatchScreen() {
 
   return (
     <Wrapper>
-      <Topbar text="Social" showBackButton />
+      <Topbar text="Watch" showBackButton />
       {loading && <Loading />}
       {!loading && (
         <View
@@ -48,9 +50,10 @@ export default function WatchScreen() {
                       fontSize: 24,
                       paddingLeft: 8,
                       paddingBottom: 16,
+                      textAlign: 'center',
                     }}
                   >
-                    YouTube
+                    {labels.watch_social_posts}
                   </Text>
                 }
                 data={videos}

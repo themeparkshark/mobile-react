@@ -1,5 +1,4 @@
 import { useFocusEffect } from '@react-navigation/native';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import { Image } from 'expo-image';
 import { useCallback, useContext } from 'react';
 import {
@@ -7,13 +6,15 @@ import {
   ImageBackground,
   SafeAreaView,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
+import SignInButtons from '../../components/SignInButtons';
 import { AuthContext } from '../../context/AuthProvider';
 import { MusicContext } from '../../context/MusicProvider';
 
-export default function LoginScreen() {
-  const { user, isReady, login } = useContext(AuthContext);
+export default function LoginScreen({ navigation }) {
+  const { user } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
 
   useFocusEffect(
@@ -59,35 +60,23 @@ export default function LoginScreen() {
             justifyContent: 'center',
           }}
         >
-          <View
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, .6)',
-              marginLeft: 'auto',
-              marginRight: 'auto',
-              padding: 16,
-              borderRadius: 5,
-            }}
-          >
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={
-                AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-              }
-              buttonStyle={
-                AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-              }
-              cornerRadius={5}
-              style={{ width: 200, height: 44 }}
-              onPress={async () => {
-                const credential = await AppleAuthentication.signInAsync({
-                  requestedScopes: [
-                    AppleAuthentication.AppleAuthenticationScope.EMAIL,
-                  ],
-                });
-
-                login(credential);
+          <SignInButtons>
+            <TouchableOpacity
+              onPress={() => {
+                navigation.navigate('Explore');
               }}
-            />
-          </View>
+            >
+              <Text
+                style={{
+                  textAlign: 'center',
+                  fontSize: 16,
+                  paddingTop: 32,
+                }}
+              >
+                Continue as Guest
+              </Text>
+            </TouchableOpacity>
+          </SignInButtons>
         </View>
         <Text
           style={{

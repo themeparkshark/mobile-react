@@ -47,7 +47,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       setLoading(false);
     },
     5000,
-    location
+    Boolean(location)
   );
 
   return (

@@ -25,7 +25,7 @@ export default function ParkCoins() {
   const [selectedPark, setSelectedPark] = useState<number>();
   const [selectedLeaderboard, setSelectedLeaderboard] = useState<number>();
   const [users, setUsers] = useState<UserType[]>([]);
-  const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>();
+  const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>([]);
 
   useAsyncEffect(async () => {
     setParks(await allParks());
@@ -40,7 +40,7 @@ export default function ParkCoins() {
   }, [parks, user]);
 
   useEffect(() => {
-    if (leaderboards) {
+    if (leaderboards.length) {
       setSelectedLeaderboard(leaderboards[0].id);
     }
   }, [leaderboards]);
@@ -116,15 +116,15 @@ export default function ParkCoins() {
               }}
             >
               <View style={{ flex: 1 }}>
-                {parks && (
+                {!!parks && (
                   <RNPickerSelect
                     placeholder={{}}
                     onValueChange={(value) => setSelectedPark(value)}
                     value={selectedPark}
-                    items={parks.map((item) => {
+                    items={parks.map((park) => {
                       return {
-                        label: item.name,
-                        value: item.id,
+                        label: park.display_name ?? park.name,
+                        value: park.id,
                       };
                     })}
                     style={{

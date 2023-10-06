@@ -16,6 +16,7 @@ import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
 import Tag from '../components/Tag';
 import Topbar from '../components/Topbar';
+import { AuthContext } from '../context/AuthProvider';
 import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
 import { CommentType } from '../models/comment-type';
@@ -30,6 +31,7 @@ export default function ThreadScreen({ route }) {
   const [page, setPage] = useState<number>(1);
   const [comments, setComments] = useState<CommentType[]>([]);
   const [comment, setComment] = useState<CommentType>();
+  const { user } = useContext(AuthContext);
 
   const fetchComments = async (page: number) => {
     if (!currentThread) {
@@ -241,17 +243,19 @@ export default function ThreadScreen({ route }) {
               setPage((prevState) => prevState + 1);
             }}
             ListFooterComponentStyle={{
-              height: 120,
+              height: user ? 120 : 40,
             }}
           />
-          <CreateReply
-            thread={currentThread}
-            onSubmit={async () => {
-              setComments(await getComments(currentThread.id, 1));
-              setCurrentThread(await getThread(thread));
-              setPage(1);
-            }}
-          />
+          {user && (
+            <CreateReply
+              thread={currentThread}
+              onSubmit={async () => {
+                setComments(await getComments(currentThread.id, 1));
+                setCurrentThread(await getThread(thread));
+                setPage(1);
+              }}
+            />
+          )}
         </View>
       )}
     </>

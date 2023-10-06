@@ -150,17 +150,18 @@ export default function Topbar({
             }}
           >
             {(parkCoins !== null ||
+              text ||
               showBackButton ||
-              showCoins ||
               leftButton ||
               rightButton ||
               informationModalId) && (
               <View
                 style={{
-                  flex: text ? 0 : 1,
+                  flex: !showCoins ? 0 : 1,
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexDirection: 'row',
+                  minWidth: 35,
                 }}
               >
                 {leftButton}
@@ -209,6 +210,7 @@ export default function Topbar({
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexDirection: 'row',
+                  minWidth: 35,
                 }}
               >
                 <Currency

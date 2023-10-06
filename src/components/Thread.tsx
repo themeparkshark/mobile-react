@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { truncate } from 'lodash';
 import { Text, TouchableOpacity, View } from 'react-native';
 import config from '../config';
@@ -34,7 +35,15 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
         }}
       >
         <View>
-          <Avatar user={thread.user} />
+          {thread.attachments.length ? (
+            <Image
+              source={thread.attachments[0].path}
+              style={{ aspectRatio: 4 / 3, borderRadius: 8, width: 60 }}
+              contentFit="cover"
+            />
+          ) : (
+            <Avatar user={thread.user} />
+          )}
         </View>
         <View
           style={{
@@ -42,7 +51,11 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
             flex: 1,
           }}
         >
-          <Text>
+          <Text
+            style={{
+              fontSize: 12,
+            }}
+          >
             {thread.user.screen_name} -{' '}
             {dayjs(thread.created_at).startOf('second').fromNow()}
           </Text>
@@ -61,6 +74,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
                 style={{
                   paddingTop: 8,
                   paddingBottom: 8,
+                  fontSize: 12,
                 }}
               >
                 {thread.latest_comment.user.screen_name} replied{' '}
@@ -71,6 +85,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
               <Text
                 style={{
                   opacity: 0.5,
+                  fontSize: 12,
                 }}
               >
                 {truncate(thread.latest_comment.content, {
