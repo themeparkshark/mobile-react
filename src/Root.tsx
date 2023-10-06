@@ -4,13 +4,18 @@ import { useFonts } from 'expo-font';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Storage } from 'expo-storage';
 import { useContext } from 'react';
-import mobileAds, { InterstitialAd, MaxAdContentRating, TestIds, } from 'react-native-google-mobile-ads';
+import mobileAds, {
+  InterstitialAd,
+  MaxAdContentRating,
+  TestIds,
+} from 'react-native-google-mobile-ads';
 import { useAsyncEffect } from 'rooks';
 import getCrumbs from './api/endpoints/crumbs/getCrumbs';
 import getCurrentTheme from './api/endpoints/current-theme/get';
 import { AuthContext } from './context/AuthProvider';
 import { CrumbContext } from './context/CrumbProvider';
 import { ThemeContext } from './context/ThemeProvider';
+import { useAxiosSetup } from './hooks/useAxiosSetup';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ErrorScreen from './screens/ErrorScreen';
@@ -37,7 +42,6 @@ import ThreadScreen from './screens/ThreadScreen';
 import UserScreen from './screens/UserScreen';
 import WatchScreen from './screens/WatchScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
-import { useAxiosSetup } from "./hooks/useAxiosSetup";
 
 const Stack = createNativeStackNavigator();
 

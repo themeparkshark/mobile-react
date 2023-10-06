@@ -1,7 +1,13 @@
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { ReactNode, useContext } from 'react';
-import { Dimensions, ImageBackground, SafeAreaView, Text, View, } from 'react-native';
+import {
+  Dimensions,
+  ImageBackground,
+  SafeAreaView,
+  Text,
+  View,
+} from 'react-native';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
