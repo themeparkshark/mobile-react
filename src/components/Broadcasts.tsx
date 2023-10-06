@@ -3,8 +3,8 @@ import { Animated, Dimensions, Text, View } from 'react-native';
 import { BroadcastContext } from '../context/BroadcastProvider';
 
 export default function Broadcasts() {
-  const { activeBroadcast } = useContext(BroadcastContext);
   const translate = useRef(new Animated.Value(0)).current;
+  const { activeBroadcast } = useContext(BroadcastContext);
 
   const slideUp = () => {
     Animated.timing(translate, {
@@ -23,9 +23,11 @@ export default function Broadcasts() {
   };
 
   useEffect(() => {
-    if (activeBroadcast) {
-      slideDown();
+    if (!activeBroadcast) {
+      return;
     }
+
+    slideDown();
 
     const timeout = setTimeout(() => {
       slideUp();

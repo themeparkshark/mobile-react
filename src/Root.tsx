@@ -15,6 +15,7 @@ import getCurrentTheme from './api/endpoints/current-theme/get';
 import { AuthContext } from './context/AuthProvider';
 import { CrumbContext } from './context/CrumbProvider';
 import { ThemeContext } from './context/ThemeProvider';
+import { useAxiosSetup } from './hooks/useAxiosSetup';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ErrorScreen from './screens/ErrorScreen';
@@ -223,6 +224,7 @@ export default function App() {
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),
   });
+  useAxiosSetup();
 
   useAsyncEffect(async () => {
     if (!fontsLoaded) {
