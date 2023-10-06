@@ -1,20 +1,17 @@
-import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
-import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { useCallback, useContext, useState } from 'react';
-import { Dimensions, Image, Pressable, View } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
-import { useAsyncEffect, useTimeoutWhen } from 'rooks';
+import { Image, View } from 'react-native';
+import { Marker } from 'react-native-maps';
+import { useAsyncEffect } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
+import Map from '../components/Map';
 import RedeemModal from '../components/RedeemModal';
 import TaskListModal from '../components/TaskListModal';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
-import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { MusicContext } from '../context/MusicProvider';
@@ -36,24 +33,18 @@ export default function ExploreScreen() {
     RedeemableType | undefined
   >();
   const { inventory, refreshUser, user } = useContext(AuthContext);
-  const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
-  const [mapReady, setMapReady] = useState<boolean>(false);
   const { playMusic } = useContext(MusicContext);
   const { location, park } = useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
+      playMusic(
+        theme?.explore_screen_music_url
+          ? { uri: theme.explore_screen_music_url }
+          : require('../../assets/sounds/music/track5.mp3')
+      );
     }, [])
-  );
-
-  useTimeoutWhen(
-    () => {
-      setFocusedOnUser(true);
-    },
-    1000,
-    mapReady
   );
 
   const getRedeemables = async () => {
@@ -97,33 +88,12 @@ export default function ExploreScreen() {
           <View
             style={{
               position: 'absolute',
-              top: 132,
-              right: 16,
-              zIndex: 10,
-            }}
-          >
-            <Pressable
-              onPress={() => setFocusedOnUser(true)}
-              style={{
-                padding: 12,
-              }}
-            >
-              <FontAwesomeIcon
-                icon={focusedOnUser ? faSolidArrow : faLocationArrow}
-                size={30}
-                color={config.primary}
-              />
-            </Pressable>
-          </View>
-          <View
-            style={{
-              position: 'absolute',
               left: 16,
               bottom: 32,
               zIndex: 10,
             }}
           >
-            {theme.store && (
+            {theme && theme.store && (
               <View
                 style={{
                   marginBottom: 8,
@@ -243,22 +213,7 @@ export default function ExploreScreen() {
           marginTop: -8,
         }}
       >
-        <MapView
-          style={{
-            width: Dimensions.get('window').width,
-            height: '100%',
-          }}
-          showsUserLocation={true}
-          showsIndoors={false}
-          rotateEnabled={false}
-          region={focusedOnUser ? location : undefined}
-          initialRegion={location}
-          pitchEnabled={false}
-          loadingEnabled={true}
-          userInterfaceStyle="light"
-          onMapReady={() => setMapReady(true)}
-          onRegionChangeComplete={() => setFocusedOnUser(false)}
-        >
+        <Map>
           {redeemables?.items
             .filter((item) => !item.is_hidden)
             .map((item) => {
@@ -409,7 +364,7 @@ export default function ExploreScreen() {
                 </Marker>
               );
             })}
-        </MapView>
+        </Map>
       </View>
     </Wrapper>
   );

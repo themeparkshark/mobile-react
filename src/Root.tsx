@@ -17,7 +17,6 @@ import { CrumbContext } from './context/CrumbProvider';
 import { ThemeContext } from './context/ThemeProvider';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
-import EntryScreen from './screens/EntryScreen';
 import ErrorScreen from './screens/ErrorScreen';
 import ExploreScreen from './screens/ExploreScreen';
 import FriendsScreen from './screens/FriendsScreen';
@@ -95,7 +94,6 @@ const HomeStackNavigator = () => {
           gestureEnabled: false,
         }}
       />
-      <Stack.Screen name="Entry" component={EntryScreen} />
       <Stack.Screen
         name="Profile"
         component={ProfileScreen}
@@ -212,7 +210,6 @@ const AuthStackNavigator = () => {
       <Stack.Screen name="User" component={UserScreen} />
       <Stack.Screen name="Park" component={ParkScreen} />
       <Stack.Screen name="Thread" component={ThreadScreen} />
-      <Stack.Screen name="Entry" component={EntryScreen} />
     </Stack.Navigator>
   );
 };
