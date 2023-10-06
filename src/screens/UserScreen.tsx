@@ -23,6 +23,7 @@ import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { UserType } from '../models/user-type';
+import { ThemeContext } from "../context/ThemeProvider";
 
 export default function UserScreen({ route }) {
   const { user } = route.params;
@@ -35,10 +36,15 @@ export default function UserScreen({ route }) {
   const { playMusic } = useContext(MusicContext);
   const { complimentUser } = useCompliment();
   const { checkPermission } = usePermissions();
+  const { theme } = useContext(ThemeContext);
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
+      playMusic(
+        theme?.explore_screen_music_url
+          ? { uri: theme.explore_screen_music_url }
+          : require('../../assets/sounds/music/track5.mp3')
+      );
     }, [])
   );
 
