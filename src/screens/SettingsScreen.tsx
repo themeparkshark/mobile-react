@@ -149,7 +149,9 @@ export default function SettingsScreen() {
                 titleTextStyle={{
                   color: PlatformColor('systemBlue'),
                 }}
-                onPress={() => logout()}
+                onPress={() => {
+                  logout();
+                }}
               />
             </Section>
           </TableView>

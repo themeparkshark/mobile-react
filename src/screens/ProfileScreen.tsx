@@ -2,13 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, ScrollView, Text, View, } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getFriends from '../api/endpoints/me/friends';
 import getInventory from '../api/endpoints/me/inventory';
@@ -57,7 +51,7 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
+      playMusic(require('../../assets/sounds/music/halloween.mp3'));
       requestFriends();
       refreshNotificationCount();
     }, [])

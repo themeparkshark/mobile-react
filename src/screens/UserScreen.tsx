@@ -38,7 +38,7 @@ export default function UserScreen({ route }) {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
+      playMusic(require('../../assets/sounds/music/halloween.mp3'));
     }, [])
   );
 

@@ -7,6 +7,7 @@ import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 import { InventoryType } from '../models/inventory-type';
 import { UserType } from '../models/user-type';
+import * as RootNavigation from '../RootNavigation';
 
 export interface AuthContextType {
   readonly inventory: InventoryType | null;
@@ -26,7 +27,7 @@ export const AuthContext = createContext<AuthContextType>(
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserType | null>(null);
   const [inventory, setInventory] = useState<InventoryType | null>(null);
-  const [token, setToken] = useState<string>();
+  const [token, setToken] = useState<string>('');
   const [isReady, setIsReady] = useState<boolean>(false);
 
   useEffect(() => {
@@ -71,7 +72,9 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const logout = async () => {
     await Storage.removeItem({ key: 'user' });
     await SecureStore.deleteItemAsync('token');
+    setToken('');
     setUser(null);
+    RootNavigation.navigate('Login');
   };
 
   return (
