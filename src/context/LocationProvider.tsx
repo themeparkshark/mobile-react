@@ -4,6 +4,8 @@ import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
 import { AuthContext } from './AuthProvider';
+import {isEqual} from "lodash";
+import currentPark from "../api/endpoints/me/current-park";
 
 export interface LocationContextType {
   readonly location?: LocationType;
@@ -19,17 +21,30 @@ export const LocationContext = createContext<LocationContextType>(
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType | undefined>();
   const [park, setPark] = useState<ParkType>();
-  const [loading, setLoading] = useState<boolean>(false);
   const { user } = useContext(AuthContext);
 
   const requestLocation = async () => {
-    setLocation(await getCurrentLocation());
+    const newLocation = await getCurrentLocation();
+
+    if (isEqual(newLocation, location)) {
+      return;
+    }
+
+    setLocation(newLocation);
   };
 
   const requestPark = async () => {
-    setLoading(true);
-    setPark(await checkForPark());
-    setLoading(false);
+    if (!location) {
+      return;
+    }
+
+    const newPark = await currentPark(location.latitude, location.longitude);
+
+    if (newPark?.id === park?.id) {
+      return;
+    }
+
+    setPark(newPark);
   };
 
   useEffect(() => {
@@ -38,14 +53,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
 
     const interval = setInterval(async () => {
-      if (loading) {
-        return;
-      }
-
-      setLoading(true);
       await requestLocation();
       await requestPark();
-      setLoading(false);
     }, 5000);
 
     return () => clearInterval(interval);
