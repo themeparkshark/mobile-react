@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+import { useAsyncEffect } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
@@ -17,7 +18,9 @@ export interface LocationContextType {
   readonly location?: LocationType;
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
+  readonly setPark: (park: ParkType | undefined) => void;
   readonly park?: ParkType;
+  readonly parkLoaded: boolean;
 }
 
 export const LocationContext = createContext<LocationContextType>(
@@ -28,6 +31,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType | undefined>();
   const [park, setPark] = useState<ParkType>();
   const { user } = useContext(AuthContext);
+  const [parkLoaded, setParkLoaded] = useState<boolean>(false);
 
   const requestLocation = async () => {
     const newLocation = await getCurrentLocation();
@@ -44,14 +48,25 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       return;
     }
 
-    const newPark = await currentPark(location.latitude, location.longitude);
+    try {
+      const newPark = await currentPark(location.latitude, location.longitude);
 
-    if (newPark?.id === park?.id) {
-      return;
+      if (newPark?.id === park?.id) {
+        setParkLoaded(true);
+        return;
+      }
+
+      setPark(newPark);
+    } catch (error) {
+      //
     }
 
-    setPark(newPark);
+    setParkLoaded(true);
   };
+
+  useAsyncEffect(async () => {
+    await requestPark();
+  }, [location]);
 
   useEffect(() => {
     if (!user) {
@@ -73,6 +88,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         requestLocation,
         requestPark,
         park,
+        parkLoaded,
+        setPark,
       }}
     >
       {children}

@@ -2,13 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, ScrollView, Text, View, } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getFriends from '../api/endpoints/me/friends';
 import getInventory from '../api/endpoints/me/inventory';
@@ -32,7 +26,6 @@ import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import { NotificationContext } from '../context/NotificationProvider';
-import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
@@ -51,7 +44,6 @@ export default function ProfileScreen() {
     useContext(NotificationContext);
   const { playMusic } = useContext(MusicContext);
   const { warnings } = useCrumbs();
-  const { theme } = useContext(ThemeContext);
 
   const requestFriends = () => {
     getFriends(1, 3).then((response) => setFriends(response));
@@ -59,11 +51,7 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(
-        theme?.explore_screen_music_url
-          ? { uri: theme.explore_screen_music_url }
-          : require('../../assets/sounds/music/track5.mp3')
-      );
+      playMusic(require('../../assets/sounds/music/halloween.mp3'));
       requestFriends();
       refreshNotificationCount();
     }, [])

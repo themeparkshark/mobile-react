@@ -16,7 +16,6 @@ import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
 import { MusicContext } from '../context/MusicProvider';
-import { ThemeContext } from '../context/ThemeProvider';
 import useCompliment from '../hooks/useCompliment';
 import useFriends from '../hooks/useFriends';
 import usePermissions from '../hooks/usePermissions';
@@ -36,15 +35,10 @@ export default function UserScreen({ route }) {
   const { playMusic } = useContext(MusicContext);
   const { complimentUser } = useCompliment();
   const { checkPermission } = usePermissions();
-  const { theme } = useContext(ThemeContext);
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(
-        theme?.explore_screen_music_url
-          ? { uri: theme.explore_screen_music_url }
-          : require('../../assets/sounds/music/track5.mp3')
-      );
+      playMusic(require('../../assets/sounds/music/halloween.mp3'));
     }, [])
   );
 

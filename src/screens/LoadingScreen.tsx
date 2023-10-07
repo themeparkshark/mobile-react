@@ -15,7 +15,8 @@ import * as RootNavigation from '../RootNavigation';
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
   const { isReady, user, refreshUser } = useContext(AuthContext);
-  const { requestLocation, requestPark } = useContext(LocationContext);
+  const { requestLocation, requestPark, parkLoaded } =
+    useContext(LocationContext);
   const { labels } = useCrumbs();
 
   useAsyncEffect(async () => {
@@ -24,12 +25,11 @@ export default function LoadingScreen() {
     }
 
     await requestLocation();
-    await requestPark();
     setLoading(false);
   }, [isReady]);
 
   useEffect(() => {
-    if (loading) {
+    if (loading || !parkLoaded) {
       return;
     }
 
@@ -39,7 +39,7 @@ export default function LoadingScreen() {
     }
 
     RootNavigation.navigate('Explore');
-  }, [loading]);
+  }, [loading, parkLoaded]);
 
   return (
     <ImageBackground

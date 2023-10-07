@@ -39,11 +39,7 @@ export default function ExploreScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(
-        theme?.explore_screen_music_url
-          ? { uri: theme.explore_screen_music_url }
-          : require('../../assets/sounds/music/track5.mp3')
-      );
+      playMusic(require('../../assets/sounds/music/halloween.mp3'));
     }, [])
   );
 
