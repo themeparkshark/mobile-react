@@ -12,13 +12,17 @@ import {
 import SignInButtons from '../../components/SignInButtons';
 import { AuthContext } from '../../context/AuthProvider';
 import { MusicContext } from '../../context/MusicProvider';
+import {LocationContext} from "../../context/LocationProvider";
 
 export default function LoginScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
+  const { setPark } = useContext(LocationContext);
 
   useFocusEffect(
     useCallback(() => {
+      setPark(undefined);
+
       if (!user) {
         playMusic(require('../../../assets/sounds/music/track1.mp3'));
       }
