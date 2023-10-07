@@ -7,18 +7,18 @@ import {
   useEffect,
   useState,
 } from 'react';
+import { useAsyncEffect } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
 import { AuthContext } from './AuthProvider';
-import {useAsyncEffect} from "rooks";
 
 export interface LocationContextType {
   readonly location?: LocationType;
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
-  readonly setPark: (park: ParkType|undefined) => void;
+  readonly setPark: (park: ParkType | undefined) => void;
   readonly park?: ParkType;
   readonly parkLoaded: boolean;
 }

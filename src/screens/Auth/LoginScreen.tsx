@@ -11,8 +11,8 @@ import {
 } from 'react-native';
 import SignInButtons from '../../components/SignInButtons';
 import { AuthContext } from '../../context/AuthProvider';
+import { LocationContext } from '../../context/LocationProvider';
 import { MusicContext } from '../../context/MusicProvider';
-import {LocationContext} from "../../context/LocationProvider";
 
 export default function LoginScreen({ navigation }) {
   const { user } = useContext(AuthContext);

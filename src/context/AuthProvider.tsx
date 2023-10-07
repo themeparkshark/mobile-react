@@ -1,14 +1,13 @@
 import { AppleAuthenticationCredential } from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
 import Storage from 'expo-storage';
-import {createContext, FC, ReactNode, useContext, useEffect, useState} from 'react';
+import { createContext, FC, ReactNode, useEffect, useState } from 'react';
 import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 import { InventoryType } from '../models/inventory-type';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
-import {LocationContext} from "./LocationProvider";
 
 export interface AuthContextType {
   readonly inventory: InventoryType | null;
