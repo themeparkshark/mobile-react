@@ -1,11 +1,17 @@
-import { createContext, FC, ReactNode, useContext, useEffect, useState, } from 'react';
-import checkForPark from '../helpers/check-for-park';
+import { isEqual } from 'lodash';
+import {
+  createContext,
+  FC,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
+import currentPark from '../api/endpoints/me/current-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
 import { AuthContext } from './AuthProvider';
-import {isEqual} from "lodash";
-import currentPark from "../api/endpoints/me/current-park";
 
 export interface LocationContextType {
   readonly location?: LocationType;

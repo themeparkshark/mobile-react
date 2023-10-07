@@ -16,6 +16,7 @@ import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
 import { MusicContext } from '../context/MusicProvider';
+import { ThemeContext } from '../context/ThemeProvider';
 import useCompliment from '../hooks/useCompliment';
 import useFriends from '../hooks/useFriends';
 import usePermissions from '../hooks/usePermissions';
@@ -23,7 +24,6 @@ import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { UserType } from '../models/user-type';
-import { ThemeContext } from "../context/ThemeProvider";
 
 export default function UserScreen({ route }) {
   const { user } = route.params;

@@ -2,7 +2,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, ImageBackground, ScrollView, Text, View, } from 'react-native';
+import {
+  Dimensions,
+  ImageBackground,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getFriends from '../api/endpoints/me/friends';
 import getInventory from '../api/endpoints/me/inventory';
@@ -26,13 +32,13 @@ import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import { NotificationContext } from '../context/NotificationProvider';
+import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
-import { ThemeContext } from "../context/ThemeProvider";
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
