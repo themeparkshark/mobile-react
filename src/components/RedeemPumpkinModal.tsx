@@ -85,6 +85,7 @@ export default function RedeemPumpkinModal({
       onSwipeComplete={() => close()}
       onModalWillHide={() => {
         playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
+        setDoublePumpkin(false);
       }}
       backdropOpacity={0.95}
       customBackdrop={
