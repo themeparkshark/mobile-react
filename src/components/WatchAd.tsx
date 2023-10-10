@@ -31,9 +31,6 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
       >
         <RedButton
           text="x2 Watch Ad"
-          onPress={() => {
-            show();
-          }}
         />
       </View>
     );
