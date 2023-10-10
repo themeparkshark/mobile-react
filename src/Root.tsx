@@ -18,7 +18,6 @@ import { ThemeContext } from './context/ThemeProvider';
 import { useAxiosSetup } from './hooks/useAxiosSetup';
 import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
-import ErrorScreen from './screens/ErrorScreen';
 import ExploreScreen from './screens/ExploreScreen';
 import FriendsScreen from './screens/FriendsScreen';
 import InventoryScreen from './screens/InventoryScreen';
@@ -53,14 +52,6 @@ const HomeStackNavigator = () => {
         headerShown: false,
       }}
     >
-      <Stack.Screen
-        name="Error"
-        component={ErrorScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
       <Stack.Screen
         name="Logout"
         component={LogoutScreen}
