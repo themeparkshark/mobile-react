@@ -17,7 +17,7 @@ client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response.status === 401) {
-      return RootNavigation.navigate('Logout');
+      return RootNavigation.navigate('Login');
     }
 
     throw error;

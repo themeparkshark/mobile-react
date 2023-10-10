@@ -57,7 +57,7 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
+      playMusic(require('../../assets/sounds/music/halloween.mp3'));
       requestFriends();
       refreshNotificationCount();
     }, [])

@@ -23,6 +23,8 @@ import * as RootNavigation from '../RootNavigation';
 import Coin from './ExploreScreen/Coin';
 import Key from './ExploreScreen/Key';
 import NotAtPark from './ExploreScreen/NotAtPark';
+import NotSignedIn from './ExploreScreen/NotSignedIn';
+import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import Pumpkin from './ExploreScreen/Pumpkin';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
@@ -39,11 +41,7 @@ export default function ExploreScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(
-        theme?.explore_screen_music_url
-          ? { uri: theme.explore_screen_music_url }
-          : require('../../assets/sounds/music/track5.mp3')
-      );
+      playMusic(require('../../assets/sounds/music/halloween.mp3'));
     }, [])
   );
 
@@ -82,7 +80,9 @@ export default function ExploreScreen() {
         showPumpkins={theme?.show_pumpkin_currency}
         parkCoins={park?.park_coins_count}
       />
-      {!park && <NotAtPark />}
+      {!user && <NotSignedIn />}
+      {user && !location && <PermissionsNotGranted />}
+      {user && location && !park && <NotAtPark />}
       {park && redeemables && (
         <>
           <View

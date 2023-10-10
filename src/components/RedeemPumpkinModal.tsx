@@ -182,7 +182,7 @@ export default function RedeemPumpkinModal({
               {doublePumpkin ? '2 Pumpkins' : '1 Pumpkin'}
             </Text>
             <Image
-              source={require('../../assets/images/keys.png')}
+              source={require('../../assets/images/pumpkins.png')}
               style={{
                 width: '60%',
                 aspectRatio: 1.23,

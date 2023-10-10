@@ -69,9 +69,11 @@ export interface CrumbContextType {
     };
     readonly warnings: {
       readonly must_be_signed_in: string;
+      readonly must_grant_permissions: string;
       readonly no_friends: string;
       readonly no_friend_suggestions: string;
       readonly no_notifications: string;
+      readonly no_permissions_granted: string;
       readonly no_recent_activity: string;
       readonly no_visited_parks: string;
       readonly not_at_a_park: string;
