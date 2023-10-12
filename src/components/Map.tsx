@@ -105,6 +105,9 @@ export default function Map({ children }: { readonly children: ReactNode[] }) {
       ref={mapRef}
       showsUserLocation={true}
       showsIndoors={false}
+      showsCompass={false}
+      zoomEnabled={false}
+      scrollEnabled={false}
       rotateEnabled={false}
       pitchEnabled={false}
       loadingEnabled={true}

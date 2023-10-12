@@ -45,6 +45,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const requestPark = async () => {
     if (!location) {
+      setParkLoaded(true);
       return;
     }
 

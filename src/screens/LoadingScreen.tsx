@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -14,7 +15,7 @@ import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
   const [loading, setLoading] = useState(true);
-  const { isReady, user, refreshUser } = useContext(AuthContext);
+  const { isReady, user, setInventory } = useContext(AuthContext);
   const { requestLocation, requestPark, parkLoaded } =
     useContext(LocationContext);
   const { labels } = useCrumbs();
@@ -25,6 +26,7 @@ export default function LoadingScreen() {
     }
 
     await requestLocation();
+    setInventory(await getInventory());
     setLoading(false);
   }, [isReady]);
 

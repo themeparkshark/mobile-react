@@ -113,7 +113,8 @@ export default function SettingsScreen() {
                   WebBrowser.openBrowserAsync(urls.privacy_policy);
                 }}
               />
-              <Cell title="Email support: contact@themeparkshark.com" />
+              <Cell title="Need help? contact@themeparkshark.com" />
+              <Cell title="Found a bug? technical@themeparkshark.com" />
             </Section>
             <Section footer={labels.copyright}>
               <Cell

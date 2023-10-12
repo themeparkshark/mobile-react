@@ -22,7 +22,7 @@ export default {
   },
   assetBundlePatterns: ['**/*'],
   ios: {
-    buildNumber: '20231007.4',
+    buildNumber: '20231007.5',
     bitcode: 'Debug',
     usesAppleSignIn: true,
     bundleIdentifier: 'com.tomhartley97.mobile-react',
@@ -39,7 +39,6 @@ export default {
     eas: {
       projectId: '38c3f46e-df32-43a2-8272-44b9556aaa36',
     },
-    pusherKey: process.env.PUSHER_KEY,
   },
   plugins: [
     [
