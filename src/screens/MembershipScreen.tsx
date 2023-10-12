@@ -1,7 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import {
-  ImageBackground,
+  ImageBackground, SafeAreaView,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -24,10 +24,9 @@ export default function MembershipScreen() {
     });
 
     const offerings = await Purchases.getOfferings();
+    console.log(offerings.current);
     setCurrentOffering(offerings.current);
   }, []);
-
-  console.log(currentOffering);
 
   return (
     <>
@@ -45,141 +44,145 @@ export default function MembershipScreen() {
             justifyContent: 'center',
           }}
         >
-          <ScrollView
-            style={{
-              flex: 1,
-              padding: 32,
-            }}
-          >
+          <ScrollView>
             <View
               style={{
-                backgroundColor: 'rgba(255, 255, 255, .8)',
-                marginLeft: 'auto',
-                marginRight: 'auto',
-                padding: 24,
-                borderRadius: 5,
-                marginBottom: 32,
+                paddingTop: 32,
+                paddingLeft: 16,
+                paddingRight: 16,
+                paddingBottom: 32,
               }}
             >
-              <Text
-                style={{
-                  fontFamily: 'Knockout',
-                  textTransform: 'uppercase',
-                  textAlign: 'center',
-                  fontSize: 32,
-                  paddingBottom: 16,
-                }}
-              >
-                {labels.membership}
-              </Text>
-              {labels?.membership_benefits.map((benefit, index) => {
-                return (
-                  <View
-                    key={index}
-                    style={{
-                      paddingBottom: 16,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontFamily: 'Knockout',
-                        fontSize: 16,
-                      }}
-                    >
-                      {benefit}
-                    </Text>
-                  </View>
-                );
-              })}
               <View
                 style={{
-                  width: '75%',
+                  backgroundColor: 'rgba(255, 255, 255, .8)',
                   marginLeft: 'auto',
                   marginRight: 'auto',
-                  paddingTop: 8,
-                }}
-              >
-                <YellowButton onPress={() => {}} text="Start Free Trial" />
-              </View>
-              <View
-                style={{
-                  paddingTop: 24,
+                  padding: 24,
+                  borderRadius: 5,
+                  marginBottom: 32,
                 }}
               >
                 <Text
                   style={{
                     fontFamily: 'Knockout',
-                    fontSize: 16,
+                    textTransform: 'uppercase',
+                    textAlign: 'center',
+                    fontSize: 32,
+                    paddingBottom: 16,
+                  }}
+                >
+                  {labels.membership}
+                </Text>
+                {labels?.membership_benefits.map((benefit, index) => {
+                  return (
+                    <View
+                      key={index}
+                      style={{
+                        paddingBottom: 16,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: 'Knockout',
+                          fontSize: 16,
+                        }}
+                      >
+                        {benefit}
+                      </Text>
+                    </View>
+                  );
+                })}
+                <View
+                  style={{
+                    width: '75%',
+                    marginLeft: 'auto',
+                    marginRight: 'auto',
+                    paddingTop: 8,
+                  }}
+                >
+                  <YellowButton onPress={() => {}} text="Start Free Trial" />
+                </View>
+                <View
+                  style={{
+                    paddingTop: 24,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: 'Knockout',
+                      fontSize: 16,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {labels.purchase_membership_additional}
+                  </Text>
+                </View>
+              </View>
+              <View>
+                <View
+                  style={{
+                    paddingBottom: 24,
+                    width: '50%',
+                    marginLeft: 'auto',
+                    marginRight: 'auto',
+                  }}
+                >
+                  <YellowButton onPress={() => {}} text={labels.restore_purchases} />
+                </View>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontFamily: 'Knockout',
+                    color: 'rgba(255, 255, 255, .7)',
                     textAlign: 'center',
                   }}
                 >
-                  {labels.purchase_membership_additional}
+                  {labels.membership_terms}
                 </Text>
-              </View>
-            </View>
-            <View>
-              <View
-                style={{
-                  paddingBottom: 24,
-                  width: '50%',
-                  marginLeft: 'auto',
-                  marginRight: 'auto',
-                }}
-              >
-                <YellowButton onPress={() => {}} text="Restore purchases" />
-              </View>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontFamily: 'Knockout',
-                  color: 'rgba(255, 255, 255, .7)',
-                  textAlign: 'center',
-                }}
-              >
-                {labels.membership_terms}
-              </Text>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  paddingTop: 24,
-                }}
-              >
-                <View>
-                  <TouchableOpacity
-                    onPress={() => {
-                      WebBrowser.openBrowserAsync(urls.terms);
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 18,
-                        fontFamily: 'Knockout',
-                        color: 'rgba(255, 255, 255, .7)',
-                        textAlign: 'center',
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    paddingTop: 24,
+                  }}
+                >
+                  <View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        WebBrowser.openBrowserAsync(urls.terms);
                       }}
                     >
-                      Terms
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <View>
-                  <TouchableOpacity
-                    onPress={() => {
-                      WebBrowser.openBrowserAsync(urls.privacy_policy);
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 18,
-                        fontFamily: 'Knockout',
-                        color: 'rgba(255, 255, 255, .7)',
-                        textAlign: 'center',
+                      <Text
+                        style={{
+                          fontSize: 18,
+                          fontFamily: 'Knockout',
+                          color: 'rgba(255, 255, 255, .7)',
+                          textAlign: 'center',
+                        }}
+                      >
+                        Terms
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        WebBrowser.openBrowserAsync(urls.privacy_policy);
                       }}
                     >
-                      Privacy Policy
-                    </Text>
-                  </TouchableOpacity>
+                      <Text
+                        style={{
+                          fontSize: 18,
+                          fontFamily: 'Knockout',
+                          color: 'rgba(255, 255, 255, .7)',
+                          textAlign: 'center',
+                        }}
+                      >
+                        Privacy Policy
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </View>

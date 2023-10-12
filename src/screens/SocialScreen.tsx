@@ -148,7 +148,7 @@ export default function SocialScreen({ navigation }) {
                             if (
                               checkPermission(PermissionEnums.BecomeAMember)
                             ) {
-                              //navigation.navigate('Membership');
+                              navigation.navigate('Membership');
                             }
                           },
                           text: 'Membership',
