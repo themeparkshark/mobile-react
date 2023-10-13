@@ -172,6 +172,18 @@ export default function SocialScreen({ navigation }) {
                           permission: PermissionEnums.TradePins,
                         },
                         {
+                          image: require('../../assets/images/screens/explore/base.png'),
+                          onPress: () => {
+                            if (
+                              checkPermission(PermissionEnums.RedeemCoinCodes)
+                            ) {
+                              navigation.navigate('RedeemCoinCode');
+                            }
+                          },
+                          text: 'Redeem',
+                          permission: PermissionEnums.RedeemCoinCodes,
+                        },
+                        {
                           image: require('../../assets/images/screens/social/social_media.png'),
                           onPress: () => {
                             if (checkPermission(PermissionEnums.WatchContent)) {
