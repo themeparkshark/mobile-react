@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import redeemCoinCode from '../api/endpoints/coin-codes/redeemCoinCode';
+import Button from '../components/Button';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
 import { CoinCodeType } from '../models/coin-code-type';
@@ -38,7 +39,23 @@ export default function RedeemCoinCodeScreen() {
 
   return (
     <>
-      <Topbar text="Redeem" showBackButton />
+      <Topbar
+        text="Redeem"
+        showBackButton
+        rightButton={
+          <Button onPress={() => {}}>
+            <Image
+              style={{
+                width: 35,
+                height: 35,
+                alignSelf: 'center',
+              }}
+              contentFit="contain"
+              source={require('../../assets/images/faq.png')}
+            />
+          </Button>
+        }
+      />
       <View
         style={{
           marginTop: -8,
@@ -86,6 +103,7 @@ export default function RedeemCoinCodeScreen() {
               enablesReturnKeyAutomatically
               onSubmitEditing={async ({ nativeEvent }) => {
                 setRedeemedCoinCode(await redeemCoinCode(nativeEvent.text));
+                setCoinCode('');
 
                 await refreshUser();
               }}
