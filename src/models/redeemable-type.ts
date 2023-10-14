@@ -4,6 +4,7 @@ import { KeyType } from './key-type';
 import { SecretTaskType } from './secret-task-type';
 import { TaskType } from './task-type';
 import { VaultType } from './vault-type';
+import {PumpkinType} from "./pumpkin-type";
 
 export interface RedeemableType {
   readonly type: string;
@@ -13,5 +14,6 @@ export interface RedeemableType {
     | TaskType
     | CoinType
     | KeyType
-    | VaultType;
+    | VaultType
+    | PumpkinType;
 }
