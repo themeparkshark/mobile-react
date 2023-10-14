@@ -12,6 +12,7 @@ export interface CrumbContextType {
       readonly pin_required: string;
     };
     readonly labels: {
+      readonly archived_tasks: string;
       readonly checking_again: string;
       readonly choose_daily_gift: string;
       readonly clearance: string;
@@ -28,8 +29,10 @@ export interface CrumbContextType {
       readonly purchase_membership_additional: string;
       readonly read_more: string;
       readonly restore_purchases: string;
+      readonly secret_tasks: string;
       readonly slow_connectivity: string;
       readonly subscribed_user: string;
+      readonly tasks: string;
       readonly task_list_modal_heading: string;
       readonly task_unlocks: string;
       readonly username_approval: string;
