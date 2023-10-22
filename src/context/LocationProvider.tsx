@@ -15,7 +15,7 @@ import { ParkType } from '../models/park-type';
 import { AuthContext } from './AuthProvider';
 
 export interface LocationContextType {
-  readonly location?: LocationType;
+  readonly location: LocationType;
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
   readonly setPark: (park: ParkType | undefined) => void;
@@ -28,7 +28,7 @@ export const LocationContext = createContext<LocationContextType>(
 );
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [location, setLocation] = useState<LocationType | undefined>();
+  const [location, setLocation] = useState<LocationType>();
   const [park, setPark] = useState<ParkType>();
   const { user } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
