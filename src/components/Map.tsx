@@ -11,18 +11,17 @@ export default function Map({ children }: { readonly children: ReactNode[] }) {
 
   useEffect(() => {
     Magnetometer.addListener((result) => {
-      const angle = calculateAzimuth(result.x, result.y);
-      setAzimuth(angle);
+      setAzimuth(calculateAzimuth(result.x, result.y));
     });
 
-    Magnetometer.setUpdateInterval(5000);
+    Magnetometer.setUpdateInterval(1000);
 
     return () => {
       Magnetometer.removeAllListeners();
     };
   }, []);
 
-  const calculateAzimuth = (x, y) => {
+  const calculateAzimuth = (x: number, y: number) => {
     let azimuth = Math.atan2(y, x) * (180 / Math.PI);
 
     if (azimuth < 0) {
@@ -62,8 +61,8 @@ export default function Map({ children }: { readonly children: ReactNode[] }) {
       initialRegion={{
         latitude: location.latitude,
         longitude: location.longitude,
-        latitudeDelta: 0.0007,
-        longitudeDelta: 0.0007,
+        latitudeDelta: 0.002,
+        longitudeDelta: 0.002,
       }}
     >
       {children}
