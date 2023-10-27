@@ -12,48 +12,57 @@ export default function Entry({ entry }: { readonly entry: EntryType }) {
       : dayjs(entry.date).startOf('second').fromNow();
 
   return (
-    <TouchableOpacity
+    <View
       style={{
-        marginBottom: 32,
-        flexDirection: 'row',
+        paddingLeft: 16,
+        paddingRight: 16,
       }}
-      onPress={() => WebBrowser.openBrowserAsync(entry.url)}
     >
-      <View
+      <TouchableOpacity
         style={{
-          flex: 1,
+          marginBottom: 32,
+          flexDirection: 'row',
         }}
+        onPress={() => WebBrowser.openBrowserAsync(entry.url)}
       >
-        <Image
+        {entry.featured_image && (
+          <View
+            style={{
+              flex: 1,
+              marginRight: 16,
+            }}
+          >
+            <Image
+              style={{
+                aspectRatio: 16 / 9,
+                borderRadius: 8,
+              }}
+              source={entry.featured_image}
+              contentFit="cover"
+            />
+          </View>
+        )}
+        <View
           style={{
-            aspectRatio: 16 / 9,
-            borderRadius: 8,
-          }}
-          source={entry.featured_image}
-          contentFit="cover"
-        />
-      </View>
-      <View
-        style={{
-          flex: 1,
-          marginLeft: 16,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 18,
+            flex: 1,
           }}
         >
-          {decode(entry.title)}
-        </Text>
-        <Text
-          style={{
-            marginTop: 8,
-          }}
-        >
-          {date}
-        </Text>
-      </View>
-    </TouchableOpacity>
+          <Text
+            style={{
+              fontSize: 18,
+            }}
+          >
+            {decode(entry.title)}
+          </Text>
+          <Text
+            style={{
+              marginTop: 8,
+            }}
+          >
+            {date}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 }
