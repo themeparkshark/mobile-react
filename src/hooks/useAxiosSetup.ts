@@ -2,9 +2,11 @@ import { AxiosError, AxiosResponse } from 'axios';
 import { useContext, useEffect } from 'react';
 import client from '../api/client';
 import { BroadcastContext } from '../context/BroadcastProvider';
+import { AuthContext } from '../context/AuthProvider';
 
 export const useAxiosSetup = () => {
   const { enqueue } = useContext(BroadcastContext);
+  const { logout } = useContext(AuthContext);
 
   useEffect(() => {
     const interceptorId = client.interceptors.response.use(
@@ -16,6 +18,10 @@ export const useAxiosSetup = () => {
         return response;
       },
       (error: AxiosError) => {
+        if (error?.response?.status === 401) {
+          logout();
+        }
+
         return Promise.reject(error);
       }
     );
