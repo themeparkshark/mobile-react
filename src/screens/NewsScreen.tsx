@@ -1,7 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import axios from 'axios';
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
@@ -23,7 +23,10 @@ export default function NewsScreen() {
             return {
               id: item.id,
               date: item.date_gmt,
-              featured_image: item._embedded['wp:featuredmedia'] ? item._embedded['wp:featuredmedia'][0].media_details.sizes.medium.source_url : null,
+              featured_image: item._embedded['wp:featuredmedia']
+                ? item._embedded['wp:featuredmedia'][0].media_details.sizes
+                    .medium.source_url
+                : null,
               title: item.title.rendered,
               url: item.link,
             };
@@ -56,9 +59,7 @@ export default function NewsScreen() {
         >
           <FlashList
             data={entries}
-            renderItem={({ item }) => (
-              <Entry key={item.id} entry={item} />
-            )}
+            renderItem={({ item }) => <Entry key={item.id} entry={item} />}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }

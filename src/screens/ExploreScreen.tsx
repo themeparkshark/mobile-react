@@ -41,7 +41,7 @@ export default function ExploreScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/halloween.mp3'));
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
     }, [])
   );
 
