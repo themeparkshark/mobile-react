@@ -65,9 +65,13 @@ export default function PendingFriendRequestsScreen() {
                       data={friendRequests}
                       keyExtractor={(user) => user.id.toString()}
                       renderItem={({ item }) => (
-                        <FriendUser isPending user={item} onAccept={async () => {
-                          await requestFriendRequests();
-                        }} />
+                        <FriendUser
+                          isPending
+                          user={item}
+                          onAccept={async () => {
+                            await requestFriendRequests();
+                          }}
+                        />
                       )}
                       estimatedItemSize={80}
                     />

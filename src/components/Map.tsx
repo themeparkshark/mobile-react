@@ -1,13 +1,18 @@
-import {ReactNode, useContext, useEffect, useRef, useState} from 'react';
-import { Dimensions } from 'react-native';
-import MapView from 'react-native-maps';
-import { LocationContext } from '../context/LocationProvider';
+import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
+import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Magnetometer } from 'expo-sensors';
+import { ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { Dimensions, Pressable, View } from 'react-native';
+import MapView from 'react-native-maps';
+import config from '../config';
+import { LocationContext } from '../context/LocationProvider';
 
 export default function Map({ children }: { readonly children: ReactNode[] }) {
   const { location } = useContext(LocationContext);
   const mapRef = useRef<MapView>(null);
   const [azimuth, setAzimuth] = useState(0);
+  const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
 
   useEffect(() => {
     Magnetometer.addListener((result) => {
@@ -32,40 +37,71 @@ export default function Map({ children }: { readonly children: ReactNode[] }) {
   };
 
   useEffect(() => {
-    if (!mapRef?.current) {
+    if (!mapRef?.current || !focusedOnUser) {
       return;
     }
 
     mapRef.current.animateCamera({
       center: location,
       heading: azimuth,
-    })
-  }, [location, mapRef, azimuth]);
+      altitude: 200,
+    });
+  }, [
+    focusedOnUser,
+    location?.latitude,
+    location?.longitude,
+    mapRef.current,
+    azimuth,
+  ]);
 
   return (
-    <MapView
-      ref={mapRef}
+    <View
       style={{
-        width: Dimensions.get('window').width,
-        height: '100%',
-      }}
-      showsUserLocation={true}
-      showsIndoors={false}
-      showsCompass={false}
-      zoomEnabled={false}
-      scrollEnabled={false}
-      rotateEnabled={false}
-      pitchEnabled={false}
-      loadingEnabled={true}
-      userInterfaceStyle="light"
-      initialRegion={{
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0.002,
-        longitudeDelta: 0.002,
+        position: 'relative',
+        flex: 1,
       }}
     >
-      {children}
-    </MapView>
+      <View
+        style={{
+          position: 'absolute',
+          top: 48,
+          right: 16,
+          zIndex: 10,
+        }}
+      >
+        <Pressable
+          onPress={() => setFocusedOnUser(true)}
+          style={{
+            padding: 12,
+          }}
+        >
+          <FontAwesomeIcon
+            icon={focusedOnUser ? faSolidArrow : faLocationArrow}
+            size={30}
+            color={config.primary}
+          />
+        </Pressable>
+      </View>
+      <MapView
+        ref={mapRef}
+        style={{
+          width: Dimensions.get('window').width,
+          height: '100%',
+        }}
+        showsUserLocation={true}
+        showsIndoors={false}
+        showsCompass={false}
+        zoomEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        loadingEnabled={true}
+        userInterfaceStyle="light"
+        onPanDrag={() => {
+          setFocusedOnUser(false);
+        }}
+      >
+        {children}
+      </MapView>
+    </View>
   );
 }

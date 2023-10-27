@@ -47,8 +47,7 @@ export default function ExploreScreen() {
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
-    const response = await currentRedeemables();
-    setRedeemables(response);
+    setRedeemables(await currentRedeemables());
   };
 
   useAsyncEffect(async () => {
@@ -63,12 +62,11 @@ export default function ExploreScreen() {
   }, [park?.id]);
 
   useAsyncEffect(async () => {
-    if (!location || !redeemables) {
+    if (!location?.latitude || !location?.longitude || !redeemables) {
       return;
     }
 
-    const response = await checkForRedeemable();
-    setActiveRedeemable(response);
+    setActiveRedeemable(await checkForRedeemable());
   }, [location?.latitude, location?.longitude, redeemables]);
 
   return (
