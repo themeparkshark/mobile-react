@@ -19,7 +19,7 @@ export default function Map({ children }: { readonly children: ReactNode[] }) {
       setAzimuth(calculateAzimuth(result.x, result.y));
     });
 
-    Magnetometer.setUpdateInterval(1000);
+    Magnetometer.setUpdateInterval(250);
 
     return () => {
       Magnetometer.removeAllListeners();
