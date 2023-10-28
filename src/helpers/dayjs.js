@@ -25,5 +25,5 @@ export default function customDayJs(args) {
     },
   });
 
-  return dayjs(args).tz('America/New_York');
+  return dayjs(args);
 }
