@@ -12,7 +12,7 @@ import { UserType } from '../../models/user-type';
 export default function Suggestions() {
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const { warnings } = useCrumbs();
+  const { labels, warnings } = useCrumbs();
   const [search, setSearch] = useState<string>('');
   const setSearchDebounced = useDebounce(setSearch, 500);
   const [searchResults, setSearchResults] = useState<UserType[]>([]);
@@ -66,7 +66,7 @@ export default function Suggestions() {
                 setLoading(false);
               }}
               maxLength={14}
-              placeholder="Search for a user"
+              placeholder={labels.search_for_a_user}
               returnKeyType="search"
               enablesReturnKeyAutomatically
               autoCorrect={false}

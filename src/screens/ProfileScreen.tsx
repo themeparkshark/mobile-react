@@ -49,7 +49,7 @@ export default function ProfileScreen() {
   const { refreshNotificationCount, notificationCount } =
     useContext(NotificationContext);
   const { playMusic } = useContext(MusicContext);
-  const { warnings } = useCrumbs();
+  const { warnings, labels } = useCrumbs();
 
   const requestFriends = () => {
     getFriends(1, 3).then((response) => setFriends(response));
@@ -80,7 +80,7 @@ export default function ProfileScreen() {
           onPress: () => {
             RootNavigation.navigate('PinCollections');
           },
-          text: 'Pin Packs',
+          text: labels.pin_packs,
         },
         ...stores.map((store) => {
           return {
@@ -192,9 +192,9 @@ export default function ProfileScreen() {
                 <UserButtons buttons={buttons} />
                 {user.became_member_at && <Subscribed />}
                 {user.verified_at && <Verified />}
-                <Heading text="Statistics" />
+                <Heading text={labels.your_statistics} />
                 <Stats user={user} />
-                <Heading text="Your Friends" />
+                <Heading text={labels.your_friends} />
                 {friends && friends.length > 0 && (
                   <>
                     <View
@@ -233,7 +233,7 @@ export default function ProfileScreen() {
                         onPress={() => {
                           RootNavigation.navigate('Friends');
                         }}
-                        text="View all friends"
+                        text={labels.view_all_friends}
                       />
                     </View>
                   </>
@@ -263,12 +263,12 @@ export default function ProfileScreen() {
                         onPress={() => {
                           RootNavigation.navigate('Friends');
                         }}
-                        text="Find friends"
+                        text={labels.find_friends}
                       />
                     </View>
                   </>
                 )}
-                <Heading text="Your Parks" />
+                <Heading text={labels.your_parks} />
                 <VisitedParks parks={parks} user={user} />
               </View>
             </View>

@@ -75,7 +75,7 @@ export default function WelcomeScreen({ navigation }) {
             textTransform: 'uppercase',
           }}
         >
-          Welcome!
+          {labels.welcome}
         </Text>
         <TextInput
           style={{
@@ -96,7 +96,7 @@ export default function WelcomeScreen({ navigation }) {
           onChangeText={setUsername}
           value={username}
           maxLength={12}
-          placeholder="Enter a username"
+          placeholder={labels.enter_a_username}
           returnKeyType="next"
           enablesReturnKeyAutomatically
           onSubmitEditing={async ({ nativeEvent }) => {

@@ -1,8 +1,8 @@
 import { AxiosError, AxiosResponse } from 'axios';
 import { useContext, useEffect } from 'react';
 import client from '../api/client';
-import { BroadcastContext } from '../context/BroadcastProvider';
 import { AuthContext } from '../context/AuthProvider';
+import { BroadcastContext } from '../context/BroadcastProvider';
 
 export const useAxiosSetup = () => {
   const { enqueue } = useContext(BroadcastContext);

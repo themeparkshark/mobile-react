@@ -1,8 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { useCallback, useContext, useState } from 'react';
-import { Image, View, Text } from 'react-native';
-import { Marker } from 'react-native-maps';
+import { Image, Text, View } from 'react-native';
+import { Callout, Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Avatar from '../components/Avatar';
@@ -26,7 +26,6 @@ import NotAtPark from './ExploreScreen/NotAtPark';
 import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import Pumpkin from './ExploreScreen/Pumpkin';
-import { Callout } from 'react-native-maps';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 

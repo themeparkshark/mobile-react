@@ -13,6 +13,7 @@ import {
 import createComment from '../api/endpoints/comments/create';
 import config from '../config';
 import { ForumContext } from '../context/ForumProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { ThreadType } from '../models/thread-type';
 
 export default function CreateReply({
@@ -27,6 +28,7 @@ export default function CreateReply({
   const [content, setContent] = useState<string>('');
   const refInput = useRef(null);
   const [keyboardHeight, setKeyboardHeight] = useState(new Animated.Value(0));
+  const { labels } = useCrumbs();
 
   useEffect(() => {
     if (!activeComment || !refInput) {
@@ -119,7 +121,7 @@ export default function CreateReply({
             placeholderTextColor="rgba(0, 0, 0, .5)"
             onChangeText={setContent}
             value={content}
-            placeholder="Add a comment"
+            placeholder={labels.add_a_comment}
             multiline
             onBlur={() => setActiveComment(undefined)}
           />
@@ -156,7 +158,7 @@ export default function CreateReply({
               >
                 <View>
                   <Text style={{ textAlign: 'center', color: 'white' }}>
-                    Reply
+                    {labels.reply}
                   </Text>
                 </View>
               </TouchableOpacity>

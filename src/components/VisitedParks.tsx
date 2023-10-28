@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { vsprintf } from 'sprintf-js';
 import useCrumbs from '../hooks/useCrumbs';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
@@ -13,7 +14,7 @@ export default function VisitedParks({
   readonly parks: ParkType[];
   readonly user: UserType;
 }) {
-  const { warnings } = useCrumbs();
+  const { labels, warnings } = useCrumbs();
 
   return (
     <View>
@@ -81,7 +82,9 @@ export default function VisitedParks({
                       fontSize: 16,
                     }}
                   >
-                    {park.completion_rate}% complete
+                    {vsprintf(labels.park_completion_rate, [
+                      park.completion_rate,
+                    ])}
                   </Text>
                 </View>
               </TouchableOpacity>

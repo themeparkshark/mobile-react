@@ -1,8 +1,12 @@
 import { Text, View } from 'react-native';
+import { vsprintf } from 'sprintf-js';
+import useCrumbs from '../hooks/useCrumbs';
 import { UserType } from '../models/user-type';
 import Progress from './Progress';
 
 export default function Experience({ user }: { readonly user: UserType }) {
+  const { labels } = useCrumbs();
+
   return (
     <>
       <Text
@@ -14,7 +18,7 @@ export default function Experience({ user }: { readonly user: UserType }) {
           paddingBottom: 8,
         }}
       >
-        Level {user.experience_level.level}
+        {vsprintf(labels.experience_level, [user.experience_level.level])}
       </Text>
       <View
         style={{
@@ -34,7 +38,10 @@ export default function Experience({ user }: { readonly user: UserType }) {
           fontSize: 20,
         }}
       >
-        {user.experience} / {user.experience_level.experience} XP
+        {vsprintf(labels.experience, [
+          user.experience,
+          user.experience_level.experience,
+        ])}
       </Text>
     </>
   );
