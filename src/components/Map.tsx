@@ -11,30 +11,7 @@ import { LocationContext } from '../context/LocationProvider';
 export default function Map({ children }: { readonly children: ReactNode[] }) {
   const { location } = useContext(LocationContext);
   const mapRef = useRef<MapView>(null);
-  const [azimuth, setAzimuth] = useState(0);
   const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
-
-  useEffect(() => {
-    Magnetometer.addListener((result) => {
-      setAzimuth(calculateAzimuth(result.x, result.y));
-    });
-
-    Magnetometer.setUpdateInterval(250);
-
-    return () => {
-      Magnetometer.removeAllListeners();
-    };
-  }, []);
-
-  const calculateAzimuth = (x: number, y: number) => {
-    let azimuth = Math.atan2(y, x) * (180 / Math.PI);
-
-    if (azimuth < 0) {
-      azimuth += 360;
-    }
-
-    return Math.round(azimuth);
-  };
 
   useEffect(() => {
     if (!mapRef?.current || !focusedOnUser) {
@@ -43,7 +20,6 @@ export default function Map({ children }: { readonly children: ReactNode[] }) {
 
     mapRef.current.animateCamera({
       center: location,
-      heading: azimuth,
       altitude: 200,
     });
   }, [
@@ -51,7 +27,6 @@ export default function Map({ children }: { readonly children: ReactNode[] }) {
     location?.latitude,
     location?.longitude,
     mapRef.current,
-    azimuth,
   ]);
 
   return (
@@ -91,7 +66,6 @@ export default function Map({ children }: { readonly children: ReactNode[] }) {
         showsUserLocation={true}
         showsIndoors={false}
         showsCompass={false}
-        zoomEnabled={false}
         rotateEnabled={false}
         pitchEnabled={false}
         loadingEnabled={true}

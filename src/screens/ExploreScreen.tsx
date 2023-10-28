@@ -286,7 +286,13 @@ export default function ExploreScreen() {
                   resizeMode="contain"
                 />
                 <Callout>
-                  <Text>{task.name}</Text>
+                  <Text
+                    style={{
+                      textAlign: 'center',
+                    }}
+                  >
+                    {task.name}
+                  </Text>
                 </Callout>
               </Marker>
             );
