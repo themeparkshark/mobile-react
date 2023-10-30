@@ -1,8 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { useCallback, useContext, useState } from 'react';
-import { Image, View } from 'react-native';
-import { Marker } from 'react-native-maps';
+import { Image, Text, View } from 'react-native';
+import { Callout, Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 import Avatar from '../components/Avatar';
@@ -41,14 +41,13 @@ export default function ExploreScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/halloween.mp3'));
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
     }, [])
   );
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
-    const response = await currentRedeemables();
-    setRedeemables(response);
+    setRedeemables(await currentRedeemables());
   };
 
   useAsyncEffect(async () => {
@@ -63,21 +62,20 @@ export default function ExploreScreen() {
   }, [park?.id]);
 
   useAsyncEffect(async () => {
-    if (!location || !redeemables) {
+    if (!location?.latitude || !location?.longitude || !redeemables) {
       return;
     }
 
-    const response = await checkForRedeemable();
-    setActiveRedeemable(response);
+    setActiveRedeemable(await checkForRedeemable());
   }, [location?.latitude, location?.longitude, redeemables]);
 
   return (
     <Wrapper>
       <Topbar
-        parkCoin={park?.coin_url}
-        showCoins
-        showKeys
-        showPumpkins={theme?.show_pumpkin_currency}
+        parkCoin={user && park?.coin_url}
+        showCoins={!!user}
+        showKeys={!!user}
+        showPumpkins={!!user && theme?.show_pumpkin_currency}
         parkCoins={park?.park_coins_count}
       />
       {!user && <NotSignedIn />}
@@ -287,6 +285,15 @@ export default function ExploreScreen() {
                   }}
                   resizeMode="contain"
                 />
+                <Callout>
+                  <Text
+                    style={{
+                      textAlign: 'center',
+                    }}
+                  >
+                    {task.name}
+                  </Text>
+                </Callout>
               </Marker>
             );
           })}

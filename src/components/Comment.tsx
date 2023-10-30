@@ -6,6 +6,7 @@ import { useAsyncEffect } from 'rooks';
 import getChildren from '../api/endpoints/comments/getChildren';
 import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
+import useCrumbs from '../hooks/useCrumbs';
 import { CommentType } from '../models/comment-type';
 import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
@@ -25,6 +26,7 @@ export default function Comment({
   const [canLoadMore, setCanLoadMore] = useState<boolean>(
     comment.children_count > childrenLimit
   );
+  const { labels } = useCrumbs();
 
   useAsyncEffect(async () => {
     if (page <= 1) {
@@ -134,7 +136,7 @@ export default function Comment({
                   textAlign: 'center',
                 }}
               >
-                Load more replies
+                {labels.load_more_replies}
               </Text>
             </TouchableOpacity>
           )}

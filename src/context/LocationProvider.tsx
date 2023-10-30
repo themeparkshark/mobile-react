@@ -15,7 +15,7 @@ import { ParkType } from '../models/park-type';
 import { AuthContext } from './AuthProvider';
 
 export interface LocationContextType {
-  readonly location?: LocationType;
+  readonly location: LocationType | undefined;
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
   readonly setPark: (park: ParkType | undefined) => void;
