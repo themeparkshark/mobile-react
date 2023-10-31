@@ -1,26 +1,23 @@
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 import {
-  Alert,
   ImageBackground,
-  SafeAreaView,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import {adapty, AdaptyPaywallProduct} from "react-native-adapty";
+import { adapty, AdaptyPaywallProduct } from 'react-native-adapty';
 import { useAsyncEffect } from 'rooks';
+import { vsprintf } from 'sprintf-js';
+import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import YellowButton from '../components/YellowButton';
 import useCrumbs from '../hooks/useCrumbs';
-import { vsprintf } from 'sprintf-js';
-import Loading from "../components/Loading";
 
 export default function MembershipScreen() {
   const { labels, urls } = useCrumbs();
-  const [product, setProduct] =
-    useState<AdaptyPaywallProduct>();
+  const [product, setProduct] = useState<AdaptyPaywallProduct>();
   const [loading, setLoading] = useState<boolean>(true);
 
   useAsyncEffect(async () => {
