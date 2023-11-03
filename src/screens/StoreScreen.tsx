@@ -1,13 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, ScrollView, Text, View, } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getStore from '../api/endpoints/stores/get';
@@ -81,9 +75,7 @@ export default function StoreScreen({ route }) {
         rightButton={
           <HelpShiftButton
             url={
-              currentStore?.is_secret_store
-                ? urls.help.secret_store_screen
-                : urls.help.store_screen
+              currentStore?.helpshift_url ?? urls.help.store_screen
             }
           />
         }

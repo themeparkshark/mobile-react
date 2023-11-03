@@ -1,9 +1,11 @@
 import { FlashList } from '@shopify/flash-list';
 import { useContext, useEffect, useLayoutEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getNotifications from '../api/endpoints/me/notifications';
+import markAllAsRead from '../api/endpoints/me/notifications/markAllAsRead';
 import updateLastReadNotificationsAt from '../api/endpoints/me/update-last-read-notifications-at';
+import Button from '../components/Button';
 import Loading from '../components/Loading';
 import Notification from '../components/Notification';
 import Topbar from '../components/Topbar';
@@ -42,7 +44,32 @@ export default function NewsScreen() {
 
   return (
     <>
-      <Topbar text="Notifications" showBackButton />
+      <Topbar
+        text="Notifications"
+        showBackButton
+        rightButton={
+          <Button
+            onPress={async () => {
+              await markAllAsRead();
+              setLoading(true);
+              setNotifications([]);
+              setPage(1);
+              await fetchNotifications(1);
+              setLoading(false);
+            }}
+          >
+            <Image
+              style={{
+                width: 35,
+                height: 35,
+                alignSelf: 'center',
+              }}
+              resizeMode="contain"
+              source={require('../../assets/images/screens/notifications/mark_all_as_read.png')}
+            />
+          </Button>
+        }
+      />
       {loading && <Loading />}
       {!loading && (
         <View

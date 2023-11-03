@@ -10,7 +10,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { vsprintf } from 'sprintf-js';
 import updateUser from '../api/endpoints/me/update-user';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -74,7 +73,7 @@ export default function WelcomeScreen({ navigation }) {
             textTransform: 'uppercase',
           }}
         >
-          Welcome!
+          {labels.welcome}
         </Text>
         <TextInput
           style={{
@@ -95,7 +94,7 @@ export default function WelcomeScreen({ navigation }) {
           onChangeText={setUsername}
           value={username}
           maxLength={12}
-          placeholder="Enter a username"
+          placeholder={labels.enter_a_username}
           returnKeyType="next"
           enablesReturnKeyAutomatically
           onSubmitEditing={async ({ nativeEvent }) => {
@@ -105,26 +104,11 @@ export default function WelcomeScreen({ navigation }) {
 
             await refreshUser();
 
-            navigation.navigate('Explore');
+            navigation.navigate('Membership', {
+              intro: true,
+            });
           }}
         />
-        <Text
-          style={{
-            paddingTop: 32,
-            textAlign: 'center',
-            color: 'white',
-            fontFamily: 'Knockout',
-            fontSize: 18,
-            textShadowColor: 'rgba(0, 0, 0, .5)',
-            textShadowOffset: {
-              width: 1,
-              height: 1,
-            },
-            textShadowRadius: 0,
-          }}
-        >
-          {vsprintf(labels.username_approval, [user.id])}
-        </Text>
         <View
           style={{
             width: '100%',

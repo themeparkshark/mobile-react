@@ -1,20 +1,9 @@
-import { Pusher, PusherEvent } from '@pusher/pusher-websocket-react-native';
-import { delay } from 'lodash';
-import {
-  createContext,
-  FC,
-  ReactNode,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
-import { useEffectOnceWhen, useIntervalWhen, useQueueState } from 'rooks';
-import client from '../api/client';
-import config from '../config';
-import { AuthContext } from './AuthProvider';
+import { createContext, FC, ReactNode, useEffect, useState } from 'react';
+import { useIntervalWhen, useQueueState } from 'rooks';
 
 export interface BroadcastContextType {
   readonly activeBroadcast: string | undefined;
+  readonly enqueue: (messages: string[]) => void;
 }
 
 export const BroadcastContext = createContext<BroadcastContextType>(
@@ -25,8 +14,6 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [list, { enqueue, dequeue, peek, length }] = useQueueState<string>([]);
-  const { user, isReady } = useContext(AuthContext);
-  const pusher = Pusher.getInstance();
   const [message, setMessage] = useState<string>();
 
   useEffect(() => {
@@ -35,43 +22,23 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
     }
   }, [message]);
 
-  useEffectOnceWhen(async () => {
-    await pusher.init({
-      apiKey: config.pusherKey,
-      cluster: 'mt1',
-      onAuthorizer: async (channelName, socketId) => {
-        const { data } = await client.post('/broadcasting/auth', {
-          channel_name: channelName,
-          socket_id: socketId,
-        });
-
-        return data;
-      },
-    });
-
-    await pusher.connect();
-    await pusher.subscribe({
-      channelName: `private-App.Models.User.${user?.id}`,
-      onEvent: (event: PusherEvent) => {
-        delay(() => {
-          setMessage(JSON.parse(event.data).message);
-        }, 1000);
-      },
-    });
-  }, !!(isReady && user));
-
   useIntervalWhen(
     () => {
       dequeue();
     },
     5250,
-    !!length
+    Boolean(length)
   );
 
   return (
     <BroadcastContext.Provider
       value={{
         activeBroadcast: peek(),
+        enqueue: (messages) => {
+          messages.forEach((message) => {
+            setMessage(message);
+          });
+        },
       }}
     >
       {children}

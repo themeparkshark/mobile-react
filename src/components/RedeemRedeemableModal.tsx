@@ -6,6 +6,7 @@ import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
 import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
 import completeTask from '../api/endpoints/me/tasks/complete-task';
+import { AuthContext } from '../context/AuthProvider';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -35,9 +36,14 @@ export default function RedeemRedeemableModal({
   readonly onPress: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
+  const { user } = useContext(AuthContext);
   const progress = useRef(new Animated.Value(0)).current;
-  const [doubleXP, setDoubleXP] = useState<boolean>(false);
-  const [doubleCoins, setDoubleCoins] = useState<boolean>(false);
+  const [doubleXP, setDoubleXP] = useState<boolean>(
+    (user && user.is_subscribed) ?? false
+  );
+  const [doubleCoins, setDoubleCoins] = useState<boolean>(
+    (user && user.is_subscribed) ?? false
+  );
 
   const backgrounds = {
     task: '#0788e4',
@@ -79,6 +85,10 @@ export default function RedeemRedeemableModal({
       animationOut="zoomOut"
       swipeDirection="down"
       isVisible={open}
+      onModalHide={() => {
+        setDoubleXP(false);
+        setDoubleCoins(false);
+      }}
       onSwipeComplete={() => close()}
       onModalWillHide={() => {
         playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
@@ -193,7 +203,7 @@ export default function RedeemRedeemableModal({
                     task: (redeemable.model as SecretTaskType | TaskType).name,
                     secret_task: (redeemable.model as SecretTaskType | TaskType)
                       .name,
-                    coin: `${(redeemable.model as CoinType).coins} Shark Coins`,
+                    coin: `${(redeemable.model as CoinType).coins} Coins`,
                     item: (redeemable.model as ItemType).name,
                     pin: (redeemable.model as ItemType).name,
                   }[redeemable.type]
@@ -230,13 +240,15 @@ export default function RedeemRedeemableModal({
                     small
                     type={redeemable.type}
                   />
-                  <View
-                    style={{
-                      marginTop: 8,
-                    }}
-                  >
-                    <WatchAd onClose={() => setDoubleXP(true)} />
-                  </View>
+                  {!doubleXP && (
+                    <View
+                      style={{
+                        marginTop: 8,
+                      }}
+                    >
+                      <WatchAd onClose={() => setDoubleXP(true)} />
+                    </View>
+                  )}
                 </View>
                 {redeemable.type !== 'coin' && (
                   <View
@@ -259,13 +271,15 @@ export default function RedeemRedeemableModal({
                       small
                       type={redeemable.type}
                     />
-                    <View
-                      style={{
-                        marginTop: 8,
-                      }}
-                    >
-                      <WatchAd onClose={() => setDoubleCoins(true)} />
-                    </View>
+                    {!doubleCoins && (
+                      <View
+                        style={{
+                          marginTop: 8,
+                        }}
+                      >
+                        <WatchAd onClose={() => setDoubleCoins(true)} />
+                      </View>
+                    )}
                   </View>
                 )}
                 <View

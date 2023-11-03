@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import Modal from 'react-native-modal';
 import { useAsyncEffect, useTimeoutWhen } from 'rooks';
+import { vsprintf } from 'sprintf-js';
 import getInventory from '../api/endpoints/me/inventory';
 import getPins from '../api/endpoints/me/pins';
 import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
@@ -45,6 +46,7 @@ export default function PinSwap({
   const { setInventory } = useContext(AuthContext);
   const { errors, messages, prompts } = useCrumbs();
   const { playSound } = useContext(SoundEffectContext);
+  const { labels } = useCrumbs();
 
   const requestItems = async (page: number) => {
     const response = await getPins(page);
@@ -168,7 +170,10 @@ export default function PinSwap({
                         fontSize: 24,
                       }}
                     >
-                      Your trade will expire in {minutes}:{zeroPad(seconds)}
+                      {vsprintf(labels.trade_expiration, [
+                        minutes,
+                        zeroPad(seconds),
+                      ])}
                     </Text>
                   );
                 }}
@@ -181,7 +186,7 @@ export default function PinSwap({
                   textAlign: 'center',
                 }}
               >
-                Please select a pin to trade for the {pinSwap.pin.item.name}.
+                {vsprintf(labels.select_a_pin, [pinSwap.pin.item.name])}
               </Text>
             </View>
             <ImageBackground
@@ -343,7 +348,7 @@ export default function PinSwap({
                     },
                   ]);
                 }}
-                text="Trade Pin"
+                text={labels.trade_pin}
               />
             </View>
           </View>

@@ -1,12 +1,5 @@
 import { useContext, useState } from 'react';
-import {
-  Alert,
-  Dimensions,
-  Image,
-  ImageBackground,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, Image, ImageBackground, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useTimeoutWhen } from 'rooks';
 import update from '../api/endpoints/daily-gifts/update';
@@ -82,27 +75,20 @@ export default function DailyGiftModal({
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const { labels } = useCrumbs();
-  const { refreshUser } = useContext(AuthContext);
+  const { user, refreshUser } = useContext(AuthContext);
 
   useTimeoutWhen(
     () => {
       setModalVisible(true);
     },
     5000,
-    !dailyGift.redeemed_at
+    Boolean(!dailyGift.redeemed_at && user?.username)
   );
 
   const claimReward = async () => {
-    Alert.alert('', `You earned ${dailyGift.shark_coins} Shark Coins!`, [
-      {
-        text: 'Ok',
-        onPress: async () => {
-          setModalVisible(false);
-          await update(dailyGift.id);
-          await refreshUser();
-        },
-      },
-    ]);
+    setModalVisible(false);
+    await update(dailyGift.id);
+    await refreshUser();
   };
 
   return (

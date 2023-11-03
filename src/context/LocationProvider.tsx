@@ -1,15 +1,24 @@
-import { createContext, Dispatch, FC, ReactNode, useState } from 'react';
+import { isEqual } from 'lodash';
+import {
+  createContext,
+  FC,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import { useAsyncEffect } from 'rooks';
-import checkForPark from '../helpers/check-for-park';
+import currentPark from '../api/endpoints/me/current-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
+import { AuthContext } from './AuthProvider';
 
 export interface LocationContextType {
-  readonly location?: LocationType;
-  readonly setLocation: Dispatch<any>;
+  readonly location: LocationType | undefined;
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
+  readonly setPark: (park: ParkType | undefined) => void;
   readonly park?: ParkType;
   readonly parkLoaded: boolean;
 }
@@ -19,46 +28,69 @@ export const LocationContext = createContext<LocationContextType>(
 );
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [location, setLocation] = useState<LocationType>();
+  const [location, setLocation] = useState<LocationType | undefined>();
   const [park, setPark] = useState<ParkType>();
+  const { user } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
 
   const requestLocation = async () => {
-    setLocation(await getCurrentLocation());
+    const newLocation = await getCurrentLocation();
+
+    if (isEqual(newLocation, location)) {
+      return;
+    }
+
+    setLocation(newLocation);
   };
 
   const requestPark = async () => {
-    setLoading(true);
-    setPark(await checkForPark());
-    setParkLoaded(true);
-    setLoading(false);
-  };
+    if (!location) {
+      setParkLoaded(true);
+      return;
+    }
 
-  useAsyncEffect(async () => {
-    const interval = setInterval(async () => {
-      if (loading) {
+    try {
+      const newPark = await currentPark(location.latitude, location.longitude);
+
+      if (newPark?.id === park?.id) {
+        setParkLoaded(true);
         return;
       }
 
-      setLoading(true);
+      setPark(newPark);
+    } catch (error) {
+      //
+    }
+
+    setParkLoaded(true);
+  };
+
+  useAsyncEffect(async () => {
+    await requestPark();
+  }, [location]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const interval = setInterval(async () => {
       await requestLocation();
       await requestPark();
-      setLoading(false);
     }, 5000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.id]);
 
   return (
     <LocationContext.Provider
       value={{
         location,
-        setLocation,
         requestLocation,
         requestPark,
         park,
         parkLoaded,
+        setPark,
       }}
     >
       {children}

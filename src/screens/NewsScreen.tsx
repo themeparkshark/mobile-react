@@ -1,93 +1,78 @@
 import { FlashList } from '@shopify/flash-list';
+import axios from 'axios';
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import client from '../api/client-cms';
-import allAnnouncements from '../api/endpoints/announcements/all';
-import Announcement from '../components/Announcement';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
-import { AnnouncementType } from '../models/announcement-type';
 import { EntryType } from '../models/entry-type';
 import Entry from './NewsScreen/Entry';
 
 export default function NewsScreen() {
-  const [announcements, setAnnouncements] = useState<AnnouncementType[]>();
   const [entries, setEntries] = useState<EntryType[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   const fetchEntries = async () => {
-    return client
-      .get('/entries')
-      .then((response) => setEntries(response.data.data));
+    return axios
+      .get('https://themeparkshark.com/wp-json/wp/v2/posts?_embed')
+      .then((response) => {
+        setEntries(
+          response.data.map((item: any) => {
+            return {
+              id: item.id,
+              date: item.date_gmt,
+              featured_image: item._embedded['wp:featuredmedia']
+                ? item._embedded['wp:featuredmedia'][0].media_details.sizes
+                    .medium.source_url
+                : null,
+              title: item.title.rendered,
+              url: item.link,
+            };
+          })
+        );
+      });
   };
 
   useAsyncEffect(async () => {
-    setAnnouncements(await allAnnouncements());
     await fetchEntries();
     setLoading(false);
   }, []);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    async () => {
-      await fetchEntries();
-      setAnnouncements(await allAnnouncements());
-    };
-    setRefreshing(false);
+    setEntries([]);
+    fetchEntries().then(() => setRefreshing(false));
   }, []);
 
   return (
     <Wrapper>
       <Topbar text={'Latest News'} />
       {loading && <Loading />}
-      {!loading && entries?.length && (
-        <ScrollView
+      {!loading && entries.length > 0 && (
+        <View
           style={{
             marginTop: -8,
+            flex: 1,
           }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
         >
-          <View
-            style={{
-              paddingLeft: 16,
-              paddingRight: 16,
-              paddingTop: 32,
-              paddingBottom: 32,
+          <FlashList
+            data={entries}
+            renderItem={({ item }) => <Entry key={item.id} entry={item} />}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            estimatedItemSize={80}
+            keyExtractor={(item) => item.id.toString()}
+            ListFooterComponentStyle={{
+              height: 64,
             }}
-          >
-            <View style={{ marginBottom: 32 }}>
-              <ScrollView horizontal={true}>
-                {announcements?.map((announcement, index) => {
-                  return (
-                    <View
-                      key={index}
-                      style={{ marginLeft: index === 0 ? 0 : 16 }}
-                    >
-                      <Announcement announcement={announcement} />
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            </View>
-            <View style={{ height: '100%' }}>
-              {entries.length && (
-                <FlashList
-                  data={entries}
-                  renderItem={({ item }) => (
-                    <Entry key={item.id} entry={item} />
-                  )}
-                  estimatedItemSize={15}
-                  keyExtractor={(item) => item.id.toString()}
-                />
-              )}
-            </View>
-          </View>
-        </ScrollView>
+            ListHeaderComponentStyle={{
+              height: 32,
+            }}
+          />
+        </View>
       )}
     </Wrapper>
   );

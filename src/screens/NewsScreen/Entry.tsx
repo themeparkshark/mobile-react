@@ -1,58 +1,68 @@
 import { Image } from 'expo-image';
+import * as WebBrowser from 'expo-web-browser';
+import { decode } from 'html-entities';
 import { Text, TouchableOpacity, View } from 'react-native';
 import dayjs from '../../helpers/dayjs';
 import { EntryType } from '../../models/entry-type';
-import * as RootNavigation from '../../RootNavigation';
 
 export default function Entry({ entry }: { readonly entry: EntryType }) {
   const date =
-    dayjs().diff(dayjs(entry.published_at), 'day') >= 7
-      ? dayjs(entry.published_at).format('MMM D, YYYY')
-      : dayjs(entry.published_at).startOf('second').fromNow();
+    dayjs().diff(dayjs(entry.date), 'day') >= 7
+      ? dayjs(entry.date).format('MMM D, YYYY')
+      : dayjs(entry.date).startOf('second').fromNow();
 
   return (
-    <TouchableOpacity
+    <View
       style={{
-        marginBottom: 32,
-        flexDirection: 'row',
+        paddingLeft: 16,
+        paddingRight: 16,
       }}
-      onPress={() => RootNavigation.navigate('Entry', { entry: entry.id })}
     >
-      <View
+      <TouchableOpacity
         style={{
-          flex: 1,
+          marginBottom: 32,
+          flexDirection: 'row',
         }}
+        onPress={() => WebBrowser.openBrowserAsync(entry.url)}
       >
-        <Image
+        {entry.featured_image && (
+          <View
+            style={{
+              flex: 1,
+              marginRight: 16,
+            }}
+          >
+            <Image
+              style={{
+                aspectRatio: 16 / 9,
+                borderRadius: 8,
+              }}
+              source={entry.featured_image}
+              contentFit="cover"
+            />
+          </View>
+        )}
+        <View
           style={{
-            aspectRatio: 16 / 9,
-            borderRadius: 8,
-          }}
-          source={entry.featured_image}
-          contentFit="cover"
-        />
-      </View>
-      <View
-        style={{
-          flex: 1,
-          marginLeft: 16,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 18,
+            flex: 1,
           }}
         >
-          {entry.headline ?? entry.full_headline}
-        </Text>
-        <Text
-          style={{
-            marginTop: 8,
-          }}
-        >
-          {date}
-        </Text>
-      </View>
-    </TouchableOpacity>
+          <Text
+            style={{
+              fontSize: 18,
+            }}
+          >
+            {decode(entry.title)}
+          </Text>
+          <Text
+            style={{
+              marginTop: 8,
+            }}
+          >
+            {date}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 }

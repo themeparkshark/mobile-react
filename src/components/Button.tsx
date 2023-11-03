@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { ReactNode, useContext, useState } from 'react';
 import { Animated, Pressable, View } from 'react-native';
 import {
@@ -7,11 +8,13 @@ import {
 
 export default function Button({
   children,
+  hasPermission = true,
   onPress,
   onPressSound,
   showRedCircle,
 }: {
   children: ReactNode;
+  hasPermission?: boolean;
   onPress: () => void;
   onPressSound?: any;
   showRedCircle?: boolean;
@@ -56,6 +59,20 @@ export default function Button({
           position: 'relative',
         }}
       >
+        {!hasPermission && (
+          <Image
+            source={require('../../assets/images/locked.png')}
+            contentFit="contain"
+            style={{
+              width: 20,
+              height: 20,
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              zIndex: 10,
+            }}
+          />
+        )}
         {showRedCircle && (
           <View
             style={{

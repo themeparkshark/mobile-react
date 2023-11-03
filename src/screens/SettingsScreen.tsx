@@ -1,5 +1,4 @@
 import dayjs from 'dayjs';
-import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { useContext, useEffect, useState } from 'react';
 import {
@@ -21,7 +20,7 @@ export default function SettingsScreen() {
   const { user, logout, refreshUser } = useContext(AuthContext);
   const [enabledMusic, setEnabledMusic] = useState<boolean>();
   const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
-  const { urls } = useCrumbs();
+  const { urls, labels } = useCrumbs();
 
   useEffect(() => {
     setEnabledMusic(user?.enabled_music);
@@ -114,13 +113,10 @@ export default function SettingsScreen() {
                   WebBrowser.openBrowserAsync(urls.privacy_policy);
                 }}
               />
-              <Cell title="Email support: contact@themeparkshark.com" />
+              <Cell title="Need help? contact@themeparkshark.com" />
+              <Cell title="Found a bug? technical@themeparkshark.com" />
             </Section>
-            <Section
-              footer={`© Theme Park Shark ${new Date().getFullYear()} v${
-                Constants.manifest?.version
-              }`}
-            >
+            <Section footer={labels.copyright}>
               <Cell
                 title="Deactivate My Account"
                 titleTextStyle={{
@@ -154,7 +150,9 @@ export default function SettingsScreen() {
                 titleTextStyle={{
                   color: PlatformColor('systemBlue'),
                 }}
-                onPress={() => logout()}
+                onPress={() => {
+                  logout();
+                }}
               />
             </Section>
           </TableView>
