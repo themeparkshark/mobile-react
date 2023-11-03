@@ -86,6 +86,7 @@ export default function DailyGiftModal({
   );
 
   const claimReward = async () => {
+    setModalVisible(false);
     await update(dailyGift.id);
     await refreshUser();
   };
