@@ -35,6 +35,7 @@ import { NotificationContext } from '../context/NotificationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
+import { PermissionEnums } from '../models/permission-enums';
 import { StoreType } from '../models/store-type';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
@@ -49,7 +50,7 @@ export default function ProfileScreen() {
   const { refreshNotificationCount, notificationCount } =
     useContext(NotificationContext);
   const { playMusic } = useContext(MusicContext);
-  const { warnings } = useCrumbs();
+  const { warnings, labels } = useCrumbs();
 
   const requestFriends = () => {
     getFriends(1, 3).then((response) => setFriends(response));
@@ -57,7 +58,7 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/halloween.mp3'));
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
       requestFriends();
       refreshNotificationCount();
     }, [])
@@ -80,18 +81,24 @@ export default function ProfileScreen() {
           onPress: () => {
             RootNavigation.navigate('PinCollections');
           },
-          text: 'Pin Packs',
+          text: labels.pin_packs,
         },
         ...stores.map((store) => {
           return {
             image: store.icon_url,
             onPress: () => {
-              RootNavigation.navigate('Store', {
-                store: store.id,
-              });
+              if (user?.is_subscribed) {
+                RootNavigation.navigate('Store', {
+                  store: store.id,
+                });
+              } else {
+                RootNavigation.navigate('Membership');
+              }
             },
             text: store.name,
-            disabled: store.is_secret_store,
+            permission: store.is_secret_store
+              ? PermissionEnums.ViewSecretStore
+              : undefined,
           };
         }),
       ]);
@@ -190,14 +197,18 @@ export default function ProfileScreen() {
               >
                 <Experience user={user} />
                 <UserButtons buttons={buttons} />
-                {user.became_member_at && <Subscribed />}
+                {user.is_subscribed && <Subscribed />}
                 {user.verified_at && <Verified />}
-                <Heading text="Statistics" />
+                <Heading text={labels.your_statistics} />
                 <Stats user={user} />
-                <Heading text="Your Friends" />
+                <Heading text={labels.your_friends} />
                 {friends && friends.length > 0 && (
                   <>
-                    <View>
+                    <View
+                      style={{
+                        height: friends.length * 80,
+                      }}
+                    >
                       <FlashList
                         contentContainerStyle={{ paddingBottom: 8 }}
                         data={friends}
@@ -229,7 +240,7 @@ export default function ProfileScreen() {
                         onPress={() => {
                           RootNavigation.navigate('Friends');
                         }}
-                        text="View all friends"
+                        text={labels.view_all_friends}
                       />
                     </View>
                   </>
@@ -259,12 +270,12 @@ export default function ProfileScreen() {
                         onPress={() => {
                           RootNavigation.navigate('Friends');
                         }}
-                        text="Find friends"
+                        text={labels.find_friends}
                       />
                     </View>
                   </>
                 )}
-                <Heading text="Your Parks" />
+                <Heading text={labels.your_parks} />
                 <VisitedParks parks={parks} user={user} />
               </View>
             </View>

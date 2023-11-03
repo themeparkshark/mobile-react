@@ -1,7 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import axios from 'axios';
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
@@ -23,9 +23,10 @@ export default function NewsScreen() {
             return {
               id: item.id,
               date: item.date_gmt,
-              featured_image:
-                item._embedded['wp:featuredmedia'][0].media_details.sizes.medium
-                  .source_url,
+              featured_image: item._embedded['wp:featuredmedia']
+                ? item._embedded['wp:featuredmedia'][0].media_details.sizes
+                    .medium.source_url
+                : null,
               title: item.title.rendered,
               url: item.link,
             };
@@ -41,6 +42,7 @@ export default function NewsScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    setEntries([]);
     fetchEntries().then(() => setRefreshing(false));
   }, []);
 
@@ -48,37 +50,29 @@ export default function NewsScreen() {
     <Wrapper>
       <Topbar text={'Latest News'} />
       {loading && <Loading />}
-      {!loading && entries?.length && (
-        <ScrollView
+      {!loading && entries.length > 0 && (
+        <View
           style={{
             marginTop: -8,
+            flex: 1,
           }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
         >
-          <View
-            style={{
-              paddingLeft: 16,
-              paddingRight: 16,
-              paddingTop: 32,
-              paddingBottom: 32,
+          <FlashList
+            data={entries}
+            renderItem={({ item }) => <Entry key={item.id} entry={item} />}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            estimatedItemSize={80}
+            keyExtractor={(item) => item.id.toString()}
+            ListFooterComponentStyle={{
+              height: 64,
             }}
-          >
-            <View style={{ height: '100%' }}>
-              {entries.length && (
-                <FlashList
-                  data={entries}
-                  renderItem={({ item }) => (
-                    <Entry key={item.id} entry={item} />
-                  )}
-                  estimatedItemSize={80}
-                  keyExtractor={(item) => item.id.toString()}
-                />
-              )}
-            </View>
-          </View>
-        </ScrollView>
+            ListHeaderComponentStyle={{
+              height: 32,
+            }}
+          />
+        </View>
       )}
     </Wrapper>
   );

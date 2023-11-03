@@ -4,7 +4,6 @@ import { MascotType } from './mascot-type';
 
 export interface UserType {
   readonly avatar_url: string;
-  readonly became_member_at: string;
   readonly coins: number;
   readonly completed_tasks_count: number;
   readonly created_at: string;
@@ -20,6 +19,7 @@ export interface UserType {
   readonly id: number;
   readonly inventory: InventoryType;
   readonly is_friend: boolean;
+  readonly is_subscribed: boolean;
   readonly keys: number;
   readonly last_read_notifications_at: string;
   readonly mascot: MascotType;
