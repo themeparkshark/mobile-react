@@ -155,7 +155,7 @@ export default function UserScreen({ route, navigation }) {
             >
               <Experience user={currentUser} />
               <UserButtons buttons={buttons} />
-              {currentUser.became_member_at && <Subscribed />}
+              {currentUser.is_subscribed && <Subscribed />}
               {currentUser.verified_at && <Verified />}
               <Heading text="Statistics" />
               <Stats user={currentUser} />

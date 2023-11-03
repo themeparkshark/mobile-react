@@ -35,6 +35,7 @@ import { NotificationContext } from '../context/NotificationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
+import { PermissionEnums } from '../models/permission-enums';
 import { StoreType } from '../models/store-type';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
@@ -86,12 +87,19 @@ export default function ProfileScreen() {
           return {
             image: store.icon_url,
             onPress: () => {
-              RootNavigation.navigate('Store', {
-                store: store.id,
-              });
+              if (user?.is_subscribed) {
+                RootNavigation.navigate('Store', {
+                  store: store.id,
+                });
+              } else {
+                RootNavigation.navigate('Membership');
+              }
             },
             text: store.name,
-            disabled: store.is_secret_store,
+            permission:
+              user && !user.is_subscribed && store.is_secret_store
+                ? PermissionEnums.ViewSecretStore
+                : undefined,
           };
         }),
       ]);
@@ -190,7 +198,7 @@ export default function ProfileScreen() {
               >
                 <Experience user={user} />
                 <UserButtons buttons={buttons} />
-                {user.became_member_at && <Subscribed />}
+                {user.is_subscribed && <Subscribed />}
                 {user.verified_at && <Verified />}
                 <Heading text={labels.your_statistics} />
                 <Stats user={user} />
