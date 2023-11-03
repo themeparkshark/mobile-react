@@ -1,4 +1,3 @@
-import dayjs from 'dayjs';
 import { Text, View } from 'react-native';
 import { UserType } from '../models/user-type';
 
@@ -38,11 +37,6 @@ export default function Stats({ user }: { readonly user: UserType }) {
       label: 'Total XP',
       value: user.total_experience,
       show: true,
-    },
-    {
-      label: 'VIP Member Since',
-      value: dayjs(user.became_member_at).format('DD MMMM YYYY'),
-      show: !!user.became_member_at,
     },
   ];
 

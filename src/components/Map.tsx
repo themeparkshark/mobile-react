@@ -1,7 +1,6 @@
 import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { Magnetometer } from 'expo-sensors';
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { Dimensions, Pressable, View } from 'react-native';
 import MapView from 'react-native-maps';
@@ -22,12 +21,7 @@ export default function Map({ children }: { readonly children: ReactNode[] }) {
       center: location,
       altitude: 200,
     });
-  }, [
-    focusedOnUser,
-    location?.latitude,
-    location?.longitude,
-    mapRef.current,
-  ]);
+  }, [focusedOnUser, location?.latitude, location?.longitude, mapRef.current]);
 
   return (
     <View
