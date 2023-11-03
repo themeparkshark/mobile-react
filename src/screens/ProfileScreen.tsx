@@ -96,9 +96,10 @@ export default function ProfileScreen() {
               }
             },
             text: store.name,
-            permission: store.is_secret_store
-              ? PermissionEnums.ViewSecretStore
-              : undefined,
+            permission:
+              user && !user.is_subscribed && store.is_secret_store
+                ? PermissionEnums.ViewSecretStore
+                : undefined,
           };
         }),
       ]);

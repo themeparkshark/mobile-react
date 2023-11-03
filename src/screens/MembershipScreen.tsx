@@ -11,11 +11,14 @@ import { adapty, AdaptyPaywallProduct } from 'react-native-adapty';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
 import Loading from '../components/Loading';
+import RedButton from '../components/RedButton';
 import Topbar from '../components/Topbar';
 import YellowButton from '../components/YellowButton';
 import useCrumbs from '../hooks/useCrumbs';
+import * as RootNavigation from '../RootNavigation';
 
-export default function MembershipScreen() {
+export default function MembershipScreen({ route }) {
+  const { intro } = route.params;
   const { labels, urls } = useCrumbs();
   const [product, setProduct] = useState<AdaptyPaywallProduct>();
   const [loading, setLoading] = useState<boolean>(true);
@@ -31,7 +34,7 @@ export default function MembershipScreen() {
 
   return (
     <>
-      <Topbar text="VIP Membership" showBackButton />
+      <Topbar text="VIP Membership" showBackButton={!intro} />
       {loading && <Loading />}
       {!loading && product && (
         <View
@@ -115,6 +118,23 @@ export default function MembershipScreen() {
                       text="Start Free Trial"
                     />
                   </View>
+                  {intro && (
+                    <View
+                      style={{
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                        marginTop: 16,
+                        width: '50%',
+                      }}
+                    >
+                      <RedButton
+                        onPress={() => {
+                          RootNavigation.navigate('Explore');
+                        }}
+                        text={labels.skip_for_now}
+                      />
+                    </View>
+                  )}
                   <View
                     style={{
                       paddingTop: 24,

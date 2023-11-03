@@ -1,7 +1,6 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -11,7 +10,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { vsprintf } from 'sprintf-js';
 import updateUser from '../api/endpoints/me/update-user';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -106,18 +104,9 @@ export default function WelcomeScreen({ navigation }) {
 
             await refreshUser();
 
-            Alert.alert('', vsprintf(labels.username_approval, [user.id]), [
-              {
-                text: 'Go back',
-                style: 'cancel',
-              },
-              {
-                text: 'Ok',
-                onPress: () => {
-                  navigation.navigate('Explore');
-                },
-              },
-            ]);
+            navigation.navigate('Membership', {
+              intro: true,
+            });
           }}
         />
         <View

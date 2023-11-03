@@ -1,5 +1,5 @@
 import { useContext, useState } from 'react';
-import { Dimensions, Image, ImageBackground, Text, View, } from 'react-native';
+import { Dimensions, Image, ImageBackground, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useTimeoutWhen } from 'rooks';
 import update from '../api/endpoints/daily-gifts/update';
