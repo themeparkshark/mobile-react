@@ -20,6 +20,7 @@ import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
+import {AuthContext} from "../context/AuthProvider";
 
 export default function RedeemRedeemableModal({
   open,
@@ -35,9 +36,10 @@ export default function RedeemRedeemableModal({
   readonly onPress: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
+  const { user } = useContext(AuthContext);
   const progress = useRef(new Animated.Value(0)).current;
-  const [doubleXP, setDoubleXP] = useState<boolean>(false);
-  const [doubleCoins, setDoubleCoins] = useState<boolean>(false);
+  const [doubleXP, setDoubleXP] = useState<boolean>((user && user.is_subscribed) ?? false);
+  const [doubleCoins, setDoubleCoins] = useState<boolean>((user && user.is_subscribed) ?? false);
 
   const backgrounds = {
     task: '#0788e4',
@@ -234,13 +236,15 @@ export default function RedeemRedeemableModal({
                     small
                     type={redeemable.type}
                   />
-                  <View
-                    style={{
-                      marginTop: 8,
-                    }}
-                  >
-                    <WatchAd onClose={() => setDoubleXP(true)} />
-                  </View>
+                  {!doubleXP && (
+                    <View
+                      style={{
+                        marginTop: 8,
+                      }}
+                    >
+                      <WatchAd onClose={() => setDoubleXP(true)} />
+                    </View>
+                  )}
                 </View>
                 {redeemable.type !== 'coin' && (
                   <View
@@ -263,13 +267,15 @@ export default function RedeemRedeemableModal({
                       small
                       type={redeemable.type}
                     />
-                    <View
-                      style={{
-                        marginTop: 8,
-                      }}
-                    >
-                      <WatchAd onClose={() => setDoubleCoins(true)} />
-                    </View>
+                    {!doubleCoins && (
+                      <View
+                        style={{
+                          marginTop: 8,
+                        }}
+                      >
+                        <WatchAd onClose={() => setDoubleCoins(true)} />
+                      </View>
+                    )}
                   </View>
                 )}
                 <View
