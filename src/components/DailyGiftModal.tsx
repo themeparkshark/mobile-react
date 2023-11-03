@@ -82,7 +82,7 @@ export default function DailyGiftModal({
       setModalVisible(true);
     },
     5000,
-    !dailyGift.redeemed_at && user.username
+    Boolean(!dailyGift.redeemed_at && user?.username)
   );
 
   const claimReward = async () => {
