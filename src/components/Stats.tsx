@@ -1,4 +1,3 @@
-import dayjs from 'dayjs';
 import { Text, View } from 'react-native';
 import { UserType } from '../models/user-type';
 

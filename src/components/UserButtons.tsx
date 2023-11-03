@@ -3,7 +3,6 @@ import { ScrollView, Text, View } from 'react-native';
 import usePermissions from '../hooks/usePermissions';
 import { ButtonType } from '../models/button-type';
 import Button from './Button';
-import {PermissionEnums} from "../models/permission-enums";
 
 export default function UserButtons({
   buttons,

@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import * as WebBrowser from 'expo-web-browser';
-import {useCallback, useContext, useState} from 'react';
+import { useCallback, useContext, useState } from 'react';
 import { Image, RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
@@ -12,11 +12,11 @@ import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
 import UserButtons from '../components/UserButtons';
 import Wrapper from '../components/Wrapper';
+import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
 import { ThreadType } from '../models/thread-type';
-import {AuthContext} from "../context/AuthProvider";
 
 const options = [
   {

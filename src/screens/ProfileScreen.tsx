@@ -35,10 +35,10 @@ import { NotificationContext } from '../context/NotificationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
+import { PermissionEnums } from '../models/permission-enums';
 import { StoreType } from '../models/store-type';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
-import {PermissionEnums} from "../models/permission-enums";
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
@@ -96,7 +96,9 @@ export default function ProfileScreen() {
               }
             },
             text: store.name,
-            permission: store.is_secret_store ? PermissionEnums.ViewSecretStore : undefined,
+            permission: store.is_secret_store
+              ? PermissionEnums.ViewSecretStore
+              : undefined,
           };
         }),
       ]);
