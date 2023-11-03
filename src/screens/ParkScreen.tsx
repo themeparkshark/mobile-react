@@ -259,6 +259,24 @@ export default function ParkScreen({ route }) {
                       />
                     </View>
                   </View>
+                  <Text
+                    style={{
+                      textAlign: 'center',
+                      paddingBottom: 16,
+                      fontFamily: 'Shark',
+                      textTransform: 'uppercase',
+                      fontSize: 28,
+                      color: 'white',
+                      textShadowColor: 'rgba(0, 0, 0, .5)',
+                      textShadowOffset: {
+                        width: 1,
+                        height: 1,
+                      },
+                      textShadowRadius: 0,
+                    }}
+                  >
+                    {labels.secret_tasks}
+                  </Text>
                   {chunk(secretTasks, 5).map(
                     (secretTasks: SecretTaskType[], index: number) => (
                       <View key={index} style={{ paddingBottom: 16 }}>
@@ -311,6 +329,24 @@ export default function ParkScreen({ route }) {
                       </View>
                     )
                   )}
+                  <Text
+                    style={{
+                      textAlign: 'center',
+                      paddingBottom: 16,
+                      fontFamily: 'Shark',
+                      textTransform: 'uppercase',
+                      fontSize: 28,
+                      color: 'white',
+                      textShadowColor: 'rgba(0, 0, 0, .5)',
+                      textShadowOffset: {
+                        width: 1,
+                        height: 1,
+                      },
+                      textShadowRadius: 0,
+                    }}
+                  >
+                    {labels.tasks}
+                  </Text>
                   {chunk(tasks, 5).map((tasks: TaskType[], index: number) => (
                     <View key={index} style={{ paddingBottom: 16 }}>
                       <View style={{ position: 'relative', height: 105 }}>
@@ -366,6 +402,24 @@ export default function ParkScreen({ route }) {
                       </View>
                     </View>
                   ))}
+                  <Text
+                    style={{
+                      textAlign: 'center',
+                      paddingBottom: 16,
+                      fontFamily: 'Shark',
+                      textTransform: 'uppercase',
+                      fontSize: 28,
+                      color: 'white',
+                      textShadowColor: 'rgba(0, 0, 0, .5)',
+                      textShadowOffset: {
+                        width: 1,
+                        height: 1,
+                      },
+                      textShadowRadius: 0,
+                    }}
+                  >
+                    {labels.archived_tasks}
+                  </Text>
                   {chunk(archivedTasks, 5).map(
                     (tasks: TaskType[], index: number) => (
                       <View key={index} style={{ paddingBottom: 16 }}>
