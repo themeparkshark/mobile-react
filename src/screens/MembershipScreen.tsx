@@ -18,7 +18,7 @@ import useCrumbs from '../hooks/useCrumbs';
 import * as RootNavigation from '../RootNavigation';
 
 export default function MembershipScreen({ route }) {
-  const { intro } = route.params;
+  const { intro } = route.params ?? {};
   const { labels, urls } = useCrumbs();
   const [product, setProduct] = useState<AdaptyPaywallProduct>();
   const [loading, setLoading] = useState<boolean>(true);
@@ -111,11 +111,12 @@ export default function MembershipScreen({ route }) {
                       onPress={async () => {
                         try {
                           await adapty.makePurchase(product);
+                          RootNavigation.navigate('Social');
                         } catch (error) {
                           console.log(error);
                         }
                       }}
-                      text="Start Free Trial"
+                      text={labels.start_free_trial}
                     />
                   </View>
                   {intro && (
