@@ -87,6 +87,13 @@ export default function ProfileScreen() {
           return {
             image: store.icon_url,
             onPress: () => {
+              if (!store.is_secret_store) {
+                RootNavigation.navigate('Store', {
+                  store: store.id,
+                });
+                return;
+              }
+
               if (user?.is_subscribed) {
                 RootNavigation.navigate('Store', {
                   store: store.id,
