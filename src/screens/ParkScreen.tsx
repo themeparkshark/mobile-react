@@ -259,150 +259,158 @@ export default function ParkScreen({ route }) {
                       />
                     </View>
                   </View>
-                  <Text
-                    style={{
-                      textAlign: 'center',
-                      paddingBottom: 16,
-                      fontFamily: 'Shark',
-                      textTransform: 'uppercase',
-                      fontSize: 28,
-                      color: 'white',
-                      textShadowColor: 'rgba(0, 0, 0, .5)',
-                      textShadowOffset: {
-                        width: 1,
-                        height: 1,
-                      },
-                      textShadowRadius: 0,
-                    }}
-                  >
-                    {labels.secret_tasks}
-                  </Text>
-                  {chunk(secretTasks, 5).map(
-                    (secretTasks: SecretTaskType[], index: number) => (
-                      <View key={index} style={{ paddingBottom: 16 }}>
-                        <View style={{ position: 'relative', height: 105 }}>
-                          <Image
-                            source={require('../../assets/images/screens/park/secretshelf.png')}
-                            contentFit="contain"
-                            style={{
-                              width: '100%',
-                              height: 55,
-                              bottom: 0,
-                              position: 'absolute',
-                            }}
-                          />
-                          <View
-                            style={{
-                              flexDirection: 'row',
-                              justifyContent: 'center',
-                              position: 'absolute',
-                              top: 0,
-                              width: '100%',
-                            }}
-                          >
-                            {secretTasks.map((secretTask, index) => (
-                              <View
-                                key={secretTask.id}
+                  {secretTasks && secretTasks.length > 0 && (
+                    <>
+                      <Text
+                        style={{
+                          textAlign: 'center',
+                          paddingBottom: 16,
+                          fontFamily: 'Shark',
+                          textTransform: 'uppercase',
+                          fontSize: 28,
+                          color: 'white',
+                          textShadowColor: 'rgba(0, 0, 0, .5)',
+                          textShadowOffset: {
+                            width: 1,
+                            height: 1,
+                          },
+                          textShadowRadius: 0,
+                        }}
+                      >
+                        {labels.secret_tasks}
+                      </Text>
+                      {chunk(secretTasks, 5).map(
+                        (secretTasks: SecretTaskType[], index: number) => (
+                          <View key={index} style={{ paddingBottom: 16 }}>
+                            <View style={{ position: 'relative', height: 105 }}>
+                              <Image
+                                source={require('../../assets/images/screens/park/secretshelf.png')}
+                                contentFit="contain"
                                 style={{
-                                  paddingLeft: index === 0 ? 0 : 12,
+                                  width: '100%',
+                                  height: 55,
+                                  bottom: 0,
+                                  position: 'absolute',
+                                }}
+                              />
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  justifyContent: 'center',
+                                  position: 'absolute',
+                                  top: 0,
+                                  width: '100%',
                                 }}
                               >
-                                {hasCompletedSecretTask(secretTask.id) ? (
-                                  <TaskCoinModal
-                                    task={secretTask}
-                                    isSecretTask
-                                  />
-                                ) : (
+                                {secretTasks.map((secretTask, index) => (
                                   <View
+                                    key={secretTask.id}
                                     style={{
-                                      width: 60,
-                                      height: 60,
-                                      backgroundColor: 'rgba(0, 0, 0, .5)',
-                                      borderRadius: 50,
+                                      paddingLeft: index === 0 ? 0 : 12,
                                     }}
-                                  />
-                                )}
+                                  >
+                                    {hasCompletedSecretTask(secretTask.id) ? (
+                                      <TaskCoinModal
+                                        task={secretTask}
+                                        isSecretTask
+                                      />
+                                    ) : (
+                                      <View
+                                        style={{
+                                          width: 60,
+                                          height: 60,
+                                          backgroundColor: 'rgba(0, 0, 0, .5)',
+                                          borderRadius: 50,
+                                        }}
+                                      />
+                                    )}
+                                  </View>
+                                ))}
                               </View>
-                            ))}
+                            </View>
                           </View>
-                        </View>
-                      </View>
-                    )
+                        )
+                      )}
+                    </>
                   )}
-                  <Text
-                    style={{
-                      textAlign: 'center',
-                      paddingBottom: 16,
-                      fontFamily: 'Shark',
-                      textTransform: 'uppercase',
-                      fontSize: 28,
-                      color: 'white',
-                      textShadowColor: 'rgba(0, 0, 0, .5)',
-                      textShadowOffset: {
-                        width: 1,
-                        height: 1,
-                      },
-                      textShadowRadius: 0,
-                    }}
-                  >
-                    {labels.tasks}
-                  </Text>
-                  {chunk(tasks, 5).map((tasks: TaskType[], index: number) => (
-                    <View key={index} style={{ paddingBottom: 16 }}>
-                      <View style={{ position: 'relative', height: 105 }}>
-                        <Image
-                          source={require('../../assets/images/screens/park/shelf.png')}
-                          contentFit="contain"
-                          style={{
-                            width: '100%',
-                            height: 55,
-                            bottom: 0,
-                            position: 'absolute',
-                          }}
-                        />
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            justifyContent: 'center',
-                            position: 'absolute',
-                            top: 0,
-                            width: '100%',
-                          }}
-                        >
-                          {tasks.map((task, index) => (
-                            <View
-                              key={task.id}
+                  {tasks && tasks.length > 0 && (
+                    <>
+                      <Text
+                        style={{
+                          textAlign: 'center',
+                          paddingBottom: 16,
+                          fontFamily: 'Shark',
+                          textTransform: 'uppercase',
+                          fontSize: 28,
+                          color: 'white',
+                          textShadowColor: 'rgba(0, 0, 0, .5)',
+                          textShadowOffset: {
+                            width: 1,
+                            height: 1,
+                          },
+                          textShadowRadius: 0,
+                        }}
+                      >
+                        {labels.tasks}
+                      </Text>
+                      {chunk(tasks, 5).map((tasks: TaskType[], index: number) => (
+                        <View key={index} style={{ paddingBottom: 16 }}>
+                          <View style={{ position: 'relative', height: 105 }}>
+                            <Image
+                              source={require('../../assets/images/screens/park/shelf.png')}
+                              contentFit="contain"
                               style={{
-                                paddingLeft: index === 0 ? 0 : 12,
+                                width: '100%',
+                                height: 55,
+                                bottom: 0,
+                                position: 'absolute',
+                              }}
+                            />
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                justifyContent: 'center',
+                                position: 'absolute',
+                                top: 0,
+                                width: '100%',
                               }}
                             >
-                              {hasCompletedTask(task.id) ? (
-                                <TaskCoinModal
-                                  task={task}
-                                  timesCompleted={
-                                    completedTasks.find(
-                                      (completedTask) =>
-                                        completedTask.id === task.id
-                                    )?.times_completed ?? 0
-                                  }
-                                />
-                              ) : (
+                              {tasks.map((task, index) => (
                                 <View
+                                  key={task.id}
                                   style={{
-                                    width: 60,
-                                    height: 60,
-                                    backgroundColor: 'rgba(0, 0, 0, .5)',
-                                    borderRadius: 50,
+                                    paddingLeft: index === 0 ? 0 : 12,
                                   }}
-                                />
-                              )}
+                                >
+                                  {hasCompletedTask(task.id) ? (
+                                    <TaskCoinModal
+                                      task={task}
+                                      timesCompleted={
+                                        completedTasks.find(
+                                          (completedTask) =>
+                                            completedTask.id === task.id
+                                        )?.times_completed ?? 0
+                                      }
+                                    />
+                                  ) : (
+                                    <View
+                                      style={{
+                                        width: 60,
+                                        height: 60,
+                                        backgroundColor: 'rgba(0, 0, 0, .5)',
+                                        borderRadius: 50,
+                                      }}
+                                    />
+                                  )}
+                                </View>
+                              ))}
                             </View>
-                          ))}
+                          </View>
                         </View>
-                      </View>
-                    </View>
-                  ))}
-                  {archivedTasks.length && (
+                      ))}
+                    </>
+                  )}
+                  {archivedTasks && archivedTasks.length > 0 && (
                     <>
                       <Text
                         style={{

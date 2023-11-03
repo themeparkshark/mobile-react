@@ -67,8 +67,8 @@ export default function Notification({
           <Image
             source={notification.data.image ?? require('../../assets/icon.png')}
             style={{
-              width: 50,
-              height: 50,
+              width: '100%',
+              height: '100%',
               position: 'absolute',
               top: 0,
               left: 0,

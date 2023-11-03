@@ -155,7 +155,7 @@ export default function SocialScreen({ navigation }) {
                           },
                           text: 'Membership',
                           permission: PermissionEnums.BecomeAMember,
-                          show: Boolean(user && !user.is_subscribed),
+                          show: !user || Boolean(user && !user.is_subscribed),
                         },
                         {
                           image: require('../../assets/images/screens/social/merch.png'),
