@@ -39,11 +39,6 @@ export default function Stats({ user }: { readonly user: UserType }) {
       value: user.total_experience,
       show: true,
     },
-    {
-      label: 'VIP Member Since',
-      value: dayjs(user.became_member_at).format('DD MMMM YYYY'),
-      show: !!user.became_member_at,
-    },
   ];
 
   return (

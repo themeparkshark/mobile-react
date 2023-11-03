@@ -1,6 +1,6 @@
 import { FlashList } from '@shopify/flash-list';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useState } from 'react';
+import {useCallback, useContext, useState} from 'react';
 import { Image, RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
@@ -16,6 +16,7 @@ import useCrumbs from '../hooks/useCrumbs';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
 import { ThreadType } from '../models/thread-type';
+import {AuthContext} from "../context/AuthProvider";
 
 const options = [
   {
@@ -37,6 +38,7 @@ export default function SocialScreen({ navigation }) {
   const [filter, setFilter] = useState<SortOption>(options[0]);
   const { urls } = useCrumbs();
   const { checkPermission } = usePermissions();
+  const { user } = useContext(AuthContext);
 
   const fetchPinnedThreads = async () => {
     setPinnedThreads(
@@ -153,6 +155,7 @@ export default function SocialScreen({ navigation }) {
                           },
                           text: 'Membership',
                           permission: PermissionEnums.BecomeAMember,
+                          show: Boolean(user && !user.is_subscribed),
                         },
                         {
                           image: require('../../assets/images/screens/social/merch.png'),

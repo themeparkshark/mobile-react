@@ -38,6 +38,7 @@ import { ParkType } from '../models/park-type';
 import { StoreType } from '../models/store-type';
 import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
+import {PermissionEnums} from "../models/permission-enums";
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
@@ -95,7 +96,7 @@ export default function ProfileScreen() {
               }
             },
             text: store.name,
-            disabled: store.is_secret_store,
+            permission: store.is_secret_store ? PermissionEnums.ViewSecretStore : undefined,
           };
         }),
       ]);
@@ -194,7 +195,7 @@ export default function ProfileScreen() {
               >
                 <Experience user={user} />
                 <UserButtons buttons={buttons} />
-                {user.became_member_at && <Subscribed />}
+                {user.is_subscribed && <Subscribed />}
                 {user.verified_at && <Verified />}
                 <Heading text={labels.your_statistics} />
                 <Stats user={user} />
