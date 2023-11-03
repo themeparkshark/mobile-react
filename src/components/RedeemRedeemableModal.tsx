@@ -6,6 +6,7 @@ import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
 import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
 import completeTask from '../api/endpoints/me/tasks/complete-task';
+import { AuthContext } from '../context/AuthProvider';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -20,7 +21,6 @@ import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
-import {AuthContext} from "../context/AuthProvider";
 
 export default function RedeemRedeemableModal({
   open,
@@ -38,8 +38,12 @@ export default function RedeemRedeemableModal({
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { user } = useContext(AuthContext);
   const progress = useRef(new Animated.Value(0)).current;
-  const [doubleXP, setDoubleXP] = useState<boolean>((user && user.is_subscribed) ?? false);
-  const [doubleCoins, setDoubleCoins] = useState<boolean>((user && user.is_subscribed) ?? false);
+  const [doubleXP, setDoubleXP] = useState<boolean>(
+    (user && user.is_subscribed) ?? false
+  );
+  const [doubleCoins, setDoubleCoins] = useState<boolean>(
+    (user && user.is_subscribed) ?? false
+  );
 
   const backgrounds = {
     task: '#0788e4',
