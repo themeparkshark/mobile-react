@@ -1,12 +1,5 @@
 import { useContext, useState } from 'react';
-import {
-  Alert,
-  Dimensions,
-  Image,
-  ImageBackground,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, Image, ImageBackground, Text, View, } from 'react-native';
 import Modal from 'react-native-modal';
 import { useTimeoutWhen } from 'rooks';
 import update from '../api/endpoints/daily-gifts/update';
@@ -93,16 +86,8 @@ export default function DailyGiftModal({
   );
 
   const claimReward = async () => {
-    Alert.alert('', `You earned ${dailyGift.coins} Coins!`, [
-      {
-        text: 'Ok',
-        onPress: async () => {
-          setModalVisible(false);
-          await update(dailyGift.id);
-          await refreshUser();
-        },
-      },
-    ]);
+    await update(dailyGift.id);
+    await refreshUser();
   };
 
   return (
