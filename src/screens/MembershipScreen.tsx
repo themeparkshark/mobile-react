@@ -7,15 +7,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { adapty, AdaptyPaywallProduct } from 'react-native-adapty';
+import { AdaptyPaywallProduct, adapty } from 'react-native-adapty';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
+import * as RootNavigation from '../RootNavigation';
 import Loading from '../components/Loading';
 import RedButton from '../components/RedButton';
 import Topbar from '../components/Topbar';
 import YellowButton from '../components/YellowButton';
 import useCrumbs from '../hooks/useCrumbs';
-import * as RootNavigation from '../RootNavigation';
 
 export default function MembershipScreen({ route }) {
   const { intro } = route.params ?? {};

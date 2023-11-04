@@ -1,4 +1,5 @@
 import ErrorBoundary from 'react-native-error-boundary';
+import Root from './src/Root';
 import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { CrumbProvider } from './src/context/CrumbProvider';
@@ -9,7 +10,6 @@ import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
 import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import { ThemeProvider } from './src/context/ThemeProvider';
-import Root from './src/Root';
 
 export default function App() {
   return (

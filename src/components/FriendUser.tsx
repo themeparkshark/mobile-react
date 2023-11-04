@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
 import { Text, TouchableOpacity, View } from 'react-native';
+import * as RootNavigation from '../RootNavigation';
 import useCompliment from '../hooks/useCompliment';
 import useFriends from '../hooks/useFriends';
 import { UserType } from '../models/user-type';
-import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
 import Button from './Button';
 

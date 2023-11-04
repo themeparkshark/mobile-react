@@ -1,11 +1,11 @@
 import { Image } from 'expo-image';
 import { useContext } from 'react';
 import { ImageBackground, View } from 'react-native';
+import * as RootNavigation from '../RootNavigation';
 import Button from '../components/Button';
 import Tabs from '../components/Tabs';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
-import * as RootNavigation from '../RootNavigation';
 import Suggestions from './FriendsScreen/Suggestions';
 import YourList from './FriendsScreen/YourList';
 

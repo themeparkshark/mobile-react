@@ -1,6 +1,6 @@
 import { Text, View } from 'react-native';
-import { UserType } from '../models/user-type';
 import * as RootNavigation from '../RootNavigation';
+import { UserType } from '../models/user-type';
 import Avatar from './Avatar';
 import Button from './Button';
 

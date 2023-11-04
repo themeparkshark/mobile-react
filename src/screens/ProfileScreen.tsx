@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import * as RootNavigation from '../RootNavigation';
 import getFriends from '../api/endpoints/me/friends';
 import getInventory from '../api/endpoints/me/inventory';
 import getParks from '../api/endpoints/me/visited-parks';
@@ -38,7 +39,6 @@ import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { StoreType } from '../models/store-type';
 import { UserType } from '../models/user-type';
-import * as RootNavigation from '../RootNavigation';
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
