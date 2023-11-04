@@ -1,8 +1,10 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, ScrollView, View } from 'react-native';
+import { Alert, Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import { vsprintf } from 'sprintf-js';
 import getUser from '../api/endpoints/users/get';
+import reportUser from '../api/endpoints/users/report';
 import getVisitedParks from '../api/endpoints/users/visited-parks';
 import Experience from '../components/Experience';
 import Heading from '../components/Heading';
@@ -18,6 +20,7 @@ import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import useCompliment from '../hooks/useCompliment';
+import useCrumbs from '../hooks/useCrumbs';
 import useFriends from '../hooks/useFriends';
 import usePermissions from '../hooks/usePermissions';
 import usePurchaseItem from '../hooks/usePurchaseItem';
@@ -37,6 +40,7 @@ export default function UserScreen({ route, navigation }) {
   const { complimentUser } = useCompliment();
   const { checkPermission } = usePermissions();
   const { user: authUser } = useContext(AuthContext);
+  const { prompts, messages } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -107,6 +111,34 @@ export default function UserScreen({ route, navigation }) {
           },
           text: 'Compliment',
           permission: PermissionEnums.CreateCompliments,
+        },
+        {
+          image: require('../../assets/images/screens/user/compliment.png'),
+          onPress: async () => {
+            Alert.alert(
+              '',
+              vsprintf(prompts.report_username, [currentUser.username]),
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                },
+                {
+                  text: 'Ok',
+                  onPress: async () => {
+                    await reportUser(currentUser.id);
+
+                    Alert.alert('', messages.report_created, [
+                      {
+                        text: 'Ok',
+                      },
+                    ]);
+                  },
+                },
+              ]
+            );
+          },
+          text: 'Report',
         },
       ]
     : [];
