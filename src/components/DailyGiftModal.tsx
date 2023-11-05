@@ -1,5 +1,6 @@
+import { Image } from 'expo-image';
 import { useContext, useState } from 'react';
-import { Dimensions, Image, ImageBackground, Text, View } from 'react-native';
+import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useTimeoutWhen } from 'rooks';
 import update from '../api/endpoints/daily-gifts/update';
@@ -57,7 +58,7 @@ function Chest({
       >
         <Image
           source={isOpen ? openedImage : closedImage}
-          resizeMode="contain"
+          contentFit="contain"
           style={{
             height: 70,
             width: '100%',
