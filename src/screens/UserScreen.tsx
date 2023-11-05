@@ -15,6 +15,7 @@ import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
+import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import useCompliment from '../hooks/useCompliment';
 import useFriends from '../hooks/useFriends';
@@ -24,7 +25,7 @@ import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { UserType } from '../models/user-type';
 
-export default function UserScreen({ route }) {
+export default function UserScreen({ route, navigation }) {
   const { user } = route.params;
   const [loading, setLoading] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<UserType>();
@@ -35,10 +36,16 @@ export default function UserScreen({ route }) {
   const { playMusic } = useContext(MusicContext);
   const { complimentUser } = useCompliment();
   const { checkPermission } = usePermissions();
+  const { user: authUser } = useContext(AuthContext);
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/halloween.mp3'));
+      if (authUser?.id === user) {
+        navigation.navigate('Profile');
+        return;
+      }
+
+      playMusic(require('../../assets/sounds/music/track5.mp3'));
     }, [])
   );
 
@@ -148,7 +155,7 @@ export default function UserScreen({ route }) {
             >
               <Experience user={currentUser} />
               <UserButtons buttons={buttons} />
-              {currentUser.became_member_at && <Subscribed />}
+              {currentUser.is_subscribed && <Subscribed />}
               {currentUser.verified_at && <Verified />}
               <Heading text="Statistics" />
               <Stats user={currentUser} />

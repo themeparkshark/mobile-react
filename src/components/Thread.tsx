@@ -1,11 +1,11 @@
 import { Image } from 'expo-image';
 import { truncate } from 'lodash';
 import { Text, TouchableOpacity, View } from 'react-native';
+import * as RootNavigation from '../RootNavigation';
 import config from '../config';
 import dayjs from '../helpers/dayjs';
 import shortenNumber from '../helpers/shorten-number';
 import { ThreadType } from '../models/thread-type';
-import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
 
 export default function Thread({ thread }: { readonly thread: ThreadType }) {

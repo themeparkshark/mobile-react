@@ -1,12 +1,12 @@
 import { Image } from 'expo-image';
 import { useContext, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import * as RootNavigation from '../RootNavigation';
 import markAsRead from '../api/endpoints/me/notifications/markAsRead';
 import config from '../config';
 import { NotificationContext } from '../context/NotificationProvider';
 import dayjs from '../helpers/dayjs';
 import { NotificationType } from '../models/notification-type';
-import * as RootNavigation from '../RootNavigation';
 
 export default function Notification({
   notification,
@@ -67,8 +67,8 @@ export default function Notification({
           <Image
             source={notification.data.image ?? require('../../assets/icon.png')}
             style={{
-              width: 50,
-              height: 50,
+              width: '100%',
+              height: '100%',
               position: 'absolute',
               top: 0,
               left: 0,

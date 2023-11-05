@@ -10,13 +10,13 @@ import mobileAds, {
   TestIds,
 } from 'react-native-google-mobile-ads';
 import { useAsyncEffect } from 'rooks';
+import { navigationRef } from './RootNavigation';
 import getCrumbs from './api/endpoints/crumbs/getCrumbs';
 import getCurrentTheme from './api/endpoints/current-theme/get';
 import { AuthContext } from './context/AuthProvider';
 import { CrumbContext } from './context/CrumbProvider';
 import { ThemeContext } from './context/ThemeProvider';
 import { useAxiosSetup } from './hooks/useAxiosSetup';
-import { navigationRef } from './RootNavigation';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
 import FriendsScreen from './screens/FriendsScreen';

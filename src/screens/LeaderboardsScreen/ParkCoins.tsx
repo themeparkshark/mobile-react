@@ -4,6 +4,7 @@ import { Dimensions, ScrollView, Text, View } from 'react-native';
 import RNPickerSelect from 'react-native-picker-select';
 import { Chevron } from 'react-native-shapes';
 import { useAsyncEffect } from 'rooks';
+import * as RootNavigation from '../../RootNavigation';
 import getUsers from '../../api/endpoints/leaderboards/users';
 import allParks from '../../api/endpoints/parks/allParks';
 import getLeaderboards from '../../api/endpoints/parks/leaderboards/get';
@@ -16,7 +17,6 @@ import { AuthContext } from '../../context/AuthProvider';
 import { LeaderboardType } from '../../models/leaderboard-type';
 import { ParkType } from '../../models/park-type';
 import { UserType } from '../../models/user-type';
-import * as RootNavigation from '../../RootNavigation';
 
 export default function ParkCoins() {
   const [loading, setLoading] = useState<boolean>(true);
