@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
-  ImageBackground,
+  ImageBackground, Pressable,
   ScrollView,
   Text,
   View,
@@ -113,58 +113,66 @@ export default function ProfileScreen() {
     }
   }, [stores]);
 
+  if (!user) {
+    return <></>;
+  }
+
   return (
-    user && (
-      <Wrapper>
-        <Topbar
-          text={user.screen_name}
-          leftButton={
-            <Button
-              onPress={() => {
-                RootNavigation.navigate('Notifications');
+    <Wrapper>
+      <Topbar
+        text={user.screen_name}
+        leftButton={
+          <Button
+            onPress={() => {
+              RootNavigation.navigate('Notifications');
+            }}
+            showRedCircle={!!notificationCount}
+          >
+            <Image
+              style={{
+                width: 35,
+                height: 35,
+                alignSelf: 'center',
               }}
-              showRedCircle={!!notificationCount}
-            >
-              <Image
-                style={{
-                  width: 35,
-                  height: 35,
-                  alignSelf: 'center',
-                }}
-                contentFit="contain"
-                source={require('../../assets/images/screens/profile/notifications.png')}
-              />
-            </Button>
-          }
-          rightButton={
-            <Button
-              onPress={() => {
-                RootNavigation.navigate('Settings');
-              }}
-            >
-              <Image
-                style={{
-                  width: 35,
-                  height: 35,
-                  alignSelf: 'center',
-                }}
-                contentFit="contain"
-                source={require('../../assets/images/screens/profile/settings.png')}
-              />
-            </Button>
-          }
-        />
-        {loading && <Loading />}
-        {!loading && user && (
-          <ScrollView
-            style={{
-              flex: 1,
-              marginTop: -8,
+              contentFit="contain"
+              source={require('../../assets/images/screens/profile/notifications.png')}
+            />
+          </Button>
+        }
+        rightButton={
+          <Button
+            onPress={() => {
+              RootNavigation.navigate('Settings');
             }}
           >
-            <View
+            <Image
               style={{
-                paddingBottom: 32,
+                width: 35,
+                height: 35,
+                alignSelf: 'center',
+              }}
+              contentFit="contain"
+              source={require('../../assets/images/screens/profile/settings.png')}
+            />
+          </Button>
+        }
+      />
+      {loading && <Loading />}
+      {!loading && user && (
+        <ScrollView
+          style={{
+            flex: 1,
+            marginTop: -8,
+          }}
+        >
+          <View
+            style={{
+              paddingBottom: 32,
+            }}
+          >
+            <Pressable
+              onPress={() => {
+                RootNavigation.navigate('Inventory');
               }}
             >
               <ImageBackground
@@ -177,119 +185,154 @@ export default function ProfileScreen() {
                   position: 'relative',
                 }}
               >
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('Inventory');
+                <Playercard
+                  showBackground={false}
+                  inventory={user.inventory}
+                  style={{
+                    position: 'absolute',
+                    width: Dimensions.get('window').width,
+                    height: 455,
+                    marginTop: -55,
+                  }}
+                />
+                <View
+                  style={{
+                    borderTopRightRadius: 6,
+                    backgroundColor: 'rgba(0, 0, 0, .5)',
+                    paddingLeft: 8,
+                    paddingRight: 8,
+                    paddingTop: 4,
+                    paddingBottom: 4,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    position: 'absolute',
+                    bottom: 0,
                   }}
                 >
-                  <Playercard
-                    showBackground={false}
-                    inventory={user.inventory}
+                  <Image
+                    source={require('../../assets/images/screens/profile/edit.png')}
+                    contentFit="contain"
                     style={{
-                      position: 'absolute',
-                      width: Dimensions.get('window').width,
-                      height: 455,
-                      marginTop: -55,
+                      width: 25,
+                      height: 25,
+                      marginRight: 8,
                     }}
                   />
-                </Button>
+                  <Text
+                    style={{
+                      fontFamily: 'Shark',
+                      textTransform: 'uppercase',
+                      color: 'white',
+                      fontSize: 24,
+                      textShadowColor: 'rgba(0, 0, 0, .5)',
+                      textShadowOffset: {
+                        width: 1,
+                        height: 1,
+                      },
+                      textShadowRadius: 0,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {labels.edit}
+                  </Text>
+                </View>
               </ImageBackground>
-              <View
-                style={{
-                  borderTopWidth: 5,
-                  borderTopColor: config.primary,
-                  paddingLeft: 16,
-                  paddingRight: 16,
-                  paddingTop: 24,
-                }}
-              >
-                <Experience user={user} />
-                <UserButtons buttons={buttons} />
-                {user.is_subscribed && <Subscribed />}
-                {user.verified_at && <Verified />}
-                <Heading text={labels.your_statistics} />
-                <Stats user={user} />
-                <Heading text={labels.your_friends} />
-                {friends && friends.length > 0 && (
-                  <>
-                    <View
-                      style={{
-                        height: friends.length * 80,
+            </Pressable>
+            <View
+              style={{
+                borderTopWidth: 5,
+                borderTopColor: config.primary,
+                paddingLeft: 16,
+                paddingRight: 16,
+                paddingTop: 24,
+              }}
+            >
+              <Experience user={user} />
+              <UserButtons buttons={buttons} />
+              {user.is_subscribed && <Subscribed />}
+              {user.verified_at && <Verified />}
+              <Heading text={labels.your_statistics} />
+              <Stats user={user} />
+              <Heading text={labels.your_friends} />
+              {friends && friends.length > 0 && (
+                <>
+                  <View
+                    style={{
+                      height: friends.length * 80,
+                    }}
+                  >
+                    <FlashList
+                      contentContainerStyle={{ paddingBottom: 8 }}
+                      data={friends}
+                      keyExtractor={(user) => user.id.toString()}
+                      renderItem={({ item }) => {
+                        return (
+                          <FriendUser
+                            user={item}
+                            isFriend
+                            onRemove={() => {
+                              requestFriends();
+                            }}
+                          />
+                        );
                       }}
-                    >
-                      <FlashList
-                        contentContainerStyle={{ paddingBottom: 8 }}
-                        data={friends}
-                        keyExtractor={(user) => user.id.toString()}
-                        renderItem={({ item }) => {
-                          return (
-                            <FriendUser
-                              user={item}
-                              isFriend
-                              onRemove={() => {
-                                requestFriends();
-                              }}
-                            />
-                          );
-                        }}
-                        estimatedItemSize={80}
-                      />
-                    </View>
-                    <View
-                      style={{
-                        alignItems: 'center',
-                        marginTop: 32,
-                        width: 190,
-                        marginLeft: 'auto',
-                        marginRight: 'auto',
+                      estimatedItemSize={80}
+                    />
+                  </View>
+                  <View
+                    style={{
+                      alignItems: 'center',
+                      marginTop: 32,
+                      width: 190,
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
+                    }}
+                  >
+                    <YellowButton
+                      onPress={() => {
+                        RootNavigation.navigate('Friends');
                       }}
-                    >
-                      <YellowButton
-                        onPress={() => {
-                          RootNavigation.navigate('Friends');
-                        }}
-                        text={labels.view_all_friends}
-                      />
-                    </View>
-                  </>
-                )}
-                {friends && friends.length === 0 && (
-                  <>
-                    <Text
-                      style={{
-                        fontFamily: 'Knockout',
-                        fontSize: 20,
-                        textAlign: 'center',
-                        paddingTop: 16,
+                      text={labels.view_all_friends}
+                    />
+                  </View>
+                </>
+              )}
+              {friends && friends.length === 0 && (
+                <>
+                  <Text
+                    style={{
+                      fontFamily: 'Knockout',
+                      fontSize: 20,
+                      textAlign: 'center',
+                      paddingTop: 16,
+                    }}
+                  >
+                    {warnings.no_friends}
+                  </Text>
+                  <View
+                    style={{
+                      alignItems: 'center',
+                      marginTop: 32,
+                      width: 190,
+                      marginLeft: 'auto',
+                      marginRight: 'auto',
+                    }}
+                  >
+                    <YellowButton
+                      onPress={() => {
+                        RootNavigation.navigate('Friends');
                       }}
-                    >
-                      {warnings.no_friends}
-                    </Text>
-                    <View
-                      style={{
-                        alignItems: 'center',
-                        marginTop: 32,
-                        width: 190,
-                        marginLeft: 'auto',
-                        marginRight: 'auto',
-                      }}
-                    >
-                      <YellowButton
-                        onPress={() => {
-                          RootNavigation.navigate('Friends');
-                        }}
-                        text={labels.find_friends}
-                      />
-                    </View>
-                  </>
-                )}
-                <Heading text={labels.your_parks} />
-                <VisitedParks parks={parks} user={user} />
-              </View>
+                      text={labels.find_friends}
+                    />
+                  </View>
+                </>
+              )}
+              <Heading text={labels.your_parks} />
+              <VisitedParks parks={parks} user={user} />
             </View>
-          </ScrollView>
-        )}
-      </Wrapper>
-    )
+          </View>
+        </ScrollView>
+      )}
+    </Wrapper>
   );
 }
