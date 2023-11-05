@@ -79,35 +79,35 @@ export default function RedeemCoinCodeScreen() {
               width: '80%',
             }}
           >
-            <TextInput
-              style={{
-                borderWidth: 1,
-                paddingTop: 15,
-                paddingBottom: 15,
-                paddingLeft: 25,
-                paddingRight: 25,
-                borderRadius: 10,
-                backgroundColor: 'white',
-                fontSize: 20,
-                fontFamily: 'Knockout',
-                width: '55%',
-                textAlign: 'center',
-              }}
-              autoFocus
-              autoCapitalize="none"
-              onChangeText={setCoinCode}
-              value={coinCode}
-              maxLength={9}
-              placeholder="Enter a coin code"
-              returnKeyType="next"
-              enablesReturnKeyAutomatically
-              onSubmitEditing={async ({ nativeEvent }) => {
-                setRedeemedCoinCode(await redeemCoinCode(nativeEvent.text));
-                setCoinCode('');
-
-                await refreshUser();
-              }}
-            />
+            {!redeemedCoinCode && (
+              <TextInput
+                style={{
+                  borderWidth: 1,
+                  paddingTop: 15,
+                  paddingBottom: 15,
+                  paddingLeft: 25,
+                  paddingRight: 25,
+                  borderRadius: 10,
+                  backgroundColor: 'white',
+                  fontSize: 20,
+                  fontFamily: 'Knockout',
+                  width: '55%',
+                  textAlign: 'center',
+                }}
+                autoFocus
+                autoCapitalize="none"
+                onChangeText={setCoinCode}
+                value={coinCode}
+                maxLength={9}
+                placeholder="Enter a coin code"
+                returnKeyType="next"
+                enablesReturnKeyAutomatically
+                onSubmitEditing={async ({ nativeEvent }) => {
+                  setRedeemedCoinCode(await redeemCoinCode(nativeEvent.text));
+                  await refreshUser();
+                }}
+              />
+            )}
             <View
               style={{
                 width: '100%',
@@ -133,8 +133,81 @@ export default function RedeemCoinCodeScreen() {
                 }}
                 resizeMode="contain"
               />
+              {redeemedCoinCode && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    columnGap: 16,
+                  }}
+                >
+                  {redeemedCoinCode.item && (
+                    <View
+                      style={{
+                        marginBottom: 32,
+                        borderRadius: 10,
+                        backgroundColor: 'rgba(255, 255, 255, .8)',
+                        borderColor: 'white',
+                        borderWidth: 3,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                        width: '40%',
+                        aspectRatio: 1,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        shadowOffset: {
+                          width: 0,
+                          height: 0,
+                        },
+                        shadowOpacity: 0.4,
+                        shadowRadius: 3,
+                      }}
+                    >
+                      <Image
+                        source={redeemedCoinCode.item.icon_url}
+                        style={{
+                          width: '60%',
+                          aspectRatio: 1,
+                        }}
+                        contentFit="contain"
+                      />
+                    </View>
+                  )}
+                  {redeemedCoinCode.coins && (
+                    <View
+                      style={{
+                        marginBottom: 32,
+                        borderRadius: 10,
+                        backgroundColor: 'rgba(255, 255, 255, .8)',
+                        borderColor: 'white',
+                        borderWidth: 3,
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                        width: '40%',
+                        aspectRatio: 1,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        shadowOffset: {
+                          width: 0,
+                          height: 0,
+                        },
+                        shadowOpacity: 0.4,
+                        shadowRadius: 3,
+                      }}
+                    >
+                      <Image
+                        source={require('../../assets/images/screens/explore/coins.png')}
+                        style={{
+                          width: '60%',
+                          aspectRatio: 1,
+                        }}
+                        contentFit="contain"
+                      />
+                    </View>
+                  )}
+                </View>
+              )}
               <Image
-                source={require('../../assets/images/screens/welcome/shark.png')}
+                source={redeemedCoinCode ? require('../../assets/images/screens/redeem/chest_opened.png') : require('../../assets/images/screens/redeem/chest_closed.png')}
                 style={{
                   width: '100%',
                   height: 300,

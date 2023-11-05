@@ -175,7 +175,7 @@ export default function SocialScreen({ navigation }) {
                           permission: PermissionEnums.TradePins,
                         },
                         {
-                          image: require('../../assets/images/screens/explore/base.png'),
+                          image: require('../../assets/images/screens/social/redeem.png'),
                           onPress: () => {
                             if (
                               checkPermission(PermissionEnums.RedeemCoinCodes)
@@ -200,7 +200,7 @@ export default function SocialScreen({ navigation }) {
                           image: require('../../assets/images/screens/social/arcade.png'),
                           onPress: () => {},
                           text: 'Arcade',
-                          disabled: true,
+                          show: false,
                           permission: PermissionEnums.ViewArcade,
                         },
                       ]}
