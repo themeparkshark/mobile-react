@@ -1,13 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
-import {
-  ImageBackground,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { AdaptyPaywallProduct, adapty } from 'react-native-adapty';
+import { useContext, useState } from 'react';
+import { ImageBackground, ScrollView, Text, TouchableOpacity, View, } from 'react-native';
+import { adapty, AdaptyPaywallProduct } from 'react-native-adapty';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
 import * as RootNavigation from '../RootNavigation';
@@ -16,21 +10,29 @@ import RedButton from '../components/RedButton';
 import Topbar from '../components/Topbar';
 import YellowButton from '../components/YellowButton';
 import useCrumbs from '../hooks/useCrumbs';
+import { AuthContext } from "../context/AuthProvider";
 
 export default function MembershipScreen({ route }) {
   const { intro } = route.params ?? {};
   const { labels, urls } = useCrumbs();
   const [product, setProduct] = useState<AdaptyPaywallProduct>();
   const [loading, setLoading] = useState<boolean>(true);
+  const { user } = useContext(AuthContext);
 
   useAsyncEffect(async () => {
-    await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH');
+    if (!user) {
+      return;
+    }
+
+    await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH', {
+      customerUserId: user.id.toString(),
+    });
     const paywall = await adapty.getPaywall('vip_membership');
     const products = await adapty.getPaywallProducts(paywall);
 
     setProduct(products[0]);
     setLoading(false);
-  }, []);
+  }, [user]);
 
   return (
     <>
