@@ -2,12 +2,12 @@ import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import dayjs from 'dayjs';
+import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import {
   Alert,
   Dimensions,
-  Image,
   ImageBackground,
   Pressable,
   Text,
@@ -119,7 +119,7 @@ export default function PinSwap({
               width: '100%',
               height: 80,
             }}
-            resizeMode="contain"
+            contentFit="contain"
           />
         </Button>
       </View>
@@ -268,7 +268,7 @@ export default function PinSwap({
                               style={{
                                 aspectRatio: 1,
                               }}
-                              resizeMode="contain"
+                              contentFit="contain"
                             />
                           </View>
                         </Pressable>

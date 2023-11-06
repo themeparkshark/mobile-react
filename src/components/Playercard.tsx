@@ -1,12 +1,6 @@
+import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
-import {
-  Animated,
-  Image,
-  StyleProp,
-  StyleSheet,
-  View,
-  ViewStyle,
-} from 'react-native';
+import { Animated, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { InventoryType } from '../models/inventory-type';
 
 export default function Playercard({
@@ -60,7 +54,7 @@ export default function Playercard({
               height: '100%',
               position: 'absolute',
             }}
-            resizeMode="cover"
+            contentFit="cover"
           />
         )}
         {inventory?.pin_item && (
@@ -75,7 +69,7 @@ export default function Playercard({
               right: 20,
               top: 90,
             }}
-            resizeMode="contain"
+            contentFit="contain"
           />
         )}
         <Animated.View
@@ -106,14 +100,14 @@ export default function Playercard({
                     : inventory.skin_item.paper_url,
                 }}
                 style={styles.image}
-                resizeMode="contain"
+                contentFit="contain"
               />
             )}
             {animate && (
               <Image
                 source={require('../../assets/images/screens/inventory/blink.png')}
                 style={styles.image}
-                resizeMode="contain"
+                contentFit="contain"
               />
             )}
             {inventory?.body_item && (
@@ -122,7 +116,7 @@ export default function Playercard({
                   uri: inventory.body_item.paper_url,
                 }}
                 style={styles.image}
-                resizeMode="contain"
+                contentFit="contain"
               />
             )}
             {inventory?.face_item && (
@@ -131,7 +125,7 @@ export default function Playercard({
                   uri: inventory.face_item.paper_url,
                 }}
                 style={styles.image}
-                resizeMode="contain"
+                contentFit="contain"
               />
             )}
             {inventory?.neck_item && (
@@ -140,7 +134,7 @@ export default function Playercard({
                   uri: inventory.neck_item.paper_url,
                 }}
                 style={styles.image}
-                resizeMode="contain"
+                contentFit="contain"
               />
             )}
             {inventory?.hand_item && (
@@ -149,7 +143,7 @@ export default function Playercard({
                   uri: inventory.hand_item.paper_url,
                 }}
                 style={styles.image}
-                resizeMode="contain"
+                contentFit="contain"
               />
             )}
             {inventory?.head_item && (
@@ -158,7 +152,7 @@ export default function Playercard({
                   uri: inventory.head_item.paper_url,
                 }}
                 style={styles.image}
-                resizeMode="contain"
+                contentFit="contain"
               />
             )}
           </View>
