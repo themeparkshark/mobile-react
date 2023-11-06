@@ -1,9 +1,11 @@
 import { Animated, ImageBackground, Pressable, Text, View } from 'react-native';
 
 export default function RedButton({
+  large,
   text,
   onPress,
 }: {
+  readonly large: boolean;
   readonly text: string;
   readonly onPress?: () => void;
 }) {
@@ -63,10 +65,10 @@ export default function RedButton({
                   height: 1,
                 },
                 textShadowRadius: 0,
-                paddingTop: 4,
-                paddingBottom: 4,
-                paddingLeft: 24,
-                paddingRight: 24,
+                paddingTop: large ? 2 : 4,
+                paddingBottom: large ? 2 : 4,
+                paddingLeft: large ? 0 : 24,
+                paddingRight: large ? 0 : 24,
               }}
             >
               {text}
