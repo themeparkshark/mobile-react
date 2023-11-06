@@ -113,11 +113,11 @@ export default function UserScreen({ route, navigation }) {
           permission: PermissionEnums.CreateCompliments,
         },
         {
-          image: require('../../assets/images/screens/user/compliment.png'),
+          image: require('../../assets/images/screens/explore/base.png'),
           onPress: async () => {
             Alert.alert(
-              '',
               vsprintf(prompts.report_username, [currentUser.username]),
+              '',
               [
                 {
                   text: 'Cancel',
@@ -128,7 +128,7 @@ export default function UserScreen({ route, navigation }) {
                   onPress: async () => {
                     await reportUser(currentUser.id);
 
-                    Alert.alert('', messages.report_created, [
+                    Alert.alert(messages.report_created, '', [
                       {
                         text: 'Ok',
                       },
