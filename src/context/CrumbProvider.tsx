@@ -86,6 +86,12 @@ export interface CrumbContextType {
       };
     };
     readonly urls: {
+      readonly help: {
+        readonly park_screen: string;
+        readonly pin_swaps_screen: string;
+        readonly social_screen: string;
+        readonly store_screen: string;
+      };
       readonly privacy_policy: string;
       readonly shop: string;
       readonly terms: string;

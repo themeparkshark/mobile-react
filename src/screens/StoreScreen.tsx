@@ -1,23 +1,17 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, ScrollView, Text, View, } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getStore from '../api/endpoints/stores/get';
+import HelpShiftButton from '../components/HelpShiftButton';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { CatalogType } from '../models/catalog-type';
-import { InformationModalEnums } from '../models/information-modal-enums';
 import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
 import Section from './StoreScreen/Section';
@@ -32,7 +26,7 @@ export default function StoreScreen({ route }) {
   const [loading, setLoading] = useState<boolean>(true);
   const { playMusic } = useContext(MusicContext);
   const { user } = useContext(AuthContext);
-  const { labels } = useCrumbs();
+  const { labels, urls } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -78,7 +72,13 @@ export default function StoreScreen({ route }) {
         purple={currentStore?.is_secret_store ?? false}
         showBackButton={true}
         text={currentStore?.name}
-        informationModalId={InformationModalEnums.StoreScreen}
+        rightButton={
+          <HelpShiftButton
+            url={
+              currentStore?.helpshift_url ?? urls.help.store_screen
+            }
+          />
+        }
       />
       {loading && <Loading />}
       {!loading && (

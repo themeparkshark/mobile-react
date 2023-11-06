@@ -1,11 +1,11 @@
 import { FlashList } from '@shopify/flash-list';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useState } from 'react';
-import { Image, RefreshControl, View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
-import Button from '../components/Button';
 import CreateThreadModal from '../components/CreateThreadModal';
+import HelpShiftButton from '../components/HelpShiftButton';
 import Loading from '../components/Loading';
 import SortByDropdown, { SortOption } from '../components/SortByDropdown';
 import Thread from '../components/Thread';
@@ -102,19 +102,7 @@ export default function SocialScreen({ navigation }) {
             }}
           />
         }
-        rightButton={
-          <Button onPress={() => {}}>
-            <Image
-              style={{
-                width: 35,
-                height: 35,
-                alignSelf: 'center',
-              }}
-              resizeMode="contain"
-              source={require('../../assets/images/faq.png')}
-            />
-          </Button>
-        }
+        rightButton={<HelpShiftButton url={urls.help.social_screen} />}
       />
       {loading && <Loading />}
       {!loading && (

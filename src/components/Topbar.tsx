@@ -14,10 +14,8 @@ import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import shortenNumber from '../helpers/shorten-number';
 import Broadcasts from './Broadcasts';
-import InformationModal from './InformationModal';
 
 export default function Topbar({
-  informationModalId = null,
   leftButton = null,
   rightButton = null,
   text = null,
@@ -30,7 +28,6 @@ export default function Topbar({
   purple = false,
   onBackButtonPress,
 }: {
-  readonly informationModalId?: number | null;
   readonly rightButton?: ReactNode | null;
   readonly leftButton?: ReactNode | null;
   readonly text?: string | null;
@@ -153,8 +150,7 @@ export default function Topbar({
               text ||
               showBackButton ||
               leftButton ||
-              rightButton ||
-              informationModalId) && (
+              rightButton) && (
               <View
                 style={{
                   flex: !showCoins ? 0 : 1,
@@ -239,8 +235,7 @@ export default function Topbar({
               showBackButton ||
               showCoins ||
               leftButton ||
-              rightButton ||
-              informationModalId) && (
+              rightButton) && (
               <View
                 style={{
                   flex: text ? 0 : 1,
@@ -251,9 +246,6 @@ export default function Topbar({
                 }}
               >
                 {rightButton}
-                {informationModalId && (
-                  <InformationModal id={informationModalId} />
-                )}
                 {showCoins && (
                   <Currency
                     image={require('../../assets/images/coins.png')}
