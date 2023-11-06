@@ -15,7 +15,7 @@ export default function useCompliment() {
       return;
     }
 
-    Alert.alert('', vsprintf(prompts.compliment, [user?.screen_name]), [
+    Alert.alert(vsprintf(prompts.compliment, [user?.screen_name]), '', [
       {
         text: 'Cancel',
         style: 'cancel',
@@ -26,7 +26,7 @@ export default function useCompliment() {
           try {
             await createCompliment(user.id);
           } catch {
-            Alert.alert('', errors.max_compliments_created, [
+            Alert.alert(errors.max_compliments_created, '', [
               {
                 text: 'Ok',
               },
@@ -35,7 +35,7 @@ export default function useCompliment() {
             return;
           }
 
-          Alert.alert('', messages.compliment_created, [
+          Alert.alert(messages.compliment_created, '', [
             {
               text: 'Ok',
             },

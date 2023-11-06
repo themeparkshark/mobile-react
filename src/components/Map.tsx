@@ -7,7 +7,7 @@ import MapView from 'react-native-maps';
 import config from '../config';
 import { LocationContext } from '../context/LocationProvider';
 
-export default function Map({ children }: { readonly children: ReactNode[] }) {
+export default function Map({ children }: { readonly children: ReactNode }) {
   const { location } = useContext(LocationContext);
   const mapRef = useRef<MapView>(null);
   const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);

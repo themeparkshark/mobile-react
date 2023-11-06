@@ -7,7 +7,6 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { useAsyncEffect } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
@@ -36,38 +35,36 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const requestLocation = async () => {
     const newLocation = await getCurrentLocation();
 
-    if (isEqual(newLocation, location)) {
-      return;
+    if (newLocation && isEqual(newLocation, location)) {
+      return location;
     }
 
     setLocation(newLocation);
+    return newLocation;
   };
 
   const requestPark = async () => {
-    if (!location) {
+    const currentLocation = await requestLocation();
+
+    if (!currentLocation) {
       setParkLoaded(true);
+      setPark(null);
       return;
     }
 
     try {
-      const newPark = await currentPark(location.latitude, location.longitude);
+      const newPark = await currentPark(
+        currentLocation.latitude,
+        currentLocation.longitude
+      );
 
-      if (newPark?.id === park?.id) {
-        setParkLoaded(true);
-        return;
-      }
-
+      setParkLoaded(true);
       setPark(newPark);
     } catch (error) {
-      //
+      setParkLoaded(true);
+      setPark(null);
     }
-
-    setParkLoaded(true);
   };
-
-  useAsyncEffect(async () => {
-    await requestPark();
-  }, [location]);
 
   useEffect(() => {
     if (!user) {

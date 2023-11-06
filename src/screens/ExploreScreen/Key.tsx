@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
+import { Image } from 'expo-image';
 import Countdown, { zeroPad } from 'react-countdown';
-import { Image, ImageBackground, Text, View } from 'react-native';
+import { ImageBackground, Text, View } from 'react-native';
 import { useTimeoutWhen } from 'rooks';
 import config from '../../config';
 import { KeyType } from '../../models/key-type';
@@ -67,7 +68,7 @@ export default function Key({
             width: 40,
             height: 40,
           }}
-          resizeMode="contain"
+          contentFit="contain"
         />
       </View>
     </View>

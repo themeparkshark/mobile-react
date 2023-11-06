@@ -33,6 +33,7 @@ import PinCollectionScreen from './screens/PinCollectionsScreen';
 import PinSwapsScreen from './screens/PinSwapsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import QueueTimesScreen from './screens/QueueTimesScreen';
+import RedeemCoinCodeScreen from './screens/RedeemCoinCodeScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import SocialScreen from './screens/SocialScreen';
 import SplashScreen from './screens/SplashScreen';
@@ -129,6 +130,7 @@ const HomeStackNavigator = () => {
       />
       <Stack.Screen name="Thread" component={ThreadScreen} />
       <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
+      <Stack.Screen name="RedeemCoinCode" component={RedeemCoinCodeScreen} />
       <Stack.Screen name="Membership" component={MembershipScreen} />
       <Stack.Screen name="Watch" component={WatchScreen} />
       <Stack.Screen

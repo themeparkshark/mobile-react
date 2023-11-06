@@ -12,8 +12,8 @@ export default function useFriends() {
   return {
     addFriend: (user: UserType) => {
       Alert.alert(
-        '',
         vsprintf(prompts.send_friend_request, [user.screen_name]),
+        '',
         [
           {
             text: 'Cancel',
@@ -24,7 +24,7 @@ export default function useFriends() {
             onPress: async () => {
               await sendFriendRequest(user);
 
-              Alert.alert('', messages.friend_request_sent, [
+              Alert.alert(messages.friend_request_sent, '', [
                 {
                   text: 'Ok',
                 },
@@ -36,8 +36,8 @@ export default function useFriends() {
     },
     acceptFriend: (user: UserType, onPress?: () => void) => {
       Alert.alert(
-        '',
         vsprintf(prompts.accept_friend_request, [user.screen_name]),
+        '',
         [
           {
             text: 'Cancel',
@@ -49,7 +49,7 @@ export default function useFriends() {
               await acceptFriendRequest(user);
               await onPress?.();
 
-              Alert.alert('', messages.friend_request_accepted, [
+              Alert.alert(messages.friend_request_accepted, '', [
                 {
                   text: 'Ok',
                 },
@@ -60,7 +60,7 @@ export default function useFriends() {
       );
     },
     removeFriend: (user: UserType, onPress: () => void) => {
-      Alert.alert('', vsprintf(prompts.remove_friend, [user.screen_name]), [
+      Alert.alert(vsprintf(prompts.remove_friend, [user.screen_name]), '', [
         {
           text: 'Cancel',
           style: 'cancel',
@@ -72,8 +72,8 @@ export default function useFriends() {
             await onPress();
 
             Alert.alert(
-              '',
               vsprintf(messages.friend_removed, [user.screen_name]),
+              '',
               [
                 {
                   text: 'Ok',

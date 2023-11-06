@@ -19,6 +19,7 @@ export interface CrumbContextType {
       readonly clearance: string;
       readonly coins: string;
       readonly copyright: string;
+      readonly edit: string;
       readonly enter_a_username: string;
       readonly experience: string;
       readonly experience_level: string;
@@ -44,6 +45,7 @@ export interface CrumbContextType {
       readonly search_for_a_user: string;
       readonly secret_tasks: string;
       readonly select_a_pin: string;
+      readonly skip_for_now: string;
       readonly slow_connectivity: string;
       readonly start_free_trial: string;
       readonly submit: string;
@@ -53,7 +55,6 @@ export interface CrumbContextType {
       readonly task_unlocks: string;
       readonly trade_expiration: string;
       readonly trade_pin: string;
-      readonly username_approval: string;
       readonly vault_cost: string;
       readonly verified_user: string;
       readonly view_all_friends: string;
@@ -70,6 +71,7 @@ export interface CrumbContextType {
       readonly friend_request_sent: string;
       readonly item_purchased: string;
       readonly pin_swap_created: string;
+      readonly report_created: string;
     };
     readonly prompts: {
       readonly accept_friend_request: string;
@@ -87,6 +89,7 @@ export interface CrumbContextType {
         readonly view_profile: string;
         readonly watch_content: string;
       };
+      readonly report_username: string;
     };
     readonly urls: {
       readonly privacy_policy: string;

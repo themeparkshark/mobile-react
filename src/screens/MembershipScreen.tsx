@@ -11,29 +11,39 @@ import {
 } from 'react-native';
 import { AdaptyPaywallProduct, adapty } from 'react-native-adapty';
 import { useAsyncEffect, useIntervalWhen } from 'rooks';
+import { adapty, AdaptyPaywallProduct } from 'react-native-adapty';
 import { vsprintf } from 'sprintf-js';
 import * as RootNavigation from '../RootNavigation';
 import Loading from '../components/Loading';
+import RedButton from '../components/RedButton';
 import Topbar from '../components/Topbar';
 import YellowButton from '../components/YellowButton';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
+import { AuthContext } from "../context/AuthProvider";
 
-export default function MembershipScreen() {
-  const { labels, urls, warnings } = useCrumbs();
+export default function MembershipScreen({ route }) {
+  const { intro } = route.params ?? {};
+  const { warnings, labels, urls } = useCrumbs();
   const [product, setProduct] = useState<AdaptyPaywallProduct>();
   const [loading, setLoading] = useState<boolean>(true);
+  const { user, refreshUser } = useContext(AuthContext);
   const [startTimer, setStartTimer] = useState<boolean>(false);
-  const { refreshUser } = useContext(AuthContext);
 
   useAsyncEffect(async () => {
-    await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH');
+    if (!user) {
+      return;
+    }
+
+    await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH', {
+      customerUserId: user.id.toString(),
+    });
     const paywall = await adapty.getPaywall('vip_membership');
     const products = await adapty.getPaywallProducts(paywall);
 
     setProduct(products[0]);
     setLoading(false);
-  }, []);
+  }, [user]);
 
   useIntervalWhen(
     async () => {
@@ -81,7 +91,7 @@ export default function MembershipScreen() {
           </View>
         </View>
       )}
-      <Topbar text="VIP Membership" showBackButton />
+      <Topbar text="VIP Membership" showBackButton={!intro} />
       {loading && <Loading />}
       {!loading && product && (
         <View
@@ -158,7 +168,6 @@ export default function MembershipScreen() {
                       onPress={async () => {
                         try {
                           await adapty.makePurchase(product);
-
                           setStartTimer(true);
                         } catch (error) {
                           Alert.alert(
@@ -175,6 +184,23 @@ export default function MembershipScreen() {
                       text={labels.start_free_trial}
                     />
                   </View>
+                  {intro && (
+                    <View
+                      style={{
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
+                        marginTop: 16,
+                        width: '50%',
+                      }}
+                    >
+                      <RedButton
+                        onPress={() => {
+                          RootNavigation.navigate('Explore');
+                        }}
+                        text={labels.skip_for_now}
+                      />
+                    </View>
+                  )}
                   <View
                     style={{
                       paddingTop: 24,

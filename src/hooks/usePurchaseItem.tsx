@@ -26,10 +26,10 @@ export default function usePurchaseItem() {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
       return Alert.alert(
-        '',
         response.cost
           ? vsprintf(errors.item_purchased, [response.name])
           : vsprintf(errors.item_redeemed, [response.name]),
+        '',
         [
           {
             text: 'Ok',
@@ -44,7 +44,7 @@ export default function usePurchaseItem() {
     ) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
-      return Alert.alert('', errors.not_enough_coins, [
+      return Alert.alert(errors.not_enough_coins, '', [
         {
           text: 'Ok',
         },
@@ -54,7 +54,7 @@ export default function usePurchaseItem() {
     if (item.currency.id === CurrencyEnum.Keys && user.keys < item.cost) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
-      return Alert.alert('', errors.not_enough_keys, [
+      return Alert.alert(errors.not_enough_keys, '', [
         {
           text: 'Ok',
         },
@@ -74,7 +74,7 @@ export default function usePurchaseItem() {
 
     playSound(require('../../assets/sounds/purchase_item_prompt.mp3'));
 
-    Alert.alert('', text, [
+    Alert.alert(text, '', [
       {
         text: 'Cancel',
         style: 'cancel',
@@ -90,7 +90,7 @@ export default function usePurchaseItem() {
 
           playSound(require('../../assets/sounds/purchase_item_success.mp3'));
 
-          Alert.alert('', vsprintf(messages.item_purchased, [item.name]), [
+          Alert.alert(vsprintf(messages.item_purchased, [item.name]), '', [
             {
               text: 'Ok',
             },

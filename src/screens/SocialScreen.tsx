@@ -1,7 +1,8 @@
 import { FlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useState } from 'react';
-import { Image, RefreshControl, View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
 import Button from '../components/Button';
@@ -110,7 +111,7 @@ export default function SocialScreen({ navigation }) {
                 height: 35,
                 alignSelf: 'center',
               }}
-              resizeMode="contain"
+              contentFit="contain"
               source={require('../../assets/images/faq.png')}
             />
           </Button>
@@ -155,7 +156,7 @@ export default function SocialScreen({ navigation }) {
                           },
                           text: 'Membership',
                           permission: PermissionEnums.BecomeAMember,
-                          show: Boolean(user && !user.is_subscribed),
+                          show: !user || Boolean(user && !user.is_subscribed),
                         },
                         {
                           image: require('../../assets/images/screens/social/merch.png'),
@@ -175,6 +176,18 @@ export default function SocialScreen({ navigation }) {
                           permission: PermissionEnums.TradePins,
                         },
                         {
+                          image: require('../../assets/images/screens/social/redeem.png'),
+                          onPress: () => {
+                            if (
+                              checkPermission(PermissionEnums.RedeemCoinCodes)
+                            ) {
+                              navigation.navigate('RedeemCoinCode');
+                            }
+                          },
+                          text: 'Redeem',
+                          permission: PermissionEnums.RedeemCoinCodes,
+                        },
+                        {
                           image: require('../../assets/images/screens/social/social_media.png'),
                           onPress: () => {
                             if (checkPermission(PermissionEnums.WatchContent)) {
@@ -188,7 +201,7 @@ export default function SocialScreen({ navigation }) {
                           image: require('../../assets/images/screens/social/arcade.png'),
                           onPress: () => {},
                           text: 'Arcade',
-                          disabled: true,
+                          show: false,
                           permission: PermissionEnums.ViewArcade,
                         },
                       ]}

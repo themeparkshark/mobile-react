@@ -1,12 +1,6 @@
+import { Image } from 'expo-image';
 import { useContext, useState } from 'react';
-import {
-  Alert,
-  Dimensions,
-  Image,
-  ImageBackground,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useTimeoutWhen } from 'rooks';
 import update from '../api/endpoints/daily-gifts/update';
@@ -64,7 +58,7 @@ function Chest({
       >
         <Image
           source={isOpen ? openedImage : closedImage}
-          resizeMode="contain"
+          contentFit="contain"
           style={{
             height: 70,
             width: '100%',
@@ -89,20 +83,13 @@ export default function DailyGiftModal({
       setModalVisible(true);
     },
     5000,
-    !dailyGift.redeemed_at && user.username
+    Boolean(!dailyGift.redeemed_at && user?.username)
   );
 
   const claimReward = async () => {
-    Alert.alert('', `You earned ${dailyGift.coins} Coins!`, [
-      {
-        text: 'Ok',
-        onPress: async () => {
-          setModalVisible(false);
-          await update(dailyGift.id);
-          await refreshUser();
-        },
-      },
-    ]);
+    setModalVisible(false);
+    await update(dailyGift.id);
+    await refreshUser();
   };
 
   return (

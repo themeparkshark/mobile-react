@@ -16,12 +16,10 @@ export default async function updateUser(payload: {
 
     return data.data;
   } catch (error) {
-    Alert.alert('', error.response.data.errors.username[0], [
+    Alert.alert(error.response.data.errors.username[0], '', [
       {
         text: 'Ok',
       },
     ]);
-
-    throw error;
   }
 }
