@@ -7,7 +7,6 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { useAsyncEffect } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';

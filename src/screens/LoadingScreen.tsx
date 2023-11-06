@@ -15,7 +15,7 @@ import useCrumbs from '../hooks/useCrumbs';
 
 export default function LoadingScreen() {
   const { user, inventory, setInventory } = useContext(AuthContext);
-  const { location, requestLocation, requestPark, parkLoaded } =
+  const { requestLocation, requestPark, parkLoaded } =
     useContext(LocationContext);
   const { labels } = useCrumbs();
 
