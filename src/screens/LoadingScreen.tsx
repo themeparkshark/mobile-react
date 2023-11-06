@@ -36,7 +36,7 @@ export default function LoadingScreen() {
     }
 
     RootNavigation.navigate('Explore');
-  }, [inventory?.id, location?.latitude, location?.longitude, user?.username]);
+  }, [parkLoaded, inventory?.id, user?.username]);
 
   return (
     <ImageBackground

@@ -49,6 +49,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
     if (!currentLocation) {
       setParkLoaded(true);
+      setPark(null);
       return;
     }
 
@@ -58,22 +59,13 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         currentLocation.longitude
       );
 
-      if (newPark?.id === park?.id) {
-        setParkLoaded(true);
-        return;
-      }
-
+      setParkLoaded(true);
       setPark(newPark);
     } catch (error) {
-      //
+      setParkLoaded(true);
+      setPark(null);
     }
-
-    setParkLoaded(true);
   };
-
-  useAsyncEffect(async () => {
-    await requestPark();
-  }, [location]);
 
   useEffect(() => {
     if (!user) {
