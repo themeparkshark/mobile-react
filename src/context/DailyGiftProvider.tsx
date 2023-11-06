@@ -25,7 +25,7 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
       setDailyGift(await getDailyGift());
     },
     5000,
-    Boolean(isReady && user)
+    Boolean(isReady && user && user.username)
   );
 
   return (
