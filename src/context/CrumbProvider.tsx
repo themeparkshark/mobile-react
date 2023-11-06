@@ -32,7 +32,10 @@ export interface CrumbContextType {
       readonly membership_terms: string;
       readonly park_completion_rate: string;
       readonly park_tasks: string;
+      readonly payment_complete: string;
       readonly pin_packs: string;
+      readonly please_try_again: string;
+      readonly processing_payment: string;
       readonly purchase_membership: string;
       readonly purchase_membership_additional: string;
       readonly read_more: string;
@@ -42,6 +45,7 @@ export interface CrumbContextType {
       readonly secret_tasks: string;
       readonly select_a_pin: string;
       readonly slow_connectivity: string;
+      readonly start_free_trial: string;
       readonly submit: string;
       readonly subscribed_user: string;
       readonly tasks: string;
@@ -100,6 +104,7 @@ export interface CrumbContextType {
       readonly no_visited_parks: string;
       readonly not_at_a_park: string;
       readonly not_signed_in: string;
+      readonly something_went_wrong: string;
     };
   };
   readonly setCrumbs: Dispatch<any>;

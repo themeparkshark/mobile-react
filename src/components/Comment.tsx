@@ -3,12 +3,12 @@ import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useContext, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import * as RootNavigation from '../RootNavigation';
 import getChildren from '../api/endpoints/comments/getChildren';
 import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
 import useCrumbs from '../hooks/useCrumbs';
 import { CommentType } from '../models/comment-type';
-import * as RootNavigation from '../RootNavigation';
 import Avatar from './Avatar';
 import Button from './Button';
 

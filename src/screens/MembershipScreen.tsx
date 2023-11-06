@@ -1,24 +1,30 @@
 import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   ImageBackground,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { adapty, AdaptyPaywallProduct } from 'react-native-adapty';
-import { useAsyncEffect } from 'rooks';
+import { AdaptyPaywallProduct, adapty } from 'react-native-adapty';
+import { useAsyncEffect, useIntervalWhen } from 'rooks';
 import { vsprintf } from 'sprintf-js';
+import * as RootNavigation from '../RootNavigation';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import YellowButton from '../components/YellowButton';
+import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function MembershipScreen() {
-  const { labels, urls } = useCrumbs();
+  const { labels, urls, warnings } = useCrumbs();
   const [product, setProduct] = useState<AdaptyPaywallProduct>();
   const [loading, setLoading] = useState<boolean>(true);
+  const [startTimer, setStartTimer] = useState<boolean>(false);
+  const { refreshUser } = useContext(AuthContext);
 
   useAsyncEffect(async () => {
     await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH');
@@ -29,8 +35,52 @@ export default function MembershipScreen() {
     setLoading(false);
   }, []);
 
+  useIntervalWhen(
+    async () => {
+      const user = await refreshUser();
+
+      if (user.is_subscribed) {
+        setStartTimer(false);
+        Alert.alert(labels.payment_complete);
+        RootNavigation.navigate('Profile');
+      }
+    },
+    5000,
+    startTimer
+  );
+
   return (
     <>
+      {startTimer && (
+        <View
+          style={{
+            position: 'absolute',
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, .9)',
+            zIndex: 30,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <View
+            style={{
+              padding: 32,
+            }}
+          >
+            <ActivityIndicator size="large" color="rgba(255, 255, 255, 1)" />
+            <Text
+              style={{
+                textAlign: 'center',
+                paddingTop: 16,
+                color: 'white',
+              }}
+            >
+              {labels.processing_payment}
+            </Text>
+          </View>
+        </View>
+      )}
       <Topbar text="VIP Membership" showBackButton />
       {loading && <Loading />}
       {!loading && product && (
@@ -108,11 +158,21 @@ export default function MembershipScreen() {
                       onPress={async () => {
                         try {
                           await adapty.makePurchase(product);
+
+                          setStartTimer(true);
                         } catch (error) {
-                          console.log(error);
+                          Alert.alert(
+                            warnings.something_went_wrong,
+                            labels.please_try_again,
+                            [
+                              {
+                                text: 'Ok',
+                              },
+                            ]
+                          );
                         }
                       }}
-                      text="Start Free Trial"
+                      text={labels.start_free_trial}
                     />
                   </View>
                   <View

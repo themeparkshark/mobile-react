@@ -1,10 +1,10 @@
 import { Image } from 'expo-image';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { vsprintf } from 'sprintf-js';
+import * as RootNavigation from '../RootNavigation';
 import useCrumbs from '../hooks/useCrumbs';
 import { ParkType } from '../models/park-type';
 import { UserType } from '../models/user-type';
-import * as RootNavigation from '../RootNavigation';
 import Progress from './Progress';
 
 export default function VisitedParks({

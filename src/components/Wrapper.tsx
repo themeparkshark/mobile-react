@@ -1,10 +1,10 @@
 import { Image } from 'expo-image';
 import { ReactNode, useContext } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
+import * as RootNavigation from '../RootNavigation';
 import { ThemeContext } from '../context/ThemeProvider';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
-import * as RootNavigation from '../RootNavigation';
 import Button from './Button';
 
 export default function Wrapper({

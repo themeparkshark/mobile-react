@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { Alert } from 'react-native';
-import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
+import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from './useCrumbs';
 
 export default function usePermissions() {
@@ -17,6 +17,7 @@ export default function usePermissions() {
     redeem_mascot_gifts: user,
     trade_pins: user,
     view_arcade: user,
+    view_secret_store: user?.is_subscribed,
     view_profile: user,
     watch_content: user,
   };
