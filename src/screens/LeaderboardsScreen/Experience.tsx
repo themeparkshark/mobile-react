@@ -2,12 +2,12 @@ import { FlashList } from '@shopify/flash-list';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import * as RootNavigation from '../../RootNavigation';
 import all from '../../api/endpoints/users/all';
 import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import Loading from '../../components/Loading';
 import { UserType } from '../../models/user-type';
-import * as RootNavigation from '../../RootNavigation';
 
 export default function Experience() {
   const [loading, setLoading] = useState<boolean>(true);

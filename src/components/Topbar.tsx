@@ -8,11 +8,11 @@ import {
   Text,
   View,
 } from 'react-native';
+import * as RootNavigation from '../RootNavigation';
 import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import shortenNumber from '../helpers/shorten-number';
-import * as RootNavigation from '../RootNavigation';
 import Broadcasts from './Broadcasts';
 import InformationModal from './InformationModal';
 

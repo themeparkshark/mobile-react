@@ -6,6 +6,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useContext, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import * as RootNavigation from '../RootNavigation';
 import getComments from '../api/endpoints/comments/getComments';
 import getThread from '../api/endpoints/threads/getThread';
 import AttachmentModal from '../components/AttachmentModal';
@@ -21,7 +22,6 @@ import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
 import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
-import * as RootNavigation from '../RootNavigation';
 
 export default function ThreadScreen({ route }) {
   const { thread } = route.params;

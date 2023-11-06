@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { Alert } from 'react-native';
-import { AuthContext } from '../context/AuthProvider';
 import * as RootNavigation from '../RootNavigation';
+import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from './useCrumbs';
 
 export default function usePermissions() {

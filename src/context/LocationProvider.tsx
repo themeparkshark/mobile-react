@@ -36,21 +36,27 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const requestLocation = async () => {
     const newLocation = await getCurrentLocation();
 
-    if (isEqual(newLocation, location)) {
-      return;
+    if (newLocation && isEqual(newLocation, location)) {
+      return location;
     }
 
     setLocation(newLocation);
+    return newLocation;
   };
 
   const requestPark = async () => {
-    if (!location) {
+    const currentLocation = await requestLocation();
+
+    if (!currentLocation) {
       setParkLoaded(true);
       return;
     }
 
     try {
-      const newPark = await currentPark(location.latitude, location.longitude);
+      const newPark = await currentPark(
+        currentLocation.latitude,
+        currentLocation.longitude
+      );
 
       if (newPark?.id === park?.id) {
         setParkLoaded(true);

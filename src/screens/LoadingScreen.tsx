@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react';
+import { useContext } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -7,31 +7,26 @@ import {
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import * as RootNavigation from '../RootNavigation';
 import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
-import * as RootNavigation from '../RootNavigation';
 
 export default function LoadingScreen() {
-  const [loading, setLoading] = useState(true);
-  const { isReady, user, setInventory } = useContext(AuthContext);
-  const { requestLocation, requestPark, parkLoaded } =
+  const { user, inventory, setInventory } = useContext(AuthContext);
+  const { location, requestLocation, requestPark, parkLoaded } =
     useContext(LocationContext);
   const { labels } = useCrumbs();
 
   useAsyncEffect(async () => {
-    if (!isReady) {
-      return;
-    }
-
     await requestLocation();
+    await requestPark();
     setInventory(await getInventory());
-    setLoading(false);
-  }, [isReady]);
+  }, []);
 
-  useEffect(() => {
-    if (loading || !parkLoaded) {
+  useAsyncEffect(async () => {
+    if (!parkLoaded || !inventory) {
       return;
     }
 
@@ -41,7 +36,7 @@ export default function LoadingScreen() {
     }
 
     RootNavigation.navigate('Explore');
-  }, [loading, parkLoaded]);
+  }, [inventory?.id, location?.latitude, location?.longitude, user?.username]);
 
   return (
     <ImageBackground

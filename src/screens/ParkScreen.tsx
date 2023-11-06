@@ -353,61 +353,63 @@ export default function ParkScreen({ route }) {
                       >
                         {labels.tasks}
                       </Text>
-                      {chunk(tasks, 5).map((tasks: TaskType[], index: number) => (
-                        <View key={index} style={{ paddingBottom: 16 }}>
-                          <View style={{ position: 'relative', height: 105 }}>
-                            <Image
-                              source={require('../../assets/images/screens/park/shelf.png')}
-                              contentFit="contain"
-                              style={{
-                                width: '100%',
-                                height: 55,
-                                bottom: 0,
-                                position: 'absolute',
-                              }}
-                            />
-                            <View
-                              style={{
-                                flexDirection: 'row',
-                                justifyContent: 'center',
-                                position: 'absolute',
-                                top: 0,
-                                width: '100%',
-                              }}
-                            >
-                              {tasks.map((task, index) => (
-                                <View
-                                  key={task.id}
-                                  style={{
-                                    paddingLeft: index === 0 ? 0 : 12,
-                                  }}
-                                >
-                                  {hasCompletedTask(task.id) ? (
-                                    <TaskCoinModal
-                                      task={task}
-                                      timesCompleted={
-                                        completedTasks.find(
-                                          (completedTask) =>
-                                            completedTask.id === task.id
-                                        )?.times_completed ?? 0
-                                      }
-                                    />
-                                  ) : (
-                                    <View
-                                      style={{
-                                        width: 60,
-                                        height: 60,
-                                        backgroundColor: 'rgba(0, 0, 0, .5)',
-                                        borderRadius: 50,
-                                      }}
-                                    />
-                                  )}
-                                </View>
-                              ))}
+                      {chunk(tasks, 5).map(
+                        (tasks: TaskType[], index: number) => (
+                          <View key={index} style={{ paddingBottom: 16 }}>
+                            <View style={{ position: 'relative', height: 105 }}>
+                              <Image
+                                source={require('../../assets/images/screens/park/shelf.png')}
+                                contentFit="contain"
+                                style={{
+                                  width: '100%',
+                                  height: 55,
+                                  bottom: 0,
+                                  position: 'absolute',
+                                }}
+                              />
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  justifyContent: 'center',
+                                  position: 'absolute',
+                                  top: 0,
+                                  width: '100%',
+                                }}
+                              >
+                                {tasks.map((task, index) => (
+                                  <View
+                                    key={task.id}
+                                    style={{
+                                      paddingLeft: index === 0 ? 0 : 12,
+                                    }}
+                                  >
+                                    {hasCompletedTask(task.id) ? (
+                                      <TaskCoinModal
+                                        task={task}
+                                        timesCompleted={
+                                          completedTasks.find(
+                                            (completedTask) =>
+                                              completedTask.id === task.id
+                                          )?.times_completed ?? 0
+                                        }
+                                      />
+                                    ) : (
+                                      <View
+                                        style={{
+                                          width: 60,
+                                          height: 60,
+                                          backgroundColor: 'rgba(0, 0, 0, .5)',
+                                          borderRadius: 50,
+                                        }}
+                                      />
+                                    )}
+                                  </View>
+                                ))}
+                              </View>
                             </View>
                           </View>
-                        </View>
-                      ))}
+                        )
+                      )}
                     </>
                   )}
                   {archivedTasks && archivedTasks.length > 0 && (
@@ -460,13 +462,16 @@ export default function ParkScreen({ route }) {
                                       paddingLeft: index === 0 ? 0 : 12,
                                     }}
                                   >
-                                    {hasCompletedArchivedTask(archivedTask.id) ? (
+                                    {hasCompletedArchivedTask(
+                                      archivedTask.id
+                                    ) ? (
                                       <TaskCoinModal
                                         task={archivedTask}
                                         timesCompleted={
                                           completedArchivedTasks.find(
                                             (completedTask) =>
-                                              completedTask.id === archivedTask.id
+                                              completedTask.id ===
+                                              archivedTask.id
                                           )?.times_completed ?? 0
                                         }
                                       />
