@@ -19,6 +19,7 @@ export interface CrumbContextType {
       readonly clearance: string;
       readonly coins: string;
       readonly copyright: string;
+      readonly edit: string;
       readonly enter_a_username: string;
       readonly experience: string;
       readonly experience_level: string;

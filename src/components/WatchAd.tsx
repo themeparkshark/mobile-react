@@ -29,7 +29,7 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
           opacity: 0.5,
         }}
       >
-        <RedButton text="x2 Watch Ad" />
+        <RedButton text="x2 Watch Ad" large />
       </View>
     );
   }
@@ -41,6 +41,7 @@ export default function WatchAd({ onClose }: { readonly onClose: () => void }) {
       direction="alternate"
     >
       <RedButton
+        large
         text="X2 WATCH AD"
         onPress={() => {
           show();

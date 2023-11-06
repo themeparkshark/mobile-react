@@ -1,7 +1,8 @@
 import { FlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useState } from 'react';
-import { Image, RefreshControl, View } from 'react-native';
+import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getThreads from '../api/endpoints/threads/getThreads';
 import Button from '../components/Button';
@@ -110,7 +111,7 @@ export default function SocialScreen({ navigation }) {
                 height: 35,
                 alignSelf: 'center',
               }}
-              resizeMode="contain"
+              contentFit="contain"
               source={require('../../assets/images/faq.png')}
             />
           </Button>

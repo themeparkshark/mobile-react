@@ -1,6 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
 import { useContext, useEffect, useLayoutEffect, useState } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getNotifications from '../api/endpoints/me/notifications';
 import markAllAsRead from '../api/endpoints/me/notifications/markAllAsRead';
@@ -64,7 +65,7 @@ export default function NewsScreen() {
                 height: 35,
                 alignSelf: 'center',
               }}
-              resizeMode="contain"
+              contentFit="contain"
               source={require('../../assets/images/screens/notifications/mark_all_as_read.png')}
             />
           </Button>

@@ -1,20 +1,21 @@
 import * as Location from 'expo-location';
 import { LocationType } from '../models/location-type';
 
-export default async function (): Promise<LocationType> {
-  const { status } = await Location.requestForegroundPermissionsAsync();
+export default async function (): Promise<LocationType | undefined> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
 
-  if (status !== 'granted') {
+    if (status !== 'granted') {
+      return;
+    }
+
+    const location = await Location.getCurrentPositionAsync();
+
     return {
-      latitude: 0,
-      longitude: 0,
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
     };
+  } catch (error) {
+    //
   }
-
-  const location = await Location.getCurrentPositionAsync();
-
-  return {
-    latitude: location.coords.latitude,
-    longitude: location.coords.longitude,
-  };
 }

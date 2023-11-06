@@ -10,7 +10,7 @@ import Button from './Button';
 export default function Wrapper({
   children,
 }: {
-  readonly children: ReactNode[];
+  readonly children: ReactNode;
 }) {
   const { theme } = useContext(ThemeContext);
   const { checkPermission, hasPermission } = usePermissions();

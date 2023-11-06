@@ -1,7 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
+import { Image } from 'expo-image';
 import { useCallback, useContext, useState } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Callout, Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
@@ -112,7 +113,7 @@ export default function ExploreScreen() {
                     source={{
                       uri: theme.store.icon_url,
                     }}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                 </Button>
               </View>
@@ -138,7 +139,7 @@ export default function ExploreScreen() {
                     source={{
                       uri: park.store.icon_url,
                     }}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                 </Button>
               </View>
@@ -189,7 +190,7 @@ export default function ExploreScreen() {
                     height: 72,
                   }}
                   source={require('../../assets/images/screens/explore/queuetimes.png')}
-                  resizeMode="contain"
+                  contentFit="contain"
                 />
               </Button>
             </View>
@@ -231,7 +232,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/item_animation.gif')}
-                    resizeMode="contain"
+                    contentFit="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -259,7 +260,7 @@ export default function ExploreScreen() {
                 >
                   <Image
                     source={require('../../assets/images/screens/explore/pin_animation.gif')}
-                    resizeMode="contain"
+                    contentFit="contain"
                     style={{
                       width: 70,
                       height: 70,
@@ -283,7 +284,7 @@ export default function ExploreScreen() {
                     width: 120,
                     height: 120,
                   }}
-                  resizeMode="contain"
+                  contentFit="contain"
                 />
                 <Callout>
                   <Text
@@ -329,7 +330,7 @@ export default function ExploreScreen() {
                     width: 70,
                     height: 70,
                   }}
-                  resizeMode="contain"
+                  contentFit="contain"
                 />
               </Marker>
             );
