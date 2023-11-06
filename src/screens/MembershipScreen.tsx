@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { AdaptyPaywallProduct, adapty } from 'react-native-adapty';
 import { useAsyncEffect, useIntervalWhen } from 'rooks';
-import { adapty, AdaptyPaywallProduct } from 'react-native-adapty';
 import { vsprintf } from 'sprintf-js';
 import * as RootNavigation from '../RootNavigation';
 import Loading from '../components/Loading';
@@ -20,7 +19,6 @@ import Topbar from '../components/Topbar';
 import YellowButton from '../components/YellowButton';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
-import { AuthContext } from "../context/AuthProvider";
 
 export default function MembershipScreen({ route }) {
   const { intro } = route.params ?? {};

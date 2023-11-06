@@ -105,11 +105,7 @@ export default function ProfileScreen() {
             },
             text: store.name,
             permission:
-<<<<<<< HEAD
-              store.is_secret_store && !user?.is_subscribed
-=======
               user && !user.is_subscribed && store.is_secret_store
->>>>>>> release/1.2.0
                 ? PermissionEnums.ViewSecretStore
                 : undefined,
           };
