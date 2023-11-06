@@ -71,7 +71,7 @@ export default function PinSwap({
 
       setModalVisible(true);
     } catch (error) {
-      Alert.alert('', error.response.data.message, [
+      Alert.alert(error.response.data.message, '', [
         {
           text: 'Ok',
           onPress: () => {

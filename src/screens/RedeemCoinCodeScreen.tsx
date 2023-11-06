@@ -207,9 +207,13 @@ export default function RedeemCoinCodeScreen() {
                 </View>
               )}
               <Image
-                source={redeemedCoinCode ? require('../../assets/images/screens/redeem/chest_opened.png') : require('../../assets/images/screens/redeem/chest_closed.png')}
+                source={
+                  redeemedCoinCode
+                    ? require('../../assets/images/screens/redeem/chest_opened.png')
+                    : require('../../assets/images/screens/redeem/chest_closed.png')
+                }
                 style={{
-                  width: '100%',
+                  aspectRatio: 1,
                   height: 300,
                 }}
                 contentFit="contain"

@@ -4,7 +4,8 @@ import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
-  ImageBackground, Pressable,
+  ImageBackground,
+  Pressable,
   ScrollView,
   Text,
   View,

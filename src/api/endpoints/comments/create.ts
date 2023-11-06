@@ -19,12 +19,10 @@ export default async function createComment(
 
     return data.data;
   } catch (error) {
-    Alert.alert('', error.response.data.message, [
+    Alert.alert(error.response.data.message, '', [
       {
         text: 'Ok',
       },
     ]);
-
-    throw error;
   }
 }
