@@ -68,6 +68,7 @@ export interface CrumbContextType {
       readonly friend_request_sent: string;
       readonly item_purchased: string;
       readonly pin_swap_created: string;
+      readonly report_created: string;
     };
     readonly prompts: {
       readonly accept_friend_request: string;
@@ -85,6 +86,7 @@ export interface CrumbContextType {
         readonly view_profile: string;
         readonly watch_content: string;
       };
+      readonly report_username: string;
     };
     readonly urls: {
       readonly privacy_policy: string;
