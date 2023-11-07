@@ -15,7 +15,7 @@ export interface AuthContextType {
   readonly logout: () => void;
   readonly setInventory: (inventory: InventoryType) => void;
   readonly setUser: (user: UserType) => void;
-  readonly refreshUser: () => void;
+  readonly refreshUser: () => Promise<UserType>;
   readonly user: UserType | null;
 }
 
@@ -58,7 +58,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  const refreshUser = async () => {
+  const refreshUser = async (): Promise<UserType> => {
     const response = await getMe();
     setUser(response);
 
@@ -66,6 +66,8 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       key: 'user',
       value: JSON.stringify({ ...response }),
     });
+
+    return response;
   };
 
   const logout = async () => {

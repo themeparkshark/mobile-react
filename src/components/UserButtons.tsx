@@ -20,19 +20,14 @@ export default function UserButtons({
       contentContainerStyle={{
         flexGrow: 1,
         justifyContent: 'center',
+        columnGap: 16,
       }}
     >
       {buttons
         ?.filter((button) => !(button.hasOwnProperty('show') && !button.show))
         .map((button, index) => {
           return (
-            <View
-              key={index}
-              style={{
-                paddingLeft: 8,
-                paddingRight: 8,
-              }}
-            >
+            <View key={index}>
               {button.disabled ? (
                 <>
                   <Image

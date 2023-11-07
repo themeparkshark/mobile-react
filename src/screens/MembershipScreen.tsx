@@ -1,6 +1,8 @@
 import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   ImageBackground,
   ScrollView,
   Text,
@@ -8,32 +10,85 @@ import {
   View,
 } from 'react-native';
 import { AdaptyPaywallProduct, adapty } from 'react-native-adapty';
-import { useAsyncEffect } from 'rooks';
+import { useAsyncEffect, useIntervalWhen } from 'rooks';
 import { vsprintf } from 'sprintf-js';
 import * as RootNavigation from '../RootNavigation';
 import Loading from '../components/Loading';
 import RedButton from '../components/RedButton';
 import Topbar from '../components/Topbar';
 import YellowButton from '../components/YellowButton';
+import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function MembershipScreen({ route }) {
   const { intro } = route.params ?? {};
-  const { labels, urls } = useCrumbs();
+  const { warnings, labels, urls } = useCrumbs();
   const [product, setProduct] = useState<AdaptyPaywallProduct>();
   const [loading, setLoading] = useState<boolean>(true);
+  const { user, refreshUser } = useContext(AuthContext);
+  const [startTimer, setStartTimer] = useState<boolean>(false);
 
   useAsyncEffect(async () => {
-    await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH');
+    if (!user) {
+      return;
+    }
+
+    await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH', {
+      customerUserId: user.id.toString(),
+    });
     const paywall = await adapty.getPaywall('vip_membership');
     const products = await adapty.getPaywallProducts(paywall);
 
     setProduct(products[0]);
     setLoading(false);
-  }, []);
+  }, [user]);
+
+  useIntervalWhen(
+    async () => {
+      const user = await refreshUser();
+
+      if (user.is_subscribed) {
+        setStartTimer(false);
+        Alert.alert(labels.payment_complete);
+        RootNavigation.navigate('Profile');
+      }
+    },
+    5000,
+    startTimer
+  );
 
   return (
     <>
+      {startTimer && (
+        <View
+          style={{
+            position: 'absolute',
+            width: '100%',
+            height: '100%',
+            backgroundColor: 'rgba(0, 0, 0, .9)',
+            zIndex: 30,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <View
+            style={{
+              padding: 32,
+            }}
+          >
+            <ActivityIndicator size="large" color="rgba(255, 255, 255, 1)" />
+            <Text
+              style={{
+                textAlign: 'center',
+                paddingTop: 16,
+                color: 'white',
+              }}
+            >
+              {labels.processing_payment}
+            </Text>
+          </View>
+        </View>
+      )}
       <Topbar text="VIP Membership" showBackButton={!intro} />
       {loading && <Loading />}
       {!loading && product && (
@@ -111,9 +166,17 @@ export default function MembershipScreen({ route }) {
                       onPress={async () => {
                         try {
                           await adapty.makePurchase(product);
-                          RootNavigation.navigate('Social');
+                          setStartTimer(true);
                         } catch (error) {
-                          console.log(error);
+                          Alert.alert(
+                            warnings.something_went_wrong,
+                            labels.please_try_again,
+                            [
+                              {
+                                text: 'Ok',
+                              },
+                            ]
+                          );
                         }
                       }}
                       text={labels.start_free_trial}

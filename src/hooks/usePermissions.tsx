@@ -17,6 +17,7 @@ export default function usePermissions() {
     redeem_mascot_gifts: user,
     trade_pins: user,
     view_arcade: user,
+    view_secret_store: user?.is_subscribed,
     view_profile: user,
     watch_content: user,
   };

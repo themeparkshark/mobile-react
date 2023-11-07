@@ -15,8 +15,8 @@ interface CrumbsType {
     readonly choose_daily_gift: string;
     readonly clearance: string;
     readonly coins: string;
-    readonly continue_as_guest: string;
     readonly copyright: string;
+    readonly edit: string;
     readonly enter_a_username: string;
     readonly experience: string;
     readonly experience_level: string;
@@ -30,7 +30,10 @@ interface CrumbsType {
     readonly membership_terms: string;
     readonly park_completion_rate: string;
     readonly park_tasks: string;
+    readonly payment_complete: string;
     readonly pin_packs: string;
+    readonly please_try_again: string;
+    readonly processing_payment: string;
     readonly purchase_membership: string;
     readonly purchase_membership_additional: string;
     readonly read_more: string;
@@ -65,6 +68,7 @@ interface CrumbsType {
     readonly friend_request_sent: string;
     readonly item_purchased: string;
     readonly pin_swap_created: string;
+    readonly report_created: string;
   };
   readonly prompts: {
     readonly accept_friend_request: string;
@@ -82,6 +86,7 @@ interface CrumbsType {
       readonly view_profile: string;
       readonly watch_content: string;
     };
+    readonly report_username: string;
   };
   readonly urls: {
     readonly privacy_policy: string;
@@ -99,5 +104,6 @@ interface CrumbsType {
     readonly no_visited_parks: string;
     readonly not_at_a_park: string;
     readonly not_signed_in: string;
+    readonly something_went_wrong: string;
   };
 }

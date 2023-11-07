@@ -1,12 +1,6 @@
+import { Image } from 'expo-image';
 import { useState } from 'react';
-import {
-  Dimensions,
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, Pressable, ScrollView, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useAsyncEffect } from 'rooks';
 import getInformationModal from '../api/endpoints/information-modals/get';
@@ -41,7 +35,7 @@ export default function InformationModal({ id }: { readonly id: number }) {
             height: 35,
             alignSelf: 'center',
           }}
-          resizeMode="contain"
+          contentFit="contain"
           source={require('../../assets/images/faq.png')}
         />
       </Button>

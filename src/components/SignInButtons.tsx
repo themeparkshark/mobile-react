@@ -38,7 +38,7 @@ export default function SignInButtons({
             login(credential);
           } catch (error) {
             if (error.code !== 'ERR_REQUEST_CANCELED') {
-              Alert.alert(warnings., 'Please try again');
+              Alert.alert(warnings.something_went_wrong, labels.please_try_again);
             }
           }
         }}
