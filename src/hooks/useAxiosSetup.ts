@@ -1,5 +1,6 @@
 import { AxiosError, AxiosResponse } from 'axios';
 import { useContext, useEffect } from 'react';
+import { Alert } from 'react-native';
 import client from '../api/client';
 import { AuthContext } from '../context/AuthProvider';
 import { BroadcastContext } from '../context/BroadcastProvider';
@@ -20,6 +21,10 @@ export const useAxiosSetup = () => {
       (error: AxiosError) => {
         if (error?.response?.status === 401) {
           logout();
+        }
+
+        if (error?.response?.status >= 500) {
+          Alert.alert('Something went wrong', 'Please try again');
         }
 
         return Promise.reject(error);

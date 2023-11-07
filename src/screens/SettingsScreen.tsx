@@ -9,7 +9,6 @@ import {
   Switch,
 } from 'react-native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
-import * as RootNavigation from '../RootNavigation';
 import deleteUser from '../api/endpoints/me/delete';
 import updateUser from '../api/endpoints/me/update-user';
 import Topbar from '../components/Topbar';
@@ -137,8 +136,6 @@ export default function SettingsScreen() {
                         onPress: async () => {
                           await deleteUser();
                           await logout();
-
-                          RootNavigation.navigate('Login');
                         },
                       },
                     ]

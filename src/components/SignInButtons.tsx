@@ -1,7 +1,8 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { ReactNode, useContext } from 'react';
-import { View } from 'react-native';
+import { Alert, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
+import useCrumbs from "../hooks/useCrumbs";
 
 export default function SignInButtons({
   children = null,
@@ -9,6 +10,7 @@ export default function SignInButtons({
   readonly children?: ReactNode;
 }) {
   const { login } = useContext(AuthContext);
+  const { labels, warnings } = useCrumbs();
 
   return (
     <View
@@ -26,13 +28,19 @@ export default function SignInButtons({
         cornerRadius={5}
         style={{ width: 200, height: 44 }}
         onPress={async () => {
-          const credential = await AppleAuthentication.signInAsync({
-            requestedScopes: [
-              AppleAuthentication.AppleAuthenticationScope.EMAIL,
-            ],
-          });
+          try {
+            const credential = await AppleAuthentication.signInAsync({
+              requestedScopes: [
+                AppleAuthentication.AppleAuthenticationScope.EMAIL,
+              ],
+            });
 
-          login(credential);
+            login(credential);
+          } catch (error) {
+            if (error.code !== 'ERR_REQUEST_CANCELED') {
+              Alert.alert(warnings., 'Please try again');
+            }
+          }
         }}
       />
       {children}

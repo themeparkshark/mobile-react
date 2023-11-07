@@ -7,7 +7,6 @@ import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 import { InventoryType } from '../models/inventory-type';
 import { UserType } from '../models/user-type';
-import * as RootNavigation from '../RootNavigation';
 
 export interface AuthContextType {
   readonly inventory: InventoryType | null;
@@ -74,7 +73,6 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     await SecureStore.deleteItemAsync('token');
     setToken('');
     setUser(null);
-    RootNavigation.navigate('Login');
   };
 
   return (

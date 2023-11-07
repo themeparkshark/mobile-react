@@ -76,7 +76,7 @@ export default function ExploreScreen() {
         showCoins={!!user}
         showKeys={!!user}
         showPumpkins={!!user && theme?.show_pumpkin_currency}
-        parkCoins={park?.park_coins_count}
+        parkCoins={user && park?.park_coins_count}
       />
       {!user && <NotSignedIn />}
       {user && !location && <PermissionsNotGranted />}

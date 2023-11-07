@@ -13,11 +13,13 @@ import SignInButtons from '../../components/SignInButtons';
 import { AuthContext } from '../../context/AuthProvider';
 import { LocationContext } from '../../context/LocationProvider';
 import { MusicContext } from '../../context/MusicProvider';
+import useCrumbs from '../../hooks/useCrumbs';
 
 export default function LoginScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
   const { setPark } = useContext(LocationContext);
+  const { labels } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -77,7 +79,7 @@ export default function LoginScreen({ navigation }) {
                   paddingTop: 32,
                 }}
               >
-                Continue as Guest
+                {labels.continue_as_guest}
               </Text>
             </TouchableOpacity>
           </SignInButtons>
@@ -91,7 +93,7 @@ export default function LoginScreen({ navigation }) {
             marginTop: 'auto',
           }}
         >
-          {`© Theme Park Shark ${new Date().getFullYear()}`}
+          {labels.copyright}
         </Text>
       </SafeAreaView>
     </ImageBackground>

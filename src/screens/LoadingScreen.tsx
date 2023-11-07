@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import { useContext } from 'react';
 import {
   ActivityIndicator,
@@ -20,15 +21,21 @@ export default function LoadingScreen() {
   const { labels } = useCrumbs();
 
   useAsyncEffect(async () => {
-    await requestLocation();
-    await requestPark();
-    setInventory(await getInventory());
-  }, []);
-
-  useAsyncEffect(async () => {
-    if (!parkLoaded || !inventory) {
+    if (!user) {
       return;
     }
+
+    setInventory(await getInventory());
+
+    const { status } = await Location.getBackgroundPermissionsAsync();
+
+    if (status !== 'granted') {
+      RootNavigation.navigate('Explore');
+      return;
+    }
+
+    await requestLocation();
+    await requestPark();
 
     if (!user?.username) {
       RootNavigation.navigate('Welcome');
@@ -36,7 +43,7 @@ export default function LoadingScreen() {
     }
 
     RootNavigation.navigate('Explore');
-  }, [parkLoaded, inventory?.id, user?.username]);
+  }, [user?.id]);
 
   return (
     <ImageBackground

@@ -209,7 +209,7 @@ const AuthStackNavigator = () => {
 export default function App() {
   useKeepAwake();
   const { user, setUser } = useContext(AuthContext);
-  const { setCrumbs } = useContext(CrumbContext);
+  const { setCrumbs, crumbsLoaded } = useContext(CrumbContext);
   const { setTheme } = useContext(ThemeContext);
   const [fontsLoaded] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
@@ -218,10 +218,6 @@ export default function App() {
   useAxiosSetup();
 
   useAsyncEffect(async () => {
-    if (!fontsLoaded) {
-      return;
-    }
-
     await mobileAds().setRequestConfiguration({
       maxAdContentRating: MaxAdContentRating.PG,
       tagForChildDirectedTreatment: true,
@@ -241,7 +237,11 @@ export default function App() {
         setUser({ ...JSON.parse(userString) });
       }
     });
-  }, [fontsLoaded]);
+  }, []);
+
+  if (!fontsLoaded || !crumbsLoaded) {
+    return <></>;
+  }
 
   return (
     <>
