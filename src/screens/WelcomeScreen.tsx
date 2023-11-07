@@ -89,7 +89,6 @@ export default function WelcomeScreen({ navigation }) {
             width: '55%',
             textAlign: 'center',
           }}
-          autoFocus
           autoCapitalize="none"
           onChangeText={setUsername}
           value={username}

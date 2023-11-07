@@ -94,7 +94,6 @@ export default function RedeemCoinCodeScreen() {
                   width: '55%',
                   textAlign: 'center',
                 }}
-                autoFocus
                 autoCapitalize="none"
                 onChangeText={setCoinCode}
                 value={coinCode}
