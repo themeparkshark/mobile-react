@@ -37,7 +37,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [permissionGranted, setPermissionGranted] = useState<boolean>(true);
 
   useAsyncEffect(async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
+    const { status } = await Location.getBackgroundPermissionsAsync();
 
     setPermissionGranted(status === 'granted');
   }, []);
