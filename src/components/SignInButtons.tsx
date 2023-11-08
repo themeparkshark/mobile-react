@@ -2,7 +2,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { ReactNode, useContext } from 'react';
 import { Alert, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
-import useCrumbs from "../hooks/useCrumbs";
+import useCrumbs from '../hooks/useCrumbs';
 
 export default function SignInButtons({
   children = null,
@@ -38,7 +38,10 @@ export default function SignInButtons({
             login(credential);
           } catch (error) {
             if (error.code !== 'ERR_REQUEST_CANCELED') {
-              Alert.alert(warnings.something_went_wrong, labels.please_try_again);
+              Alert.alert(
+                warnings.something_went_wrong,
+                labels.please_try_again
+              );
             }
           }
         }}

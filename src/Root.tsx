@@ -131,7 +131,13 @@ const HomeStackNavigator = () => {
       <Stack.Screen name="Thread" component={ThreadScreen} />
       <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
       <Stack.Screen name="RedeemCoinCode" component={RedeemCoinCodeScreen} />
-      <Stack.Screen name="Membership" component={MembershipScreen} />
+      <Stack.Screen
+        name="Membership"
+        component={MembershipScreen}
+        options={{
+          gestureEnabled: false,
+        }}
+      />
       <Stack.Screen name="Watch" component={WatchScreen} />
       <Stack.Screen
         name="Loading"

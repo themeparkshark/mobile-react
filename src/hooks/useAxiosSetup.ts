@@ -4,7 +4,6 @@ import { Alert } from 'react-native';
 import client from '../api/client';
 import { AuthContext } from '../context/AuthProvider';
 import { BroadcastContext } from '../context/BroadcastProvider';
-import useCrumbs from "./useCrumbs";
 
 export const useAxiosSetup = () => {
   const { enqueue } = useContext(BroadcastContext);
@@ -25,7 +24,10 @@ export const useAxiosSetup = () => {
         }
 
         if (error?.response?.status >= 500) {
-          Alert.alert('Whoops! Something went wrong.', 'Please try again or contact support.');
+          Alert.alert(
+            'Whoops! Something went wrong.',
+            'Please try again or contact support.'
+          );
         }
 
         return Promise.reject(error);
