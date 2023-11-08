@@ -8,9 +8,7 @@ import {
   useEffect,
   useState,
 } from 'react';
-import { useAsyncEffect } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
-import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
 import { AuthContext } from './AuthProvider';
@@ -36,14 +34,33 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(true);
 
-  useAsyncEffect(async () => {
-    const { status } = await Location.getBackgroundPermissionsAsync();
+  const getCurrentLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
 
-    setPermissionGranted(status === 'granted');
-  }, []);
+      if (status !== 'granted') {
+        setPermissionGranted(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync();
+      setPermissionGranted(true);
+
+      return {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+    } catch (error) {
+      //
+    }
+  };
 
   const requestLocation = async () => {
     const newLocation = await getCurrentLocation();
+
+    if (newLocation) {
+      setPermissionGranted(true);
+    }
 
     if (newLocation && isEqual(newLocation, location)) {
       return location;

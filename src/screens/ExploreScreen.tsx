@@ -97,7 +97,7 @@ export default function ExploreScreen() {
       />
       {user && (
         <>
-          {!location && !permissionGranted && <PermissionsNotGranted />}
+          {!permissionGranted && <PermissionsNotGranted />}
           {location && parkLoaded && !park && <NotAtPark />}
         </>
       )}
