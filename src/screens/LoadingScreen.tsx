@@ -1,17 +1,19 @@
-import * as Location from 'expo-location';
-import { useContext, useEffect } from 'react';
-import { ActivityIndicator, Dimensions, ImageBackground, Text, View, } from 'react-native';
+import { useContext } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  ImageBackground,
+  Text,
+  View,
+} from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getInventory from '../api/endpoints/me/inventory';
 import { AuthContext } from '../context/AuthProvider';
-import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function LoadingScreen() {
-  const { user, inventory, setInventory } = useContext(AuthContext);
-  const { location, requestLocation, requestPark, parkLoaded } =
-    useContext(LocationContext);
+  const { user, setInventory } = useContext(AuthContext);
   const { labels } = useCrumbs();
 
   useAsyncEffect(async () => {
@@ -21,27 +23,13 @@ export default function LoadingScreen() {
 
     setInventory(await getInventory());
 
-    const { status } = await Location.getBackgroundPermissionsAsync();
-
-    if (status !== 'granted') {
-      RootNavigation.navigate('Explore');
+    if (!user?.username) {
+      RootNavigation.navigate('Welcome');
       return;
     }
 
-    await requestLocation();
-    await requestPark();
+    RootNavigation.navigate('Explore');
   }, [user?.id]);
-
-  useEffect(() => {
-    if (location && parkLoaded) {
-      if (!user?.username) {
-        RootNavigation.navigate('Welcome');
-        return;
-      }
-
-      RootNavigation.navigate('Explore');
-    }
-  }, [location, parkLoaded]);
 
   return (
     <ImageBackground

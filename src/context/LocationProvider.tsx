@@ -1,3 +1,4 @@
+import * as Location from 'expo-location';
 import { isEqual } from 'lodash';
 import {
   createContext,
@@ -7,6 +8,7 @@ import {
   useEffect,
   useState,
 } from 'react';
+import { useAsyncEffect } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import getCurrentLocation from '../helpers/get-current-location';
 import { LocationType } from '../models/location-type';
@@ -20,6 +22,7 @@ export interface LocationContextType {
   readonly setPark: (park: ParkType | undefined) => void;
   readonly park?: ParkType;
   readonly parkLoaded: boolean;
+  readonly permissionGranted: boolean;
 }
 
 export const LocationContext = createContext<LocationContextType>(
@@ -31,6 +34,13 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [park, setPark] = useState<ParkType>();
   const { user } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
+  const [permissionGranted, setPermissionGranted] = useState<boolean>(true);
+
+  useAsyncEffect(async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+
+    setPermissionGranted(status === 'granted');
+  }, []);
 
   const requestLocation = async () => {
     const newLocation = await getCurrentLocation();
@@ -88,6 +98,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         park,
         parkLoaded,
         setPark,
+        permissionGranted,
       }}
     >
       {children}

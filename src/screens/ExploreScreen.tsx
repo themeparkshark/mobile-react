@@ -37,8 +37,24 @@ export default function ExploreScreen() {
   >();
   const { inventory, refreshUser, user } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
-  const { location, park } = useContext(LocationContext);
+  const {
+    parkLoaded,
+    requestLocation,
+    requestPark,
+    location,
+    park,
+    permissionGranted,
+  } = useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
+
+  useAsyncEffect(async () => {
+    if (!user) {
+      return;
+    }
+
+    await requestLocation();
+    await requestPark();
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -79,9 +95,13 @@ export default function ExploreScreen() {
         showPumpkins={!!user && theme?.show_pumpkin_currency}
         parkCoins={user && park?.park_coins_count}
       />
+      {user && (
+        <>
+          {!permissionGranted && <PermissionsNotGranted />}
+          {location && parkLoaded && !park && <NotAtPark />}
+        </>
+      )}
       {!user && <NotSignedIn />}
-      {user && !location && <PermissionsNotGranted />}
-      {user && location && !park && <NotAtPark />}
       {park && redeemables && (
         <>
           <View
