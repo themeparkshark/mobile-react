@@ -11,14 +11,16 @@ interface SortByDropdownProps {
   activeOption: SortOption;
   onChange: (activeOption: SortOption) => void;
   options: SortOption[];
+  resource: string;
   title: string;
 }
 
 const SortByDropdown: React.FC<SortByDropdownProps> = ({
   activeOption,
-  title,
-  options,
   onChange,
+  options,
+  resource,
+  title,
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -33,9 +35,10 @@ const SortByDropdown: React.FC<SortByDropdownProps> = ({
         <Text
           style={{
             textTransform: 'uppercase',
+            fontFamily: 'Knockout',
           }}
         >
-          {activeOption.label} posts
+          {activeOption.label} {resource}
         </Text>
       </TouchableOpacity>
 
@@ -62,6 +65,8 @@ const SortByDropdown: React.FC<SortByDropdownProps> = ({
             <Text
               style={{
                 marginBottom: 16,
+                fontFamily: 'Knockout',
+                fontSize: 16,
               }}
             >
               {title}
@@ -78,6 +83,7 @@ const SortByDropdown: React.FC<SortByDropdownProps> = ({
               >
                 <Text
                   style={{
+                    fontFamily: 'Knockout',
                     fontSize: 16,
                   }}
                 >
