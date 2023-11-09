@@ -1,4 +1,5 @@
 import React, { ReactNode, useContext, useState } from 'react';
+import * as Clipboard from 'expo-clipboard';
 import {
   Alert,
   SafeAreaView,
@@ -27,7 +28,10 @@ const ThreadActions: React.FC<ThreadActionsProps> = ({ trigger, thread }) => {
   const options = [
     {
       label: 'Copy text',
-      onPress: () => {},
+      onPress: async () => {
+        await Clipboard.setStringAsync(thread.content);
+        setModalVisible(false);
+      },
       show: true,
     },
     {
