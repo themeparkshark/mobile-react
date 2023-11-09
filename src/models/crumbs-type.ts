@@ -29,6 +29,7 @@ interface CrumbsType {
     readonly membership: string;
     readonly membership_benefits: string[];
     readonly membership_terms: string;
+    readonly more_actions: string;
     readonly most_comments: string;
     readonly new: string;
     readonly park_completion_rate: string;
@@ -74,10 +75,12 @@ interface CrumbsType {
     readonly item_purchased: string;
     readonly pin_swap_created: string;
     readonly report_created: string;
+    readonly thread_deleted: string;
   };
   readonly prompts: {
     readonly accept_friend_request: string;
     readonly compliment: string;
+    readonly delete_thread: string;
     readonly pin_swap: string;
     readonly purchase_item: string;
     readonly redeem_item: string;

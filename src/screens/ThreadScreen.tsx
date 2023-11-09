@@ -4,7 +4,7 @@ import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import { useContext, useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getComments from '../api/endpoints/comments/getComments';
@@ -16,10 +16,12 @@ import Comment from '../components/Comment';
 import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
 import Tag from '../components/Tag';
+import ThreadActions from '../components/ThreadActions';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
 import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
+import useCrumbs from '../hooks/useCrumbs';
 import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
 
@@ -32,6 +34,7 @@ export default function ThreadScreen({ route }) {
   const [comments, setComments] = useState<CommentType[]>([]);
   const [comment, setComment] = useState<CommentType>();
   const { user } = useContext(AuthContext);
+  const { warnings, labels } = useCrumbs();
 
   const fetchComments = async (page: number) => {
     if (!currentThread) {
@@ -45,7 +48,19 @@ export default function ThreadScreen({ route }) {
   };
 
   useAsyncEffect(async () => {
-    setCurrentThread(await getThread(thread));
+    try {
+      const response = await getThread(thread);
+      setCurrentThread(response);
+    } catch (error) {
+      Alert.alert(warnings.something_went_wrong, labels.please_try_again, [
+        {
+          text: 'Go back',
+          onPress: () => {
+            RootNavigation.goBack();
+          },
+        },
+      ]);
+    }
   }, []);
 
   useAsyncEffect(async () => {
@@ -68,6 +83,10 @@ export default function ThreadScreen({ route }) {
       <Topbar
         showBackButton
         onBackButtonPress={() => setActiveComment(undefined)}
+        text=" "
+        rightButton={
+          <ThreadActions trigger={<Text>Open</Text>} thread={currentThread} />
+        }
       />
       {loading && <Loading />}
       {!loading && currentThread && (
