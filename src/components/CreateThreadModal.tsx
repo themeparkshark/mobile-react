@@ -88,7 +88,7 @@ export default function CreateThreadModal({
             >
               <Button
                 onPress={() => {
-                  if (title.length) {
+                  if (title.length || (!title.length && content.length)) {
                     Alert.alert(
                       'Are you sure you want to leave? This draft will not be saved.',
                       '',
@@ -160,7 +160,9 @@ export default function CreateThreadModal({
                   fontSize: 16,
                   marginTop: 32,
                   width: '100%',
+                  flex: 1,
                 }}
+                multiline
                 autoCapitalize="none"
                 onChangeText={setContent}
                 value={content}
