@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import deleteUser from '../api/endpoints/me/delete';
+import forceDeleteUser from '../api/endpoints/me/force-delete';
 import updateUser from '../api/endpoints/me/update-user';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
@@ -50,7 +51,7 @@ export default function SettingsScreen() {
               />
               <Cell
                 title="Theme Park Shark ID"
-                cellStyle="RightDetail"
+                cellStyle="Subtitle"
                 detail={user.email}
               />
               <Cell
@@ -136,6 +137,44 @@ export default function SettingsScreen() {
                         onPress: async () => {
                           await deleteUser();
                           await logout();
+                        },
+                      },
+                    ]
+                  );
+                }}
+              />
+              <Cell
+                title="Permanently Delete My Account"
+                titleTextStyle={{
+                  color: PlatformColor('systemRed'),
+                }}
+                onPress={() => {
+                  Alert.alert(
+                    'Are you sure you want to permanently delete your account?',
+                    'This cannot be undone.',
+                    [
+                      {
+                        text: 'Cancel',
+                        style: 'cancel',
+                      },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await forceDeleteUser();
+
+                          Alert.alert(
+                            'Please check your email in order to confirm to permanently delete your account.',
+                            '',
+                            [
+                              {
+                                text: 'Ok',
+                                onPress: async () => {
+                                  await logout();
+                                },
+                              },
+                            ]
+                          );
                         },
                       },
                     ]
