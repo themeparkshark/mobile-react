@@ -27,7 +27,7 @@ export default function UserButtons({
         ?.filter((button) => !(button.hasOwnProperty('show') && !button.show))
         .map((button, index) => {
           return (
-            <View key={index}>
+            <View key={index} style={{ width: 80 }}>
               {button.disabled ? (
                 <>
                   <Image
@@ -51,6 +51,8 @@ export default function UserButtons({
                         fontSize: 16,
                         opacity: 0.3,
                       }}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
                     >
                       {button.text}
                     </Text>
