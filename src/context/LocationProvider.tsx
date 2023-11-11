@@ -1,13 +1,6 @@
 import * as Location from 'expo-location';
-import { isEqual } from 'lodash';
-import {
-  createContext,
-  FC,
-  ReactNode,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
+import { createContext, FC, ReactNode, useContext, useState } from 'react';
+import { useAsyncEffect, useDebounce, useIntervalWhen } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
@@ -17,7 +10,6 @@ export interface LocationContextType {
   readonly location: LocationType | undefined;
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
-  readonly setPark: (park: ParkType | undefined) => void;
   readonly park?: ParkType;
   readonly parkLoaded: boolean;
   readonly permissionGranted: boolean;
@@ -32,19 +24,14 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [park, setPark] = useState<ParkType>();
   const { user } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
-  const [permissionGranted, setPermissionGranted] = useState<boolean>(true);
+  const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
+  const debouncedSetLocation = useDebounce(setLocation, 5000, {
+    leading: true,
+  });
 
   const getCurrentLocation = async () => {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-
-      if (status !== 'granted') {
-        setPermissionGranted(false);
-        return;
-      }
-
       const location = await Location.getCurrentPositionAsync();
-      setPermissionGranted(true);
 
       return {
         latitude: location.coords.latitude,
@@ -58,32 +45,28 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const requestLocation = async () => {
     const newLocation = await getCurrentLocation();
 
-    if (newLocation) {
-      setPermissionGranted(true);
+    if (
+      newLocation &&
+      location &&
+      newLocation.longitude === location.longitude &&
+      newLocation.latitude === location.latitude
+    ) {
+      return;
     }
 
-    if (newLocation && isEqual(newLocation, location)) {
-      return location;
-    }
-
-    setLocation(newLocation);
-    return newLocation;
+    debouncedSetLocation(newLocation);
   };
 
   const requestPark = async () => {
-    const currentLocation = await requestLocation();
-
-    if (!currentLocation) {
-      setParkLoaded(true);
+    if (!location) {
+      await requestLocation();
+      setParkLoaded(false);
       setPark(null);
       return;
     }
 
     try {
-      const newPark = await currentPark(
-        currentLocation.latitude,
-        currentLocation.longitude
-      );
+      const newPark = await currentPark(location.latitude, location.longitude);
 
       setParkLoaded(true);
       setPark(newPark);
@@ -93,18 +76,28 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  useEffect(() => {
-    if (!user) {
+  useAsyncEffect(async () => {
+    if (!user || !permissionGranted || !location) {
       return;
     }
 
-    const interval = setInterval(async () => {
-      await requestLocation();
-      await requestPark();
-    }, 5000);
+    await requestPark();
+  }, [user, permissionGranted, location?.latitude, location?.longitude]);
 
-    return () => clearInterval(interval);
-  }, [user?.id]);
+  useIntervalWhen(
+    async () => {
+      await requestLocation();
+    },
+    5000,
+    Boolean(user && permissionGranted),
+    true
+  );
+
+  useAsyncEffect(async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+
+    setPermissionGranted(status === 'granted');
+  }, []);
 
   return (
     <LocationContext.Provider
@@ -114,7 +107,6 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         requestPark,
         park,
         parkLoaded,
-        setPark,
         permissionGranted,
       }}
     >

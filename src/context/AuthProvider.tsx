@@ -7,6 +7,7 @@ import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 import { InventoryType } from '../models/inventory-type';
 import { UserType } from '../models/user-type';
+import * as RootNavigation from '../RootNavigation';
 
 export interface AuthContextType {
   readonly inventory: InventoryType | null;
@@ -37,6 +38,12 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       setIsReady(true);
     }
   }, [token]);
+
+  useEffect(() => {
+    if (user && !user.username) {
+      RootNavigation.navigate('Welcome');
+    }
+  }, [user]);
 
   useEffect(() => {
     SecureStore.getItemAsync('token').then((_token) => {

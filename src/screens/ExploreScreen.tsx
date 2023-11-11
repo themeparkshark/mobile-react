@@ -47,15 +47,6 @@ export default function ExploreScreen() {
   } = useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
 
-  useAsyncEffect(async () => {
-    if (!user) {
-      return;
-    }
-
-    await requestLocation();
-    await requestPark();
-  }, [user?.id]);
-
   useFocusEffect(
     useCallback(() => {
       playMusic(require('../../assets/sounds/music/track5.mp3'));
@@ -79,12 +70,12 @@ export default function ExploreScreen() {
   }, [park?.id]);
 
   useAsyncEffect(async () => {
-    if (!location?.latitude || !location?.longitude || !redeemables) {
+    if (!park || !location?.latitude || !location?.longitude || !redeemables) {
       return;
     }
 
     setActiveRedeemable(await checkForRedeemable());
-  }, [location?.latitude, location?.longitude, redeemables]);
+  }, [park?.id, location?.latitude, location?.longitude, redeemables]);
 
   return (
     <Wrapper>
@@ -98,7 +89,7 @@ export default function ExploreScreen() {
       {user && (
         <>
           {!permissionGranted && <PermissionsNotGranted />}
-          {location && parkLoaded && !park && <NotAtPark />}
+          {parkLoaded && !park && <NotAtPark />}
         </>
       )}
       {!user && <NotSignedIn />}

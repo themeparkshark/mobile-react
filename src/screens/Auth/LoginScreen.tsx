@@ -11,20 +11,16 @@ import {
 } from 'react-native';
 import SignInButtons from '../../components/SignInButtons';
 import { AuthContext } from '../../context/AuthProvider';
-import { LocationContext } from '../../context/LocationProvider';
 import { MusicContext } from '../../context/MusicProvider';
 import useCrumbs from '../../hooks/useCrumbs';
 
 export default function LoginScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
-  const { setPark } = useContext(LocationContext);
   const { labels } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
-      setPark(undefined);
-
       if (!user) {
         playMusic(require('../../../assets/sounds/music/track1.mp3'));
       }

@@ -45,178 +45,9 @@ import WelcomeScreen from './screens/WelcomeScreen';
 
 const Stack = createNativeStackNavigator();
 
-const HomeStackNavigator = () => {
-  return (
-    <Stack.Navigator
-      initialRouteName="Loading"
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen
-        name="Logout"
-        component={LogoutScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Welcome"
-        component={WelcomeScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="Store" component={StoreScreen} />
-      <Stack.Screen name="PinCollections" component={PinCollectionScreen} />
-      <Stack.Screen
-        name="Explore"
-        component={ExploreScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="News"
-        component={NewsScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="User" component={UserScreen} />
-      <Stack.Screen name="Park" component={ParkScreen} />
-      <Stack.Screen
-        name="Inventory"
-        component={InventoryScreen}
-        options={{
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen
-        name="Leaderboard"
-        component={LeaderboardScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Social"
-        component={SocialScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
-      <Stack.Screen name="Friends" component={FriendsScreen} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} />
-      <Stack.Screen
-        name="PendingFriendRequests"
-        component={PendingFriendRequestsScreen}
-      />
-      <Stack.Screen name="Thread" component={ThreadScreen} />
-      <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
-      <Stack.Screen name="RedeemCoinCode" component={RedeemCoinCodeScreen} />
-      <Stack.Screen
-        name="Membership"
-        component={MembershipScreen}
-        options={{
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="Watch" component={WatchScreen} />
-      <Stack.Screen
-        name="Loading"
-        component={LoadingScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-    </Stack.Navigator>
-  );
-};
-
-const AuthStackNavigator = () => {
-  return (
-    <Stack.Navigator
-      initialRouteName="Splash"
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen
-        name="Login"
-        component={LoginScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Splash"
-        component={SplashScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Leaderboard"
-        component={LeaderboardScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Social"
-        component={SocialScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Explore"
-        component={ExploreScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="News"
-        component={NewsScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="User" component={UserScreen} />
-      <Stack.Screen name="Park" component={ParkScreen} />
-      <Stack.Screen name="Thread" component={ThreadScreen} />
-    </Stack.Navigator>
-  );
-};
-
 export default function App() {
   useKeepAwake();
-  const { user, setUser } = useContext(AuthContext);
+  const { setUser } = useContext(AuthContext);
   const { setCrumbs, crumbsLoaded } = useContext(CrumbContext);
   const { setTheme } = useContext(ThemeContext);
   const [fontsLoaded] = useFonts({
@@ -252,16 +83,124 @@ export default function App() {
   }
 
   return (
-    <>
-      {user ? (
-        <NavigationContainer ref={navigationRef}>
-          <HomeStackNavigator />
-        </NavigationContainer>
-      ) : (
-        <NavigationContainer ref={navigationRef}>
-          <AuthStackNavigator />
-        </NavigationContainer>
-      )}
-    </>
+    <NavigationContainer ref={navigationRef}>
+      <Stack.Navigator
+        initialRouteName="Splash"
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen
+          name="Logout"
+          component={LogoutScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Welcome"
+          component={WelcomeScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen name="Store" component={StoreScreen} />
+        <Stack.Screen name="PinCollections" component={PinCollectionScreen} />
+        <Stack.Screen
+          name="Profile"
+          component={ProfileScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen name="User" component={UserScreen} />
+        <Stack.Screen name="Park" component={ParkScreen} />
+        <Stack.Screen
+          name="Inventory"
+          component={InventoryScreen}
+          options={{
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
+        <Stack.Screen name="Friends" component={FriendsScreen} />
+        <Stack.Screen name="Notifications" component={NotificationsScreen} />
+        <Stack.Screen
+          name="PendingFriendRequests"
+          component={PendingFriendRequestsScreen}
+        />
+        <Stack.Screen name="Thread" component={ThreadScreen} />
+        <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
+        <Stack.Screen name="RedeemCoinCode" component={RedeemCoinCodeScreen} />
+        <Stack.Screen
+          name="Membership"
+          component={MembershipScreen}
+          options={{
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen name="Watch" component={WatchScreen} />
+        <Stack.Screen
+          name="Loading"
+          component={LoadingScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Splash"
+          component={SplashScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Leaderboard"
+          component={LeaderboardScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Social"
+          component={SocialScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Explore"
+          component={ExploreScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="News"
+          component={NewsScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }

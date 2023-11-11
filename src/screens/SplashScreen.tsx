@@ -9,6 +9,8 @@ export default function SplashScreen() {
     Storage.getItem({ key: 'user' }).then((userString: string) => {
       if (!userString) {
         RootNavigation.navigate('Login');
+      } else {
+        RootNavigation.navigate('Loading');
       }
     });
   }, []);
