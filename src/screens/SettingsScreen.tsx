@@ -14,6 +14,7 @@ import forceDeleteUser from '../api/endpoints/me/force-delete';
 import updateUser from '../api/endpoints/me/update-user';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
+import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function SettingsScreen() {
@@ -21,6 +22,7 @@ export default function SettingsScreen() {
   const [enabledMusic, setEnabledMusic] = useState<boolean>();
   const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
   const { urls, labels } = useCrumbs();
+  const { reset } = useContext(LocationContext);
 
   useEffect(() => {
     setEnabledMusic(user?.enabled_music);
@@ -187,6 +189,7 @@ export default function SettingsScreen() {
                   color: PlatformColor('systemBlue'),
                 }}
                 onPress={() => {
+                  reset();
                   logout();
                 }}
               />

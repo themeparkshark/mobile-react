@@ -8,6 +8,7 @@ import { AuthContext } from './AuthProvider';
 
 export interface LocationContextType {
   readonly location: LocationType | undefined;
+  readonly reset: () => void;
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
   readonly park?: ParkType;
@@ -20,7 +21,7 @@ export const LocationContext = createContext<LocationContextType>(
 );
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [location, setLocation] = useState<LocationType | undefined>();
+  const [location, setLocation] = useState<LocationType>();
   const [park, setPark] = useState<ParkType>();
   const { user } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
@@ -99,12 +100,19 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     setPermissionGranted(status === 'granted');
   }, []);
 
+  const reset = () => {
+    setLocation(undefined);
+    setParkLoaded(false);
+    setPark(undefined);
+  };
+
   return (
     <LocationContext.Provider
       value={{
         location,
         requestLocation,
         requestPark,
+        reset,
         park,
         parkLoaded,
         permissionGranted,

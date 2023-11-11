@@ -37,14 +37,8 @@ export default function ExploreScreen() {
   >();
   const { inventory, refreshUser, user } = useContext(AuthContext);
   const { playMusic } = useContext(MusicContext);
-  const {
-    parkLoaded,
-    requestLocation,
-    requestPark,
-    location,
-    park,
-    permissionGranted,
-  } = useContext(LocationContext);
+  const { parkLoaded, location, park, permissionGranted } =
+    useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
 
   useFocusEffect(

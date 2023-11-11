@@ -38,6 +38,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     if (token) {
       setIsReady(true);
       await refreshUser();
+      RootNavigation.navigate('Loading');
     }
   }, [token]);
 
@@ -81,6 +82,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const logout = async () => {
+    RootNavigation.navigate('Login');
     await Storage.removeItem({ key: 'user' });
     await SecureStore.deleteItemAsync('token');
     setToken('');

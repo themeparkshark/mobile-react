@@ -139,6 +139,7 @@ export default function UserScreen({ route, navigation }) {
             );
           },
           text: 'Report',
+          permission: PermissionEnums.CreateReports,
         },
       ]
     : [];

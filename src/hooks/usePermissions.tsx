@@ -12,6 +12,7 @@ export default function usePermissions() {
     add_friends: user,
     become_a_member: user,
     create_compliments: user,
+    create_reports: user,
     create_threads: user,
     redeem_coin_codes: user,
     redeem_mascot_gifts: user,

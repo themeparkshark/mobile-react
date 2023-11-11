@@ -23,7 +23,6 @@ import FriendsScreen from './screens/FriendsScreen';
 import InventoryScreen from './screens/InventoryScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import LoadingScreen from './screens/LoadingScreen';
-import LogoutScreen from './screens/LogoutScreen';
 import MembershipScreen from './screens/MembershipScreen';
 import NewsScreen from './screens/NewsScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
@@ -90,14 +89,6 @@ export default function App() {
           headerShown: false,
         }}
       >
-        <Stack.Screen
-          name="Logout"
-          component={LogoutScreen}
-          options={{
-            animation: 'none',
-            gestureEnabled: false,
-          }}
-        />
         <Stack.Screen
           name="Welcome"
           component={WelcomeScreen}
