@@ -2,6 +2,7 @@ import { AppleAuthenticationCredential } from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
 import Storage from 'expo-storage';
 import { createContext, FC, ReactNode, useEffect, useState } from 'react';
+import { useAsyncEffect, useTimeoutWhen } from 'rooks';
 import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
@@ -30,20 +31,23 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string>('');
   const [isReady, setIsReady] = useState<boolean>(false);
 
-  useEffect(() => {
+  useAsyncEffect(async () => {
     const { headers } = client.defaults;
     headers.common.Authorization = `Bearer ${token}`;
 
     if (token) {
       setIsReady(true);
+      await refreshUser();
     }
   }, [token]);
 
-  useEffect(() => {
-    if (user && !user.username) {
+  useTimeoutWhen(
+    () => {
       RootNavigation.navigate('Welcome');
-    }
-  }, [user]);
+    },
+    5000,
+    Boolean(user && !user.username)
+  );
 
   useEffect(() => {
     SecureStore.getItemAsync('token').then((_token) => {
@@ -59,7 +63,6 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       setToken(response.token);
 
       await SecureStore.setItemAsync('token', response.token);
-      await refreshUser();
     } catch (error) {
       console.log(error);
     }
