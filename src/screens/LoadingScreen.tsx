@@ -51,7 +51,7 @@ export default function LoadingScreen() {
       return;
     }
 
-    setProgress(100);
+    setProgress(90);
   }, [parkLoaded]);
 
   useEffect(() => {
@@ -60,9 +60,17 @@ export default function LoadingScreen() {
 
   useTimeoutWhen(
     () => {
+      setProgress(100);
+    },
+    3000,
+    progress === 90
+  );
+
+  useTimeoutWhen(
+    () => {
       RootNavigation.navigate('Explore');
     },
-    2000,
+    500,
     progress === 100
   );
 
