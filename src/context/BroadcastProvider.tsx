@@ -1,9 +1,18 @@
-import { createContext, FC, ReactNode, useEffect, useState } from 'react';
+import {
+  createContext,
+  FC,
+  ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { Animated } from 'react-native';
 import { useIntervalWhen, useQueueState } from 'rooks';
 
 export interface BroadcastContextType {
   readonly activeBroadcast: string | undefined;
   readonly enqueue: (messages: string[]) => void;
+  readonly translate: Animated.Value;
 }
 
 export const BroadcastContext = createContext<BroadcastContextType>(
@@ -15,6 +24,7 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
 }) => {
   const [list, { enqueue, dequeue, peek, length }] = useQueueState<string>([]);
   const [message, setMessage] = useState<string>();
+  const translate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (message) {
@@ -30,6 +40,36 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
     Boolean(length)
   );
 
+  useIntervalWhen(
+    () => {
+      slideUp();
+    },
+    5000,
+    Boolean(length)
+  );
+
+  useEffect(() => {
+    if (peek()) {
+      slideDown();
+    }
+  }, [peek()]);
+
+  const slideUp = () => {
+    Animated.timing(translate, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const slideDown = () => {
+    Animated.timing(translate, {
+      toValue: 60,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  };
+
   return (
     <BroadcastContext.Provider
       value={{
@@ -39,6 +79,7 @@ export const BroadcastProvider: FC<{ children: ReactNode }> = ({
             setMessage(message);
           });
         },
+        translate,
       }}
     >
       {children}
