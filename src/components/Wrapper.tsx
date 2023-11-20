@@ -53,14 +53,6 @@ export default function Wrapper({
     },
   ];
 
-  let background;
-
-  if (theme?.bottom_bar_url) {
-    background = { url: theme.bottom_bar_url };
-  } else {
-    background = require('../../assets/images/screens/explore/bottombar.png');
-  }
-
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
@@ -78,7 +70,7 @@ export default function Wrapper({
         }}
       >
         <ImageBackground
-          source={background}
+          source={{ url: theme.bottom_bar_url }}
           resizeMode="cover"
           style={{
             width: '100%',

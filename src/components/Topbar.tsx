@@ -127,9 +127,7 @@ export default function Topbar({
         source={
           purple
             ? require('../../assets/images/screens/store/purple_topbar.png')
-            : theme?.top_bar_url
-            ? { url: theme.top_bar_url }
-            : require('../../assets/images/screens/explore/topbar.png')
+            : { url: theme?.top_bar_url }
         }
         resizeMode="cover"
         style={{
