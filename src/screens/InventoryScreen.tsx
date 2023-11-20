@@ -17,7 +17,6 @@ import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
-import { MusicContext } from '../context/MusicProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';

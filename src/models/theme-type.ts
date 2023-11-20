@@ -9,7 +9,7 @@ export interface ThemeType {
   readonly top_bar_url: string;
   readonly tracks: {
     readonly id: number;
-    readonly url: string;
+    readonly track_url: string;
   }[];
   readonly store: StoreType;
 }

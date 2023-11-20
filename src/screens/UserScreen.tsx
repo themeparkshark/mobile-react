@@ -18,7 +18,6 @@ import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
-import { MusicContext } from '../context/MusicProvider';
 import useCompliment from '../hooks/useCompliment';
 import useCrumbs from '../hooks/useCrumbs';
 import useFriends from '../hooks/useFriends';

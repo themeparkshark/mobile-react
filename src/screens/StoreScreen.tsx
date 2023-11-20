@@ -13,7 +13,6 @@ import getStore from '../api/endpoints/stores/get';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
-import { MusicContext } from '../context/MusicProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { CatalogType } from '../models/catalog-type';
 import { InformationModalEnums } from '../models/information-modal-enums';

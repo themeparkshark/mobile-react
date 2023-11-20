@@ -1,5 +1,4 @@
 import { Image } from 'expo-image';
-import { useContext } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -9,8 +8,6 @@ import {
   View,
 } from 'react-native';
 import SignInButtons from '../../components/SignInButtons';
-import { AuthContext } from '../../context/AuthProvider';
-import { MusicContext } from '../../context/MusicProvider';
 import useCrumbs from '../../hooks/useCrumbs';
 
 export default function LoginScreen({ navigation }) {

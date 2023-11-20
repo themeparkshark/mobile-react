@@ -32,7 +32,6 @@ import Wrapper from '../components/Wrapper';
 import YellowButton from '../components/YellowButton';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
-import { MusicContext } from '../context/MusicProvider';
 import { NotificationContext } from '../context/NotificationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';

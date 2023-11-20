@@ -21,32 +21,28 @@ export const ThemeContext = createContext<ThemeContextType>(
 );
 
 export const ThemeProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<ThemeType | undefined>();
+  const [theme, setTheme] = useState<ThemeType>();
   const [themeLoaded, setThemeLoaded] = useState<boolean>(false);
   const { initializeTracks } = useContext(MusicContext);
 
   useEffect(() => {
-    if (!themeLoaded) {
+    if (!themeLoaded || !theme?.tracks.length) {
       return;
     }
 
-    if (theme) {
-      initializeTracks(theme.tracks.map((track) => track.url));
-      return;
-    }
+    initializeTracks(theme?.tracks.map((track) => track.track_url) ?? []);
   }, [themeLoaded, theme]);
+
+  useEffect(() => {
+    setThemeLoaded(Boolean(theme));
+  }, [theme]);
 
   return (
     <ThemeContext.Provider
       value={{
         theme,
         retrieveTheme: async () => {
-          try {
-            setTheme(await getCurrentTheme());
-            setThemeLoaded(true);
-          } catch (error) {
-            setThemeLoaded(true);
-          }
+          setTheme(await getCurrentTheme());
         },
         themeLoaded,
       }}

@@ -15,7 +15,6 @@ import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
-import { MusicContext } from '../context/MusicProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { RedeemableType } from '../models/redeemable-type';
