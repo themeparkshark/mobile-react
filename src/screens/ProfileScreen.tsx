@@ -50,7 +50,6 @@ export default function ProfileScreen() {
   const [friends, setFriends] = useState<UserType[]>([]);
   const { refreshNotificationCount, notificationCount } =
     useContext(NotificationContext);
-  const { playMusic } = useContext(MusicContext);
   const { warnings, labels } = useCrumbs();
 
   const requestFriends = () => {
@@ -59,7 +58,6 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
       requestFriends();
       refreshNotificationCount();
     }, [])

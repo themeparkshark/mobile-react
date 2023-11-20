@@ -1,7 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Callout, Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
@@ -36,16 +35,9 @@ export default function ExploreScreen() {
     RedeemableType | undefined
   >();
   const { inventory, refreshUser, user } = useContext(AuthContext);
-  const { playMusic } = useContext(MusicContext);
   const { parkLoaded, location, park, permissionGranted } =
     useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
-
-  useFocusEffect(
-    useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
-    }, [])
-  );
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);

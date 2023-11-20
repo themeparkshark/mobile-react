@@ -1,6 +1,14 @@
-import { createContext, FC, ReactNode, useState } from 'react';
+import {
+  createContext,
+  FC,
+  ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import getCurrentTheme from '../api/endpoints/current-theme/get';
 import { ThemeType } from '../models/theme-type';
+import { MusicContext } from './MusicProvider';
 
 export interface ThemeContextType {
   readonly retrieveTheme: () => void;
@@ -15,6 +23,18 @@ export const ThemeContext = createContext<ThemeContextType>(
 export const ThemeProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<ThemeType | undefined>();
   const [themeLoaded, setThemeLoaded] = useState<boolean>(false);
+  const { initializeTracks } = useContext(MusicContext);
+
+  useEffect(() => {
+    if (!themeLoaded) {
+      return;
+    }
+
+    if (theme) {
+      initializeTracks(theme.tracks.map((track) => track.url));
+      return;
+    }
+  }, [themeLoaded, theme]);
 
   return (
     <ThemeContext.Provider

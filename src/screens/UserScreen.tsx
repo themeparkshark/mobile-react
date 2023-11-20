@@ -36,7 +36,6 @@ export default function UserScreen({ route, navigation }) {
   const { purchaseItem } = usePurchaseItem();
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
-  const { playMusic } = useContext(MusicContext);
   const { complimentUser } = useCompliment();
   const { checkPermission } = usePermissions();
   const { user: authUser } = useContext(AuthContext);
@@ -48,8 +47,6 @@ export default function UserScreen({ route, navigation }) {
         navigation.navigate('Profile');
         return;
       }
-
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
     }, [])
   );
 

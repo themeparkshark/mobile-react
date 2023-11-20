@@ -1,6 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useContext } from 'react';
+import { useContext } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -15,17 +14,7 @@ import { MusicContext } from '../../context/MusicProvider';
 import useCrumbs from '../../hooks/useCrumbs';
 
 export default function LoginScreen({ navigation }) {
-  const { user } = useContext(AuthContext);
-  const { playMusic } = useContext(MusicContext);
   const { labels } = useCrumbs();
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!user) {
-        playMusic(require('../../../assets/sounds/music/track1.mp3'));
-      }
-    }, [])
-  );
 
   return (
     <ImageBackground

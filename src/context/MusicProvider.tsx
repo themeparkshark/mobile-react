@@ -1,62 +1,69 @@
 import { Audio } from 'expo-av';
-import { createContext, FC, ReactNode, useContext, useState } from 'react';
-import { useAsyncEffect } from 'rooks';
-import { AuthContext } from './AuthProvider';
+import { shuffle } from 'lodash';
+import React, { createContext, useCallback, useState } from 'react';
 
-export interface MusicContextType {
-  readonly currentSound: any;
-  readonly playMusic: (pendingSound: any) => void;
+type Track = string;
+
+interface MusicContextType {
+  initializeTracks: (newTracks: Track[]) => void;
 }
 
 export const MusicContext = createContext<MusicContextType>(
   {} as MusicContextType
 );
 
-export const MusicProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentSound, setCurrentSound] = useState<any>();
-  const [playingSound, setPlayingSound] = useState<any>();
-  const { user, isReady } = useContext(AuthContext);
+export const MusicProvider: React.FC = ({ children }) => {
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+  const [soundObject, setSoundObject] = useState<Audio.Sound | null>(null);
 
-  useAsyncEffect(async () => {
-    if (isReady && !user?.enabled_music && playingSound) {
-      setCurrentSound(null);
-      await playingSound.stopAsync();
-      setPlayingSound(null);
-    }
-  }, [isReady, user?.enabled_music, playingSound]);
+  const playTrack = useCallback(
+    async (track: Track) => {
+      if (soundObject) {
+        await soundObject.unloadAsync();
+      }
 
-  useAsyncEffect(async () => {
-    if (!currentSound || !user?.enabled_music) {
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: track },
+        {},
+        onPlaybackStatusUpdate
+      );
+      setSoundObject(sound);
+      await sound.playAsync();
+    },
+    [soundObject]
+  );
+
+  const onPlaybackStatusUpdate = useCallback(
+    async (status: Audio.AVPlaybackStatus) => {
+      if (!status.didJustFinish) {
+        return;
+      }
+
+      await selectNewTrack();
+    },
+    []
+  );
+
+  const selectNewTrack = useCallback(async () => {
+    if (!tracks.length) {
       return;
     }
 
-    if (playingSound) {
-      await playingSound.stopAsync();
-    }
+    let shuffledTracks = shuffle(tracks);
+    let newTrack = shuffledTracks[0];
+    setCurrentTrack(newTrack);
+    await playTrack(newTrack);
+  }, [tracks, playTrack]);
 
-    const { sound } = await Audio.Sound.createAsync(currentSound);
-    await sound.playAsync();
-    await sound.setIsLoopingAsync(true);
-    setPlayingSound(sound);
-
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [currentSound, user?.enabled_music]);
+  const initializeTracks = useCallback((newTracks: Track[]) => {
+    setTracks(newTracks);
+  }, []);
 
   return (
     <MusicContext.Provider
       value={{
-        currentSound,
-        playMusic: async (pendingMusic: any) => {
-          if (isReady && !user?.enabled_music) {
-            return;
-          }
-
-          setCurrentSound(pendingMusic);
-        },
+        initializeTracks,
       }}
     >
       {children}

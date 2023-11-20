@@ -7,5 +7,9 @@ export interface ThemeType {
   readonly show_pumpkin_currency: boolean;
   readonly splash_screen_url;
   readonly top_bar_url: string;
+  readonly tracks: {
+    readonly id: number;
+    readonly url: string;
+  }[];
   readonly store: StoreType;
 }

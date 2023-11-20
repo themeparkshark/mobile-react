@@ -1,7 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -33,13 +32,6 @@ export default function InventoryScreen() {
   const { refreshUser } = useContext(AuthContext);
   const [page, setPage] = useState<number>(1);
   const { playSound } = useContext(SoundEffectContext);
-  const { playMusic } = useContext(MusicContext);
-
-  useFocusEffect(
-    useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track2.mp3'));
-    }, [])
-  );
 
   const requestItems = async (page: number) => {
     if (!currentItemType) {

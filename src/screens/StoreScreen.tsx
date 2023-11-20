@@ -1,6 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -30,23 +29,8 @@ export default function StoreScreen({ route }) {
   const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
   const [items, setItems] = useState<ItemType[]>();
   const [loading, setLoading] = useState<boolean>(true);
-  const { playMusic } = useContext(MusicContext);
   const { user } = useContext(AuthContext);
   const { labels } = useCrumbs();
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!currentStore) {
-        return;
-      }
-
-      playMusic(
-        currentStore.is_secret_store
-          ? require('../../assets/sounds/music/track4.mp3')
-          : require('../../assets/sounds/music/track3.mp3')
-      );
-    }, [currentStore?.id])
-  );
 
   useEffect(() => {
     getStore(store).then((response) => setCurrentStore(response));
