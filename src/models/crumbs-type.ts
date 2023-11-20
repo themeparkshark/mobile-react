@@ -44,6 +44,7 @@ interface CrumbsType {
     readonly select_a_pin: string;
     readonly skip_for_now: string;
     readonly slow_connectivity: string;
+    readonly splash_screen_facts: string[];
     readonly start_free_trial: string;
     readonly submit: string;
     readonly subscribed_user: string;

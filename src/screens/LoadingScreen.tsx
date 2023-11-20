@@ -1,16 +1,19 @@
-import { useContext, useEffect } from 'react';
+import { sample } from 'lodash';
+import { useContext, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Dimensions,
   ImageBackground,
+  SafeAreaView,
   Text,
   View,
 } from 'react-native';
-import { useAsyncEffect } from 'rooks';
+import { useAsyncEffect, useTimeoutWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getInventory from '../api/endpoints/me/inventory';
+import Progress from '../components/Progress';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
+import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function LoadingScreen() {
@@ -18,6 +21,9 @@ export default function LoadingScreen() {
   const { requestPark, parkLoaded, permissionGranted } =
     useContext(LocationContext);
   const { labels } = useCrumbs();
+  const { theme } = useContext(ThemeContext);
+  const [progress, setProgress] = useState<number>(0);
+  const [fact, setFact] = useState<string>();
 
   useAsyncEffect(async () => {
     if (!isReady) {
@@ -25,7 +31,7 @@ export default function LoadingScreen() {
     }
 
     if (!permissionGranted) {
-      RootNavigation.navigate('Explore');
+      setProgress(100);
       return;
     }
     await requestPark();
@@ -36,6 +42,7 @@ export default function LoadingScreen() {
       return;
     }
 
+    setProgress(50);
     setInventory(await getInventory());
   }, [isReady]);
 
@@ -44,47 +51,80 @@ export default function LoadingScreen() {
       return;
     }
 
-    RootNavigation.navigate('Explore');
+    setProgress(100);
   }, [parkLoaded]);
+
+  useEffect(() => {
+    setFact(sample(labels.splash_screen_facts));
+  }, []);
+
+  useTimeoutWhen(
+    () => {
+      RootNavigation.navigate('Explore');
+    },
+    2000,
+    progress === 100
+  );
 
   return (
     <ImageBackground
-      source={require('../../assets/images/screens/login/background.png')}
+      source={
+        theme?.splash_screen_url
+          ? {
+              uri: theme?.splash_screen_url,
+            }
+          : require('../../assets/images/screens/login/background.png')
+      }
       resizeMode="cover"
       style={{
         width: Dimensions.get('window').width,
         height: Dimensions.get('window').height,
       }}
     >
-      <View
+      <SafeAreaView
         style={{
           width: '100%',
           height: '100%',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'flex-end',
         }}
       >
         <View
           style={{
-            backgroundColor: 'rgba(255, 255, 255, .8)',
+            marginBottom: 32,
             marginLeft: 'auto',
             marginRight: 'auto',
-            padding: 16,
-            width: '50%',
-            borderRadius: 5,
+            width: '80%',
           }}
         >
-          <ActivityIndicator size="large" color="rgba(0, 0, 0, .5)" />
           <Text
             style={{
+              color: 'white',
               textAlign: 'center',
-              paddingTop: 16,
+              fontFamily: 'Knockout',
+              fontSize: 20,
+              textShadowColor: 'rgba(0, 0, 0, .5)',
+              textShadowOffset: {
+                width: 1,
+                height: 1,
+              },
+              textShadowRadius: 0,
+              marginBottom: 16,
             }}
           >
-            {labels.loading}
+            {fact}
           </Text>
+          <View
+            style={{
+              borderRadius: 50,
+              borderColor: 'white',
+              borderWidth: 3,
+            }}
+          >
+            <Progress progress={progress} />
+          </View>
         </View>
-      </View>
+      </SafeAreaView>
     </ImageBackground>
   );
 }
