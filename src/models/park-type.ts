@@ -12,6 +12,6 @@ export interface ParkType {
   readonly name: string;
   readonly park_coins_count: number;
   readonly secret_tasks_count: number;
-  readonly store: StoreType;
+  readonly stores: StoreType[];
   readonly tasks_count: number;
 }

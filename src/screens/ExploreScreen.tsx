@@ -17,6 +17,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
+import { CurrencyEnum } from '../models/currency-enum';
 import { RedeemableType } from '../models/redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import Coin from './ExploreScreen/Coin';
@@ -68,7 +69,7 @@ export default function ExploreScreen() {
         parkCoin={user && park?.coin_url}
         showCoins={!!user}
         showKeys={!!user}
-        showPumpkins={!!user && theme?.show_pumpkin_currency}
+        showPumpkins={!!user && theme?.currency?.id === CurrencyEnum.Pumpkins}
         parkCoins={user && park?.park_coins_count}
       />
       {user && (
@@ -88,56 +89,36 @@ export default function ExploreScreen() {
               zIndex: 10,
             }}
           >
-            {theme && theme.store && (
+            {park.stores.length && (
               <View
                 style={{
                   marginBottom: 8,
+                  rowGap: 8,
                 }}
               >
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('Store', {
-                      store: theme.store.id,
-                    });
-                  }}
-                >
-                  <Image
-                    style={{
-                      width: 70,
-                      height: 75,
-                    }}
-                    source={{
-                      uri: theme.store.icon_url,
-                    }}
-                    contentFit="contain"
-                  />
-                </Button>
-              </View>
-            )}
-            {park.store && (
-              <View
-                style={{
-                  marginBottom: 8,
-                }}
-              >
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('Store', {
-                      store: park.store.id,
-                    });
-                  }}
-                >
-                  <Image
-                    style={{
-                      width: 70,
-                      height: 75,
-                    }}
-                    source={{
-                      uri: park.store.icon_url,
-                    }}
-                    contentFit="contain"
-                  />
-                </Button>
+                {park.stores.map((store) => {
+                  return (
+                    <Button
+                      key={store.id}
+                      onPress={() => {
+                        RootNavigation.navigate('Store', {
+                          store: store.id,
+                        });
+                      }}
+                    >
+                      <Image
+                        style={{
+                          width: 70,
+                          height: 75,
+                        }}
+                        source={{
+                          uri: store.icon_url,
+                        }}
+                        contentFit="contain"
+                      />
+                    </Button>
+                  );
+                })}
               </View>
             )}
             <TaskListModal redeemables={redeemables} />
