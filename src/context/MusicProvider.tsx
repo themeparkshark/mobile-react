@@ -1,7 +1,8 @@
 import { Audio } from 'expo-av';
 import { shuffle } from 'lodash';
-import React, { createContext, useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { useAsyncEffect } from 'rooks';
+import { AuthContext } from './AuthProvider';
 
 type Track = string;
 
@@ -14,11 +15,26 @@ export const MusicContext = createContext<MusicContextType>(
 );
 
 export const MusicProvider: React.FC = ({ children }) => {
+  const { user } = useContext(AuthContext);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [soundObject, setSoundObject] = useState<Audio.Sound | null>(null);
 
+  useAsyncEffect(async () => {
+    if (!user?.enabled_music) {
+      await soundObject?.stopAsync();
+    } else if (!currentTrack) {
+      await selectNewTrack();
+    }
+  }, [user?.enabled_music]);
+
   const playTrack = async (track: Track) => {
+    if (user && !user?.enabled_music) {
+      return;
+    }
+
+    setCurrentTrack(currentTrack);
+
     if (soundObject) {
       await soundObject.unloadAsync();
     }
@@ -46,7 +62,6 @@ export const MusicProvider: React.FC = ({ children }) => {
     const newTrack = shuffle(tracks)[0];
 
     await playTrack(newTrack);
-    setCurrentTrack(currentTrack);
   };
 
   useAsyncEffect(async () => {
@@ -54,7 +69,7 @@ export const MusicProvider: React.FC = ({ children }) => {
       return;
     }
 
-    //await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
     await selectNewTrack();
   }, [tracks]);
 
