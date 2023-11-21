@@ -167,7 +167,7 @@ export default function Topbar({
                 {parkCoins !== null && (
                   <Currency
                     image={parkCoin}
-                    count={user?.park_coins_count ?? 0}
+                    count={parkCoins ?? 0}
                   />
                 )}
               </View>
