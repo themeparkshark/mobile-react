@@ -1,7 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { chunk } from 'lodash';
-import { useCallback, useContext, useState } from 'react';
+import { useState } from 'react';
 import { ImageBackground, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
@@ -17,7 +16,6 @@ import Progress from '../components/Progress';
 import TaskCoinModal from '../components/TaskCoinModal';
 import Topbar from '../components/Topbar';
 import config from '../config';
-import { MusicContext } from '../context/MusicProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
@@ -38,14 +36,7 @@ export default function ParkScreen({ route }) {
     SecretTaskType[]
   >([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const { playMusic } = useContext(MusicContext);
   const { labels } = useCrumbs();
-
-  useFocusEffect(
-    useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track6.mp3'));
-    }, [])
-  );
 
   const hasCompletedTask = (task: number) => {
     return completedTasks.find((completedTask) => completedTask.id === task);

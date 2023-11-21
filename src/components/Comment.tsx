@@ -52,19 +52,23 @@ export default function Comment({
           paddingBottom: 16,
         }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Button
-            onPress={() => {
-              RootNavigation.navigate('User', {
-                user: comment.user.id,
-              });
-            }}
-          >
-            <Avatar size="sm" user={comment.user} />
-          </Button>
-          <View style={{ paddingLeft: 16 }}>
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', columnGap: 16 }}
+        >
+          {comment.user && (
+            <Button
+              onPress={() => {
+                RootNavigation.navigate('User', {
+                  user: comment.user.id,
+                });
+              }}
+            >
+              <Avatar size="sm" user={comment.user} />
+            </Button>
+          )}
+          <View>
             <Text>
-              {comment.user.screen_name} -{' '}
+              {comment.user?.screen_name ?? '[deleted]'} -{' '}
               {dayjs(comment.created_at).startOf('second').fromNow()}
             </Text>
           </View>

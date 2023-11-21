@@ -22,8 +22,9 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({
     async () => {
       await refreshNotificationCount();
     },
-    30000,
-    Boolean(isReady && user)
+    120000,
+    Boolean(isReady && user),
+    true
   );
 
   const refreshNotificationCount = async () => {

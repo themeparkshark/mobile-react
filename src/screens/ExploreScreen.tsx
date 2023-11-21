@@ -1,7 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Callout, Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
@@ -16,9 +15,9 @@ import Topbar from '../components/Topbar';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
-import { MusicContext } from '../context/MusicProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
+import { CurrencyEnum } from '../models/currency-enum';
 import { RedeemableType } from '../models/redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import Coin from './ExploreScreen/Coin';
@@ -36,31 +35,9 @@ export default function ExploreScreen() {
     RedeemableType | undefined
   >();
   const { inventory, refreshUser, user } = useContext(AuthContext);
-  const { playMusic } = useContext(MusicContext);
-  const {
-    parkLoaded,
-    requestLocation,
-    requestPark,
-    location,
-    park,
-    permissionGranted,
-  } = useContext(LocationContext);
+  const { parkLoaded, location, park, permissionGranted } =
+    useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
-
-  useAsyncEffect(async () => {
-    if (!user) {
-      return;
-    }
-
-    await requestLocation();
-    await requestPark();
-  }, [user?.id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
-    }, [])
-  );
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
@@ -79,12 +56,12 @@ export default function ExploreScreen() {
   }, [park?.id]);
 
   useAsyncEffect(async () => {
-    if (!location?.latitude || !location?.longitude || !redeemables) {
+    if (!park || !location?.latitude || !location?.longitude || !redeemables) {
       return;
     }
 
     setActiveRedeemable(await checkForRedeemable());
-  }, [location?.latitude, location?.longitude, redeemables]);
+  }, [park?.id, location?.latitude, location?.longitude, redeemables]);
 
   return (
     <Wrapper>
@@ -92,13 +69,13 @@ export default function ExploreScreen() {
         parkCoin={user && park?.coin_url}
         showCoins={!!user}
         showKeys={!!user}
-        showPumpkins={!!user && theme?.show_pumpkin_currency}
+        showPumpkins={!!user && theme?.currency?.id === CurrencyEnum.Pumpkins}
         parkCoins={user && park?.park_coins_count}
       />
       {user && (
         <>
           {!permissionGranted && <PermissionsNotGranted />}
-          {location && parkLoaded && !park && <NotAtPark />}
+          {parkLoaded && !park && <NotAtPark />}
         </>
       )}
       {!user && <NotSignedIn />}
@@ -112,56 +89,36 @@ export default function ExploreScreen() {
               zIndex: 10,
             }}
           >
-            {theme && theme.store && (
+            {park.stores.length && (
               <View
                 style={{
                   marginBottom: 8,
+                  rowGap: 8,
                 }}
               >
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('Store', {
-                      store: theme.store.id,
-                    });
-                  }}
-                >
-                  <Image
-                    style={{
-                      width: 70,
-                      height: 75,
-                    }}
-                    source={{
-                      uri: theme.store.icon_url,
-                    }}
-                    contentFit="contain"
-                  />
-                </Button>
-              </View>
-            )}
-            {park.store && (
-              <View
-                style={{
-                  marginBottom: 8,
-                }}
-              >
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('Store', {
-                      store: park.store.id,
-                    });
-                  }}
-                >
-                  <Image
-                    style={{
-                      width: 70,
-                      height: 75,
-                    }}
-                    source={{
-                      uri: park.store.icon_url,
-                    }}
-                    contentFit="contain"
-                  />
-                </Button>
+                {park.stores.map((store) => {
+                  return (
+                    <Button
+                      key={store.id}
+                      onPress={() => {
+                        RootNavigation.navigate('Store', {
+                          store: store.id,
+                        });
+                      }}
+                    >
+                      <Image
+                        style={{
+                          width: 70,
+                          height: 75,
+                        }}
+                        source={{
+                          uri: store.icon_url,
+                        }}
+                        contentFit="contain"
+                      />
+                    </Button>
+                  );
+                })}
               </View>
             )}
             <TaskListModal redeemables={redeemables} />

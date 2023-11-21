@@ -160,7 +160,7 @@ export default function SocialScreen({ navigation }) {
                               navigation.navigate('Membership');
                             }
                           },
-                          text: 'Membership',
+                          text: 'Member',
                           permission: PermissionEnums.BecomeAMember,
                           show: !user || Boolean(user && !user.is_subscribed),
                         },

@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -35,10 +36,6 @@ export default function WelcomeScreen({ navigation }) {
       })
     ).start();
   }, []);
-
-  if (!user) {
-    return <></>;
-  }
 
   return (
     <ImageBackground
@@ -75,6 +72,16 @@ export default function WelcomeScreen({ navigation }) {
         >
           {labels.welcome}
         </Text>
+        <Text
+          style={{
+            fontFamily: 'Knockout',
+            color: 'white',
+            paddingBottom: 8,
+            fontSize: 18,
+          }}
+        >
+          Create Shark Name:
+        </Text>
         <TextInput
           style={{
             borderWidth: 1,
@@ -93,13 +100,22 @@ export default function WelcomeScreen({ navigation }) {
           onChangeText={setUsername}
           value={username}
           maxLength={12}
-          placeholder={labels.enter_a_username}
           returnKeyType="next"
           enablesReturnKeyAutomatically
           onSubmitEditing={async ({ nativeEvent }) => {
-            await updateUser({
-              username: nativeEvent.text,
-            });
+            try {
+              await updateUser({
+                username: nativeEvent.text,
+              });
+            } catch (error) {
+              Alert.alert(error.response.data.errors.username[0], '', [
+                {
+                  text: 'Ok',
+                },
+              ]);
+
+              return;
+            }
 
             await refreshUser();
 
@@ -108,6 +124,16 @@ export default function WelcomeScreen({ navigation }) {
             });
           }}
         />
+        <Text
+          style={{
+            color: 'white',
+            fontFamily: 'Knockout',
+            fontSize: 16,
+            paddingTop: 8,
+          }}
+        >
+          4 - 12 letters or numbers. No spaces.
+        </Text>
         <View
           style={{
             width: '100%',

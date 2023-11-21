@@ -12,7 +12,6 @@ import mobileAds, {
 import { useAsyncEffect } from 'rooks';
 import { navigationRef } from './RootNavigation';
 import getCrumbs from './api/endpoints/crumbs/getCrumbs';
-import getCurrentTheme from './api/endpoints/current-theme/get';
 import { AuthContext } from './context/AuthProvider';
 import { CrumbContext } from './context/CrumbProvider';
 import { ThemeContext } from './context/ThemeProvider';
@@ -23,7 +22,6 @@ import FriendsScreen from './screens/FriendsScreen';
 import InventoryScreen from './screens/InventoryScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import LoadingScreen from './screens/LoadingScreen';
-import LogoutScreen from './screens/LogoutScreen';
 import MembershipScreen from './screens/MembershipScreen';
 import NewsScreen from './screens/NewsScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
@@ -45,180 +43,11 @@ import WelcomeScreen from './screens/WelcomeScreen';
 
 const Stack = createNativeStackNavigator();
 
-const HomeStackNavigator = () => {
-  return (
-    <Stack.Navigator
-      initialRouteName="Loading"
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen
-        name="Logout"
-        component={LogoutScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Welcome"
-        component={WelcomeScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="Store" component={StoreScreen} />
-      <Stack.Screen name="PinCollections" component={PinCollectionScreen} />
-      <Stack.Screen
-        name="Explore"
-        component={ExploreScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="News"
-        component={NewsScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="User" component={UserScreen} />
-      <Stack.Screen name="Park" component={ParkScreen} />
-      <Stack.Screen
-        name="Inventory"
-        component={InventoryScreen}
-        options={{
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen
-        name="Leaderboard"
-        component={LeaderboardScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Social"
-        component={SocialScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
-      <Stack.Screen name="Friends" component={FriendsScreen} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} />
-      <Stack.Screen
-        name="PendingFriendRequests"
-        component={PendingFriendRequestsScreen}
-      />
-      <Stack.Screen name="Thread" component={ThreadScreen} />
-      <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
-      <Stack.Screen name="RedeemCoinCode" component={RedeemCoinCodeScreen} />
-      <Stack.Screen
-        name="Membership"
-        component={MembershipScreen}
-        options={{
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="Watch" component={WatchScreen} />
-      <Stack.Screen
-        name="Loading"
-        component={LoadingScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-    </Stack.Navigator>
-  );
-};
-
-const AuthStackNavigator = () => {
-  return (
-    <Stack.Navigator
-      initialRouteName="Splash"
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen
-        name="Login"
-        component={LoginScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Splash"
-        component={SplashScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Leaderboard"
-        component={LeaderboardScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Social"
-        component={SocialScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Explore"
-        component={ExploreScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="News"
-        component={NewsScreen}
-        options={{
-          animation: 'none',
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen name="User" component={UserScreen} />
-      <Stack.Screen name="Park" component={ParkScreen} />
-      <Stack.Screen name="Thread" component={ThreadScreen} />
-    </Stack.Navigator>
-  );
-};
-
 export default function App() {
   useKeepAwake();
-  const { user, setUser } = useContext(AuthContext);
+  const { setUser } = useContext(AuthContext);
   const { setCrumbs, crumbsLoaded } = useContext(CrumbContext);
-  const { setTheme } = useContext(ThemeContext);
+  const { retrieveTheme, themeLoaded } = useContext(ThemeContext);
   const [fontsLoaded] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),
@@ -238,7 +67,7 @@ export default function App() {
     InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
 
     setCrumbs(await getCrumbs());
-    setTheme(await getCurrentTheme());
+    await retrieveTheme();
 
     Storage.getItem({ key: 'user' }).then((userString: string) => {
       if (userString) {
@@ -247,21 +76,121 @@ export default function App() {
     });
   }, []);
 
-  if (!fontsLoaded || !crumbsLoaded) {
+  if (!fontsLoaded || !crumbsLoaded || !themeLoaded) {
     return <></>;
   }
 
   return (
-    <>
-      {user ? (
-        <NavigationContainer ref={navigationRef}>
-          <HomeStackNavigator />
-        </NavigationContainer>
-      ) : (
-        <NavigationContainer ref={navigationRef}>
-          <AuthStackNavigator />
-        </NavigationContainer>
-      )}
-    </>
+    <NavigationContainer ref={navigationRef}>
+      <Stack.Navigator
+        initialRouteName="Splash"
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen
+          name="Welcome"
+          component={WelcomeScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen name="Store" component={StoreScreen} />
+        <Stack.Screen name="PinCollections" component={PinCollectionScreen} />
+        <Stack.Screen
+          name="Profile"
+          component={ProfileScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen name="User" component={UserScreen} />
+        <Stack.Screen name="Park" component={ParkScreen} />
+        <Stack.Screen
+          name="Inventory"
+          component={InventoryScreen}
+          options={{
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
+        <Stack.Screen name="Friends" component={FriendsScreen} />
+        <Stack.Screen name="Notifications" component={NotificationsScreen} />
+        <Stack.Screen
+          name="PendingFriendRequests"
+          component={PendingFriendRequestsScreen}
+        />
+        <Stack.Screen name="Thread" component={ThreadScreen} />
+        <Stack.Screen name="PinSwaps" component={PinSwapsScreen} />
+        <Stack.Screen name="RedeemCoinCode" component={RedeemCoinCodeScreen} />
+        <Stack.Screen
+          name="Membership"
+          component={MembershipScreen}
+          options={{
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen name="Watch" component={WatchScreen} />
+        <Stack.Screen
+          name="Loading"
+          component={LoadingScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Splash"
+          component={SplashScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Leaderboard"
+          component={LeaderboardScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Social"
+          component={SocialScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="Explore"
+          component={ExploreScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="News"
+          component={NewsScreen}
+          options={{
+            animation: 'none',
+            gestureEnabled: false,
+          }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }

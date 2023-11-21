@@ -10,9 +10,11 @@ import {
 } from 'react-native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import deleteUser from '../api/endpoints/me/delete';
+import forceDeleteUser from '../api/endpoints/me/force-delete';
 import updateUser from '../api/endpoints/me/update-user';
 import Topbar from '../components/Topbar';
 import { AuthContext } from '../context/AuthProvider';
+import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function SettingsScreen() {
@@ -20,6 +22,7 @@ export default function SettingsScreen() {
   const [enabledMusic, setEnabledMusic] = useState<boolean>();
   const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
   const { urls, labels } = useCrumbs();
+  const { reset } = useContext(LocationContext);
 
   useEffect(() => {
     setEnabledMusic(user?.enabled_music);
@@ -50,7 +53,7 @@ export default function SettingsScreen() {
               />
               <Cell
                 title="Theme Park Shark ID"
-                cellStyle="RightDetail"
+                cellStyle="Subtitle"
                 detail={user.email}
               />
               <Cell
@@ -112,8 +115,16 @@ export default function SettingsScreen() {
                   WebBrowser.openBrowserAsync(urls.privacy_policy);
                 }}
               />
-              <Cell title="Need help? contact@themeparkshark.com" />
-              <Cell title="Found a bug? technical@themeparkshark.com" />
+              <Cell
+                title="Need help?"
+                cellStyle="Subtitle"
+                detail="Email: contact@themeparkshark.com"
+              />
+              <Cell
+                title="Found a bug?"
+                cellStyle="Subtitle"
+                detail="Email: technical@themeparkshark.com"
+              />
             </Section>
             <Section footer={labels.copyright}>
               <Cell
@@ -143,11 +154,50 @@ export default function SettingsScreen() {
                 }}
               />
               <Cell
+                title="Permanently Delete My Account"
+                titleTextStyle={{
+                  color: PlatformColor('systemRed'),
+                }}
+                onPress={() => {
+                  Alert.alert(
+                    'Are you sure you want to permanently delete your account?',
+                    'This cannot be undone.',
+                    [
+                      {
+                        text: 'Cancel',
+                        style: 'cancel',
+                      },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await forceDeleteUser();
+
+                          Alert.alert(
+                            'Please check your email in order to confirm to permanently delete your account.',
+                            '',
+                            [
+                              {
+                                text: 'Ok',
+                                onPress: async () => {
+                                  await logout();
+                                },
+                              },
+                            ]
+                          );
+                        },
+                      },
+                    ]
+                  );
+                }}
+              />
+              <Cell
                 title="Sign Out"
                 titleTextStyle={{
                   color: PlatformColor('systemBlue'),
                 }}
                 onPress={() => {
+                  reset();
                   logout();
                 }}
               />

@@ -1,40 +1,9 @@
-import { useContext, useEffect, useRef } from 'react';
+import { useContext } from 'react';
 import { Animated, Dimensions, Text, View } from 'react-native';
 import { BroadcastContext } from '../context/BroadcastProvider';
 
 export default function Broadcasts() {
-  const translate = useRef(new Animated.Value(0)).current;
-  const { activeBroadcast } = useContext(BroadcastContext);
-
-  const slideUp = () => {
-    Animated.timing(translate, {
-      toValue: 0,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const slideDown = () => {
-    Animated.timing(translate, {
-      toValue: 60,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  useEffect(() => {
-    if (!activeBroadcast) {
-      return;
-    }
-
-    slideDown();
-
-    const timeout = setTimeout(() => {
-      slideUp();
-    }, 5000);
-
-    return () => clearTimeout(timeout);
-  }, [activeBroadcast]);
+  const { activeBroadcast, translate } = useContext(BroadcastContext);
 
   return (
     <Animated.View
