@@ -4,7 +4,7 @@ import Countdown, { zeroPad } from 'react-countdown';
 import { ImageBackground, Text, View } from 'react-native';
 import { useTimeoutWhen } from 'rooks';
 import config from '../../config';
-import { RedeemableType } from "../../models/redeemable-type";
+import { RedeemableType } from '../../models/redeemable-type';
 
 export default function Redeemable({
   redeemable,

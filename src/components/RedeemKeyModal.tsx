@@ -16,8 +16,8 @@ import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
-import { KeyType } from '../models/key-type';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
+import { KeyType } from '../models/key-type';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
 

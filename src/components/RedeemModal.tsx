@@ -6,15 +6,15 @@ import {
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
 import { CoinType } from '../models/coin-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { KeyType } from '../models/key-type';
 import { ParkType } from '../models/park-type';
-import { CurrentRedeemableType } from '../models/current-redeemable-type';
-import RedeemKeyModal from './RedeemKeyModal';
+import { RedeemableType } from '../models/redeemable-type';
 import RedeemCurrentRedeemableModal from './RedeemCurrentRedeemableModel';
+import RedeemKeyModal from './RedeemKeyModal';
 import RedeemRedeemableModal from './RedeemRedeemableModal';
 import RedeemVaultModal from './RedeemVaultModal';
 import YellowButton from './YellowButton';
-import { RedeemableType } from "../models/redeemable-type";
 
 export default function RedeemModal({
   redeemable,

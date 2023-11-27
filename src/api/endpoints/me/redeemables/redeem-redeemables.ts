@@ -1,6 +1,6 @@
 import { ApiResponseType } from '../../../../models/api-response-type';
+import { RedeemableType } from '../../../../models/redeemable-type';
 import client from '../../../client';
-import { RedeemableType } from "../../../../models/redeemable-type";
 
 export default async function redeemRedeemable(
   redeemable: RedeemableType,

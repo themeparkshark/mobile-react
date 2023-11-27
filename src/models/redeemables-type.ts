@@ -1,9 +1,9 @@
 import { CoinType } from './coin-type';
 import { ItemType } from './item-type';
 import { KeyType } from './key-type';
+import { RedeemableType } from './redeemable-type';
 import { TaskType } from './task-type';
 import { VaultType } from './vault-type';
-import { RedeemableType } from "./redeemable-type";
 
 export interface RedeemablesType {
   readonly coins: CoinType[];

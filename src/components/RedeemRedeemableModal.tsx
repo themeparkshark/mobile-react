@@ -12,9 +12,9 @@ import {
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
 import { CoinType } from '../models/coin-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { ItemType } from '../models/item-type';
 import { ParkType } from '../models/park-type';
-import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 import Box from './RedeemModal/Box';

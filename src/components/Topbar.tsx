@@ -13,9 +13,9 @@ import Button from '../components/Button';
 import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import shortenNumber from '../helpers/shorten-number';
+import { CurrencyType } from '../models/currency-type';
 import Broadcasts from './Broadcasts';
 import InformationModal from './InformationModal';
-import { CurrencyType } from "../models/currency-type";
 
 export default function Topbar({
   informationModalId = null,
@@ -166,10 +166,7 @@ export default function Topbar({
                 {leftButton}
                 {showBackButton && <BackButton />}
                 {parkCoins !== null && (
-                  <Currency
-                    image={parkCoin}
-                    count={parkCoins ?? 0}
-                  />
+                  <Currency image={parkCoin} count={parkCoins ?? 0} />
                 )}
               </View>
             )}

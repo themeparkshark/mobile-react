@@ -17,7 +17,6 @@ import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
-import { CurrencyEnum } from '../models/currency-enum';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import Coin from './ExploreScreen/Coin';
@@ -345,7 +344,10 @@ export default function ExploreScreen() {
                     longitude: Number(redeemable.longitude),
                   }}
                 >
-                  <Redeemable redeemable={redeemable} onExpire={() => getRedeemables()} />
+                  <Redeemable
+                    redeemable={redeemable}
+                    onExpire={() => getRedeemables()}
+                  />
                 </Marker>
               );
             })}

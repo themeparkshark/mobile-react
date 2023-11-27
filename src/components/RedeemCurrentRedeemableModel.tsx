@@ -11,15 +11,14 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
+import redeemRedeemables from '../api/endpoints/me/redeemables/redeem-redeemables';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
-import { CurrentRedeemableType } from '../models/current-redeemable-type';
+import { RedeemableType } from '../models/redeemable-type';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
-import { RedeemableType } from "../models/redeemable-type";
-import redeemRedeemables from "../api/endpoints/me/redeemables/redeem-redeemables";
 
 export default function RedeemCurrentRedeemableModel({
   open,
@@ -180,11 +179,13 @@ export default function RedeemCurrentRedeemableModel({
                 paddingBottom: 32,
               }}
             >
-              {doubleRedeemable ? `2 ${redeemable.currency.name}` : `1 ${redeemable.currency.singular_name}`}
+              {doubleRedeemable
+                ? `2 ${redeemable.currency.name}`
+                : `1 ${redeemable.currency.singular_name}`}
             </Text>
             <Image
               source={{
-                uri: redeemable.currency.icon_url
+                uri: redeemable.currency.icon_url,
               }}
               style={{
                 width: '60%',
@@ -198,10 +199,7 @@ export default function RedeemCurrentRedeemableModel({
             <YellowButton
               text="Collect"
               onPress={async () => {
-                await redeemRedeemables(
-                  redeemable,
-                  doubleRedeemable
-                );
+                await redeemRedeemables(redeemable, doubleRedeemable);
 
                 onPress();
                 playSound(
