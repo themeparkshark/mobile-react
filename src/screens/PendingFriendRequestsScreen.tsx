@@ -5,7 +5,9 @@ import { useAsyncEffect } from 'rooks';
 import getFriendRequests from '../api/endpoints/me/pending-requests';
 import FriendUser from '../components/FriendUser';
 import Loading from '../components/Loading';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { UserType } from '../models/user-type';
 
 export default function PendingFriendRequestsScreen() {
@@ -26,7 +28,15 @@ export default function PendingFriendRequestsScreen() {
 
   return (
     <>
-      <Topbar text="Pending Friend Requests" showBackButton={true} />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Pending Friend Requests</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       <View
         style={{
           marginTop: -8,

@@ -7,9 +7,12 @@ import {
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getPinSwaps from '../api/endpoints/pin-swaps/all';
+import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
 import PinSwap from '../components/PinSwap';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { PinSwapType } from '../models/pin-swap-type';
 
@@ -32,11 +35,17 @@ export default function PinSwapsScreen() {
 
   return (
     <>
-      <Topbar
-        text="Pin Trading"
-        showBackButton
-        informationModalId={InformationModalEnums.PinSwapsScreen}
-      />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Pin Trading</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
+          <InformationModal id={InformationModalEnums.PinSwapsScreen} />
+        </TopbarColumn>
+      </Topbar>
       <View
         style={{
           marginTop: -8,

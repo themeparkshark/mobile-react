@@ -15,7 +15,9 @@ import getItems from '../api/endpoints/me/inventory/items';
 import Item from '../components/Item';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
@@ -65,13 +67,15 @@ export default function InventoryScreen() {
 
   return (
     <>
-      <Topbar
-        onBackButtonPress={async () => {
-          await refreshUser();
-        }}
-        showBackButton={true}
-        text="Inventory"
-      />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton onPress={async () => await refreshUser()} />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Inventory</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       {loading && <Loading />}
       {!loading && inventory && itemTypes && currentItemType && (
         <>

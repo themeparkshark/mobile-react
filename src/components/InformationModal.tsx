@@ -7,7 +7,7 @@ import getInformationModal from '../api/endpoints/information-modals/get';
 import Button from './Button';
 import Loading from './Loading';
 
-export default function InformationModal({ id }: { readonly id: number }) {
+export default function InformationModal({ id }: { readonly id?: number }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
@@ -26,6 +26,10 @@ export default function InformationModal({ id }: { readonly id: number }) {
     <>
       <Button
         onPress={async () => {
+          if (!id) {
+            return;
+          }
+
           setModalVisible(true);
         }}
       >

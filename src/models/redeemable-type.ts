@@ -1,8 +1,8 @@
-import { CurrencyType } from './currency-type';
+import { ThemeType } from './theme-type';
 
 export interface RedeemableType {
   readonly id: number;
-  readonly currency: CurrencyType;
+  readonly theme: ThemeType;
   readonly latitude: string;
   readonly longitude: string;
   readonly active_from: string;

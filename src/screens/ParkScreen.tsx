@@ -11,10 +11,13 @@ import getCompletedArchivedTasks from '../api/endpoints/users/parks/getCompleted
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
 import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
 import getVisitedPark from '../api/endpoints/users/visited-parks/getPark';
+import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
 import Progress from '../components/Progress';
 import TaskCoinModal from '../components/TaskCoinModal';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import config from '../config';
 import useCrumbs from '../hooks/useCrumbs';
 import { InformationModalEnums } from '../models/information-modal-enums';
@@ -82,11 +85,19 @@ export default function ParkScreen({ route }) {
 
   return (
     <>
-      <Topbar
-        showBackButton={true}
-        text={currentPark?.display_name ?? currentPark?.name}
-        informationModalId={InformationModalEnums.ParkScreen}
-      />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>
+            {currentPark?.display_name ?? currentPark?.name}
+          </TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
+          <InformationModal id={InformationModalEnums.ParkScreen} />
+        </TopbarColumn>
+      </Topbar>
       {loading && <Loading />}
       {!loading && (
         <View

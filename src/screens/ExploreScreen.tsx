@@ -12,8 +12,11 @@ import Map from '../components/Map';
 import RedeemModal from '../components/RedeemModal';
 import TaskListModal from '../components/TaskListModal';
 import Topbar from '../components/Topbar';
+import Currency from '../components/Topbar/Currency';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
+import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
@@ -37,6 +40,7 @@ export default function ExploreScreen() {
   const { parkLoaded, location, park, permissionGranted } =
     useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
+  const { currencies } = useContext(CurrencyContext);
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
@@ -64,13 +68,31 @@ export default function ExploreScreen() {
 
   return (
     <Wrapper>
-      <Topbar
-        parkCoin={user && park?.coin_url}
-        showCoins={!!user}
-        showKeys={!!user}
-        redeemableCurrency={!!user && theme?.currency}
-        parkCoins={user && park?.park_coins_count}
-      />
+      <Topbar>
+        {user && (
+          <>
+            <TopbarColumn>
+              <Currency image={park?.coin_url} count={park?.park_coins_count} />
+            </TopbarColumn>
+            {theme?.currency && (
+              <TopbarColumn>
+                <Currency
+                  image={theme.currency.icon_url}
+                  count={user[theme.currency.name.toLowerCase()]}
+                />
+              </TopbarColumn>
+            )}
+            {currencies.map((currency) => (
+              <TopbarColumn key={currency.id}>
+                <Currency
+                  image={currency.icon_url}
+                  count={user[currency.name.toLowerCase()]}
+                />
+              </TopbarColumn>
+            ))}
+          </>
+        )}
+      </Topbar>
       {user && (
         <>
           {!permissionGranted && <PermissionsNotGranted />}

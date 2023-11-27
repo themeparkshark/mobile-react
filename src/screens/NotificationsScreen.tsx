@@ -9,7 +9,9 @@ import updateLastReadNotificationsAt from '../api/endpoints/me/update-last-read-
 import Button from '../components/Button';
 import Loading from '../components/Loading';
 import Notification from '../components/Notification';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { NotificationContext } from '../context/NotificationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { NotificationType } from '../models/notification-type';
@@ -45,10 +47,14 @@ export default function NewsScreen() {
 
   return (
     <>
-      <Topbar
-        text="Notifications"
-        showBackButton
-        rightButton={
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Notifications</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
           <Button
             onPress={async () => {
               await markAllAsRead();
@@ -69,8 +75,8 @@ export default function NewsScreen() {
               source={require('../../assets/images/screens/notifications/mark_all_as_read.png')}
             />
           </Button>
-        }
-      />
+        </TopbarColumn>
+      </Topbar>
       {loading && <Loading />}
       {!loading && (
         <View

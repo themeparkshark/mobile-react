@@ -12,7 +12,9 @@ import { useAsyncEffect } from 'rooks';
 import allParks from '../api/endpoints/parks/allParks';
 import get from '../api/endpoints/parks/queue-times/get';
 import Loading from '../components/Loading';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import dayjs from '../helpers/dayjs';
 import { ParkType } from '../models/park-type';
 import { QueueTimeType } from '../models/queue-time-type';
@@ -48,7 +50,15 @@ export default function QueueTimesScreen({ route }) {
 
   return (
     <>
-      <Topbar text="Queue Times" showBackButton />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Queue Times</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       {loading && <Loading />}
       {!loading && queueTimes && (
         <>

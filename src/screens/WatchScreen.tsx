@@ -7,7 +7,9 @@ import { useAsyncEffect } from 'rooks';
 import view from '../api/endpoints/social-posts/view';
 import youtube from '../api/endpoints/social-posts/youtube';
 import Loading from '../components/Loading';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
 import useCrumbs from '../hooks/useCrumbs';
 import { SocialPostType } from '../models/social-post-type';
@@ -24,7 +26,15 @@ export default function WatchScreen() {
 
   return (
     <Wrapper>
-      <Topbar text="Watch" showBackButton />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Watch</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       {loading && <Loading />}
       {!loading && (
         <View

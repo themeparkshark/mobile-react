@@ -180,12 +180,12 @@ export default function RedeemCurrentRedeemableModel({
               }}
             >
               {doubleRedeemable
-                ? `2 ${redeemable.currency.name}`
-                : `1 ${redeemable.currency.singular_name}`}
+                ? `2 ${redeemable.theme.currency.name}`
+                : `1 ${redeemable.theme.currency.singular_name}`}
             </Text>
             <Image
               source={{
-                uri: redeemable.currency.icon_url,
+                uri: redeemable.theme.currency.icon_url,
               }}
               style={{
                 width: '60%',

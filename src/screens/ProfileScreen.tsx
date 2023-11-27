@@ -25,6 +25,8 @@ import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import Subscribed from '../components/Subscribed';
 import Topbar from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
@@ -117,9 +119,8 @@ export default function ProfileScreen() {
 
   return (
     <Wrapper>
-      <Topbar
-        text={user.screen_name}
-        leftButton={
+      <Topbar>
+        <TopbarColumn stretch={false}>
           <Button
             onPress={() => {
               RootNavigation.navigate('Notifications');
@@ -136,8 +137,11 @@ export default function ProfileScreen() {
               source={require('../../assets/images/screens/profile/notifications.png')}
             />
           </Button>
-        }
-        rightButton={
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>{user.screen_name}</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
           <Button
             onPress={() => {
               RootNavigation.navigate('Settings');
@@ -153,8 +157,8 @@ export default function ProfileScreen() {
               source={require('../../assets/images/screens/profile/settings.png')}
             />
           </Button>
-        }
-      />
+        </TopbarColumn>
+      </Topbar>
       {loading && <Loading />}
       {!loading && user && (
         <ScrollView

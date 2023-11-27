@@ -64,7 +64,7 @@ export default function Redeemable({
         </ImageBackground>
         <Image
           source={{
-            uri: redeemable.currency.map_url,
+            uri: redeemable.theme.currency.map_url,
           }}
           style={{
             width: 60,
