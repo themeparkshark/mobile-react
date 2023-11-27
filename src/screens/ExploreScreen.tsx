@@ -71,9 +71,11 @@ export default function ExploreScreen() {
       <Topbar>
         {user && (
           <>
-            <TopbarColumn>
-              <Currency image={park?.coin_url} count={park?.park_coins_count} />
-            </TopbarColumn>
+            {park && (
+              <TopbarColumn>
+                <Currency image={park?.coin_url} count={park?.park_coins_count} />
+              </TopbarColumn>
+            )}
             {theme?.currency && (
               <TopbarColumn>
                 <Currency
