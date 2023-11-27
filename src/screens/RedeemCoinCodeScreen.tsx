@@ -10,9 +10,12 @@ import {
   View,
 } from 'react-native';
 import redeemCoinCode from '../api/endpoints/coin-codes/redeemCoinCode';
-import Button from '../components/Button';
-import Topbar from '../components/Topbar';
+import InformationModal from '../components/InformationModal';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { AuthContext } from '../context/AuthProvider';
+import { CurrencyContext } from '../context/CurrencyProvider';
 import { CoinCodeType } from '../models/coin-code-type';
 
 export default function RedeemCoinCodeScreen() {
@@ -20,6 +23,7 @@ export default function RedeemCoinCodeScreen() {
   const [redeemedCoinCode, setRedeemedCoinCode] = useState<CoinCodeType>();
   const { refreshUser } = useContext(AuthContext);
   const rotate = useRef(new Animated.Value(0)).current;
+  const { currencies } = useContext(CurrencyContext);
 
   const spin = rotate.interpolate({
     inputRange: [0, 1],
@@ -39,23 +43,17 @@ export default function RedeemCoinCodeScreen() {
 
   return (
     <>
-      <Topbar
-        text="Redeem"
-        showBackButton
-        rightButton={
-          <Button onPress={() => {}}>
-            <Image
-              style={{
-                width: 35,
-                height: 35,
-                alignSelf: 'center',
-              }}
-              contentFit="contain"
-              source={require('../../assets/images/faq.png')}
-            />
-          </Button>
-        }
-      />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Redeem</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
+          <InformationModal />
+        </TopbarColumn>
+      </Topbar>
       <View
         style={{
           marginTop: -8,
@@ -194,7 +192,9 @@ export default function RedeemCoinCodeScreen() {
                       }}
                     >
                       <Image
-                        source={require('../../assets/images/screens/explore/coins.png')}
+                        source={{
+                          uri: currencies[0].icon_url,
+                        }}
                         style={{
                           width: '60%',
                           aspectRatio: 1,

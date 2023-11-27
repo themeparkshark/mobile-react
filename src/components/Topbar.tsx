@@ -1,32 +1,37 @@
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { ReactNode, useContext } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  SafeAreaView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from '../components/Button';
-import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
-import shortenNumber from '../helpers/shorten-number';
 import Broadcasts from './Broadcasts';
-import InformationModal from './InformationModal';
+
+export function BackButton({ onPress }) {
+  return (
+    <Button
+      onPress={async () => {
+        if (onPress) {
+          await onPress();
+        }
+
+        RootNavigation.goBack();
+      }}
+    >
+      <Image
+        source={require('../../assets/images/screens/explore/back.png')}
+        style={{
+          width: 35,
+          height: 35,
+        }}
+        contentFit="contain"
+      />
+    </Button>
+  );
+}
 
 export default function Topbar({
-  informationModalId = null,
-  leftButton = null,
-  rightButton = null,
-  text = null,
-  showBackButton = false,
-  showCoins = false,
-  showKeys = false,
-  showPumpkins = false,
-  parkCoin = null,
-  parkCoins = null,
+  children,
   purple = false,
   onBackButtonPress,
 }: {
@@ -36,76 +41,12 @@ export default function Topbar({
   readonly text?: string | null;
   readonly purple?: boolean;
   readonly showBackButton?: boolean;
-  readonly showCoins?: boolean;
-  readonly showKeys?: boolean;
-  readonly showPumpkins?: boolean;
+  readonly showCurrencies?: boolean;
   readonly parkCoin?: string | null;
   readonly parkCoins?: number | null;
   readonly onBackButtonPress?: () => void;
 }) {
-  const { user } = useContext(AuthContext);
   const { theme } = useContext(ThemeContext);
-
-  const BackButton = () => {
-    return (
-      <Button
-        onPress={async () => {
-          if (onBackButtonPress) {
-            await onBackButtonPress();
-          }
-
-          RootNavigation.goBack();
-        }}
-      >
-        <Image
-          source={require('../../assets/images/screens/explore/back.png')}
-          style={{
-            width: 35,
-            height: 35,
-          }}
-          contentFit="contain"
-        />
-      </Button>
-    );
-  };
-
-  const Currency = ({ image, count }: { image: any; count: number }) => {
-    return (
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-        }}
-      >
-        <Image
-          source={image}
-          style={{
-            width: 35,
-            height: 35,
-            marginRight: 8,
-          }}
-          contentFit="contain"
-        />
-        <Text
-          style={{
-            textAlign: 'center',
-            fontSize: 24,
-            color: 'white',
-            fontFamily: 'Shark',
-            textTransform: 'uppercase',
-            textShadowColor: 'rgba(0, 0, 0, .5)',
-            textShadowOffset: {
-              width: 2,
-              height: 2,
-            },
-            textShadowRadius: 0,
-          }}
-        >
-          {shortenNumber(count)}
-        </Text>
-      </View>
-    );
-  };
 
   return (
     <View
@@ -127,9 +68,7 @@ export default function Topbar({
         source={
           purple
             ? require('../../assets/images/screens/store/purple_topbar.png')
-            : theme?.top_bar_url
-            ? { url: theme.top_bar_url }
-            : require('../../assets/images/screens/explore/topbar.png')
+            : { url: theme?.top_bar_url }
         }
         resizeMode="cover"
         style={{
@@ -147,121 +86,10 @@ export default function Topbar({
               alignItems: 'center',
               width: Dimensions.get('window').width,
               height: 80,
+              columnGap: 8,
             }}
           >
-            {(parkCoins !== null ||
-              text ||
-              showBackButton ||
-              leftButton ||
-              rightButton ||
-              informationModalId) && (
-              <View
-                style={{
-                  flex: !showCoins ? 0 : 1,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'row',
-                  minWidth: 35,
-                }}
-              >
-                {leftButton}
-                {showBackButton && <BackButton />}
-                {parkCoins !== null && (
-                  <Currency
-                    image={parkCoin}
-                    count={user?.park_coins_count ?? 0}
-                  />
-                )}
-              </View>
-            )}
-            {!showKeys && (
-              <View
-                style={{
-                  flex: 1,
-                }}
-              >
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit={true}
-                  style={{
-                    textAlign: 'center',
-                    fontSize: showCoins ? 28 : 38,
-                    color: 'white',
-                    fontFamily: 'Shark',
-                    textTransform: 'uppercase',
-                    textShadowColor: 'rgba(0, 0, 0, .5)',
-                    textShadowOffset: {
-                      width: 2,
-                      height: 2,
-                    },
-                    textShadowRadius: 0,
-                    paddingLeft: 12,
-                    paddingRight: 12,
-                  }}
-                >
-                  {text}
-                </Text>
-              </View>
-            )}
-            {showKeys && (
-              <View
-                style={{
-                  flex: 1,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'row',
-                  minWidth: 35,
-                }}
-              >
-                <Currency
-                  image={require('../../assets/images/keys.png')}
-                  count={user?.keys ?? 0}
-                />
-              </View>
-            )}
-            {showPumpkins && (
-              <View
-                style={{
-                  flex: 1,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'row',
-                }}
-              >
-                <Currency
-                  image={require('../../assets/images/pumpkins.png')}
-                  count={user?.pumpkins ?? 0}
-                />
-              </View>
-            )}
-            {(text ||
-              parkCoins !== null ||
-              showBackButton ||
-              showCoins ||
-              leftButton ||
-              rightButton ||
-              informationModalId) && (
-              <View
-                style={{
-                  flex: text ? 0 : 1,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexDirection: 'row',
-                  minWidth: 35,
-                }}
-              >
-                {rightButton}
-                {informationModalId && (
-                  <InformationModal id={informationModalId} />
-                )}
-                {showCoins && (
-                  <Currency
-                    image={require('../../assets/images/coins.png')}
-                    count={user?.coins ?? 0}
-                  />
-                )}
-              </View>
-            )}
+            {children}
           </View>
         </SafeAreaView>
       </ImageBackground>

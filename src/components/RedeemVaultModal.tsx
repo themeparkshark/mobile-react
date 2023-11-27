@@ -19,7 +19,7 @@ import {
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
 import useCrumbs from '../hooks/useCrumbs';
-import { RedeemableType } from '../models/redeemable-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { VaultType } from '../models/vault-type';
 import YellowButton from './YellowButton';
 
@@ -31,7 +31,7 @@ export default function RedeemVaultModal({
 }: {
   readonly close: () => void;
   readonly open?: boolean;
-  readonly redeemable: RedeemableType;
+  readonly redeemable: CurrentRedeemableType;
   readonly onPress: () => void;
 }) {
   const { labels } = useCrumbs();

@@ -3,8 +3,7 @@ interface CrumbsType {
     readonly item_purchased: string;
     readonly item_redeemed: string;
     readonly max_compliments_created: string;
-    readonly not_enough_coins: string;
-    readonly not_enough_keys: string;
+    readonly not_enough_currency: string;
     readonly pin_swap_unavailable: string;
     readonly pin_required: string;
   };
@@ -44,6 +43,7 @@ interface CrumbsType {
     readonly select_a_pin: string;
     readonly skip_for_now: string;
     readonly slow_connectivity: string;
+    readonly splash_screen_facts: string[];
     readonly start_free_trial: string;
     readonly submit: string;
     readonly subscribed_user: string;

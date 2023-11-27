@@ -12,7 +12,9 @@ import { useAsyncEffect } from 'rooks';
 import all from '../api/endpoints/pin-collections/all';
 import Loading from '../components/Loading';
 import PinCollectionModal from '../components/PinCollectionModal';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { PinCollectionType } from '../models/pin-collection-type';
 
 export default function PinCollectionsScreen() {
@@ -37,7 +39,15 @@ export default function PinCollectionsScreen() {
 
   return (
     <>
-      <Topbar text={'Pin Packs'} showBackButton={true} />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Pin Packs</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       {loading && <Loading />}
       {!loading && (
         <View

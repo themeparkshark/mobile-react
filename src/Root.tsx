@@ -12,9 +12,9 @@ import mobileAds, {
 import { useAsyncEffect } from 'rooks';
 import { navigationRef } from './RootNavigation';
 import getCrumbs from './api/endpoints/crumbs/getCrumbs';
-import getCurrentTheme from './api/endpoints/current-theme/get';
 import { AuthContext } from './context/AuthProvider';
 import { CrumbContext } from './context/CrumbProvider';
+import { CurrencyContext } from './context/CurrencyProvider';
 import { ThemeContext } from './context/ThemeProvider';
 import { useAxiosSetup } from './hooks/useAxiosSetup';
 import LoginScreen from './screens/Auth/LoginScreen';
@@ -48,7 +48,8 @@ export default function App() {
   useKeepAwake();
   const { setUser } = useContext(AuthContext);
   const { setCrumbs, crumbsLoaded } = useContext(CrumbContext);
-  const { setTheme } = useContext(ThemeContext);
+  const { retrieveCurrencies, currenciesLoaded } = useContext(CurrencyContext);
+  const { retrieveTheme, themeLoaded } = useContext(ThemeContext);
   const [fontsLoaded] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),
@@ -68,7 +69,8 @@ export default function App() {
     InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
 
     setCrumbs(await getCrumbs());
-    setTheme(await getCurrentTheme());
+    await retrieveTheme();
+    await retrieveCurrencies();
 
     Storage.getItem({ key: 'user' }).then((userString: string) => {
       if (userString) {
@@ -77,7 +79,7 @@ export default function App() {
     });
   }, []);
 
-  if (!fontsLoaded || !crumbsLoaded) {
+  if (!fontsLoaded || !crumbsLoaded || !themeLoaded || !currenciesLoaded) {
     return <></>;
   }
 

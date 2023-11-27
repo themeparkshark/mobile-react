@@ -12,13 +12,14 @@ import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import Subscribed from '../components/Subscribed';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
-import { MusicContext } from '../context/MusicProvider';
 import useCompliment from '../hooks/useCompliment';
 import useCrumbs from '../hooks/useCrumbs';
 import useFriends from '../hooks/useFriends';
@@ -36,7 +37,6 @@ export default function UserScreen({ route, navigation }) {
   const { purchaseItem } = usePurchaseItem();
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
-  const { playMusic } = useContext(MusicContext);
   const { complimentUser } = useCompliment();
   const { checkPermission } = usePermissions();
   const { user: authUser } = useContext(AuthContext);
@@ -48,8 +48,6 @@ export default function UserScreen({ route, navigation }) {
         navigation.navigate('Profile');
         return;
       }
-
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
     }, [])
   );
 
@@ -113,10 +111,11 @@ export default function UserScreen({ route, navigation }) {
           permission: PermissionEnums.CreateCompliments,
         },
         {
+          show: Boolean(currentUser.username),
           image: require('../../assets/images/screens/explore/base.png'),
           onPress: async () => {
             Alert.alert(
-              vsprintf(prompts.report_username, [currentUser.username]),
+              vsprintf(prompts.report_username, [currentUser.screen_name]),
               '',
               [
                 {
@@ -146,7 +145,15 @@ export default function UserScreen({ route, navigation }) {
 
   return (
     <>
-      <Topbar text={currentUser?.screen_name} showBackButton={true} />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>{currentUser?.screen_name}</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       {loading && <Loading />}
       {!loading && currentUser && (
         <ScrollView
