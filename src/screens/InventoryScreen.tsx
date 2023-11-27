@@ -1,7 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -16,9 +15,10 @@ import getItems from '../api/endpoints/me/inventory/items';
 import Item from '../components/Item';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { AuthContext } from '../context/AuthProvider';
-import { MusicContext } from '../context/MusicProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
@@ -33,13 +33,6 @@ export default function InventoryScreen() {
   const { refreshUser } = useContext(AuthContext);
   const [page, setPage] = useState<number>(1);
   const { playSound } = useContext(SoundEffectContext);
-  const { playMusic } = useContext(MusicContext);
-
-  useFocusEffect(
-    useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track2.mp3'));
-    }, [])
-  );
 
   const requestItems = async (page: number) => {
     if (!currentItemType) {
@@ -74,13 +67,15 @@ export default function InventoryScreen() {
 
   return (
     <>
-      <Topbar
-        onBackButtonPress={async () => {
-          await refreshUser();
-        }}
-        showBackButton={true}
-        text="Inventory"
-      />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton onPress={async () => await refreshUser()} />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Inventory</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       {loading && <Loading />}
       {!loading && inventory && itemTypes && currentItemType && (
         <>

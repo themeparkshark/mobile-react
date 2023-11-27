@@ -1,7 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Callout, Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
@@ -13,39 +12,35 @@ import Map from '../components/Map';
 import RedeemModal from '../components/RedeemModal';
 import TaskListModal from '../components/TaskListModal';
 import Topbar from '../components/Topbar';
+import Currency from '../components/Topbar/Currency';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
+import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
-import { MusicContext } from '../context/MusicProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
-import { RedeemableType } from '../models/redeemable-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import Coin from './ExploreScreen/Coin';
 import Key from './ExploreScreen/Key';
 import NotAtPark from './ExploreScreen/NotAtPark';
 import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
-import Pumpkin from './ExploreScreen/Pumpkin';
+import Redeemable from './ExploreScreen/Redeemable';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
 export default function ExploreScreen() {
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   const [activeRedeemable, setActiveRedeemable] = useState<
-    RedeemableType | undefined
+    CurrentRedeemableType | undefined
   >();
   const { inventory, refreshUser, user } = useContext(AuthContext);
-  const { playMusic } = useContext(MusicContext);
   const { parkLoaded, location, park, permissionGranted } =
     useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
-
-  useFocusEffect(
-    useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
-    }, [])
-  );
+  const { currencies } = useContext(CurrencyContext);
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
@@ -73,13 +68,33 @@ export default function ExploreScreen() {
 
   return (
     <Wrapper>
-      <Topbar
-        parkCoin={user && park?.coin_url}
-        showCoins={!!user}
-        showKeys={!!user}
-        showPumpkins={!!user && theme?.show_pumpkin_currency}
-        parkCoins={user && park?.park_coins_count}
-      />
+      <Topbar>
+        {user && (
+          <>
+            {park && (
+              <TopbarColumn>
+                <Currency image={park?.coin_url} count={park?.park_coins_count} />
+              </TopbarColumn>
+            )}
+            {theme?.currency && (
+              <TopbarColumn>
+                <Currency
+                  image={theme.currency.icon_url}
+                  count={user[theme.currency.name.toLowerCase()]}
+                />
+              </TopbarColumn>
+            )}
+            {currencies.map((currency) => (
+              <TopbarColumn key={currency.id}>
+                <Currency
+                  image={currency.icon_url}
+                  count={user[currency.name.toLowerCase()]}
+                />
+              </TopbarColumn>
+            ))}
+          </>
+        )}
+      </Topbar>
       {user && (
         <>
           {!permissionGranted && <PermissionsNotGranted />}
@@ -97,56 +112,36 @@ export default function ExploreScreen() {
               zIndex: 10,
             }}
           >
-            {theme && theme.store && (
+            {park.stores.length && (
               <View
                 style={{
                   marginBottom: 8,
+                  rowGap: 8,
                 }}
               >
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('Store', {
-                      store: theme.store.id,
-                    });
-                  }}
-                >
-                  <Image
-                    style={{
-                      width: 70,
-                      height: 75,
-                    }}
-                    source={{
-                      uri: theme.store.icon_url,
-                    }}
-                    contentFit="contain"
-                  />
-                </Button>
-              </View>
-            )}
-            {park.store && (
-              <View
-                style={{
-                  marginBottom: 8,
-                }}
-              >
-                <Button
-                  onPress={() => {
-                    RootNavigation.navigate('Store', {
-                      store: park.store.id,
-                    });
-                  }}
-                >
-                  <Image
-                    style={{
-                      width: 70,
-                      height: 75,
-                    }}
-                    source={{
-                      uri: park.store.icon_url,
-                    }}
-                    contentFit="contain"
-                  />
-                </Button>
+                {park.stores.map((store) => {
+                  return (
+                    <Button
+                      key={store.id}
+                      onPress={() => {
+                        RootNavigation.navigate('Store', {
+                          store: store.id,
+                        });
+                      }}
+                    >
+                      <Image
+                        style={{
+                          width: 70,
+                          height: 75,
+                        }}
+                        source={{
+                          uri: store.icon_url,
+                        }}
+                        contentFit="contain"
+                      />
+                    </Button>
+                  );
+                })}
               </View>
             )}
             <TaskListModal redeemables={redeemables} />
@@ -357,23 +352,26 @@ export default function ExploreScreen() {
                 </Marker>
               );
             })}
-          {redeemables?.pumpkins
-            .filter((pumpkin) =>
+          {redeemables?.redeemables
+            .filter((redeemable) =>
               dayjs().isBetween(
-                dayjs(pumpkin.active_from),
-                dayjs(pumpkin.active_to)
+                dayjs(redeemable.active_from),
+                dayjs(redeemable.active_to)
               )
             )
-            .map((pumpkin) => {
+            .map((redeemable) => {
               return (
                 <Marker
-                  key={pumpkin.id}
+                  key={redeemable.id}
                   coordinate={{
-                    latitude: Number(pumpkin.latitude),
-                    longitude: Number(pumpkin.longitude),
+                    latitude: Number(redeemable.latitude),
+                    longitude: Number(redeemable.longitude),
                   }}
                 >
-                  <Pumpkin model={pumpkin} onExpire={() => getRedeemables()} />
+                  <Redeemable
+                    redeemable={redeemable}
+                    onExpire={() => getRedeemables()}
+                  />
                 </Marker>
               );
             })}

@@ -1,6 +1,4 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useContext } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -10,26 +8,19 @@ import {
   View,
 } from 'react-native';
 import SignInButtons from '../../components/SignInButtons';
-import { AuthContext } from '../../context/AuthProvider';
-import { MusicContext } from '../../context/MusicProvider';
 import useCrumbs from '../../hooks/useCrumbs';
+import { useContext } from "react";
+import { ThemeContext } from "../../context/ThemeProvider";
 
 export default function LoginScreen({ navigation }) {
-  const { user } = useContext(AuthContext);
-  const { playMusic } = useContext(MusicContext);
   const { labels } = useCrumbs();
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!user) {
-        playMusic(require('../../../assets/sounds/music/track1.mp3'));
-      }
-    }, [])
-  );
+  const { theme } = useContext(ThemeContext);
 
   return (
     <ImageBackground
-      source={require('../../../assets/images/screens/login/background.png')}
+      source={{
+        uri: theme?.splash_screen_url
+      }}
       resizeMode="cover"
       style={{
         width: Dimensions.get('window').width,

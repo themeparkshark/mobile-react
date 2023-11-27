@@ -25,6 +25,8 @@ import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import Subscribed from '../components/Subscribed';
 import Topbar from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import UserButtons from '../components/UserButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
@@ -32,7 +34,6 @@ import Wrapper from '../components/Wrapper';
 import YellowButton from '../components/YellowButton';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
-import { MusicContext } from '../context/MusicProvider';
 import { NotificationContext } from '../context/NotificationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
@@ -50,7 +51,6 @@ export default function ProfileScreen() {
   const [friends, setFriends] = useState<UserType[]>([]);
   const { refreshNotificationCount, notificationCount } =
     useContext(NotificationContext);
-  const { playMusic } = useContext(MusicContext);
   const { warnings, labels } = useCrumbs();
 
   const requestFriends = () => {
@@ -59,7 +59,6 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      playMusic(require('../../assets/sounds/music/track5.mp3'));
       requestFriends();
       refreshNotificationCount();
     }, [])
@@ -120,9 +119,8 @@ export default function ProfileScreen() {
 
   return (
     <Wrapper>
-      <Topbar
-        text={user.screen_name}
-        leftButton={
+      <Topbar>
+        <TopbarColumn stretch={false}>
           <Button
             onPress={() => {
               RootNavigation.navigate('Notifications');
@@ -139,8 +137,11 @@ export default function ProfileScreen() {
               source={require('../../assets/images/screens/profile/notifications.png')}
             />
           </Button>
-        }
-        rightButton={
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>{user.screen_name}</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
           <Button
             onPress={() => {
               RootNavigation.navigate('Settings');
@@ -156,8 +157,8 @@ export default function ProfileScreen() {
               source={require('../../assets/images/screens/profile/settings.png')}
             />
           </Button>
-        }
-      />
+        </TopbarColumn>
+      </Topbar>
       {loading && <Loading />}
       {!loading && user && (
         <ScrollView

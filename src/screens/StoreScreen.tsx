@@ -1,6 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -11,10 +10,13 @@ import {
 import { vsprintf } from 'sprintf-js';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getStore from '../api/endpoints/stores/get';
+import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { AuthContext } from '../context/AuthProvider';
-import { MusicContext } from '../context/MusicProvider';
+import { CurrencyContext } from '../context/CurrencyProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { CatalogType } from '../models/catalog-type';
 import { InformationModalEnums } from '../models/information-modal-enums';
@@ -30,23 +32,9 @@ export default function StoreScreen({ route }) {
   const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
   const [items, setItems] = useState<ItemType[]>();
   const [loading, setLoading] = useState<boolean>(true);
-  const { playMusic } = useContext(MusicContext);
   const { user } = useContext(AuthContext);
   const { labels } = useCrumbs();
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!currentStore) {
-        return;
-      }
-
-      playMusic(
-        currentStore.is_secret_store
-          ? require('../../assets/sounds/music/track4.mp3')
-          : require('../../assets/sounds/music/track3.mp3')
-      );
-    }, [currentStore?.id])
-  );
+  const { currencies } = useContext(CurrencyContext);
 
   useEffect(() => {
     getStore(store).then((response) => setCurrentStore(response));
@@ -74,12 +62,17 @@ export default function StoreScreen({ route }) {
 
   return (
     <>
-      <Topbar
-        purple={currentStore?.is_secret_store ?? false}
-        showBackButton={true}
-        text={currentStore?.name}
-        informationModalId={InformationModalEnums.StoreScreen}
-      />
+      <Topbar purple={currentStore?.is_secret_store ?? false}>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>{currentStore?.name}</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
+          <InformationModal id={InformationModalEnums.StoreScreen} />
+        </TopbarColumn>
+      </Topbar>
       {loading && <Loading />}
       {!loading && (
         <View
@@ -123,7 +116,9 @@ export default function StoreScreen({ route }) {
                   }}
                 >
                   <Image
-                    source={require('../../assets/images/coins.png')}
+                    source={{
+                      uri: currencies[0].icon_url,
+                    }}
                     style={{
                       width: 35,
                       height: 35,

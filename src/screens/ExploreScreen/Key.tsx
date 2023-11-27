@@ -1,9 +1,11 @@
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
+import { useContext } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
 import { ImageBackground, Text, View } from 'react-native';
 import { useTimeoutWhen } from 'rooks';
 import config from '../../config';
+import { CurrencyContext } from '../../context/CurrencyProvider';
 import { KeyType } from '../../models/key-type';
 
 export default function Key({
@@ -13,6 +15,8 @@ export default function Key({
   readonly model: KeyType;
   readonly onExpire: () => void;
 }) {
+  const { currencies } = useContext(CurrencyContext);
+
   useTimeoutWhen(
     () => {
       onExpire();
@@ -63,7 +67,9 @@ export default function Key({
           />
         </ImageBackground>
         <Image
-          source={require('../../../assets/images/screens/explore/key.gif')}
+          source={{
+            uri: currencies[1].map_url,
+          }}
           style={{
             width: 40,
             height: 40,

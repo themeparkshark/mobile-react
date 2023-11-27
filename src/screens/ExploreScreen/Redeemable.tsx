@@ -4,21 +4,21 @@ import Countdown, { zeroPad } from 'react-countdown';
 import { ImageBackground, Text, View } from 'react-native';
 import { useTimeoutWhen } from 'rooks';
 import config from '../../config';
-import { PumpkinType } from '../../models/pumpkin-type';
+import { RedeemableType } from '../../models/redeemable-type';
 
-export default function Pumpkin({
-  model,
+export default function Redeemable({
+  redeemable,
   onExpire,
 }: {
-  readonly model: PumpkinType;
+  readonly redeemable: RedeemableType;
   readonly onExpire: () => void;
 }) {
   useTimeoutWhen(
     () => {
       onExpire();
     },
-    dayjs(model.active_to).diff(dayjs()),
-    !!model.id
+    dayjs(redeemable.active_to).diff(dayjs()),
+    !!redeemable.id
   );
 
   return (
@@ -43,7 +43,7 @@ export default function Pumpkin({
           source={require('../../../assets/images/screens/explore/cloud.png')}
         >
           <Countdown
-            date={Date.parse(model.active_to)}
+            date={Date.parse(redeemable.active_to)}
             renderer={({ minutes, seconds }) => {
               return (
                 <Text
@@ -63,7 +63,9 @@ export default function Pumpkin({
           />
         </ImageBackground>
         <Image
-          source={require('../../../assets/images/screens/explore/pumpkin.gif')}
+          source={{
+            uri: redeemable.theme.currency.map_url,
+          }}
           style={{
             width: 60,
             height: 60,

@@ -12,7 +12,9 @@ import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import deleteUser from '../api/endpoints/me/delete';
 import forceDeleteUser from '../api/endpoints/me/force-delete';
 import updateUser from '../api/endpoints/me/update-user';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -35,13 +37,15 @@ export default function SettingsScreen() {
 
   return (
     <>
-      <Topbar
-        text="Settings"
-        showBackButton={true}
-        onBackButtonPress={async () => {
-          await refreshUser();
-        }}
-      />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton onPress={async () => await refreshUser()} />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Settings</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       <SafeAreaView style={{ marginTop: -8, flex: 1 }}>
         <ScrollView>
           <TableView>

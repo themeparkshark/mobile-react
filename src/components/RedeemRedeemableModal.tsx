@@ -7,14 +7,15 @@ import redeemItem from '../api/endpoints/me/items/redeem-item';
 import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret-task';
 import completeTask from '../api/endpoints/me/tasks/complete-task';
 import { AuthContext } from '../context/AuthProvider';
+import { CurrencyContext } from '../context/CurrencyProvider';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
 import { CoinType } from '../models/coin-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { ItemType } from '../models/item-type';
 import { ParkType } from '../models/park-type';
-import { RedeemableType } from '../models/redeemable-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 import Box from './RedeemModal/Box';
@@ -32,7 +33,7 @@ export default function RedeemRedeemableModal({
   readonly close: () => void;
   readonly open?: boolean;
   readonly park: ParkType;
-  readonly redeemable: RedeemableType;
+  readonly redeemable: CurrentRedeemableType;
   readonly onPress: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
@@ -44,6 +45,7 @@ export default function RedeemRedeemableModal({
   const [doubleCoins, setDoubleCoins] = useState<boolean>(
     (user && user.is_subscribed) ?? false
   );
+  const { currencies } = useContext(CurrencyContext);
 
   const backgrounds = {
     task: '#0788e4',
@@ -195,7 +197,9 @@ export default function RedeemRedeemableModal({
                     pin: {
                       uri: (redeemable.model as ItemType).icon_url,
                     },
-                    coin: require('../../assets/images/screens/explore/coins.png'),
+                    coin: {
+                      uri: currencies[0].icon_url,
+                    },
                   }[redeemable.type]
                 }
                 text={
@@ -260,7 +264,9 @@ export default function RedeemRedeemableModal({
                   >
                     <Box
                       backgroundColor="#4cdcff"
-                      image={require('../../assets/images/screens/explore/coins.png')}
+                      image={{
+                        uri: currencies[0].icon_url,
+                      }}
                       text={
                         doubleCoins
                           ? (redeemable.model as TaskType | SecretTaskType)
