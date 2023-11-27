@@ -1,19 +1,10 @@
-import { CoinType } from './coin-type';
-import { ItemType } from './item-type';
-import { KeyType } from './key-type';
-import { PumpkinType } from './pumpkin-type';
-import { SecretTaskType } from './secret-task-type';
-import { TaskType } from './task-type';
-import { VaultType } from './vault-type';
+import { CurrencyType } from './currency-type';
 
 export interface RedeemableType {
-  readonly type: string;
-  readonly model:
-    | SecretTaskType
-    | ItemType
-    | TaskType
-    | CoinType
-    | KeyType
-    | VaultType
-    | PumpkinType;
+  readonly id: number;
+  readonly currency: CurrencyType;
+  readonly latitude: string;
+  readonly longitude: string;
+  readonly active_from: string;
+  readonly active_to: string;
 }

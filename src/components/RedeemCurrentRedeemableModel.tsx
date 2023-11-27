@@ -11,17 +11,17 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import redeemPumpkin from '../api/endpoints/me/pumpkins/redeem-pumpkin';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
-import { PumpkinType } from '../models/pumpkin-type';
-import { RedeemableType } from '../models/redeemable-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
+import { RedeemableType } from "../models/redeemable-type";
+import redeemRedeemables from "../api/endpoints/me/redeemables/redeem-redeemables";
 
-export default function RedeemPumpkinModal({
+export default function RedeemCurrentRedeemableModel({
   open,
   close,
   redeemable,
@@ -35,7 +35,7 @@ export default function RedeemPumpkinModal({
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const progress = useRef(new Animated.Value(0)).current;
   const rotate = useRef(new Animated.Value(0)).current;
-  const [doublePumpkin, setDoublePumpkin] = useState<boolean>(false);
+  const [doubleRedeemable, setDoubleRedeemable] = useState<boolean>(false);
   const spin = rotate.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
@@ -85,7 +85,7 @@ export default function RedeemPumpkinModal({
       onSwipeComplete={() => close()}
       onModalWillHide={() => {
         playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
-        setDoublePumpkin(false);
+        setDoubleRedeemable(false);
       }}
       backdropOpacity={0.95}
       customBackdrop={
@@ -180,10 +180,12 @@ export default function RedeemPumpkinModal({
                 paddingBottom: 32,
               }}
             >
-              {doublePumpkin ? '2 Pumpkins' : '1 Pumpkin'}
+              {doubleRedeemable ? `2 ${redeemable.currency.name}` : `1 ${redeemable.currency.singular_name}`}
             </Text>
             <Image
-              source={require('../../assets/images/pumpkins.png')}
+              source={{
+                uri: redeemable.currency.icon_url
+              }}
               style={{
                 width: '60%',
                 aspectRatio: 1.23,
@@ -196,9 +198,9 @@ export default function RedeemPumpkinModal({
             <YellowButton
               text="Collect"
               onPress={async () => {
-                await redeemPumpkin(
-                  redeemable.model as PumpkinType,
-                  doublePumpkin
+                await redeemRedeemables(
+                  redeemable,
+                  doubleRedeemable
                 );
 
                 onPress();
@@ -216,7 +218,7 @@ export default function RedeemPumpkinModal({
                 marginTop: 16,
               }}
             >
-              <WatchAd onClose={() => setDoublePumpkin(true)} />
+              <WatchAd onClose={() => setDoubleRedeemable(true)} />
             </View>
           </View>
         </View>

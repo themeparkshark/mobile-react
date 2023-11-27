@@ -18,21 +18,21 @@ import { LocationContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { CurrencyEnum } from '../models/currency-enum';
-import { RedeemableType } from '../models/redeemable-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
 import Coin from './ExploreScreen/Coin';
 import Key from './ExploreScreen/Key';
 import NotAtPark from './ExploreScreen/NotAtPark';
 import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
-import Pumpkin from './ExploreScreen/Pumpkin';
+import Redeemable from './ExploreScreen/Redeemable';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
 export default function ExploreScreen() {
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   const [activeRedeemable, setActiveRedeemable] = useState<
-    RedeemableType | undefined
+    CurrentRedeemableType | undefined
   >();
   const { inventory, refreshUser, user } = useContext(AuthContext);
   const { parkLoaded, location, park, permissionGranted } =
@@ -69,7 +69,7 @@ export default function ExploreScreen() {
         parkCoin={user && park?.coin_url}
         showCoins={!!user}
         showKeys={!!user}
-        showPumpkins={!!user && theme?.currency?.id === CurrencyEnum.Pumpkins}
+        redeemableCurrency={!!user && theme?.currency}
         parkCoins={user && park?.park_coins_count}
       />
       {user && (
@@ -329,23 +329,23 @@ export default function ExploreScreen() {
                 </Marker>
               );
             })}
-          {redeemables?.pumpkins
-            .filter((pumpkin) =>
+          {redeemables?.redeemables
+            .filter((redeemable) =>
               dayjs().isBetween(
-                dayjs(pumpkin.active_from),
-                dayjs(pumpkin.active_to)
+                dayjs(redeemable.active_from),
+                dayjs(redeemable.active_to)
               )
             )
-            .map((pumpkin) => {
+            .map((redeemable) => {
               return (
                 <Marker
-                  key={pumpkin.id}
+                  key={redeemable.id}
                   coordinate={{
-                    latitude: Number(pumpkin.latitude),
-                    longitude: Number(pumpkin.longitude),
+                    latitude: Number(redeemable.latitude),
+                    longitude: Number(redeemable.longitude),
                   }}
                 >
-                  <Pumpkin model={pumpkin} onExpire={() => getRedeemables()} />
+                  <Redeemable redeemable={redeemable} onExpire={() => getRedeemables()} />
                 </Marker>
               );
             })}

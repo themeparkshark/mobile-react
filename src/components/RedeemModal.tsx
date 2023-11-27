@@ -8,20 +8,20 @@ import {
 import { CoinType } from '../models/coin-type';
 import { KeyType } from '../models/key-type';
 import { ParkType } from '../models/park-type';
-import { PumpkinType } from '../models/pumpkin-type';
-import { RedeemableType } from '../models/redeemable-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import RedeemKeyModal from './RedeemKeyModal';
-import RedeemPumpkinModal from './RedeemPumpkinModal';
+import RedeemCurrentRedeemableModal from './RedeemCurrentRedeemableModel';
 import RedeemRedeemableModal from './RedeemRedeemableModal';
 import RedeemVaultModal from './RedeemVaultModal';
 import YellowButton from './YellowButton';
+import { RedeemableType } from "../models/redeemable-type";
 
 export default function RedeemModal({
   redeemable,
   park,
   onPress,
 }: {
-  readonly redeemable?: RedeemableType;
+  readonly redeemable?: CurrentRedeemableType;
   readonly park: ParkType;
   readonly onPress: () => void;
 }) {
@@ -57,10 +57,10 @@ export default function RedeemModal({
           dayjs((redeemable?.model as KeyType).active_from),
           dayjs((redeemable?.model as KeyType).active_to)
         )) ||
-      (redeemable?.type === 'pumpkin' &&
+      (redeemable?.type === 'redeemable' &&
         dayjs().isBetween(
-          dayjs((redeemable?.model as PumpkinType).active_from),
-          dayjs((redeemable?.model as PumpkinType).active_to)
+          dayjs((redeemable?.model as RedeemableType).active_from),
+          dayjs((redeemable?.model as RedeemableType).active_to)
         )) ||
       !!redeemable?.type;
 
@@ -92,11 +92,11 @@ export default function RedeemModal({
       </Animated.View>
       {redeemable && (
         <>
-          {redeemable?.type === 'pumpkin' && (
-            <RedeemPumpkinModal
+          {redeemable?.type === 'redeemable' && (
+            <RedeemCurrentRedeemableModal
               open={modalVisible}
               close={() => setModalVisible(false)}
-              redeemable={redeemable}
+              redeemable={redeemable.model as RedeemableType}
               onPress={() => onPress()}
             />
           )}

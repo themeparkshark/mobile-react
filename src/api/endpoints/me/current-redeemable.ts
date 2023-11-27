@@ -1,12 +1,12 @@
 import { ApiResponseType } from '../../../models/api-response-type';
-import { RedeemableType } from '../../../models/redeemable-type';
+import { CurrentRedeemableType } from '../../../models/current-redeemable-type';
 import client from '../../client';
 
 export default async function currentRedeemable(
   latitude: number,
   longitude: number
-): Promise<RedeemableType> {
-  const { data } = await client.get<ApiResponseType<RedeemableType>>(
+): Promise<CurrentRedeemableType> {
+  const { data } = await client.get<ApiResponseType<CurrentRedeemableType>>(
     '/me/current-redeemable',
     {
       params: {

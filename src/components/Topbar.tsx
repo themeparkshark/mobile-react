@@ -15,16 +15,17 @@ import { ThemeContext } from '../context/ThemeProvider';
 import shortenNumber from '../helpers/shorten-number';
 import Broadcasts from './Broadcasts';
 import InformationModal from './InformationModal';
+import { CurrencyType } from "../models/currency-type";
 
 export default function Topbar({
   informationModalId = null,
   leftButton = null,
   rightButton = null,
   text = null,
+  redeemableCurrency = null,
   showBackButton = false,
   showCoins = false,
   showKeys = false,
-  showPumpkins = false,
   parkCoin = null,
   parkCoins = null,
   purple = false,
@@ -38,7 +39,7 @@ export default function Topbar({
   readonly showBackButton?: boolean;
   readonly showCoins?: boolean;
   readonly showKeys?: boolean;
-  readonly showPumpkins?: boolean;
+  readonly redeemableCurrency?: CurrencyType;
   readonly parkCoin?: string | null;
   readonly parkCoins?: number | null;
   readonly onBackButtonPress?: () => void;
@@ -217,7 +218,7 @@ export default function Topbar({
                 />
               </View>
             )}
-            {showPumpkins && (
+            {redeemableCurrency && (
               <View
                 style={{
                   flex: 1,
@@ -227,8 +228,10 @@ export default function Topbar({
                 }}
               >
                 <Currency
-                  image={require('../../assets/images/pumpkins.png')}
-                  count={user?.pumpkins ?? 0}
+                  image={{
+                    uri: redeemableCurrency.icon_url,
+                  }}
+                  count={user ? user[redeemableCurrency.name.toLowerCase()] : 0}
                 />
               </View>
             )}

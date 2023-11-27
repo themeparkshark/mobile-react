@@ -14,7 +14,7 @@ import {
 import { CoinType } from '../models/coin-type';
 import { ItemType } from '../models/item-type';
 import { ParkType } from '../models/park-type';
-import { RedeemableType } from '../models/redeemable-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 import Box from './RedeemModal/Box';
@@ -32,7 +32,7 @@ export default function RedeemRedeemableModal({
   readonly close: () => void;
   readonly open?: boolean;
   readonly park: ParkType;
-  readonly redeemable: RedeemableType;
+  readonly redeemable: CurrentRedeemableType;
   readonly onPress: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);

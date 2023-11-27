@@ -17,7 +17,7 @@ import {
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
 import { KeyType } from '../models/key-type';
-import { RedeemableType } from '../models/redeemable-type';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
 
@@ -29,7 +29,7 @@ export default function RedeemKeyModal({
 }: {
   readonly close: () => void;
   readonly open?: boolean;
-  readonly redeemable: RedeemableType;
+  readonly redeemable: CurrentRedeemableType;
   readonly onPress: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
