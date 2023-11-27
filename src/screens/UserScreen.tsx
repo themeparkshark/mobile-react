@@ -111,10 +111,11 @@ export default function UserScreen({ route, navigation }) {
           permission: PermissionEnums.CreateCompliments,
         },
         {
+          show: Boolean(currentUser.username),
           image: require('../../assets/images/screens/explore/base.png'),
           onPress: async () => {
             Alert.alert(
-              vsprintf(prompts.report_username, [currentUser.username]),
+              vsprintf(prompts.report_username, [currentUser.screen_name]),
               '',
               [
                 {
