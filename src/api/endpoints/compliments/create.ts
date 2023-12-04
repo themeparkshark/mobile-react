@@ -6,7 +6,7 @@ export default async function createCompliment(
   user: number
 ): Promise<ComplimentType> {
   const response = await client.post<ApiResponseType<ComplimentType>>(
-    `/compliments/${user}`
+    `/users/${user}/compliment`
   );
 
   return response.data.data;

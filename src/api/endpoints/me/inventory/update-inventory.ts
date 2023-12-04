@@ -7,7 +7,7 @@ export default async function items(item: ItemType): Promise<InventoryType> {
   const { data } = await client.put<ApiResponseType<InventoryType>>(
     '/me/inventory',
     {
-      item: item.id,
+      item_id: item.id,
     }
   );
 
