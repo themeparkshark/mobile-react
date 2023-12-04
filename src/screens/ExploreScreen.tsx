@@ -115,7 +115,7 @@ export default function ExploreScreen() {
               zIndex: 10,
             }}
           >
-            {park.stores.length && (
+            {park.stores.length > 0 && (
               <View
                 style={{
                   marginBottom: 8,
