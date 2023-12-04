@@ -1,12 +1,10 @@
 import { FlashList } from '@shopify/flash-list';
-import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
-import view from '../api/endpoints/social-posts/view';
 import youtube from '../api/endpoints/social-posts/youtube';
 import Loading from '../components/Loading';
+import SocialPost from '../components/SocialPost';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -69,24 +67,7 @@ export default function WatchScreen() {
                 data={videos}
                 numColumns={2}
                 renderItem={({ item }) => (
-                  <TouchableOpacity
-                    onPress={async () => {
-                      await WebBrowser.openBrowserAsync(item.permalink);
-                      await view(item);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: 8,
-                    }}
-                  >
-                    <Image
-                      source={item.image_url}
-                      style={{
-                        aspectRatio: 16 / 9,
-                        borderRadius: 10,
-                      }}
-                    />
-                  </TouchableOpacity>
+                  <SocialPost socialPost={item as SocialPostType} />
                 )}
                 estimatedItemSize={15}
                 keyExtractor={(item) => item.id.toString()}

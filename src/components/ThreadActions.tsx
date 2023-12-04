@@ -1,5 +1,5 @@
-import React, { ReactNode, useContext, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
+import React, { ReactNode, useContext, useState } from 'react';
 import {
   Alert,
   SafeAreaView,

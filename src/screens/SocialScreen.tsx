@@ -40,7 +40,7 @@ export default function SocialScreen({ navigation }) {
     {
       label: labels.most_comments,
       value: 'most_comments',
-    }
+    },
   ];
   const [filter, setFilter] = useState<SortOption>(options[0]);
   const { checkPermission } = usePermissions();
