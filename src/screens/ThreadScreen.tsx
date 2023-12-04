@@ -16,6 +16,7 @@ import Button from '../components/Button';
 import Comment from '../components/Comment';
 import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
+import SortByDropdown, { SortOption } from '../components/SortByDropdown';
 import Tag from '../components/Tag';
 import ThreadActions from '../components/ThreadActions';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -37,13 +38,26 @@ export default function ThreadScreen({ route }) {
   const [comment, setComment] = useState<CommentType>();
   const { user } = useContext(AuthContext);
   const { warnings, labels } = useCrumbs();
+  const options = [
+    {
+      label: labels.new,
+      value: 'latest',
+    },
+    {
+      label: labels.most_reactions,
+      value: 'most_reactions',
+    },
+  ];
+  const [filter, setFilter] = useState<SortOption>(options[0]);
 
   const fetchComments = async (page: number) => {
     if (!currentThread) {
       return;
     }
 
-    const response = await getComments(currentThread.id, page);
+    const response = await getComments(currentThread.id, page, {
+      sort: filter.value,
+    });
     setComments((prevState) => {
       return [...prevState, ...response];
     });
@@ -73,6 +87,15 @@ export default function ThreadScreen({ route }) {
     await fetchComments(page);
     setLoading(false);
   }, [currentThread]);
+
+  useAsyncEffect(async () => {
+    if (loading) {
+      return;
+    }
+
+    await fetchComments(1);
+    setPage(1);
+  }, [filter]);
 
   useAsyncEffect(async () => {
     if (page > 1) {
@@ -109,145 +132,172 @@ export default function ThreadScreen({ route }) {
           <FlashList
             data={comments}
             ListHeaderComponent={
-              <View style={{ padding: 16, backgroundColor: 'white' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <View>
-                    <Button
-                      onPress={() => {
-                        RootNavigation.navigate('User', {
-                          user: currentThread.user.id,
-                        });
-                      }}
-                    >
-                      <Avatar size="sm" user={currentThread.user} />
-                    </Button>
-                  </View>
-                  <View style={{ paddingLeft: 16 }}>
-                    <Text>
-                      {currentThread.user.screen_name} -{' '}
-                      {dayjs(currentThread.created_at)
-                        .startOf('second')
-                        .fromNow()}
-                    </Text>
-                  </View>
-                </View>
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    fontSize: 28,
-                    paddingTop: 16,
-                    paddingBottom: 16,
-                  }}
-                >
-                  {currentThread.title}
-                </Text>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  {currentThread.tags.map((tag) => (
-                    <Tag key={tag.id} tag={tag} />
-                  ))}
-                </View>
-                {currentThread.content && (
-                  <Text
-                    style={{
-                      paddingTop: 16,
-                      paddingBottom: 16,
-                      fontSize: 16,
-                      lineHeight: 24,
-                    }}
-                  >
-                    {currentThread.content}
-                  </Text>
-                )}
-                <View
-                  style={{ margin: -8, flexWrap: 'wrap', flexDirection: 'row' }}
-                >
-                  {currentThread.attachments.map((attachment) => {
-                    return (
-                      <View
-                        key={attachment.id}
-                        style={{
-                          width:
-                            currentThread.attachments.length > 1
-                              ? '33.3333333%'
-                              : '100%',
-                          padding: 8,
+              <>
+                <View style={{ padding: 16, backgroundColor: 'white' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View>
+                      <Button
+                        onPress={() => {
+                          RootNavigation.navigate('User', {
+                            user: currentThread.user.id,
+                          });
                         }}
                       >
-                        <AttachmentModal attachment={attachment} />
-                      </View>
-                    );
-                  })}
-                </View>
-                <View
-                  style={{
-                    marginTop: 16,
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <View>
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: 'row',
-                      }}
-                    >
-                      <FontAwesomeIcon
-                        icon={faFaceSmile}
-                        size={16}
-                        color="black"
-                      />
-                      <Text
-                        style={{
-                          paddingLeft: 16,
-                        }}
-                      >
-                        {currentThread.reactions_count}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View>
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                      }}
-                    >
-                      <FontAwesomeIcon
-                        icon={faComments}
-                        size={16}
-                        color="black"
-                      />
-                      <Text
-                        style={{
-                          paddingLeft: 16,
-                        }}
-                      >
-                        {currentThread.comments_count}
+                        <Avatar size="sm" user={currentThread.user} />
+                      </Button>
+                    </View>
+                    <View style={{ paddingLeft: 16 }}>
+                      <Text>
+                        {currentThread.user.screen_name} -{' '}
+                        {dayjs(currentThread.created_at)
+                          .startOf('second')
+                          .fromNow()}
                       </Text>
                     </View>
                   </View>
-                  <View>
-                    <TouchableOpacity
+                  <Text
+                    style={{
+                      fontFamily: 'Knockout',
+                      fontSize: 28,
+                      paddingTop: 16,
+                      paddingBottom: 16,
+                    }}
+                  >
+                    {currentThread.title}
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {currentThread.tags.map((tag) => (
+                      <Tag key={tag.id} tag={tag} />
+                    ))}
+                  </View>
+                  {currentThread.content && (
+                    <Text
                       style={{
-                        flexDirection: 'row',
+                        paddingTop: 16,
+                        paddingBottom: 16,
+                        fontSize: 16,
+                        lineHeight: 24,
                       }}
                     >
-                      <FontAwesomeIcon icon={faFlag} size={16} color="black" />
-                      <Text
+                      {currentThread.content}
+                    </Text>
+                  )}
+                  <View
+                    style={{
+                      margin: -8,
+                      flexWrap: 'wrap',
+                      flexDirection: 'row',
+                    }}
+                  >
+                    {currentThread.attachments.map((attachment) => {
+                      return (
+                        <View
+                          key={attachment.id}
+                          style={{
+                            width:
+                              currentThread.attachments.length > 1
+                                ? '33.3333333%'
+                                : '100%',
+                            padding: 8,
+                          }}
+                        >
+                          <AttachmentModal attachment={attachment} />
+                        </View>
+                      );
+                    })}
+                  </View>
+                  <View
+                    style={{
+                      marginTop: 16,
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <View>
+                      <TouchableOpacity
                         style={{
-                          paddingLeft: 16,
+                          flexDirection: 'row',
                         }}
                       >
-                        Report
-                      </Text>
-                    </TouchableOpacity>
+                        <FontAwesomeIcon
+                          icon={faFaceSmile}
+                          size={16}
+                          color="black"
+                        />
+                        <Text
+                          style={{
+                            paddingLeft: 16,
+                          }}
+                        >
+                          {currentThread.reactions_count}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                        }}
+                      >
+                        <FontAwesomeIcon
+                          icon={faComments}
+                          size={16}
+                          color="black"
+                        />
+                        <Text
+                          style={{
+                            paddingLeft: 16,
+                          }}
+                        >
+                          {currentThread.comments_count}
+                        </Text>
+                      </View>
+                    </View>
+                    <View>
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                        }}
+                      >
+                        <FontAwesomeIcon
+                          icon={faFlag}
+                          size={16}
+                          color="black"
+                        />
+                        <Text
+                          style={{
+                            paddingLeft: 16,
+                          }}
+                        >
+                          Report
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              </View>
+                <View
+                  style={{
+                    paddingLeft: 16,
+                    paddingTop: 16,
+                  }}
+                >
+                  <SortByDropdown
+                    activeOption={filter}
+                    options={options}
+                    onChange={async (activeOption) => {
+                      setComments([]);
+                      setFilter(activeOption);
+                    }}
+                    title={labels.sort_comments}
+                    resource={labels.comments}
+                  />
+                </View>
+              </>
             }
             renderItem={({ item }) => {
               return (
