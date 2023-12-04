@@ -1,4 +1,5 @@
 import { faComments } from '@fortawesome/pro-light-svg-icons/faComments';
+import { faEllipsis } from '@fortawesome/pro-light-svg-icons/faEllipsis';
 import { faFaceSmile } from '@fortawesome/pro-light-svg-icons/faFaceSmile';
 import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
@@ -85,9 +86,15 @@ export default function ThreadScreen({ route }) {
         <TopbarColumn stretch={false}>
           <BackButton onPress={() => setActiveComment(undefined)} />
         </TopbarColumn>
+        <TopbarColumn />
         <TopbarColumn stretch={false}>
           {currentThread && (
-            <ThreadActions trigger={<Text>Open</Text>} thread={currentThread} />
+            <ThreadActions
+              trigger={
+                <FontAwesomeIcon icon={faEllipsis} size={24} color={'white'} />
+              }
+              thread={currentThread}
+            />
           )}
         </TopbarColumn>
       </Topbar>
