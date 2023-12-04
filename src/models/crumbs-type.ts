@@ -21,12 +21,16 @@ interface CrumbsType {
     readonly experience_level: string;
     readonly find_friends: string;
     readonly free_trial: string;
+    readonly hot: string;
     readonly keys: string;
     readonly loading: string;
     readonly load_more_replies: string;
     readonly membership: string;
     readonly membership_benefits: string[];
     readonly membership_terms: string;
+    readonly more_actions: string;
+    readonly most_comments: string;
+    readonly new: string;
     readonly park_completion_rate: string;
     readonly park_tasks: string;
     readonly payment_complete: string;
@@ -43,6 +47,7 @@ interface CrumbsType {
     readonly select_a_pin: string;
     readonly skip_for_now: string;
     readonly slow_connectivity: string;
+    readonly sort_threads: string;
     readonly splash_screen_facts: string[];
     readonly start_free_trial: string;
     readonly submit: string;
@@ -50,6 +55,7 @@ interface CrumbsType {
     readonly tasks: string;
     readonly task_list_modal_heading: string;
     readonly task_unlocks: string;
+    readonly threads: string;
     readonly trade_expiration: string;
     readonly trade_pin: string;
     readonly vault_cost: string;
@@ -69,10 +75,12 @@ interface CrumbsType {
     readonly item_purchased: string;
     readonly pin_swap_created: string;
     readonly report_created: string;
+    readonly thread_deleted: string;
   };
   readonly prompts: {
     readonly accept_friend_request: string;
     readonly compliment: string;
+    readonly delete_thread: string;
     readonly pin_swap: string;
     readonly purchase_item: string;
     readonly redeem_item: string;
