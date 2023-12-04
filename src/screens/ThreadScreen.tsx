@@ -17,7 +17,8 @@ import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
 import Tag from '../components/Tag';
 import ThreadActions from '../components/ThreadActions';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
 import { AuthContext } from '../context/AuthProvider';
 import { ForumContext } from '../context/ForumProvider';
 import dayjs from '../helpers/dayjs';
@@ -80,14 +81,16 @@ export default function ThreadScreen({ route }) {
 
   return (
     <>
-      <Topbar
-        showBackButton
-        onBackButtonPress={() => setActiveComment(undefined)}
-        text=" "
-        rightButton={
-          <ThreadActions trigger={<Text>Open</Text>} thread={currentThread} />
-        }
-      />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton onPress={() => setActiveComment(undefined)} />
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
+          {currentThread && (
+            <ThreadActions trigger={<Text>Open</Text>} thread={currentThread} />
+          )}
+        </TopbarColumn>
+      </Topbar>
       {loading && <Loading />}
       {!loading && currentThread && (
         <View

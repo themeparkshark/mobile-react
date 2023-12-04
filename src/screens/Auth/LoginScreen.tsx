@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useContext } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -8,14 +9,18 @@ import {
   View,
 } from 'react-native';
 import SignInButtons from '../../components/SignInButtons';
+import { ThemeContext } from '../../context/ThemeProvider';
 import useCrumbs from '../../hooks/useCrumbs';
 
 export default function LoginScreen({ navigation }) {
   const { labels } = useCrumbs();
+  const { theme } = useContext(ThemeContext);
 
   return (
     <ImageBackground
-      source={require('../../../assets/images/screens/login/background.png')}
+      source={{
+        uri: theme?.splash_screen_url,
+      }}
       resizeMode="cover"
       style={{
         width: Dimensions.get('window').width,

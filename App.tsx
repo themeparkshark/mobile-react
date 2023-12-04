@@ -3,6 +3,7 @@ import Root from './src/Root';
 import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { CrumbProvider } from './src/context/CrumbProvider';
+import { CurrencyProvider } from './src/context/CurrencyProvider';
 import { DailyGiftProvider } from './src/context/DailyGiftProvider';
 import { ForumProvider } from './src/context/ForumProvider';
 import { LocationProvider } from './src/context/LocationProvider';
@@ -24,7 +25,9 @@ export default function App() {
                     <LocationProvider>
                       <DailyGiftProvider>
                         <ThemeProvider>
-                          <Root />
+                          <CurrencyProvider>
+                            <Root />
+                          </CurrencyProvider>
                         </ThemeProvider>
                       </DailyGiftProvider>
                     </LocationProvider>

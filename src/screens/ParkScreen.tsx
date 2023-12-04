@@ -11,10 +11,14 @@ import getCompletedArchivedTasks from '../api/endpoints/users/parks/getCompleted
 import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
 import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
 import getVisitedPark from '../api/endpoints/users/visited-parks/getPark';
+import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
+import ParkTrophyModal from '../components/ParkTrophyModal';
 import Progress from '../components/Progress';
 import TaskCoinModal from '../components/TaskCoinModal';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import config from '../config';
 import useCrumbs from '../hooks/useCrumbs';
 import { InformationModalEnums } from '../models/information-modal-enums';
@@ -82,11 +86,19 @@ export default function ParkScreen({ route }) {
 
   return (
     <>
-      <Topbar
-        showBackButton={true}
-        text={currentPark?.display_name ?? currentPark?.name}
-        informationModalId={InformationModalEnums.ParkScreen}
-      />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>
+            {currentPark?.display_name ?? currentPark?.name}
+          </TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
+          <InformationModal id={InformationModalEnums.ParkScreen} />
+        </TopbarColumn>
+      </Topbar>
       {loading && <Loading />}
       {!loading && (
         <View
@@ -193,16 +205,25 @@ export default function ParkScreen({ route }) {
                             alignItems: 'flex-end',
                           }}
                         >
-                          <Image
-                            source={silver}
-                            style={{
-                              width: 90,
-                              height: 95,
-                              opacity:
-                                currentPark.park_coins_count >= 50 ? 1 : 0.6,
-                              marginRight: 16,
+                          <ParkTrophyModal
+                            trophy={{
+                              name: 'Silver',
+                              image: silver,
+                              unlocked: currentPark.park_coins_count >= 50,
+                              unlockCount: 50,
                             }}
-                          />
+                          >
+                            <Image
+                              source={silver}
+                              style={{
+                                width: 90,
+                                height: 95,
+                                opacity:
+                                  currentPark.park_coins_count >= 50 ? 1 : 0.6,
+                                marginRight: 16,
+                              }}
+                            />
+                          </ParkTrophyModal>
                         </View>
                         <View
                           style={{
@@ -210,15 +231,24 @@ export default function ParkScreen({ route }) {
                             alignItems: 'center',
                           }}
                         >
-                          <Image
-                            source={gold}
-                            style={{
-                              width: 100,
-                              height: 140,
-                              opacity:
-                                currentPark.park_coins_count >= 100 ? 1 : 0.6,
+                          <ParkTrophyModal
+                            trophy={{
+                              name: 'Gold',
+                              image: gold,
+                              unlocked: currentPark.park_coins_count >= 100,
+                              unlockCount: 100,
                             }}
-                          />
+                          >
+                            <Image
+                              source={gold}
+                              style={{
+                                width: 100,
+                                height: 140,
+                                opacity:
+                                  currentPark.park_coins_count >= 100 ? 1 : 0.6,
+                              }}
+                            />
+                          </ParkTrophyModal>
                         </View>
                         <View
                           style={{
@@ -226,16 +256,25 @@ export default function ParkScreen({ route }) {
                             alignItems: 'flex-start',
                           }}
                         >
-                          <Image
-                            source={bronze}
-                            style={{
-                              width: 70,
-                              height: 75,
-                              opacity:
-                                currentPark.park_coins_count >= 12 ? 1 : 0.6,
-                              marginLeft: 16,
+                          <ParkTrophyModal
+                            trophy={{
+                              name: 'Bronze',
+                              image: bronze,
+                              unlocked: currentPark.park_coins_count >= 12,
+                              unlockCount: 12,
                             }}
-                          />
+                          >
+                            <Image
+                              source={bronze}
+                              style={{
+                                width: 70,
+                                height: 75,
+                                opacity:
+                                  currentPark.park_coins_count >= 12 ? 1 : 0.6,
+                                marginLeft: 16,
+                              }}
+                            />
+                          </ParkTrophyModal>
                         </View>
                       </View>
                       <Image

@@ -15,7 +15,9 @@ import { vsprintf } from 'sprintf-js';
 import * as RootNavigation from '../RootNavigation';
 import Loading from '../components/Loading';
 import RedButton from '../components/RedButton';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import YellowButton from '../components/YellowButton';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -89,7 +91,13 @@ export default function MembershipScreen({ route }) {
           </View>
         </View>
       )}
-      <Topbar text="VIP Membership" showBackButton={!intro} />
+      <Topbar>
+        <TopbarColumn stretch={false}>{!intro && <BackButton />}</TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>VIP Membership</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       {loading && <Loading />}
       {!loading && product && (
         <View

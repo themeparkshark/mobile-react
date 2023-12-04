@@ -5,6 +5,8 @@ import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import Loading from '../components/Loading';
 import Topbar from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
 import { EntryType } from '../models/entry-type';
 import Entry from './NewsScreen/Entry';
@@ -48,7 +50,11 @@ export default function NewsScreen() {
 
   return (
     <Wrapper>
-      <Topbar text={'Latest News'} />
+      <Topbar>
+        <TopbarColumn stretch>
+          <TopbarText>Latest News</TopbarText>
+        </TopbarColumn>
+      </Topbar>
       {loading && <Loading />}
       {!loading && entries.length > 0 && (
         <View
@@ -58,7 +64,7 @@ export default function NewsScreen() {
           }}
         >
           <FlashList
-            data={entries}
+            data={entries as ReadonlyArray<EntryType>}
             renderItem={({ item }) => <Entry key={item.id} entry={item} />}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

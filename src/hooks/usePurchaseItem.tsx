@@ -5,7 +5,6 @@ import purchase from '../api/endpoints/me/inventory/purchase-item';
 import search from '../api/endpoints/me/inventory/search';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
-import { CurrencyEnum } from '../models/currency-enum';
 import { ItemType } from '../models/item-type';
 import { UserType } from '../models/user-type';
 import useCrumbs from './useCrumbs';
@@ -38,27 +37,18 @@ export default function usePurchaseItem() {
       );
     }
 
-    if (
-      item.currency.id === CurrencyEnum.SharkCoins &&
-      user.coins < item.cost
-    ) {
+    if (user[item.currency.name.toLowerCase()] < item.cost) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
-      return Alert.alert(errors.not_enough_coins, '', [
-        {
-          text: 'Ok',
-        },
-      ]);
-    }
-
-    if (item.currency.id === CurrencyEnum.Keys && user.keys < item.cost) {
-      playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
-
-      return Alert.alert(errors.not_enough_keys, '', [
-        {
-          text: 'Ok',
-        },
-      ]);
+      return Alert.alert(
+        vsprintf(errors.not_enough_currency, [item.currency.name]),
+        '',
+        [
+          {
+            text: 'Ok',
+          },
+        ]
+      );
     }
 
     const text =

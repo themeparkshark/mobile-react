@@ -12,12 +12,13 @@ import {
 } from 'react-native';
 import Modal from 'react-native-modal';
 import redeemKey from '../api/endpoints/me/keys/redeem-key';
+import { CurrencyContext } from '../context/CurrencyProvider';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
+import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { KeyType } from '../models/key-type';
-import { RedeemableType } from '../models/redeemable-type';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
 
@@ -29,7 +30,7 @@ export default function RedeemKeyModal({
 }: {
   readonly close: () => void;
   readonly open?: boolean;
-  readonly redeemable: RedeemableType;
+  readonly redeemable: CurrentRedeemableType;
   readonly onPress: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
@@ -40,6 +41,8 @@ export default function RedeemKeyModal({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
+  const { currencies } = useContext(CurrencyContext);
+  const currency = currencies[1];
 
   useEffect(() => {
     if (open) {
@@ -180,10 +183,12 @@ export default function RedeemKeyModal({
                 paddingBottom: 32,
               }}
             >
-              {doubleKey ? '2 Shark Keys' : '1 Shark Key'}
+              {doubleKey ? `2 ${currency.name}` : `1 ${currency.singular_name}`}
             </Text>
             <Image
-              source={require('../../assets/images/keys.png')}
+              source={{
+                uri: currency.icon_url,
+              }}
               style={{
                 width: '60%',
                 aspectRatio: 1.23,

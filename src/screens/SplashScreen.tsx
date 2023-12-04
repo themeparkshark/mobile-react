@@ -20,13 +20,9 @@ export default function SplashScreen() {
 
   return (
     <Image
-      source={
-        theme?.splash_screen_url
-          ? {
-              uri: theme?.splash_screen_url,
-            }
-          : require('../../assets/images/screens/login/background.png')
-      }
+      source={{
+        uri: theme?.splash_screen_url,
+      }}
       contentFit="cover"
       style={{
         width: Dimensions.get('window').width,

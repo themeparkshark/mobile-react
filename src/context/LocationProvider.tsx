@@ -90,7 +90,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       await requestLocation();
     },
     5000,
-    Boolean(user && permissionGranted),
+    Boolean(user && permissionGranted && user.username),
     true
   );
 

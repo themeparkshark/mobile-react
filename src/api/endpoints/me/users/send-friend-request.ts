@@ -6,7 +6,7 @@ export default async function sendFriendRequest(
   user: UserType
 ): Promise<UserType[]> {
   const { data } = await client.post<ApiResponseType<UserType[]>>(
-    `/me/users/${user.id}/send-friend-request`
+    `/users/${user.id}/send-friend-request`
   );
 
   return data.data;

@@ -139,7 +139,9 @@ export default function Item({ item }: { readonly item: ItemType }) {
             }}
           >
             <Image
-              source={require('../../../assets/images/coins.png')}
+              source={{
+                uri: item.currency.icon_url,
+              }}
               style={{
                 width: 15,
                 height: 15,

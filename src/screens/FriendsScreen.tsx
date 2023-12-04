@@ -4,7 +4,9 @@ import { ImageBackground, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from '../components/Button';
 import Tabs from '../components/Tabs';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import { AuthContext } from '../context/AuthProvider';
 import Suggestions from './FriendsScreen/Suggestions';
 import YourList from './FriendsScreen/YourList';
@@ -14,10 +16,14 @@ export default function FriendsScreen() {
 
   return (
     <>
-      <Topbar
-        text="Friends"
-        showBackButton={true}
-        rightButton={
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Friends</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
           <Button
             onPress={() => {
               RootNavigation.navigate('PendingFriendRequests');
@@ -33,8 +39,8 @@ export default function FriendsScreen() {
               contentFit="contain"
             />
           </Button>
-        }
-      />
+        </TopbarColumn>
+      </Topbar>
       <View
         style={{
           marginTop: -8,

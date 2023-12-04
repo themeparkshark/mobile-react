@@ -11,6 +11,8 @@ import Loading from '../components/Loading';
 import SortByDropdown, { SortOption } from '../components/SortByDropdown';
 import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import UserButtons from '../components/UserButtons';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
@@ -95,9 +97,8 @@ export default function SocialScreen({ navigation }) {
 
   return (
     <Wrapper>
-      <Topbar
-        text="Social"
-        leftButton={
+      <Topbar>
+        <TopbarColumn stretch={false}>
           <CreateThreadModal
             onSubmit={async () => {
               setPage(1);
@@ -105,8 +106,11 @@ export default function SocialScreen({ navigation }) {
               await fetchThreads(1);
             }}
           />
-        }
-        rightButton={
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Social</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false}>
           <Button onPress={() => {}}>
             <Image
               style={{
@@ -118,8 +122,8 @@ export default function SocialScreen({ navigation }) {
               source={require('../../assets/images/faq.png')}
             />
           </Button>
-        }
-      />
+        </TopbarColumn>
+      </Topbar>
       {loading && <Loading />}
       {!loading && (
         <View
