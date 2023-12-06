@@ -1,11 +1,9 @@
-import { faComment } from '@fortawesome/pro-light-svg-icons/faComment';
 import { faEllipsis } from '@fortawesome/pro-light-svg-icons/faEllipsis';
-import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useContext, useState } from 'react';
-import { Alert, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getComments from '../api/endpoints/comments/getComments';
@@ -15,6 +13,7 @@ import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Comment from '../components/Comment';
 import CreateReply from '../components/CreateReply';
+import CreateReport from '../components/CreateReport';
 import Loading from '../components/Loading';
 import Reactions from '../components/Reactions';
 import ReactionsDropdown from '../components/ReactionsDropdown';
@@ -277,44 +276,10 @@ export default function ThreadScreen({ route }) {
                       </ReactionsDropdown>
                     </View>
                     <View>
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                        }}
-                      >
-                        <FontAwesomeIcon
-                          icon={faComment}
-                          size={16}
-                          color="black"
-                        />
-                        <Text
-                          style={{
-                            paddingLeft: 16,
-                          }}
-                        >
-                          Comment
-                        </Text>
-                      </View>
-                    </View>
-                    <View>
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: 'row',
-                        }}
-                      >
-                        <FontAwesomeIcon
-                          icon={faFlag}
-                          size={16}
-                          color="black"
-                        />
-                        <Text
-                          style={{
-                            paddingLeft: 16,
-                          }}
-                        >
-                          Report
-                        </Text>
-                      </TouchableOpacity>
+                      <CreateReport
+                        model={{ id: currentThread.id, type: 'thread' }}
+                        showText
+                      />
                     </View>
                   </View>
                   <View style={{ marginTop: 16, zIndex: -1 }}>

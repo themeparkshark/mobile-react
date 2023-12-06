@@ -14,6 +14,7 @@ import useCrumbs from '../hooks/useCrumbs';
 import { CommentType } from '../models/comment-type';
 import Avatar from './Avatar';
 import Button from './Button';
+import CreateReport from './CreateReport';
 
 export default function Comment({
   comment,
@@ -116,6 +117,9 @@ export default function Comment({
               >
                 <FontAwesomeIcon icon={faReply} size={16} color="black" />
               </TouchableOpacity>
+            </View>
+            <View>
+              <CreateReport model={{ id: comment.id, type: 'comment' }} />
             </View>
             {comment.user?.id === user?.id && (
               <View>

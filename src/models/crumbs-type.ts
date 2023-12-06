@@ -41,10 +41,18 @@ interface CrumbsType {
     readonly purchase_membership_additional: string;
     readonly read_more: string;
     readonly reply: string;
+    readonly report_reasons: {
+      readonly disrespectful: string;
+      readonly spam: string;
+      readonly selling: string;
+      readonly swearing: string;
+      readonly unrelated: string;
+    };
     readonly restore_purchases: string;
     readonly search_for_a_user: string;
     readonly secret_tasks: string;
     readonly select_a_pin: string;
+    readonly select_a_report_reason: string;
     readonly skip_for_now: string;
     readonly slow_connectivity: string;
     readonly sort_threads: string;
