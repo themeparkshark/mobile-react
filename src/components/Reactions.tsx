@@ -1,11 +1,14 @@
 import { Image } from 'expo-image';
 import { Text, View } from 'react-native';
+import shortenNumber from '../helpers/shorten-number';
 import { ReactionType } from '../models/reaction-type';
 
 export default function Reactions({
+  hasReacted,
   reactions,
   count,
 }: {
+  readonly hasReacted?: ReactionType;
   readonly count: number;
   readonly reactions: ReactionType[];
 }) {
@@ -42,7 +45,11 @@ export default function Reactions({
             paddingLeft: 8,
           }}
         >
-          {count}
+          {hasReacted
+            ? `You and ${shortenNumber(count - 1)} other${
+                count - 1 === 1 ? '' : 's'
+              }`
+            : shortenNumber(count)}
         </Text>
       </View>
     </View>

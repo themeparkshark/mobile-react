@@ -3,6 +3,7 @@ import { faEllipsis } from '@fortawesome/pro-light-svg-icons/faEllipsis';
 import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
 import { useContext, useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
@@ -16,6 +17,7 @@ import Comment from '../components/Comment';
 import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
 import Reactions from '../components/Reactions';
+import ReactionsDropdown from '../components/ReactionsDropdown';
 import SortByDropdown, { SortOption } from '../components/SortByDropdown';
 import Tag from '../components/Tag';
 import ThreadActions from '../components/ThreadActions';
@@ -36,6 +38,7 @@ export default function ThreadScreen({ route }) {
   const [page, setPage] = useState<number>(1);
   const [comments, setComments] = useState<CommentType[]>([]);
   const [comment, setComment] = useState<CommentType>();
+  const { reactionTypes } = useContext(ForumContext);
   const { user } = useContext(AuthContext);
   const { warnings, labels } = useCrumbs();
   const options = [
@@ -63,7 +66,7 @@ export default function ThreadScreen({ route }) {
     });
   };
 
-  useAsyncEffect(async () => {
+  const requestThread = async () => {
     try {
       const response = await getThread(thread);
       setCurrentThread(response);
@@ -77,7 +80,9 @@ export default function ThreadScreen({ route }) {
         },
       ]);
     }
-  }, []);
+  };
+
+  useAsyncEffect(requestThread, []);
 
   useAsyncEffect(async () => {
     if (!currentThread) {
@@ -216,20 +221,60 @@ export default function ThreadScreen({ route }) {
                       marginTop: 16,
                       flexDirection: 'row',
                       alignItems: 'center',
+                      justifyContent: 'space-between',
                       columnGap: 48,
                     }}
                   >
                     <View>
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: 'row',
-                        }}
+                      <ReactionsDropdown
+                        model={{ id: currentThread.id, type: 'thread' }}
+                        activeReaction={currentThread.current_user_reaction}
+                        onReactionChange={() => requestThread()}
                       >
-                        <Reactions
-                          count={currentThread.reactions_count}
-                          reactions={currentThread.reactions}
-                        />
-                      </TouchableOpacity>
+                        {currentThread.current_user_reaction ? (
+                          <>
+                            <Image
+                              source={{
+                                uri: currentThread.current_user_reaction
+                                  .reaction_type.image_url,
+                              }}
+                              style={{
+                                width: 20,
+                                height: 20,
+                              }}
+                            />
+                            <Text
+                              style={{
+                                paddingLeft: 16,
+                              }}
+                            >
+                              {
+                                currentThread.current_user_reaction
+                                  .reaction_type.name
+                              }
+                            </Text>
+                          </>
+                        ) : (
+                          <>
+                            <Image
+                              source={{
+                                uri: reactionTypes[0].image_url,
+                              }}
+                              style={{
+                                width: 20,
+                                height: 20,
+                              }}
+                            />
+                            <Text
+                              style={{
+                                paddingLeft: 16,
+                              }}
+                            >
+                              React
+                            </Text>
+                          </>
+                        )}
+                      </ReactionsDropdown>
                     </View>
                     <View>
                       <View
@@ -247,7 +292,7 @@ export default function ThreadScreen({ route }) {
                             paddingLeft: 16,
                           }}
                         >
-                          {currentThread.comments_count}
+                          Comment
                         </Text>
                       </View>
                     </View>
@@ -262,8 +307,22 @@ export default function ThreadScreen({ route }) {
                           size={16}
                           color="black"
                         />
+                        <Text
+                          style={{
+                            paddingLeft: 16,
+                          }}
+                        >
+                          Report
+                        </Text>
                       </TouchableOpacity>
                     </View>
+                  </View>
+                  <View style={{ marginTop: 16, zIndex: -1 }}>
+                    <Reactions
+                      count={currentThread.reactions_count}
+                      reactions={currentThread.reactions}
+                      hasReacted={currentThread.current_user_reaction}
+                    />
                   </View>
                 </View>
                 <View

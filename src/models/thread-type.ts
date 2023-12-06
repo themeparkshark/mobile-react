@@ -17,4 +17,5 @@ export interface ThreadType {
   readonly tags: TagType[];
   readonly latest_comment: CommentType;
   readonly reactions: ReactionType[];
+  readonly current_user_reaction: ReactionType;
 }
