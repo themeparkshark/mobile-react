@@ -17,7 +17,7 @@ import CreateReport from '../components/CreateReport';
 import Loading from '../components/Loading';
 import Reactions from '../components/Reactions';
 import ReactionsDropdown from '../components/ReactionsDropdown';
-import SortByDropdown, { SortOption } from '../components/SortByDropdown';
+import { SortOption } from '../components/SortByDropdown';
 import Tag from '../components/Tag';
 import ThreadActions from '../components/ThreadActions';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -298,16 +298,16 @@ export default function ThreadScreen({ route }) {
                     paddingTop: 16,
                   }}
                 >
-                  <SortByDropdown
-                    activeOption={filter}
-                    options={options}
-                    onChange={async (activeOption) => {
-                      setComments([]);
-                      setFilter(activeOption);
-                    }}
-                    title={labels.sort_comments}
-                    resource={labels.comments}
-                  />
+                  {/*<SortByDropdown*/}
+                  {/*  activeOption={filter}*/}
+                  {/*  options={options}*/}
+                  {/*  onChange={async (activeOption) => {*/}
+                  {/*    setComments([]);*/}
+                  {/*    setFilter(activeOption);*/}
+                  {/*  }}*/}
+                  {/*  title={labels.sort_comments}*/}
+                  {/*  resource={labels.comments}*/}
+                  {/*/>*/}
                 </View>
               </>
             }
