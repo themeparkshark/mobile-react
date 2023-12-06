@@ -30,6 +30,7 @@ interface CrumbsType {
     readonly membership_terms: string;
     readonly more_actions: string;
     readonly most_comments: string;
+    readonly most_reactions: string;
     readonly new: string;
     readonly park_completion_rate: string;
     readonly park_tasks: string;
