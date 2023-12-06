@@ -36,6 +36,7 @@ const SortByDropdown: React.FC<SortByDropdownProps> = ({
           style={{
             textTransform: 'uppercase',
             fontFamily: 'Knockout',
+            zIndex: -1,
           }}
         >
           {activeOption.label} {resource}

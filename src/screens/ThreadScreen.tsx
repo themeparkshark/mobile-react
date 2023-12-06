@@ -244,7 +244,7 @@ export default function ThreadScreen({ route }) {
                             />
                             <Text
                               style={{
-                                paddingLeft: 16,
+                                paddingLeft: 8,
                               }}
                             >
                               {
@@ -266,7 +266,7 @@ export default function ThreadScreen({ route }) {
                             />
                             <Text
                               style={{
-                                paddingLeft: 16,
+                                paddingLeft: 8,
                               }}
                             >
                               React
@@ -282,13 +282,15 @@ export default function ThreadScreen({ route }) {
                       />
                     </View>
                   </View>
-                  <View style={{ marginTop: 16, zIndex: -1 }}>
-                    <Reactions
-                      count={currentThread.reactions_count}
-                      reactions={currentThread.reactions}
-                      hasReacted={currentThread.current_user_reaction}
-                    />
-                  </View>
+                  {currentThread.reactions_count > 0 && (
+                    <View style={{ marginTop: 16, zIndex: -1 }}>
+                      <Reactions
+                        count={currentThread.reactions_count}
+                        reactions={currentThread.reactions}
+                        hasReacted={currentThread.current_user_reaction}
+                      />
+                    </View>
+                  )}
                 </View>
                 <View
                   style={{

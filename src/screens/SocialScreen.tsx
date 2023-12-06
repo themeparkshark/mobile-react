@@ -99,13 +99,7 @@ export default function SocialScreen({ navigation }) {
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <CreateThreadModal
-            onSubmit={async () => {
-              setPage(1);
-              setThreads([]);
-              await fetchThreads(1);
-            }}
-          />
+          <CreateThreadModal />
         </TopbarColumn>
         <TopbarColumn>
           <TopbarText>Social</TopbarText>

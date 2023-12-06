@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
-import { ReactElement, useContext, useState } from 'react';
+import { ReactElement, useContext, useRef, useState } from 'react';
 import { TouchableOpacity, View } from 'react-native';
-import { useTimeoutWhen } from 'rooks';
+import Tooltip from 'rn-tooltip';
 import deleteReaction from '../api/endpoints/reactions/delete';
 import addThreadReaction from '../api/endpoints/threads/addReaction';
 import { ForumContext } from '../context/ForumProvider';
@@ -23,79 +23,77 @@ export default function ReactionsDropdown({
 }) {
   const [open, setOpen] = useState<boolean>(false);
   const { reactionTypes } = useContext(ForumContext);
-
-  useTimeoutWhen(
-    () => {
-      setOpen(false);
-    },
-    5000,
-    open
-  );
+  const tooltip = useRef();
 
   return (
     <View style={{ position: 'relative' }}>
-      <TouchableOpacity
-        onPress={() => setOpen(!open)}
-        style={{ flexDirection: 'row', alignItems: 'center' }}
-      >
-        {children}
-      </TouchableOpacity>
-      {open && (
-        <View
-          style={{
-            position: 'absolute',
-            top: '150%',
-            left: 0,
-            backgroundColor: 'white',
-            borderRadius: 10,
-            padding: 8,
-            shadowOffset: {
-              width: 0,
-              height: 0,
-            },
-            shadowOpacity: 0.4,
-            shadowRadius: 3,
-            flexDirection: 'row',
-            columnGap: 16,
-            zIndex: 20,
-          }}
-        >
-          {reactionTypes.map((reactionType) => {
-            return (
-              <View key={reactionType.id}>
-                <TouchableOpacity
-                  onPress={async () => {
-                    if (activeReaction?.reaction_type.id === reactionType.id) {
-                      await deleteReaction(activeReaction.id);
+      <Tooltip
+        ref={(ref) => (tooltip.current = ref)}
+        actionType="press"
+        width={500}
+        height="auto"
+        popover={
+          <View
+            style={{
+              backgroundColor: 'white',
+              borderRadius: 10,
+              padding: 8,
+              shadowOffset: {
+                width: 0,
+                height: 0,
+              },
+              shadowOpacity: 0.4,
+              shadowRadius: 3,
+              flexDirection: 'row',
+              columnGap: 16,
+            }}
+          >
+            {reactionTypes.map((reactionType) => {
+              return (
+                <View key={reactionType.id}>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      if (
+                        activeReaction?.reaction_type.id === reactionType.id
+                      ) {
+                        await deleteReaction(activeReaction.id);
+
+                        onReactionChange();
+                        tooltip.current.toggleTooltip();
+                        return;
+                      }
+
+                      if (model.type === 'thread') {
+                        await addThreadReaction(model.id, reactionType.id);
+                      }
 
                       onReactionChange();
-                      setOpen(false);
-                      return;
-                    }
-
-                    if (model.type === 'thread') {
-                      await addThreadReaction(model.id, reactionType.id);
-                    }
-
-                    onReactionChange();
-                    setOpen(false);
-                  }}
-                >
-                  <Image
-                    source={{
-                      uri: reactionType.image_url,
+                      tooltip.current.toggleTooltip();
                     }}
-                    style={{
-                      width: 32,
-                      height: 32,
-                    }}
-                  />
-                </TouchableOpacity>
-              </View>
-            );
-          })}
+                  >
+                    <Image
+                      source={{
+                        uri: reactionType.image_url,
+                      }}
+                      style={{
+                        width: 32,
+                        height: 32,
+                      }}
+                    />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        }
+        withOverlay={false}
+        pointerColor="white"
+        backgroundColor="transparent"
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {children}
         </View>
-      )}
+      </Tooltip>
     </View>
   );
 }

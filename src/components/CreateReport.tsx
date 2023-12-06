@@ -38,7 +38,7 @@ export default function CreateReport({
         {showText && (
           <Text
             style={{
-              paddingLeft: 16,
+              paddingLeft: 8,
             }}
           >
             Report

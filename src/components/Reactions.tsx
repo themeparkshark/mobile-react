@@ -45,11 +45,13 @@ export default function Reactions({
             paddingLeft: 8,
           }}
         >
-          {hasReacted
-            ? `You and ${shortenNumber(count - 1)} other${
-                count - 1 === 1 ? '' : 's'
-              }`
-            : shortenNumber(count)}
+          {hasReacted && count === 1 && 'You'}
+          {hasReacted &&
+            count > 1 &&
+            `You and ${shortenNumber(count - 1)} other${
+              count - 1 === 1 ? '' : 's'
+            }`}
+          {!hasReacted && shortenNumber(count)}
         </Text>
       </View>
     </View>
