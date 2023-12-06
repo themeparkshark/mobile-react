@@ -1,6 +1,5 @@
-import { faComments } from '@fortawesome/pro-light-svg-icons/faComments';
+import { faComment } from '@fortawesome/pro-light-svg-icons/faComment';
 import { faEllipsis } from '@fortawesome/pro-light-svg-icons/faEllipsis';
-import { faFaceSmile } from '@fortawesome/pro-light-svg-icons/faFaceSmile';
 import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
@@ -16,6 +15,7 @@ import Button from '../components/Button';
 import Comment from '../components/Comment';
 import CreateReply from '../components/CreateReply';
 import Loading from '../components/Loading';
+import Reactions from '../components/Reactions';
 import SortByDropdown, { SortOption } from '../components/SortByDropdown';
 import Tag from '../components/Tag';
 import ThreadActions from '../components/ThreadActions';
@@ -215,7 +215,8 @@ export default function ThreadScreen({ route }) {
                     style={{
                       marginTop: 16,
                       flexDirection: 'row',
-                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      columnGap: 48,
                     }}
                   >
                     <View>
@@ -224,18 +225,10 @@ export default function ThreadScreen({ route }) {
                           flexDirection: 'row',
                         }}
                       >
-                        <FontAwesomeIcon
-                          icon={faFaceSmile}
-                          size={16}
-                          color="black"
+                        <Reactions
+                          count={currentThread.reactions_count}
+                          reactions={currentThread.reactions}
                         />
-                        <Text
-                          style={{
-                            paddingLeft: 16,
-                          }}
-                        >
-                          {currentThread.reactions_count}
-                        </Text>
                       </TouchableOpacity>
                     </View>
                     <View>
@@ -245,7 +238,7 @@ export default function ThreadScreen({ route }) {
                         }}
                       >
                         <FontAwesomeIcon
-                          icon={faComments}
+                          icon={faComment}
                           size={16}
                           color="black"
                         />
@@ -269,13 +262,6 @@ export default function ThreadScreen({ route }) {
                           size={16}
                           color="black"
                         />
-                        <Text
-                          style={{
-                            paddingLeft: 16,
-                          }}
-                        >
-                          Report
-                        </Text>
                       </TouchableOpacity>
                     </View>
                   </View>
