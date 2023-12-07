@@ -22,7 +22,7 @@ export default {
   },
   assetBundlePatterns: ['**/*'],
   ios: {
-    buildNumber: '20231206.1',
+    buildNumber: '20231207.1',
     bitcode: 'Debug',
     usesAppleSignIn: true,
     bundleIdentifier: 'com.tomhartley97.mobile-react',
