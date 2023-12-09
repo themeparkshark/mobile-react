@@ -8,7 +8,10 @@ export default async function redeemCoinCode(
 ): Promise<CoinCodeType> {
   try {
     const response = await client.post<ApiResponseType<CoinCodeType>>(
-      `/coin-codes/${code}/redeem`
+      '/coin-codes/redeem',
+      {
+        code,
+      }
     );
 
     return response.data.data;
