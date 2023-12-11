@@ -27,9 +27,8 @@ export interface UserType {
   readonly park_coins: number;
   readonly park_coins_count: number;
   readonly screen_name: string;
-  readonly total_coins: number;
+  readonly token: string;
   readonly total_experience: number;
-  readonly total_keys: number;
   readonly username: string;
   readonly verified_at: string;
   readonly visited_parks_count: number;

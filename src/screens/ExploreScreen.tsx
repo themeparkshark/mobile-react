@@ -73,7 +73,10 @@ export default function ExploreScreen() {
           <>
             {park && (
               <TopbarColumn>
-                <Currency image={park?.coin_url} count={park?.park_coins_count} />
+                <Currency
+                  image={park?.coin_url}
+                  count={park?.park_coins_count}
+                />
               </TopbarColumn>
             )}
             {theme?.currency && (
