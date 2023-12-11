@@ -1,21 +1,36 @@
 import { Image } from 'expo-image';
 import { useContext } from 'react';
-import { ImageBackground, Pressable, Text, View } from 'react-native';
+import { Alert, ImageBackground, Pressable, Text, View } from 'react-native';
 import { AuthContext } from '../../context/AuthProvider';
 import useCrumbs from '../../hooks/useCrumbs';
 import usePurchaseItem from '../../hooks/usePurchaseItem';
 import { ItemType } from '../../models/item-type';
+import { SoundEffectContext } from "../../context/SoundEffectProvider";
+import { vsprintf } from 'sprintf-js';
 
 export default function Item({ item }: { readonly item: ItemType }) {
   const { user } = useContext(AuthContext);
   const { purchaseItem } = usePurchaseItem();
-  const { labels } = useCrumbs();
+  const { errors, labels } = useCrumbs();
+  const { playSound } = useContext(SoundEffectContext);
 
   return (
     <Pressable
       onPress={async () => {
-        if (!user) {
-          return;
+        if (item.has_purchased) {
+          playSound(require('../../../assets/sounds/purchase_item_cancel.mp3'));
+
+          return Alert.alert(
+            item.cost
+              ? vsprintf(errors.item_purchased, [item.name])
+              : vsprintf(errors.item_redeemed, [item.name]),
+            '',
+            [
+              {
+                text: 'Ok',
+              },
+            ]
+          );
         }
 
         await purchaseItem(item);
