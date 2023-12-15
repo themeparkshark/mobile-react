@@ -30,6 +30,7 @@ import ParkScreen from './screens/ParkScreen';
 import PendingFriendRequestsScreen from './screens/PendingFriendRequestsScreen';
 import PinCollectionScreen from './screens/PinCollectionsScreen';
 import PinSwapsScreen from './screens/PinSwapsScreen';
+import PlayerScreen from './screens/PlayerScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import QueueTimesScreen from './screens/QueueTimesScreen';
 import RedeemCoinCodeScreen from './screens/RedeemCoinCodeScreen';
@@ -38,7 +39,6 @@ import SocialScreen from './screens/SocialScreen';
 import SplashScreen from './screens/SplashScreen';
 import StoreScreen from './screens/StoreScreen';
 import ThreadScreen from './screens/ThreadScreen';
-import PlayerScreen from './screens/PlayerScreen';
 import WatchScreen from './screens/WatchScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
 

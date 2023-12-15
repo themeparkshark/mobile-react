@@ -6,7 +6,6 @@ import { Dimensions, Pressable, View } from 'react-native';
 import MapView from 'react-native-maps';
 import config from '../config';
 import { LocationContext } from '../context/LocationProvider';
-import { set } from "lodash";
 
 export default function Map({ children }: { readonly children: ReactNode }) {
   const { location } = useContext(LocationContext);
@@ -22,7 +21,12 @@ export default function Map({ children }: { readonly children: ReactNode }) {
       center: location,
       altitude: 200,
     });
-  }, [focusedOnPlayer, location?.latitude, location?.longitude, mapRef.current]);
+  }, [
+    focusedOnPlayer,
+    location?.latitude,
+    location?.longitude,
+    mapRef.current,
+  ]);
 
   return (
     <View

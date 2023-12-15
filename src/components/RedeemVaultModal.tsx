@@ -241,7 +241,8 @@ export default function RedeemVaultModal({
             )}
             <YellowButton
               disabled={
-                (redeemable.model as VaultType).item.cost > player.keys || isOpen
+                (redeemable.model as VaultType).item.cost > player.keys ||
+                isOpen
               }
               text="Unlock"
               onPress={async () => {

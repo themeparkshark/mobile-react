@@ -4,7 +4,11 @@ import { PlayerType } from '../models/player-type';
 import Avatar from './Avatar';
 import Button from './Button';
 
-export default function LeaderboardPlayer({ player }: { readonly player: PlayerType }) {
+export default function LeaderboardPlayer({
+  player,
+}: {
+  readonly player: PlayerType;
+}) {
   return (
     <>
       <Button

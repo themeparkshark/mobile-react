@@ -2,7 +2,9 @@ import { ApiResponseType } from '../../../models/api-response-type';
 import { ParkType } from '../../../models/park-type';
 import client from '../../client';
 
-export default async function visitedParks(player: number): Promise<ParkType[]> {
+export default async function visitedParks(
+  player: number
+): Promise<ParkType[]> {
   const { data } = await client.get<ApiResponseType<ParkType[]>>(
     `/players/${player}/visited-parks`
   );

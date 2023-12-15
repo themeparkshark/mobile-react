@@ -27,6 +27,7 @@ export interface PlayerType {
   readonly park_coins: number;
   readonly park_coins_count: number;
   readonly screen_name: string;
+  readonly token: string;
   readonly total_coins: number;
   readonly total_experience: number;
   readonly total_keys: number;

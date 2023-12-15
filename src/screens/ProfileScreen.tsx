@@ -21,13 +21,13 @@ import Experience from '../components/Experience';
 import FriendPlayer from '../components/FriendPlayer';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
+import PlayerButtons from '../components/PlayerButtons';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import Subscribed from '../components/Subscribed';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import PlayerButtons from '../components/PlayerButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import Wrapper from '../components/Wrapper';
@@ -39,8 +39,8 @@ import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
-import { StoreType } from '../models/store-type';
 import { PlayerType } from '../models/player-type';
+import { StoreType } from '../models/store-type';
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);

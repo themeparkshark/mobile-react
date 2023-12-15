@@ -2,7 +2,6 @@ import { useContext } from 'react';
 import { Alert } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
-import search from '../api/endpoints/me/inventory/search';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
@@ -19,15 +18,13 @@ export default function usePurchaseItem() {
       return;
     }
 
-    const response = await search(item);
-
-    if (response.has_purchased) {
+    if (item.has_purchased) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
       return Alert.alert(
-        response.cost
-          ? vsprintf(errors.item_purchased, [response.name])
-          : vsprintf(errors.item_redeemed, [response.name]),
+        item.cost
+          ? vsprintf(errors.item_purchased, [item.name])
+          : vsprintf(errors.item_redeemed, [item.name]),
         '',
         [
           {
@@ -58,7 +55,7 @@ export default function usePurchaseItem() {
             item.name,
             item.cost,
             item.currency.name,
-          player[item.currency.name.toLowerCase() as keyof PlayerType],
+            player[item.currency.name.toLowerCase() as keyof PlayerType],
             item.currency.name,
           ]);
 

@@ -48,7 +48,7 @@ export default function Avatar({
           contentFit="cover"
         />
       )}
-      {user.is_subscribed && (
+      {player.is_subscribed && (
         <Image
           source={require('../../assets/images/screens/profile/subscribed.png')}
           style={{

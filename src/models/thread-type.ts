@@ -1,8 +1,8 @@
 import { AttachmentType } from './attachment-type';
 import { CommentType } from './comment-type';
+import { PlayerType } from './player-type';
 import { ReactionType } from './reaction-type';
 import { TagType } from './tag-type';
-import { PlayerType } from './player-type';
 
 export interface ThreadType {
   readonly attachments: AttachmentType[];

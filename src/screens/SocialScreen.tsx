@@ -8,12 +8,12 @@ import getThreads from '../api/endpoints/threads/getThreads';
 import Button from '../components/Button';
 import CreateThreadModal from '../components/CreateThreadModal';
 import Loading from '../components/Loading';
+import PlayerButtons from '../components/PlayerButtons';
 import SortByDropdown, { SortOption } from '../components/SortByDropdown';
 import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import PlayerButtons from '../components/PlayerButtons';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -164,7 +164,8 @@ export default function SocialScreen({ navigation }) {
                           },
                           text: 'Member',
                           permission: PermissionEnums.BecomeAMember,
-                          show: !player || Boolean(player && !player.is_subscribed),
+                          show:
+                            !player || Boolean(player && !player.is_subscribed),
                         },
                         {
                           image: require('../../assets/images/screens/social/merch.png'),

@@ -7,7 +7,10 @@ export default async function updatePlayer(payload: {
   readonly enabled_sound_effects?: boolean;
   readonly username?: string;
 }): Promise<PlayerType> {
-  const { data } = await client.put<ApiResponseType<PlayerType>>('/me', payload);
+  const { data } = await client.put<ApiResponseType<PlayerType>>(
+    '/me',
+    payload
+  );
 
   return data.data;
 }

@@ -4,7 +4,11 @@ import useCrumbs from '../hooks/useCrumbs';
 import { PlayerType } from '../models/player-type';
 import Progress from './Progress';
 
-export default function Experience({ player }: { readonly player: PlayerType }) {
+export default function Experience({
+  player,
+}: {
+  readonly player: PlayerType;
+}) {
   const { labels } = useCrumbs();
 
   return (
@@ -27,7 +31,9 @@ export default function Experience({ player }: { readonly player: PlayerType }) 
         }}
       >
         <Progress
-          progress={(player.experience / player.experience_level.experience) * 100}
+          progress={
+            (player.experience / player.experience_level.experience) * 100
+          }
         />
       </View>
       <Text

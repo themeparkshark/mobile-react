@@ -22,7 +22,7 @@ interface ThreadActionsProps {
 
 const ThreadActions: React.FC<ThreadActionsProps> = ({ trigger, thread }) => {
   const [modalVisible, setModalVisible] = useState(false);
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const { labels, prompts, messages } = useCrumbs();
 
   const options = [
@@ -59,7 +59,7 @@ const ThreadActions: React.FC<ThreadActionsProps> = ({ trigger, thread }) => {
           },
         ]);
       },
-      show: thread?.user.id === user?.id,
+      show: thread?.player.id === player?.id,
       type: 'danger',
     },
   ];
