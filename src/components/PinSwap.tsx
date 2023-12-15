@@ -16,12 +16,10 @@ import {
 import Modal from 'react-native-modal';
 import { useAsyncEffect, useTimeoutWhen } from 'rooks';
 import { vsprintf } from 'sprintf-js';
-import getInventory from '../api/endpoints/me/inventory';
 import getPins from '../api/endpoints/me/pins';
 import acceptPinSwap from '../api/endpoints/pin-swaps/accept';
 import holdPinSwap from '../api/endpoints/pin-swaps/hold';
 import unHoldPinSwap from '../api/endpoints/pin-swaps/unhold';
-import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ItemType } from '../models/item-type';
@@ -43,7 +41,6 @@ export default function PinSwap({
   const [page, setPage] = useState<number>(1);
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const [selectedPin, setSelectedPin] = useState<ItemType>();
-  const { setInventory } = useContext(AuthContext);
   const { errors, messages, prompts } = useCrumbs();
   const { playSound } = useContext(SoundEffectContext);
   const { labels } = useCrumbs();
@@ -343,7 +340,6 @@ export default function PinSwap({
 
                         setModalVisible(false);
                         onClose();
-                        setInventory(await getInventory());
                       },
                     },
                   ]);

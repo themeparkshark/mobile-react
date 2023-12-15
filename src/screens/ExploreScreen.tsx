@@ -36,7 +36,7 @@ export default function ExploreScreen() {
   const [activeRedeemable, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined
   >();
-  const { inventory, refreshPlayer, player } = useContext(AuthContext);
+  const { refreshPlayer, player } = useContext(AuthContext);
   const { parkLoaded, location, park, permissionGranted } =
     useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
@@ -197,7 +197,7 @@ export default function ExploreScreen() {
                 />
               </Button>
             </View>
-            {inventory && (
+            {player?.inventory && (
               <Button
                 onPress={() => {
                   RootNavigation.navigate('Inventory');

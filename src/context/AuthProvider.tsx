@@ -6,16 +6,13 @@ import { useAsyncEffect, useTimeoutWhen } from 'rooks';
 import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
-import { InventoryType } from '../models/inventory-type';
 import { PlayerType } from '../models/player-type';
 import * as RootNavigation from '../RootNavigation';
 
 export interface AuthContextType {
-  readonly inventory: InventoryType | null;
   readonly isReady: boolean;
   readonly login: (credential: AppleAuthenticationCredential) => void;
   readonly logout: () => void;
-  readonly setInventory: (inventory: InventoryType) => void;
   readonly setPlayer: (player: PlayerType) => void;
   readonly refreshPlayer: () => Promise<PlayerType>;
   readonly player: PlayerType | null;
@@ -27,7 +24,6 @@ export const AuthContext = createContext<AuthContextType>(
 
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [player, setPlayer] = useState<PlayerType | null>(null);
-  const [inventory, setInventory] = useState<InventoryType | null>(null);
   const [token, setToken] = useState<string>('');
   const [isReady, setIsReady] = useState<boolean>(false);
 
@@ -97,8 +93,6 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         setPlayer,
         login: requestLogin,
         logout,
-        inventory,
-        setInventory,
         isReady,
       }}
     >

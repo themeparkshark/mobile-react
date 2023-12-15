@@ -7,32 +7,28 @@ export default function Playercard({
   inventory,
   style,
   showBackground = true,
-  animate = true,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
   readonly showBackground?: boolean;
-  readonly animate?: boolean;
 }) {
   const translate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (animate) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(translate, {
-            toValue: 10,
-            duration: 2700,
-            useNativeDriver: true,
-          }),
-          Animated.timing(translate, {
-            toValue: 0,
-            duration: 2700,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    }
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(translate, {
+          toValue: 10,
+          duration: 2700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translate, {
+          toValue: 0,
+          duration: 2700,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
   }, []);
 
   return (
@@ -95,21 +91,17 @@ export default function Playercard({
             {inventory?.skin_item && (
               <Image
                 source={{
-                  uri: animate
-                    ? inventory.skin_item.no_eye_url
-                    : inventory.skin_item.paper_url,
+                  uri: inventory.skin_item.no_eye_url,
                 }}
                 style={styles.image}
                 contentFit="contain"
               />
             )}
-            {animate && (
-              <Image
-                source={require('../../assets/images/screens/inventory/blink.png')}
-                style={styles.image}
-                contentFit="contain"
-              />
-            )}
+            <Image
+              source={require('../../assets/images/screens/inventory/blink.png')}
+              style={styles.image}
+              contentFit="contain"
+            />
             {inventory?.body_item && (
               <Image
                 source={{

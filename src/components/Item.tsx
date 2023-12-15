@@ -6,7 +6,6 @@ import { ImageBackground, Pressable, View } from 'react-native';
 import updateInventory from '../api/endpoints/me/inventory/update-inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
-import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
 
@@ -17,7 +16,7 @@ export default function Item({
   readonly currentItemType: ItemTypeType;
   readonly item: ItemType;
 }) {
-  const { inventory, setInventory } = useContext(AuthContext);
+  const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
 
   return (
@@ -43,22 +42,21 @@ export default function Item({
           position: 'relative',
           width: '100%',
         }}
-        onPress={() => {
-          if (inventory && inventory.skin_item.id === item.id) {
+        onPress={async () => {
+          if (player?.inventory && player.inventory.skin_item.id === item.id) {
             return false;
           }
 
           playSound(require('../../assets/sounds/inventory_item_tap.mp3'));
 
-          updateInventory(item).then((response: InventoryType) => {
-            setInventory(response);
-          });
+          await updateInventory(item);
+          await refreshPlayer();
         }}
       >
         <View
           style={{
             position: 'absolute',
-            display: Object.values(inventory)
+            display: Object.values(player?.inventory)
               .map(function (inventoryItem) {
                 return inventoryItem?.id;
               })

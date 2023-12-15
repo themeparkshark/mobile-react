@@ -27,7 +27,7 @@ export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>([]);
   const [currentItemType, setCurrentItemType] = useState<ItemTypeType>();
   const [items, setItems] = useState<ItemType[]>([]);
-  const { inventory } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const { refreshPlayer } = useContext(AuthContext);
@@ -77,7 +77,7 @@ export default function InventoryScreen() {
         <TopbarColumn stretch={false} />
       </Topbar>
       {loading && <Loading />}
-      {!loading && inventory && itemTypes && currentItemType && (
+      {!loading && player?.inventory && itemTypes && currentItemType && (
         <>
           <View
             style={{
@@ -88,7 +88,7 @@ export default function InventoryScreen() {
             }}
           >
             <Playercard
-              inventory={inventory}
+              inventory={player.inventory}
               style={{
                 position: 'absolute',
                 width: Dimensions.get('window').width,

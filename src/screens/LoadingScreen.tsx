@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { useAsyncEffect, useTimeoutWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
-import getInventory from '../api/endpoints/me/inventory';
 import Progress from '../components/Progress';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
@@ -17,7 +16,7 @@ import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function LoadingScreen() {
-  const { isReady, player, setInventory } = useContext(AuthContext);
+  const { isReady } = useContext(AuthContext);
   const { requestPark, parkLoaded, permissionGranted } =
     useContext(LocationContext);
   const { labels } = useCrumbs();
@@ -43,7 +42,6 @@ export default function LoadingScreen() {
     }
 
     setProgress(50);
-    setInventory(await getInventory());
   }, [isReady]);
 
   useEffect(() => {

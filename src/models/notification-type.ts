@@ -1,7 +1,7 @@
 export interface NotificationType {
   readonly id: string;
   readonly type: string;
-  readonly data: {
+  readonly content: {
     readonly message: string;
     readonly image: string | null;
     readonly route: {

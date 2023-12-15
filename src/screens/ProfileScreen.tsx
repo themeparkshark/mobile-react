@@ -13,7 +13,6 @@ import {
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getFriends from '../api/endpoints/me/friends';
-import getInventory from '../api/endpoints/me/inventory';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
 import Button from '../components/Button';
@@ -47,7 +46,7 @@ export default function ProfileScreen() {
   const [stores, setStores] = useState<StoreType[]>([]);
   const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const { player, inventory, setInventory } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const [friends, setFriends] = useState<PlayerType[]>([]);
   const { refreshNotificationCount, notificationCount } =
     useContext(NotificationContext);
@@ -67,7 +66,6 @@ export default function ProfileScreen() {
   useAsyncEffect(async () => {
     setParks(await getParks(player.id));
     setStores(await getStores());
-    setInventory(await getInventory());
     requestFriends();
 
     setLoading(false);
@@ -179,7 +177,7 @@ export default function ProfileScreen() {
             >
               <ImageBackground
                 source={{
-                  uri: inventory?.background_item.paper_url,
+                  uri: player?.inventory.background_item.paper_url,
                 }}
                 style={{
                   height: 315,

@@ -32,10 +32,10 @@ export default function Notification({
           setHasRead(true);
         }
 
-        if (notification.data.route) {
+        if (notification.content.route) {
           RootNavigation.navigate(
-            notification.data.route.screen,
-            notification.data.route.params
+            notification.content.route.screen,
+            notification.content.route.params
           );
         }
       }}
@@ -65,7 +65,9 @@ export default function Notification({
           }}
         >
           <Image
-            source={notification.data.image ?? require('../../assets/icon.png')}
+            source={
+              notification.content?.image ?? require('../../assets/icon.png')
+            }
             style={{
               width: '100%',
               height: '100%',
@@ -89,7 +91,7 @@ export default function Notification({
             marginBottom: 16,
           }}
         >
-          {notification.data.message}
+          {notification.content.message}
         </Text>
         <Text
           style={{
