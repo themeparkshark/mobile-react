@@ -3,16 +3,16 @@ import { useEffect, useState } from 'react';
 import { ImageBackground, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getFriendRequests from '../api/endpoints/me/pending-requests';
-import FriendUser from '../components/FriendUser';
+import FriendPlayer from '../components/FriendPlayer';
 import Loading from '../components/Loading';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 
 export default function PendingFriendRequestsScreen() {
   const [loading, setLoading] = useState<boolean>(true);
-  const [friendRequests, setFriendRequests] = useState<UserType[]>([]);
+  const [friendRequests, setFriendRequests] = useState<PlayerType[]>([]);
 
   const requestFriendRequests = async () => {
     setFriendRequests(await getFriendRequests());
@@ -73,11 +73,11 @@ export default function PendingFriendRequestsScreen() {
                     <FlashList
                       contentContainerStyle={{ paddingBottom: 8 }}
                       data={friendRequests}
-                      keyExtractor={(user) => user.id.toString()}
+                      keyExtractor={(player) => player.id.toString()}
                       renderItem={({ item }) => (
-                        <FriendUser
+                        <FriendPlayer
                           isPending
-                          user={item}
+                          player={item}
                           onAccept={async () => {
                             await requestFriendRequests();
                           }}

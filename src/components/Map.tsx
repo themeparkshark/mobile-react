@@ -6,14 +6,15 @@ import { Dimensions, Pressable, View } from 'react-native';
 import MapView from 'react-native-maps';
 import config from '../config';
 import { LocationContext } from '../context/LocationProvider';
+import { set } from "lodash";
 
 export default function Map({ children }: { readonly children: ReactNode }) {
   const { location } = useContext(LocationContext);
   const mapRef = useRef<MapView>(null);
-  const [focusedOnUser, setFocusedOnUser] = useState<boolean>(true);
+  const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
 
   useEffect(() => {
-    if (!mapRef?.current || !focusedOnUser) {
+    if (!mapRef?.current || !focusedOnPlayer) {
       return;
     }
 
@@ -21,7 +22,7 @@ export default function Map({ children }: { readonly children: ReactNode }) {
       center: location,
       altitude: 200,
     });
-  }, [focusedOnUser, location?.latitude, location?.longitude, mapRef.current]);
+  }, [focusedOnPlayer, location?.latitude, location?.longitude, mapRef.current]);
 
   return (
     <View
@@ -39,13 +40,13 @@ export default function Map({ children }: { readonly children: ReactNode }) {
         }}
       >
         <Pressable
-          onPress={() => setFocusedOnUser(true)}
+          onPress={() => setFocusedOnPlayer(true)}
           style={{
             padding: 12,
           }}
         >
           <FontAwesomeIcon
-            icon={focusedOnUser ? faSolidArrow : faLocationArrow}
+            icon={focusedOnPlayer ? faSolidArrow : faLocationArrow}
             size={30}
             color={config.primary}
           />
@@ -65,7 +66,7 @@ export default function Map({ children }: { readonly children: ReactNode }) {
         loadingEnabled={true}
         userInterfaceStyle="light"
         onPanDrag={() => {
-          setFocusedOnUser(false);
+          setFocusedOnPlayer(false);
         }}
       >
         {children}

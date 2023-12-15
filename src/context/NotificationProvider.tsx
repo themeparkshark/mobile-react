@@ -16,14 +16,14 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [notificationCount, setNotificationCount] = useState<number>(0);
-  const { isReady, user } = useContext(AuthContext);
+  const { isReady, player } = useContext(AuthContext);
 
   useIntervalWhen(
     async () => {
       await refreshNotificationCount();
     },
     120000,
-    Boolean(isReady && user),
+    Boolean(isReady && player),
     true
   );
 

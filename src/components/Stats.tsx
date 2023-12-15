@@ -1,41 +1,41 @@
 import { Text, View } from 'react-native';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 
-export default function Stats({ user }: { readonly user: UserType }) {
+export default function Stats({ player }: { readonly player: PlayerType }) {
   const stats = [
     {
       label: 'Friends',
-      value: user.friends_count,
+      value: player.friends_count,
       show: true,
     },
     {
       label: 'Key balance',
-      value: user.keys,
+      value: player.keys,
       show: true,
     },
     {
       label: 'Park coins',
-      value: user.park_coins_count,
+      value: player.park_coins_count,
       show: true,
     },
     {
       label: 'Parks visited',
-      value: user.visited_parks_count,
+      value: player.visited_parks_count,
       show: true,
     },
     {
       label: 'Shark coin balance',
-      value: user.coins,
+      value: player.coins,
       show: true,
     },
     {
       label: 'Tasks completed',
-      value: user.completed_tasks_count,
+      value: player.completed_tasks_count,
       show: true,
     },
     {
       label: 'Total XP',
-      value: user.total_experience,
+      value: player.total_experience,
       show: true,
     },
   ];

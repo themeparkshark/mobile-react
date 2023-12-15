@@ -3,13 +3,13 @@ import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getFriends from '../../api/endpoints/me/friends';
-import FriendUser from '../../components/FriendUser';
+import FriendPlayer from '../../components/FriendPlayer';
 import Loading from '../../components/Loading';
 import useCrumbs from '../../hooks/useCrumbs';
-import { UserType } from '../../models/user-type';
+import { PlayerType } from '../../models/player-type';
 
 export default function YourList() {
-  const [friends, setFriends] = useState<UserType[]>([]);
+  const [friends, setFriends] = useState<PlayerType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
@@ -52,11 +52,11 @@ export default function YourList() {
                 setPage(1);
               }}
               refreshing={refreshing}
-              keyExtractor={(user) => user.id.toString()}
+              keyExtractor={(player) => player.id.toString()}
               renderItem={({ item }) => {
                 return (
-                  <FriendUser
-                    user={item}
+                  <FriendPlayer
+                    player={item}
                     isFriend
                     onRemove={async () => {
                       setFriends([]);

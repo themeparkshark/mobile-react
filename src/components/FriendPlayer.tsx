@@ -3,42 +3,42 @@ import { Text, TouchableOpacity, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import useCompliment from '../hooks/useCompliment';
 import useFriends from '../hooks/useFriends';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 import Avatar from './Avatar';
 import Button from './Button';
 
-export default function FriendUser({
+export default function FriendPlayer({
   isFriend,
   isPending,
   onAccept,
   onRemove,
-  user,
+  player,
 }: {
   readonly isFriend?: boolean;
   readonly isPending?: boolean;
   readonly onAccept?: () => void;
   readonly onRemove?: () => void;
-  readonly user: UserType;
+  readonly player: PlayerType;
 }) {
   const { acceptFriend, addFriend, removeFriend } = useFriends();
-  const { complimentUser } = useCompliment();
+  const { complimentPlayer } = useCompliment();
 
   return (
     <TouchableOpacity
-      key={user.id}
+      key={player.id}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         paddingTop: 16,
       }}
       onPress={() => {
-        RootNavigation.navigate('User', {
-          user: user.id,
+        RootNavigation.navigate('Player', {
+          player: player.id,
         });
       }}
     >
       <View>
-        <Avatar size="md" user={user} />
+        <Avatar size="md" player={player} />
       </View>
       <View
         style={{
@@ -52,7 +52,7 @@ export default function FriendUser({
             fontSize: 18,
           }}
         >
-          {user.screen_name}
+          {player.screen_name}
         </Text>
       </View>
       <View
@@ -67,11 +67,11 @@ export default function FriendUser({
         >
           <Button
             onPress={async () => {
-              await complimentUser(user);
+              await complimentPlayer(player);
             }}
           >
             <Image
-              source={require('../../assets/images/screens/user/compliment.png')}
+              source={require('../../assets/images/screens/player/compliment.png')}
               style={{
                 width: 40,
                 aspectRatio: 1,
@@ -83,18 +83,18 @@ export default function FriendUser({
         <Button
           onPress={() => {
             if (isPending && !isFriend) {
-              acceptFriend(user, async () => {
+              acceptFriend(player, async () => {
                 await onAccept?.();
               });
               return;
             }
 
             if (!isFriend) {
-              addFriend(user);
+              addFriend(player);
               return;
             }
 
-            removeFriend(user, async () => {
+            removeFriend(player, async () => {
               await onRemove?.();
             });
           }}

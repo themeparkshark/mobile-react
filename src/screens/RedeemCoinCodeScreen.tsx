@@ -21,7 +21,7 @@ import { CoinCodeType } from '../models/coin-code-type';
 export default function RedeemCoinCodeScreen() {
   const [coinCode, setCoinCode] = useState<string>('');
   const [redeemedCoinCode, setRedeemedCoinCode] = useState<CoinCodeType>();
-  const { refreshUser } = useContext(AuthContext);
+  const { refreshPlayer } = useContext(AuthContext);
   const rotate = useRef(new Animated.Value(0)).current;
   const { currencies } = useContext(CurrencyContext);
 
@@ -101,7 +101,7 @@ export default function RedeemCoinCodeScreen() {
                 enablesReturnKeyAutomatically
                 onSubmitEditing={async ({ nativeEvent }) => {
                   setRedeemedCoinCode(await redeemCoinCode(nativeEvent.text));
-                  await refreshUser();
+                  await refreshPlayer();
                 }}
               />
             )}

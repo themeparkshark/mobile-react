@@ -18,7 +18,7 @@ import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
 import Button from '../components/Button';
 import Experience from '../components/Experience';
-import FriendUser from '../components/FriendUser';
+import FriendPlayer from '../components/FriendPlayer';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
@@ -27,7 +27,7 @@ import Subscribed from '../components/Subscribed';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import UserButtons from '../components/UserButtons';
+import PlayerButtons from '../components/PlayerButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import Wrapper from '../components/Wrapper';
@@ -40,15 +40,15 @@ import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { StoreType } from '../models/store-type';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 
 export default function ProfileScreen() {
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
   const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const { user, inventory, setInventory } = useContext(AuthContext);
-  const [friends, setFriends] = useState<UserType[]>([]);
+  const { player, inventory, setInventory } = useContext(AuthContext);
+  const [friends, setFriends] = useState<PlayerType[]>([]);
   const { refreshNotificationCount, notificationCount } =
     useContext(NotificationContext);
   const { warnings, labels } = useCrumbs();
@@ -65,7 +65,7 @@ export default function ProfileScreen() {
   );
 
   useAsyncEffect(async () => {
-    setParks(await getParks(user.id));
+    setParks(await getParks(player.id));
     setStores(await getStores());
     setInventory(await getInventory());
     requestFriends();
@@ -94,7 +94,7 @@ export default function ProfileScreen() {
                 return;
               }
 
-              if (user?.is_subscribed) {
+              if (player?.is_subscribed) {
                 RootNavigation.navigate('Store', {
                   store: store.id,
                 });
@@ -104,7 +104,7 @@ export default function ProfileScreen() {
             },
             text: store.name,
             permission:
-              user && !user.is_subscribed && store.is_secret_store
+              player && !player.is_subscribed && store.is_secret_store
                 ? PermissionEnums.ViewSecretStore
                 : undefined,
           };
@@ -113,7 +113,7 @@ export default function ProfileScreen() {
     }
   }, [stores]);
 
-  if (!user) {
+  if (!player) {
     return <></>;
   }
 
@@ -139,7 +139,7 @@ export default function ProfileScreen() {
           </Button>
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>{user.screen_name}</TopbarText>
+          <TopbarText>{player.screen_name}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
           <Button
@@ -160,7 +160,7 @@ export default function ProfileScreen() {
         </TopbarColumn>
       </Topbar>
       {loading && <Loading />}
-      {!loading && user && (
+      {!loading && player && (
         <ScrollView
           style={{
             flex: 1,
@@ -189,7 +189,7 @@ export default function ProfileScreen() {
               >
                 <Playercard
                   showBackground={false}
-                  inventory={user.inventory}
+                  inventory={player.inventory}
                   style={{
                     position: 'absolute',
                     width: Dimensions.get('window').width,
@@ -249,12 +249,12 @@ export default function ProfileScreen() {
                 paddingTop: 24,
               }}
             >
-              <Experience user={user} />
-              <UserButtons buttons={buttons} />
-              {user.is_subscribed && <Subscribed />}
-              {user.verified_at && <Verified />}
+              <Experience player={player} />
+              <PlayerButtons buttons={buttons} />
+              {player.is_subscribed && <Subscribed />}
+              {player.verified_at && <Verified />}
               <Heading text={labels.your_statistics} />
-              <Stats user={user} />
+              <Stats player={player} />
               <Heading text={labels.your_friends} />
               {friends && friends.length > 0 && (
                 <>
@@ -266,11 +266,11 @@ export default function ProfileScreen() {
                     <FlashList
                       contentContainerStyle={{ paddingBottom: 8 }}
                       data={friends}
-                      keyExtractor={(user) => user.id.toString()}
+                      keyExtractor={(player) => player.id.toString()}
                       renderItem={({ item }) => {
                         return (
-                          <FriendUser
-                            user={item}
+                          <FriendPlayer
+                            player={item}
                             isFriend
                             onRemove={() => {
                               requestFriends();
@@ -330,7 +330,7 @@ export default function ProfileScreen() {
                 </>
               )}
               <Heading text={labels.your_parks} />
-              <VisitedParks parks={parks} user={user} />
+              <VisitedParks parks={parks} player={player} />
             </View>
           </View>
         </ScrollView>

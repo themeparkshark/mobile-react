@@ -1,18 +1,18 @@
 import { Alert } from 'react-native';
 import { vsprintf } from 'sprintf-js';
-import acceptFriendRequest from '../api/endpoints/me/users/accept-friend-request';
-import sendFriendRequest from '../api/endpoints/me/users/send-friend-request';
-import unfriend from '../api/endpoints/me/users/unfriend';
-import { UserType } from '../models/user-type';
+import acceptFriendRequest from '../api/endpoints/me/players/accept-friend-request';
+import sendFriendRequest from '../api/endpoints/me/players/send-friend-request';
+import unfriend from '../api/endpoints/me/players/unfriend';
+import { PlayerType } from '../models/player-type';
 import useCrumbs from './useCrumbs';
 
 export default function useFriends() {
   const { messages, prompts } = useCrumbs();
 
   return {
-    addFriend: (user: UserType) => {
+    addFriend: (player: PlayerType) => {
       Alert.alert(
-        vsprintf(prompts.send_friend_request, [user.screen_name]),
+        vsprintf(prompts.send_friend_request, [player.screen_name]),
         '',
         [
           {
@@ -22,7 +22,7 @@ export default function useFriends() {
           {
             text: 'Ok',
             onPress: async () => {
-              await sendFriendRequest(user);
+              await sendFriendRequest(player);
 
               Alert.alert(messages.friend_request_sent, '', [
                 {
@@ -34,9 +34,9 @@ export default function useFriends() {
         ]
       );
     },
-    acceptFriend: (user: UserType, onPress?: () => void) => {
+    acceptFriend: (player: PlayerType, onPress?: () => void) => {
       Alert.alert(
-        vsprintf(prompts.accept_friend_request, [user.screen_name]),
+        vsprintf(prompts.accept_friend_request, [player.screen_name]),
         '',
         [
           {
@@ -46,7 +46,7 @@ export default function useFriends() {
           {
             text: 'Ok',
             onPress: async () => {
-              await acceptFriendRequest(user);
+              await acceptFriendRequest(player);
               await onPress?.();
 
               Alert.alert(messages.friend_request_accepted, '', [
@@ -59,8 +59,8 @@ export default function useFriends() {
         ]
       );
     },
-    removeFriend: (user: UserType, onPress: () => void) => {
-      Alert.alert(vsprintf(prompts.remove_friend, [user.screen_name]), '', [
+    removeFriend: (player: PlayerType, onPress: () => void) => {
+      Alert.alert(vsprintf(prompts.remove_friend, [player.screen_name]), '', [
         {
           text: 'Cancel',
           style: 'cancel',
@@ -68,11 +68,11 @@ export default function useFriends() {
         {
           text: 'Ok',
           onPress: async () => {
-            await unfriend(user);
+            await unfriend(player);
             await onPress();
 
             Alert.alert(
-              vsprintf(messages.friend_removed, [user.screen_name]),
+              vsprintf(messages.friend_removed, [player.screen_name]),
               '',
               [
                 {

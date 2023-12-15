@@ -9,9 +9,9 @@ import {
   Switch,
 } from 'react-native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
-import deleteUser from '../api/endpoints/me/delete';
-import forceDeleteUser from '../api/endpoints/me/force-delete';
-import updateUser from '../api/endpoints/me/update-user';
+import deletePlayer from '../api/endpoints/me/delete';
+import forceDeletePlayer from '../api/endpoints/me/force-delete';
+import updatePlayer from '../api/endpoints/me/update-player';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -20,18 +20,18 @@ import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function SettingsScreen() {
-  const { user, logout, refreshUser } = useContext(AuthContext);
+  const { player, logout, refreshPlayer } = useContext(AuthContext);
   const [enabledMusic, setEnabledMusic] = useState<boolean>();
   const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
   const { urls, labels } = useCrumbs();
   const { reset } = useContext(LocationContext);
 
   useEffect(() => {
-    setEnabledMusic(user?.enabled_music);
-    setEnabledSoundEffects(user?.enabled_sound_effects);
-  }, [user]);
+    setEnabledMusic(player?.enabled_music);
+    setEnabledSoundEffects(player?.enabled_sound_effects);
+  }, [player]);
 
-  if (!user) {
+  if (!player) {
     return;
   }
 
@@ -39,7 +39,7 @@ export default function SettingsScreen() {
     <>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <BackButton onPress={async () => await refreshUser()} />
+          <BackButton onPress={async () => await refreshPlayer()} />
         </TopbarColumn>
         <TopbarColumn>
           <TopbarText>Settings</TopbarText>
@@ -53,17 +53,17 @@ export default function SettingsScreen() {
               <Cell
                 title="Username"
                 cellStyle="RightDetail"
-                detail={user.screen_name}
+                detail={player.screen_name}
               />
               <Cell
                 title="Theme Park Shark ID"
                 cellStyle="Subtitle"
-                detail={user.email}
+                detail={player.email}
               />
               <Cell
                 title="Member since"
                 cellStyle="RightDetail"
-                detail={dayjs(user.created_at).format('DD MMMM YYYY')}
+                detail={dayjs(player.created_at).format('DD MMMM YYYY')}
               />
             </Section>
             <Section header={'Audio'.toUpperCase()}>
@@ -74,10 +74,10 @@ export default function SettingsScreen() {
                   <Switch
                     onValueChange={async () => {
                       setEnabledMusic(!enabledMusic);
-                      await updateUser({
-                        enabled_music: !user.enabled_music,
+                      await updatePlayer({
+                        enabled_music: !player.enabled_music,
                       });
-                      await refreshUser();
+                      await refreshPlayer();
                     }}
                     value={enabledMusic}
                   />
@@ -90,10 +90,10 @@ export default function SettingsScreen() {
                   <Switch
                     onValueChange={async () => {
                       setEnabledSoundEffects(!enabledSoundEffects);
-                      await updateUser({
-                        enabled_sound_effects: !user?.enabled_sound_effects,
+                      await updatePlayer({
+                        enabled_sound_effects: !player?.enabled_sound_effects,
                       });
-                      await refreshUser();
+                      await refreshPlayer();
                     }}
                     value={enabledSoundEffects}
                   />
@@ -149,7 +149,7 @@ export default function SettingsScreen() {
                         text: 'Deactivate',
                         style: 'destructive',
                         onPress: async () => {
-                          await deleteUser();
+                          await deletePlayer();
                           await logout();
                         },
                       },
@@ -175,7 +175,7 @@ export default function SettingsScreen() {
                         text: 'Delete',
                         style: 'destructive',
                         onPress: async () => {
-                          await forceDeleteUser();
+                          await forceDeletePlayer();
 
                           Alert.alert(
                             'Please check your email in order to confirm to permanently delete your account.',

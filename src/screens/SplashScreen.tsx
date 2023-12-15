@@ -9,8 +9,8 @@ export default function SplashScreen() {
   const { theme } = useContext(ThemeContext);
 
   useEffect(() => {
-    Storage.getItem({ key: 'user' }).then((userString: string) => {
-      if (!userString) {
+    Storage.getItem({ key: 'player' }).then((playerString: string) => {
+      if (!playerString) {
         RootNavigation.navigate('Login');
       } else {
         RootNavigation.navigate('Loading');

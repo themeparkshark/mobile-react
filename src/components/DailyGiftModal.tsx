@@ -76,20 +76,20 @@ export default function DailyGiftModal({
 }) {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const { labels } = useCrumbs();
-  const { user, refreshUser } = useContext(AuthContext);
+  const { player, refreshPlayer } = useContext(AuthContext);
 
   useTimeoutWhen(
     () => {
       setModalVisible(true);
     },
     5000,
-    Boolean(!dailyGift.redeemed_at && user?.username)
+    Boolean(!dailyGift.redeemed_at && player?.username)
   );
 
   const claimReward = async () => {
     setModalVisible(false);
     await update(dailyGift.id);
-    await refreshUser();
+    await refreshPlayer();
   };
 
   return (

@@ -34,7 +34,7 @@ export default function Verified() {
             fontSize: 16,
           }}
         >
-          {labels.subscribed_user}
+          {labels.subscribed_player}
         </Text>
       </View>
     </View>

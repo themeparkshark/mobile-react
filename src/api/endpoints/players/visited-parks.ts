@@ -3,10 +3,10 @@ import { ParkType } from '../../../models/park-type';
 import client from '../../client';
 
 export default async function getVisitedParks(
-  user: number
+  player: number
 ): Promise<ParkType[]> {
   const { data } = await client.get<ApiResponseType<ParkType[]>>(
-    `/users/${user}/visited-parks`
+    `/players/${player}/visited-parks`
   );
 
   return data.data;

@@ -6,16 +6,16 @@ import search from '../api/endpoints/me/inventory/search';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 import useCrumbs from './useCrumbs';
 
 export default function usePurchaseItem() {
   const { playSound } = useContext(SoundEffectContext);
   const { errors, messages, prompts } = useCrumbs();
-  const { user, isReady, refreshUser } = useContext(AuthContext);
+  const { player, isReady, refreshPlayer } = useContext(AuthContext);
 
   const purchaseItem = async (item: ItemType) => {
-    if (!isReady || !user) {
+    if (!isReady || !player) {
       return;
     }
 
@@ -37,7 +37,7 @@ export default function usePurchaseItem() {
       );
     }
 
-    if (user[item.currency.name.toLowerCase()] < item.cost) {
+    if (player[item.currency.name.toLowerCase()] < item.cost) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
       return Alert.alert(
@@ -58,7 +58,7 @@ export default function usePurchaseItem() {
             item.name,
             item.cost,
             item.currency.name,
-            user[item.currency.name.toLowerCase() as keyof UserType],
+          player[item.currency.name.toLowerCase() as keyof PlayerType],
             item.currency.name,
           ]);
 
@@ -76,7 +76,7 @@ export default function usePurchaseItem() {
         text: 'Ok',
         onPress: async () => {
           await purchase(item);
-          await refreshUser();
+          await refreshPlayer();
 
           playSound(require('../../assets/sounds/purchase_item_success.mp3'));
 

@@ -1,10 +1,10 @@
 import { Text, View } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import useCrumbs from '../hooks/useCrumbs';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 import Progress from './Progress';
 
-export default function Experience({ user }: { readonly user: UserType }) {
+export default function Experience({ player }: { readonly player: PlayerType }) {
   const { labels } = useCrumbs();
 
   return (
@@ -18,7 +18,7 @@ export default function Experience({ user }: { readonly user: UserType }) {
           paddingBottom: 8,
         }}
       >
-        {vsprintf(labels.experience_level, [user.experience_level.level])}
+        {vsprintf(labels.experience_level, [player.experience_level.level])}
       </Text>
       <View
         style={{
@@ -27,7 +27,7 @@ export default function Experience({ user }: { readonly user: UserType }) {
         }}
       >
         <Progress
-          progress={(user.experience / user.experience_level.experience) * 100}
+          progress={(player.experience / player.experience_level.experience) * 100}
         />
       </View>
       <Text
@@ -39,8 +39,8 @@ export default function Experience({ user }: { readonly user: UserType }) {
         }}
       >
         {vsprintf(labels.experience, [
-          user.experience,
-          user.experience_level.experience,
+          player.experience,
+          player.experience_level.experience,
         ])}
       </Text>
     </>

@@ -7,10 +7,10 @@ import { vsprintf } from 'sprintf-js';
 import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
-import getCompletedArchivedTasks from '../api/endpoints/users/parks/getCompletedArchivedTasks';
-import getCompletedSecretTasks from '../api/endpoints/users/parks/getCompletedSecretTasks';
-import getCompletedTasks from '../api/endpoints/users/parks/getCompletedTasks';
-import getVisitedPark from '../api/endpoints/users/visited-parks/getPark';
+import getCompletedArchivedTasks from '../api/endpoints/players/parks/getCompletedArchivedTasks';
+import getCompletedSecretTasks from '../api/endpoints/players/parks/getCompletedSecretTasks';
+import getCompletedTasks from '../api/endpoints/players/parks/getCompletedTasks';
+import getVisitedPark from '../api/endpoints/players/visited-parks/getPark';
 import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
 import Progress from '../components/Progress';
@@ -26,7 +26,7 @@ import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 
 export default function ParkScreen({ route }) {
-  const { park, user } = route.params;
+  const { park, player } = route.params;
   const [currentPark, setCurrentPark] = useState<ParkType>();
   const [archivedTasks, setArchivedTasks] = useState<TaskType[]>([]);
   const [tasks, setTasks] = useState<TaskType[]>([]);
@@ -73,13 +73,13 @@ export default function ParkScreen({ route }) {
       : require('../../assets/images/screens/park/bronze_placeholder.png');
 
   useAsyncEffect(async () => {
-    setCurrentPark(await getVisitedPark(park, user));
+    setCurrentPark(await getVisitedPark(park, player));
     setTasks(await getTasks(park));
     setSecretTasks(await getSecretTasks(park));
-    setCompletedTasks(await getCompletedTasks(park, user));
-    setCompletedSecretTasks(await getCompletedSecretTasks(park, user));
+    setCompletedTasks(await getCompletedTasks(park, player));
+    setCompletedSecretTasks(await getCompletedSecretTasks(park, player));
     setArchivedTasks(await getArchivedTasks(park));
-    setCompletedArchivedTasks(await getCompletedArchivedTasks(park, user));
+    setCompletedArchivedTasks(await getCompletedArchivedTasks(park, player));
     setLoading(false);
   }, []);
 

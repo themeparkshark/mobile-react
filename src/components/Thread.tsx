@@ -42,7 +42,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
               contentFit="cover"
             />
           ) : (
-            <Avatar user={thread.user} />
+            <Avatar player={thread.player} />
           )}
         </View>
         <View
@@ -56,7 +56,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
               fontSize: 12,
             }}
           >
-            {thread.user.screen_name} -{' '}
+            {thread.player.screen_name} -{' '}
             {dayjs(thread.created_at).startOf('second').fromNow()}
           </Text>
           <Text
@@ -77,7 +77,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
                   fontSize: 12,
                 }}
               >
-                {thread.latest_comment.user.screen_name} replied{' '}
+                {thread.latest_comment.player.screen_name} replied{' '}
                 {dayjs(thread.latest_comment.created_at)
                   .startOf('second')
                   .fromNow()}

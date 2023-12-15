@@ -55,20 +55,20 @@ export default function Comment({
         <View
           style={{ flexDirection: 'row', alignItems: 'center', columnGap: 16 }}
         >
-          {comment.user && (
+          {comment.player && (
             <Button
               onPress={() => {
-                RootNavigation.navigate('User', {
-                  user: comment.user.id,
+                RootNavigation.navigate('Player', {
+                  player: comment.player.id,
                 });
               }}
             >
-              <Avatar size="sm" user={comment.user} />
+              <Avatar size="sm" player={comment.player} />
             </Button>
           )}
           <View>
             <Text>
-              {comment.user?.screen_name ?? '[deleted]'} -{' '}
+              {comment.player?.screen_name ?? '[deleted]'} -{' '}
               {dayjs(comment.created_at).startOf('second').fromNow()}
             </Text>
           </View>

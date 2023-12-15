@@ -11,7 +11,7 @@ import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function LoadingScreen() {
-  const { isReady, user, setInventory } = useContext(AuthContext);
+  const { isReady, player, setInventory } = useContext(AuthContext);
   const { requestPark, parkLoaded, permissionGranted } =
     useContext(LocationContext);
   const { labels } = useCrumbs();

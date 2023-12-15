@@ -38,7 +38,7 @@ import SocialScreen from './screens/SocialScreen';
 import SplashScreen from './screens/SplashScreen';
 import StoreScreen from './screens/StoreScreen';
 import ThreadScreen from './screens/ThreadScreen';
-import UserScreen from './screens/UserScreen';
+import PlayerScreen from './screens/PlayerScreen';
 import WatchScreen from './screens/WatchScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
 
@@ -46,7 +46,7 @@ const Stack = createNativeStackNavigator();
 
 export default function App() {
   useKeepAwake();
-  const { setUser } = useContext(AuthContext);
+  const { setPlayer } = useContext(AuthContext);
   const { setCrumbs, crumbsLoaded } = useContext(CrumbContext);
   const { retrieveCurrencies, currenciesLoaded } = useContext(CurrencyContext);
   const { retrieveTheme, themeLoaded } = useContext(ThemeContext);
@@ -72,9 +72,9 @@ export default function App() {
     await retrieveTheme();
     await retrieveCurrencies();
 
-    Storage.getItem({ key: 'user' }).then((userString: string) => {
-      if (userString) {
-        setUser({ ...JSON.parse(userString) });
+    Storage.getItem({ key: 'player' }).then((playerString: string) => {
+      if (playerString) {
+        setPlayer({ ...JSON.parse(playerString) });
       }
     });
   }, []);
@@ -109,7 +109,7 @@ export default function App() {
             gestureEnabled: false,
           }}
         />
-        <Stack.Screen name="User" component={UserScreen} />
+        <Stack.Screen name="Player" component={PlayerScreen} />
         <Stack.Screen name="Park" component={ParkScreen} />
         <Stack.Screen
           name="Inventory"

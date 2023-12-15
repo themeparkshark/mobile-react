@@ -36,7 +36,7 @@ export default function ExploreScreen() {
   const [activeRedeemable, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined
   >();
-  const { inventory, refreshUser, user } = useContext(AuthContext);
+  const { inventory, refreshPlayer, player } = useContext(AuthContext);
   const { parkLoaded, location, park, permissionGranted } =
     useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
@@ -69,7 +69,7 @@ export default function ExploreScreen() {
   return (
     <Wrapper>
       <Topbar>
-        {user && (
+        {player && (
           <>
             {park && (
               <TopbarColumn>
@@ -80,7 +80,7 @@ export default function ExploreScreen() {
               <TopbarColumn>
                 <Currency
                   image={theme.currency.icon_url}
-                  count={user[theme.currency.name.toLowerCase()]}
+                  count={player[theme.currency.name.toLowerCase()]}
                 />
               </TopbarColumn>
             )}
@@ -88,20 +88,20 @@ export default function ExploreScreen() {
               <TopbarColumn key={currency.id}>
                 <Currency
                   image={currency.icon_url}
-                  count={user[currency.name.toLowerCase()]}
+                  count={player[currency.name.toLowerCase()]}
                 />
               </TopbarColumn>
             ))}
           </>
         )}
       </Topbar>
-      {user && (
+      {player && (
         <>
           {!permissionGranted && <PermissionsNotGranted />}
           {parkLoaded && !park && <NotAtPark />}
         </>
       )}
-      {!user && <NotSignedIn />}
+      {!player && <NotSignedIn />}
       {park && redeemables && (
         <>
           <View
@@ -160,7 +160,7 @@ export default function ExploreScreen() {
               park={park}
               onPress={async () => {
                 await getRedeemables();
-                await refreshUser();
+                await refreshPlayer();
               }}
             />
           </View>
@@ -200,7 +200,7 @@ export default function ExploreScreen() {
                   RootNavigation.navigate('Inventory');
                 }}
               >
-                <Avatar user={user} size="lg" />
+                <Avatar player={player} size="lg" />
               </Button>
             )}
           </View>

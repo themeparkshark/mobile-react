@@ -1,13 +1,13 @@
 import { ApiResponseType } from '../../../models/api-response-type';
-import { UserType } from '../../../models/user-type';
+import { PlayerType } from '../../../models/player-type';
 import client from '../../client';
 
-export default async function updateUser(payload: {
+export default async function updatePlayer(payload: {
   readonly enabled_music?: boolean;
   readonly enabled_sound_effects?: boolean;
   readonly username?: string;
-}): Promise<UserType> {
-  const { data } = await client.put<ApiResponseType<UserType>>('/me', payload);
+}): Promise<PlayerType> {
+  const { data } = await client.put<ApiResponseType<PlayerType>>('/me', payload);
 
   return data.data;
 }

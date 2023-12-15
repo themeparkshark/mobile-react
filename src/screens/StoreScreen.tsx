@@ -32,7 +32,7 @@ export default function StoreScreen({ route }) {
   const [monthlyItems, setMonthlyItems] = useState<ItemType[]>();
   const [items, setItems] = useState<ItemType[]>();
   const [loading, setLoading] = useState<boolean>(true);
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const { labels } = useCrumbs();
   const { currencies } = useContext(CurrencyContext);
 
@@ -139,7 +139,7 @@ export default function StoreScreen({ route }) {
                       marginLeft: 8,
                     }}
                   >
-                    {vsprintf(labels.coins, [user.coins])}
+                    {vsprintf(labels.coins, [player.coins])}
                   </Text>
                 </View>
               </View>

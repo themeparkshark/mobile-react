@@ -3,30 +3,30 @@ import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { useAsyncEffect, useDebounce } from 'rooks';
 import getFriendSuggestions from '../../api/endpoints/me/getFriendSuggestions';
-import searchUsers from '../../api/endpoints/users/search';
-import FriendUser from '../../components/FriendUser';
+import searchPlayers from '../../api/endpoints/players/search';
+import FriendPlayer from '../../components/FriendPlayer';
 import Loading from '../../components/Loading';
 import useCrumbs from '../../hooks/useCrumbs';
-import { UserType } from '../../models/user-type';
+import { PlayerType } from '../../models/player-type';
 
 export default function Suggestions() {
-  const [users, setUsers] = useState<UserType[]>([]);
+  const [players, setPlayers] = useState<PlayerType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { labels, warnings } = useCrumbs();
   const [search, setSearch] = useState<string>('');
   const setSearchDebounced = useDebounce(setSearch, 500);
-  const [searchResults, setSearchResults] = useState<UserType[]>([]);
+  const [searchResults, setSearchResults] = useState<PlayerType[]>([]);
 
   useAsyncEffect(async () => {
     if (search.length < 3) {
       return;
     }
 
-    setSearchResults(search ? await searchUsers(search) : []);
+    setSearchResults(search ? await searchPlayers(search) : []);
   }, [search]);
 
   useAsyncEffect(async () => {
-    setUsers(await getFriendSuggestions());
+    setPlayers(await getFriendSuggestions());
     setLoading(false);
   }, []);
 
@@ -66,7 +66,7 @@ export default function Suggestions() {
                 setLoading(false);
               }}
               maxLength={14}
-              placeholder={labels.search_for_a_user}
+              placeholder={labels.search_for_a_player}
               returnKeyType="search"
               enablesReturnKeyAutomatically
               autoCorrect={false}
@@ -75,14 +75,14 @@ export default function Suggestions() {
           {!search.length && (
             <FlashList
               contentContainerStyle={{ paddingBottom: 8 }}
-              data={users}
-              keyExtractor={(user) => user.id.toString()}
+              data={players}
+              keyExtractor={(player) => player.id.toString()}
               renderItem={({ item }) => {
                 return (
-                  <FriendUser
+                  <FriendPlayer
                     isFriend={item.is_friend}
                     isPending={item.has_friend_request_from}
-                    user={item}
+                    player={item}
                   />
                 );
               }}
@@ -93,9 +93,9 @@ export default function Suggestions() {
             <FlashList
               contentContainerStyle={{ paddingBottom: 8 }}
               data={searchResults}
-              keyExtractor={(user) => user.id.toString()}
+              keyExtractor={(player) => player.id.toString()}
               renderItem={({ item }) => {
-                return <FriendUser user={item} />;
+                return <FriendPlayer player={item} />;
               }}
               estimatedItemSize={80}
             />

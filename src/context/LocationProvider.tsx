@@ -23,7 +23,7 @@ export const LocationContext = createContext<LocationContextType>(
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
   const [park, setPark] = useState<ParkType>();
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
   const debouncedSetLocation = useDebounce(setLocation, 5000, {
@@ -78,19 +78,19 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   useAsyncEffect(async () => {
-    if (!user || !permissionGranted || !location) {
+    if (!player || !permissionGranted || !location) {
       return;
     }
 
     await requestPark();
-  }, [user, permissionGranted, location?.latitude, location?.longitude]);
+  }, [player, permissionGranted, location?.latitude, location?.longitude]);
 
   useIntervalWhen(
     async () => {
       await requestLocation();
     },
     5000,
-    Boolean(user && permissionGranted && user.username),
+    Boolean(player && permissionGranted && player.username),
     true
   );
 

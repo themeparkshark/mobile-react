@@ -3,31 +3,31 @@ import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../../RootNavigation';
-import all from '../../api/endpoints/users/all';
+import all from '../../api/endpoints/players/all';
 import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
 import Loading from '../../components/Loading';
-import { UserType } from '../../models/user-type';
+import { PlayerType } from '../../models/player-type';
 
 export default function Experience() {
   const [loading, setLoading] = useState<boolean>(true);
-  const [users, setUsers] = useState<UserType[]>([]);
+  const [players, setPlayers] = useState<PlayerType[]>([]);
   const [page, setPage] = useState<number>(1);
 
-  const fetchUsers = async (page: number) => {
+  const fetchPlayers = async (page: number) => {
     const response = await all(page);
-    setUsers((prevState) => {
+    setPlayers((prevState) => {
       return [...prevState, ...response];
     });
   };
 
   useEffect(() => {
-    fetchUsers(page).then(() => setLoading(false));
+    fetchPlayers(page).then(() => setLoading(false));
   }, []);
 
   useAsyncEffect(async () => {
     if (page > 1) {
-      await fetchUsers(page);
+      await fetchPlayers(page);
     }
   }, [page]);
 
@@ -42,8 +42,8 @@ export default function Experience() {
         >
           <FlashList
             contentContainerStyle={{ paddingBottom: 8 }}
-            data={users}
-            keyExtractor={(user) => user.id.toString()}
+            data={players}
+            keyExtractor={(player) => player.id.toString()}
             renderItem={({ item, index }) => {
               return (
                 <View
@@ -85,12 +85,12 @@ export default function Experience() {
                   >
                     <Button
                       onPress={() => {
-                        RootNavigation.navigate('User', {
-                          user: item.id,
+                        RootNavigation.navigate('Player', {
+                          player: item.id,
                         });
                       }}
                     >
-                      <Avatar size="sm" user={item} />
+                      <Avatar size="sm" player={item} />
                     </Button>
                     <View style={{ flex: 1 }}>
                       <Text

@@ -3,10 +3,10 @@ import { ApiResponseType } from '../../../models/api-response-type';
 import client from '../../client';
 
 export default async function getActivities(
-  user: number
+  player: number
 ): Promise<ActivityType[]> {
   const { data } = await client.get<ApiResponseType<ActivityType[]>>(
-    `/users/${user}/activities`
+    `/players/${player}/activities`
   );
 
   return data.data;

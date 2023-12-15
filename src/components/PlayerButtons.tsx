@@ -4,7 +4,7 @@ import usePermissions from '../hooks/usePermissions';
 import { ButtonType } from '../models/button-type';
 import Button from './Button';
 
-export default function UserButtons({
+export default function PlayerButtons({
   buttons,
 }: {
   readonly buttons: ButtonType[];

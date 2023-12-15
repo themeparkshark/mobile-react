@@ -1,20 +1,20 @@
 import { Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 import Avatar from './Avatar';
 import Button from './Button';
 
-export default function LeaderboardUser({ user }: { readonly user: UserType }) {
+export default function LeaderboardPlayer({ player }: { readonly player: PlayerType }) {
   return (
     <>
       <Button
         onPress={() => {
-          RootNavigation.navigate('User', {
-            user: user.id,
+          RootNavigation.navigate('Player', {
+            player: player.id,
           });
         }}
       >
-        <Avatar user={user} size="lg" />
+        <Avatar player={player} size="lg" />
       </Button>
       <View
         style={{
@@ -40,7 +40,7 @@ export default function LeaderboardUser({ user }: { readonly user: UserType }) {
             textShadowRadius: 0,
           }}
         >
-          {user.screen_name}
+          {player.screen_name}
         </Text>
         <View
           style={{
@@ -70,7 +70,7 @@ export default function LeaderboardUser({ user }: { readonly user: UserType }) {
               textAlign: 'center',
             }}
           >
-            {user.park_coins}
+            {player.park_coins}
           </Text>
         </View>
       </View>

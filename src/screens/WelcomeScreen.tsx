@@ -11,13 +11,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import updateUser from '../api/endpoints/me/update-user';
+import updatePlayer from '../api/endpoints/me/update-player';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function WelcomeScreen({ navigation }) {
   const [username, setUsername] = useState<string>('');
-  const { user, refreshUser } = useContext(AuthContext);
+  const { player, refreshPlayer } = useContext(AuthContext);
   const rotate = useRef(new Animated.Value(0)).current;
   const { labels } = useCrumbs();
 
@@ -104,7 +104,7 @@ export default function WelcomeScreen({ navigation }) {
           enablesReturnKeyAutomatically
           onSubmitEditing={async ({ nativeEvent }) => {
             try {
-              await updateUser({
+              await updatePlayer({
                 username: nativeEvent.text,
               });
             } catch (error) {
@@ -117,7 +117,7 @@ export default function WelcomeScreen({ navigation }) {
               return;
             }
 
-            await refreshUser();
+            await refreshPlayer();
 
             navigation.navigate('Membership', {
               intro: true,

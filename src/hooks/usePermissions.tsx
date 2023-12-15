@@ -5,22 +5,22 @@ import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from './useCrumbs';
 
 export default function usePermissions() {
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const { prompts } = useCrumbs();
 
   const permissions = {
-    add_friends: user,
-    become_a_member: user,
-    create_compliments: user,
-    create_reports: user,
-    create_threads: user,
-    redeem_coin_codes: user,
-    redeem_mascot_gifts: user,
-    trade_pins: user,
-    view_arcade: user,
-    view_secret_store: user?.is_subscribed,
-    view_profile: user,
-    watch_content: user,
+    add_friends: player,
+    become_a_member: player,
+    create_compliments: player,
+    create_reports: player,
+    create_threads: player,
+    redeem_coin_codes: player,
+    redeem_mascot_gifts: player,
+    trade_pins: player,
+    view_arcade: player,
+    view_secret_store: player?.is_subscribed,
+    view_profile: player,
+    watch_content: player,
   };
 
   return {

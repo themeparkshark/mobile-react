@@ -34,7 +34,7 @@ export default function Verified() {
             fontSize: 16,
           }}
         >
-          {labels.verified_user}
+          {labels.verified_player}
         </Text>
       </View>
     </View>

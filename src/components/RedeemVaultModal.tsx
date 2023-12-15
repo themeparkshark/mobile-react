@@ -42,7 +42,7 @@ export default function RedeemVaultModal({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const [isOpen, setIsOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export default function RedeemVaultModal({
     }
   }, [open]);
 
-  if (!redeemable || !user) {
+  if (!redeemable || !player) {
     return <></>;
   }
 
@@ -241,7 +241,7 @@ export default function RedeemVaultModal({
             )}
             <YellowButton
               disabled={
-                (redeemable.model as VaultType).item.cost > user.keys || isOpen
+                (redeemable.model as VaultType).item.cost > player.keys || isOpen
               }
               text="Unlock"
               onPress={async () => {

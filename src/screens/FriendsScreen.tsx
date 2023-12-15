@@ -12,7 +12,7 @@ import Suggestions from './FriendsScreen/Suggestions';
 import YourList from './FriendsScreen/YourList';
 
 export default function FriendsScreen() {
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
 
   return (
     <>
@@ -28,7 +28,7 @@ export default function FriendsScreen() {
             onPress={() => {
               RootNavigation.navigate('PendingFriendRequests');
             }}
-            showRedCircle={user?.has_pending_friend_requests}
+            showRedCircle={player?.has_pending_friend_requests}
           >
             <Image
               source={require('../../assets/images/screens/friends/pending_requests.png')}

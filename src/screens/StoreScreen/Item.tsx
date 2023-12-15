@@ -7,14 +7,14 @@ import usePurchaseItem from '../../hooks/usePurchaseItem';
 import { ItemType } from '../../models/item-type';
 
 export default function Item({ item }: { readonly item: ItemType }) {
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const { purchaseItem } = usePurchaseItem();
   const { labels } = useCrumbs();
 
   return (
     <Pressable
       onPress={async () => {
-        if (!user) {
+        if (!player) {
           return;
         }
 

@@ -2,7 +2,7 @@ import { ExperienceLevelType } from './experience-level-type';
 import { InventoryType } from './inventory-type';
 import { MascotType } from './mascot-type';
 
-export interface UserType {
+export interface PlayerType {
   readonly avatar_url: string;
   readonly coins: number;
   readonly completed_tasks_count: number;

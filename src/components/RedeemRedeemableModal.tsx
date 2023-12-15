@@ -37,13 +37,13 @@ export default function RedeemRedeemableModal({
   readonly onPress: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const progress = useRef(new Animated.Value(0)).current;
   const [doubleXP, setDoubleXP] = useState<boolean>(
-    (user && user.is_subscribed) ?? false
+    (player && player.is_subscribed) ?? false
   );
   const [doubleCoins, setDoubleCoins] = useState<boolean>(
-    (user && user.is_subscribed) ?? false
+    (player && player.is_subscribed) ?? false
   );
   const { currencies } = useContext(CurrencyContext);
 

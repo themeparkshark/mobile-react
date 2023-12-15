@@ -7,7 +7,7 @@ import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
 import { InventoryType } from '../models/inventory-type';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 import * as RootNavigation from '../RootNavigation';
 
 export interface AuthContextType {
@@ -16,9 +16,9 @@ export interface AuthContextType {
   readonly login: (credential: AppleAuthenticationCredential) => void;
   readonly logout: () => void;
   readonly setInventory: (inventory: InventoryType) => void;
-  readonly setUser: (user: UserType) => void;
-  readonly refreshUser: () => Promise<UserType>;
-  readonly user: UserType | null;
+  readonly setPlayer: (player: PlayerType) => void;
+  readonly refreshPlayer: () => Promise<PlayerType>;
+  readonly player: PlayerType | null;
 }
 
 export const AuthContext = createContext<AuthContextType>(
@@ -26,7 +26,7 @@ export const AuthContext = createContext<AuthContextType>(
 );
 
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserType | null>(null);
+  const [player, setPlayer] = useState<PlayerType | null>(null);
   const [inventory, setInventory] = useState<InventoryType | null>(null);
   const [token, setToken] = useState<string>('');
   const [isReady, setIsReady] = useState<boolean>(false);
@@ -37,7 +37,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
     if (token) {
       setIsReady(true);
-      await refreshUser();
+      await refreshPlayer();
       RootNavigation.navigate('Loading');
     }
   }, [token]);
@@ -47,7 +47,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       RootNavigation.navigate('Welcome');
     },
     5000,
-    Boolean(user && !user.username)
+    Boolean(player && !player.username)
   );
 
   useEffect(() => {
@@ -69,12 +69,12 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  const refreshUser = async (): Promise<UserType> => {
+  const refreshPlayer = async (): Promise<PlayerType> => {
     const response = await getMe();
-    setUser(response);
+    setPlayer(response);
 
     Storage.setItem({
-      key: 'user',
+      key: 'player',
       value: JSON.stringify({ ...response }),
     });
 
@@ -83,18 +83,18 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const logout = async () => {
     RootNavigation.navigate('Login');
-    await Storage.removeItem({ key: 'user' });
+    await Storage.removeItem({ key: 'player' });
     await SecureStore.deleteItemAsync('token');
     setToken('');
-    setUser(null);
+    setPlayer(null);
   };
 
   return (
     <AuthContext.Provider
       value={{
-        user,
-        refreshUser,
-        setUser,
+        player,
+        refreshPlayer,
+        setPlayer,
         login: requestLogin,
         logout,
         inventory,

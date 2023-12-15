@@ -21,7 +21,7 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [sound, setSound] = useState<any>();
-  const { user, isReady } = useContext(AuthContext);
+  const { player, isReady } = useContext(AuthContext);
 
   useEffect(() => {
     return sound
@@ -35,7 +35,7 @@ export const SoundEffectProvider: FC<{ children: ReactNode }> = ({
     <SoundEffectContext.Provider
       value={{
         playSound: async (pendingSound: any) => {
-          if (isReady && !user?.enabled_sound_effects) {
+          if (isReady && !player?.enabled_sound_effects) {
             return;
           }
 

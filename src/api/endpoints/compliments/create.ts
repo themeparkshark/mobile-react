@@ -3,10 +3,10 @@ import { ComplimentType } from '../../../models/compliment-type';
 import client from '../../client';
 
 export default async function createCompliment(
-  user: number
+  player: number
 ): Promise<ComplimentType> {
   const response = await client.post<ApiResponseType<ComplimentType>>(
-    `/users/${user}/compliment`
+    `/players/${player}/compliment`
   );
 
   return response.data.data;

@@ -3,19 +3,19 @@ import { Alert } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import createCompliment from '../api/endpoints/compliments/create';
 import { AuthContext } from '../context/AuthProvider';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 import useCrumbs from './useCrumbs';
 
 export default function useCompliment() {
   const { errors, messages, prompts } = useCrumbs();
-  const { user: currentUser, isReady } = useContext(AuthContext);
+  const { player: currentPlayer, isReady } = useContext(AuthContext);
 
-  const complimentUser = async (user: UserType) => {
-    if (!isReady || !currentUser) {
+  const complimentPlayer = async (player: PlayerType) => {
+    if (!isReady || !currentPlayer) {
       return;
     }
 
-    Alert.alert(vsprintf(prompts.compliment, [user?.screen_name]), '', [
+    Alert.alert(vsprintf(prompts.compliment, [player?.screen_name]), '', [
       {
         text: 'Cancel',
         style: 'cancel',
@@ -24,7 +24,7 @@ export default function useCompliment() {
         text: 'Ok',
         onPress: async () => {
           try {
-            await createCompliment(user.id);
+            await createCompliment(player.id);
           } catch {
             Alert.alert(errors.max_compliments_created, '', [
               {
@@ -46,6 +46,6 @@ export default function useCompliment() {
   };
 
   return {
-    complimentUser,
+    complimentPlayer,
   };
 }

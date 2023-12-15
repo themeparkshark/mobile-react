@@ -13,7 +13,7 @@ import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import UserButtons from '../components/UserButtons';
+import PlayerButtons from '../components/PlayerButtons';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -41,7 +41,7 @@ export default function SocialScreen({ navigation }) {
   const [filter, setFilter] = useState<SortOption>(options[0]);
   const { urls } = useCrumbs();
   const { checkPermission } = usePermissions();
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
 
   const fetchPinnedThreads = async () => {
     setPinnedThreads(
@@ -147,7 +147,7 @@ export default function SocialScreen({ navigation }) {
                       marginBottom: 32,
                     }}
                   >
-                    <UserButtons
+                    <PlayerButtons
                       buttons={[
                         {
                           image: require('../../assets/images/screens/social/membership.png'),
@@ -160,7 +160,7 @@ export default function SocialScreen({ navigation }) {
                           },
                           text: 'Member',
                           permission: PermissionEnums.BecomeAMember,
-                          show: !user || Boolean(user && !user.is_subscribed),
+                          show: !player || Boolean(player && !player.is_subscribed),
                         },
                         {
                           image: require('../../assets/images/screens/social/merch.png'),

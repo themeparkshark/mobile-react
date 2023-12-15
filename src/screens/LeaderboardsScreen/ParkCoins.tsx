@@ -5,26 +5,26 @@ import RNPickerSelect from 'react-native-picker-select';
 import { Chevron } from 'react-native-shapes';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../../RootNavigation';
-import getUsers from '../../api/endpoints/leaderboards/users';
+import getPlayers from '../../api/endpoints/leaderboards/players';
 import allParks from '../../api/endpoints/parks/allParks';
 import getLeaderboards from '../../api/endpoints/parks/leaderboards/get';
 import Avatar from '../../components/Avatar';
 import Button from '../../components/Button';
-import LeaderboardUser from '../../components/LeaderboardUser';
+import LeaderboardPlayer from '../../components/LeaderboardPlayer';
 import Loading from '../../components/Loading';
 import config from '../../config';
 import { AuthContext } from '../../context/AuthProvider';
 import { LeaderboardType } from '../../models/leaderboard-type';
 import { ParkType } from '../../models/park-type';
-import { UserType } from '../../models/user-type';
+import { PlayerType } from '../../models/player-type';
 
 export default function ParkCoins() {
   const [loading, setLoading] = useState<boolean>(true);
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const [parks, setParks] = useState<ParkType[]>([]);
   const [selectedPark, setSelectedPark] = useState<number>();
   const [selectedLeaderboard, setSelectedLeaderboard] = useState<number>();
-  const [users, setUsers] = useState<UserType[]>([]);
+  const [players, setPlayers] = useState<PlayerType[]>([]);
   const [leaderboards, setLeaderboards] = useState<LeaderboardType[]>([]);
 
   useAsyncEffect(async () => {
@@ -32,12 +32,12 @@ export default function ParkCoins() {
   }, []);
 
   useEffect(() => {
-    if (user?.current_park_id) {
-      setSelectedPark(user.current_park_id);
+    if (player?.current_park_id) {
+      setSelectedPark(player.current_park_id);
     } else if (parks.length) {
       setSelectedPark(parks[0].id);
     }
-  }, [parks, user]);
+  }, [parks, player]);
 
   useEffect(() => {
     if (leaderboards.length) {
@@ -47,7 +47,7 @@ export default function ParkCoins() {
 
   useAsyncEffect(async () => {
     if (selectedLeaderboard) {
-      setUsers(await getUsers(selectedLeaderboard));
+      setPlayers(await getPlayers(selectedLeaderboard));
       setLoading(false);
     }
   }, [selectedLeaderboard]);
@@ -71,7 +71,7 @@ export default function ParkCoins() {
               position: 'relative',
             }}
           >
-            {users.length > 0 && (
+            {players.length > 0 && (
               <>
                 <View
                   style={{
@@ -81,7 +81,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[0] && <LeaderboardUser user={users[0]} />}
+                  {players[0] && <LeaderboardPlayer player={players[0]} />}
                 </View>
                 <View
                   style={{
@@ -92,7 +92,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[1] && <LeaderboardUser user={users[1]} />}
+                  {players[1] && <LeaderboardPlayer player={players[1]} />}
                 </View>
                 <View
                   style={{
@@ -103,7 +103,7 @@ export default function ParkCoins() {
                     width: '100%',
                   }}
                 >
-                  {users[2] && <LeaderboardUser user={users[2]} />}
+                  {players[2] && <LeaderboardPlayer player={players[2]} />}
                 </View>
               </>
             )}
@@ -210,11 +210,11 @@ export default function ParkCoins() {
               paddingBottom: 32,
             }}
           >
-            {users.slice(3).length > 0 &&
-              users.slice(3).map((user, index) => {
+            {players.slice(3).length > 0 &&
+              players.slice(3).map((player, index) => {
                 return (
                   <View
-                    key={user.id}
+                    key={player.id}
                     style={{
                       paddingTop: 25,
                       paddingBottom: 25,
@@ -252,12 +252,12 @@ export default function ParkCoins() {
                     >
                       <Button
                         onPress={() => {
-                          RootNavigation.navigate('User', {
-                            user: user.id,
+                          RootNavigation.navigate('Player', {
+                            player: player.id,
                           });
                         }}
                       >
-                        <Avatar user={user} />
+                        <Avatar player={player} />
                       </Button>
                       <Text
                         style={{
@@ -268,7 +268,7 @@ export default function ParkCoins() {
                           paddingLeft: 32,
                         }}
                       >
-                        {user.screen_name}
+                        {player.screen_name}
                       </Text>
                     </View>
                     <View
@@ -285,7 +285,7 @@ export default function ParkCoins() {
                           color: 'black',
                         }}
                       >
-                        {user.park_coins}
+                        {player.park_coins}
                       </Text>
                     </View>
                   </View>

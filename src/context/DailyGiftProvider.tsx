@@ -18,14 +18,14 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [dailyGift, setDailyGift] = useState<DailyGiftType | null>(null);
-  const { user, isReady } = useContext(AuthContext);
+  const { player, isReady } = useContext(AuthContext);
 
   useTimeoutWhen(
     async () => {
       setDailyGift(await getDailyGift());
     },
     5000,
-    Boolean(isReady && user && user.username)
+    Boolean(isReady && player && player.username)
   );
 
   return (

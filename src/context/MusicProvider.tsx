@@ -15,21 +15,21 @@ export const MusicContext = createContext<MusicContextType>(
 );
 
 export const MusicProvider: React.FC = ({ children }) => {
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [soundObject, setSoundObject] = useState<Audio.Sound | null>(null);
 
   useAsyncEffect(async () => {
-    if (!user?.enabled_music) {
+    if (!player?.enabled_music) {
       await soundObject?.stopAsync();
     } else if (!currentTrack) {
       await selectNewTrack();
     }
-  }, [user?.enabled_music]);
+  }, [player?.enabled_music]);
 
   const playTrack = async (track: Track) => {
-    if (user && !user?.enabled_music) {
+    if (player && !player?.enabled_music) {
       return;
     }
 

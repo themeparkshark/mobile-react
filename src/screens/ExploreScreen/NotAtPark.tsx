@@ -8,7 +8,7 @@ import WarningMessage from './WarningMessage';
 export default function NotAtPark() {
   const [seconds, setSeconds] = useState<number>(5);
   const { labels, warnings } = useCrumbs();
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
 
   useIntervalWhen(
     () => {
@@ -19,7 +19,7 @@ export default function NotAtPark() {
       }
     },
     1000,
-    Boolean(!!seconds && user)
+    Boolean(!!seconds && player)
   );
 
   return (

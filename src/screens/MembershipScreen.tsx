@@ -27,29 +27,29 @@ export default function MembershipScreen({ route }) {
   const { warnings, labels, urls } = useCrumbs();
   const [product, setProduct] = useState<AdaptyPaywallProduct>();
   const [loading, setLoading] = useState<boolean>(true);
-  const { user, refreshUser } = useContext(AuthContext);
+  const { player, refreshPlayer } = useContext(AuthContext);
   const [startTimer, setStartTimer] = useState<boolean>(false);
 
   useAsyncEffect(async () => {
-    if (!user) {
+    if (!player) {
       return;
     }
 
     await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH', {
-      customerUserId: user.id.toString(),
+      customerUserId: player.id.toString(),
     });
     const paywall = await adapty.getPaywall('vip_membership');
     const products = await adapty.getPaywallProducts(paywall);
 
     setProduct(products[0]);
     setLoading(false);
-  }, [user]);
+  }, [player]);
 
   useIntervalWhen(
     async () => {
-      const user = await refreshUser();
+      const player = await refreshPlayer();
 
-      if (user.is_subscribed) {
+      if (player.is_subscribed) {
         setStartTimer(false);
         Alert.alert(labels.payment_complete);
         RootNavigation.navigate('Profile');

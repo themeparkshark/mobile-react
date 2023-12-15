@@ -32,7 +32,7 @@ export default function ThreadScreen({ route }) {
   const [page, setPage] = useState<number>(1);
   const [comments, setComments] = useState<CommentType[]>([]);
   const [comment, setComment] = useState<CommentType>();
-  const { user } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
 
   const fetchComments = async (page: number) => {
     if (!currentThread) {
@@ -87,17 +87,17 @@ export default function ThreadScreen({ route }) {
                   <View>
                     <Button
                       onPress={() => {
-                        RootNavigation.navigate('User', {
-                          user: currentThread.user.id,
+                        RootNavigation.navigate('Player', {
+                          player: currentThread.player.id,
                         });
                       }}
                     >
-                      <Avatar size="sm" user={currentThread.user} />
+                      <Avatar size="sm" player={currentThread.player} />
                     </Button>
                   </View>
                   <View style={{ paddingLeft: 16 }}>
                     <Text>
-                      {currentThread.user.screen_name} -{' '}
+                      {currentThread.player.screen_name} -{' '}
                       {dayjs(currentThread.created_at)
                         .startOf('second')
                         .fromNow()}
@@ -245,10 +245,10 @@ export default function ThreadScreen({ route }) {
               setPage((prevState) => prevState + 1);
             }}
             ListFooterComponentStyle={{
-              height: user ? 120 : 40,
+              height: player ? 120 : 40,
             }}
           />
-          {user && (
+          {player && (
             <CreateReply
               thread={currentThread}
               onSubmit={async () => {

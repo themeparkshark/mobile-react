@@ -4,15 +4,15 @@ import { vsprintf } from 'sprintf-js';
 import * as RootNavigation from '../RootNavigation';
 import useCrumbs from '../hooks/useCrumbs';
 import { ParkType } from '../models/park-type';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 import Progress from './Progress';
 
 export default function VisitedParks({
   parks,
-  user,
+  player,
 }: {
   readonly parks: ParkType[];
-  readonly user: UserType;
+  readonly player: PlayerType;
 }) {
   const { labels, warnings } = useCrumbs();
 
@@ -39,7 +39,7 @@ export default function VisitedParks({
                 onPress={() => {
                   RootNavigation.navigate('Park', {
                     park: park.id,
-                    user: user.id,
+                    player: player.id,
                   });
                 }}
                 style={{

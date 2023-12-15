@@ -4,10 +4,10 @@ import client from '../../../client';
 
 export default async function getCompletedTasks(
   park: number,
-  user: number
+  player: number
 ): Promise<TaskType[]> {
   const { data } = await client.get<ApiResponseType<TaskType[]>>(
-    `/users/${user}/parks/${park}/tasks`
+    `/players/${player}/parks/${park}/tasks`
   );
 
   return data.data;

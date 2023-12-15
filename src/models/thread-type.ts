@@ -1,7 +1,7 @@
 import { AttachmentType } from './attachment-type';
 import { CommentType } from './comment-type';
 import { TagType } from './tag-type';
-import { UserType } from './user-type';
+import { PlayerType } from './player-type';
 
 export interface ThreadType {
   readonly attachments: AttachmentType[];
@@ -10,7 +10,7 @@ export interface ThreadType {
   readonly content: string;
   readonly id: number;
   readonly reactions_count: number;
-  readonly user: UserType;
+  readonly player: PlayerType;
   readonly comments_count: number;
   readonly title: string;
   readonly tags: TagType[];

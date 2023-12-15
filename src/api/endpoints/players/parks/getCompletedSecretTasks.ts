@@ -4,10 +4,10 @@ import client from '../../../client';
 
 export default async function getCompletedSecretTasks(
   park: number,
-  user: number
+  player: number
 ): Promise<SecretTaskType[]> {
   const { data } = await client.get<ApiResponseType<SecretTaskType[]>>(
-    `/users/${user}/parks/${park}/secret-tasks`
+    `/players/${player}/parks/${park}/secret-tasks`
   );
 
   return data.data;

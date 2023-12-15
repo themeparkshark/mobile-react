@@ -1,9 +1,9 @@
 import { ApiResponseType } from '../../../models/api-response-type';
-import { UserType } from '../../../models/user-type';
+import { PlayerType } from '../../../models/player-type';
 import client from '../../client';
 
-export default async function getFriendSuggestions(): Promise<UserType[]> {
-  const { data } = await client.get<ApiResponseType<UserType[]>>(
+export default async function getFriendSuggestions(): Promise<PlayerType[]> {
+  const { data } = await client.get<ApiResponseType<PlayerType[]>>(
     '/me/friend-suggestions'
   );
 

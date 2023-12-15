@@ -30,7 +30,7 @@ export default function InventoryScreen() {
   const { inventory } = useContext(AuthContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
-  const { refreshUser } = useContext(AuthContext);
+  const { refreshPlayer } = useContext(AuthContext);
   const [page, setPage] = useState<number>(1);
   const { playSound } = useContext(SoundEffectContext);
 
@@ -69,7 +69,7 @@ export default function InventoryScreen() {
     <>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <BackButton onPress={async () => await refreshUser()} />
+          <BackButton onPress={async () => await refreshPlayer()} />
         </TopbarColumn>
         <TopbarColumn>
           <TopbarText>Inventory</TopbarText>

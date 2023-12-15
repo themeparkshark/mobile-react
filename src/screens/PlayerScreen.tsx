@@ -3,9 +3,9 @@ import { useCallback, useContext, useEffect, useState } from 'react';
 import { Alert, Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
-import getUser from '../api/endpoints/users/get';
-import reportUser from '../api/endpoints/users/report';
-import getVisitedParks from '../api/endpoints/users/visited-parks';
+import getPlayer from '../api/endpoints/players/get';
+import reportPlayer from '../api/endpoints/players/report';
+import getVisitedParks from '../api/endpoints/players/visited-parks';
 import Experience from '../components/Experience';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
@@ -15,7 +15,7 @@ import Subscribed from '../components/Subscribed';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
-import UserButtons from '../components/UserButtons';
+import PlayerButtons from '../components/PlayerButtons';
 import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import config from '../config';
@@ -27,24 +27,24 @@ import usePermissions from '../hooks/usePermissions';
 import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 
-export default function UserScreen({ route, navigation }) {
-  const { user } = route.params;
+export default function PlayerScreen({ route, navigation }) {
+  const { player } = route.params;
   const [loading, setLoading] = useState<boolean>(true);
-  const [currentUser, setCurrentUser] = useState<UserType>();
+  const [currentPlayer, setCurrentPlayer] = useState<PlayerType>();
   const [parks, setParks] = useState<ParkType[]>([]);
   const { purchaseItem } = usePurchaseItem();
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
-  const { complimentUser } = useCompliment();
+  const { complimentPlayer } = useCompliment();
   const { checkPermission } = usePermissions();
-  const { user: authUser } = useContext(AuthContext);
+  const { player: authPlayer } = useContext(AuthContext);
   const { prompts, messages } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
-      if (authUser?.id === user) {
+      if (authPlayer?.id === player) {
         navigation.navigate('Profile');
         return;
       }
@@ -53,36 +53,36 @@ export default function UserScreen({ route, navigation }) {
 
   useAsyncEffect(async () => {
     setLoading(true);
-    setCurrentUser(await getUser(user));
-    setParks(await getVisitedParks(user));
+    setCurrentPlayer(await getPlayer(player));
+    setParks(await getVisitedParks(player));
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentPlayer) {
       return;
     }
 
-    setIsFriend(currentUser.is_friend);
-  }, [currentUser]);
+    setIsFriend(currentPlayer.is_friend);
+  }, [currentPlayer]);
 
-  const buttons = currentUser
+  const buttons = currentPlayer
     ? [
         {
-          image: require('../../assets/images/screens/user/gift.png'),
+          image: require('../../assets/images/screens/player/gift.png'),
           onPress: async () => {
             if (checkPermission(PermissionEnums.RedeemMascotGifts)) {
-              await purchaseItem(currentUser.mascot.item);
+              await purchaseItem(currentPlayer.mascot.item);
             }
           },
-          show: !!currentUser.mascot,
+          show: !!currentPlayer.mascot,
           text: 'Gift',
           permission: PermissionEnums.RedeemMascotGifts,
         },
         {
           image: require('../../assets/images/screens/friends/remove_friend.png'),
           onPress: () => {
-            removeFriend(currentUser, () => setIsFriend(false));
+            removeFriend(currentPlayer, () => setIsFriend(false));
           },
           show: isFriend,
           text: 'Remove friend',
@@ -91,9 +91,9 @@ export default function UserScreen({ route, navigation }) {
           image: require('../../assets/images/screens/friends/add_friend.png'),
           onPress: async () => {
             if (checkPermission(PermissionEnums.AddFriends)) {
-              currentUser?.has_friend_request_from
-                ? acceptFriend(currentUser)
-                : addFriend(currentUser);
+              currentPlayer?.has_friend_request_from
+                ? acceptFriend(currentPlayer)
+                : addFriend(currentPlayer);
             }
           },
           show: !isFriend,
@@ -101,21 +101,21 @@ export default function UserScreen({ route, navigation }) {
           permission: PermissionEnums.AddFriends,
         },
         {
-          image: require('../../assets/images/screens/user/compliment.png'),
+          image: require('../../assets/images/screens/player/compliment.png'),
           onPress: async () => {
             if (checkPermission(PermissionEnums.CreateCompliments)) {
-              await complimentUser(currentUser);
+              await complimentPlayer(currentPlayer);
             }
           },
           text: 'Compliment',
           permission: PermissionEnums.CreateCompliments,
         },
         {
-          show: Boolean(currentUser.username),
+          show: Boolean(currentPlayer.username),
           image: require('../../assets/images/screens/explore/base.png'),
           onPress: async () => {
             Alert.alert(
-              vsprintf(prompts.report_username, [currentUser.screen_name]),
+              vsprintf(prompts.report_username, [currentPlayer.screen_name]),
               '',
               [
                 {
@@ -125,7 +125,7 @@ export default function UserScreen({ route, navigation }) {
                 {
                   text: 'Ok',
                   onPress: async () => {
-                    await reportUser(currentUser.id);
+                    await reportPlayer(currentPlayer.id);
 
                     Alert.alert(messages.report_created, '', [
                       {
@@ -150,12 +150,12 @@ export default function UserScreen({ route, navigation }) {
           <BackButton />
         </TopbarColumn>
         <TopbarColumn>
-          <TopbarText>{currentUser?.screen_name}</TopbarText>
+          <TopbarText>{currentPlayer?.screen_name}</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false} />
       </Topbar>
       {loading && <Loading />}
-      {!loading && currentUser && (
+      {!loading && currentPlayer && (
         <ScrollView
           style={{
             flex: 1,
@@ -175,7 +175,7 @@ export default function UserScreen({ route, navigation }) {
               }}
             >
               <Playercard
-                inventory={currentUser.inventory}
+                inventory={currentPlayer.inventory}
                 style={{
                   position: 'absolute',
                   width: Dimensions.get('window').width,
@@ -193,16 +193,16 @@ export default function UserScreen({ route, navigation }) {
                 paddingTop: 24,
               }}
             >
-              <Experience user={currentUser} />
-              <UserButtons buttons={buttons} />
-              {currentUser.is_subscribed && <Subscribed />}
-              {currentUser.verified_at && <Verified />}
+              <Experience player={currentPlayer} />
+              <PlayerButtons buttons={buttons} />
+              {currentPlayer.is_subscribed && <Subscribed />}
+              {currentPlayer.verified_at && <Verified />}
               <Heading text="Statistics" />
-              <Stats user={currentUser} />
+              <Stats player={currentPlayer} />
               {parks.length > 0 && (
                 <>
                   <Heading text="Visited Parks" />
-                  <VisitedParks parks={parks} user={currentUser} />
+                  <VisitedParks parks={parks} player={currentPlayer} />
                 </>
               )}
             </View>

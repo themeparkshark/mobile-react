@@ -1,14 +1,14 @@
 import { Image } from 'expo-image';
 import { View } from 'react-native';
 import config from '../config';
-import { UserType } from '../models/user-type';
+import { PlayerType } from '../models/player-type';
 
 export default function Avatar({
-  user,
+  player,
   size = 'md',
 }: {
   readonly size?: 'sm' | 'md' | 'lg' | 'xl';
-  readonly user: UserType;
+  readonly player: PlayerType;
 }) {
   const sizes = {
     sm: 50,
@@ -34,7 +34,7 @@ export default function Avatar({
         marginRight: size === 'md' ? 0 : 'auto',
       }}
     >
-      {!!user.verified_at && (
+      {!!player.verified_at && (
         <Image
           source={require('../../assets/images/screens/profile/verified.png')}
           style={{
@@ -48,10 +48,10 @@ export default function Avatar({
           contentFit="cover"
         />
       )}
-      {user.inventory && user.inventory.pin_item && (
+      {player.inventory && player.inventory.pin_item && (
         <Image
           source={{
-            uri: user.inventory.pin_item.icon_url,
+            uri: player.inventory.pin_item.icon_url,
           }}
           style={{
             width: sizes[size] / 4,
@@ -86,7 +86,7 @@ export default function Avatar({
           }}
         >
           <Image
-            source={user.avatar_url}
+            source={player.avatar_url}
             style={{
               width: sizes[size] * 1.2,
               height: sizes[size] * 1.2,
