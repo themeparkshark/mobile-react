@@ -33,7 +33,6 @@ export function BackButton({ onPress }) {
 export default function Topbar({
   children,
   purple = false,
-  onBackButtonPress,
 }: {
   readonly informationModalId?: number | null;
   readonly rightButton?: ReactNode | null;
@@ -44,7 +43,6 @@ export default function Topbar({
   readonly showCurrencies?: boolean;
   readonly parkCoin?: string | null;
   readonly parkCoins?: number | null;
-  readonly onBackButtonPress?: () => void;
 }) {
   const { theme } = useContext(ThemeContext);
 

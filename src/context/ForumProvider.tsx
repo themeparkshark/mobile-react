@@ -7,7 +7,10 @@ import {
   useEffect,
   useState,
 } from 'react';
+import { useAsyncEffect } from 'rooks';
+import all from '../api/endpoints/reaction-types/all';
 import { CommentType } from '../models/comment-type';
+import { ReactionTypeType } from '../models/reaction-type-type';
 
 export interface ForumContextType {
   readonly activeComment?: CommentType;
@@ -16,6 +19,7 @@ export interface ForumContextType {
   readonly setRecentlyAddedComment: Dispatch<
     SetStateAction<CommentType | undefined>
   >;
+  readonly reactionTypes: ReactionTypeType[];
 }
 
 export const ForumContext = createContext<ForumContextType>(
@@ -27,6 +31,7 @@ export const ForumProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [recentlyAddedComment, setRecentlyAddedComment] = useState<
     CommentType | undefined
   >();
+  const [reactionTypes, setReactionTypes] = useState<ReactionTypeType[]>([]);
 
   useEffect(() => {
     if (!recentlyAddedComment) {
@@ -40,6 +45,10 @@ export const ForumProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return () => clearTimeout(timeout);
   }, [recentlyAddedComment]);
 
+  useAsyncEffect(async () => {
+    setReactionTypes(await all());
+  }, []);
+
   return (
     <ForumContext.Provider
       value={{
@@ -47,6 +56,7 @@ export const ForumProvider: FC<{ children: ReactNode }> = ({ children }) => {
         setActiveComment,
         recentlyAddedComment,
         setRecentlyAddedComment,
+        reactionTypes,
       }}
     >
       {children}

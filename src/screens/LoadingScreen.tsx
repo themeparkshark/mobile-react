@@ -1,6 +1,12 @@
 import { sample } from 'lodash';
 import { useContext, useEffect, useState } from 'react';
-import { Dimensions, ImageBackground, SafeAreaView, Text, View, } from 'react-native';
+import {
+  Dimensions,
+  ImageBackground,
+  SafeAreaView,
+  Text,
+  View,
+} from 'react-native';
 import { useAsyncEffect, useTimeoutWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getInventory from '../api/endpoints/me/inventory';

@@ -21,25 +21,32 @@ import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
 import { ThreadType } from '../models/thread-type';
 
-const options = [
-  {
-    label: 'Hot',
-    value: 'hottest',
-  },
-  {
-    label: 'New',
-    value: 'latest',
-  },
-];
-
 export default function SocialScreen({ navigation }) {
   const [threads, setThreads] = useState<ThreadType[]>([]);
   const [pinnedThreads, setPinnedThreads] = useState<ThreadType[]>([]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
+  const { labels, urls } = useCrumbs();
+  const options = [
+    {
+      label: labels.hot,
+      value: 'hottest',
+    },
+    {
+      label: labels.new,
+      value: 'latest',
+    },
+    {
+      label: labels.most_comments,
+      value: 'most_comments',
+    },
+    {
+      label: labels.most_reactions,
+      value: 'most_reactions',
+    },
+  ];
   const [filter, setFilter] = useState<SortOption>(options[0]);
-  const { urls } = useCrumbs();
   const { checkPermission } = usePermissions();
   const { player } = useContext(AuthContext);
 
@@ -96,13 +103,7 @@ export default function SocialScreen({ navigation }) {
     <Wrapper>
       <Topbar>
         <TopbarColumn stretch={false}>
-          <CreateThreadModal
-            onSubmit={async () => {
-              setPage(1);
-              setThreads([]);
-              await fetchThreads(1);
-            }}
-          />
+          <CreateThreadModal />
         </TopbarColumn>
         <TopbarColumn>
           <TopbarText>Social</TopbarText>
@@ -134,6 +135,9 @@ export default function SocialScreen({ navigation }) {
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
+            contentContainerStyle={{
+              paddingBottom: 64,
+            }}
             ListHeaderComponent={
               <>
                 <View
@@ -218,7 +222,8 @@ export default function SocialScreen({ navigation }) {
                       setThreads([]);
                       setFilter(activeOption);
                     }}
-                    title="Sort posts by"
+                    title={labels.sort_threads}
+                    resource={labels.threads}
                   />
                 </View>
                 <View>
@@ -235,9 +240,6 @@ export default function SocialScreen({ navigation }) {
                 </View>
               </>
             }
-            ListFooterComponentStyle={{
-              height: 64,
-            }}
             renderItem={({ item }) => (
               <View
                 key={item.id}

@@ -29,6 +29,7 @@ export default function CreateReply({
   const refInput = useRef(null);
   const [keyboardHeight, setKeyboardHeight] = useState(new Animated.Value(0));
   const { labels } = useCrumbs();
+  const [hasPressed, setHasPressed] = useState<boolean>(false);
 
   useEffect(() => {
     if (!activeComment || !refInput) {
@@ -142,10 +143,11 @@ export default function CreateReply({
                   paddingRight: 16,
                 }}
                 onPress={async () => {
-                  if (!content) {
+                  if (!content || hasPressed) {
                     return;
                   }
 
+                  setHasPressed(true);
                   const response = await createComment(
                     thread.id,
                     content,

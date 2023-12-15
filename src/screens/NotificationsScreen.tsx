@@ -1,11 +1,10 @@
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useContext, useEffect, useLayoutEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getNotifications from '../api/endpoints/me/notifications';
 import markAllAsRead from '../api/endpoints/me/notifications/markAllAsRead';
-import updateLastReadNotificationsAt from '../api/endpoints/me/update-last-read-notifications-at';
 import Button from '../components/Button';
 import Loading from '../components/Loading';
 import Notification from '../components/Notification';
@@ -23,10 +22,6 @@ export default function NewsScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const { warnings } = useCrumbs();
-
-  useLayoutEffect(() => {
-    updateLastReadNotificationsAt().then(() => refreshNotificationCount());
-  }, []);
 
   const fetchNotifications = async (page: number) => {
     const response = await getNotifications(page);
@@ -62,6 +57,7 @@ export default function NewsScreen() {
               setNotifications([]);
               setPage(1);
               await fetchNotifications(1);
+              await refreshNotificationCount();
               setLoading(false);
             }}
           >

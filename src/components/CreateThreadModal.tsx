@@ -11,22 +11,20 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
+import * as RootNavigation from '../RootNavigation';
 import createThread from '../api/endpoints/threads/create';
 import useCrumbs from '../hooks/useCrumbs';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
 import Button from './Button';
 
-export default function CreateThreadModal({
-  onSubmit,
-}: {
-  readonly onSubmit: () => void;
-}) {
+export default function CreateThreadModal() {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [title, setTitle] = useState<string>('');
   const [content, setContent] = useState<string>('');
   const { checkPermission, hasPermission } = usePermissions();
   const { labels } = useCrumbs();
+  const [hasPressed, setHasPressed] = useState<boolean>(false);
 
   useEffect(() => {
     if (!modalVisible) {
@@ -122,11 +120,18 @@ export default function CreateThreadModal({
               <TouchableOpacity
                 disabled={!title.length}
                 onPress={async () => {
-                  await createThread({
+                  if (hasPressed) {
+                    return;
+                  }
+
+                  setHasPressed(true);
+                  const newThread = await createThread({
                     title,
                     content,
                   });
-                  onSubmit();
+                  RootNavigation.navigate('Thread', {
+                    thread: newThread.id,
+                  });
                   setModalVisible(false);
                 }}
               >

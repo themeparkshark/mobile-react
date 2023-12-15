@@ -6,6 +6,7 @@ const config = {
   secondary: '#00a5f5',
   tertiary: '#fec90e',
   lightBlue: '#dbf1ff',
+  red: '#ff0000',
 };
 
 export default config;
