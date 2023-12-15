@@ -41,6 +41,20 @@ export default function Avatar({
             width: sizes[size] / 4,
             height: sizes[size] / 4,
             position: 'absolute',
+            top: 0,
+            right: 0,
+            zIndex: 10,
+          }}
+          contentFit="cover"
+        />
+      )}
+      {user.is_subscribed && (
+        <Image
+          source={require('../../assets/images/screens/profile/subscribed.png')}
+          style={{
+            width: sizes[size] / 4,
+            height: sizes[size] / 4,
+            position: 'absolute',
             bottom: 0,
             right: 0,
             zIndex: 10,

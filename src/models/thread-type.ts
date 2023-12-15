@@ -1,5 +1,6 @@
 import { AttachmentType } from './attachment-type';
 import { CommentType } from './comment-type';
+import { ReactionType } from './reaction-type';
 import { TagType } from './tag-type';
 import { UserType } from './user-type';
 
@@ -15,4 +16,6 @@ export interface ThreadType {
   readonly title: string;
   readonly tags: TagType[];
   readonly latest_comment: CommentType;
+  readonly reactions: ReactionType[];
+  readonly current_user_reaction: ReactionType;
 }

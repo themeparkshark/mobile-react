@@ -7,4 +7,6 @@ export interface CommentType {
   readonly user?: UserType;
   readonly content: string;
   readonly created_at: string;
+  readonly deleted_at: string;
+  readonly removed_at: string;
 }

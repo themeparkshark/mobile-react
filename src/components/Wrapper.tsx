@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { ReactNode, useContext } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
+import { NotificationContext } from '../context/NotificationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
@@ -14,6 +15,7 @@ export default function Wrapper({
 }) {
   const { theme } = useContext(ThemeContext);
   const { checkPermission, hasPermission } = usePermissions();
+  const { notificationCount } = useContext(NotificationContext);
 
   const items = [
     {
@@ -94,6 +96,9 @@ export default function Wrapper({
                     }}
                   >
                     <Button
+                      showRedCircle={
+                        notificationCount > 0 && item.text === 'Profile'
+                      }
                       hasPermission={
                         item.permission !== undefined
                           ? hasPermission(item.permission)

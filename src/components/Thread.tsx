@@ -1,3 +1,5 @@
+import { faComment } from '@fortawesome/pro-light-svg-icons/faComment';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
 import { truncate } from 'lodash';
 import { Text, TouchableOpacity, View } from 'react-native';
@@ -7,6 +9,7 @@ import dayjs from '../helpers/dayjs';
 import shortenNumber from '../helpers/shorten-number';
 import { ThreadType } from '../models/thread-type';
 import Avatar from './Avatar';
+import Reactions from './Reactions';
 
 export default function Thread({ thread }: { readonly thread: ThreadType }) {
   return (
@@ -94,6 +97,14 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
               </Text>
             </>
           )}
+          {thread.reactions.length > 0 && (
+            <View style={{ marginTop: 8 }}>
+              <Reactions
+                count={thread.reactions_count}
+                reactions={thread.reactions}
+              />
+            </View>
+          )}
         </View>
         <View
           style={{
@@ -107,12 +118,19 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
               justifyContent: 'center',
               borderRadius: 16,
               padding: 8,
+              flexDirection: 'row',
             }}
           >
+            <FontAwesomeIcon
+              icon={faComment}
+              size={16}
+              color="rgba(0, 0, 0, .8)"
+            />
             <Text
               style={{
                 fontFamily: 'Knockout',
                 fontSize: 18,
+                paddingLeft: 8,
               }}
             >
               {shortenNumber(thread.comments_count)}
