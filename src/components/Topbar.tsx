@@ -1,13 +1,13 @@
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
-import { ReactNode, useContext } from 'react';
+import { ReactElement, ReactNode, useContext } from 'react';
 import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from '../components/Button';
 import { ThemeContext } from '../context/ThemeProvider';
 import Broadcasts from './Broadcasts';
 
-export function BackButton({ onPress }) {
+export function BackButton({ onPress }: { readonly onPress?: () => void }) {
   return (
     <Button
       onPress={async () => {
@@ -34,6 +34,7 @@ export default function Topbar({
   children,
   purple = false,
 }: {
+  readonly children: ReactElement[];
   readonly informationModalId?: number | null;
   readonly rightButton?: ReactNode | null;
   readonly leftButton?: ReactNode | null;

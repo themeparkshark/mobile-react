@@ -56,7 +56,10 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
   const requestLogin = async (credential: AppleAuthenticationCredential) => {
     try {
-      const response = await login(credential);
+      const response = await login({
+        user: credential.user,
+        identity_token: credential.identityToken ?? '',
+      });
       setToken(response.token);
 
       await SecureStore.setItemAsync('token', response.token);

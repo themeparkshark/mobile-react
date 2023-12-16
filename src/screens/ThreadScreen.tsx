@@ -275,12 +275,14 @@ export default function ThreadScreen({ route }) {
                         )}
                       </ReactionsDropdown>
                     </View>
-                    <View>
-                      <CreateReport
-                        model={{ id: currentThread.id, type: 'thread' }}
-                        showText
-                      />
-                    </View>
+                    {player && (
+                      <View>
+                        <CreateReport
+                          model={{ id: currentThread.id, type: 'thread' }}
+                          showText
+                        />
+                      </View>
+                    )}
                   </View>
                   {currentThread.reactions_count > 0 && (
                     <View style={{ marginTop: 16, zIndex: -1 }}>

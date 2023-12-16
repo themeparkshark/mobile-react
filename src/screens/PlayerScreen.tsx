@@ -114,28 +114,30 @@ export default function PlayerScreen({ route, navigation }) {
           show: Boolean(currentPlayer.username),
           image: require('../../assets/images/screens/explore/base.png'),
           onPress: async () => {
-            Alert.alert(
-              vsprintf(prompts.report_username, [currentPlayer.screen_name]),
-              '',
-              [
-                {
-                  text: 'Cancel',
-                  style: 'cancel',
-                },
-                {
-                  text: 'Ok',
-                  onPress: async () => {
-                    await reportPlayer(currentPlayer.id);
-
-                    Alert.alert(messages.report_created, '', [
-                      {
-                        text: 'Ok',
-                      },
-                    ]);
+            if (checkPermission(PermissionEnums.CreateReports)) {
+              Alert.alert(
+                vsprintf(prompts.report_username, [currentPlayer.screen_name]),
+                '',
+                [
+                  {
+                    text: 'Cancel',
+                    style: 'cancel',
                   },
-                },
-              ]
-            );
+                  {
+                    text: 'Ok',
+                    onPress: async () => {
+                      await reportPlayer(currentPlayer.id);
+
+                      Alert.alert(messages.report_created, '', [
+                        {
+                          text: 'Ok',
+                        },
+                      ]);
+                    },
+                  },
+                ]
+              );
+            }
           },
           text: 'Report',
           permission: PermissionEnums.CreateReports,

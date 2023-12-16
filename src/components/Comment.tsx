@@ -118,9 +118,11 @@ export default function Comment({
                 <FontAwesomeIcon icon={faReply} size={16} color="black" />
               </TouchableOpacity>
             </View>
-            <View>
-              <CreateReport model={{ id: comment.id, type: 'comment' }} />
-            </View>
+            {player && (
+              <View>
+                <CreateReport model={{ id: comment.id, type: 'comment' }} />
+              </View>
+            )}
             {comment.player?.id === player?.id && (
               <View>
                 <TouchableOpacity
