@@ -43,7 +43,10 @@ export default function Item({
           width: '100%',
         }}
         onPress={async () => {
-          if (player?.inventory && player.inventory.skin_item.id === item.id) {
+          if (
+            player?.inventory
+            && (player.inventory.skin_item.id === item.id || player.inventory.background_item.id === item.id)
+          ) {
             return false;
           }
 
