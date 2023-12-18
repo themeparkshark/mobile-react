@@ -96,7 +96,7 @@ export default function WelcomeScreen({ navigation }) {
             width: '55%',
             textAlign: 'center',
           }}
-          autoCapitalize="none"
+          autoCapitalize="characters"
           onChangeText={setUsername}
           value={username}
           maxLength={12}

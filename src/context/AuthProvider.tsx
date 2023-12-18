@@ -2,7 +2,7 @@ import { AppleAuthenticationCredential } from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
 import Storage from 'expo-storage';
 import { createContext, FC, ReactNode, useEffect, useState } from 'react';
-import { useAsyncEffect, useTimeoutWhen } from 'rooks';
+import { useAsyncEffect } from 'rooks';
 import client from '../api/client';
 import login from '../api/endpoints/auth/login';
 import getMe from '../api/endpoints/me/me';
@@ -37,14 +37,6 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       RootNavigation.navigate('Loading');
     }
   }, [token]);
-
-  useTimeoutWhen(
-    () => {
-      RootNavigation.navigate('Welcome');
-    },
-    5000,
-    Boolean(player && !player.username)
-  );
 
   useEffect(() => {
     SecureStore.getItemAsync('token').then((_token) => {
