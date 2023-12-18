@@ -116,6 +116,7 @@ export default function StoreScreen({ route }) {
                 catalog.currencies.map((currency) => {
                   return (
                     <View
+                      key={currency.id}
                       style={{
                         backgroundColor: 'rgba(0, 0, 0, .5)',
                         paddingLeft: 12,

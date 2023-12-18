@@ -1,8 +1,8 @@
 import { Alert } from 'react-native';
 import { vsprintf } from 'sprintf-js';
-import acceptFriendRequest from '../api/endpoints/me/players/accept-friend-request';
-import sendFriendRequest from '../api/endpoints/me/players/send-friend-request';
-import unfriend from '../api/endpoints/me/players/unfriend';
+import acceptFriendRequest from '../api/endpoints/players/accept-friend-request';
+import sendFriendRequest from '../api/endpoints/players/send-friend-request';
+import unfriend from '../api/endpoints/players/unfriend';
 import { PlayerType } from '../models/player-type';
 import useCrumbs from './useCrumbs';
 

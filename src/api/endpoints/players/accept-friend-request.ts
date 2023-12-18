@@ -1,6 +1,6 @@
-import { ApiResponseType } from '../../../../models/api-response-type';
-import { PlayerType } from '../../../../models/player-type';
-import client from '../../../client';
+import { ApiResponseType } from '../../../models/api-response-type';
+import { PlayerType } from '../../../models/player-type';
+import client from '../../client';
 
 export default async function acceptFriendRequest(
   player: PlayerType
