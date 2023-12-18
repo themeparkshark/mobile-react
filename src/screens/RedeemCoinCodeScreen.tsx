@@ -92,7 +92,7 @@ export default function RedeemCoinCodeScreen() {
                   width: '55%',
                   textAlign: 'center',
                 }}
-                autoCapitalize="none"
+                autoCapitalize="characters"
                 onChangeText={setCoinCode}
                 value={coinCode}
                 maxLength={9}
