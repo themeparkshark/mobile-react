@@ -7,7 +7,7 @@ export default async function items(itemType: number, page: number) {
     '/me/inventory/items',
     {
       params: {
-        itemType,
+        item_type_id: itemType,
         page,
       },
     }

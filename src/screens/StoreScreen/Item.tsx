@@ -8,7 +8,7 @@ import { ItemType } from '../../models/item-type';
 
 export default function Item({ item }: { readonly item: ItemType }) {
   const { player } = useContext(AuthContext);
-  const { purchaseItem } = usePurchaseItem();
+  const { purchaseItem, hasPurchased } = usePurchaseItem();
   const { labels } = useCrumbs();
 
   return (
@@ -22,6 +22,7 @@ export default function Item({ item }: { readonly item: ItemType }) {
       }}
       style={{
         position: 'relative',
+        width: '100%',
       }}
     >
       {item.item_type.id === 8 && (
@@ -85,6 +86,7 @@ export default function Item({ item }: { readonly item: ItemType }) {
           },
           shadowOpacity: 0.4,
           shadowRadius: 0,
+          width: '100%',
         }}
       >
         <ImageBackground
@@ -92,7 +94,7 @@ export default function Item({ item }: { readonly item: ItemType }) {
           resizeMode="cover"
           style={{
             borderRadius: 3,
-            width: 100,
+            width: '100%',
             overflow: 'hidden',
           }}
         >
@@ -104,16 +106,13 @@ export default function Item({ item }: { readonly item: ItemType }) {
             {item.item_type.name === 'Body item' ? (
               <ImageBackground
                 source={require('../../../assets/images/screens/inventory/shark.png')}
-                style={{
-                  margin: -12,
-                }}
               >
                 <Image
                   source={item.paper_url}
                   style={{
-                    aspectRatio: 1,
+                    aspectRatio: 1 / 0.8,
                   }}
-                  contentFit="contain"
+                  contentFit="cover"
                 />
               </ImageBackground>
             ) : (
@@ -121,7 +120,7 @@ export default function Item({ item }: { readonly item: ItemType }) {
                 source={item.icon_url}
                 style={{
                   width: '100%',
-                  height: 80,
+                  aspectRatio: 1 / 0.8,
                 }}
                 contentFit="contain"
               />

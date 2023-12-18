@@ -7,15 +7,8 @@ import updateInventory from '../api/endpoints/me/inventory/update-inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
-import { ItemTypeType } from '../models/item-type-type';
 
-export default function Item({
-  item,
-  currentItemType,
-}: {
-  readonly currentItemType: ItemTypeType;
-  readonly item: ItemType;
-}) {
+export default function Item({ item }: { readonly item: ItemType }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
 
@@ -29,9 +22,9 @@ export default function Item({
       <Pressable
         style={{
           backgroundColor: 'lightblue',
-          borderWidth: 6,
+          borderWidth: 3,
           borderColor: 'white',
-          borderRadius: 10,
+          borderRadius: 12,
           alignSelf: 'center',
           shadowOffset: {
             width: 0,
@@ -43,7 +36,11 @@ export default function Item({
           width: '100%',
         }}
         onPress={async () => {
-          if (player?.inventory && player.inventory.skin_item.id === item.id) {
+          if (
+            player?.inventory &&
+            (player.inventory.skin_item.id === item.id ||
+              player.inventory.background_item.id === item.id)
+          ) {
             return false;
           }
 
@@ -53,6 +50,25 @@ export default function Item({
           await refreshPlayer();
         }}
       >
+        {item.is_coin_code_item && (
+          <View
+            style={{
+              zIndex: 20,
+              position: 'absolute',
+              top: -12,
+              right: -12,
+            }}
+          >
+            <Image
+              source={require('../../assets/images/modals/brown_closed.png')}
+              style={{
+                width: 25,
+                height: 25,
+              }}
+              contentFit="contain"
+            />
+          </View>
+        )}
         <View
           style={{
             position: 'absolute',
@@ -73,7 +89,7 @@ export default function Item({
             zIndex: 10,
             alignItems: 'center',
             justifyContent: 'center',
-            borderRadius: 4,
+            borderRadius: 10,
           }}
         >
           <FontAwesomeIcon icon={faCircleCheck} size={56} color={'white'} />
@@ -83,7 +99,7 @@ export default function Item({
             padding: 12,
           }}
         >
-          {currentItemType.name === 'Body item' && (
+          {item.item_type.id === 4 && (
             <ImageBackground
               source={require('../../assets/images/screens/inventory/shark.png')}
               style={{
@@ -95,11 +111,11 @@ export default function Item({
                 style={{
                   aspectRatio: 1,
                 }}
-                contentFit="contain"
+                contentFit="cover"
               />
             </ImageBackground>
           )}
-          {currentItemType.name !== 'Body item' && (
+          {item.item_type.id !== 4 && (
             <Image
               source={item.icon_url}
               style={{

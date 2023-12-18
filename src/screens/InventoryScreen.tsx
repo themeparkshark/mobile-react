@@ -102,8 +102,8 @@ export default function InventoryScreen() {
                 width: '100%',
                 bottom: 0,
                 borderColor: 'white',
-                borderTopWidth: 6,
-                borderBottomWidth: 6,
+                borderTopWidth: 3,
+                borderBottomWidth: 3,
               }}
               horizontal={true}
             >
@@ -163,8 +163,7 @@ export default function InventoryScreen() {
             <View
               style={{
                 flex: 1,
-                paddingLeft: 4,
-                paddingRight: 4,
+                padding: 4,
               }}
             >
               {itemsLoading && (
@@ -181,9 +180,7 @@ export default function InventoryScreen() {
               {!itemsLoading && (
                 <FlashList
                   data={items}
-                  renderItem={({ item }) => (
-                    <Item item={item} currentItemType={currentItemType} />
-                  )}
+                  renderItem={({ item }) => <Item item={item} />}
                   estimatedItemSize={15}
                   keyExtractor={(item) => item.id.toString()}
                   numColumns={3}

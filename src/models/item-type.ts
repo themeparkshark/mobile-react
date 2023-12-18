@@ -15,4 +15,5 @@ export interface ItemType {
   readonly is_hidden: boolean;
   readonly is_clearance: boolean;
   readonly currency: CurrencyType;
+  readonly is_coin_code_item: boolean;
 }

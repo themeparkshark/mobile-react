@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { Alert } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
@@ -12,13 +12,14 @@ export default function usePurchaseItem() {
   const { playSound } = useContext(SoundEffectContext);
   const { errors, messages, prompts } = useCrumbs();
   const { player, isReady, refreshPlayer } = useContext(AuthContext);
+  const [hasPurchased, setHasPurchased] = useState<boolean>(false);
 
   const purchaseItem = async (item: ItemType) => {
     if (!isReady || !player) {
       return;
     }
 
-    if (item.has_purchased) {
+    if (item.has_purchased || hasPurchased) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
 
       return Alert.alert(
@@ -74,6 +75,8 @@ export default function usePurchaseItem() {
         onPress: async () => {
           await purchase(item);
           await refreshPlayer();
+
+          setHasPurchased(true);
 
           playSound(require('../../assets/sounds/purchase_item_success.mp3'));
 
