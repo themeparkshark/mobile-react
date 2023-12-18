@@ -33,6 +33,7 @@ export default function LoadingScreen() {
       setProgress(100);
       return;
     }
+
     await requestPark();
   }, [isReady, permissionGranted]);
 

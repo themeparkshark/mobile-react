@@ -1,6 +1,7 @@
+import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useContext, useState } from 'react';
+import { useCallback, useContext, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Callout, Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
@@ -41,6 +42,15 @@ export default function ExploreScreen() {
     useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (player && !player.username) {
+        RootNavigation.navigate('Welcome');
+        return;
+      }
+    }, [player?.username])
+  );
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);

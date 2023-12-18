@@ -154,7 +154,8 @@ export default function StoreScreen({ route }) {
                           marginLeft: 8,
                         }}
                       >
-                        {player[currency.name.toLowerCase()]} {currency.name}
+                        {player[currency.name.toLowerCase()] ?? 0}{' '}
+                        {currency.name}
                       </Text>
                     </View>
                   );

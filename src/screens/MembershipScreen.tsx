@@ -173,7 +173,9 @@ export default function MembershipScreen({ route }) {
                     <YellowButton
                       onPress={async () => {
                         try {
-                          await adapty.makePurchase(product);
+                          await adapty.makePurchase(
+                            product as AdaptyPaywallProduct
+                          );
                           setStartTimer(true);
                         } catch (error) {
                           Alert.alert(

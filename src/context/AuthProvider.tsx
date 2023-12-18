@@ -23,8 +23,8 @@ export const AuthContext = createContext<AuthContextType>(
 );
 
 export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [player, setPlayer] = useState<PlayerType | null>(null);
-  const [token, setToken] = useState<string>('');
+  const [player, setPlayer] = useState<PlayerType>(null);
+  const [token, setToken] = useState<string>();
   const [isReady, setIsReady] = useState<boolean>(false);
 
   useAsyncEffect(async () => {
