@@ -13,6 +13,7 @@ interface CrumbsType {
     readonly checking_again: string;
     readonly choose_daily_gift: string;
     readonly clearance: string;
+    readonly continue_as_guest: string;
     readonly copyright: string;
     readonly edit: string;
     readonly enter_a_username: string;
