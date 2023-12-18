@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useAsyncEffect, useTimeoutWhen } from 'rooks';
+import { useAsyncEffect, useEffectOnceWhen, useTimeoutWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import Progress from '../components/Progress';
 import { AuthContext } from '../context/AuthProvider';
@@ -16,16 +16,21 @@ import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function LoadingScreen() {
-  const { isReady } = useContext(AuthContext);
+  const { isReady, player } = useContext(AuthContext);
   const { requestPark, parkLoaded, permissionGranted } =
     useContext(LocationContext);
   const { labels } = useCrumbs();
   const { theme } = useContext(ThemeContext);
   const [progress, setProgress] = useState<number>(0);
   const [fact, setFact] = useState<string>();
+  const [hasUsername] = useState<boolean>(!!player?.username);
+
+  useEffectOnceWhen(() => {
+    RootNavigation.navigate('Welcome');
+  }, Boolean(isReady && !hasUsername));
 
   useAsyncEffect(async () => {
-    if (!isReady) {
+    if (!isReady || !hasUsername) {
       return;
     }
 
@@ -35,23 +40,23 @@ export default function LoadingScreen() {
     }
 
     await requestPark();
-  }, [isReady, permissionGranted]);
+  }, [isReady, permissionGranted, hasUsername]);
 
   useAsyncEffect(async () => {
-    if (!isReady) {
+    if (!isReady || !hasUsername) {
       return;
     }
 
     setProgress(50);
-  }, [isReady]);
+  }, [isReady, hasUsername]);
 
   useEffect(() => {
-    if (!parkLoaded) {
+    if (!parkLoaded || !hasUsername) {
       return;
     }
 
     setProgress(90);
-  }, [parkLoaded]);
+  }, [parkLoaded, hasUsername]);
 
   useEffect(() => {
     setFact(sample(labels.splash_screen_facts));
@@ -70,7 +75,7 @@ export default function LoadingScreen() {
       RootNavigation.navigate('Explore');
     },
     500,
-    progress === 100
+    progress === 100 && hasUsername
   );
 
   return (

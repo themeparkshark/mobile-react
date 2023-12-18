@@ -43,15 +43,6 @@ export default function ExploreScreen() {
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (player && !player.username) {
-        RootNavigation.navigate('Welcome');
-        return;
-      }
-    }, [player?.username])
-  );
-
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
     setRedeemables(await currentRedeemables());
