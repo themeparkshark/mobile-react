@@ -215,9 +215,9 @@ export default function PinSwap({
                           }}
                           style={{
                             backgroundColor: 'lightblue',
-                            borderWidth: 6,
+                            borderWidth: 3,
                             borderColor: 'white',
-                            borderRadius: 10,
+                            borderRadius: 12,
                             alignSelf: 'center',
                             shadowOffset: {
                               width: 0,
@@ -244,7 +244,7 @@ export default function PinSwap({
                               zIndex: 10,
                               alignItems: 'center',
                               justifyContent: 'center',
-                              borderRadius: 4,
+                              borderRadius: 10,
                             }}
                           >
                             <FontAwesomeIcon
@@ -331,12 +331,6 @@ export default function PinSwap({
                         playSound(
                           require('../../assets/sounds/pin_swap_complete.mp3')
                         );
-
-                        Alert.alert(messages.pin_swap_created, '', [
-                          {
-                            text: 'Ok',
-                          },
-                        ]);
 
                         setModalVisible(false);
                         onClose();

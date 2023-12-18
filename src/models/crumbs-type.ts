@@ -13,7 +13,6 @@ interface CrumbsType {
     readonly checking_again: string;
     readonly choose_daily_gift: string;
     readonly clearance: string;
-    readonly coins: string;
     readonly copyright: string;
     readonly edit: string;
     readonly enter_a_username: string;
@@ -22,7 +21,6 @@ interface CrumbsType {
     readonly find_friends: string;
     readonly free_trial: string;
     readonly hot: string;
-    readonly keys: string;
     readonly loading: string;
     readonly load_more_replies: string;
     readonly membership: string;
@@ -82,7 +80,6 @@ interface CrumbsType {
     readonly friend_request_accepted: string;
     readonly friend_request_sent: string;
     readonly item_purchased: string;
-    readonly pin_swap_created: string;
     readonly report_created: string;
     readonly thread_deleted: string;
   };
