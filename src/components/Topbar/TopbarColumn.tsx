@@ -1,6 +1,13 @@
+import { ReactElement } from 'react';
 import { View } from 'react-native';
 
-export default function TopbarColumn({ children, stretch = true }) {
+export default function TopbarColumn({
+  children,
+  stretch = true,
+}: {
+  readonly children?: ReactElement;
+  readonly stretch?: boolean;
+}) {
   return (
     <View
       style={{
@@ -11,7 +18,7 @@ export default function TopbarColumn({ children, stretch = true }) {
         minWidth: 35,
       }}
     >
-      {children}
+      {children && children}
     </View>
   );
 }

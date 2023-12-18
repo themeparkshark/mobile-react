@@ -37,9 +37,8 @@ export default function Item({ item }: { readonly item: ItemType }) {
         }}
         onPress={async () => {
           if (
-            player?.inventory &&
-            (player.inventory.skin_item.id === item.id ||
-              player.inventory.background_item.id === item.id)
+            player?.inventory
+            && (player.inventory.skin_item.id === item.id || player.inventory.background_item.id === item.id)
           ) {
             return false;
           }

@@ -15,13 +15,13 @@ import useCrumbs from '../hooks/useCrumbs';
 
 export default function CreateReport({
   model,
-  showText,
+  showText = false,
 }: {
   readonly model: {
     readonly id: number;
     readonly type: string;
   };
-  readonly showText: boolean;
+  readonly showText?: boolean;
 }) {
   const [modalVisible, setModalVisible] = useState(false);
   const { labels, messages } = useCrumbs();

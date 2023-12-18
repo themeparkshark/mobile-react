@@ -96,10 +96,16 @@ interface CrumbsType {
     readonly remove_friend: string;
     readonly send_friend_request: string;
     readonly permissions: {
+      readonly add_friends: string;
+      readonly become_a_member: string;
+      readonly create_compliments: string;
+      readonly create_reports: string;
       readonly create_threads: string;
       readonly redeem_coin_codes: string;
+      readonly redeem_mascot_gifts: string;
       readonly trade_pins: string;
       readonly view_arcade: string;
+      readonly view_secret_store: string;
       readonly view_profile: string;
       readonly watch_content: string;
     };
