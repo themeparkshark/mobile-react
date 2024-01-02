@@ -1,3 +1,6 @@
+import { faArrowRight } from '@fortawesome/pro-light-svg-icons/faArrowRight';
+import { faMicrophone } from '@fortawesome/pro-light-svg-icons/faMicrophone';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import * as WebBrowser from 'expo-web-browser';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { LiveEventType } from '../models/live-event-type';
@@ -15,6 +18,7 @@ export default function LiveEvents({
           marginBottom: 16,
           flexDirection: 'row',
           alignItems: 'center',
+          columnGap: 8,
         }}
         onPress={() => {
           WebBrowser.openBrowserAsync(liveEvent.permalink);
@@ -25,9 +29,16 @@ export default function LiveEvents({
             backgroundColor: 'red',
             padding: 4,
             borderRadius: 4,
-            marginRight: 8,
+            flexDirection: 'row',
+            columnGap: 4,
+            alignItems: 'center',
           }}
         >
+          <FontAwesomeIcon
+            icon={faMicrophone}
+            size={14}
+            style={{ color: 'white' }}
+          />
           <Text
             style={{
               textTransform: 'uppercase',
@@ -51,6 +62,9 @@ export default function LiveEvents({
           >
             {liveEvent.title}
           </Text>
+        </View>
+        <View>
+          <FontAwesomeIcon icon={faArrowRight} size={16} />
         </View>
       </TouchableOpacity>
     );

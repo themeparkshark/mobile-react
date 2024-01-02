@@ -153,7 +153,7 @@ export default function SocialScreen({ navigation }) {
                 >
                   <View
                     style={{
-                      marginBottom: 32,
+                      marginBottom: 16,
                     }}
                   >
                     <ButtonRow
@@ -174,7 +174,7 @@ export default function SocialScreen({ navigation }) {
                               navigation.navigate('Membership');
                             }
                           },
-                          text: 'Member',
+                          text: 'Become a Member',
                           permission: PermissionEnums.BecomeAMember,
                           show:
                             !player || Boolean(player && !player.is_subscribed),
