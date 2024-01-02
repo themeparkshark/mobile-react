@@ -16,4 +16,5 @@ export interface ItemType {
   readonly currency: CurrencyType;
   readonly is_coin_code_item: boolean;
   readonly is_wearable: boolean;
+  readonly is_member_item: boolean;
 }

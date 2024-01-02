@@ -8,7 +8,7 @@ import { ItemType } from '../../models/item-type';
 
 export default function Item({ item }: { readonly item: ItemType }) {
   const { player } = useContext(AuthContext);
-  const { purchaseItem, hasPurchased } = usePurchaseItem();
+  const { purchaseItem } = usePurchaseItem();
   const { labels } = useCrumbs();
 
   return (
@@ -25,19 +25,24 @@ export default function Item({ item }: { readonly item: ItemType }) {
         width: '100%',
       }}
     >
-      {item.item_type.id === 8 && (
-        <Image
-          source={require('../../../assets/images/screens/store/pin_badge.png')}
+      {item.is_member_item && (
+        <View
           style={{
-            width: 25,
-            height: 25,
-            zIndex: 10,
+            zIndex: 20,
             position: 'absolute',
-            top: -10,
-            right: -10,
+            top: -12,
+            right: -12,
           }}
-          contentFit="contain"
-        />
+        >
+          <Image
+            source={require('../../../assets/images/screens/profile/subscribed.png')}
+            style={{
+              width: 25,
+              height: 25,
+            }}
+            contentFit="contain"
+          />
+        </View>
       )}
       {item.is_clearance && (
         <View

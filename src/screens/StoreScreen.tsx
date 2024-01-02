@@ -1,13 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useContext, useState } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  SafeAreaView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getItems from '../api/endpoints/catalogs/items';
@@ -99,7 +93,7 @@ export default function StoreScreen({ route }) {
             uri: currentStore?.background_url,
           }}
         >
-          <SafeAreaView
+          <View
             style={{
               flex: 1,
             }}
@@ -207,7 +201,7 @@ export default function StoreScreen({ route }) {
                 />
               </View>
             )}
-          </SafeAreaView>
+          </View>
         </ImageBackground>
       )}
     </>
