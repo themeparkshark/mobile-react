@@ -8,4 +8,5 @@ export interface TaskType {
   readonly longitude: string;
   readonly name: string;
   readonly times_completed: number;
+  readonly has_completed: boolean;
 }

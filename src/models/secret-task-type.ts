@@ -6,4 +6,5 @@ export interface SecretTaskType {
   readonly latitude: string;
   readonly longitude: string;
   readonly name: string;
+  readonly has_completed: boolean;
 }

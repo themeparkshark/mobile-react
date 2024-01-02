@@ -4,12 +4,9 @@ import { useState } from 'react';
 import { ImageBackground, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
-import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
-import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
-import getTasks from '../api/endpoints/parks/getTasks';
-import getCompletedArchivedTasks from '../api/endpoints/players/parks/getCompletedArchivedTasks';
-import getCompletedSecretTasks from '../api/endpoints/players/parks/getCompletedSecretTasks';
-import getCompletedTasks from '../api/endpoints/players/parks/getCompletedTasks';
+import getArchivedTasks from '../api/endpoints/players/parks/getArchivedTasks';
+import getSecretTasks from '../api/endpoints/players/parks/getSecretTasks';
+import getTasks from '../api/endpoints/players/parks/getTasks';
 import getVisitedPark from '../api/endpoints/players/visited-parks/getPark';
 import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
@@ -25,38 +22,16 @@ import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
+import ParkItemModal from "../components/ParkItemModal";
 
 export default function ParkScreen({ route }) {
   const { park, player } = route.params;
   const [currentPark, setCurrentPark] = useState<ParkType>();
   const [archivedTasks, setArchivedTasks] = useState<TaskType[]>([]);
   const [tasks, setTasks] = useState<TaskType[]>([]);
-  const [completedArchivedTasks, setCompletedArchivedTasks] = useState<
-    TaskType[]
-  >([]);
   const [secretTasks, setSecretTasks] = useState<SecretTaskType[]>([]);
-  const [completedTasks, setCompletedTasks] = useState<TaskType[]>([]);
-  const [completedSecretTasks, setCompletedSecretTasks] = useState<
-    SecretTaskType[]
-  >([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { labels } = useCrumbs();
-
-  const hasCompletedTask = (task: number) => {
-    return completedTasks.find((completedTask) => completedTask.id === task);
-  };
-
-  const hasCompletedSecretTask = (secretTask: number) => {
-    return completedSecretTasks.find(
-      (completedSecretTask) => completedSecretTask.id === secretTask
-    );
-  };
-
-  const hasCompletedArchivedTask = (task: number) => {
-    return completedArchivedTasks.find(
-      (archivedTask) => archivedTask.id === task
-    );
-  };
 
   const silver =
     currentPark && currentPark.park_coins_count >= 50
@@ -75,12 +50,9 @@ export default function ParkScreen({ route }) {
 
   useAsyncEffect(async () => {
     setCurrentPark(await getVisitedPark(park, player));
-    setTasks(await getTasks(park));
-    setSecretTasks(await getSecretTasks(park));
-    setCompletedTasks(await getCompletedTasks(park, player));
-    setCompletedSecretTasks(await getCompletedSecretTasks(park, player));
-    setArchivedTasks(await getArchivedTasks(park));
-    setCompletedArchivedTasks(await getCompletedArchivedTasks(park, player));
+    setTasks(await getTasks(park, player));
+    setSecretTasks(await getSecretTasks(park, player));
+    setArchivedTasks(await getArchivedTasks(park, player));
     setLoading(false);
   }, []);
 
@@ -125,24 +97,101 @@ export default function ParkScreen({ route }) {
                 >
                   <View
                     style={{
-                      backgroundColor: config.secondary,
-                      borderColor: 'white',
-                      borderWidth: 3,
-                      borderRadius: 10,
+                      marginBottom: 16,
+                      columnGap: 16,
+                      flexDirection: 'row',
+                      alignItems: 'center',
                     }}
                   >
                     <View
                       style={{
-                        padding: 8,
+                        flex: 1,
                       }}
                     >
-                      <Progress progress={currentPark.completion_rate} />
+                      <Image
+                        source={{
+                          uri: currentPark.image_url,
+                        }}
+                        style={{
+                          borderColor: 'white',
+                          borderWidth: 3,
+                          borderRadius: 10,
+                          height: 88,
+                          width: '100%',
+                        }}
+                        contentFit="cover"
+                      />
                     </View>
+                    {currentPark.completion_item && (
+                      <View
+                        style={{
+                          width: 100,
+                        }}
+                      >
+                        <ImageBackground
+                          source={require('../../assets/images/screens/store/gradient.png')}
+                          resizeMode="cover"
+                          style={{
+                            borderColor: 'white',
+                            borderWidth: 3,
+                            borderRadius: 10,
+                            overflow: 'hidden',
+                            flex: 1,
+                          }}
+                        >
+                          <View
+                            style={{
+                              padding: 10,
+                              justifyContent: 'center',
+                              flex: 1,
+                            }}
+                          >
+                            <ParkItemModal item={currentPark.completion_item}>
+                              {currentPark.completion_item.item_type.id === 4 ? (
+                                <ImageBackground
+                                  source={require('../../assets/images/screens/inventory/shark.png')}
+                                  style={{
+                                    aspectRatio: 1 / 0.8,
+                                  }}
+                                >
+                                  <Image
+                                    source={currentPark.completion_item.paper_url}
+                                    style={{
+                                      aspectRatio: 1 / 0.8,
+                                    }}
+                                    contentFit="cover"
+                                  />
+                                </ImageBackground>
+                              ) : (
+                                <Image
+                                  source={currentPark.completion_item.icon_url}
+                                  style={{
+                                    width: 80,
+                                    aspectRatio: 1 / 0.8,
+                                  }}
+                                  contentFit="contain"
+                                />
+                              )}
+                            </ParkItemModal>
+                          </View>
+                        </ImageBackground>
+                      </View>
+                    )}
+                  </View>
+                  <View
+                    style={{
+                      backgroundColor: config.secondary,
+                      borderColor: 'white',
+                      borderWidth: 3,
+                      borderRadius: 10,
+                      padding: 8,
+                    }}
+                  >
+                    <Progress progress={currentPark.completion_rate} />
                     <View
                       style={{
-                        padding: 8,
-                        borderTopColor: config.primary,
-                        borderTopWidth: 3,
+                        paddingTop: 8,
+                        rowGap: 4,
                       }}
                     >
                       <Text
@@ -160,11 +209,48 @@ export default function ParkScreen({ route }) {
                           textShadowRadius: 0,
                         }}
                       >
+                        {vsprintf(labels.park_completion_rate, [
+                          currentPark.completion_rate,
+                        ])}
+                      </Text>
+                      <Text
+                        style={{
+                          color: 'white',
+                          fontSize: 16,
+                          textAlign: 'center',
+                          fontFamily: 'Knockout',
+                          textTransform: 'uppercase',
+                          textShadowColor: 'rgba(0, 0, 0, .5)',
+                          textShadowOffset: {
+                            width: 1,
+                            height: 1,
+                          },
+                          textShadowRadius: 0,
+                        }}
+                      >
                         {vsprintf(labels.park_tasks, [
                           currentPark.completed_tasks_count +
-                            currentPark.completed_secret_tasks_count,
+                          currentPark.completed_secret_tasks_count,
                           currentPark.tasks_count +
-                            currentPark.secret_tasks_count,
+                          currentPark.secret_tasks_count,
+                        ])}
+                      </Text>
+                      <Text
+                        style={{
+                          color: 'white',
+                          fontSize: 16,
+                          textAlign: 'center',
+                          fontFamily: 'Knockout',
+                          textTransform: 'uppercase',
+                          textShadowColor: 'rgba(0, 0, 0, .5)',
+                          textShadowOffset: {
+                            width: 1,
+                            height: 1,
+                          },
+                          textShadowRadius: 0,
+                        }}
+                      >
+                        {vsprintf(labels.park_coins, [
                           currentPark.park_coins_count,
                           `coin${
                             currentPark.park_coins_count === 1 ? '' : 's'
@@ -339,7 +425,7 @@ export default function ParkScreen({ route }) {
                                       paddingLeft: index === 0 ? 0 : 12,
                                     }}
                                   >
-                                    {hasCompletedSecretTask(secretTask.id) ? (
+                                    {secretTask.has_completed ? (
                                       <TaskCoinModal
                                         task={secretTask}
                                         isSecretTask
@@ -413,14 +499,11 @@ export default function ParkScreen({ route }) {
                                       paddingLeft: index === 0 ? 0 : 12,
                                     }}
                                   >
-                                    {hasCompletedTask(task.id) ? (
+                                    {task.has_completed ? (
                                       <TaskCoinModal
                                         task={task}
                                         timesCompleted={
-                                          completedTasks.find(
-                                            (completedTask) =>
-                                              completedTask.id === task.id
-                                          )?.times_completed ?? 0
+                                          task.times_completed ?? 0
                                         }
                                       />
                                     ) : (
@@ -492,17 +575,11 @@ export default function ParkScreen({ route }) {
                                       paddingLeft: index === 0 ? 0 : 12,
                                     }}
                                   >
-                                    {hasCompletedArchivedTask(
-                                      archivedTask.id
-                                    ) ? (
+                                    {archivedTask.has_completed ? (
                                       <TaskCoinModal
                                         task={archivedTask}
                                         timesCompleted={
-                                          completedArchivedTasks.find(
-                                            (completedTask) =>
-                                              completedTask.id ===
-                                              archivedTask.id
-                                          )?.times_completed ?? 0
+                                          archivedTask.times_completed ?? 0
                                         }
                                       />
                                     ) : (

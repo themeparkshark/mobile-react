@@ -34,6 +34,7 @@ interface CrumbsType {
     readonly most_reactions: string;
     readonly new: string;
     readonly park_completion_rate: string;
+    readonly park_coins: string;
     readonly park_tasks: string;
     readonly payment_complete: string;
     readonly pin_packs: string;

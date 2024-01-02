@@ -2,7 +2,7 @@ import { ApiResponseType } from '../../../../models/api-response-type';
 import { SecretTaskType } from '../../../../models/secret-task-type';
 import client from '../../../client';
 
-export default async function getCompletedSecretTasks(
+export default async function getSecretTasks(
   park: number,
   player: number
 ): Promise<SecretTaskType[]> {

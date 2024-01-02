@@ -2,7 +2,7 @@ import { ApiResponseType } from '../../../../models/api-response-type';
 import { TaskType } from '../../../../models/task-type';
 import client from '../../../client';
 
-export default async function getCompletedArchivedTasks(
+export default async function getArchivedTasks(
   park: number,
   player: number
 ): Promise<TaskType[]> {

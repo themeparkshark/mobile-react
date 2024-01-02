@@ -9,6 +9,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ItemType } from '../models/item-type';
+import config from "../config";
 
 export default function Item({ item }: { readonly item: ItemType }) {
   const { player, refreshPlayer } = useContext(AuthContext);
@@ -25,7 +26,7 @@ export default function Item({ item }: { readonly item: ItemType }) {
     >
       <Pressable
         style={{
-          backgroundColor: 'lightblue',
+          backgroundColor: config.lightBlue,
           borderWidth: 3,
           borderColor: 'white',
           borderRadius: 12,

@@ -1,4 +1,5 @@
 import { StoreType } from './store-type';
+import { ItemType } from "./item-type";
 
 export interface ParkType {
   readonly catalog_id: number;
@@ -14,4 +15,5 @@ export interface ParkType {
   readonly secret_tasks_count: number;
   readonly stores: StoreType[];
   readonly tasks_count: number;
+  readonly completion_item: ItemType;
 }
