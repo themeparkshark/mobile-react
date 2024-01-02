@@ -9,7 +9,7 @@ import getVisitedParks from '../api/endpoints/players/visited-parks';
 import Experience from '../components/Experience';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
-import PlayerButtons from '../components/PlayerButtons';
+import ButtonRow from '../components/ButtonRow';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import Subscribed from '../components/Subscribed';
@@ -196,7 +196,7 @@ export default function PlayerScreen({ route, navigation }) {
               }}
             >
               <Experience player={currentPlayer} />
-              <PlayerButtons buttons={buttons} />
+              <ButtonRow buttons={buttons} />
               {currentPlayer.is_subscribed && <Subscribed />}
               {currentPlayer.verified_at && <Verified />}
               <Heading text="Statistics" />

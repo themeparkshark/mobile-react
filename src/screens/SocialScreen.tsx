@@ -10,7 +10,7 @@ import Button from '../components/Button';
 import CreateThreadModal from '../components/CreateThreadModal';
 import LiveEvents from '../components/LiveEvents';
 import Loading from '../components/Loading';
-import PlayerButtons from '../components/PlayerButtons';
+import ButtonRow from '../components/ButtonRow';
 import SortByDropdown, { SortOption } from '../components/SortByDropdown';
 import Thread from '../components/Thread';
 import Topbar from '../components/Topbar';
@@ -156,7 +156,7 @@ export default function SocialScreen({ navigation }) {
                       marginBottom: 32,
                     }}
                   >
-                    <PlayerButtons
+                    <ButtonRow
                       buttons={[
                         {
                           image: require('../../assets/images/screens/explore/base.png'),

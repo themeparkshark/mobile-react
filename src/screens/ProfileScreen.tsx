@@ -2,14 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, Pressable, ScrollView, Text, View, } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getFriends from '../api/endpoints/me/friends';
@@ -20,7 +13,7 @@ import Experience from '../components/Experience';
 import FriendPlayer from '../components/FriendPlayer';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
-import PlayerButtons from '../components/PlayerButtons';
+import ButtonRow from '../components/ButtonRow';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import Subscribed from '../components/Subscribed';
@@ -84,6 +77,13 @@ export default function ProfileScreen() {
             RootNavigation.navigate('PinCollections');
           },
           text: labels.pin_packs,
+        },
+        {
+          image: require('../../assets/images/screens/explore/base.png'),
+          onPress: () => {
+            RootNavigation.navigate('PinCollections');
+          },
+          text: 'Badges',
         },
         ...stores.map((store) => {
           return {
@@ -237,7 +237,7 @@ export default function ProfileScreen() {
               }}
             >
               <Experience player={player} />
-              <PlayerButtons buttons={buttons} />
+              <ButtonRow buttons={buttons} />
               {player.is_subscribed && <Subscribed />}
               {player.verified_at && <Verified />}
               <Heading text={labels.your_statistics} />
