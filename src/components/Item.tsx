@@ -5,11 +5,11 @@ import { useContext } from 'react';
 import { Alert, ImageBackground, Pressable, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import updateInventory from '../api/endpoints/me/inventory/update-inventory';
+import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ItemType } from '../models/item-type';
-import config from "../config";
 
 export default function Item({ item }: { readonly item: ItemType }) {
   const { player, refreshPlayer } = useContext(AuthContext);

@@ -10,6 +10,7 @@ import getTasks from '../api/endpoints/players/parks/getTasks';
 import getVisitedPark from '../api/endpoints/players/visited-parks/getPark';
 import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
+import ParkItemModal from '../components/ParkItemModal';
 import ParkTrophyModal from '../components/ParkTrophyModal';
 import Progress from '../components/Progress';
 import TaskCoinModal from '../components/TaskCoinModal';
@@ -22,7 +23,6 @@ import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
-import ParkItemModal from "../components/ParkItemModal";
 
 export default function ParkScreen({ route }) {
   const { park, player } = route.params;
@@ -147,7 +147,8 @@ export default function ParkScreen({ route }) {
                             }}
                           >
                             <ParkItemModal item={currentPark.completion_item}>
-                              {currentPark.completion_item.item_type.id === 4 ? (
+                              {currentPark.completion_item.item_type.id ===
+                              4 ? (
                                 <ImageBackground
                                   source={require('../../assets/images/screens/inventory/shark.png')}
                                   style={{
@@ -155,7 +156,9 @@ export default function ParkScreen({ route }) {
                                   }}
                                 >
                                   <Image
-                                    source={currentPark.completion_item.paper_url}
+                                    source={
+                                      currentPark.completion_item.paper_url
+                                    }
                                     style={{
                                       aspectRatio: 1 / 0.8,
                                     }}
@@ -230,9 +233,9 @@ export default function ParkScreen({ route }) {
                       >
                         {vsprintf(labels.park_tasks, [
                           currentPark.completed_tasks_count +
-                          currentPark.completed_secret_tasks_count,
+                            currentPark.completed_secret_tasks_count,
                           currentPark.tasks_count +
-                          currentPark.secret_tasks_count,
+                            currentPark.secret_tasks_count,
                         ])}
                       </Text>
                       <Text

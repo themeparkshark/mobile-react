@@ -1,5 +1,5 @@
+import { ItemType } from './item-type';
 import { StoreType } from './store-type';
-import { ItemType } from "./item-type";
 
 export interface ParkType {
   readonly catalog_id: number;
