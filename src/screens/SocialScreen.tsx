@@ -173,47 +173,11 @@ export default function SocialScreen({ navigation }) {
                           text: 'Facebook',
                         },
                         {
-                          image: require('../../assets/images/screens/social/membership.png'),
-                          onPress: () => {
-                            if (
-                              checkPermission(PermissionEnums.BecomeAMember)
-                            ) {
-                              navigation.navigate('Membership');
-                            }
-                          },
-                          text: 'Become a Member',
-                          permission: PermissionEnums.BecomeAMember,
-                          show:
-                            !player || Boolean(player && !player.is_subscribed),
-                        },
-                        {
                           image: require('../../assets/images/screens/social/merch.png'),
                           onPress: () => {
                             WebBrowser.openBrowserAsync(urls.shop);
                           },
                           text: 'Merch',
-                        },
-                        {
-                          image: require('../../assets/images/screens/social/pin_swaps.png'),
-                          onPress: () => {
-                            if (checkPermission(PermissionEnums.TradePins)) {
-                              navigation.navigate('PinSwaps');
-                            }
-                          },
-                          text: 'Pin Trading',
-                          permission: PermissionEnums.TradePins,
-                        },
-                        {
-                          image: require('../../assets/images/screens/social/redeem.png'),
-                          onPress: () => {
-                            if (
-                              checkPermission(PermissionEnums.RedeemCoinCodes)
-                            ) {
-                              navigation.navigate('RedeemCoinCode');
-                            }
-                          },
-                          text: 'Redeem',
-                          permission: PermissionEnums.RedeemCoinCodes,
                         },
                         {
                           image: require('../../assets/images/screens/explore/base.png'),

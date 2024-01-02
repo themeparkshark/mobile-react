@@ -131,6 +131,7 @@ interface CrumbsType {
     readonly no_permissions_granted: string;
     readonly no_recent_activity: string;
     readonly no_visited_parks: string;
+    readonly no_visited_parks_for_player: string;
     readonly not_at_a_park: string;
     readonly not_signed_in: string;
     readonly something_went_wrong: string;

@@ -10,11 +10,13 @@ import Progress from './Progress';
 export default function VisitedParks({
   parks,
   player,
+  message,
 }: {
+  readonly message: string;
   readonly parks: ParkType[];
   readonly player: PlayerType;
 }) {
-  const { labels, warnings } = useCrumbs();
+  const { labels } = useCrumbs();
 
   return (
     <View>
@@ -27,7 +29,7 @@ export default function VisitedParks({
             paddingBottom: 32,
           }}
         >
-          {warnings.no_visited_parks}
+          {message}
         </Text>
       )}
       {parks.length > 0 && (

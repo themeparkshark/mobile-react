@@ -35,12 +35,14 @@ import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { NotificationContext } from '../context/NotificationProvider';
 import useCrumbs from '../hooks/useCrumbs';
+import usePermissions from '../hooks/usePermissions';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
+import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
 import { StoreType } from '../models/store-type';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
   const [buttons, setButtons] = useState<ButtonType[]>([]);
@@ -50,6 +52,7 @@ export default function ProfileScreen() {
   const { refreshNotificationCount, notificationCount } =
     useContext(NotificationContext);
   const { warnings, labels } = useCrumbs();
+  const { checkPermission } = usePermissions();
 
   const requestFriends = () => {
     getFriends(1, 3).then((response) => setFriends(response));
@@ -78,6 +81,37 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (stores) {
       setButtons([
+        {
+          image: require('../../assets/images/screens/social/membership.png'),
+          onPress: () => {
+            if (checkPermission(PermissionEnums.BecomeAMember)) {
+              navigation.navigate('Membership');
+            }
+          },
+          text: 'Become a Member',
+          permission: PermissionEnums.BecomeAMember,
+          show: !player || Boolean(player && !player.is_subscribed),
+        },
+        {
+          image: require('../../assets/images/screens/social/pin_swaps.png'),
+          onPress: () => {
+            if (checkPermission(PermissionEnums.TradePins)) {
+              navigation.navigate('PinSwaps');
+            }
+          },
+          text: 'Pin Trading',
+          permission: PermissionEnums.TradePins,
+        },
+        {
+          image: require('../../assets/images/screens/social/redeem.png'),
+          onPress: () => {
+            if (checkPermission(PermissionEnums.RedeemCoinCodes)) {
+              navigation.navigate('RedeemCoinCode');
+            }
+          },
+          text: 'Redeem',
+          permission: PermissionEnums.RedeemCoinCodes,
+        },
         {
           image: require('../../assets/images/screens/profile/pin_collections.png'),
           onPress: () => {
@@ -324,7 +358,11 @@ export default function ProfileScreen() {
                 </>
               )}
               <Heading text={labels.your_parks} />
-              <VisitedParks parks={parks} player={player} />
+              <VisitedParks
+                parks={parks}
+                player={player}
+                message={warnings.no_visited_parks}
+              />
             </View>
           </View>
         </ScrollView>

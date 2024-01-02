@@ -41,7 +41,7 @@ export default function PlayerScreen({ route, navigation }) {
   const { complimentPlayer } = useCompliment();
   const { checkPermission } = usePermissions();
   const { player: authPlayer } = useContext(AuthContext);
-  const { prompts, messages } = useCrumbs();
+  const { prompts, messages, warnings } = useCrumbs();
 
   useFocusEffect(
     useCallback(() => {
@@ -209,12 +209,12 @@ export default function PlayerScreen({ route, navigation }) {
               {currentPlayer.verified_at && <Verified />}
               <Heading text="Statistics" />
               <Stats player={currentPlayer} />
-              {parks.length > 0 && (
-                <>
-                  <Heading text="Visited Parks" />
-                  <VisitedParks parks={parks} player={currentPlayer} />
-                </>
-              )}
+              <Heading text="Visited Parks" />
+              <VisitedParks
+                parks={parks}
+                player={currentPlayer}
+                message={warnings.no_visited_parks_for_player}
+              />
             </View>
           </View>
         </ScrollView>
