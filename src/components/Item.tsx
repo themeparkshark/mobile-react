@@ -2,22 +2,25 @@ import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
 import { useContext } from 'react';
-import { ImageBackground, Pressable, View } from 'react-native';
+import { Alert, ImageBackground, Pressable, View } from 'react-native';
+import * as RootNavigation from '../RootNavigation';
 import updateInventory from '../api/endpoints/me/inventory/update-inventory';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
+import useCrumbs from '../hooks/useCrumbs';
 import { ItemType } from '../models/item-type';
 
 export default function Item({ item }: { readonly item: ItemType }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { playSound } = useContext(SoundEffectContext);
+  const { warnings } = useCrumbs();
 
   return (
     <View
       style={{
         flex: 1,
         padding: 8,
-        opacity: item.is_wearable ? 1 : .5,
+        opacity: item.is_wearable ? 1 : 0.5,
       }}
     >
       <Pressable
@@ -46,6 +49,18 @@ export default function Item({ item }: { readonly item: ItemType }) {
           }
 
           if (!item.is_wearable) {
+            Alert.alert(warnings.must_be_a_member_to_wear_item, '', [
+              {
+                text: 'Cancel',
+                style: 'cancel',
+              },
+              {
+                text: 'Ok',
+                onPress: async () => {
+                  RootNavigation.navigate('Membership');
+                },
+              },
+            ]);
             return;
           }
 
@@ -78,9 +93,7 @@ export default function Item({ item }: { readonly item: ItemType }) {
           style={{
             position: 'absolute',
             display: Object.values(player?.inventory)
-              .map(function (inventoryItem) {
-                return inventoryItem?.id;
-              })
+              .map((inventoryItem) => inventoryItem?.id)
               .includes(item.id)
               ? 'flex'
               : 'none',

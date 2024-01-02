@@ -2,18 +2,25 @@ import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, ImageBackground, Pressable, ScrollView, Text, View, } from 'react-native';
+import {
+  Dimensions,
+  ImageBackground,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getFriends from '../api/endpoints/me/friends';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
 import Button from '../components/Button';
+import ButtonRow from '../components/ButtonRow';
 import Experience from '../components/Experience';
 import FriendPlayer from '../components/FriendPlayer';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
-import ButtonRow from '../components/ButtonRow';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import Subscribed from '../components/Subscribed';

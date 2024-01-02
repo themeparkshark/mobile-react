@@ -3,13 +3,14 @@ import { useCallback, useContext, useEffect, useState } from 'react';
 import { Alert, Dimensions, ScrollView, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
+import * as RootNavigation from '../RootNavigation';
 import getPlayer from '../api/endpoints/players/get';
 import reportPlayer from '../api/endpoints/players/report';
 import getVisitedParks from '../api/endpoints/players/visited-parks';
+import ButtonRow from '../components/ButtonRow';
 import Experience from '../components/Experience';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
-import ButtonRow from '../components/ButtonRow';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
 import Subscribed from '../components/Subscribed';
@@ -28,7 +29,6 @@ import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
-import * as RootNavigation from "../RootNavigation";
 
 export default function PlayerScreen({ route, navigation }) {
   const { player } = route.params;

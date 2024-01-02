@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
+import { sortBy } from 'lodash';
 import { ScrollView, Text, View } from 'react-native';
 import usePermissions from '../hooks/usePermissions';
 import { ButtonType } from '../models/button-type';
 import Button from './Button';
-import { sortBy } from 'lodash';
 
 export default function ButtonRow({
   buttons,

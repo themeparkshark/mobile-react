@@ -120,6 +120,7 @@ interface CrumbsType {
     readonly x: string;
   };
   readonly warnings: {
+    readonly must_be_a_member_to_wear_item: string;
     readonly must_be_signed_in: string;
     readonly must_grant_permissions: string;
     readonly no_friends: string;
