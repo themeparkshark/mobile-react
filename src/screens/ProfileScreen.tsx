@@ -2,7 +2,14 @@ import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Dimensions, ImageBackground, Pressable, ScrollView, Text, View, } from 'react-native';
+import {
+  Dimensions,
+  ImageBackground,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getFriends from '../api/endpoints/me/friends';

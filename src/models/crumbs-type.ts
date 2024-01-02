@@ -10,6 +10,7 @@ interface CrumbsType {
   };
   readonly labels: {
     readonly add_a_comment: string;
+    readonly all_tasks_completed: string;
     readonly archived_tasks: string;
     readonly checking_again: string;
     readonly choose_daily_gift: string;
@@ -111,9 +112,12 @@ interface CrumbsType {
     readonly report_username: string;
   };
   readonly urls: {
+    readonly instagram: string;
     readonly privacy_policy: string;
     readonly shop: string;
     readonly terms: string;
+    readonly tiktok: string;
+    readonly x: string;
   };
   readonly warnings: {
     readonly must_be_signed_in: string;

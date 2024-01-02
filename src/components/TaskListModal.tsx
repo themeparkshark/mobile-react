@@ -9,22 +9,25 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
+import { vsprintf } from 'sprintf-js';
+import { LocationContext } from '../context/LocationProvider';
 import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
 import useCrumbs from '../hooks/useCrumbs';
-import { RedeemablesType } from '../models/redeemables-type';
+import { TaskType } from '../models/task-type';
 import Button from './Button';
 
 export default function TaskListModal({
-  redeemables,
+  tasks,
 }: {
-  readonly redeemables: RedeemablesType;
+  readonly tasks: TaskType[];
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const { labels } = useCrumbs();
+  const { park } = useContext(LocationContext);
 
   return (
     <>
@@ -161,22 +164,34 @@ export default function TaskListModal({
                     justifyContent: 'center',
                   }}
                 >
-                  {redeemables?.tasks.map((task, index) => {
-                    return (
-                      <View key={task.id}>
-                        <Text
-                          style={{
-                            textAlign: 'center',
-                            fontFamily: 'Knockout',
-                            fontSize: 20,
-                            paddingTop: index === 0 ? 0 : 16,
-                          }}
-                        >
-                          {task.name}
-                        </Text>
-                      </View>
-                    );
-                  })}
+                  {!tasks.length && (
+                    <Text
+                      style={{
+                        textAlign: 'center',
+                        fontFamily: 'Knockout',
+                        fontSize: 20,
+                      }}
+                    >
+                      {vsprintf(labels.all_tasks_completed, [park.name])}
+                    </Text>
+                  )}
+                  {tasks.length > 0 &&
+                    tasks.map((task, index) => {
+                      return (
+                        <View key={task.id}>
+                          <Text
+                            style={{
+                              textAlign: 'center',
+                              fontFamily: 'Knockout',
+                              fontSize: 20,
+                              paddingTop: index === 0 ? 0 : 16,
+                            }}
+                          >
+                            {task.name}
+                          </Text>
+                        </View>
+                      );
+                    })}
                 </View>
               </ScrollView>
             </View>

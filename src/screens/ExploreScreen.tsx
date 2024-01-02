@@ -1,7 +1,6 @@
-import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Callout, Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
@@ -148,7 +147,7 @@ export default function ExploreScreen() {
                 })}
               </View>
             )}
-            <TaskListModal redeemables={redeemables} />
+            <TaskListModal tasks={redeemables.tasks} />
           </View>
           <View
             style={{

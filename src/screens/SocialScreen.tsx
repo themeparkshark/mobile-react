@@ -4,9 +4,11 @@ import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useState } from 'react';
 import { RefreshControl, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
+import getLiveEvents from '../api/endpoints/live-events/all';
 import getThreads from '../api/endpoints/threads/getThreads';
 import Button from '../components/Button';
 import CreateThreadModal from '../components/CreateThreadModal';
+import LiveEvents from '../components/LiveEvents';
 import Loading from '../components/Loading';
 import PlayerButtons from '../components/PlayerButtons';
 import SortByDropdown, { SortOption } from '../components/SortByDropdown';
@@ -18,6 +20,7 @@ import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import usePermissions from '../hooks/usePermissions';
+import { LiveEventType } from '../models/live-event-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { ThreadType } from '../models/thread-type';
 
@@ -49,6 +52,7 @@ export default function SocialScreen({ navigation }) {
   const [filter, setFilter] = useState<SortOption>(options[0]);
   const { checkPermission } = usePermissions();
   const { player } = useContext(AuthContext);
+  const [liveEvents, setLiveEvents] = useState<LiveEventType[]>([]);
 
   const fetchPinnedThreads = async () => {
     setPinnedThreads(
@@ -79,6 +83,7 @@ export default function SocialScreen({ navigation }) {
   useAsyncEffect(async () => {
     await fetchPinnedThreads();
     await fetchThreads(1);
+    setLiveEvents(await getLiveEvents());
     setPage(1);
     setLoading(false);
   }, []);
@@ -154,6 +159,13 @@ export default function SocialScreen({ navigation }) {
                     <PlayerButtons
                       buttons={[
                         {
+                          image: require('../../assets/images/screens/explore/base.png'),
+                          onPress: () => {
+                            WebBrowser.openBrowserAsync(urls.instagram);
+                          },
+                          text: 'Instagram',
+                        },
+                        {
                           image: require('../../assets/images/screens/social/membership.png'),
                           onPress: () => {
                             if (
@@ -197,6 +209,13 @@ export default function SocialScreen({ navigation }) {
                           permission: PermissionEnums.RedeemCoinCodes,
                         },
                         {
+                          image: require('../../assets/images/screens/explore/base.png'),
+                          onPress: () => {
+                            WebBrowser.openBrowserAsync(urls.tiktok);
+                          },
+                          text: 'TikTok',
+                        },
+                        {
                           image: require('../../assets/images/screens/social/social_media.png'),
                           onPress: () => {
                             if (checkPermission(PermissionEnums.WatchContent)) {
@@ -207,15 +226,18 @@ export default function SocialScreen({ navigation }) {
                           permission: PermissionEnums.WatchContent,
                         },
                         {
-                          image: require('../../assets/images/screens/social/arcade.png'),
-                          onPress: () => {},
-                          text: 'Arcade',
-                          show: false,
-                          permission: PermissionEnums.ViewArcade,
+                          image: require('../../assets/images/screens/explore/base.png'),
+                          onPress: () => {
+                            WebBrowser.openBrowserAsync(urls.x);
+                          },
+                          text: 'X',
                         },
                       ]}
                     />
                   </View>
+                  {liveEvents.length > 0 && (
+                    <LiveEvents liveEvents={liveEvents} />
+                  )}
                   <SortByDropdown
                     activeOption={filter}
                     options={options}

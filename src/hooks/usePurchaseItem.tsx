@@ -1,13 +1,13 @@
 import { useContext, useState } from 'react';
 import { Alert } from 'react-native';
 import { vsprintf } from 'sprintf-js';
+import * as RootNavigation from '../RootNavigation';
 import purchase from '../api/endpoints/me/inventory/purchase-item';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import { PlayerType } from '../models/player-type';
 import useCrumbs from './useCrumbs';
-import * as RootNavigation from '../RootNavigation';
 
 export default function usePurchaseItem() {
   const { playSound } = useContext(SoundEffectContext);
@@ -51,8 +51,8 @@ export default function usePurchaseItem() {
             text: 'Learn more',
             onPress: () => {
               RootNavigation.navigate('Membership');
-            }
-          }
+            },
+          },
         ]
       );
     }
