@@ -166,6 +166,13 @@ export default function SocialScreen({ navigation }) {
                           text: 'Instagram',
                         },
                         {
+                          image: require('../../assets/images/screens/explore/base.png'),
+                          onPress: () => {
+                            WebBrowser.openBrowserAsync(urls.facebook);
+                          },
+                          text: 'Facebook',
+                        },
+                        {
                           image: require('../../assets/images/screens/social/membership.png'),
                           onPress: () => {
                             if (

@@ -113,6 +113,7 @@ interface CrumbsType {
     readonly report_username: string;
   };
   readonly urls: {
+    readonly facebook: string;
     readonly instagram: string;
     readonly privacy_policy: string;
     readonly shop: string;
