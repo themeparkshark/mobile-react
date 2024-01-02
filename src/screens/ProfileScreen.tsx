@@ -2,14 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, Pressable, ScrollView, Text, View, } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getFriends from '../api/endpoints/me/friends';
@@ -37,7 +30,6 @@ import { NotificationContext } from '../context/NotificationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { ButtonType } from '../models/button-type';
 import { ParkType } from '../models/park-type';
-import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
 import { StoreType } from '../models/store-type';
 
@@ -90,26 +82,11 @@ export default function ProfileScreen() {
           return {
             image: store.icon_url,
             onPress: () => {
-              if (!store.is_secret_store) {
-                RootNavigation.navigate('Store', {
-                  store: store.id,
-                });
-                return;
-              }
-
-              if (player?.is_subscribed) {
-                RootNavigation.navigate('Store', {
-                  store: store.id,
-                });
-              } else {
-                RootNavigation.navigate('Membership');
-              }
+              RootNavigation.navigate('Store', {
+                store: store.id,
+              });
             },
             text: store.name,
-            permission:
-              player && !player.is_subscribed && store.is_secret_store
-                ? PermissionEnums.ViewSecretStore
-                : undefined,
           };
         }),
       ]);

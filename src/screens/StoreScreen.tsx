@@ -1,13 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useContext, useState } from 'react';
-import {
-  Dimensions,
-  ImageBackground,
-  SafeAreaView,
-  Text,
-  View,
-} from 'react-native';
+import { Dimensions, ImageBackground, SafeAreaView, Text, View, } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getItems from '../api/endpoints/catalogs/items';
@@ -77,7 +71,7 @@ export default function StoreScreen({ route }) {
 
   return (
     <>
-      <Topbar purple={currentStore?.is_secret_store ?? false}>
+      <Topbar>
         <TopbarColumn stretch={false}>
           <BackButton />
         </TopbarColumn>

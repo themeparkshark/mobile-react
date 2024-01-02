@@ -7,6 +7,7 @@ import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import { PlayerType } from '../models/player-type';
 import useCrumbs from './useCrumbs';
+import * as RootNavigation from '../RootNavigation';
 
 export default function usePurchaseItem() {
   const { playSound } = useContext(SoundEffectContext);
@@ -31,6 +32,27 @@ export default function usePurchaseItem() {
           {
             text: 'Ok',
           },
+        ]
+      );
+    }
+
+    if (!player.is_subscribed && item.is_member_item) {
+      playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
+
+      return Alert.alert(
+        vsprintf(errors.membership_required_for_item, [item.name]),
+        '',
+        [
+          {
+            text: 'Ok',
+            style: 'cancel',
+          },
+          {
+            text: 'Learn more',
+            onPress: () => {
+              RootNavigation.navigate('Membership');
+            }
+          }
         ]
       );
     }

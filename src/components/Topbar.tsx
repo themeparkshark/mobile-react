@@ -32,14 +32,12 @@ export function BackButton({ onPress }: { readonly onPress?: () => void }) {
 
 export default function Topbar({
   children,
-  purple = false,
 }: {
   readonly children: ReactElement[];
   readonly informationModalId?: number | null;
   readonly rightButton?: ReactNode | null;
   readonly leftButton?: ReactNode | null;
   readonly text?: string | null;
-  readonly purple?: boolean;
   readonly showBackButton?: boolean;
   readonly showCurrencies?: boolean;
   readonly parkCoin?: string | null;
@@ -64,11 +62,7 @@ export default function Topbar({
         <Broadcasts />
       </SafeAreaView>
       <ImageBackground
-        source={
-          purple
-            ? require('../../assets/images/screens/store/purple_topbar.png')
-            : { url: theme?.top_bar_url }
-        }
+        source={{ uri: theme?.top_bar_url }}
         resizeMode="cover"
         style={{
           height: 70 + Constants.statusBarHeight,

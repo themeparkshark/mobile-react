@@ -9,6 +9,5 @@ export enum PermissionEnums {
   TradePins = 'trade_pins',
   ViewArcade = 'view_arcade',
   ViewProfile = 'view_profile',
-  ViewSecretStore = 'view_secret_store',
   WatchContent = 'watch_content',
 }

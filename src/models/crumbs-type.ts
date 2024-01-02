@@ -3,6 +3,7 @@ interface CrumbsType {
     readonly item_purchased: string;
     readonly item_redeemed: string;
     readonly max_compliments_created: string;
+    readonly membership_required_for_item: string;
     readonly not_enough_currency: string;
     readonly pin_swap_unavailable: string;
     readonly pin_required: string;
