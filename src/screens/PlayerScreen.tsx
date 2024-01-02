@@ -28,6 +28,7 @@ import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
+import * as RootNavigation from "../RootNavigation";
 
 export default function PlayerScreen({ route, navigation }) {
   const { player } = route.params;
@@ -68,6 +69,13 @@ export default function PlayerScreen({ route, navigation }) {
 
   const buttons = currentPlayer
     ? [
+        {
+          image: require('../../assets/images/screens/explore/base.png'),
+          onPress: () => {
+            RootNavigation.navigate('PinCollections');
+          },
+          text: 'Badges',
+        },
         {
           image: require('../../assets/images/screens/player/gift.png'),
           onPress: async () => {

@@ -17,6 +17,7 @@ export default function Item({ item }: { readonly item: ItemType }) {
       style={{
         flex: 1,
         padding: 8,
+        opacity: item.is_wearable ? 1 : .5,
       }}
     >
       <Pressable
@@ -42,6 +43,10 @@ export default function Item({ item }: { readonly item: ItemType }) {
               player.inventory.background_item.id === item.id)
           ) {
             return false;
+          }
+
+          if (!item.is_wearable) {
+            return;
           }
 
           playSound(require('../../assets/sounds/inventory_item_tap.mp3'));

@@ -11,10 +11,9 @@ export interface ItemType {
   readonly paper_url: string;
   readonly latitude: number;
   readonly longitude: number;
-  readonly section: string;
   readonly is_hidden: boolean;
   readonly is_clearance: boolean;
   readonly currency: CurrencyType;
   readonly is_coin_code_item: boolean;
-  readonly is_member_item: boolean;
+  readonly is_wearable: boolean;
 }
