@@ -1,4 +1,4 @@
-import { TriviaGameResponseType } from '../../../../models/trivia-game-response-type';
+import { TriviaStartResponseType } from '../../../../models/trivia-start-response-type';
 import client from '../../../client';
 
 /**
@@ -7,8 +7,8 @@ import client from '../../../client';
  */
 export default async function startTrivia(
   taskId: number
-): Promise<TriviaGameResponseType> {
-  const { data } = await client.post<TriviaGameResponseType>(
+): Promise<TriviaStartResponseType> {
+  const { data } = await client.post<TriviaStartResponseType>(
     `/tasks/${taskId}/trivia/start`
   );
 

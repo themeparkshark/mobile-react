@@ -110,6 +110,22 @@ export default function ExploreScreen() {
                 />
               </TopbarColumn>
             ))}
+            {/* V2: Show tickets if player has any */}
+            {(player.tickets ?? 0) > 0 && (
+              <TopbarColumn>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 24, marginRight: 4 }}>🎟️</Text>
+                  <Text style={{
+                    fontSize: 24,
+                    color: 'white',
+                    fontFamily: 'Shark',
+                    textShadowColor: 'rgba(0, 0, 0, .5)',
+                    textShadowOffset: { width: 2, height: 2 },
+                    textShadowRadius: 0,
+                  }}>{player.tickets}</Text>
+                </View>
+              </TopbarColumn>
+            )}
           </>
         )}
       </Topbar>
