@@ -7,15 +7,10 @@ export default {
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
-  owner: 'theme-park-shark',
   splash: {
     image: './assets/splash.png',
     resizeMode: 'cover',
     backgroundColor: '#ffffff',
-  },
-  updates: {
-    fallbackToCacheTimeout: 0,
-    url: 'https://u.expo.dev/38c3f46e-df32-43a2-8272-44b9556aaa36',
   },
   runtimeVersion: {
     policy: 'sdkVersion',
@@ -25,7 +20,7 @@ export default {
     buildNumber: '20231218.4',
     bitcode: 'Debug',
     usesAppleSignIn: true,
-    bundleIdentifier: 'com.tomhartley97.mobile-react',
+    bundleIdentifier: 'com.dustinsparage.themeparkshark',
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
         "Theme Park Shark requires your mobile device's location permissions to be enabled in order to find tasks and other redeemables near you.",
@@ -37,7 +32,7 @@ export default {
   extra: {
     apiUrl: process.env.API_URL,
     eas: {
-      projectId: '38c3f46e-df32-43a2-8272-44b9556aaa36',
+      projectId: 'aaf6495c-456b-4fbd-afb5-d429c1472ddb',
     },
   },
   plugins: [

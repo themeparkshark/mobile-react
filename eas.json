@@ -15,6 +15,17 @@
       },
       "channel": "development"
     },
+    "development-device": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "API_URL": "https://dev-app.themeparkshark.com/api"
+      },
+      "channel": "development"
+    },
     "preview": {
       "distribution": "store",
       "env": {

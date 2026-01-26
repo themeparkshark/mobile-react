@@ -22,18 +22,29 @@ export default function NewsScreen() {
       .then((response) => {
         setEntries(
           response.data.map((item: any) => {
+            // Safely get featured image with fallback
+            let featured_image = null;
+            try {
+              const media = item._embedded?.['wp:featuredmedia']?.[0];
+              featured_image = media?.media_details?.sizes?.medium?.source_url 
+                || media?.source_url 
+                || null;
+            } catch (e) {
+              featured_image = null;
+            }
+            
             return {
               id: item.id,
               date: item.date_gmt,
-              featured_image: item._embedded['wp:featuredmedia']
-                ? item._embedded['wp:featuredmedia'][0].media_details.sizes
-                    .medium.source_url
-                : null,
+              featured_image,
               title: item.title.rendered,
               url: item.link,
             };
           })
         );
+      })
+      .catch((error) => {
+        console.error('Failed to fetch news:', error);
       });
   };
 

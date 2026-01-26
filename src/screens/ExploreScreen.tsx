@@ -11,6 +11,7 @@ import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Map from '../components/Map';
 import RedeemModal from '../components/RedeemModal';
+import PrepItemRedeemModal from '../components/PrepItemRedeemModal';
 import TaskListModal from '../components/TaskListModal';
 import Topbar from '../components/Topbar';
 import Currency from '../components/Topbar/Currency';
@@ -23,9 +24,10 @@ import { ThemeContext } from '../context/ThemeProvider';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
+import { PrepItemType } from '../models/prep-item-type';
 import Coin from './ExploreScreen/Coin';
 import Key from './ExploreScreen/Key';
-import NotAtPark from './ExploreScreen/NotAtPark';
+import HomeExplore from './ExploreScreen/HomeExplore';
 import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import Redeemable from './ExploreScreen/Redeemable';
@@ -37,11 +39,23 @@ export default function ExploreScreen() {
   const [activeRedeemable, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined
   >();
+  // Home mode state for prep items
+  const [activePrepItem, setActivePrepItem] = useState<PrepItemType | null>(null);
+  const [activePrepItemPivotId, setActivePrepItemPivotId] = useState<number | null>(null);
+  const [showPrepItemModal, setShowPrepItemModal] = useState(false);
+  
   const { refreshPlayer, player } = useContext(AuthContext);
   const { parkLoaded, location, park, permissionGranted } =
     useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
+  
+  // Handler for when user approaches a prep item in home mode
+  const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
+    setActivePrepItem(prepItem);
+    setActivePrepItemPivotId(pivotId);
+    setShowPrepItemModal(true);
+  }, []);
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
@@ -102,10 +116,28 @@ export default function ExploreScreen() {
       {player && (
         <>
           {!permissionGranted && <PermissionsNotGranted />}
-          {parkLoaded && !park && <NotAtPark />}
+          {/* Home Mode: Show prep items map instead of "Not at Park" message */}
+          {parkLoaded && !park && permissionGranted && (
+            <HomeExplore onPrepItemNearby={handlePrepItemNearby} />
+          )}
         </>
       )}
       {!player && <NotSignedIn />}
+      
+      {/* Prep Item Redeem Modal (Home Mode) */}
+      <PrepItemRedeemModal
+        visible={showPrepItemModal}
+        prepItem={activePrepItem}
+        pivotId={activePrepItemPivotId}
+        onClose={() => {
+          setShowPrepItemModal(false);
+          setActivePrepItem(null);
+          setActivePrepItemPivotId(null);
+        }}
+        onCollected={() => {
+          // Modal will be closed by onClose
+        }}
+      />
       {park && redeemables && (
         <>
           <View
@@ -210,6 +242,8 @@ export default function ExploreScreen() {
           </View>
         </>
       )}
+      {/* Park Mode Map - Only renders when at a park */}
+      {park && (
       <View
         style={{
           flex: 1,
@@ -381,6 +415,7 @@ export default function ExploreScreen() {
             })}
         </Map>
       </View>
+      )}
     </Wrapper>
   );
 }
