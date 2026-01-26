@@ -1,6 +1,6 @@
 import Lottie from 'lottie-react-native';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Pressable, View } from 'react-native';
+import { Animated, Dimensions, Pressable, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Modal from 'react-native-modal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
@@ -22,6 +22,7 @@ import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
 import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
+import TriviaMiniGame from './TriviaMiniGame';
 
 export default function RedeemRedeemableModal({
   open,
@@ -45,7 +46,12 @@ export default function RedeemRedeemableModal({
   const [doubleCoins, setDoubleCoins] = useState<boolean>(
     (player && player.is_subscribed) ?? false
   );
+  const [showTrivia, setShowTrivia] = useState(false);
   const { currencies } = useContext(CurrencyContext);
+  
+  // Check if this is a task that can have trivia
+  const canPlayTrivia = redeemable?.type === 'task' || redeemable?.type === 'secret_task';
+  const hasTickets = (player?.tickets ?? 0) > 0;
 
   const backgrounds = {
     task: '#0788e4',
@@ -348,9 +354,79 @@ export default function RedeemRedeemableModal({
                 }}
               />
             </View>
+            
+            {/* Play Trivia Button - for tasks when player has tickets */}
+            {canPlayTrivia && (
+              <View style={triviaStyles.triviaSection}>
+                <TouchableOpacity
+                  style={[
+                    triviaStyles.triviaButton,
+                    !hasTickets && triviaStyles.triviaButtonDisabled,
+                  ]}
+                  onPress={() => setShowTrivia(true)}
+                  disabled={!hasTickets}
+                >
+                  <Text style={triviaStyles.triviaButtonText}>
+                    🎯 Play Trivia for Bonus!
+                  </Text>
+                  <Text style={triviaStyles.triviaSubtext}>
+                    {hasTickets 
+                      ? `Cost: 1 🎟️ | Earn up to 3x rewards`
+                      : `Need tickets to play (collect prep items at home!)`
+                    }
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
       </View>
+      
+      {/* Trivia Mini-Game Modal */}
+      {canPlayTrivia && (
+        <TriviaMiniGame
+          visible={showTrivia}
+          taskId={(redeemable.model as TaskType | SecretTaskType).id}
+          taskName={(redeemable.model as TaskType | SecretTaskType).name}
+          coinImageUrl={(redeemable.model as TaskType | SecretTaskType).coin_url}
+          onClose={() => setShowTrivia(false)}
+          onComplete={(multiplier, rewards) => {
+            // Trivia completed - task is already claimed on backend
+            setShowTrivia(false);
+            onPress(); // Refresh data
+            playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
+            close();
+          }}
+        />
+      )}
     </Modal>
   );
 }
+
+const triviaStyles = StyleSheet.create({
+  triviaSection: {
+    marginTop: 8,
+  },
+  triviaButton: {
+    backgroundColor: '#9C27B0',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  triviaButtonDisabled: {
+    backgroundColor: '#666',
+    opacity: 0.7,
+  },
+  triviaButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  triviaSubtext: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 11,
+    marginTop: 4,
+  },
+});

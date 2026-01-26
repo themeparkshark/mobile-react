@@ -32,4 +32,10 @@ export interface PlayerType {
   readonly username: string;
   readonly verified_at: string;
   readonly visited_parks_count: number;
+  // V2 fields
+  readonly tickets?: number;
+  readonly energy?: number;
+  readonly max_energy?: number;
+  readonly current_streak?: number;
+  readonly longest_streak?: number;
 }
