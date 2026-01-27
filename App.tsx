@@ -11,6 +11,7 @@ import { MusicProvider } from './src/context/MusicProvider';
 import { NotificationProvider } from './src/context/NotificationProvider';
 import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import { ThemeProvider } from './src/context/ThemeProvider';
+import { WeatherProvider } from './src/context/WeatherProvider';
 
 export default function App() {
   return (
@@ -23,13 +24,15 @@ export default function App() {
                 <ForumProvider>
                   <CrumbProvider>
                     <LocationProvider>
-                      <DailyGiftProvider>
-                        <ThemeProvider>
-                          <CurrencyProvider>
-                            <Root />
-                          </CurrencyProvider>
-                        </ThemeProvider>
-                      </DailyGiftProvider>
+                      <WeatherProvider>
+                        <DailyGiftProvider>
+                          <ThemeProvider>
+                            <CurrencyProvider>
+                              <Root />
+                            </CurrencyProvider>
+                          </ThemeProvider>
+                        </DailyGiftProvider>
+                      </WeatherProvider>
                     </LocationProvider>
                   </CrumbProvider>
                 </ForumProvider>
