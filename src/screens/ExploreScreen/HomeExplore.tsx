@@ -15,6 +15,8 @@ import PrepItemMarker from './PrepItem';
 import EnergyBar from '../../components/EnergyBar';
 import StreakBadge from '../../components/StreakBadge';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
+import WeatherBadge from '../../components/WeatherBadge';
+import TimePeriodBadge from '../../components/TimePeriodBadge';
 
 dayjs.extend(isBetween);
 
@@ -108,6 +110,11 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
                 atRisk={playerStats.streak_at_risk}
               />
             </View>
+            {/* Weather and Time conditions */}
+            <View style={styles.conditionsRow}>
+              <WeatherBadge compact />
+              <TimePeriodBadge compact showCountdown />
+            </View>
           </>
         )}
       </View>
@@ -189,6 +196,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
+  },
+  conditionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
   },
   ticketContainer: {
     flexDirection: 'row',
