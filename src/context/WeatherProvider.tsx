@@ -1,4 +1,4 @@
-import { createContext, FC, ReactNode, useContext, useState, useCallback } from 'react';
+import React, { createContext, FC, ReactNode, useContext, useState, useCallback } from 'react';
 import { useAsyncEffect, useIntervalWhen } from 'rooks';
 import * as Location from 'expo-location';
 import { LocationContext } from './LocationProvider';
@@ -67,6 +67,9 @@ const WMO_CODES: Record<number, { description: string; conditions: WeatherCondit
   99: { description: 'Thunderstorm with heavy hail', conditions: ['rain'] },
 };
 
+// Cache duration: 10 minutes minimum between API calls
+const WEATHER_CACHE_DURATION = 10 * 60 * 1000;
+
 export const WeatherProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -74,6 +77,9 @@ export const WeatherProvider: FC<{ children: ReactNode }> = ({ children }) => {
   
   const { location } = useContext(LocationContext);
   const { player } = useContext(AuthContext);
+  
+  // Cache time to prevent API spam (not a hook, just a ref)
+  const lastFetchTimeRef = React.useRef<number>(0);
 
   /**
    * Fetch weather data from Open-Meteo API
@@ -128,12 +134,19 @@ export const WeatherProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }, []);
 
   /**
-   * Refresh weather data
+   * Refresh weather data (with rate limiting to prevent API spam)
    */
-  const refreshWeather = useCallback(async () => {
+  const refreshWeather = useCallback(async (force: boolean = false) => {
     if (!location?.latitude || !location?.longitude) return;
     
+    // Check cache - don't fetch if we fetched recently (unless forced)
+    const now = Date.now();
+    if (!force && lastFetchTimeRef.current > 0 && (now - lastFetchTimeRef.current) < WEATHER_CACHE_DURATION) {
+      return; // Use cached data
+    }
+    
     setIsLoading(true);
+    lastFetchTimeRef.current = now;
     const data = await fetchWeather(location.latitude, location.longitude);
     if (data) {
       setWeather(data);

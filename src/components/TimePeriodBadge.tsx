@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Text, TouchableOpacity, View, Platform } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../helpers/haptics';
 import {
   TimePeriod,
   TIME_PERIOD_CONFIG,

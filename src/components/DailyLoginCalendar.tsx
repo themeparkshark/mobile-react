@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../helpers/haptics';
 import config from '../config';
 
 interface DayReward {

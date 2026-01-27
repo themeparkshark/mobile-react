@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../helpers/haptics';
 import { Image } from 'expo-image';
 import Button from './Button';
 import Ribbon from './Ribbon';

@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { AdaptyPaywallProduct, adapty } from 'react-native-adapty';
+import { AdaptyPaywallProduct, adapty } from '../helpers/adapty-stub';
 import { useAsyncEffect, useIntervalWhen } from 'rooks';
 import { vsprintf } from 'sprintf-js';
 import * as RootNavigation from '../RootNavigation';

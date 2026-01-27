@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../helpers/haptics';
 import Button from './Button';
 import Ribbon from './Ribbon';
 import config from '../config';

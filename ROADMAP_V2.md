@@ -147,14 +147,21 @@
 ## PRIORITY 6: Polish & Juice 🧃 ✅ IN PROGRESS
 **Goal:** Every tap feels AMAZING
 
-### 6.1 Haptics ✅
+### 6.1 Haptics ✅✅ POLISHED (Jan 26)
 - [x] Light haptic on button tap (expo-haptics)
 - [x] Medium on collection/selection
 - [x] Heavy on level up/achievement
 - [x] Pattern haptics in celebration modals
 - [x] Error haptics on wrong answers
+- [x] **HapticPatterns library** (`src/helpers/hapticPatterns.ts`)
+  - Rarity-based collection haptics (common→legendary escalation)
+  - Streak milestone haptics (5/10/25/50/100 day celebrations)
+  - Mini-game result haptics (based on multiplier)
+  - Rapid-fire haptics (scaling intensity for tap games)
+  - Timer complete/countdown haptics
+  - Button/modal/selection patterns
 
-### 6.2 Animations ✅
+### 6.2 Animations ✅✅ POLISHED (Jan 26)
 - [x] Pulse animations on badges
 - [x] Glow effects for weather/time conditions
 - [x] Bounce/spring animations (Animated.spring)
@@ -162,7 +169,23 @@
 - [x] Firework bursts
 - [x] Card flip animations (Memory Match)
 - [x] Screen shake (Tap Challenge)
-- [ ] Lottie animations for extra polish
+- [x] Lottie animations for extra polish
+- [x] Animation helper utilities (src/helpers/animations.ts)
+- [x] Animated counter component (numbers go brrr!)
+- [x] Level-up celebration modal
+- [x] Reward popup component (quick feedback)
+- [x] Design system file with consistent styles
+- [x] **CelebrationEffects** (`src/components/CelebrationEffects.tsx`)
+  - FloatingNumber - Animated "+50 XP" that floats up
+  - RewardPopup - Multiple floating rewards container
+  - StarBurst - Exploding star particles
+  - CelebrationOverlay - Full-screen celebration layer
+  - AnimatedCounter - Smooth count-up numbers
+  - PulseGlow - Pulsing glow wrapper
+  - ShakeEffect - Screen shake wrapper
+- [x] **PrepItemRedeemModal polish** - Lottie, star burst, floating rewards, screen glow
+- [x] **EnergyBar polish** - Glow when full, pulse on gain, "FULL!" indicator
+- [x] **StreakBadge polish** - Flickering fire, milestone glow, at-risk shake
 
 ### 6.3 Sounds
 - [ ] Collection sounds per rarity

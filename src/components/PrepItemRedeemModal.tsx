@@ -6,101 +6,32 @@ import {
   ImageBackground,
   Text,
   View,
+  Platform,
 } from 'react-native';
 import Modal from 'react-native-modal';
+import LottieView from 'lottie-react-native';
 import { PrepItemType } from '../models/prep-item-type';
 import { AuthContext } from '../context/AuthProvider';
 import redeemPrepItem from '../api/endpoints/me/prep-items/redeem';
 import Button from './Button';
 import Ribbon from './Ribbon';
 import config from '../config';
+import HapticPatterns from '../helpers/hapticPatterns';
+import {
+  FloatingNumber,
+  StarBurst,
+  PulseGlow,
+  CelebrationLevel,
+} from './CelebrationEffects';
 
-// Simple confetti particle component
-function ConfettiParticle({ delay, color }: { delay: number; color: string }) {
-  const translateY = useRef(new Animated.Value(-50)).current;
-  const translateX = useRef(
-    new Animated.Value(Math.random() * 200 - 100)
-  ).current;
-  const rotate = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.sequence([
-      Animated.delay(delay),
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 400,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(rotate, {
-          toValue: 360,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
-  }, []);
-
-  const spin = rotate.interpolate({
-    inputRange: [0, 360],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  return (
-    <Animated.View
-      style={{
-        position: 'absolute',
-        width: 10,
-        height: 10,
-        backgroundColor: color,
-        borderRadius: 2,
-        transform: [{ translateY }, { translateX }, { rotate: spin }],
-        opacity,
-      }}
-    />
-  );
-}
-
-function Confetti() {
-  const colors = [
-    config.tertiary,
-    config.red,
-    '#4CAF50',
-    config.secondary,
-    '#9C27B0',
-    '#FF9800',
-  ];
-  const particles = Array.from({ length: 30 }, (_, i) => ({
-    id: i,
-    delay: Math.random() * 500,
-    color: colors[Math.floor(Math.random() * colors.length)],
-  }));
-
-  return (
-    <View
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        alignItems: 'center',
-        overflow: 'hidden',
-      }}
-      pointerEvents="none"
-    >
-      {particles.map((p) => (
-        <ConfettiParticle key={p.id} delay={p.delay} color={p.color} />
-      ))}
-    </View>
-  );
-}
+// Map rarity number to celebration level
+const RARITY_TO_CELEBRATION: Record<number, CelebrationLevel> = {
+  1: 'common',
+  2: 'uncommon',
+  3: 'rare',
+  4: 'epic',
+  5: 'legendary',
+};
 
 interface Props {
   visible: boolean;
@@ -134,10 +65,22 @@ export default function PrepItemRedeemModal({
   } | null>(null);
   const { player, refreshPlayer } = useContext(AuthContext);
 
+  // Animation refs for collect celebration
+  const itemScale = useRef(new Animated.Value(1)).current;
+  const glowOpacity = useRef(new Animated.Value(0)).current;
+  const [showStarBurst, setShowStarBurst] = useState(false);
+  const [showFloatingRewards, setShowFloatingRewards] = useState(false);
+  const lottieRef = useRef<LottieView>(null);
+
   const handleCollect = async () => {
     if (!prepItem || !pivotId) return;
 
     setIsCollecting(true);
+    
+    // Trigger haptic based on rarity
+    const celebrationLevel = RARITY_TO_CELEBRATION[prepItem.rarity] || 'common';
+    HapticPatterns.collect(celebrationLevel);
+
     try {
       const response = await redeemPrepItem(
         prepItem.id,
@@ -147,32 +90,96 @@ export default function PrepItemRedeemModal({
 
       setRewards(response.data.rewards);
       setStreakInfo(response.data.streak);
+      
+      // Play celebration animations
+      playCollectAnimation(prepItem.rarity);
+      
       setShowRewards(true);
 
       await refreshPlayer();
     } catch (error) {
       console.error('Failed to collect prep item:', error);
+      HapticPatterns.error();
       onClose();
     } finally {
       setIsCollecting(false);
     }
   };
 
+  // Play the collect celebration animation
+  const playCollectAnimation = (rarity: number) => {
+    // Item pop animation
+    Animated.sequence([
+      Animated.timing(itemScale, {
+        toValue: 1.3,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.spring(itemScale, {
+        toValue: 1,
+        friction: 3,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Screen glow for rare+
+    if (rarity >= 3) {
+      Animated.sequence([
+        Animated.timing(glowOpacity, {
+          toValue: 0.4,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowOpacity, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+
+    // Star burst for rare+
+    if (rarity >= 3) {
+      setShowStarBurst(true);
+      setTimeout(() => setShowStarBurst(false), 1000);
+    }
+
+    // Floating rewards
+    setTimeout(() => setShowFloatingRewards(true), 300);
+    setTimeout(() => setShowFloatingRewards(false), 2000);
+
+    // Play Lottie confetti for epic+
+    if (rarity >= 4) {
+      lottieRef.current?.play();
+    }
+  };
+
   const handleDone = () => {
+    HapticPatterns.buttonTap();
     setShowRewards(false);
     setRewards(null);
     setStreakInfo(null);
+    setShowFloatingRewards(false);
     onCollected();
     onClose();
   };
 
+  // Trigger haptic when modal opens
+  useEffect(() => {
+    if (visible && prepItem) {
+      HapticPatterns.modalOpen();
+    }
+  }, [visible, prepItem]);
+
   if (!prepItem) return null;
 
   const rarityConfig = {
-    1: { label: 'Common', color: '#4CAF50' },
-    2: { label: 'Uncommon', color: config.secondary },
-    3: { label: 'Rare', color: '#9C27B0' },
-  }[prepItem.rarity] || { label: 'Common', color: '#4CAF50' };
+    1: { label: 'Common', color: '#4CAF50', glowColor: '#4CAF50' },
+    2: { label: 'Uncommon', color: config.secondary, glowColor: config.secondary },
+    3: { label: 'Rare', color: '#9C27B0', glowColor: '#9C27B0' },
+    4: { label: 'Epic', color: '#E91E63', glowColor: '#E91E63' },
+    5: { label: 'Legendary', color: '#FFD700', glowColor: '#FFD700' },
+  }[prepItem.rarity] || { label: 'Common', color: '#4CAF50', glowColor: '#4CAF50' };
 
   return (
     <Modal
@@ -225,7 +232,42 @@ export default function PrepItemRedeemModal({
                 resizeMode="cover"
                 style={{ width: '100%' }}
               >
-                <Confetti />
+                {/* Screen glow for rare+ items */}
+                <Animated.View
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: rarityConfig.glowColor,
+                    opacity: glowOpacity,
+                  }}
+                  pointerEvents="none"
+                />
+
+                {/* Lottie confetti for epic+ items */}
+                {prepItem.rarity >= 4 && (
+                  <LottieView
+                    ref={lottieRef}
+                    source={require('../../assets/animations/confetti.json')}
+                    style={{
+                      position: 'absolute',
+                      width: '150%',
+                      height: '150%',
+                      left: '-25%',
+                      top: '-25%',
+                    }}
+                    loop={false}
+                  />
+                )}
+
+                {/* Star burst effect */}
+                {showStarBurst && (
+                  <View style={{ position: 'absolute', top: '30%', alignSelf: 'center' }}>
+                    <StarBurst visible color={rarityConfig.color} count={prepItem.rarity >= 5 ? 12 : 8} />
+                  </View>
+                )}
 
                 <View
                   style={{
@@ -266,37 +308,44 @@ export default function PrepItemRedeemModal({
                         </Text>
                       </View>
 
-                      {/* Item Image */}
-                      <View
-                        style={{
-                          marginBottom: 16,
-                          shadowColor: '#000',
-                          shadowOffset: { width: 2, height: 2 },
-                          shadowRadius: 0,
-                          shadowOpacity: 0.3,
-                        }}
+                      {/* Item Image with pulse glow for rare+ */}
+                      <PulseGlow
+                        color={rarityConfig.glowColor}
+                        intensity={prepItem.rarity >= 3 ? 0.8 : 0.3}
+                        speed={prepItem.rarity >= 4 ? 1000 : 2000}
                       >
-                        {prepItem.icon_url ? (
-                          <Image
-                            source={{ uri: prepItem.icon_url }}
-                            style={{ width: 100, height: 100 }}
-                            contentFit="contain"
-                          />
-                        ) : (
-                          <View
-                            style={{
-                              width: 100,
-                              height: 100,
-                              borderRadius: 50,
-                              backgroundColor: rarityConfig.color,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <Text style={{ fontSize: 50 }}>🎁</Text>
-                          </View>
-                        )}
-                      </View>
+                        <Animated.View
+                          style={{
+                            marginBottom: 16,
+                            shadowColor: '#000',
+                            shadowOffset: { width: 2, height: 2 },
+                            shadowRadius: 0,
+                            shadowOpacity: 0.3,
+                            transform: [{ scale: itemScale }],
+                          }}
+                        >
+                          {prepItem.icon_url ? (
+                            <Image
+                              source={{ uri: prepItem.icon_url }}
+                              style={{ width: 100, height: 100 }}
+                              contentFit="contain"
+                            />
+                          ) : (
+                            <View
+                              style={{
+                                width: 100,
+                                height: 100,
+                                borderRadius: 50,
+                                backgroundColor: rarityConfig.color,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <Text style={{ fontSize: 50 }}>🎁</Text>
+                            </View>
+                          )}
+                        </Animated.View>
+                      </PulseGlow>
 
                       {/* Item Name */}
                       <Text
@@ -437,6 +486,36 @@ export default function PrepItemRedeemModal({
                   ) : (
                     // Post-collect view
                     <>
+                      {/* Floating reward numbers */}
+                      {showFloatingRewards && rewards && (
+                        <View style={{ position: 'absolute', top: 20, alignSelf: 'center', zIndex: 100 }}>
+                          {rewards.energy > 0 && (
+                            <FloatingNumber
+                              value={rewards.energy}
+                              emoji="⚡"
+                              color="#4CAF50"
+                              delay={0}
+                            />
+                          )}
+                          {rewards.tickets > 0 && (
+                            <FloatingNumber
+                              value={rewards.tickets}
+                              emoji="🎟️"
+                              color="#FF9800"
+                              delay={200}
+                            />
+                          )}
+                          {rewards.experience > 0 && (
+                            <FloatingNumber
+                              value={rewards.experience}
+                              label="XP"
+                              color={config.tertiary}
+                              delay={400}
+                            />
+                          )}
+                        </View>
+                      )}
+
                       <Text
                         style={{
                           fontFamily: 'Shark',
@@ -451,7 +530,7 @@ export default function PrepItemRedeemModal({
                           marginTop: 16,
                         }}
                       >
-                        🎉 Nice!
+                        {prepItem.rarity >= 4 ? '🔥 EPIC!' : prepItem.rarity >= 3 ? '✨ Nice!' : '🎉 Got it!'}
                       </Text>
 
                       <Text

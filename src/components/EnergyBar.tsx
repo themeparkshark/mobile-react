@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Text, View } from 'react-native';
+import { Animated, Text, View, Platform } from 'react-native';
 import config from '../config';
+import HapticPatterns from '../helpers/hapticPatterns';
+import { AnimatedCounter } from './CelebrationEffects';
 
 interface Props {
   current: number;
@@ -14,20 +16,78 @@ interface Props {
  */
 export default function EnergyBar({ current, max, secondsUntilNext }: Props) {
   const [timer, setTimer] = useState(secondsUntilNext);
+  const [prevCurrent, setPrevCurrent] = useState(current);
   const percentage = Math.min(100, (current / max) * 100);
   const isFull = current >= max;
   const widthAnim = useRef(new Animated.Value(percentage)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Animate bar width changes
+  // Animate bar width changes with celebration
   useEffect(() => {
     Animated.timing(widthAnim, {
       toValue: percentage,
       duration: 300,
       useNativeDriver: false,
     }).start();
-  }, [percentage]);
 
-  // Countdown timer
+    // Energy increased - celebrate!
+    if (current > prevCurrent) {
+      // Pulse the bar
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.05,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.spring(pulseAnim, {
+          toValue: 1,
+          friction: 3,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      // Glow effect
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+
+    setPrevCurrent(current);
+  }, [percentage, current, prevCurrent]);
+
+  // Pulse animation when full
+  useEffect(() => {
+    if (isFull) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 0.6,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      glowAnim.setValue(0);
+    }
+  }, [isFull]);
+
+  // Countdown timer with haptic on complete
   useEffect(() => {
     setTimer(secondsUntilNext);
 
@@ -37,7 +97,15 @@ export default function EnergyBar({ current, max, secondsUntilNext }: Props) {
       setTimer((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
+          // Energy regenerated!
+          if (Platform.OS === 'ios') {
+            HapticPatterns.timerComplete();
+          }
           return 0;
+        }
+        // Tick sound at 3, 2, 1
+        if (prev <= 3 && Platform.OS === 'ios') {
+          HapticPatterns.countdownTick();
         }
         return prev - 1;
       });
@@ -89,51 +157,89 @@ export default function EnergyBar({ current, max, secondsUntilNext }: Props) {
         >
           ⚡ Energy
         </Text>
-        <Text
-          style={{
-            fontFamily: 'Knockout',
-            fontSize: 18,
-            color: config.tertiary,
-            textShadowColor: 'rgba(0, 0, 0, 0.5)',
-            textShadowOffset: { width: 1, height: 1 },
-            textShadowRadius: 0,
-          }}
-        >
-          {current}/{max}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <AnimatedCounter
+            value={current}
+            style={{
+              fontFamily: 'Knockout',
+              fontSize: 18,
+              color: config.tertiary,
+              textShadowColor: 'rgba(0, 0, 0, 0.5)',
+              textShadowOffset: { width: 1, height: 1 },
+              textShadowRadius: 0,
+            }}
+          />
+          <Text
+            style={{
+              fontFamily: 'Knockout',
+              fontSize: 18,
+              color: config.tertiary,
+              textShadowColor: 'rgba(0, 0, 0, 0.5)',
+              textShadowOffset: { width: 1, height: 1 },
+              textShadowRadius: 0,
+            }}
+          >
+            /{max}
+          </Text>
+          {isFull && (
+            <Text
+              style={{
+                fontFamily: 'Knockout',
+                fontSize: 14,
+                color: '#4CAF50',
+                marginLeft: 8,
+                textShadowColor: 'rgba(0, 0, 0, 0.5)',
+                textShadowOffset: { width: 1, height: 1 },
+                textShadowRadius: 0,
+              }}
+            >
+              ✨ FULL!
+            </Text>
+          )}
+        </View>
       </View>
 
-      {/* Progress Bar Container */}
-      <View
+      {/* Progress Bar Container with glow */}
+      <Animated.View
         style={{
-          position: 'relative',
-          width: '100%',
-          height: 20,
-          borderRadius: 10,
-          borderWidth: 3,
-          borderColor: config.primary,
-          backgroundColor: 'white',
-          overflow: 'hidden',
-          shadowColor: '#000',
-          shadowOffset: { width: 2, height: 2 },
-          shadowRadius: 0,
-          shadowOpacity: 0.3,
+          transform: [{ scale: pulseAnim }],
+          shadowColor: isFull ? '#4CAF50' : getEnergyColor(),
+          shadowOffset: { width: 0, height: 0 },
+          shadowRadius: isFull ? 15 : 5,
+          shadowOpacity: glowAnim,
         }}
       >
-        {/* Animated Fill */}
-        <Animated.View
+        <View
           style={{
-            position: 'absolute',
-            width: widthAnim.interpolate({
-              inputRange: [0, 100],
-              outputRange: ['0%', '100%'],
-            }),
-            height: '100%',
-            backgroundColor: getEnergyColor(),
-            borderRadius: 7,
+            position: 'relative',
+            width: '100%',
+            height: 20,
+            borderRadius: 10,
+            borderWidth: 3,
+            borderColor: config.primary,
+            backgroundColor: 'white',
+            overflow: 'hidden',
+            shadowColor: '#000',
+            shadowOffset: { width: 2, height: 2 },
+            shadowRadius: 0,
+            shadowOpacity: 0.3,
           }}
-        />
-      </View>
+        >
+          {/* Animated Fill */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              width: widthAnim.interpolate({
+                inputRange: [0, 100],
+                outputRange: ['0%', '100%'],
+              }),
+              height: '100%',
+              backgroundColor: getEnergyColor(),
+              borderRadius: 7,
+            }}
+          />
+        </View>
+      </Animated.View>
 
       {/* Regen Timer */}
       {!isFull && timer > 0 && (

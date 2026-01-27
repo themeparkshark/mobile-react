@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../helpers/haptics';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { 
   faBars, 

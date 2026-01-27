@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../helpers/haptics';
 import { useNavigation } from '@react-navigation/native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faArrowLeft, faLock, faStar, faArrowUp } from '@fortawesome/free-solid-svg-icons';
@@ -24,86 +24,46 @@ import {
   RIDE_COIN_LEVEL_CONFIG,
 } from '../models/ride-coin-level-type';
 import { RIDE_PART_RARITY_CONFIG } from '../models/ride-part-type';
+import getTasks from '../api/endpoints/parks/getTasks';
+import visitedParks from '../api/endpoints/me/visited-parks';
+import { TaskType } from '../models/task-type';
 
-// Mock data for development
-const MOCK_COINS: RideCoinLevelType[] = [
-  {
-    id: 1,
-    ride_id: 1,
-    ride_name: 'Space Mountain',
-    coin_url: '',
-    current_level: 3,
+// Mock coins for initial state (replaced when API loads)
+const MOCK_COINS: RideCoinLevelType[] = [];
+
+// Helper to convert TaskType to RideCoinLevelType with real coin images
+const taskToCoinLevel = (task: TaskType, playerLevel: number): RideCoinLevelType => {
+  // Simulate leveling based on times_completed (until backend supports it)
+  const level = Math.min(Math.floor(task.times_completed / 3), 5);
+  const isMax = level >= 5;
+  
+  // Calculate required player level based on task experience (higher XP = harder ride)
+  const requiredLevel = Math.max(1, Math.floor(task.experience / 20));
+  const isUnlocked = playerLevel >= requiredLevel;
+  
+  return {
+    id: task.id,
+    ride_id: task.id,
+    ride_name: task.name,
+    coin_url: task.coin_url, // ← REAL COIN IMAGE!
+    current_level: level,
     max_level: 5,
-    times_collected: 12,
-    energy_to_next_level: 50,
-    parts_to_next_level: 30,
+    times_collected: task.times_completed,
+    energy_to_next_level: isMax ? 0 : (level + 1) * 10,
+    parts_to_next_level: isMax ? 0 : (level + 1) * 5,
     required_parts: [],
-    player_level_required: 10,
-    is_unlocked: true,
-    current_perks: [
-      { id: 1, name: 'Coin Boost', description: '1.25x coins', icon_url: '', type: 'multiplier', value: 1.25 },
-      { id: 2, name: 'Extra Parts', description: '+1 ride part', icon_url: '', type: 'bonus_parts', value: 1 },
-    ],
-    next_level_perks: [
-      { id: 3, name: 'Super Boost', description: '1.5x coins', icon_url: '', type: 'multiplier', value: 1.5 },
-    ],
+    player_level_required: requiredLevel,
+    is_unlocked: isUnlocked,
+    current_perks: level > 0 ? [
+      { id: 1, name: 'Coin Boost', description: `${1 + level * 0.1}x coins`, icon_url: '', type: 'multiplier', value: 1 + level * 0.1 },
+    ] : [],
+    next_level_perks: !isMax ? [
+      { id: 2, name: 'Next Boost', description: `${1 + (level + 1) * 0.1}x coins`, icon_url: '', type: 'multiplier', value: 1 + (level + 1) * 0.1 },
+    ] : [],
     current_frame_url: '',
     next_frame_url: '',
-  },
-  {
-    id: 2,
-    ride_id: 2,
-    ride_name: 'Pirates of the Caribbean',
-    coin_url: '',
-    current_level: 5,
-    max_level: 5,
-    times_collected: 47,
-    energy_to_next_level: 0,
-    parts_to_next_level: 0,
-    required_parts: [],
-    player_level_required: 5,
-    is_unlocked: true,
-    current_perks: [
-      { id: 4, name: 'Max Boost', description: '2x coins', icon_url: '', type: 'multiplier', value: 2 },
-      { id: 5, name: 'Boss Access', description: 'Challenge the boss!', icon_url: '', type: 'boss_access', value: 1 },
-    ],
-    next_level_perks: [],
-  },
-  {
-    id: 3,
-    ride_id: 3,
-    ride_name: 'Haunted Mansion',
-    coin_url: '',
-    current_level: 1,
-    max_level: 5,
-    times_collected: 3,
-    energy_to_next_level: 10,
-    parts_to_next_level: 5,
-    required_parts: [],
-    player_level_required: 1,
-    is_unlocked: true,
-    current_perks: [],
-    next_level_perks: [
-      { id: 6, name: 'Coin Boost', description: '1.1x coins', icon_url: '', type: 'multiplier', value: 1.1 },
-    ],
-  },
-  {
-    id: 4,
-    ride_id: 4,
-    ride_name: 'Rise of the Resistance',
-    coin_url: '',
-    current_level: 0,
-    max_level: 5,
-    times_collected: 0,
-    energy_to_next_level: 0,
-    parts_to_next_level: 0,
-    required_parts: [],
-    player_level_required: 20,
-    is_unlocked: false,
-    current_perks: [],
-    next_level_perks: [],
-  },
-];
+  };
+};
 
 export default function CoinShelfScreen() {
   const navigation = useNavigation();

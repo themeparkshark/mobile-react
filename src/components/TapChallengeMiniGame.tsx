@@ -10,10 +10,11 @@ import {
   Platform,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import * as Haptics from 'expo-haptics';
+import HapticPatterns from '../helpers/hapticPatterns';
 import Button from './Button';
 import Ribbon from './Ribbon';
 import config from '../config';
+import { AnimatedCounter, ShakeEffect } from './CelebrationEffects';
 
 interface Props {
   visible: boolean;
@@ -117,13 +118,9 @@ export default function TapChallengeMiniGame({
     const mult = calculateMultiplier(tapCount);
     setFinalMultiplier(mult);
     
-    // Heavy haptic for game end
+    // Haptic based on performance
     if (Platform.OS === 'ios') {
-      Haptics.notificationAsync(
-        mult >= 1.5 ? Haptics.NotificationFeedbackType.Success :
-        mult >= 1.0 ? Haptics.NotificationFeedbackType.Warning :
-        Haptics.NotificationFeedbackType.Error
-      );
+      HapticPatterns.miniGameResult(mult);
     }
   }, [tapCount, calculateMultiplier]);
 
@@ -142,18 +139,15 @@ export default function TapChallengeMiniGame({
     setTapCount((prev) => {
       const newCount = prev + 1;
       
-      // Calculate current multiplier for color
-      const mult = calculateMultiplier(newCount);
+      // Haptic feedback - scales with taps
+      if (Platform.OS === 'ios') {
+        HapticPatterns.rapidFire(newCount);
+      } else {
+        Vibration.vibrate(10);
+      }
       
       return newCount;
     });
-
-    // Haptic feedback
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } else {
-      Vibration.vibrate(10);
-    }
 
     // Button press animation
     Animated.sequence([

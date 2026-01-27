@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../helpers/haptics';
 import TapChallengeMiniGame from './TapChallengeMiniGame';
 import TimingMiniGame from './TimingMiniGame';
 import MemoryMatchMiniGame from './MemoryMatchMiniGame';

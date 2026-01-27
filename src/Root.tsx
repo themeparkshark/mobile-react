@@ -8,7 +8,7 @@ import mobileAds, {
   InterstitialAd,
   MaxAdContentRating,
   TestIds,
-} from 'react-native-google-mobile-ads';
+} from './helpers/ads-stub';
 import { useAsyncEffect } from 'rooks';
 import { navigationRef } from './RootNavigation';
 import getCrumbs from './api/endpoints/crumbs/getCrumbs';

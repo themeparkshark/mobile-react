@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef } from 'react';
 import { Animated, Text, TouchableOpacity, View, Platform } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '../helpers/haptics';
 import { WeatherContext, getWeatherEmoji, getWeatherDescription } from '../context/WeatherProvider';
 import { WeatherCondition } from '../models/prep-item-set-type';
 import config from '../config';
