@@ -41,6 +41,9 @@ import StoreScreen from './screens/StoreScreen';
 import ThreadScreen from './screens/ThreadScreen';
 import WatchScreen from './screens/WatchScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
+// V2 Screens
+import SetCollectionScreen from './screens/SetCollectionScreen';
+import CoinShelfScreen from './screens/CoinShelfScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -193,6 +196,9 @@ export default function App() {
             gestureEnabled: false,
           }}
         />
+        {/* V2 Screens */}
+        <Stack.Screen name="SetCollection" component={SetCollectionScreen} />
+        <Stack.Screen name="CoinShelf" component={CoinShelfScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

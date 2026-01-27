@@ -1,21 +1,26 @@
 import { Image } from 'expo-image';
 import { useContext, useState, useEffect, useRef } from 'react';
 import {
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
   Animated,
+  Dimensions,
+  ImageBackground,
+  Text,
+  View,
 } from 'react-native';
+import Modal from 'react-native-modal';
 import { PrepItemType } from '../models/prep-item-type';
 import { AuthContext } from '../context/AuthProvider';
 import redeemPrepItem from '../api/endpoints/me/prep-items/redeem';
+import Button from './Button';
+import Ribbon from './Ribbon';
+import config from '../config';
 
-// Simple confetti particle component (no Lottie dependency)
+// Simple confetti particle component
 function ConfettiParticle({ delay, color }: { delay: number; color: string }) {
   const translateY = useRef(new Animated.Value(-50)).current;
-  const translateX = useRef(new Animated.Value(Math.random() * 200 - 100)).current;
+  const translateX = useRef(
+    new Animated.Value(Math.random() * 200 - 100)
+  ).current;
   const rotate = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
@@ -63,7 +68,14 @@ function ConfettiParticle({ delay, color }: { delay: number; color: string }) {
 }
 
 function Confetti() {
-  const colors = ['#FFD700', '#FF6B6B', '#4CAF50', '#2196F3', '#9C27B0', '#FF9800'];
+  const colors = [
+    config.tertiary,
+    config.red,
+    '#4CAF50',
+    config.secondary,
+    '#9C27B0',
+    '#FF9800',
+  ];
   const particles = Array.from({ length: 30 }, (_, i) => ({
     id: i,
     delay: Math.random() * 500,
@@ -71,25 +83,24 @@ function Confetti() {
   }));
 
   return (
-    <View style={confettiStyles.container} pointerEvents="none">
+    <View
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        alignItems: 'center',
+        overflow: 'hidden',
+      }}
+      pointerEvents="none"
+    >
       {particles.map((p) => (
         <ConfettiParticle key={p.id} delay={p.delay} color={p.color} />
       ))}
     </View>
   );
 }
-
-const confettiStyles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-});
 
 interface Props {
   visible: boolean;
@@ -101,7 +112,7 @@ interface Props {
 
 /**
  * Modal for collecting a prep item.
- * Shows the item, rewards preview, and collect button.
+ * Styled to match app's AAA quality standards.
  */
 export default function PrepItemRedeemModal({
   visible,
@@ -131,14 +142,13 @@ export default function PrepItemRedeemModal({
       const response = await redeemPrepItem(
         prepItem.id,
         pivotId,
-        player?.is_subscribed || false // VIP double rewards
+        player?.is_subscribed || false
       );
 
       setRewards(response.data.rewards);
       setStreakInfo(response.data.streak);
       setShowRewards(true);
 
-      // Refresh player data
       await refreshPlayer();
     } catch (error) {
       console.error('Failed to collect prep item:', error);
@@ -158,315 +168,444 @@ export default function PrepItemRedeemModal({
 
   if (!prepItem) return null;
 
-  const rarityLabel = {
-    1: 'Common',
-    2: 'Uncommon',
-    3: 'Rare',
-  }[prepItem.rarity] || 'Common';
-
-  const rarityColor = {
-    1: '#4CAF50',
-    2: '#2196F3',
-    3: '#9C27B0',
-  }[prepItem.rarity] || '#4CAF50';
+  const rarityConfig = {
+    1: { label: 'Common', color: '#4CAF50' },
+    2: { label: 'Uncommon', color: config.secondary },
+    3: { label: 'Rare', color: '#9C27B0' },
+  }[prepItem.rarity] || { label: 'Common', color: '#4CAF50' };
 
   return (
     <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      animationIn="zoomIn"
+      animationOut="zoomOut"
+      isVisible={visible}
+      onBackdropPress={onClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          {/* Close button */}
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeText}>✕</Text>
-          </TouchableOpacity>
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <View
+          style={{
+            width: Dimensions.get('window').width - 40,
+            position: 'relative',
+            alignItems: 'center',
+          }}
+        >
+          {/* Ribbon Header */}
+          <Ribbon text={showRewards ? 'Collected!' : 'Prep Item'} />
 
-          {!showRewards ? (
-            // Pre-collect view
-            <>
-              {/* Confetti animation */}
-              <Confetti />
-
-              {/* Rarity badge */}
-              <View style={[styles.rarityBadge, { backgroundColor: rarityColor }]}>
-                <Text style={styles.rarityText}>{rarityLabel}</Text>
-              </View>
-
-              {/* Item image */}
-              <View style={styles.itemContainer}>
-                {prepItem.icon_url ? (
-                  <Image
-                    source={{ uri: prepItem.icon_url }}
-                    style={styles.itemImage}
-                    contentFit="contain"
-                  />
-                ) : (
-                  <View style={[styles.fallbackIcon, { backgroundColor: rarityColor }]}>
-                    <Text style={styles.fallbackEmoji}>🎁</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Item name */}
-              <Text style={styles.itemName}>{prepItem.name}</Text>
-              {prepItem.description && (
-                <Text style={styles.itemDescription}>{prepItem.description}</Text>
-              )}
-
-              {/* Rewards preview */}
-              <View style={styles.rewardsPreview}>
-                {prepItem.energy_reward > 0 && (
-                  <View style={styles.rewardBox}>
-                    <Text style={styles.rewardIcon}>⚡</Text>
-                    <Text style={styles.rewardValue}>+{prepItem.energy_reward}</Text>
-                    <Text style={styles.rewardLabel}>Energy</Text>
-                  </View>
-                )}
-                {prepItem.ticket_reward > 0 && (
-                  <View style={styles.rewardBox}>
-                    <Text style={styles.rewardIcon}>🎟️</Text>
-                    <Text style={styles.rewardValue}>+{prepItem.ticket_reward}</Text>
-                    <Text style={styles.rewardLabel}>Tickets</Text>
-                  </View>
-                )}
-                {prepItem.experience_reward > 0 && (
-                  <View style={styles.rewardBox}>
-                    <Text style={styles.rewardIcon}>⭐</Text>
-                    <Text style={styles.rewardValue}>+{prepItem.experience_reward}</Text>
-                    <Text style={styles.rewardLabel}>XP</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Collect button */}
-              <TouchableOpacity
-                style={[styles.collectButton, isCollecting && styles.collectingButton]}
-                onPress={handleCollect}
-                disabled={isCollecting}
+          {/* Main Content Box */}
+          <View
+            style={{
+              backgroundColor: config.secondary,
+              marginTop: '-10%',
+              width: '85%',
+              zIndex: 10,
+              shadowColor: '#000',
+              shadowOffset: { width: 2, height: 2 },
+              shadowRadius: 0,
+              shadowOpacity: 0.4,
+              borderColor: 'rgba(0, 0, 0, 0.4)',
+              borderWidth: 2,
+              borderRadius: 16,
+            }}
+          >
+            <View
+              style={{
+                borderRadius: 16,
+                overflow: 'hidden',
+              }}
+            >
+              <ImageBackground
+                source={require('../../assets/images/modals/daily_gift.png')}
+                resizeMode="cover"
+                style={{ width: '100%' }}
               >
-                <Text style={styles.collectButtonText}>
-                  {isCollecting ? 'Collecting...' : 'Collect!'}
-                </Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            // Post-collect view (rewards received)
-            <>
-              <Confetti />
+                <Confetti />
 
-              <Text style={styles.collectedTitle}>🎉 Collected!</Text>
-              <Text style={styles.itemName}>{prepItem.name}</Text>
+                <View
+                  style={{
+                    paddingTop: 32,
+                    paddingLeft: 16,
+                    paddingRight: 16,
+                    paddingBottom: 24,
+                    alignItems: 'center',
+                  }}
+                >
+                  {!showRewards ? (
+                    // Pre-collect view
+                    <>
+                      {/* Rarity Badge */}
+                      <View
+                        style={{
+                          backgroundColor: rarityConfig.color,
+                          paddingHorizontal: 16,
+                          paddingVertical: 6,
+                          borderRadius: 12,
+                          marginBottom: 16,
+                          borderWidth: 2,
+                          borderColor: 'rgba(255, 255, 255, 0.3)',
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: 'Knockout',
+                            fontSize: 14,
+                            color: 'white',
+                            textTransform: 'uppercase',
+                            textShadowColor: 'rgba(0, 0, 0, 0.5)',
+                            textShadowOffset: { width: 1, height: 1 },
+                            textShadowRadius: 0,
+                          }}
+                        >
+                          {rarityConfig.label}
+                        </Text>
+                      </View>
 
-              {/* Actual rewards received */}
-              <View style={styles.rewardsReceived}>
-                {rewards?.energy && rewards.energy > 0 && (
-                  <View style={styles.rewardReceivedBox}>
-                    <Text style={styles.rewardReceivedValue}>+{rewards.energy}</Text>
-                    <Text style={styles.rewardReceivedLabel}>⚡ Energy</Text>
-                  </View>
-                )}
-                {rewards?.tickets && rewards.tickets > 0 && (
-                  <View style={styles.rewardReceivedBox}>
-                    <Text style={styles.rewardReceivedValue}>+{rewards.tickets}</Text>
-                    <Text style={styles.rewardReceivedLabel}>🎟️ Tickets</Text>
-                  </View>
-                )}
-                {rewards?.experience && rewards.experience > 0 && (
-                  <View style={styles.rewardReceivedBox}>
-                    <Text style={styles.rewardReceivedValue}>+{rewards.experience}</Text>
-                    <Text style={styles.rewardReceivedLabel}>⭐ XP</Text>
-                  </View>
-                )}
-              </View>
+                      {/* Item Image */}
+                      <View
+                        style={{
+                          marginBottom: 16,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 2, height: 2 },
+                          shadowRadius: 0,
+                          shadowOpacity: 0.3,
+                        }}
+                      >
+                        {prepItem.icon_url ? (
+                          <Image
+                            source={{ uri: prepItem.icon_url }}
+                            style={{ width: 100, height: 100 }}
+                            contentFit="contain"
+                          />
+                        ) : (
+                          <View
+                            style={{
+                              width: 100,
+                              height: 100,
+                              borderRadius: 50,
+                              backgroundColor: rarityConfig.color,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <Text style={{ fontSize: 50 }}>🎁</Text>
+                          </View>
+                        )}
+                      </View>
 
-              {/* Streak info */}
-              {streakInfo && streakInfo.current > 0 && (
-                <View style={styles.streakInfo}>
-                  <Text style={styles.streakText}>
-                    🔥 {streakInfo.current} day streak!
-                  </Text>
-                  {streakInfo.multiplier > 1 && (
-                    <Text style={styles.multiplierText}>
-                      {streakInfo.multiplier}x bonus applied!
-                    </Text>
+                      {/* Item Name */}
+                      <Text
+                        style={{
+                          fontFamily: 'Shark',
+                          fontSize: 24,
+                          color: 'white',
+                          textAlign: 'center',
+                          textTransform: 'uppercase',
+                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
+                          textShadowOffset: { width: 2, height: 2 },
+                          textShadowRadius: 0,
+                          marginBottom: 8,
+                        }}
+                      >
+                        {prepItem.name}
+                      </Text>
+
+                      {prepItem.description && (
+                        <Text
+                          style={{
+                            fontFamily: 'Knockout',
+                            fontSize: 14,
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            textAlign: 'center',
+                            marginBottom: 16,
+                          }}
+                        >
+                          {prepItem.description}
+                        </Text>
+                      )}
+
+                      {/* Rewards Preview */}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'center',
+                          marginBottom: 20,
+                          gap: 12,
+                        }}
+                      >
+                        {prepItem.energy_reward > 0 && (
+                          <View
+                            style={{
+                              alignItems: 'center',
+                              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                              paddingHorizontal: 14,
+                              paddingVertical: 10,
+                              borderRadius: 12,
+                            }}
+                          >
+                            <Text style={{ fontSize: 20 }}>⚡</Text>
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 18,
+                                color: config.tertiary,
+                              }}
+                            >
+                              +{prepItem.energy_reward}
+                            </Text>
+                          </View>
+                        )}
+                        {prepItem.ticket_reward > 0 && (
+                          <View
+                            style={{
+                              alignItems: 'center',
+                              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                              paddingHorizontal: 14,
+                              paddingVertical: 10,
+                              borderRadius: 12,
+                            }}
+                          >
+                            <Text style={{ fontSize: 20 }}>🎟️</Text>
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 18,
+                                color: config.tertiary,
+                              }}
+                            >
+                              +{prepItem.ticket_reward}
+                            </Text>
+                          </View>
+                        )}
+                        {prepItem.experience_reward > 0 && (
+                          <View
+                            style={{
+                              alignItems: 'center',
+                              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                              paddingHorizontal: 14,
+                              paddingVertical: 10,
+                              borderRadius: 12,
+                            }}
+                          >
+                            <Text style={{ fontSize: 20 }}>⭐</Text>
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 18,
+                                color: config.tertiary,
+                              }}
+                            >
+                              +{prepItem.experience_reward}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Collect Button */}
+                      <Button
+                        onPress={handleCollect}
+                        hasPermission={!isCollecting}
+                      >
+                        <ImageBackground
+                          source={require('../../assets/images/yellow_button.png')}
+                          style={{
+                            paddingHorizontal: 40,
+                            paddingVertical: 12,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                          resizeMode="stretch"
+                        >
+                          <Text
+                            style={{
+                              fontFamily: 'Shark',
+                              fontSize: 22,
+                              color: config.primary,
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {isCollecting ? 'Collecting...' : 'Collect!'}
+                          </Text>
+                        </ImageBackground>
+                      </Button>
+                    </>
+                  ) : (
+                    // Post-collect view
+                    <>
+                      <Text
+                        style={{
+                          fontFamily: 'Shark',
+                          fontSize: 28,
+                          color: config.tertiary,
+                          textAlign: 'center',
+                          textTransform: 'uppercase',
+                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
+                          textShadowOffset: { width: 2, height: 2 },
+                          textShadowRadius: 0,
+                          marginBottom: 8,
+                          marginTop: 16,
+                        }}
+                      >
+                        🎉 Nice!
+                      </Text>
+
+                      <Text
+                        style={{
+                          fontFamily: 'Knockout',
+                          fontSize: 18,
+                          color: 'white',
+                          textAlign: 'center',
+                          marginBottom: 20,
+                        }}
+                      >
+                        {prepItem.name}
+                      </Text>
+
+                      {/* Rewards Received */}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'center',
+                          marginBottom: 20,
+                          gap: 16,
+                        }}
+                      >
+                        {rewards?.energy && rewards.energy > 0 && (
+                          <View style={{ alignItems: 'center' }}>
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 28,
+                                color: '#4CAF50',
+                              }}
+                            >
+                              +{rewards.energy}
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 12,
+                                color: 'rgba(255, 255, 255, 0.7)',
+                              }}
+                            >
+                              ⚡ Energy
+                            </Text>
+                          </View>
+                        )}
+                        {rewards?.tickets && rewards.tickets > 0 && (
+                          <View style={{ alignItems: 'center' }}>
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 28,
+                                color: '#4CAF50',
+                              }}
+                            >
+                              +{rewards.tickets}
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 12,
+                                color: 'rgba(255, 255, 255, 0.7)',
+                              }}
+                            >
+                              🎟️ Tickets
+                            </Text>
+                          </View>
+                        )}
+                        {rewards?.experience && rewards.experience > 0 && (
+                          <View style={{ alignItems: 'center' }}>
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 28,
+                                color: '#4CAF50',
+                              }}
+                            >
+                              +{rewards.experience}
+                            </Text>
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 12,
+                                color: 'rgba(255, 255, 255, 0.7)',
+                              }}
+                            >
+                              ⭐ XP
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Streak Info */}
+                      {streakInfo && streakInfo.current > 0 && (
+                        <View
+                          style={{
+                            alignItems: 'center',
+                            marginBottom: 20,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: 'Knockout',
+                              fontSize: 18,
+                              color: '#FF9800',
+                            }}
+                          >
+                            🔥 {streakInfo.current} day streak!
+                          </Text>
+                          {streakInfo.multiplier > 1 && (
+                            <Text
+                              style={{
+                                fontFamily: 'Knockout',
+                                fontSize: 14,
+                                color: config.tertiary,
+                              }}
+                            >
+                              {streakInfo.multiplier}x bonus applied!
+                            </Text>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Done Button */}
+                      <Button onPress={handleDone}>
+                        <ImageBackground
+                          source={require('../../assets/images/yellow_button.png')}
+                          style={{
+                            paddingHorizontal: 40,
+                            paddingVertical: 12,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                          resizeMode="stretch"
+                        >
+                          <Text
+                            style={{
+                              fontFamily: 'Shark',
+                              fontSize: 22,
+                              color: config.primary,
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            Awesome!
+                          </Text>
+                        </ImageBackground>
+                      </Button>
+                    </>
                   )}
                 </View>
-              )}
-
-              {/* Done button */}
-              <TouchableOpacity style={styles.doneButton} onPress={handleDone}>
-                <Text style={styles.doneButtonText}>Awesome!</Text>
-              </TouchableOpacity>
-            </>
-          )}
+              </ImageBackground>
+            </View>
+          </View>
         </View>
       </View>
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  container: {
-    width: '85%',
-    backgroundColor: '#1a1a2e',
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeText: {
-    color: 'white',
-    fontSize: 18,
-  },
-  rarityBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  rarityText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 12,
-    textTransform: 'uppercase',
-  },
-  itemContainer: {
-    marginBottom: 16,
-  },
-  itemImage: {
-    width: 120,
-    height: 120,
-  },
-  fallbackIcon: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fallbackEmoji: {
-    fontSize: 60,
-  },
-  itemName: {
-    color: 'white',
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  itemDescription: {
-    color: '#aaa',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  rewardsPreview: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-    marginBottom: 24,
-  },
-  rewardBox: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  rewardIcon: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  rewardValue: {
-    color: '#4CAF50',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  rewardLabel: {
-    color: '#888',
-    fontSize: 10,
-  },
-  collectButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 48,
-    paddingVertical: 16,
-    borderRadius: 30,
-  },
-  collectingButton: {
-    backgroundColor: '#888',
-  },
-  collectButtonText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  collectedTitle: {
-    color: '#FFD700',
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    marginTop: 20,
-  },
-  rewardsReceived: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-    marginVertical: 24,
-  },
-  rewardReceivedBox: {
-    alignItems: 'center',
-  },
-  rewardReceivedValue: {
-    color: '#4CAF50',
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  rewardReceivedLabel: {
-    color: '#888',
-    fontSize: 12,
-  },
-  streakInfo: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  streakText: {
-    color: '#FF9800',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  multiplierText: {
-    color: '#FFD700',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  doneButton: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 48,
-    paddingVertical: 16,
-    borderRadius: 30,
-  },
-  doneButtonText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-});

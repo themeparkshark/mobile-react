@@ -1,7 +1,8 @@
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Text, View } from 'react-native';
 import { PrepItemType } from '../../models/prep-item-type';
+import config from '../../config';
 import dayjs from 'dayjs';
 
 interface Props {
@@ -11,11 +12,47 @@ interface Props {
 
 /**
  * Prep item marker for the home map.
- * Shows a collectible item that spawns near the player when not at a park.
+ * Styled to match app's AAA quality standards.
  */
 export default function PrepItem({ prepItem, onExpire }: Props) {
   const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
 
+  // Pulse animation for attention
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 0.6,
+          duration: 1000,
+          useNativeDriver: false,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0.3,
+          duration: 1000,
+          useNativeDriver: false,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  // Countdown timer
   useEffect(() => {
     if (!prepItem.active_to) return;
 
@@ -38,93 +75,127 @@ export default function PrepItem({ prepItem, onExpire }: Props) {
     return () => clearInterval(interval);
   }, [prepItem.active_to, onExpire]);
 
-  // Rarity colors
-  const rarityColor = {
-    1: '#4CAF50', // Common - green
-    2: '#2196F3', // Uncommon - blue
-    3: '#9C27B0', // Rare - purple
-  }[prepItem.rarity] || '#4CAF50';
+  // Rarity config
+  const rarityConfig = {
+    1: { color: '#4CAF50', label: 'Common' },
+    2: { color: config.secondary, label: 'Uncommon' },
+    3: { color: '#9C27B0', label: 'Rare' },
+  }[prepItem.rarity] || { color: '#4CAF50', label: 'Common' };
 
   return (
-    <View style={styles.container}>
+    <Animated.View
+      style={{
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 80,
+        height: 80,
+        transform: [{ scale: pulseAnim }],
+      }}
+    >
       {/* Glow effect based on rarity */}
-      <View style={[styles.glow, { backgroundColor: rarityColor }]} />
-      
+      <Animated.View
+        style={{
+          position: 'absolute',
+          width: 70,
+          height: 70,
+          borderRadius: 35,
+          backgroundColor: rarityConfig.color,
+          opacity: glowAnim,
+        }}
+      />
+
+      {/* White outline circle */}
+      <View
+        style={{
+          position: 'absolute',
+          width: 60,
+          height: 60,
+          borderRadius: 30,
+          borderWidth: 3,
+          borderColor: 'white',
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          shadowColor: '#000',
+          shadowOffset: { width: 2, height: 2 },
+          shadowRadius: 0,
+          shadowOpacity: 0.3,
+        }}
+      />
+
       {/* Item icon or fallback */}
       {prepItem.icon_url ? (
         <Image
           source={{ uri: prepItem.icon_url }}
-          style={styles.icon}
+          style={{
+            width: 45,
+            height: 45,
+            zIndex: 10,
+          }}
           contentFit="contain"
         />
       ) : (
-        <View style={[styles.fallbackIcon, { backgroundColor: rarityColor }]}>
-          <Text style={styles.fallbackText}>🎁</Text>
+        <View
+          style={{
+            width: 45,
+            height: 45,
+            borderRadius: 22,
+            backgroundColor: rarityConfig.color,
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10,
+          }}
+        >
+          <Text style={{ fontSize: 24 }}>🎁</Text>
         </View>
       )}
 
       {/* Timer */}
       {timeRemaining && (
-        <View style={styles.timerContainer}>
-          <Text style={styles.timerText}>{timeRemaining}</Text>
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            backgroundColor: config.primary,
+            paddingHorizontal: 8,
+            paddingVertical: 3,
+            borderRadius: 10,
+            borderWidth: 2,
+            borderColor: 'white',
+            shadowColor: '#000',
+            shadowOffset: { width: 1, height: 1 },
+            shadowRadius: 0,
+            shadowOpacity: 0.3,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: 'Knockout',
+              fontSize: 11,
+              color: 'white',
+            }}
+          >
+            {timeRemaining}
+          </Text>
         </View>
       )}
 
       {/* Rarity indicator */}
-      <View style={[styles.rarityDot, { backgroundColor: rarityColor }]} />
-    </View>
+      <View
+        style={{
+          position: 'absolute',
+          top: 5,
+          right: 10,
+          width: 14,
+          height: 14,
+          borderRadius: 7,
+          backgroundColor: rarityConfig.color,
+          borderWidth: 2,
+          borderColor: 'white',
+          shadowColor: '#000',
+          shadowOffset: { width: 1, height: 1 },
+          shadowRadius: 0,
+          shadowOpacity: 0.3,
+        }}
+      />
+    </Animated.View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 80,
-    height: 80,
-  },
-  glow: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    opacity: 0.3,
-  },
-  icon: {
-    width: 50,
-    height: 50,
-  },
-  fallbackIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fallbackText: {
-    fontSize: 24,
-  },
-  timerContainer: {
-    position: 'absolute',
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  timerText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  rarityDot: {
-    position: 'absolute',
-    top: 5,
-    right: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: 'white',
-  },
-});

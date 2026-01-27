@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Text, View } from 'react-native';
+import config from '../config';
 
 interface Props {
   current: number;
@@ -9,11 +10,22 @@ interface Props {
 
 /**
  * Energy bar showing current/max energy with regeneration timer.
+ * Styled to match app's AAA quality standards.
  */
 export default function EnergyBar({ current, max, secondsUntilNext }: Props) {
   const [timer, setTimer] = useState(secondsUntilNext);
   const percentage = Math.min(100, (current / max) * 100);
   const isFull = current >= max;
+  const widthAnim = useRef(new Animated.Value(percentage)).current;
+
+  // Animate bar width changes
+  useEffect(() => {
+    Animated.timing(widthAnim, {
+      toValue: percentage,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [percentage]);
 
   // Countdown timer
   useEffect(() => {
@@ -40,70 +52,103 @@ export default function EnergyBar({ current, max, secondsUntilNext }: Props) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Energy color based on level
+  const getEnergyColor = () => {
+    if (percentage > 60) return '#4CAF50'; // Green - healthy
+    if (percentage > 30) return config.tertiary; // Yellow/gold - medium
+    return config.red; // Red - low
+  };
+
   return (
-    <View style={styles.container}>
-      <View style={styles.labelRow}>
-        <Text style={styles.label}>⚡ Energy</Text>
-        <Text style={styles.count}>
+    <View
+      style={{
+        width: '100%',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+      }}
+    >
+      {/* Label Row */}
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 6,
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: 'Knockout',
+            fontSize: 16,
+            color: 'white',
+            textTransform: 'uppercase',
+            textShadowColor: 'rgba(0, 0, 0, 0.5)',
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 0,
+          }}
+        >
+          ⚡ Energy
+        </Text>
+        <Text
+          style={{
+            fontFamily: 'Knockout',
+            fontSize: 18,
+            color: config.tertiary,
+            textShadowColor: 'rgba(0, 0, 0, 0.5)',
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 0,
+          }}
+        >
           {current}/{max}
         </Text>
       </View>
-      
-      <View style={styles.barContainer}>
-        <View
-          style={[
-            styles.barFill,
-            {
-              width: `${percentage}%`,
-              backgroundColor: percentage > 30 ? '#4CAF50' : '#FF9800',
-            },
-          ]}
+
+      {/* Progress Bar Container */}
+      <View
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: 20,
+          borderRadius: 10,
+          borderWidth: 3,
+          borderColor: config.primary,
+          backgroundColor: 'white',
+          overflow: 'hidden',
+          shadowColor: '#000',
+          shadowOffset: { width: 2, height: 2 },
+          shadowRadius: 0,
+          shadowOpacity: 0.3,
+        }}
+      >
+        {/* Animated Fill */}
+        <Animated.View
+          style={{
+            position: 'absolute',
+            width: widthAnim.interpolate({
+              inputRange: [0, 100],
+              outputRange: ['0%', '100%'],
+            }),
+            height: '100%',
+            backgroundColor: getEnergyColor(),
+            borderRadius: 7,
+          }}
         />
       </View>
 
+      {/* Regen Timer */}
       {!isFull && timer > 0 && (
-        <Text style={styles.timer}>
-          +1 in {formatTime(timer)}
+        <Text
+          style={{
+            fontFamily: 'Knockout',
+            fontSize: 12,
+            color: 'rgba(255, 255, 255, 0.7)',
+            textAlign: 'right',
+            marginTop: 4,
+          }}
+        >
+          +1 energy in {formatTime(timer)}
         </Text>
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-  },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  label: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  count: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  barContainer: {
-    height: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 5,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: 5,
-  },
-  timer: {
-    color: '#aaa',
-    fontSize: 10,
-    marginTop: 2,
-    textAlign: 'right',
-  },
-});

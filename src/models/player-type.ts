@@ -38,4 +38,21 @@ export interface PlayerType {
   readonly max_energy?: number;
   readonly current_streak?: number;
   readonly longest_streak?: number;
+  readonly ride_parts?: number;
+  readonly player_level?: number;
+  readonly xp_to_next_level?: number;
+  readonly current_xp?: number;
+  readonly title?: string;
+  readonly active_cosmetics?: PlayerCosmeticType[];
+}
+
+/**
+ * Player cosmetic customization
+ */
+export interface PlayerCosmeticType {
+  readonly id: number;
+  readonly type: 'shark_skin' | 'frame' | 'badge' | 'trail';
+  readonly name: string;
+  readonly icon_url: string;
+  readonly is_equipped: boolean;
 }
