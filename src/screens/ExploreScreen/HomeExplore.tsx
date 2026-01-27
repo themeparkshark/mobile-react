@@ -14,6 +14,7 @@ import getCurrentPrepItem from '../../api/endpoints/me/prep-items/current';
 import PrepItemMarker from './PrepItem';
 import EnergyBar from '../../components/EnergyBar';
 import StreakBadge from '../../components/StreakBadge';
+import QuickAccessMenu from '../../components/QuickAccessMenu';
 
 dayjs.extend(isBetween);
 
@@ -157,6 +158,9 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
           </Text>
         </View>
       )}
+
+      {/* Quick Access Menu */}
+      <QuickAccessMenu position="left" />
 
       {/* Home mode indicator */}
       <View style={styles.homeBadge}>
