@@ -216,10 +216,6 @@ export default function MiniGameShell({
               >
                 <Text style={s.startBtnText}>I'M READY!</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
-                <Text style={s.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
             </Animated.View>
           )}
 
@@ -342,8 +338,7 @@ const s = StyleSheet.create({
     borderRadius: 14, marginTop: 24,
   },
   startBtnText: { color: '#000', fontSize: 20, fontWeight: '900' },
-  cancelBtn: { marginTop: 12 },
-  cancelBtnText: { color: 'rgba(255,255,255,0.4)', fontSize: 14 },
+  // Cancel button removed - tickets are spent, player is committed!
   
   // Timer styles  
   timerWrap: { 
