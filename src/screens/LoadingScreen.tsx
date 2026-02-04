@@ -23,7 +23,7 @@ export default function LoadingScreen() {
   const { theme } = useContext(ThemeContext);
   const [progress, setProgress] = useState<number>(0);
   const [fact, setFact] = useState<string>();
-  const [hasUsername] = useState<boolean>(!!player?.username);
+  const hasUsername = !!player?.username;
 
   useEffectOnceWhen(() => {
     RootNavigation.navigate('Welcome');
@@ -51,12 +51,16 @@ export default function LoadingScreen() {
   }, [isReady, hasUsername]);
 
   useEffect(() => {
-    if (!parkLoaded || !hasUsername) {
+    if (!hasUsername) {
       return;
     }
-
-    setProgress(90);
-  }, [parkLoaded, hasUsername]);
+    // Don't wait for parkLoaded - proceed after a short delay
+    // parkLoaded may never be true in Travel Mode (not at a park)
+    const timer = setTimeout(() => {
+      setProgress(90);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [hasUsername]);
 
   useEffect(() => {
     setFact(sample(labels.splash_screen_facts));
@@ -68,6 +72,20 @@ export default function LoadingScreen() {
     },
     3000,
     progress === 90
+  );
+
+  useEffect(() => {
+    console.log('🦈 Loading screen state:', { progress, isReady, hasUsername, parkLoaded, permissionGranted });
+  }, [progress, isReady, hasUsername, parkLoaded, permissionGranted]);
+
+  // Force navigate after 5 seconds regardless of state
+  useTimeoutWhen(
+    () => {
+      console.log('🦈 Force navigating to Explore');
+      RootNavigation.navigate('Explore');
+    },
+    5000,
+    isReady
   );
 
   useTimeoutWhen(

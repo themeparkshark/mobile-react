@@ -1,706 +1,333 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import {
-  Animated,
-  Dimensions,
-  ImageBackground,
-  Text,
-  TouchableOpacity,
-  View,
-  Platform,
-} from 'react-native';
-import Modal from 'react-native-modal';
-import * as Haptics from '../helpers/haptics';
-import Button from './Button';
-import Ribbon from './Ribbon';
-import config from '../config';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing, Vibration } from 'react-native';
+import MiniGameShell from './MiniGameShell';
 
 interface Props {
   visible: boolean;
   taskName: string;
-  rounds: number;
+  totalTargets?: number;
+  requiredHits?: number;
+  timeLimitSeconds?: number;
   onClose: () => void;
-  onComplete: (multiplier: number, perfectCount: number) => void;
+  onComplete: (multiplier: number, perfects: number) => void;
 }
 
-type GameState = 'ready' | 'playing' | 'waiting' | 'result' | 'complete';
-type HitResult = 'perfect' | 'good' | 'miss';
+const TRACK_HEIGHT = 260;
+const HIT_ZONE_Y = TRACK_HEIGHT - 60;
+const HIT_ZONE_SIZE = 50;
+const PERFECT_RANGE = 18;
+const GOOD_RANGE = 40;
 
-/**
- * Timing Mini-Game
- * Hit the button when the slider is in the target zone!
- * 
- * Multipliers based on total perfects:
- * - 0 perfect: 0.5x
- * - 1 perfect: 0.75x
- * - 2 perfect: 1.0x
- * - 3 perfect: 1.5x
- * - 4+ perfect: 2.0x
- */
 export default function TimingMiniGame({
   visible,
   taskName,
-  rounds,
+  totalTargets = 6,
+  requiredHits = 5,
+  timeLimitSeconds = 15,
   onClose,
   onComplete,
 }: Props) {
-  const [gameState, setGameState] = useState<GameState>('ready');
-  const [currentRound, setCurrentRound] = useState(1);
-  const [results, setResults] = useState<HitResult[]>([]);
-  const [lastResult, setLastResult] = useState<HitResult | null>(null);
-  const [finalMultiplier, setFinalMultiplier] = useState(1);
-  
-  const sliderPosition = useRef(new Animated.Value(0)).current;
-  const targetZoneStart = useRef(0.4); // 40-60% is target zone (adjustable per round)
-  const targetZoneEnd = useRef(0.6);
-  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
-  const currentPosition = useRef(0);
-  
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const resultScale = useRef(new Animated.Value(0)).current;
+  const [phase, setPhase] = useState<'instructions' | 'countdown' | 'playing' | 'ended'>('instructions');
+  const [hitsLeft, setHitsLeft] = useState(requiredHits);
+  const [result, setResult] = useState<{ won: boolean; message: string; stars: number } | null>(null);
+  const [feedback, setFeedback] = useState<string>('');
 
-  // Track slider position
-  useEffect(() => {
-    const listener = sliderPosition.addListener(({ value }) => {
-      currentPosition.current = value;
-    });
-    return () => sliderPosition.removeListener(listener);
-  }, []);
+  // Game state refs
+  const hitsRef = useRef(0);
+  const perfectsRef = useRef(0);
+  const spawnedRef = useRef(0);
+  const activeTargets = useRef<{ id: number; anim: Animated.Value; position: number }[]>([]);
+  const spawnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const targetCounter = useRef(0);
+  const gameEndedRef = useRef(false);
 
-  // Reset game when modal opens
+  // Target animation pool (max 5 simultaneous)
+  const targetAnims = useRef(
+    Array.from({ length: 5 }, () => new Animated.Value(-30))
+  ).current;
+  const targetOpacities = useRef(
+    Array.from({ length: 5 }, () => new Animated.Value(0))
+  ).current;
+
+  // Hit zone pulse
+  const hitZonePulse = useRef(new Animated.Value(1)).current;
+  const feedbackScale = useRef(new Animated.Value(0)).current;
+
+  // Progress
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     if (visible) {
-      setGameState('ready');
-      setCurrentRound(1);
-      setResults([]);
-      setLastResult(null);
-      sliderPosition.setValue(0);
+      setPhase('instructions');
+      setHitsLeft(requiredHits);
+      setResult(null);
+      setFeedback('');
+      hitsRef.current = 0;
+      perfectsRef.current = 0;
+      spawnedRef.current = 0;
+      activeTargets.current = [];
+      targetCounter.current = 0;
+      gameEndedRef.current = false;
+      targetAnims.forEach(a => a.setValue(-30));
+      targetOpacities.forEach(o => o.setValue(0));
+      progressAnim.setValue(0);
     }
-  }, [visible]);
-
-  // Pulse animation for button
-  useEffect(() => {
-    if (gameState === 'playing') {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [gameState]);
-
-  // Get difficulty for current round (makes it harder each round)
-  const getDifficulty = useCallback((round: number) => {
-    const baseZoneSize = 0.25; // 25% target zone
-    const minZoneSize = 0.1; // Minimum 10% target zone
-    const zoneReduction = 0.03 * (round - 1); // Reduce by 3% per round
-    const zoneSize = Math.max(minZoneSize, baseZoneSize - zoneReduction);
-    
-    const center = 0.5;
-    targetZoneStart.current = center - zoneSize / 2;
-    targetZoneEnd.current = center + zoneSize / 2;
-    
-    // Speed increases each round
-    const baseSpeed = 1500; // 1.5 seconds to cross
-    const speedIncrease = 150 * (round - 1); // 150ms faster per round
-    return Math.max(800, baseSpeed - speedIncrease);
-  }, []);
-
-  // Start a round
-  const startRound = useCallback(() => {
-    setGameState('playing');
-    sliderPosition.setValue(0);
-    
-    const speed = getDifficulty(currentRound);
-    
-    // Animate slider back and forth
-    const animate = () => {
-      animationRef.current = Animated.sequence([
-        Animated.timing(sliderPosition, {
-          toValue: 1,
-          duration: speed,
-          useNativeDriver: false,
-        }),
-        Animated.timing(sliderPosition, {
-          toValue: 0,
-          duration: speed,
-          useNativeDriver: false,
-        }),
-      ]);
-      
-      animationRef.current.start(({ finished }) => {
-        if (finished && gameState === 'playing') {
-          animate();
-        }
-      });
+    return () => {
+      if (spawnTimer.current) clearTimeout(spawnTimer.current);
     };
-    
-    animate();
-  }, [currentRound, getDifficulty, gameState]);
+  }, [visible, requiredHits]);
 
-  // Handle tap
-  const handleTap = useCallback(() => {
-    if (gameState !== 'playing') return;
+  const endGame = useCallback((won: boolean) => {
+    if (gameEndedRef.current) return;
+    gameEndedRef.current = true;
+    if (spawnTimer.current) clearTimeout(spawnTimer.current);
     
-    // Stop animation
-    if (animationRef.current) {
-      animationRef.current.stop();
+    const stars = won ? (perfectsRef.current >= totalTargets - 1 ? 3 : perfectsRef.current >= totalTargets / 2 ? 2 : 1) : 0;
+    setResult({
+      won,
+      message: won ? (stars === 3 ? 'PERFECT!' : stars === 2 ? 'GREAT!' : 'PASSED!') : 'FAILED!',
+      stars,
+    });
+    setPhase('ended');
+  }, [totalTargets]);
+
+  const spawnTarget = useCallback(() => {
+    if (gameEndedRef.current) return;
+    if (spawnedRef.current >= totalTargets) return;
+
+    // Find free slot
+    let slot = -1;
+    for (let i = 0; i < 5; i++) {
+      if (!activeTargets.current.find(t => t.id % 5 === i)) { slot = i; break; }
     }
-    
-    const pos = currentPosition.current;
-    let result: HitResult;
-    
-    // Calculate how close to center
-    const center = (targetZoneStart.current + targetZoneEnd.current) / 2;
-    const distanceFromCenter = Math.abs(pos - center);
-    const perfectThreshold = 0.05; // Within 5% of center = perfect
-    const goodThreshold = (targetZoneEnd.current - targetZoneStart.current) / 2;
-    
-    if (pos >= targetZoneStart.current && pos <= targetZoneEnd.current) {
-      if (distanceFromCenter <= perfectThreshold) {
-        result = 'perfect';
-        if (Platform.OS === 'ios') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
+    if (slot === -1) return;
+
+    spawnedRef.current++;
+    const id = ++targetCounter.current;
+    const anim = targetAnims[slot];
+    const opacity = targetOpacities[slot];
+
+    anim.setValue(-30);
+    opacity.setValue(1);
+
+    const target = { id, anim, position: -30 };
+    activeTargets.current.push(target);
+
+    // Track position via listener
+    const listenerId = anim.addListener(({ value }) => {
+      const t = activeTargets.current.find(t => t.id === id);
+      if (t) t.position = value;
+    });
+
+    // Animate down the track - can't use native driver with addListener
+    Animated.timing(anim, {
+      toValue: TRACK_HEIGHT + 30,
+      duration: 1800,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      anim.removeListener(listenerId);
+      opacity.setValue(0);
+      activeTargets.current = activeTargets.current.filter(t => t.id !== id);
+
+      // Missed - if game still active
+      if (finished && !gameEndedRef.current) {
+        showFeedback('MISS!');
+        Vibration.vibrate([0, 50, 30, 50]);
+      }
+    });
+
+    // Schedule next
+    if (spawnedRef.current < totalTargets) {
+      const delay = 1000 + Math.random() * 500;
+      spawnTimer.current = setTimeout(spawnTarget, delay);
+    }
+  }, [totalTargets]);
+
+  // Start spawning when playing
+  useEffect(() => {
+    if (phase === 'playing') {
+      gameEndedRef.current = false;
+      spawnTarget();
+    }
+    return () => {
+      if (spawnTimer.current) clearTimeout(spawnTimer.current);
+    };
+  }, [phase, spawnTarget]);
+
+  const showFeedback = (text: string) => {
+    setFeedback(text);
+    feedbackScale.setValue(0);
+    Animated.sequence([
+      Animated.spring(feedbackScale, { toValue: 1, friction: 4, useNativeDriver: true }),
+      Animated.timing(feedbackScale, { toValue: 0, duration: 300, delay: 400, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const handleTap = useCallback(() => {
+    if (phase !== 'playing' || gameEndedRef.current) return;
+    if (activeTargets.current.length === 0) return;
+
+    // Find closest target to hit zone
+    let closest: typeof activeTargets.current[0] | null = null;
+    let closestDist = Infinity;
+    for (const t of activeTargets.current) {
+      const dist = Math.abs(t.position - HIT_ZONE_Y);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = t;
+      }
+    }
+
+    if (!closest) return;
+
+    // Check if it's a valid hit (within good range)
+    if (closestDist <= GOOD_RANGE) {
+      // Remove target
+      const slot = closest.id % 5;
+      targetOpacities[slot].setValue(0);
+      activeTargets.current = activeTargets.current.filter(t => t.id !== closest!.id);
+
+      hitsRef.current++;
+      const newHitsLeft = requiredHits - hitsRef.current;
+      setHitsLeft(Math.max(0, newHitsLeft));
+
+      // Update progress
+      Animated.spring(progressAnim, {
+        toValue: Math.min(1, hitsRef.current / requiredHits),
+        friction: 6,
+        useNativeDriver: false,
+      }).start();
+
+      if (closestDist <= PERFECT_RANGE) {
+        perfectsRef.current++;
+        showFeedback('PERFECT!');
+        Vibration.vibrate(10);
+        // Pulse hit zone
+        Animated.sequence([
+          Animated.timing(hitZonePulse, { toValue: 1.3, duration: 80, useNativeDriver: true }),
+          Animated.spring(hitZonePulse, { toValue: 1, friction: 4, useNativeDriver: true }),
+        ]).start();
       } else {
-        result = 'good';
-        if (Platform.OS === 'ios') {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
+        showFeedback('GOOD!');
+        Vibration.vibrate(5);
+      }
+
+      // Check for WIN
+      if (hitsRef.current >= requiredHits) {
+        endGame(true);
       }
     } else {
-      result = 'miss';
-      if (Platform.OS === 'ios') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
+      // Tap was too early/late
+      showFeedback('MISS!');
+      Vibration.vibrate([0, 30, 20, 30]);
     }
-    
-    setLastResult(result);
-    setResults(prev => [...prev, result]);
-    setGameState('result');
-    
-    // Animate result
-    resultScale.setValue(0);
-    Animated.spring(resultScale, {
-      toValue: 1,
-      friction: 4,
-      useNativeDriver: true,
-    }).start();
-    
-    // Auto-advance after delay
-    setTimeout(() => {
-      if (currentRound >= rounds) {
-        calculateFinalScore([...results, result]);
-      } else {
-        setCurrentRound(prev => prev + 1);
-        setGameState('waiting');
-        setTimeout(() => startRound(), 500);
-      }
-    }, 1200);
-  }, [gameState, currentRound, rounds, results, startRound]);
+  }, [phase, requiredHits, endGame]);
 
-  // Calculate final score
-  const calculateFinalScore = useCallback((allResults: HitResult[]) => {
-    const perfectCount = allResults.filter(r => r === 'perfect').length;
-    const goodCount = allResults.filter(r => r === 'good').length;
-    
-    let mult: number;
-    if (perfectCount >= 4) mult = 2.0;
-    else if (perfectCount >= 3) mult = 1.5;
-    else if (perfectCount >= 2) mult = 1.0;
-    else if (perfectCount >= 1 || goodCount >= 2) mult = 0.75;
-    else mult = 0.5;
-    
-    setFinalMultiplier(mult);
-    setGameState('complete');
-    
-    if (Platform.OS === 'ios') {
-      Haptics.notificationAsync(
-        mult >= 1.5 ? Haptics.NotificationFeedbackType.Success :
-        Haptics.NotificationFeedbackType.Warning
-      );
+  const handleTimeUp = useCallback(() => {
+    endGame(hitsRef.current >= requiredHits);
+  }, [requiredHits, endGame]);
+
+  const handleDone = useCallback(() => {
+    if (result?.won) {
+      const mult = result.stars === 3 ? 2.0 : result.stars === 2 ? 1.5 : 1.0;
+      onComplete(mult, perfectsRef.current);
+    } else {
+      onClose();
     }
-  }, []);
-
-  // Handle done
-  const handleDone = () => {
-    const perfectCount = results.filter(r => r === 'perfect').length;
-    onComplete(finalMultiplier, perfectCount);
-    onClose();
-  };
-
-  // Get result color
-  const getResultColor = (result: HitResult): string => {
-    switch (result) {
-      case 'perfect': return '#FFD700';
-      case 'good': return '#4CAF50';
-      case 'miss': return config.red;
-    }
-  };
-
-  // Get multiplier color
-  const getMultiplierColor = (mult: number): string => {
-    if (mult >= 2.0) return '#FFD700';
-    if (mult >= 1.5) return '#4CAF50';
-    if (mult >= 1.0) return config.tertiary;
-    return config.red;
-  };
-
-  const sliderTranslate = sliderPosition.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, Dimensions.get('window').width * 0.65],
-  });
+  }, [result, onComplete, onClose]);
 
   return (
-    <Modal
-      animationIn="zoomIn"
-      animationOut="zoomOut"
-      isVisible={visible}
-      onBackdropPress={gameState === 'ready' ? onClose : undefined}
+    <MiniGameShell
+      visible={visible}
+      title="Rhythm Tap!"
+      subtitle={taskName}
+      timeLimit={timeLimitSeconds}
+      score={hitsRef.current}
+      objective={`Hit ${requiredHits} of ${totalTargets} targets in the green zone!`}
+      objectiveIcon="O"
+      onTimeUp={handleTimeUp}
+      onClose={onClose}
+      phase={phase}
+      setPhase={setPhase}
+      result={result || undefined}
+      onDone={handleDone}
     >
-      <View
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <View
-          style={{
-            width: Dimensions.get('window').width - 32,
-            position: 'relative',
-            alignItems: 'center',
-          }}
-        >
-          {/* Ribbon Header */}
-          <Ribbon text="Perfect Timing!" />
-
-          {/* Main Content Box */}
-          <View
-            style={{
-              backgroundColor: config.primary,
-              marginTop: '-10%',
-              width: '90%',
-              zIndex: 10,
-              shadowColor: '#000',
-              shadowOffset: { width: 2, height: 2 },
-              shadowRadius: 0,
-              shadowOpacity: 0.4,
-              borderColor: 'rgba(0, 0, 0, 0.4)',
-              borderWidth: 2,
-              borderRadius: 16,
-            }}
-          >
-            <View
-              style={{
-                borderRadius: 16,
-                overflow: 'hidden',
-              }}
-            >
-              <ImageBackground
-                source={require('../../assets/images/modals/daily_gift.png')}
-                resizeMode="cover"
-                style={{ width: '100%' }}
-              >
-                <View
-                  style={{
-                    paddingTop: 32,
-                    paddingHorizontal: 16,
-                    paddingBottom: 24,
-                    alignItems: 'center',
-                  }}
-                >
-                  {/* Task Name */}
-                  <Text
-                    style={{
-                      fontFamily: 'Knockout',
-                      fontSize: 16,
-                      color: 'white',
-                      textAlign: 'center',
-                      marginBottom: 12,
-                      opacity: 0.8,
-                    }}
-                  >
-                    {taskName}
-                  </Text>
-
-                  {/* Ready State */}
-                  {gameState === 'ready' && (
-                    <>
-                      <Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 24,
-                          color: config.tertiary,
-                          textAlign: 'center',
-                          textTransform: 'uppercase',
-                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                          textShadowOffset: { width: 2, height: 2 },
-                          textShadowRadius: 0,
-                          marginBottom: 8,
-                        }}
-                      >
-                        Hit the target zone!
-                      </Text>
-                      
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 16,
-                          color: 'rgba(255, 255, 255, 0.8)',
-                          textAlign: 'center',
-                          marginBottom: 24,
-                        }}
-                      >
-                        {rounds} rounds - tap when the slider is in the green!
-                      </Text>
-
-                      <Button onPress={() => { setGameState('waiting'); setTimeout(startRound, 500); }}>
-                        <ImageBackground
-                          source={require('../../assets/images/yellow_button.png')}
-                          style={{
-                            paddingHorizontal: 48,
-                            paddingVertical: 14,
-                            alignItems: 'center',
-                          }}
-                          resizeMode="stretch"
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 22,
-                              color: config.primary,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            Start!
-                          </Text>
-                        </ImageBackground>
-                      </Button>
-
-                      <TouchableOpacity
-                        onPress={onClose}
-                        style={{ marginTop: 12 }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 14,
-                            color: 'rgba(255, 255, 255, 0.6)',
-                          }}
-                        >
-                          Skip (0.5x)
-                        </Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
-
-                  {/* Playing / Waiting / Result State */}
-                  {(gameState === 'playing' || gameState === 'waiting' || gameState === 'result') && (
-                    <>
-                      {/* Round indicator */}
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 20,
-                          color: 'white',
-                          marginBottom: 16,
-                        }}
-                      >
-                        Round {currentRound} of {rounds}
-                      </Text>
-
-                      {/* Progress dots */}
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          justifyContent: 'center',
-                          marginBottom: 20,
-                          gap: 8,
-                        }}
-                      >
-                        {Array.from({ length: rounds }).map((_, i) => (
-                          <View
-                            key={i}
-                            style={{
-                              width: 16,
-                              height: 16,
-                              borderRadius: 8,
-                              backgroundColor: results[i] 
-                                ? getResultColor(results[i]) 
-                                : i === currentRound - 1 
-                                  ? 'white' 
-                                  : 'rgba(255, 255, 255, 0.3)',
-                              borderWidth: 2,
-                              borderColor: 'rgba(255, 255, 255, 0.5)',
-                            }}
-                          />
-                        ))}
-                      </View>
-
-                      {/* Slider track */}
-                      <View
-                        style={{
-                          width: '100%',
-                          height: 50,
-                          backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                          borderRadius: 25,
-                          marginBottom: 20,
-                          overflow: 'hidden',
-                          position: 'relative',
-                          borderWidth: 3,
-                          borderColor: 'rgba(255, 255, 255, 0.3)',
-                        }}
-                      >
-                        {/* Target zone */}
-                        <View
-                          style={{
-                            position: 'absolute',
-                            left: `${targetZoneStart.current * 100}%`,
-                            width: `${(targetZoneEnd.current - targetZoneStart.current) * 100}%`,
-                            height: '100%',
-                            backgroundColor: 'rgba(76, 175, 80, 0.6)',
-                          }}
-                        >
-                          {/* Perfect center line */}
-                          <View
-                            style={{
-                              position: 'absolute',
-                              left: '50%',
-                              width: 4,
-                              height: '100%',
-                              backgroundColor: '#FFD700',
-                              marginLeft: -2,
-                            }}
-                          />
-                        </View>
-
-                        {/* Slider */}
-                        <Animated.View
-                          style={{
-                            position: 'absolute',
-                            left: 0,
-                            width: 20,
-                            height: '100%',
-                            backgroundColor: config.tertiary,
-                            borderRadius: 10,
-                            transform: [{ translateX: sliderTranslate }],
-                            shadowColor: '#000',
-                            shadowOffset: { width: 2, height: 0 },
-                            shadowRadius: 0,
-                            shadowOpacity: 0.5,
-                          }}
-                        />
-                      </View>
-
-                      {/* Result display */}
-                      {gameState === 'result' && lastResult && (
-                        <Animated.View
-                          style={{
-                            marginBottom: 16,
-                            transform: [{ scale: resultScale }],
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 36,
-                              color: getResultColor(lastResult),
-                              textAlign: 'center',
-                              textTransform: 'uppercase',
-                              textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                              textShadowOffset: { width: 2, height: 2 },
-                              textShadowRadius: 0,
-                            }}
-                          >
-                            {lastResult === 'perfect' ? '⭐ PERFECT!' :
-                             lastResult === 'good' ? '👍 GOOD!' : '❌ MISS!'}
-                          </Text>
-                        </Animated.View>
-                      )}
-
-                      {/* Tap button (only during playing) */}
-                      {gameState === 'playing' && (
-                        <TouchableOpacity
-                          onPress={handleTap}
-                          activeOpacity={0.9}
-                        >
-                          <Animated.View
-                            style={{
-                              width: 120,
-                              height: 120,
-                              borderRadius: 60,
-                              backgroundColor: config.tertiary,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              borderWidth: 5,
-                              borderColor: 'white',
-                              shadowColor: '#000',
-                              shadowOffset: { width: 4, height: 4 },
-                              shadowRadius: 0,
-                              shadowOpacity: 0.4,
-                              transform: [{ scale: pulseAnim }],
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontFamily: 'Shark',
-                                fontSize: 24,
-                                color: config.primary,
-                                textTransform: 'uppercase',
-                              }}
-                            >
-                              TAP!
-                            </Text>
-                          </Animated.View>
-                        </TouchableOpacity>
-                      )}
-
-                      {/* Waiting indicator */}
-                      {gameState === 'waiting' && (
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 18,
-                            color: 'rgba(255, 255, 255, 0.7)',
-                          }}
-                        >
-                          Get ready...
-                        </Text>
-                      )}
-                    </>
-                  )}
-
-                  {/* Complete State */}
-                  {gameState === 'complete' && (
-                    <>
-                      <Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 28,
-                          color: config.tertiary,
-                          textAlign: 'center',
-                          textTransform: 'uppercase',
-                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                          textShadowOffset: { width: 2, height: 2 },
-                          textShadowRadius: 0,
-                          marginBottom: 8,
-                        }}
-                      >
-                        {finalMultiplier >= 1.5 ? '🎯 Precision!' : 
-                         finalMultiplier >= 1.0 ? '👍 Nice!' : '😅 Keep Practicing!'}
-                      </Text>
-
-                      {/* Results summary */}
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          justifyContent: 'center',
-                          marginBottom: 16,
-                          gap: 12,
-                        }}
-                      >
-                        <View style={{ alignItems: 'center' }}>
-                          <Text style={{ fontFamily: 'Knockout', fontSize: 24, color: '#FFD700' }}>
-                            {results.filter(r => r === 'perfect').length}
-                          </Text>
-                          <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-                            Perfect
-                          </Text>
-                        </View>
-                        <View style={{ alignItems: 'center' }}>
-                          <Text style={{ fontFamily: 'Knockout', fontSize: 24, color: '#4CAF50' }}>
-                            {results.filter(r => r === 'good').length}
-                          </Text>
-                          <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-                            Good
-                          </Text>
-                        </View>
-                        <View style={{ alignItems: 'center' }}>
-                          <Text style={{ fontFamily: 'Knockout', fontSize: 24, color: config.red }}>
-                            {results.filter(r => r === 'miss').length}
-                          </Text>
-                          <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-                            Miss
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Multiplier Display */}
-                      <View
-                        style={{
-                          backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                          paddingHorizontal: 40,
-                          paddingVertical: 16,
-                          borderRadius: 16,
-                          marginBottom: 20,
-                          borderWidth: 3,
-                          borderColor: getMultiplierColor(finalMultiplier),
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: 'Shark',
-                            fontSize: 48,
-                            color: getMultiplierColor(finalMultiplier),
-                            textAlign: 'center',
-                          }}
-                        >
-                          {finalMultiplier}x
-                        </Text>
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 14,
-                            color: 'rgba(255, 255, 255, 0.7)',
-                            textAlign: 'center',
-                          }}
-                        >
-                          Multiplier
-                        </Text>
-                      </View>
-
-                      {/* Done Button */}
-                      <Button onPress={handleDone}>
-                        <ImageBackground
-                          source={require('../../assets/images/yellow_button.png')}
-                          style={{
-                            paddingHorizontal: 48,
-                            paddingVertical: 14,
-                            alignItems: 'center',
-                          }}
-                          resizeMode="stretch"
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 22,
-                              color: config.primary,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            Awesome!
-                          </Text>
-                        </ImageBackground>
-                      </Button>
-                    </>
-                  )}
-                </View>
-              </ImageBackground>
-            </View>
-          </View>
+      {/* Progress indicator */}
+      <View style={ts.progressWrap}>
+        <View style={ts.progressBar}>
+          <Animated.View style={[ts.progressFill, {
+            width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+          }]} />
         </View>
+        <Text style={ts.progressText}>
+          {hitsLeft > 0 ? `${hitsLeft} more hits!` : 'COMPLETE!'}
+        </Text>
       </View>
-    </Modal>
+
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={handleTap}
+        style={ts.trackWrap}
+      >
+        {/* Track */}
+        <View style={ts.track}>
+          {/* Hit zone */}
+          <Animated.View style={[ts.hitZone, {
+            top: HIT_ZONE_Y - HIT_ZONE_SIZE / 2,
+            transform: [{ scale: hitZonePulse }],
+          }]} />
+
+          {/* Targets */}
+          {targetAnims.map((anim, i) => (
+            <Animated.View
+              key={i}
+              style={[ts.target, {
+                transform: [{ translateY: anim }],
+                opacity: targetOpacities[i],
+              }]}
+            />
+          ))}
+
+          {/* Guide lines */}
+          <View style={[ts.guideLine, { top: HIT_ZONE_Y - GOOD_RANGE }]} />
+          <View style={[ts.guideLine, { top: HIT_ZONE_Y + GOOD_RANGE }]} />
+        </View>
+
+        {/* Feedback text */}
+        <Animated.View style={[ts.feedbackWrap, { transform: [{ scale: feedbackScale }] }]}>
+          <Text style={[ts.feedbackText, {
+            color: feedback === 'PERFECT!' ? '#fbbf24' : feedback === 'GOOD!' ? '#4ade80' : '#ef4444',
+          }]}>{feedback}</Text>
+        </Animated.View>
+
+        <Text style={ts.hint}>Hit {requiredHits} of {totalTargets} targets!</Text>
+      </TouchableOpacity>
+    </MiniGameShell>
   );
 }
+
+const ts = StyleSheet.create({
+  progressWrap: { alignItems: 'center', marginBottom: 8 },
+  progressBar: { 
+    width: '80%', height: 12, backgroundColor: 'rgba(255,255,255,0.1)', 
+    borderRadius: 6, overflow: 'hidden' 
+  },
+  progressFill: { height: '100%', backgroundColor: '#4ade80', borderRadius: 6 },
+  progressText: { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 4 },
+  trackWrap: { alignItems: 'center', paddingVertical: 8 },
+  track: { width: 60, height: TRACK_HEIGHT, backgroundColor: '#0f172a', borderRadius: 30, overflow: 'hidden', borderWidth: 2, borderColor: '#334155' },
+  hitZone: {
+    position: 'absolute', left: -4, right: -4, height: HIT_ZONE_SIZE,
+    backgroundColor: 'rgba(74, 222, 128, 0.2)', borderWidth: 2, borderColor: '#4ade80',
+    borderRadius: 8,
+  },
+  target: {
+    position: 'absolute', left: 14, width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#3b82f6', top: 0,
+  },
+  guideLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.1)' },
+  feedbackWrap: { position: 'absolute', right: 20, top: '40%' },
+  feedbackText: { fontSize: 22, fontWeight: '900' },
+  hint: { color: 'rgba(255,255,255,0.3)', fontSize: 12, marginTop: 8 },
+});

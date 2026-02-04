@@ -9,759 +9,1173 @@ import {
   Text,
   TouchableOpacity,
   View,
+  StyleSheet,
 } from 'react-native';
+// import { LinearGradient } from 'expo-linear-gradient';
+// Temp: Using View instead of LinearGradient until dev client is rebuilt
+const LinearGradient = ({ colors, style, children }: any) => (
+  <View style={[style, { backgroundColor: colors[0] }]}>{children}</View>
+);
 import * as Haptics from '../helpers/haptics';
-import { useNavigation } from '@react-navigation/native';
+import HapticPatterns from '../helpers/hapticPatterns';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faArrowLeft, faLock, faStar, faCheck, faClock, faCloud } from '@fortawesome/free-solid-svg-icons';
+import { 
+  faArrowLeft, 
+  faLock, 
+  faStar, 
+  faCheck, 
+  faClock, 
+  faCloud,
+  faTrophy,
+  faFire,
+  faGem,
+} from '@fortawesome/free-solid-svg-icons';
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import Button from '../components/Button';
 import config from '../config';
+import { Modal } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
-import {
-  PrepItemSetType,
-  PrepItemSetItemType,
-  SET_THEME_CONFIG,
-  SET_RARITY_CONFIG,
-} from '../models/prep-item-set-type';
+import getPrepItemSets, { 
+  getPrepItemSet, 
+  claimSetRewards,
+  PrepItemSetListItem,
+  PrepItemSetItem,
+} from '../api/endpoints/me/prep-item-sets';
+import mockChurroData, { MOCK_CHURRO_SET_LIST, MOCK_CHURRO_SET_DETAIL } from '../data/mockChurroSet';
 
-// Mock data for development - will be replaced with API call
-const MOCK_SETS: PrepItemSetType[] = [
-  {
-    id: 1,
-    name: 'Churro Collection',
-    description: 'Collect all churro varieties!',
-    icon_url: null,
-    theme: 'food',
-    active_from: '2025-01-01',
-    active_to: '2025-01-31',
-    is_active: true,
-    is_monthly: true,
-    is_seasonal: false,
-    items: [
-      { id: 1, prep_item: { id: 1, name: 'Classic Churro', description: null, icon_url: null, energy_reward: 5, ticket_reward: 1, experience_reward: 10, rarity: 1 }, is_collected: true, collected_at: '2025-01-15', quantity_collected: 3, required_quantity: 1, spawn_rarity: 'common' },
-      { id: 2, prep_item: { id: 2, name: 'Chocolate Churro', description: null, icon_url: null, energy_reward: 8, ticket_reward: 1, experience_reward: 15, rarity: 2 }, is_collected: true, collected_at: '2025-01-16', quantity_collected: 1, required_quantity: 1, spawn_rarity: 'uncommon' },
-      { id: 3, prep_item: { id: 3, name: 'Strawberry Churro', description: null, icon_url: null, energy_reward: 8, ticket_reward: 1, experience_reward: 15, rarity: 2 }, is_collected: false, collected_at: null, quantity_collected: 0, required_quantity: 1, spawn_rarity: 'uncommon' },
-      { id: 4, prep_item: { id: 4, name: 'Golden Churro', description: null, icon_url: null, energy_reward: 20, ticket_reward: 3, experience_reward: 50, rarity: 3 }, is_collected: false, collected_at: null, quantity_collected: 0, required_quantity: 1, spawn_rarity: 'rare', hint: 'Only appears on weekends!' },
-    ],
-    total_items: 4,
-    collected_count: 2,
-    is_complete: false,
-    completion_rewards: { energy: 50, tickets: 10, experience: 200 },
-    rarity: 'common',
-    sort_order: 1,
-  },
-  {
-    id: 2,
-    name: 'Night Explorer',
-    description: 'Items that only appear after dark',
-    icon_url: null,
-    theme: 'night',
-    active_from: '2025-01-01',
-    active_to: '2025-12-31',
-    is_active: true,
-    is_monthly: false,
-    is_seasonal: false,
-    items: [
-      { id: 5, prep_item: { id: 5, name: 'Glow Stick', description: null, icon_url: null, energy_reward: 10, ticket_reward: 2, experience_reward: 20, rarity: 2 }, is_collected: true, collected_at: '2025-01-14', quantity_collected: 2, required_quantity: 1, spawn_rarity: 'uncommon', time_window: { start_hour: 21, end_hour: 6 } },
-      { id: 6, prep_item: { id: 6, name: 'Flashlight', description: null, icon_url: null, energy_reward: 10, ticket_reward: 2, experience_reward: 20, rarity: 2 }, is_collected: false, collected_at: null, quantity_collected: 0, required_quantity: 1, spawn_rarity: 'uncommon', time_window: { start_hour: 21, end_hour: 6 } },
-      { id: 7, prep_item: { id: 7, name: 'Moon Pendant', description: null, icon_url: null, energy_reward: 25, ticket_reward: 5, experience_reward: 75, rarity: 3 }, is_collected: false, collected_at: null, quantity_collected: 0, required_quantity: 1, spawn_rarity: 'rare', time_window: { start_hour: 0, end_hour: 4 }, hint: 'Only appears midnight-4am!' },
-    ],
-    total_items: 3,
-    collected_count: 1,
-    is_complete: false,
-    completion_rewards: { energy: 75, tickets: 15, experience: 300, title: 'Night Owl' },
-    rarity: 'rare',
-    sort_order: 2,
-  },
-];
+// Churro image mapping - require all images statically
+const CHURRO_IMAGES: Record<string, any> = {
+  churro_01: require('../../assets/images/prep-items/churros/churro_01.png'),
+  churro_02: require('../../assets/images/prep-items/churros/churro_02.png'),
+  churro_03: require('../../assets/images/prep-items/churros/churro_03.png'),
+  churro_04: require('../../assets/images/prep-items/churros/churro_04.png'),
+  churro_05: require('../../assets/images/prep-items/churros/churro_05.png'),
+  churro_06: require('../../assets/images/prep-items/churros/churro_06.png'),
+  churro_07: require('../../assets/images/prep-items/churros/churro_07.png'),
+  churro_08: require('../../assets/images/prep-items/churros/churro_08.png'),
+  churro_09: require('../../assets/images/prep-items/churros/churro_09.png'),
+  churro_10: require('../../assets/images/prep-items/churros/churro_10.png'),
+  churro_11: require('../../assets/images/prep-items/churros/churro_11.png'),
+  churro_12: require('../../assets/images/prep-items/churros/churro_12.png'),
+  churro_13: require('../../assets/images/prep-items/churros/churro_13.png'),
+  churro_14: require('../../assets/images/prep-items/churros/churro_14.png'),
+  churro_15: require('../../assets/images/prep-items/churros/churro_15.png'),
+  churro_16: require('../../assets/images/prep-items/churros/churro_16.png'),
+  churro_17: require('../../assets/images/prep-items/churros/churro_17.png'),
+  churro_18: require('../../assets/images/prep-items/churros/churro_18.png'),
+  churro_19: require('../../assets/images/prep-items/churros/churro_19.png'),
+  churro_20: require('../../assets/images/prep-items/churros/churro_20.png'),
+  churro_21: require('../../assets/images/prep-items/churros/churro_21.png'),
+  churro_22: require('../../assets/images/prep-items/churros/churro_22.png'),
+  churro_23: require('../../assets/images/prep-items/churros/churro_23.png'),
+  churro_24: require('../../assets/images/prep-items/churros/churro_24.png'),
+  churro_25: require('../../assets/images/prep-items/churros/churro_25.png'),
+  churro_26: require('../../assets/images/prep-items/churros/churro_26.png'),
+  churro_27: require('../../assets/images/prep-items/churros/churro_27.png'),
+  churro_28: require('../../assets/images/prep-items/churros/churro_28.png'),
+  churro_29: require('../../assets/images/prep-items/churros/churro_29.png'),
+  churro_30: require('../../assets/images/prep-items/churros/churro_30.png'),
+  churro_31: require('../../assets/images/prep-items/churros/churro_31.png'),
+  churro_32: require('../../assets/images/prep-items/churros/churro_32.png'),
+  churro_33: require('../../assets/images/prep-items/churros/churro_33.png'),
+  churro_34: require('../../assets/images/prep-items/churros/churro_34.png'),
+  churro_35: require('../../assets/images/prep-items/churros/churro_35.png'),
+  churro_36: require('../../assets/images/prep-items/churros/churro_36.png'),
+  churro_37: require('../../assets/images/prep-items/churros/churro_37.png'),
+  churro_38: require('../../assets/images/prep-items/churros/churro_38.png'),
+  churro_39: require('../../assets/images/prep-items/churros/churro_39.png'),
+  churro_40: require('../../assets/images/prep-items/churros/churro_40.png'),
+};
+
+// Helper to get churro image
+const getChurroImage = (variantSlug: string) => {
+  return CHURRO_IMAGES[variantSlug] || null;
+};
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const ITEM_SIZE = (SCREEN_WIDTH - 48) / 4; // 4 items per row with padding
+
+// Rarity configuration
+const RARITY_CONFIG = {
+  1: { name: 'common', label: 'Common', color: '#4CAF50', bgColor: 'rgba(76, 175, 80, 0.15)' },
+  2: { name: 'uncommon', label: 'Uncommon', color: '#2196F3', bgColor: 'rgba(33, 150, 243, 0.15)' },
+  3: { name: 'rare', label: 'Rare', color: '#9C27B0', bgColor: 'rgba(156, 39, 176, 0.15)' },
+  4: { name: 'epic', label: 'Epic', color: '#FF9800', bgColor: 'rgba(255, 152, 0, 0.15)' },
+  5: { name: 'legendary', label: 'Legendary', color: '#FFD700', bgColor: 'rgba(255, 215, 0, 0.2)' },
+};
 
 export default function SetCollectionScreen() {
   const navigation = useNavigation();
-  const { player } = useContext(AuthContext);
-  const [sets, setSets] = useState<PrepItemSetType[]>(MOCK_SETS);
-  const [selectedSet, setSelectedSet] = useState<PrepItemSetType | null>(null);
+  const route = useRoute();
+  const { player, refreshPlayer } = useContext(AuthContext);
+  
+  const [sets, setSets] = useState<PrepItemSetListItem[]>([]);
+  const [selectedSetSlug, setSelectedSetSlug] = useState<string | null>(
+    (route.params as any)?.slug || null
+  );
+  const [selectedSetData, setSelectedSetData] = useState<{
+    set: any;
+    progress: any;
+    items: PrepItemSetItem[];
+    items_by_rarity: any;
+    completion_rewards: any;
+  } | null>(null);
+  
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'active' | 'complete'>('all');
+  const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<PrepItemSetItem | null>(null);
   
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
 
-  // Load sets from API (TODO: implement)
+  // Load all sets (with mock data fallback)
   const loadSets = useCallback(async () => {
-    // const response = await getSets();
-    // setSets(response.data);
+    try {
+      const data = await getPrepItemSets();
+      setSets(data);
+    } catch (error) {
+      console.log('API unavailable, using mock data');
+      // Use mock data when API is unavailable
+      setSets([MOCK_CHURRO_SET_LIST]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Load single set detail (with mock data fallback)
+  const loadSetDetail = useCallback(async (slug: string) => {
+    try {
+      const data = await getPrepItemSet(slug);
+      setSelectedSetData(data);
+      
+      // Animate progress bar
+      Animated.timing(progressAnim, {
+        toValue: data.progress.percentage / 100,
+        duration: 800,
+        useNativeDriver: false,
+      }).start();
+    } catch (error) {
+      console.log('API unavailable, using mock set detail');
+      // Use mock data when API is unavailable
+      if (slug === 'churro_collection') {
+        setSelectedSetData(MOCK_CHURRO_SET_DETAIL);
+        
+        Animated.timing(progressAnim, {
+          toValue: MOCK_CHURRO_SET_DETAIL.progress.percentage / 100,
+          duration: 800,
+          useNativeDriver: false,
+        }).start();
+      }
+    }
+  }, [progressAnim]);
+
+  // Initial load
+  useEffect(() => {
+    loadSets();
+  }, [loadSets]);
+
+  // Load detail when set is selected
+  useEffect(() => {
+    if (selectedSetSlug) {
+      loadSetDetail(selectedSetSlug);
+    }
+  }, [selectedSetSlug, loadSetDetail]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    HapticPatterns.refresh();
     await loadSets();
-    setRefreshing(false);
-  }, [loadSets]);
-
-  // Filter sets
-  const filteredSets = sets.filter(set => {
-    if (filter === 'active') return set.is_active && !set.is_complete;
-    if (filter === 'complete') return set.is_complete;
-    return true;
-  });
-
-  // Handle set selection
-  const handleSelectSet = (set: PrepItemSetType) => {
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (selectedSetSlug) {
+      await loadSetDetail(selectedSetSlug);
     }
-    setSelectedSet(set);
-    Animated.spring(slideAnim, {
+    setRefreshing(false);
+  }, [loadSets, loadSetDetail, selectedSetSlug]);
+
+  // Open set detail
+  const openSet = useCallback((slug: string) => {
+    HapticPatterns.buttonTap();
+    setSelectedSetSlug(slug);
+    progressAnim.setValue(0);
+    
+    Animated.timing(slideAnim, {
       toValue: 1,
-      friction: 8,
+      duration: 300,
       useNativeDriver: true,
     }).start();
-  };
+  }, [slideAnim, progressAnim]);
 
   // Close set detail
-  const handleCloseDetail = () => {
+  const closeSet = useCallback(() => {
+    HapticPatterns.buttonTap();
+    
     Animated.timing(slideAnim, {
       toValue: 0,
-      duration: 200,
+      duration: 250,
       useNativeDriver: true,
-    }).start(() => setSelectedSet(null));
-  };
+    }).start(() => {
+      setSelectedSetSlug(null);
+      setSelectedSetData(null);
+    });
+  }, [slideAnim]);
 
-  // Calculate progress percentage
-  const getProgressPercentage = (set: PrepItemSetType): number => {
-    return Math.round((set.collected_count / set.total_items) * 100);
-  };
+  // Claim completion rewards
+  const handleClaimRewards = useCallback(async () => {
+    if (!selectedSetSlug || claiming) return;
+    
+    setClaiming(true);
+    HapticPatterns.collect('legendary');
+    
+    try {
+      const result = await claimSetRewards(selectedSetSlug);
+      await refreshPlayer();
+      await loadSetDetail(selectedSetSlug);
+      
+      // Show celebration (TODO: implement celebration modal)
+      HapticPatterns.achievement();
+    } catch (error) {
+      console.error('Failed to claim rewards:', error);
+      HapticPatterns.error();
+    } finally {
+      setClaiming(false);
+    }
+  }, [selectedSetSlug, claiming, refreshPlayer, loadSetDetail]);
 
-  // Render set card
-  const renderSetCard = (set: PrepItemSetType) => {
-    const themeConfig = SET_THEME_CONFIG[set.theme];
-    const rarityConfig = SET_RARITY_CONFIG[set.rarity];
-    const progress = getProgressPercentage(set);
-
+  // Render set card in list
+  const renderSetCard = (set: PrepItemSetListItem) => {
+    const progressPercent = set.progress_percentage;
+    const themeColor = set.theme_config?.color || '#FF9800';
+    
     return (
       <TouchableOpacity
         key={set.id}
-        onPress={() => handleSelectSet(set)}
-        activeOpacity={0.8}
-        style={{
-          marginBottom: 16,
-          borderRadius: 16,
-          overflow: 'hidden',
-          shadowColor: rarityConfig.color,
-          shadowOffset: { width: 0, height: 4 },
-          shadowRadius: 8,
-          shadowOpacity: 0.3,
-        }}
+        style={styles.setCard}
+        onPress={() => openSet(set.slug)}
+        activeOpacity={0.85}
       >
-        <View
-          style={{
-            backgroundColor: config.primary,
-            borderWidth: 3,
-            borderColor: rarityConfig.color,
-            borderRadius: 16,
-            overflow: 'hidden',
-          }}
+        <LinearGradient
+          colors={[themeColor + '20', themeColor + '40']}
+          style={styles.setCardGradient}
         >
-          {/* Header with theme color */}
-          <View
-            style={{
-              backgroundColor: themeConfig.color,
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <Text
-              style={{
-                fontFamily: 'Knockout',
-                fontSize: 12,
-                color: 'white',
-                textTransform: 'uppercase',
-              }}
-            >
-              {themeConfig.label}
-            </Text>
-            {set.is_monthly && (
-              <View
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                  paddingHorizontal: 8,
-                  paddingVertical: 2,
-                  borderRadius: 8,
-                }}
-              >
-                <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: 'white' }}>
-                  MONTHLY
-                </Text>
-              </View>
+          {/* Set Icon */}
+          <View style={[styles.setIconContainer, { backgroundColor: themeColor + '30' }]}>
+            {set.icon_url ? (
+              <Image source={{ uri: set.icon_url }} style={styles.setIcon} />
+            ) : (
+              <Text style={styles.setIconEmoji}>
+                {set.theme === 'food' ? '🥨' : set.theme === 'night' ? '🌙' : '📦'}
+              </Text>
             )}
           </View>
 
-          {/* Content */}
-          <View style={{ padding: 16 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              {/* Icon */}
-              <View
-                style={{
-                  width: 60,
-                  height: 60,
-                  borderRadius: 30,
-                  backgroundColor: rarityConfig.glow,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: 12,
-                  borderWidth: 2,
-                  borderColor: rarityConfig.color,
-                }}
-              >
-                {set.icon_url ? (
-                  <Image
-                    source={{ uri: set.icon_url }}
-                    style={{ width: 40, height: 40 }}
-                    contentFit="contain"
-                  />
-                ) : (
-                  <Text style={{ fontSize: 28 }}>
-                    {set.theme === 'food' ? '🍿' :
-                     set.theme === 'gear' ? '🎒' :
-                     set.theme === 'night' ? '🌙' :
-                     set.theme === 'weather' ? '🌧️' : '🎁'}
-                  </Text>
-                )}
-              </View>
-
-              {/* Info */}
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontFamily: 'Shark',
-                    fontSize: 18,
-                    color: 'white',
-                    textTransform: 'uppercase',
-                    marginBottom: 4,
-                  }}
-                >
-                  {set.name}
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    fontSize: 13,
-                    color: 'rgba(255, 255, 255, 0.7)',
-                  }}
-                >
-                  {set.collected_count}/{set.total_items} collected
-                </Text>
-              </View>
-
-              {/* Completion badge */}
-              {set.is_complete && (
-                <View
-                  style={{
-                    backgroundColor: '#4CAF50',
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderWidth: 2,
-                    borderColor: 'white',
-                  }}
-                >
-                  <FontAwesomeIcon icon={faCheck} size={18} color="white" />
-                </View>
-              )}
-            </View>
-
-            {/* Progress bar */}
-            <View style={{ marginTop: 12 }}>
-              <View
-                style={{
-                  height: 12,
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  borderRadius: 6,
-                  overflow: 'hidden',
-                  borderWidth: 1,
-                  borderColor: 'rgba(255, 255, 255, 0.2)',
-                }}
-              >
-                <View
-                  style={{
-                    height: '100%',
-                    width: `${progress}%`,
-                    backgroundColor: set.is_complete ? '#4CAF50' : config.tertiary,
-                    borderRadius: 5,
-                  }}
+          {/* Set Info */}
+          <View style={styles.setInfo}>
+            <Text style={styles.setName}>{set.name}</Text>
+            <Text style={styles.setDescription} numberOfLines={1}>
+              {set.description}
+            </Text>
+            
+            {/* Progress Bar */}
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill, 
+                    { width: `${progressPercent}%`, backgroundColor: themeColor }
+                  ]} 
                 />
               </View>
-              <Text
-                style={{
-                  fontFamily: 'Knockout',
-                  fontSize: 12,
-                  color: set.is_complete ? '#4CAF50' : config.tertiary,
-                  textAlign: 'right',
-                  marginTop: 4,
-                }}
-              >
-                {progress}%
+              <Text style={styles.progressText}>
+                {set.collected_count}/{set.total_items}
               </Text>
             </View>
-
-            {/* Rewards preview */}
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'flex-start',
-                marginTop: 8,
-                gap: 12,
-              }}
-            >
-              {set.completion_rewards.energy > 0 && (
-                <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
-                  ⚡{set.completion_rewards.energy}
-                </Text>
-              )}
-              {set.completion_rewards.tickets > 0 && (
-                <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
-                  🎟️{set.completion_rewards.tickets}
-                </Text>
-              )}
-              {set.completion_rewards.experience > 0 && (
-                <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
-                  ⭐{set.completion_rewards.experience}
-                </Text>
-              )}
-              {set.completion_rewards.title && (
-                <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: '#FFD700' }}>
-                  🏆 "{set.completion_rewards.title}"
-                </Text>
-              )}
-            </View>
           </View>
+
+          {/* Completion Badge */}
+          {set.is_complete && (
+            <View style={styles.completeBadge}>
+              <FontAwesomeIcon icon={faCheck} size={14} color="white" />
+            </View>
+          )}
+
+          {/* Time Gate Indicator */}
+          {set.time_gate && !set.time_gate.is_spawning_now && (
+            <View style={styles.timeGateBadge}>
+              <FontAwesomeIcon icon={faClock} size={10} color="#666" />
+            </View>
+          )}
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  };
+
+  // Render collection item
+  const renderCollectionItem = (item: PrepItemSetItem, index: number) => {
+    const rarity = RARITY_CONFIG[item.rarity as keyof typeof RARITY_CONFIG] || RARITY_CONFIG[1];
+    const isCollected = item.is_collected;
+    
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[
+          styles.collectionItem,
+          { backgroundColor: isCollected ? rarity.bgColor : 'rgba(0,0,0,0.3)' },
+        ]}
+        activeOpacity={0.8}
+        onPress={() => {
+          HapticPatterns.buttonTap();
+          setSelectedItem(item);
+        }}
+      >
+        {/* Rarity glow for collected items */}
+        {isCollected && (
+          <View 
+            style={[
+              styles.itemGlow, 
+              { backgroundColor: rarity.color, opacity: 0.3 }
+            ]} 
+          />
+        )}
+
+        {/* Item Image */}
+        <View style={styles.itemImageContainer}>
+          {(() => {
+            const localImage = item.variant_slug ? getChurroImage(item.variant_slug) : null;
+            
+            if (localImage) {
+              return (
+                <Image
+                  source={localImage}
+                  style={[
+                    styles.itemImage,
+                    !isCollected && styles.itemImageLocked,
+                  ]}
+                  contentFit="contain"
+                />
+              );
+            } else if (item.icon_url) {
+              return (
+                <Image
+                  source={{ uri: item.icon_url }}
+                  style={[
+                    styles.itemImage,
+                    !isCollected && styles.itemImageLocked,
+                  ]}
+                  contentFit="contain"
+                />
+              );
+            } else {
+              return (
+                <View style={[styles.itemPlaceholder, { borderColor: rarity.color }]}>
+                  {isCollected ? (
+                    <Text style={styles.itemPlaceholderEmoji}>🥨</Text>
+                  ) : (
+                    <FontAwesomeIcon icon={faLock} size={20} color="#666" />
+                  )}
+                </View>
+              );
+            }
+          })()}
+        </View>
+
+        {/* Rarity indicator */}
+        <View style={[styles.rarityDot, { backgroundColor: rarity.color }]} />
+
+        {/* Collected checkmark */}
+        {isCollected && (
+          <View style={styles.collectedBadge}>
+            <FontAwesomeIcon icon={faCheck} size={8} color="white" />
+          </View>
+        )}
+
+        {/* Quantity badge - always show count */}
+        <View style={[
+          styles.quantityBadge,
+          !isCollected && styles.quantityBadgeEmpty
+        ]}>
+          <Text style={[
+            styles.quantityText,
+            !isCollected && styles.quantityTextEmpty
+          ]}>
+            {isCollected ? item.quantity_collected : 0}
+          </Text>
         </View>
       </TouchableOpacity>
     );
   };
 
-  // Render item in set detail
-  const renderSetItem = (item: PrepItemSetItemType) => {
-    const rarityColors = {
-      common: '#4CAF50',
-      uncommon: '#2196F3',
-      rare: '#9C27B0',
-      epic: '#FF9800',
-      legendary: '#FFD700',
-    };
-    const color = rarityColors[item.spawn_rarity];
+  // Render set detail view
+  const renderSetDetail = () => {
+    if (!selectedSetData) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      );
+    }
+
+    const { set, progress, items, items_by_rarity, completion_rewards } = selectedSetData;
+    const themeColor = set.theme_config?.color || '#FF9800';
 
     return (
-      <View
-        key={item.id}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          backgroundColor: item.is_collected 
-            ? 'rgba(76, 175, 80, 0.1)' 
-            : 'rgba(255, 255, 255, 0.05)',
-          padding: 12,
-          borderRadius: 12,
-          marginBottom: 8,
-          borderWidth: 2,
-          borderColor: item.is_collected ? '#4CAF50' : 'rgba(255, 255, 255, 0.1)',
-        }}
+      <ScrollView
+        style={styles.detailScroll}
+        contentContainerStyle={styles.detailContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
-        {/* Item icon */}
-        <View
-          style={{
-            width: 50,
-            height: 50,
-            borderRadius: 25,
-            backgroundColor: item.is_collected ? color : 'rgba(255, 255, 255, 0.1)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginRight: 12,
-            opacity: item.is_collected ? 1 : 0.5,
-          }}
+        {/* Header */}
+        <LinearGradient
+          colors={[themeColor, themeColor + 'CC']}
+          style={styles.detailHeader}
         >
-          {!item.is_collected && (
-            <FontAwesomeIcon icon={faLock} size={20} color="rgba(255,255,255,0.5)" />
-          )}
-          {item.is_collected && item.prep_item.icon_url ? (
-            <Image
-              source={{ uri: item.prep_item.icon_url }}
-              style={{ width: 35, height: 35 }}
-              contentFit="contain"
-            />
-          ) : item.is_collected && (
-            <Text style={{ fontSize: 24 }}>✓</Text>
-          )}
-        </View>
+          <TouchableOpacity style={styles.backButton} onPress={closeSet}>
+            <FontAwesomeIcon icon={faArrowLeft} size={20} color="white" />
+          </TouchableOpacity>
 
-        {/* Item info */}
-        <View style={{ flex: 1 }}>
-          <Text
-            style={{
-              fontFamily: 'Knockout',
-              fontSize: 16,
-              color: item.is_collected ? 'white' : 'rgba(255, 255, 255, 0.5)',
-            }}
-          >
-            {item.prep_item.name}
-          </Text>
-          
-          {/* Rarity & conditions */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}>
-            <View
-              style={{
-                backgroundColor: color,
-                paddingHorizontal: 6,
-                paddingVertical: 2,
-                borderRadius: 4,
-                opacity: item.is_collected ? 1 : 0.5,
-              }}
-            >
-              <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: 'white', textTransform: 'uppercase' }}>
-                {item.spawn_rarity}
-              </Text>
+          <Text style={styles.detailTitle}>{set.name}</Text>
+          <Text style={styles.detailDescription}>{set.description}</Text>
+
+          {/* Time gate info */}
+          {set.time_gate && (
+            <View style={styles.timeGateInfo}>
+              <FontAwesomeIcon icon={faClock} size={12} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.timeGateText}>{set.time_gate.description}</Text>
+              {set.time_gate.is_spawning_now ? (
+                <Text style={styles.timeGateActive}>● Active Now</Text>
+              ) : (
+                <Text style={styles.timeGateInactive}>○ Not Spawning</Text>
+              )}
             </View>
-            
-            {item.time_window && (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <FontAwesomeIcon icon={faClock} size={10} color="rgba(255,255,255,0.5)" />
-                <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: 'rgba(255,255,255,0.5)', marginLeft: 4 }}>
-                  {item.time_window.start_hour}:00-{item.time_window.end_hour}:00
+          )}
+
+          {/* Progress */}
+          <View style={styles.detailProgress}>
+            <Text style={styles.progressLabel}>Collection Progress</Text>
+            <View style={styles.detailProgressBar}>
+              <Animated.View
+                style={[
+                  styles.detailProgressFill,
+                  {
+                    width: progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressCount}>
+              {progress.collected} / {progress.total} ({progress.percentage}%)
+            </Text>
+          </View>
+        </LinearGradient>
+
+        {/* Completion Rewards */}
+        <View style={styles.rewardsSection}>
+          <Text style={styles.sectionTitle}>
+            <FontAwesomeIcon icon={faTrophy} size={16} color="#FFD700" /> Completion Rewards
+          </Text>
+          <View style={styles.rewardsGrid}>
+            <View style={styles.rewardItem}>
+              <Text style={styles.rewardEmoji}>⚡</Text>
+              <Text style={styles.rewardValue}>+{completion_rewards.energy}</Text>
+              <Text style={styles.rewardLabel}>Energy</Text>
+            </View>
+            <View style={styles.rewardItem}>
+              <Text style={styles.rewardEmoji}>🎟️</Text>
+              <Text style={styles.rewardValue}>+{completion_rewards.tickets}</Text>
+              <Text style={styles.rewardLabel}>Tickets</Text>
+            </View>
+            <View style={styles.rewardItem}>
+              <Text style={styles.rewardEmoji}>⭐</Text>
+              <Text style={styles.rewardValue}>+{completion_rewards.experience}</Text>
+              <Text style={styles.rewardLabel}>XP</Text>
+            </View>
+            {completion_rewards.title && (
+              <View style={styles.rewardItem}>
+                <Text style={styles.rewardEmoji}>🏆</Text>
+                <Text style={styles.rewardValue} numberOfLines={1}>
+                  {completion_rewards.title}
+                </Text>
+                <Text style={styles.rewardLabel}>Title</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Claim Button */}
+          {progress.is_complete && (
+            <Button onPress={handleClaimRewards} hasPermission={!claiming}>
+              <View style={styles.claimButton}>
+                <Text style={styles.claimButtonText}>
+                  {claiming ? 'Claiming...' : '🎉 Claim Rewards!'}
                 </Text>
               </View>
-            )}
-            
-            {item.weather_required && (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <FontAwesomeIcon icon={faCloud} size={10} color="rgba(255,255,255,0.5)" />
-              </View>
-            )}
-          </View>
-
-          {/* Hint for uncollected items */}
-          {!item.is_collected && item.hint && (
-            <Text
-              style={{
-                fontFamily: 'Knockout',
-                fontSize: 11,
-                color: config.tertiary,
-                fontStyle: 'italic',
-                marginTop: 4,
-              }}
-            >
-              💡 {item.hint}
-            </Text>
+            </Button>
           )}
         </View>
 
-        {/* Collection status */}
-        {item.is_collected && (
-          <View
-            style={{
-              backgroundColor: '#4CAF50',
-              width: 28,
-              height: 28,
-              borderRadius: 14,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <FontAwesomeIcon icon={faCheck} size={14} color="white" />
-          </View>
-        )}
-      </View>
+        {/* Collection Grid - By Rarity */}
+        {Object.entries(items_by_rarity)
+          .filter(([_, items]) => (items as PrepItemSetItem[]).length > 0)
+          .map(([rarityName, rarityItems]) => {
+            const items = rarityItems as PrepItemSetItem[];
+            const rarityNum = { legendary: 5, epic: 4, rare: 3, uncommon: 2, common: 1 }[rarityName] || 1;
+            const rarityConfig = RARITY_CONFIG[rarityNum as keyof typeof RARITY_CONFIG];
+            const collectedCount = items.filter(i => i.is_collected).length;
+
+            return (
+              <View key={rarityName} style={styles.raritySection}>
+                <View style={styles.raritySectionHeader}>
+                  <View style={[styles.rarityBadge, { backgroundColor: rarityConfig.color }]}>
+                    <Text style={styles.rarityBadgeText}>{rarityConfig.label}</Text>
+                  </View>
+                  <Text style={styles.rarityCount}>
+                    {collectedCount}/{items.length}
+                  </Text>
+                </View>
+                <View style={styles.collectionGrid}>
+                  {items.map((item, index) => renderCollectionItem(item, index))}
+                </View>
+              </View>
+            );
+          })}
+      </ScrollView>
     );
   };
-
-  // Detail slide panel translate
-  const detailTranslate = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [Dimensions.get('window').height, 0],
-  });
 
   return (
     <Wrapper>
       <Topbar>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={{ padding: 8 }}
-        >
-          <FontAwesomeIcon icon={faArrowLeft} size={24} color="white" />
-        </TouchableOpacity>
-        <Text
-          style={{
-            fontFamily: 'Shark',
-            fontSize: 22,
-            color: 'white',
-            textTransform: 'uppercase',
-            flex: 1,
-            textAlign: 'center',
-            textShadowColor: 'rgba(0, 0, 0, 0.5)',
-            textShadowOffset: { width: 2, height: 2 },
-            textShadowRadius: 0,
-          }}
-        >
-          Collections
-        </Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.topbarContent}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.topbarBack}>
+            <FontAwesomeIcon icon={faArrowLeft} size={20} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.topbarTitle}>Collections</Text>
+        </View>
       </Topbar>
 
-      {/* Filter tabs */}
-      <View
-        style={{
-          flexDirection: 'row',
-          paddingHorizontal: 16,
-          paddingVertical: 8,
-          gap: 8,
-        }}
-      >
-        {(['all', 'active', 'complete'] as const).map((f) => (
-          <TouchableOpacity
-            key={f}
-            onPress={() => setFilter(f)}
-            style={{
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              borderRadius: 20,
-              backgroundColor: filter === f ? config.tertiary : 'rgba(255, 255, 255, 0.1)',
-            }}
+      {/* Main Content - Set List or Detail */}
+      <View style={styles.container}>
+        {/* Set List */}
+        {!selectedSetSlug && (
+          <ScrollView
+            style={styles.setList}
+            contentContainerStyle={styles.setListContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
           >
-            <Text
-              style={{
-                fontFamily: 'Knockout',
-                fontSize: 14,
-                color: filter === f ? config.primary : 'white',
-                textTransform: 'uppercase',
-              }}
-            >
-              {f}
-            </Text>
-          </TouchableOpacity>
-        ))}
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading collections...</Text>
+              </View>
+            ) : sets.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>📦</Text>
+                <Text style={styles.emptyText}>No collections available</Text>
+              </View>
+            ) : (
+              sets.map(renderSetCard)
+            )}
+          </ScrollView>
+        )}
+
+        {/* Set Detail (slides in) */}
+        {selectedSetSlug && (
+          <Animated.View
+            style={[
+              styles.detailContainer,
+              {
+                transform: [
+                  {
+                    translateX: slideAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [SCREEN_WIDTH, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {renderSetDetail()}
+          </Animated.View>
+        )}
       </View>
 
-      {/* Sets list */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="white" />
-        }
+      {/* Item Detail Modal */}
+      <Modal
+        visible={!!selectedItem}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedItem(null)}
       >
-        {filteredSets.map(renderSetCard)}
-
-        {filteredSets.length === 0 && (
-          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-            <Text style={{ fontSize: 48, marginBottom: 12 }}>📦</Text>
-            <Text
-              style={{
-                fontFamily: 'Knockout',
-                fontSize: 18,
-                color: 'rgba(255, 255, 255, 0.5)',
-                textAlign: 'center',
-              }}
-            >
-              No sets found
-            </Text>
-          </View>
-        )}
-      </ScrollView>
-
-      {/* Set Detail Panel */}
-      {selectedSet && (
-        <Animated.View
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-            transform: [{ translateY: detailTranslate }],
-          }}
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setSelectedItem(null)}
         >
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingTop: 60 }}>
-            {/* Close button */}
-            <TouchableOpacity
-              onPress={handleCloseDetail}
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                zIndex: 10,
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ color: 'white', fontSize: 24 }}>×</Text>
-            </TouchableOpacity>
-
-            {/* Set header */}
-            <View style={{ alignItems: 'center', marginBottom: 24 }}>
-              <View
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 40,
-                  backgroundColor: SET_RARITY_CONFIG[selectedSet.rarity].glow,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderWidth: 3,
-                  borderColor: SET_RARITY_CONFIG[selectedSet.rarity].color,
-                  marginBottom: 12,
-                }}
-              >
-                <Text style={{ fontSize: 40 }}>
-                  {selectedSet.theme === 'food' ? '🍿' :
-                   selectedSet.theme === 'gear' ? '🎒' :
-                   selectedSet.theme === 'night' ? '🌙' :
-                   selectedSet.theme === 'weather' ? '🌧️' : '🎁'}
-                </Text>
-              </View>
-
-              <Text
-                style={{
-                  fontFamily: 'Shark',
-                  fontSize: 28,
-                  color: 'white',
-                  textTransform: 'uppercase',
-                  textAlign: 'center',
-                  textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                  textShadowOffset: { width: 2, height: 2 },
-                  textShadowRadius: 0,
-                }}
-              >
-                {selectedSet.name}
-              </Text>
-
-              <Text
-                style={{
-                  fontFamily: 'Knockout',
-                  fontSize: 14,
-                  color: 'rgba(255, 255, 255, 0.7)',
-                  textAlign: 'center',
-                  marginTop: 8,
-                }}
-              >
-                {selectedSet.description}
-              </Text>
-
-              {/* Progress */}
-              <View style={{ width: '100%', marginTop: 16 }}>
-                <View
-                  style={{
-                    height: 16,
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <View
-                    style={{
-                      height: '100%',
-                      width: `${getProgressPercentage(selectedSet)}%`,
-                      backgroundColor: selectedSet.is_complete ? '#4CAF50' : config.tertiary,
-                    }}
-                  />
+          <View style={styles.modalContent}>
+            {selectedItem && (
+              <>
+                {/* Item Image */}
+                <View style={styles.modalImageContainer}>
+                  {(() => {
+                    const localImage = selectedItem.variant_slug ? getChurroImage(selectedItem.variant_slug) : null;
+                    if (localImage) {
+                      return (
+                        <Image
+                          source={localImage}
+                          style={styles.modalImage}
+                          contentFit="contain"
+                        />
+                      );
+                    } else if (selectedItem.icon_url) {
+                      return (
+                        <Image
+                          source={{ uri: selectedItem.icon_url }}
+                          style={styles.modalImage}
+                          contentFit="contain"
+                        />
+                      );
+                    } else {
+                      return <Text style={styles.modalPlaceholder}>🥨</Text>;
+                    }
+                  })()}
                 </View>
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    fontSize: 16,
-                    color: config.tertiary,
-                    textAlign: 'center',
-                    marginTop: 8,
-                  }}
-                >
-                  {selectedSet.collected_count}/{selectedSet.total_items} Collected
+
+                {/* Item Name */}
+                <Text style={styles.modalItemName}>{selectedItem.name}</Text>
+
+                {/* Rarity */}
+                <View style={[
+                  styles.modalRarityBadge,
+                  { backgroundColor: (RARITY_CONFIG[selectedItem.rarity as keyof typeof RARITY_CONFIG] || RARITY_CONFIG[1]).color }
+                ]}>
+                  <Text style={styles.modalRarityText}>
+                    {(RARITY_CONFIG[selectedItem.rarity as keyof typeof RARITY_CONFIG] || RARITY_CONFIG[1]).label}
+                  </Text>
+                </View>
+
+                {/* Collection Status */}
+                <Text style={styles.modalStatus}>
+                  {selectedItem.is_collected
+                    ? `✅ Collected${selectedItem.quantity_collected > 1 ? ` (×${selectedItem.quantity_collected})` : ''}`
+                    : '🔒 Not Yet Collected'}
                 </Text>
-              </View>
-            </View>
 
-            {/* Completion rewards */}
-            <View
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: 12,
-                padding: 16,
-                marginBottom: 24,
-                borderWidth: 2,
-                borderColor: selectedSet.is_complete ? '#4CAF50' : 'rgba(255, 255, 255, 0.1)',
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: 'Shark',
-                  fontSize: 16,
-                  color: 'white',
-                  textTransform: 'uppercase',
-                  marginBottom: 12,
-                }}
-              >
-                {selectedSet.is_complete ? '✅ Rewards Claimed!' : '🎁 Completion Rewards'}
-              </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-                {selectedSet.completion_rewards.energy > 0 && (
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 24 }}>⚡</Text>
-                    <Text style={{ fontFamily: 'Knockout', fontSize: 16, color: '#4CAF50' }}>
-                      +{selectedSet.completion_rewards.energy}
-                    </Text>
-                  </View>
+                {/* Hint if not collected */}
+                {!selectedItem.is_collected && selectedItem.hint && (
+                  <Text style={styles.modalHint}>💡 {selectedItem.hint}</Text>
                 )}
-                {selectedSet.completion_rewards.tickets > 0 && (
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 24 }}>🎟️</Text>
-                    <Text style={{ fontFamily: 'Knockout', fontSize: 16, color: '#4CAF50' }}>
-                      +{selectedSet.completion_rewards.tickets}
-                    </Text>
-                  </View>
-                )}
-                {selectedSet.completion_rewards.experience > 0 && (
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 24 }}>⭐</Text>
-                    <Text style={{ fontFamily: 'Knockout', fontSize: 16, color: '#4CAF50' }}>
-                      +{selectedSet.completion_rewards.experience}
-                    </Text>
-                  </View>
-                )}
-                {selectedSet.completion_rewards.title && (
-                  <View style={{ alignItems: 'center' }}>
-                    <Text style={{ fontSize: 24 }}>🏆</Text>
-                    <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: '#FFD700' }}>
-                      "{selectedSet.completion_rewards.title}"
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
 
-            {/* Items list */}
-            <Text
-              style={{
-                fontFamily: 'Shark',
-                fontSize: 18,
-                color: 'white',
-                textTransform: 'uppercase',
-                marginBottom: 12,
-              }}
-            >
-              Items in Set
-            </Text>
-            {selectedSet.items.map(renderSetItem)}
-          </ScrollView>
-        </Animated.View>
-      )}
+                {/* Close button */}
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => setSelectedItem(null)}
+                >
+                  <Text style={styles.modalCloseText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Wrapper>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  topbarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  topbarBack: {
+    padding: 8,
+    marginRight: 12,
+  },
+  topbarTitle: {
+    fontFamily: 'Shark',
+    fontSize: 24,
+    color: 'white',
+    textTransform: 'uppercase',
+  },
+  
+  // Set List
+  setList: {
+    flex: 1,
+  },
+  setListContent: {
+    padding: 16,
+    gap: 12,
+  },
+  setCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  setCardGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  setIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  setIcon: {
+    width: 40,
+    height: 40,
+  },
+  setIconEmoji: {
+    fontSize: 28,
+  },
+  setInfo: {
+    flex: 1,
+  },
+  setName: {
+    fontFamily: 'Shark',
+    fontSize: 18,
+    color: 'white',
+    textTransform: 'uppercase',
+  },
+  setDescription: {
+    fontFamily: 'Knockout',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 2,
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  progressBar: {
+    flex: 1,
+    height: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 3,
+    marginRight: 8,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressText: {
+    fontFamily: 'Knockout',
+    fontSize: 12,
+    color: 'white',
+    minWidth: 40,
+    textAlign: 'right',
+  },
+  completeBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4CAF50',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeGateBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    padding: 4,
+  },
+
+  // Detail View
+  detailContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: config.primary,
+  },
+  detailScroll: {
+    flex: 1,
+  },
+  detailContent: {
+    paddingBottom: 40,
+  },
+  detailHeader: {
+    padding: 20,
+    paddingTop: 60,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    padding: 8,
+    zIndex: 10,
+  },
+  detailTitle: {
+    fontFamily: 'Shark',
+    fontSize: 28,
+    color: 'white',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  detailDescription: {
+    fontFamily: 'Knockout',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  timeGateInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    gap: 6,
+  },
+  timeGateText: {
+    fontFamily: 'Knockout',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  timeGateActive: {
+    fontFamily: 'Knockout',
+    fontSize: 12,
+    color: '#4CAF50',
+  },
+  timeGateInactive: {
+    fontFamily: 'Knockout',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+  },
+  detailProgress: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  progressLabel: {
+    fontFamily: 'Knockout',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    textTransform: 'uppercase',
+  },
+  detailProgressBar: {
+    width: '80%',
+    height: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 6,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  detailProgressFill: {
+    height: '100%',
+    backgroundColor: 'white',
+    borderRadius: 6,
+  },
+  progressCount: {
+    fontFamily: 'Shark',
+    fontSize: 16,
+    color: 'white',
+    marginTop: 8,
+  },
+
+  // Rewards Section
+  rewardsSection: {
+    padding: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    margin: 16,
+    borderRadius: 16,
+  },
+  sectionTitle: {
+    fontFamily: 'Shark',
+    fontSize: 16,
+    color: 'white',
+    textTransform: 'uppercase',
+    marginBottom: 12,
+  },
+  rewardsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  rewardItem: {
+    alignItems: 'center',
+  },
+  rewardEmoji: {
+    fontSize: 24,
+  },
+  rewardValue: {
+    fontFamily: 'Knockout',
+    fontSize: 18,
+    color: config.tertiary,
+    marginTop: 4,
+  },
+  rewardLabel: {
+    fontFamily: 'Knockout',
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.6)',
+    textTransform: 'uppercase',
+  },
+  claimButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  claimButtonText: {
+    fontFamily: 'Shark',
+    fontSize: 18,
+    color: 'white',
+    textTransform: 'uppercase',
+  },
+
+  // Rarity Sections
+  raritySection: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+  },
+  raritySectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  rarityBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  rarityBadgeText: {
+    fontFamily: 'Knockout',
+    fontSize: 12,
+    color: 'white',
+    textTransform: 'uppercase',
+  },
+  rarityCount: {
+    fontFamily: 'Knockout',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+  },
+
+  // Collection Grid
+  collectionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  collectionItem: {
+    width: ITEM_SIZE,
+    height: ITEM_SIZE,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  itemGlow: {
+    position: 'absolute',
+    top: -10,
+    left: -10,
+    right: -10,
+    bottom: -10,
+    borderRadius: 20,
+  },
+  itemImageContainer: {
+    width: '70%',
+    height: '70%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemImage: {
+    width: '100%',
+    height: '100%',
+  },
+  itemImageLocked: {
+    opacity: 0.3,
+  },
+  itemPlaceholder: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemPlaceholderEmoji: {
+    fontSize: 24,
+  },
+  rarityDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  collectedBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#4CAF50',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityBadge: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  quantityBadgeEmpty: {
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  quantityText: {
+    fontFamily: 'Knockout',
+    fontSize: 10,
+    color: 'white',
+  },
+  quantityTextEmpty: {
+    color: 'rgba(255,255,255,0.4)',
+  },
+
+  // Loading & Empty States
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    fontFamily: 'Knockout',
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  emptyText: {
+    fontFamily: 'Knockout',
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+  },
+
+  // Item Detail Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#1E222A',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    width: '80%',
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  modalImageContainer: {
+    width: 120,
+    height: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  modalImage: {
+    width: '100%',
+    height: '100%',
+  },
+  modalPlaceholder: {
+    fontSize: 64,
+  },
+  modalItemName: {
+    fontFamily: 'Shark',
+    fontSize: 22,
+    color: 'white',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalRarityBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  modalRarityText: {
+    fontFamily: 'Knockout',
+    fontSize: 14,
+    color: 'white',
+    textTransform: 'uppercase',
+  },
+  modalStatus: {
+    fontFamily: 'Knockout',
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 8,
+  },
+  modalHint: {
+    fontFamily: 'Knockout',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  modalCloseButton: {
+    backgroundColor: config.tertiary,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  modalCloseText: {
+    fontFamily: 'Shark',
+    fontSize: 16,
+    color: 'white',
+    textTransform: 'uppercase',
+  },
+});

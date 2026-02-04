@@ -34,6 +34,7 @@ export const ThemeProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }, [themeLoaded, theme]);
 
   useEffect(() => {
+    console.log('🦈 Theme updated:', theme ? 'loaded' : 'not loaded');
     setThemeLoaded(Boolean(theme));
   }, [theme]);
 

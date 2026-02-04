@@ -88,15 +88,16 @@ export default function Playercard({
               marginTop: '5%',
             }}
           >
-            {inventory?.skin_item && (
-              <Image
-                source={{
-                  uri: inventory.skin_item.no_eye_url,
-                }}
-                style={styles.image}
-                contentFit="contain"
-              />
-            )}
+            {/* Shark body - use no_eye_url if available, otherwise fallback to local shark.png */}
+            <Image
+              source={
+                inventory?.skin_item?.no_eye_url
+                  ? { uri: inventory.skin_item.no_eye_url }
+                  : require('../../assets/images/screens/inventory/shark.png')
+              }
+              style={styles.image}
+              contentFit="contain"
+            />
             <Image
               source={require('../../assets/images/screens/inventory/blink.png')}
               style={styles.image}

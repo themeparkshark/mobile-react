@@ -1,5 +1,14 @@
+import { LogBox } from 'react-native';
 import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
+
+// Suppress common network error warnings in LogBox
+LogBox.ignoreLogs([
+  'Possible Unhandled Promise Rejection',
+  'Network Error',
+  'API error',
+  'AxiosError',
+]);
 import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { CrumbProvider } from './src/context/CrumbProvider';

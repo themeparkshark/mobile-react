@@ -29,7 +29,7 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({
 
   const refreshNotificationCount = async () => {
     const response = await unreadNotificationsCount();
-    setNotificationCount(response.unread_notifications_count);
+    setNotificationCount(response?.unread_notifications_count ?? 0);
   };
 
   return (

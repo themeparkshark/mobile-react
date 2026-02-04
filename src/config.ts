@@ -9,4 +9,6 @@ const config = {
   red: '#ff0000',
 };
 
+console.log('🦈 API URL:', config.apiUrl);
+
 export default config;

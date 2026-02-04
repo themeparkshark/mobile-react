@@ -3,7 +3,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Storage } from 'expo-storage';
-import { useContext } from 'react';
+import { useContext, useCallback } from 'react';
+import { View, StyleSheet as RNStyleSheet } from 'react-native';
+import { DevJoystick } from './components/DevJoystick';
+import { LocationContext } from './context/LocationProvider';
 import mobileAds, {
   InterstitialAd,
   MaxAdContentRating,
@@ -44,6 +47,7 @@ import WelcomeScreen from './screens/WelcomeScreen';
 // V2 Screens
 import SetCollectionScreen from './screens/SetCollectionScreen';
 import CoinShelfScreen from './screens/CoinShelfScreen';
+import MiniGameTesterScreen from './screens/MiniGameTesterScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -53,11 +57,18 @@ export default function App() {
   const { setCrumbs, crumbsLoaded } = useContext(CrumbContext);
   const { retrieveCurrencies, currenciesLoaded } = useContext(CurrencyContext);
   const { retrieveTheme, themeLoaded } = useContext(ThemeContext);
+  const { devMode, setDevMode, moveDevLocation, location: currentLocation } = useContext(LocationContext);
   const [fontsLoaded] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),
   });
   useAxiosSetup();
+
+  const handleJoystickMove = useCallback((dx: number, dy: number, speed: number) => {
+    moveDevLocation(dx, dy, speed);
+  }, [moveDevLocation]);
+
+  const handleJoystickStop = useCallback(() => {}, []);
 
   useAsyncEffect(async () => {
     await mobileAds().setRequestConfiguration({
@@ -82,11 +93,16 @@ export default function App() {
     });
   }, []);
 
-  if (!fontsLoaded || !crumbsLoaded || !themeLoaded || !currenciesLoaded) {
+  // Wait for fonts to load - but let crumbs load in background
+  // SplashScreen will wait for crumbs before navigating
+  if (!fontsLoaded) {
+    console.log('🦈 Waiting for fonts...');
     return <></>;
   }
+  console.log('🦈 App loading! Theme:', themeLoaded, 'Currencies:', currenciesLoaded);
 
   return (
+    <View style={{ flex: 1 }}>
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         initialRouteName="Splash"
@@ -199,7 +215,17 @@ export default function App() {
         {/* V2 Screens */}
         <Stack.Screen name="SetCollection" component={SetCollectionScreen} />
         <Stack.Screen name="CoinShelf" component={CoinShelfScreen} />
+        {__DEV__ && <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />}
       </Stack.Navigator>
     </NavigationContainer>
+    {__DEV__ && devMode && currentLocation && (
+      <DevJoystick
+        onMove={handleJoystickMove}
+        onStop={handleJoystickStop}
+        currentLat={currentLocation.latitude}
+        currentLng={currentLocation.longitude}
+      />
+    )}
+    </View>
   );
 }

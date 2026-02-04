@@ -14,6 +14,9 @@ export default function Wrapper({
   readonly children: ReactNode;
 }) {
   const { theme } = useContext(ThemeContext);
+  
+  // Default theme URLs if theme not loaded
+  const bottomBarUrl = theme?.bottom_bar_url || 'https://assets.themeparkshark.com/mobile/local/placeholder.png';
   const { checkPermission, hasPermission } = usePermissions();
   const { notificationCount } = useContext(NotificationContext);
 
@@ -72,7 +75,7 @@ export default function Wrapper({
         }}
       >
         <ImageBackground
-          source={{ url: theme.bottom_bar_url }}
+          source={{ uri: bottomBarUrl }}
           resizeMode="cover"
           style={{
             width: '100%',

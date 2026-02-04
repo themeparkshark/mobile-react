@@ -8,6 +8,7 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import deletePlayer from '../api/endpoints/me/delete';
 import forceDeletePlayer from '../api/endpoints/me/force-delete';
@@ -20,11 +21,12 @@ import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
 export default function SettingsScreen() {
+  const navigation = useNavigation();
   const { player, logout, refreshPlayer } = useContext(AuthContext);
   const [enabledMusic, setEnabledMusic] = useState<boolean>();
   const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
   const { urls, labels } = useCrumbs();
-  const { reset } = useContext(LocationContext);
+  const { reset, devMode, setDevMode } = useContext(LocationContext);
 
   useEffect(() => {
     setEnabledMusic(player?.enabled_music);
@@ -32,7 +34,7 @@ export default function SettingsScreen() {
   }, [player]);
 
   if (!player) {
-    return;
+    return null;
   }
 
   return (
@@ -100,6 +102,28 @@ export default function SettingsScreen() {
                 }
               />
             </Section>
+            {__DEV__ && (
+              <Section header={'Developer'.toUpperCase()}>
+                <Cell
+                  title="GPS Joystick"
+                  cellStyle="Subtitle"
+                  detail="Simulate movement with on-screen joystick"
+                  cellAccessoryView={
+                    <Switch
+                      onValueChange={() => setDevMode(!devMode)}
+                      value={devMode}
+                    />
+                  }
+                />
+                <Cell
+                  title="🎮 Mini-Game Tester"
+                  cellStyle="Subtitle"
+                  detail="Play and test all mini-games"
+                  accessory="DisclosureIndicator"
+                  onPress={() => (navigation as any).navigate('MiniGameTester')}
+                />
+              </Section>
+            )}
             <Section header={'Help'.toUpperCase()}>
               <Cell
                 title="Terms of Service"

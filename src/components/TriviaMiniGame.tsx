@@ -1,786 +1,265 @@
-import { Image } from 'expo-image';
-import { useContext, useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  Dimensions,
-  ImageBackground,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import Modal from 'react-native-modal';
-import { AuthContext } from '../context/AuthProvider';
-import startTrivia from '../api/endpoints/tasks/trivia/start';
-import answerTrivia from '../api/endpoints/tasks/trivia/answer';
-import skipTrivia from '../api/endpoints/tasks/trivia/skip';
-import Button from './Button';
-import Ribbon from './Ribbon';
-import config from '../config';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Vibration } from 'react-native';
+import MiniGameShell from './MiniGameShell';
 
 interface Props {
   visible: boolean;
   taskId: number;
   taskName: string;
   coinImageUrl?: string;
+  totalQuestions?: number;
+  timeLimitSeconds?: number;
   onClose: () => void;
-  onComplete: (
-    multiplier: number,
-    rewards: { coins: number; xp: number }
-  ) => void;
+  onComplete: (multiplier: number, rewards: { coins: number; xp: number }) => void;
 }
 
-type GameState =
-  | 'loading'
-  | 'playing'
-  | 'answered'
-  | 'complete'
-  | 'error'
-  | 'no_trivia';
+interface Question {
+  q: string;
+  options: string[];
+  answer: number;
+}
 
-/**
- * Trivia mini-game modal.
- * Styled to match app's AAA quality standards.
- */
+const QUESTION_POOL: Question[] = [
+  { q: 'What year did Walt Disney World open?', options: ['1965', '1971', '1975', '1982'], answer: 1 },
+  { q: 'Which park has Spaceship Earth?', options: ['Magic Kingdom', 'Hollywood Studios', 'EPCOT', 'Animal Kingdom'], answer: 2 },
+  { q: 'Which Disney park opened first?', options: ['Magic Kingdom', 'Disneyland', 'EPCOT', 'Tokyo Disney'], answer: 1 },
+  { q: 'What is the tallest attraction at WDW?', options: ['Tower of Terror', 'Expedition Everest', 'Space Mountain', 'Guardians'], answer: 1 },
+  { q: 'Which land has Pirates of the Caribbean?', options: ['Fantasyland', 'Frontierland', 'Adventureland', 'Liberty Square'], answer: 2 },
+  { q: 'What year did EPCOT open?', options: ['1971', '1982', '1989', '1998'], answer: 1 },
+  { q: 'How many theme parks are at WDW?', options: ['2', '3', '4', '6'], answer: 2 },
+  { q: 'Which park has the Haunted Mansion?', options: ['EPCOT', 'Magic Kingdom', 'Animal Kingdom', 'Hollywood Studios'], answer: 1 },
+  { q: 'What is the Avatar ride in Animal Kingdom?', options: ['Avatar Run', 'Pandora Express', 'Flight of Passage', 'Banshee Ride'], answer: 2 },
+  { q: 'What replaced Splash Mountain?', options: ['Moana Journey', "Tiana's Bayou", 'Princess & Frog', 'Splash Remake'], answer: 1 },
+  { q: 'Which resort has a monorail stop?', options: ['All-Star Sports', 'Contemporary', 'Coronado', 'Riviera'], answer: 1 },
+  { q: 'What is the oldest ride at Magic Kingdom?', options: ['Space Mountain', 'Jungle Cruise', "it's a small world", 'Carousel'], answer: 2 },
+  { q: 'Which park has Rock n Roller Coaster?', options: ['Magic Kingdom', 'EPCOT', 'Hollywood Studios', 'Animal Kingdom'], answer: 2 },
+  { q: 'What is the name of the Animal Kingdom tree?', options: ['Tree of Life', 'The Great Tree', 'Wisdom Tree', 'Pandora Tree'], answer: 0 },
+  { q: 'Which land is Tron Lightcycle Run in?', options: ['Fantasyland', 'Tomorrowland', 'Adventureland', 'Main Street'], answer: 1 },
+];
+
+function pickQuestions(count: number): Question[] {
+  return [...QUESTION_POOL].sort(() => Math.random() - 0.5).slice(0, count);
+}
+
 export default function TriviaMiniGame({
   visible,
   taskId,
   taskName,
-  coinImageUrl,
+  totalQuestions = 3,
+  timeLimitSeconds = 15,
   onClose,
   onComplete,
 }: Props) {
-  const [gameState, setGameState] = useState<GameState>('loading');
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [question, setQuestion] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<string[]>([]);
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>(
-    'medium'
-  );
-  const [timeLimit, setTimeLimit] = useState(12);
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [correctAnswer, setCorrectAnswer] = useState<string | null>(null);
-  const [wasCorrect, setWasCorrect] = useState<boolean | null>(null);
-  const [finalMultiplier, setFinalMultiplier] = useState(1);
-  const [finalRewards, setFinalRewards] = useState<{
-    coins: number;
-    xp: number;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<'instructions' | 'countdown' | 'playing' | 'ended'>('instructions');
+  const [questionsLeft, setQuestionsLeft] = useState(totalQuestions);
+  const [result, setResult] = useState<{ won: boolean; message: string; stars: number } | null>(null);
 
-  const { refreshPlayer, player } = useContext(AuthContext);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const progressAnim = useRef(new Animated.Value(1)).current;
+  const [currentQ, setCurrentQ] = useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [showAnswer, setShowAnswer] = useState(false);
 
-  // Start the game when modal opens
+  const questionsRef = useRef<Question[]>([]);
+  const correctRef = useRef(0);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gameEndedRef = useRef(false);
+  const startTimeRef = useRef(0);
+
+  // Option animations
+  const optionScales = useRef(
+    Array.from({ length: 4 }, () => new Animated.Value(1))
+  ).current;
+  const questionFade = useRef(new Animated.Value(1)).current;
+
+  // Progress
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    if (visible && taskId) {
-      initGame();
+    if (visible) {
+      questionsRef.current = pickQuestions(totalQuestions);
+      correctRef.current = 0;
+      gameEndedRef.current = false;
+      startTimeRef.current = Date.now();
+      setQuestionsLeft(totalQuestions);
+      setCurrentQ(0);
+      setSelected(null);
+      setShowAnswer(false);
+      setResult(null);
+      setPhase('instructions');
+      questionFade.setValue(1);
+      optionScales.forEach(s => s.setValue(1));
+      progressAnim.setValue(0);
     }
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
     };
-  }, [visible, taskId]);
+  }, [visible, totalQuestions]);
 
-  // Countdown timer
-  useEffect(() => {
-    if (gameState !== 'playing' || !question) return;
+  const endGame = useCallback((won: boolean) => {
+    if (gameEndedRef.current) return;
+    gameEndedRef.current = true;
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    
+    const elapsed = (Date.now() - startTimeRef.current) / 1000;
+    const timeBonus = Math.max(0, timeLimitSeconds - elapsed);
+    const stars = won ? (timeBonus > timeLimitSeconds * 0.5 ? 3 : timeBonus > timeLimitSeconds * 0.25 ? 2 : 1) : 0;
+    
+    setResult({
+      won,
+      message: won ? (stars === 3 ? 'GENIUS!' : stars === 2 ? 'SMART!' : 'PASSED!') : 'WRONG!',
+      stars,
+    });
+    setPhase('ended');
+  }, [timeLimitSeconds]);
 
-    setTimeLeft(timeLimit);
-    progressAnim.setValue(1);
+  const handleAnswer = useCallback((idx: number) => {
+    if (showAnswer || gameEndedRef.current) return;
+    if (phase !== 'playing') return;
 
-    Animated.timing(progressAnim, {
-      toValue: 0,
-      duration: timeLimit * 1000,
-      useNativeDriver: false,
-    }).start();
+    const q = questionsRef.current[currentQ];
+    if (!q) return;
 
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          handleTimeout();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    setSelected(idx);
+    setShowAnswer(true);
 
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [gameState, question, timeLimit]);
+    const correct = q.answer === idx;
+    
+    if (correct) {
+      // CORRECT!
+      correctRef.current++;
+      const newLeft = totalQuestions - correctRef.current;
+      setQuestionsLeft(Math.max(0, newLeft));
+      
+      // Update progress
+      Animated.spring(progressAnim, {
+        toValue: correctRef.current / totalQuestions,
+        friction: 6,
+        useNativeDriver: false,
+      }).start();
+      
+      Vibration.vibrate(10);
+      
+      // Bounce the correct option
+      Animated.sequence([
+        Animated.timing(optionScales[idx], { toValue: 1.08, duration: 100, useNativeDriver: false }),
+        Animated.spring(optionScales[idx], { toValue: 1, friction: 4, useNativeDriver: false }),
+      ]).start();
 
-  const initGame = async () => {
-    setGameState('loading');
-    setSelectedAnswer(null);
-    setCorrectAnswer(null);
-    setWasCorrect(null);
-    setError(null);
-
-    try {
-      const response = await startTrivia(taskId);
-
-      if (response.skip_trivia || !response.trivia) {
-        setGameState('no_trivia');
+      // Check if all correct
+      if (correctRef.current >= totalQuestions) {
+        advanceTimer.current = setTimeout(() => endGame(true), 600);
         return;
       }
 
-      setSessionToken(response.trivia.session_token);
-      setQuestion(response.trivia.question);
-      setAnswers(response.trivia.answers);
-      setDifficulty(response.trivia.difficulty);
-      setTimeLimit(response.trivia.time_limit_seconds);
-      setGameState('playing');
-    } catch (err: any) {
-      console.error('Failed to start trivia:', err);
-      setError(
-        err?.response?.data?.error ||
-          'Failed to start trivia. Do you have enough tickets?'
-      );
-      setGameState('error');
+      // Next question
+      advanceTimer.current = setTimeout(() => {
+        Animated.timing(questionFade, { toValue: 0, duration: 120, useNativeDriver: false }).start(() => {
+          setCurrentQ(c => c + 1);
+          setSelected(null);
+          setShowAnswer(false);
+          optionScales.forEach(s => s.setValue(1));
+          Animated.timing(questionFade, { toValue: 1, duration: 120, useNativeDriver: false }).start();
+        });
+      }, 600);
+    } else {
+      // WRONG - instant fail!
+      Vibration.vibrate([0, 100, 50, 100]);
+      advanceTimer.current = setTimeout(() => endGame(false), 800);
     }
-  };
+  }, [phase, currentQ, showAnswer, totalQuestions, endGame]);
 
-  const handleTimeout = async () => {
-    if (!sessionToken) return;
-    await submitAnswer('__TIMEOUT__');
-  };
-
-  const submitAnswer = async (answer: string) => {
-    if (!sessionToken) return;
-
-    setSelectedAnswer(answer);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+  const handleTimeUp = useCallback(() => {
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    // Time's up = fail (unless already completed)
+    if (correctRef.current >= totalQuestions) {
+      endGame(true);
+    } else {
+      endGame(false);
     }
+  }, [totalQuestions, endGame]);
 
-    try {
-      const response = await answerTrivia(
-        sessionToken,
-        answer,
-        player?.is_subscribed || false,
-        player?.is_subscribed || false
-      );
-
-      setCorrectAnswer(response.correct_answer);
-      setWasCorrect(response.correct);
-      setFinalMultiplier(response.multiplier);
-      setFinalRewards(response.rewards);
-      setGameState('answered');
-
-      setTimeout(() => {
-        setGameState('complete');
-      }, 1500);
-    } catch (err: any) {
-      console.error('Answer submission error:', err);
-      setError(err?.response?.data?.error || 'Failed to submit answer');
-      setGameState('error');
-    }
-  };
-
-  const handleSelectAnswer = (answer: string) => {
-    if (gameState !== 'playing' || selectedAnswer !== null) return;
-    submitAnswer(answer);
-  };
-
-  const handleSkip = async () => {
-    try {
-      await skipTrivia(taskId);
-      await refreshPlayer();
-      onComplete(1, { coins: 0, xp: 0 });
+  const handleDone = useCallback(() => {
+    if (result?.won) {
+      const mult = result.stars === 3 ? 2.0 : result.stars === 2 ? 1.5 : 1.0;
+      onComplete(mult, { coins: 10, xp: 25 });
+    } else {
       onClose();
-    } catch (err) {
-      console.error('Skip error:', err);
     }
-  };
+  }, [result, onComplete, onClose]);
 
-  const handleDone = async () => {
-    await refreshPlayer();
-    if (finalRewards) {
-      onComplete(finalMultiplier, finalRewards);
-    }
-    onClose();
-  };
-
-  const getDifficultyColor = (diff: string) => {
-    switch (diff) {
-      case 'easy':
-        return '#4CAF50';
-      case 'medium':
-        return config.tertiary;
-      case 'hard':
-        return config.red;
-      default:
-        return '#888';
-    }
-  };
-
-  const getMultiplierColor = (mult: number) => {
-    if (mult >= 1.5) return '#4CAF50';
-    if (mult >= 1.0) return config.tertiary;
-    return config.red;
-  };
-
-  const getAnswerStyle = (answer: string) => {
-    const baseStyle = {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      backgroundColor: 'rgba(255, 255, 255, 0.15)',
-      padding: 14,
-      borderRadius: 12,
-      borderWidth: 3,
-      borderColor: 'transparent',
-      marginBottom: 10,
-    };
-
-    if (!selectedAnswer) return baseStyle;
-    if (answer === correctAnswer) {
-      return { ...baseStyle, borderColor: '#4CAF50', backgroundColor: 'rgba(76, 175, 80, 0.3)' };
-    }
-    if (answer === selectedAnswer && selectedAnswer !== correctAnswer) {
-      return { ...baseStyle, borderColor: config.red, backgroundColor: 'rgba(244, 67, 54, 0.3)' };
-    }
-    return { ...baseStyle, opacity: 0.5 };
-  };
-
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
+  const q = questionsRef.current[currentQ];
 
   return (
-    <Modal
-      animationIn="zoomIn"
-      animationOut="zoomOut"
-      isVisible={visible}
-      onBackdropPress={onClose}
+    <MiniGameShell
+      visible={visible}
+      title="Quick Trivia!"
+      subtitle={taskName}
+      timeLimit={timeLimitSeconds}
+      score={correctRef.current}
+      objective={`Answer all ${totalQuestions} questions correctly!\nOne wrong answer = FAIL`}
+      objectiveIcon="?"
+      onTimeUp={handleTimeUp}
+      onClose={onClose}
+      phase={phase}
+      setPhase={setPhase}
+      result={result || undefined}
+      onDone={handleDone}
     >
-      <View
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <View
-          style={{
-            width: Dimensions.get('window').width - 32,
-            position: 'relative',
-            alignItems: 'center',
-          }}
-        >
-          {/* Ribbon Header */}
-          <Ribbon text="Trivia Time!" />
-
-          {/* Main Content Box */}
-          <View
-            style={{
-              backgroundColor: config.primary,
-              marginTop: '-10%',
-              width: '90%',
-              zIndex: 10,
-              shadowColor: '#000',
-              shadowOffset: { width: 2, height: 2 },
-              shadowRadius: 0,
-              shadowOpacity: 0.4,
-              borderColor: 'rgba(0, 0, 0, 0.4)',
-              borderWidth: 2,
-              borderRadius: 16,
-            }}
-          >
-            <View
-              style={{
-                borderRadius: 16,
-                overflow: 'hidden',
-              }}
-            >
-              <ImageBackground
-                source={require('../../assets/images/modals/daily_gift.png')}
-                resizeMode="cover"
-                style={{ width: '100%' }}
-              >
-                <View
-                  style={{
-                    paddingTop: 32,
-                    paddingHorizontal: 16,
-                    paddingBottom: 24,
-                  }}
-                >
-                  {/* Loading State */}
-                  {gameState === 'loading' && (
-                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 18,
-                          color: 'rgba(255, 255, 255, 0.7)',
-                        }}
-                      >
-                        Loading trivia...
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* No Trivia State */}
-                  {gameState === 'no_trivia' && (
-                    <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 18,
-                          color: 'white',
-                          textAlign: 'center',
-                          marginBottom: 8,
-                        }}
-                      >
-                        No trivia available for this ride.
-                      </Text>
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 14,
-                          color: 'rgba(255, 255, 255, 0.7)',
-                          textAlign: 'center',
-                          marginBottom: 20,
-                        }}
-                      >
-                        Collecting with standard rewards.
-                      </Text>
-                      <Button onPress={handleSkip}>
-                        <ImageBackground
-                          source={require('../../assets/images/yellow_button.png')}
-                          style={{
-                            paddingHorizontal: 32,
-                            paddingVertical: 12,
-                            alignItems: 'center',
-                          }}
-                          resizeMode="stretch"
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 20,
-                              color: config.primary,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            Collect Coin
-                          </Text>
-                        </ImageBackground>
-                      </Button>
-                    </View>
-                  )}
-
-                  {/* Error State */}
-                  {gameState === 'error' && (
-                    <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 16,
-                          color: config.red,
-                          textAlign: 'center',
-                          marginBottom: 16,
-                        }}
-                      >
-                        {error}
-                      </Text>
-                      <Button onPress={initGame}>
-                        <ImageBackground
-                          source={require('../../assets/images/yellow_button.png')}
-                          style={{
-                            paddingHorizontal: 24,
-                            paddingVertical: 10,
-                            alignItems: 'center',
-                          }}
-                          resizeMode="stretch"
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 18,
-                              color: config.primary,
-                            }}
-                          >
-                            Try Again
-                          </Text>
-                        </ImageBackground>
-                      </Button>
-                      <TouchableOpacity
-                        onPress={onClose}
-                        style={{ marginTop: 12 }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 14,
-                            color: 'rgba(255, 255, 255, 0.6)',
-                          }}
-                        >
-                          Cancel
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-
-                  {/* Playing / Answered State */}
-                  {(gameState === 'playing' || gameState === 'answered') &&
-                    question && (
-                      <>
-                        {/* Header with Task Name and Coin */}
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            marginBottom: 12,
-                          }}
-                        >
-                          {coinImageUrl && (
-                            <Image
-                              source={{ uri: coinImageUrl }}
-                              style={{
-                                width: 40,
-                                height: 40,
-                                marginRight: 10,
-                              }}
-                              contentFit="contain"
-                            />
-                          )}
-                          <Text
-                            style={{
-                              fontFamily: 'Knockout',
-                              fontSize: 16,
-                              color: 'white',
-                              flex: 1,
-                              textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                              textShadowOffset: { width: 1, height: 1 },
-                              textShadowRadius: 0,
-                            }}
-                            numberOfLines={1}
-                          >
-                            {taskName}
-                          </Text>
-                        </View>
-
-                        {/* Difficulty & Timer */}
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            marginBottom: 12,
-                          }}
-                        >
-                          <View
-                            style={{
-                              backgroundColor: getDifficultyColor(difficulty),
-                              paddingHorizontal: 12,
-                              paddingVertical: 4,
-                              borderRadius: 8,
-                              borderWidth: 2,
-                              borderColor: 'rgba(255, 255, 255, 0.3)',
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 12,
-                                color: 'white',
-                                textTransform: 'uppercase',
-                              }}
-                            >
-                              {difficulty}
-                            </Text>
-                          </View>
-                          <Text
-                            style={{
-                              fontFamily: 'Knockout',
-                              fontSize: 24,
-                              color:
-                                timeLeft <= 3 ? config.red : config.tertiary,
-                              textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                              textShadowOffset: { width: 1, height: 1 },
-                              textShadowRadius: 0,
-                            }}
-                          >
-                            {gameState === 'playing' ? `${timeLeft}s` : ''}
-                          </Text>
-                        </View>
-
-                        {/* Timer Bar */}
-                        {gameState === 'playing' && (
-                          <View
-                            style={{
-                              height: 10,
-                              backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                              borderRadius: 5,
-                              marginBottom: 16,
-                              overflow: 'hidden',
-                              borderWidth: 2,
-                              borderColor: 'rgba(255, 255, 255, 0.3)',
-                            }}
-                          >
-                            <Animated.View
-                              style={{
-                                height: '100%',
-                                width: progressWidth,
-                                backgroundColor:
-                                  timeLeft <= 3 ? config.red : '#4CAF50',
-                                borderRadius: 3,
-                              }}
-                            />
-                          </View>
-                        )}
-
-                        {/* Question */}
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 18,
-                            color: 'white',
-                            textAlign: 'center',
-                            marginBottom: 20,
-                            lineHeight: 26,
-                            textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                            textShadowOffset: { width: 1, height: 1 },
-                            textShadowRadius: 0,
-                          }}
-                        >
-                          {question}
-                        </Text>
-
-                        {/* Answers */}
-                        <View>
-                          {answers.map((answer, index) => (
-                            <TouchableOpacity
-                              key={index}
-                              style={getAnswerStyle(answer)}
-                              onPress={() => handleSelectAnswer(answer)}
-                              disabled={selectedAnswer !== null}
-                            >
-                              <View
-                                style={{
-                                  width: 28,
-                                  height: 28,
-                                  borderRadius: 14,
-                                  backgroundColor: config.tertiary,
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  marginRight: 12,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    fontFamily: 'Knockout',
-                                    fontSize: 16,
-                                    color: config.primary,
-                                    fontWeight: 'bold',
-                                  }}
-                                >
-                                  {String.fromCharCode(65 + index)}
-                                </Text>
-                              </View>
-                              <Text
-                                style={{
-                                  fontFamily: 'Knockout',
-                                  fontSize: 15,
-                                  color: 'white',
-                                  flex: 1,
-                                }}
-                              >
-                                {answer}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-
-                        {/* Feedback */}
-                        {gameState === 'answered' && wasCorrect !== null && (
-                          <View
-                            style={{
-                              backgroundColor: wasCorrect
-                                ? 'rgba(76, 175, 80, 0.3)'
-                                : 'rgba(244, 67, 54, 0.3)',
-                              padding: 12,
-                              borderRadius: 12,
-                              marginTop: 16,
-                              alignItems: 'center',
-                              borderWidth: 2,
-                              borderColor: wasCorrect ? '#4CAF50' : config.red,
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontFamily: 'Shark',
-                                fontSize: 20,
-                                color: 'white',
-                                textTransform: 'uppercase',
-                              }}
-                            >
-                              {wasCorrect ? '✓ Correct!' : '✗ Wrong!'}
-                            </Text>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 16,
-                                color: getMultiplierColor(finalMultiplier),
-                                marginTop: 4,
-                              }}
-                            >
-                              {finalMultiplier}x Multiplier
-                            </Text>
-                          </View>
-                        )}
-
-                        {/* Skip Button */}
-                        {gameState === 'playing' && selectedAnswer === null && (
-                          <TouchableOpacity
-                            style={{ marginTop: 16, alignItems: 'center' }}
-                            onPress={handleSkip}
-                          >
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 14,
-                                color: 'rgba(255, 255, 255, 0.6)',
-                              }}
-                            >
-                              Skip (collect 1x)
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                      </>
-                    )}
-
-                  {/* Complete State */}
-                  {gameState === 'complete' && (
-                    <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                      <Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 28,
-                          color: config.tertiary,
-                          textTransform: 'uppercase',
-                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                          textShadowOffset: { width: 2, height: 2 },
-                          textShadowRadius: 0,
-                          marginBottom: 16,
-                        }}
-                      >
-                        {wasCorrect ? '🎉 Great Job!' : '🎯 Nice Try!'}
-                      </Text>
-
-                      {/* Multiplier Display */}
-                      <View
-                        style={{
-                          backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                          paddingHorizontal: 40,
-                          paddingVertical: 16,
-                          borderRadius: 16,
-                          marginBottom: 20,
-                          borderWidth: 3,
-                          borderColor: getMultiplierColor(finalMultiplier),
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: 'Shark',
-                            fontSize: 48,
-                            color: getMultiplierColor(finalMultiplier),
-                            textAlign: 'center',
-                          }}
-                        >
-                          {finalMultiplier}x
-                        </Text>
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 14,
-                            color: 'rgba(255, 255, 255, 0.7)',
-                            textAlign: 'center',
-                          }}
-                        >
-                          Multiplier
-                        </Text>
-                      </View>
-
-                      {/* Rewards Earned */}
-                      {finalRewards && (
-                        <View style={{ alignItems: 'center', marginBottom: 20 }}>
-                          <Text
-                            style={{
-                              fontFamily: 'Knockout',
-                              fontSize: 14,
-                              color: 'rgba(255, 255, 255, 0.7)',
-                              marginBottom: 8,
-                            }}
-                          >
-                            Rewards Earned
-                          </Text>
-                          <View
-                            style={{
-                              flexDirection: 'row',
-                              gap: 20,
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 18,
-                                color: '#4CAF50',
-                              }}
-                            >
-                              🪙 {finalRewards.coins} coins
-                            </Text>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 18,
-                                color: '#4CAF50',
-                              }}
-                            >
-                              ⭐ {finalRewards.xp} XP
-                            </Text>
-                          </View>
-                        </View>
-                      )}
-
-                      {/* Done Button */}
-                      <Button onPress={handleDone}>
-                        <ImageBackground
-                          source={require('../../assets/images/yellow_button.png')}
-                          style={{
-                            paddingHorizontal: 48,
-                            paddingVertical: 14,
-                            alignItems: 'center',
-                          }}
-                          resizeMode="stretch"
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 22,
-                              color: config.primary,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            Awesome!
-                          </Text>
-                        </ImageBackground>
-                      </Button>
-                    </View>
-                  )}
-                </View>
-              </ImageBackground>
-            </View>
-          </View>
+      {/* Progress indicator */}
+      <View style={qs.progressWrap}>
+        <View style={qs.progressBar}>
+          <Animated.View style={[qs.progressFill, {
+            width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+          }]} />
         </View>
+        <Text style={qs.progressText}>
+          {questionsLeft > 0 ? `${questionsLeft} to go!` : 'COMPLETE!'}
+        </Text>
       </View>
-    </Modal>
+
+      {q && (
+        <Animated.View style={[qs.wrap, { opacity: questionFade }]}>  
+          <Text style={qs.qNum}>Question {currentQ + 1} / {totalQuestions}</Text>
+          <Text style={qs.question}>{q.q}</Text>
+          <View style={qs.options}>
+            {q.options.map((opt, i) => {
+              let bg = '#334155';
+              if (showAnswer) {
+                if (i === q.answer) bg = '#22c55e';
+                else if (i === selected) bg = '#ef4444';
+              }
+              return (
+                <Animated.View key={i} style={{ transform: [{ scale: optionScales[i] }] }}>
+                  <TouchableOpacity
+                    style={[qs.option, { backgroundColor: bg }]}
+                    onPress={() => handleAnswer(i)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={qs.optionText}>{opt}</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+            })}
+          </View>
+          <Text style={qs.hint}>Get ALL {totalQuestions} correct to pass!</Text>
+        </Animated.View>
+      )}
+    </MiniGameShell>
   );
 }
+
+const qs = StyleSheet.create({
+  progressWrap: { alignItems: 'center', marginBottom: 8 },
+  progressBar: { 
+    width: '80%', height: 12, backgroundColor: 'rgba(255,255,255,0.1)', 
+    borderRadius: 6, overflow: 'hidden' 
+  },
+  progressFill: { height: '100%', backgroundColor: '#4ade80', borderRadius: 6 },
+  progressText: { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 4 },
+  wrap: { paddingVertical: 8 },
+  qNum: { color: '#fbbf24', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  question: { color: '#fff', fontSize: 17, fontWeight: '600', textAlign: 'center', marginTop: 8, lineHeight: 22 },
+  options: { marginTop: 16 },
+  option: { paddingVertical: 14, paddingHorizontal: 16, borderRadius: 10, marginTop: 8 },
+  optionText: { color: '#fff', fontSize: 15, textAlign: 'center' },
+  hint: { color: 'rgba(255,255,255,0.4)', fontSize: 12, textAlign: 'center', marginTop: 12 },
+});

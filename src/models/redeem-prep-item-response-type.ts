@@ -2,9 +2,8 @@ import { PlayerStatsType } from './player-stats-type';
 import { PrepItemType } from './prep-item-type';
 
 export interface RedeemPrepItemResponseType {
-  readonly message: string;
+  readonly success: boolean;
   readonly data: {
-    readonly prep_item: PrepItemType;
     readonly rewards: {
       readonly energy: number;
       readonly tickets: number;
@@ -14,6 +13,24 @@ export interface RedeemPrepItemResponseType {
       readonly current: number;
       readonly multiplier: number;
     };
-    readonly player_stats: PlayerStatsType;
+    readonly new_totals?: {
+      readonly energy: number;
+      readonly tickets: number;
+      readonly experience: number;
+    };
+    readonly is_new_variant?: boolean;
+    readonly set_progress?: {
+      readonly total: number;
+      readonly collected: number;
+      readonly percentage: number;
+      readonly is_complete: boolean;
+      readonly collected_ids: number[];
+    };
+    readonly item: {
+      readonly id: number;
+      readonly name: string;
+      readonly rarity: number;
+      readonly rarity_label: string;
+    };
   };
 }

@@ -1,7 +1,7 @@
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -51,6 +51,11 @@ export default function ProfileScreen() {
   const { refreshNotificationCount, notificationCount } =
     useContext(NotificationContext);
   const { warnings, labels } = useCrumbs();
+  
+  // Scroll refs
+  const route = useRoute();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const parksYPosition = useRef<number>(0);
 
   const requestFriends = () => {
     getFriends(1, 3).then((response) => setFriends(response));
@@ -69,12 +74,26 @@ export default function ProfileScreen() {
   );
 
   useAsyncEffect(async () => {
+    if (!player) {
+      setLoading(false);
+      return;
+    }
     setParks(await getParks(player.id));
     setStores(await getStores());
     requestFriends();
 
     setLoading(false);
-  }, []);
+  }, [player]);
+
+  // Scroll to parks section if requested
+  useEffect(() => {
+    const params = route.params as { scrollTo?: string } | undefined;
+    if (!loading && params?.scrollTo === 'parks' && parksYPosition.current > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: parksYPosition.current, animated: true });
+      }, 300);
+    }
+  }, [loading, route.params]);
 
   useEffect(() => {
     if (stores) {
@@ -165,6 +184,7 @@ export default function ProfileScreen() {
       {loading && <Loading />}
       {!loading && player && (
         <ScrollView
+          ref={scrollViewRef}
           style={{
             flex: 1,
             marginTop: -8,
@@ -181,9 +201,9 @@ export default function ProfileScreen() {
               }}
             >
               <ImageBackground
-                source={{
-                  uri: player?.inventory.background_item.paper_url,
-                }}
+                source={player?.inventory?.background_item?.paper_url ? {
+                  uri: player.inventory.background_item.paper_url,
+                } : undefined}
                 style={{
                   height: 315,
                   overflow: 'hidden',
@@ -332,8 +352,14 @@ export default function ProfileScreen() {
                   </View>
                 </>
               )}
-              <Heading text={labels.your_parks} />
-              <VisitedParks parks={parks} player={player} />
+              <View 
+                onLayout={(event) => {
+                  parksYPosition.current = event.nativeEvent.layout.y + 250; // Offset for header
+                }}
+              >
+                <Heading text={labels.your_parks} />
+                <VisitedParks parks={parks} player={player} />
+              </View>
             </View>
           </View>
         </ScrollView>

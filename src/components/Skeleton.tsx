@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+// LinearGradient temporarily replaced — native module broken after Skia install
 import { colors, borderRadius } from '../design-system';
 
 interface Props {
@@ -57,12 +57,7 @@ export default function Skeleton({
           },
         ]}
       >
-        <LinearGradient
-          colors={['transparent', 'rgba(255, 255, 255, 0.1)', 'transparent']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.gradient}
-        />
+        <View style={[styles.gradient, { backgroundColor: 'rgba(255, 255, 255, 0.08)' }]} />
       </Animated.View>
     </View>
   );

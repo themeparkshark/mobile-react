@@ -43,7 +43,8 @@ const MENU_ITEMS: MenuItem[] = [
     label: 'Coin Shelf',
     icon: faCoins,
     color: '#FFD700',
-    screen: 'CoinShelf',
+    screen: 'Profile',
+    params: { scrollTo: 'parks' },
   },
   {
     id: 'stamps',
@@ -199,8 +200,9 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
         </TouchableOpacity>
       )}
 
-      {/* Menu container */}
+      {/* Menu container - box-none lets touches pass through empty space */}
       <View
+        pointerEvents="box-none"
         style={{
           position: 'absolute',
           bottom: 100,
@@ -209,10 +211,11 @@ export default function QuickAccessMenu({ position = 'right' }: Props) {
           alignItems: isRight ? 'flex-end' : 'flex-start',
         }}
       >
-        {/* Menu items */}
+        {/* Menu items - pointerEvents none when closed to prevent ghost touches */}
         {MENU_ITEMS.map((item, index) => (
           <Animated.View
             key={item.id}
+            pointerEvents={isOpen ? 'auto' : 'none'}
             style={{
               flexDirection: 'row',
               alignItems: 'center',

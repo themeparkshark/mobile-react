@@ -12,11 +12,8 @@ import { PlayerStatsType } from '../../models/player-stats-type';
 import getPrepItems from '../../api/endpoints/me/prep-items';
 import getCurrentPrepItem from '../../api/endpoints/me/prep-items/current';
 import PrepItemMarker from './PrepItem';
-import EnergyBar from '../../components/EnergyBar';
-import StreakBadge from '../../components/StreakBadge';
+import RadialStatsMenu from '../../components/RadialStatsMenu';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
-import WeatherBadge from '../../components/WeatherBadge';
-import TimePeriodBadge from '../../components/TimePeriodBadge';
 
 dayjs.extend(isBetween);
 
@@ -47,7 +44,8 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
       // Also refresh player data to sync currencies
       refreshPlayer();
     } catch (error) {
-      console.error('Failed to load prep items:', error);
+      // Silently handle network errors - user can pull to refresh
+      if (__DEV__) console.log('Prep items load error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -75,7 +73,8 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
           onPrepItemNearby(nearbyItem.prep_item, nearbyItem.pivot_id);
         }
       } catch (error) {
-        console.error('Failed to check nearby prep items:', error);
+        // Silently handle - will retry on next location update
+        if (__DEV__) console.log('Nearby check error:', error);
       }
     };
 
@@ -90,52 +89,8 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
 
   return (
     <View style={styles.container}>
-      {/* Stats overlay at top */}
-      <View style={styles.statsOverlay}>
-        {playerStats && (
-          <>
-            <EnergyBar
-              current={playerStats.energy}
-              max={playerStats.max_energy}
-              secondsUntilNext={playerStats.seconds_until_next_energy}
-            />
-            <View style={styles.statsRow}>
-              <View style={styles.ticketContainer}>
-                <Text style={styles.ticketIcon}>🎟️</Text>
-                <Text style={styles.ticketCount}>{playerStats.tickets}</Text>
-              </View>
-              <StreakBadge
-                streak={playerStats.current_streak}
-                multiplier={playerStats.streak_multiplier}
-                atRisk={playerStats.streak_at_risk}
-              />
-            </View>
-            {/* Weather and Time conditions */}
-            <View style={styles.conditionsRow}>
-              <WeatherBadge compact />
-              <TimePeriodBadge compact showCountdown />
-            </View>
-          </>
-        )}
-      </View>
-
-      {/* Map with prep items */}
+      {/* Map with prep items - player marker is handled by Map component */}
       <Map>
-        {/* Player marker */}
-        {location && (
-          <Marker
-            coordinate={{
-              latitude: location.latitude,
-              longitude: location.longitude,
-            }}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <View style={styles.playerMarker}>
-              <Text style={styles.playerEmoji}>🦈</Text>
-            </View>
-          </Marker>
-        )}
-
         {/* Prep item markers */}
         {activePrepItems.map((prepItem) => (
           <Marker
@@ -143,6 +98,12 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
             coordinate={{
               latitude: prepItem.latitude!,
               longitude: prepItem.longitude!,
+            }}
+            onPress={() => {
+              // Allow tapping markers for easier testing (and better UX)
+              if (prepItem.pivot_id) {
+                onPrepItemNearby(prepItem, prepItem.pivot_id);
+              }
             }}
           >
             <PrepItemMarker prepItem={prepItem} onExpire={loadPrepItems} />
@@ -161,18 +122,17 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
       {!isLoading && activePrepItems.length === 0 && (
         <View style={styles.emptyOverlay}>
           <Text style={styles.emptyText}>
-            No prep items nearby. Walk around to find more!
+            No prep items yet — check back soon!
           </Text>
         </View>
       )}
 
-      {/* Quick Access Menu */}
+      {/* Quick Access Menu - hamburger on left */}
       <QuickAccessMenu position="left" />
 
-      {/* Home mode indicator */}
-      <View style={styles.homeBadge}>
-        <Text style={styles.homeBadgeText}>🏠 Home Mode</Text>
-      </View>
+      {/* Radial Stats Menu - shark avatar on right */}
+      <RadialStatsMenu />
+
     </View>
   );
 }
@@ -181,55 +141,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  statsOverlay: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    right: 10,
+  // Removed conditionsBar - weather/time badges removed
+  _placeholder: {
+    // placeholder to maintain structure
     zIndex: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 12,
-    padding: 10,
-  },
-  statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  conditionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    marginTop: 8,
     gap: 8,
   },
-  ticketContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ticketIcon: {
-    fontSize: 20,
-    marginRight: 4,
-  },
-  ticketCount: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  playerMarker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1976D2',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: 'white',
-  },
-  playerEmoji: {
-    fontSize: 24,
-  },
+  // Player marker moved to Map component
   loadingOverlay: {
     position: 'absolute',
     bottom: 100,
@@ -258,19 +177,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     textAlign: 'center',
-  },
-  homeBadge: {
-    position: 'absolute',
-    bottom: 20,
-    alignSelf: 'center',
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  homeBadgeText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
   },
 });

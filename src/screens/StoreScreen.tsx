@@ -12,6 +12,8 @@ import { useAsyncEffect } from 'rooks';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getItems from '../api/endpoints/catalogs/items';
 import getStore from '../api/endpoints/stores/get';
+import getStoreRotation, { StoreRotation } from '../api/endpoints/stores/rotation';
+import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
 import Topbar, { BackButton } from '../components/Topbar';
@@ -36,6 +38,7 @@ export default function StoreScreen({ route }) {
   const { labels } = useCrumbs();
   const { currencies } = useContext(CurrencyContext);
   const [page, setPage] = useState<number>(1);
+  const [rotation, setRotation] = useState<StoreRotation | null>(null);
 
   const fetchItems = async (page: number) => {
     if (!catalog) {
@@ -50,6 +53,7 @@ export default function StoreScreen({ route }) {
 
   useAsyncEffect(async () => {
     setCurrentStore(await getStore(store));
+    setRotation(await getStoreRotation(store));
   }, []);
 
   useAsyncEffect(async () => {
@@ -161,6 +165,10 @@ export default function StoreScreen({ route }) {
                   );
                 })}
             </View>
+            {/* Countdown Timer */}
+            {rotation?.next_rotation_at && (
+              <StoreCountdown nextRotationAt={rotation.next_rotation_at} />
+            )}
             <View
               style={{
                 height: 180,

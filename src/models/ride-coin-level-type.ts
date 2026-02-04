@@ -6,7 +6,7 @@ import { RidePartType } from './ride-part-type';
  * Players spend Energy + Ride Parts to level up their ride coins.
  * Each level unlocks:
  * - Cosmetic upgrades (coin appearance)
- * - Perks (bonus multipliers, special abilities)
+ * - Cosmetic tier upgrades (Silver, Gold, Prismatic, Legendary)
  * - Boss challenges at max level
  */
 export interface RideCoinLevelType {
@@ -44,8 +44,8 @@ export interface RideCoinPerkType {
   readonly name: string;
   readonly description: string;
   readonly icon_url: string;
-  readonly type: 'multiplier' | 'bonus_parts' | 'energy_discount' | 'boss_access' | 'cosmetic';
-  readonly value: number; // e.g., 1.5x multiplier, +2 bonus parts
+  readonly type: 'cosmetic' | 'bonus_parts' | 'energy_discount' | 'boss_access';
+  readonly value: number;
 }
 
 /**
@@ -61,25 +61,25 @@ export const RIDE_COIN_LEVEL_CONFIG = {
   2: {
     energyCost: 10,
     partsCost: 5,
-    perks: ['1.1x coin multiplier'],
+    perks: ['Silver coin appearance'],
     frameStyle: 'bronze_enhanced',
   },
   3: {
     energyCost: 25,
     partsCost: 15,
-    perks: ['1.25x coin multiplier', '+1 ride part drop'],
+    perks: ['Gold coin appearance'],
     frameStyle: 'silver',
   },
   4: {
     energyCost: 50,
     partsCost: 30,
-    perks: ['1.5x coin multiplier', '+2 ride part drop'],
+    perks: ['Prismatic coin appearance'],
     frameStyle: 'silver_enhanced',
   },
   5: {
     energyCost: 100,
     partsCost: 75,
-    perks: ['2x coin multiplier', '+3 ride part drop', 'Boss challenge unlocked'],
+    perks: ['Legendary coin appearance'],
     frameStyle: 'gold',
   },
 } as const;

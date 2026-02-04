@@ -11,6 +11,8 @@ import Loading from '../components/Loading';
 import PlayerButtons from '../components/PlayerButtons';
 import SortByDropdown, { SortOption } from '../components/SortByDropdown';
 import Thread from '../components/Thread';
+import InformationModal from '../components/InformationModal';
+import { InformationModalEnums } from '../models/information-modal-enums';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -109,17 +111,7 @@ export default function SocialScreen({ navigation }) {
           <TopbarText>Social</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
-          <Button onPress={() => {}}>
-            <Image
-              style={{
-                width: 35,
-                height: 35,
-                alignSelf: 'center',
-              }}
-              contentFit="contain"
-              source={require('../../assets/images/faq.png')}
-            />
-          </Button>
+          <InformationModal id={InformationModalEnums.SocialScreen} />
         </TopbarColumn>
       </Topbar>
       {loading && <Loading />}

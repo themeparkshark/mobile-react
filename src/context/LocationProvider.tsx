@@ -1,24 +1,45 @@
 import * as Location from 'expo-location';
-import { createContext, FC, ReactNode, useContext, useState } from 'react';
+import { createContext, FC, ReactNode, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { useAsyncEffect, useDebounce, useIntervalWhen } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
 import { AuthContext } from './AuthProvider';
+import { setDevModeEnabled, setDevLocation as setGlobalDevLocation } from '../helpers/dev-location-store';
+
+// Smoothing factor for heading (lower = smoother but laggier, higher = more responsive but jittery)
+// Tuned for snappy but stable
+const HEADING_SMOOTHING_FACTOR = 0.5; // snappy response
+// Minimum heading change to register (prevents micro-jitters)
+const HEADING_THRESHOLD = 2; // small dead zone for jitter
+// Fast turn threshold - if turning quickly, be more responsive
+const FAST_TURN_THRESHOLD = 8; // triggers fast mode quickly
+const FAST_TURN_SMOOTHING = 0.75; // very responsive when turning
 
 export interface LocationContextType {
   readonly location: LocationType | undefined;
+  readonly heading: number | null;
+  readonly headingEnabled: boolean;
+  readonly setHeadingEnabled: (enabled: boolean) => void;
   readonly reset: () => void;
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
   readonly park?: ParkType;
   readonly parkLoaded: boolean;
   readonly permissionGranted: boolean;
+  // Dev joystick support
+  readonly devMode: boolean;
+  readonly setDevMode: (enabled: boolean) => void;
+  readonly moveDevLocation: (dx: number, dy: number, speed: number) => void;
 }
 
 export const LocationContext = createContext<LocationContextType>(
   {} as LocationContextType
 );
+
+// Default dev location: Magic Kingdom entrance
+const DEV_DEFAULT_LAT = 28.4177;
+const DEV_DEFAULT_LNG = -81.5812;
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
@@ -30,7 +51,123 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     leading: true,
   });
 
+  // Dev joystick mock location
+  const [devMode, setDevMode] = useState<boolean>(false);
+  const devLocationRef = useRef<LocationType>({ latitude: DEV_DEFAULT_LAT, longitude: DEV_DEFAULT_LNG });
+
+  const moveDevLocation = useCallback((dx: number, dy: number, speed: number) => {
+    const prev = devLocationRef.current;
+    const newLoc = {
+      latitude: prev.latitude + dy * speed,
+      longitude: prev.longitude + dx * speed,
+    };
+    devLocationRef.current = newLoc;
+    setGlobalDevLocation(newLoc);
+    setLocation(newLoc);
+  }, []);
+
+  // When dev mode is toggled on, set initial mock location and sync global store
+  useEffect(() => {
+    if (devMode && __DEV__) {
+      setDevModeEnabled(true);
+      setGlobalDevLocation(devLocationRef.current);
+      setLocation(devLocationRef.current);
+      setPermissionGranted(true);
+    } else {
+      setDevModeEnabled(false);
+    }
+  }, [devMode]);
+
+  // Heading state for compass-based map rotation
+  const [heading, setHeading] = useState<number | null>(null);
+  const [headingEnabled, setHeadingEnabled] = useState<boolean>(false);
+  const smoothedHeadingRef = useRef<number | null>(null);
+  const headingSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+
+  // Normalize heading to handle 0/360 wraparound smoothly
+  const normalizeHeadingDelta = (current: number, target: number): number => {
+    let delta = target - current;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    return delta;
+  };
+
+  // Apply low-pass filter for smooth heading with velocity-aware smoothing
+  const smoothHeading = (rawHeading: number): number => {
+    if (smoothedHeadingRef.current === null) {
+      smoothedHeadingRef.current = rawHeading;
+      return rawHeading;
+    }
+
+    const delta = normalizeHeadingDelta(smoothedHeadingRef.current, rawHeading);
+    
+    // Ignore tiny changes to prevent jitter
+    if (Math.abs(delta) < HEADING_THRESHOLD) {
+      return smoothedHeadingRef.current;
+    }
+
+    // Velocity-aware smoothing: when turning fast, be more responsive
+    // This gives AAA-quality feel like Pokemon GO
+    const smoothingFactor = Math.abs(delta) > FAST_TURN_THRESHOLD 
+      ? FAST_TURN_SMOOTHING 
+      : HEADING_SMOOTHING_FACTOR;
+
+    // Apply smoothing
+    let newHeading = smoothedHeadingRef.current + delta * smoothingFactor;
+    
+    // Normalize to 0-360
+    if (newHeading < 0) newHeading += 360;
+    if (newHeading >= 360) newHeading -= 360;
+
+    smoothedHeadingRef.current = newHeading;
+    return newHeading;
+  };
+
+  // Subscribe to heading updates when enabled
+  useEffect(() => {
+    if (!headingEnabled || !permissionGranted) {
+      // Cleanup subscription if disabled
+      if (headingSubscriptionRef.current) {
+        headingSubscriptionRef.current.remove();
+        headingSubscriptionRef.current = null;
+      }
+      return;
+    }
+
+    const startHeadingSubscription = async () => {
+      try {
+        headingSubscriptionRef.current = await Location.watchHeadingAsync((headingData) => {
+          // Use trueHeading if available (more accurate), fallback to magHeading
+          const rawHeading = headingData.trueHeading >= 0 
+            ? headingData.trueHeading 
+            : headingData.magHeading;
+          
+          if (rawHeading >= 0) {
+            const smoothed = smoothHeading(rawHeading);
+            setHeading(smoothed);
+          }
+        });
+      } catch (error) {
+        console.error('Failed to start heading subscription:', error);
+      }
+    };
+
+    startHeadingSubscription();
+
+    return () => {
+      if (headingSubscriptionRef.current) {
+        headingSubscriptionRef.current.remove();
+        headingSubscriptionRef.current = null;
+      }
+    };
+  }, [headingEnabled, permissionGranted]);
+
   const getCurrentLocation = async () => {
+    // In dev mode, return the mock location
+    if (devMode && __DEV__) {
+      return devLocationRef.current;
+    }
+
     try {
       const location = await Location.getCurrentPositionAsync();
 
@@ -104,18 +241,26 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     setLocation(undefined);
     setParkLoaded(false);
     setPark(undefined);
+    setHeading(null);
+    smoothedHeadingRef.current = null;
   };
 
   return (
     <LocationContext.Provider
       value={{
         location,
+        heading,
+        headingEnabled,
+        setHeadingEnabled,
         requestLocation,
         requestPark,
         reset,
         park,
         parkLoaded,
         permissionGranted,
+        devMode,
+        setDevMode,
+        moveDevLocation,
       }}
     >
       {children}

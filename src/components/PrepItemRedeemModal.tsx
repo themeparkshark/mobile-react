@@ -1,26 +1,24 @@
-import { Image } from 'expo-image';
 import { useContext, useState, useEffect, useRef } from 'react';
 import {
   Animated,
   Dimensions,
-  ImageBackground,
   Text,
   View,
-  Platform,
 } from 'react-native';
 import Modal from 'react-native-modal';
 import LottieView from 'lottie-react-native';
 import { PrepItemType } from '../models/prep-item-type';
 import { AuthContext } from '../context/AuthProvider';
+import { LocationContext } from '../context/LocationProvider';
 import redeemPrepItem from '../api/endpoints/me/prep-items/redeem';
-import Button from './Button';
+import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
+import YellowButton from './YellowButton';
 import config from '../config';
 import HapticPatterns from '../helpers/hapticPatterns';
 import {
   FloatingNumber,
   StarBurst,
-  PulseGlow,
   CelebrationLevel,
 } from './CelebrationEffects';
 
@@ -64,6 +62,7 @@ export default function PrepItemRedeemModal({
     multiplier: number;
   } | null>(null);
   const { player, refreshPlayer } = useContext(AuthContext);
+  const { location } = useContext(LocationContext);
 
   // Animation refs for collect celebration
   const itemScale = useRef(new Animated.Value(1)).current;
@@ -85,7 +84,9 @@ export default function PrepItemRedeemModal({
       const response = await redeemPrepItem(
         prepItem.id,
         pivotId,
-        player?.is_subscribed || false
+        player?.is_subscribed || false,
+        location?.latitude,
+        location?.longitude
       );
 
       setRewards(response.data.rewards);
@@ -173,13 +174,94 @@ export default function PrepItemRedeemModal({
 
   if (!prepItem) return null;
 
+  // Outer modal colors (solid, like task modal's #0788e4)
+  const outerColors = {
+    1: '#0788e4',   // Common - task blue
+    2: '#e8a000',   // Uncommon - gold
+    3: '#9C27B0',   // Rare - purple
+    4: '#E91E63',   // Epic - pink
+    5: '#FF6F00',   // Legendary - orange
+  };
+
+  // Inner box colors (like Box component's backgrounds)
+  const innerColors = {
+    1: '#4cdcff',   // Common - cyan (matches task)
+    2: '#ffe7a2',   // Uncommon - light gold (matches coin)
+    3: '#e5d4ff',   // Rare - light purple (matches item)
+    4: '#ffccdd',   // Epic - light pink
+    5: '#fff4cc',   // Legendary - light gold
+  };
+
+  // Border colors for inner box
+  const borderColors = {
+    1: '#0d3249',   // Common
+    2: '#3d4a24',   // Uncommon
+    3: '#4a2a66',   // Rare
+    4: '#6a2a3a',   // Epic
+    5: '#5a4a1a',   // Legendary
+  };
+
   const rarityConfig = {
-    1: { label: 'Common', color: '#4CAF50', glowColor: '#4CAF50' },
-    2: { label: 'Uncommon', color: config.secondary, glowColor: config.secondary },
-    3: { label: 'Rare', color: '#9C27B0', glowColor: '#9C27B0' },
-    4: { label: 'Epic', color: '#E91E63', glowColor: '#E91E63' },
-    5: { label: 'Legendary', color: '#FFD700', glowColor: '#FFD700' },
-  }[prepItem.rarity] || { label: 'Common', color: '#4CAF50', glowColor: '#4CAF50' };
+    label: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'][prepItem.rarity - 1] || 'Common',
+    color: [null, '#4CAF50', config.secondary, '#9C27B0', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
+    glowColor: [null, '#4CAF50', config.secondary, '#9C27B0', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
+    outerBg: outerColors[prepItem.rarity as keyof typeof outerColors] || '#0788e4',
+    innerBg: innerColors[prepItem.rarity as keyof typeof innerColors] || '#4cdcff',
+    borderColor: borderColors[prepItem.rarity as keyof typeof borderColors] || '#0d3249',
+  };
+  
+  // Get local churro image if available
+  const getLocalChurroImage = (name: string) => {
+    const CHURRO_IMAGES: Record<string, any> = {
+      'classic cinnamon': require('../../assets/images/prep-items/churros/churro_01.png'),
+      'sugar dusted': require('../../assets/images/prep-items/churros/churro_02.png'),
+      'honey glazed': require('../../assets/images/prep-items/churros/churro_03.png'),
+      'brown sugar': require('../../assets/images/prep-items/churros/churro_04.png'),
+      'maple swirl': require('../../assets/images/prep-items/churros/churro_05.png'),
+      'vanilla bean': require('../../assets/images/prep-items/churros/churro_06.png'),
+      'caramel drizzle': require('../../assets/images/prep-items/churros/churro_07.png'),
+      'dulce de leche': require('../../assets/images/prep-items/churros/churro_08.png'),
+      'butterscotch': require('../../assets/images/prep-items/churros/churro_09.png'),
+      'toasted coconut': require('../../assets/images/prep-items/churros/churro_10.png'),
+      'churro original': require('../../assets/images/prep-items/churros/churro_11.png'),
+      'cinnamon toast': require('../../assets/images/prep-items/churros/churro_12.png'),
+      'golden crisp': require('../../assets/images/prep-items/churros/churro_13.png'),
+      'sweet cream': require('../../assets/images/prep-items/churros/churro_14.png'),
+      'salted caramel': require('../../assets/images/prep-items/churros/churro_15.png'),
+      'toffee crunch': require('../../assets/images/prep-items/churros/churro_16.png'),
+      'praline': require('../../assets/images/prep-items/churros/churro_17.png'),
+      'snickerdoodle': require('../../assets/images/prep-items/churros/churro_18.png'),
+      'biscoff': require('../../assets/images/prep-items/churros/churro_19.png'),
+      'cookie butter': require('../../assets/images/prep-items/churros/churro_20.png'),
+      'chocolate dipped': require('../../assets/images/prep-items/churros/churro_21.png'),
+      'strawberry frosted': require('../../assets/images/prep-items/churros/churro_22.png'),
+      'blueberry bliss': require('../../assets/images/prep-items/churros/churro_23.png'),
+      'matcha green tea': require('../../assets/images/prep-items/churros/churro_24.png'),
+      'ube purple yam': require('../../assets/images/prep-items/churros/churro_25.png'),
+      'red velvet': require('../../assets/images/prep-items/churros/churro_26.png'),
+      'orange creamsicle': require('../../assets/images/prep-items/churros/churro_27.png'),
+      'lemon zest': require('../../assets/images/prep-items/churros/churro_28.png'),
+      'mint chocolate': require('../../assets/images/prep-items/churros/churro_29.png'),
+      'cookies & cream': require('../../assets/images/prep-items/churros/churro_30.png'),
+      'pumpkin spice': require('../../assets/images/prep-items/churros/churro_31.png'),
+      'birthday cake': require('../../assets/images/prep-items/churros/churro_32.png'),
+      'cotton candy': require('../../assets/images/prep-items/churros/churro_33.png'),
+      'tropical mango': require('../../assets/images/prep-items/churros/churro_34.png'),
+      'galaxy swirl': require('../../assets/images/prep-items/churros/churro_35.png'),
+      'electric blue': require('../../assets/images/prep-items/churros/churro_36.png'),
+      'watermelon wave': require('../../assets/images/prep-items/churros/churro_37.png'),
+      'sunset orange': require('../../assets/images/prep-items/churros/churro_38.png'),
+      'golden churro': require('../../assets/images/prep-items/churros/churro_39.png'),
+      'rainbow galaxy': require('../../assets/images/prep-items/churros/churro_40.png'),
+      'default': require('../../assets/images/prep-items/churros/base_churro.png'),
+    };
+    const lowerName = name.toLowerCase().replace(' churro', '').trim();
+    return CHURRO_IMAGES[lowerName] || CHURRO_IMAGES['default'];
+  };
+  
+  const itemImage = prepItem.name.toLowerCase().includes('churro') 
+    ? getLocalChurroImage(prepItem.name)
+    : (prepItem.icon_url ? { uri: prepItem.icon_url } : require('../../assets/images/prep-items/churros/base_churro.png'));
 
   return (
     <Modal
@@ -205,33 +287,43 @@ export default function PrepItemRedeemModal({
           {/* Ribbon Header */}
           <Ribbon text={showRewards ? 'Collected!' : 'Prep Item'} />
 
-          {/* Main Content Box */}
+          {/* Main Content Box - matches task modal structure exactly */}
           <View
             style={{
-              backgroundColor: config.secondary,
+              backgroundColor: rarityConfig.outerBg,
+              borderRadius: 16,
               marginTop: '-10%',
               width: '85%',
               zIndex: 10,
+              paddingTop: 16,
+              paddingLeft: 16,
+              paddingRight: 16,
+              paddingBottom: 8,
               shadowColor: '#000',
               shadowOffset: { width: 2, height: 2 },
               shadowRadius: 0,
               shadowOpacity: 0.4,
-              borderColor: 'rgba(0, 0, 0, 0.4)',
+              borderColor: 'rgba(0, 0, 0, .4)',
               borderWidth: 2,
-              borderRadius: 16,
             }}
           >
+            {/* Inner content area - matches task modal's inner structure */}
             <View
               style={{
-                borderRadius: 16,
+                paddingTop: 16,
+                paddingBottom: 16,
+                paddingLeft: 16,
+                paddingRight: 16,
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                borderColor: 'rgba(0, 0, 0, .6)',
+                borderLeftWidth: 2,
+                borderRightWidth: 2,
+                borderBottomWidth: 2,
+                borderBottomLeftRadius: 16,
+                borderBottomRightRadius: 16,
                 overflow: 'hidden',
               }}
             >
-              <ImageBackground
-                source={require('../../assets/images/modals/daily_gift.png')}
-                resizeMode="cover"
-                style={{ width: '100%' }}
-              >
                 {/* Screen glow for rare+ items */}
                 <Animated.View
                   style={{
@@ -269,418 +361,246 @@ export default function PrepItemRedeemModal({
                   </View>
                 )}
 
-                <View
-                  style={{
-                    paddingTop: 32,
-                    paddingLeft: 16,
-                    paddingRight: 16,
-                    paddingBottom: 24,
-                    alignItems: 'center',
-                  }}
-                >
-                  {!showRewards ? (
-                    // Pre-collect view
-                    <>
-                      {/* Rarity Badge */}
-                      <View
-                        style={{
-                          backgroundColor: rarityConfig.color,
-                          paddingHorizontal: 16,
-                          paddingVertical: 6,
-                          borderRadius: 12,
-                          marginBottom: 16,
-                          borderWidth: 2,
-                          borderColor: 'rgba(255, 255, 255, 0.3)',
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 14,
-                            color: 'white',
-                            textTransform: 'uppercase',
-                            textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                            textShadowOffset: { width: 1, height: 1 },
-                            textShadowRadius: 0,
-                          }}
-                        >
-                          {rarityConfig.label}
-                        </Text>
-                      </View>
-
-                      {/* Item Image with pulse glow for rare+ */}
-                      <PulseGlow
-                        color={rarityConfig.glowColor}
-                        intensity={prepItem.rarity >= 3 ? 0.8 : 0.3}
-                        speed={prepItem.rarity >= 4 ? 1000 : 2000}
-                      >
-                        <Animated.View
-                          style={{
-                            marginBottom: 16,
-                            shadowColor: '#000',
-                            shadowOffset: { width: 2, height: 2 },
-                            shadowRadius: 0,
-                            shadowOpacity: 0.3,
-                            transform: [{ scale: itemScale }],
-                          }}
-                        >
-                          {prepItem.icon_url ? (
-                            <Image
-                              source={{ uri: prepItem.icon_url }}
-                              style={{ width: 100, height: 100 }}
-                              contentFit="contain"
-                            />
-                          ) : (
-                            <View
-                              style={{
-                                width: 100,
-                                height: 100,
-                                borderRadius: 50,
-                                backgroundColor: rarityConfig.color,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              <Text style={{ fontSize: 50 }}>🎁</Text>
-                            </View>
-                          )}
-                        </Animated.View>
-                      </PulseGlow>
-
-                      {/* Item Name */}
-                      <Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 24,
-                          color: 'white',
-                          textAlign: 'center',
-                          textTransform: 'uppercase',
-                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                          textShadowOffset: { width: 2, height: 2 },
-                          textShadowRadius: 0,
-                          marginBottom: 8,
-                        }}
-                      >
-                        {prepItem.name}
-                      </Text>
-
-                      {prepItem.description && (
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 14,
-                            color: 'rgba(255, 255, 255, 0.8)',
-                            textAlign: 'center',
-                            marginBottom: 16,
-                          }}
-                        >
-                          {prepItem.description}
-                        </Text>
-                      )}
-
-                      {/* Rewards Preview */}
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          justifyContent: 'center',
-                          marginBottom: 20,
-                          gap: 12,
-                        }}
-                      >
-                        {prepItem.energy_reward > 0 && (
-                          <View
-                            style={{
-                              alignItems: 'center',
-                              backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                              paddingHorizontal: 14,
-                              paddingVertical: 10,
-                              borderRadius: 12,
-                            }}
-                          >
-                            <Text style={{ fontSize: 20 }}>⚡</Text>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 18,
-                                color: config.tertiary,
-                              }}
-                            >
-                              +{prepItem.energy_reward}
-                            </Text>
-                          </View>
-                        )}
-                        {prepItem.ticket_reward > 0 && (
-                          <View
-                            style={{
-                              alignItems: 'center',
-                              backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                              paddingHorizontal: 14,
-                              paddingVertical: 10,
-                              borderRadius: 12,
-                            }}
-                          >
-                            <Text style={{ fontSize: 20 }}>🎟️</Text>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 18,
-                                color: config.tertiary,
-                              }}
-                            >
-                              +{prepItem.ticket_reward}
-                            </Text>
-                          </View>
-                        )}
-                        {prepItem.experience_reward > 0 && (
-                          <View
-                            style={{
-                              alignItems: 'center',
-                              backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                              paddingHorizontal: 14,
-                              paddingVertical: 10,
-                              borderRadius: 12,
-                            }}
-                          >
-                            <Text style={{ fontSize: 20 }}>⭐</Text>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 18,
-                                color: config.tertiary,
-                              }}
-                            >
-                              +{prepItem.experience_reward}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Collect Button */}
-                      <Button
-                        onPress={handleCollect}
-                        hasPermission={!isCollecting}
-                      >
-                        <ImageBackground
-                          source={require('../../assets/images/yellow_button.png')}
-                          style={{
-                            paddingHorizontal: 40,
-                            paddingVertical: 12,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                          resizeMode="stretch"
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 22,
-                              color: config.primary,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            {isCollecting ? 'Collecting...' : 'Collect!'}
-                          </Text>
-                        </ImageBackground>
-                      </Button>
-                    </>
-                  ) : (
-                    // Post-collect view
-                    <>
-                      {/* Floating reward numbers */}
-                      {showFloatingRewards && rewards && (
-                        <View style={{ position: 'absolute', top: 20, alignSelf: 'center', zIndex: 100 }}>
-                          {rewards.energy > 0 && (
-                            <FloatingNumber
-                              value={rewards.energy}
-                              emoji="⚡"
-                              color="#4CAF50"
-                              delay={0}
-                            />
-                          )}
-                          {rewards.tickets > 0 && (
-                            <FloatingNumber
-                              value={rewards.tickets}
-                              emoji="🎟️"
-                              color="#FF9800"
-                              delay={200}
-                            />
-                          )}
-                          {rewards.experience > 0 && (
-                            <FloatingNumber
-                              value={rewards.experience}
-                              label="XP"
-                              color={config.tertiary}
-                              delay={400}
-                            />
-                          )}
-                        </View>
-                      )}
-
-                      <Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 28,
-                          color: config.tertiary,
-                          textAlign: 'center',
-                          textTransform: 'uppercase',
-                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                          textShadowOffset: { width: 2, height: 2 },
-                          textShadowRadius: 0,
-                          marginBottom: 8,
-                          marginTop: 16,
-                        }}
-                      >
-                        {prepItem.rarity >= 4 ? '🔥 EPIC!' : prepItem.rarity >= 3 ? '✨ Nice!' : '🎉 Got it!'}
-                      </Text>
-
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 18,
-                          color: 'white',
-                          textAlign: 'center',
-                          marginBottom: 20,
-                        }}
-                      >
-                        {prepItem.name}
-                      </Text>
-
-                      {/* Rewards Received */}
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          justifyContent: 'center',
-                          marginBottom: 20,
-                          gap: 16,
-                        }}
-                      >
-                        {rewards?.energy && rewards.energy > 0 && (
-                          <View style={{ alignItems: 'center' }}>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 28,
-                                color: '#4CAF50',
-                              }}
-                            >
-                              +{rewards.energy}
-                            </Text>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 12,
-                                color: 'rgba(255, 255, 255, 0.7)',
-                              }}
-                            >
-                              ⚡ Energy
-                            </Text>
-                          </View>
-                        )}
-                        {rewards?.tickets && rewards.tickets > 0 && (
-                          <View style={{ alignItems: 'center' }}>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 28,
-                                color: '#4CAF50',
-                              }}
-                            >
-                              +{rewards.tickets}
-                            </Text>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 12,
-                                color: 'rgba(255, 255, 255, 0.7)',
-                              }}
-                            >
-                              🎟️ Tickets
-                            </Text>
-                          </View>
-                        )}
-                        {rewards?.experience && rewards.experience > 0 && (
-                          <View style={{ alignItems: 'center' }}>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 28,
-                                color: '#4CAF50',
-                              }}
-                            >
-                              +{rewards.experience}
-                            </Text>
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 12,
-                                color: 'rgba(255, 255, 255, 0.7)',
-                              }}
-                            >
-                              ⭐ XP
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Streak Info */}
-                      {streakInfo && streakInfo.current > 0 && (
+                {!showRewards ? (
+                  // Pre-collect view - matches task modal structure exactly
+                  <>
+                    {/* Main item Box - same as task modal */}
+                    <Box
+                      background={require('../../assets/images/screens/explore/starburst.png')}
+                      image={itemImage}
+                      text={prepItem.name}
+                      type="task"
+                      pulse
+                    />
+                    
+                    {/* Reward boxes row - same layout as task modal */}
+                    <View
+                      style={{
+                        marginLeft: -4,
+                        marginRight: -4,
+                        marginTop: 8,
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {prepItem.energy_reward > 0 && (
                         <View
                           style={{
-                            alignItems: 'center',
-                            marginBottom: 20,
+                            width: '33.3333333%',
+                            paddingLeft: 4,
+                            paddingRight: 4,
                           }}
                         >
+                          <Box
+                            backgroundColor="#4cdcff"
+                            image={require('../../assets/images/screens/explore/xp.png')}
+                            text={prepItem.energy_reward}
+                            small
+                            type="task"
+                          />
+                        </View>
+                      )}
+                      {prepItem.ticket_reward > 0 && (
+                        <View
+                          style={{
+                            width: '33.3333333%',
+                            paddingLeft: 4,
+                            paddingRight: 4,
+                          }}
+                        >
+                          <Box
+                            backgroundColor="#4cdcff"
+                            image={require('../../assets/images/screens/explore/xp.png')}
+                            text={prepItem.ticket_reward}
+                            small
+                            type="task"
+                          />
+                        </View>
+                      )}
+                      {prepItem.experience_reward > 0 && (
+                        <View
+                          style={{
+                            width: '33.3333333%',
+                            paddingLeft: 4,
+                            paddingRight: 4,
+                          }}
+                        >
+                          <Box
+                            backgroundColor="#4cdcff"
+                            image={require('../../assets/images/screens/explore/xp.png')}
+                            text={prepItem.experience_reward}
+                            small
+                            type="task"
+                          />
+                        </View>
+                      )}
+                    </View>
+                  </>
+                ) : (
+                  // Post-collect view
+                  <>
+                    {/* Floating reward numbers */}
+                    {showFloatingRewards && rewards && (
+                      <View style={{ position: 'absolute', top: 20, alignSelf: 'center', zIndex: 100 }}>
+                        {rewards.energy > 0 && (
+                          <FloatingNumber
+                            value={rewards.energy}
+                            emoji="⚡"
+                            color="#4CAF50"
+                            delay={0}
+                          />
+                        )}
+                        {rewards.tickets > 0 && (
+                          <FloatingNumber
+                            value={rewards.tickets}
+                            emoji="🎟️"
+                            color="#FF9800"
+                            delay={200}
+                          />
+                        )}
+                        {rewards.experience > 0 && (
+                          <FloatingNumber
+                            value={rewards.experience}
+                            label="XP"
+                            color={config.tertiary}
+                            delay={400}
+                          />
+                        )}
+                      </View>
+                    )}
+
+                    <Text
+                      style={{
+                        fontFamily: 'Shark',
+                        fontSize: 28,
+                        color: config.tertiary,
+                        textAlign: 'center',
+                        textTransform: 'uppercase',
+                        textShadowColor: 'rgba(0, 0, 0, 0.5)',
+                        textShadowOffset: { width: 2, height: 2 },
+                        textShadowRadius: 0,
+                        marginBottom: 8,
+                        marginTop: 16,
+                      }}
+                    >
+                      {prepItem.rarity >= 4 ? '🔥 EPIC!' : prepItem.rarity >= 3 ? '✨ Nice!' : '🎉 Got it!'}
+                    </Text>
+
+                    <Text
+                      style={{
+                        fontFamily: 'Knockout',
+                        fontSize: 18,
+                        color: 'white',
+                        textAlign: 'center',
+                        marginBottom: 8,
+                      }}
+                    >
+                      {prepItem.name}
+                    </Text>
+
+                    {/* Rewards Received - using Box components like task modal */}
+                    <View
+                      style={{
+                        marginLeft: -4,
+                        marginRight: -4,
+                        marginTop: 8,
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {rewards?.energy && rewards.energy > 0 && (
+                        <View
+                          style={{
+                            width: '33.3333333%',
+                            paddingLeft: 4,
+                            paddingRight: 4,
+                          }}
+                        >
+                          <Box
+                            backgroundColor="#4cdcff"
+                            image={require('../../assets/images/screens/explore/xp.png')}
+                            text={`+${rewards.energy}`}
+                            small
+                            type="task"
+                          />
+                        </View>
+                      )}
+                      {rewards?.tickets && rewards.tickets > 0 && (
+                        <View
+                          style={{
+                            width: '33.3333333%',
+                            paddingLeft: 4,
+                            paddingRight: 4,
+                          }}
+                        >
+                          <Box
+                            backgroundColor="#4cdcff"
+                            image={require('../../assets/images/screens/explore/xp.png')}
+                            text={`+${rewards.tickets}`}
+                            small
+                            type="task"
+                          />
+                        </View>
+                      )}
+                      {rewards?.experience && rewards.experience > 0 && (
+                        <View
+                          style={{
+                            width: '33.3333333%',
+                            paddingLeft: 4,
+                            paddingRight: 4,
+                          }}
+                        >
+                          <Box
+                            backgroundColor="#4cdcff"
+                            image={require('../../assets/images/screens/explore/xp.png')}
+                            text={`+${rewards.experience}`}
+                            small
+                            type="task"
+                          />
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Streak Info */}
+                    {streakInfo && streakInfo.current > 0 && (
+                      <View
+                        style={{
+                          alignItems: 'center',
+                          marginTop: 12,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: 'Knockout',
+                            fontSize: 18,
+                            color: '#FF9800',
+                          }}
+                        >
+                          🔥 {streakInfo.current} day streak!
+                        </Text>
+                        {streakInfo.multiplier > 1 && (
                           <Text
                             style={{
                               fontFamily: 'Knockout',
-                              fontSize: 18,
-                              color: '#FF9800',
+                              fontSize: 14,
+                              color: config.tertiary,
                             }}
                           >
-                            🔥 {streakInfo.current} day streak!
+                            {streakInfo.multiplier}x bonus applied!
                           </Text>
-                          {streakInfo.multiplier > 1 && (
-                            <Text
-                              style={{
-                                fontFamily: 'Knockout',
-                                fontSize: 14,
-                                color: config.tertiary,
-                              }}
-                            >
-                              {streakInfo.multiplier}x bonus applied!
-                            </Text>
-                          )}
-                        </View>
-                      )}
-
-                      {/* Done Button */}
-                      <Button onPress={handleDone}>
-                        <ImageBackground
-                          source={require('../../assets/images/yellow_button.png')}
-                          style={{
-                            paddingHorizontal: 40,
-                            paddingVertical: 12,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                          resizeMode="stretch"
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 22,
-                              color: config.primary,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            Awesome!
-                          </Text>
-                        </ImageBackground>
-                      </Button>
-                    </>
-                  )}
-                </View>
-              </ImageBackground>
+                        )}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            {/* Button outside inner content - matches task modal exactly */}
+            <View style={{ marginTop: 8 }}>
+              <YellowButton
+                text={showRewards ? 'Awesome!' : (isCollecting ? 'Collecting...' : 'Collect')}
+                onPress={showRewards ? handleDone : handleCollect}
+                disabled={!showRewards && isCollecting}
+              />
             </View>
           </View>
         </View>

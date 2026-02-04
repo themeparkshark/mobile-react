@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   Dimensions,
   ImageBackground,
-  ScrollView,
   View,
 } from 'react-native';
 import { useAsyncEffect } from 'rooks';
@@ -62,72 +61,65 @@ export default function PinCollectionsScreen() {
             }}
             source={require('../../assets/images/water_background.png')}
           >
-            <ScrollView
-              contentContainerStyle={{
-                flexGrow: 1,
-              }}
-            >
+            {collectionsLoading && (
               <View
                 style={{
-                  height: 300,
-                  borderBottomWidth: 5,
-                  borderBottomColor: '#fff',
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                <Image
-                  source={require('../../assets/images/screens/pin-collections/shark.png')}
-                  style={{
-                    width: Dimensions.get('window').width - 25,
-                    height: '100%',
-                    marginLeft: 'auto',
-                    marginRight: 'auto',
-                  }}
-                  contentFit="contain"
+                <ActivityIndicator
+                  size="large"
+                  color="rgba(0, 0, 0, .5)"
                 />
               </View>
-              {collections && (
-                <View
-                  style={{
-                    flex: 1,
-                    paddingLeft: 4,
-                    paddingRight: 4,
-                    backgroundColor: 'rgba(255, 255, 255, .6)',
-                  }}
-                >
-                  {collectionsLoading && (
-                    <View
+            )}
+            {!collectionsLoading && (
+              <FlashList
+                contentContainerStyle={{ 
+                  paddingBottom: 8,
+                  paddingLeft: 4,
+                  paddingRight: 4,
+                  backgroundColor: 'rgba(255, 255, 255, .6)',
+                }}
+                ListHeaderComponent={
+                  <View
+                    style={{
+                      height: 300,
+                      borderBottomWidth: 5,
+                      borderBottomColor: '#fff',
+                      marginLeft: -4,
+                      marginRight: -4,
+                      backgroundColor: 'transparent',
+                    }}
+                  >
+                    <Image
+                      source={require('../../assets/images/screens/pin-collections/shark.png')}
                       style={{
-                        flex: 1,
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        width: Dimensions.get('window').width - 25,
+                        height: '100%',
+                        marginLeft: 'auto',
+                        marginRight: 'auto',
                       }}
-                    >
-                      <ActivityIndicator
-                        size="large"
-                        color="rgba(0, 0, 0, .5)"
-                      />
-                    </View>
-                  )}
-                  {!collectionsLoading && (
-                    <FlashList
-                      contentContainerStyle={{ paddingBottom: 8 }}
-                      data={collections}
-                      keyExtractor={(pinCollection) =>
-                        pinCollection.id.toString()
-                      }
-                      renderItem={({ item }) => (
-                        <PinCollectionModal pinCollection={item} />
-                      )}
-                      numColumns={3}
-                      estimatedItemSize={15}
-                      onEndReached={() => {
-                        setPage((prevState) => prevState + 1);
-                      }}
+                      contentFit="contain"
                     />
-                  )}
-                </View>
-              )}
-            </ScrollView>
+                  </View>
+                }
+                data={collections}
+                keyExtractor={(pinCollection) =>
+                  pinCollection.id.toString()
+                }
+                renderItem={({ item }) => (
+                  <PinCollectionModal pinCollection={item} />
+                )}
+                numColumns={3}
+                estimatedItemSize={15}
+                onEndReached={() => {
+                  setPage((prevState) => prevState + 1);
+                }}
+              />
+            )}
           </ImageBackground>
         </View>
       )}

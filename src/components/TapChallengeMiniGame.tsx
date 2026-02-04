@@ -1,582 +1,266 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import {
-  Animated,
-  Dimensions,
-  ImageBackground,
-  Text,
-  TouchableOpacity,
-  View,
-  Vibration,
-  Platform,
-} from 'react-native';
-import Modal from 'react-native-modal';
-import HapticPatterns from '../helpers/hapticPatterns';
-import Button from './Button';
-import Ribbon from './Ribbon';
-import config from '../config';
-import { AnimatedCounter, ShakeEffect } from './CelebrationEffects';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Vibration } from 'react-native';
+import MiniGameShell from './MiniGameShell';
 
 interface Props {
   visible: boolean;
   taskName: string;
-  targetTaps: number;
-  timeLimitSeconds: number;
+  requiredTaps?: number;
+  timeLimitSeconds?: number;
   onClose: () => void;
-  onComplete: (multiplier: number, tapsAchieved: number) => void;
+  onComplete: (multiplier: number, taps: number) => void;
 }
 
-type GameState = 'ready' | 'playing' | 'complete';
+const GRID_SIZE = 9; // 3x3
 
-/**
- * Tap Challenge Mini-Game
- * Tap as fast as you can to hit the target!
- * 
- * Multipliers:
- * - < 50% target: 0.5x
- * - 50-75% target: 0.75x
- * - 75-100% target: 1.0x
- * - 100-125% target: 1.25x
- * - 125-150% target: 1.5x
- * - > 150% target: 2.0x
- */
+// Theme park themed symbols (no emoji)
+const FACES = ['S', 'M', 'C', 'R', 'P', 'T', 'W', 'D', 'B'];
+
 export default function TapChallengeMiniGame({
   visible,
   taskName,
-  targetTaps,
-  timeLimitSeconds,
+  requiredTaps = 10,
+  timeLimitSeconds = 12,
   onClose,
   onComplete,
 }: Props) {
-  const [gameState, setGameState] = useState<GameState>('ready');
-  const [tapCount, setTapCount] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(timeLimitSeconds);
-  const [finalMultiplier, setFinalMultiplier] = useState(1);
-  
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const progressAnim = useRef(new Animated.Value(1)).current;
-  const buttonScale = useRef(new Animated.Value(1)).current;
-  const tapCountScale = useRef(new Animated.Value(1)).current;
-  const shakeAnim = useRef(new Animated.Value(0)).current;
+  console.log('🎮 TapChallengeMiniGame render:', { visible, taskName });
+  const [phase, setPhase] = useState<'instructions' | 'countdown' | 'playing' | 'ended'>('instructions');
+  const [tapsLeft, setTapsLeft] = useState(requiredTaps);
+  const [result, setResult] = useState<{ won: boolean; message: string; stars: number } | null>(null);
 
-  // Reset game when modal opens
+  // Game state in refs to avoid render storms
+  const tapsRef = useRef(0);
+  const comboRef = useRef(0);
+  const gridRef = useRef<(number | null)[]>(new Array(GRID_SIZE).fill(null));
+  const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const targetIdRef = useRef(0);
+  const gameEndedRef = useRef(false);
+  
+  // Animation values — created once
+  const cellScales = useRef(
+    Array.from({ length: GRID_SIZE }, () => new Animated.Value(0))
+  ).current;
+  const cellOpacities = useRef(
+    Array.from({ length: GRID_SIZE }, () => new Animated.Value(0))
+  ).current;
+
+  // Progress bar animation
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  // Reset
   useEffect(() => {
     if (visible) {
-      setGameState('ready');
-      setTapCount(0);
-      setTimeLeft(timeLimitSeconds);
-      progressAnim.setValue(1);
+      setPhase('instructions');
+      setTapsLeft(requiredTaps);
+      setResult(null);
+      tapsRef.current = 0;
+      comboRef.current = 0;
+      gridRef.current = new Array(GRID_SIZE).fill(null);
+      targetIdRef.current = 0;
+      gameEndedRef.current = false;
+      cellScales.forEach(s => s.setValue(0));
+      cellOpacities.forEach(o => o.setValue(0));
+      progressAnim.setValue(0);
     }
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      if (tickerRef.current) clearInterval(tickerRef.current);
     };
-  }, [visible, timeLimitSeconds]);
+  }, [visible, requiredTaps]);
 
-  // Start the game
-  const startGame = () => {
-    setGameState('playing');
-    setTapCount(0);
-    setTimeLeft(timeLimitSeconds);
-    progressAnim.setValue(1);
+  // Game loop
+  useEffect(() => {
+    if (phase !== 'playing') {
+      if (tickerRef.current) clearInterval(tickerRef.current);
+      return;
+    }
 
-    // Animate timer bar
-    Animated.timing(progressAnim, {
-      toValue: 0,
-      duration: timeLimitSeconds * 1000,
+    const spawnTarget = () => {
+      if (gameEndedRef.current) return;
+      
+      // Find empty cells
+      const empty: number[] = [];
+      gridRef.current.forEach((v, i) => { if (v === null) empty.push(i); });
+      if (empty.length === 0) return;
+
+      const cell = empty[Math.floor(Math.random() * empty.length)];
+      const id = ++targetIdRef.current;
+      gridRef.current[cell] = id;
+
+      // Pop in animation
+      cellScales[cell].setValue(0);
+      cellOpacities[cell].setValue(1);
+      Animated.spring(cellScales[cell], {
+        toValue: 1,
+        friction: 4,
+        tension: 60,
+        useNativeDriver: false,
+      }).start();
+
+      // Auto-disappear after 1.2s (faster for urgency)
+      setTimeout(() => {
+        if (gridRef.current[cell] === id && !gameEndedRef.current) {
+          gridRef.current[cell] = null;
+          comboRef.current = 0;
+          Animated.timing(cellOpacities[cell], {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: false,
+          }).start();
+        }
+      }, 1200);
+    };
+
+    // Spawn first target immediately
+    spawnTarget();
+
+    // Then every 600ms (faster spawn rate)
+    tickerRef.current = setInterval(() => {
+      spawnTarget();
+    }, 600);
+
+    return () => {
+      if (tickerRef.current) clearInterval(tickerRef.current);
+    };
+  }, [phase]);
+
+  const endGame = useCallback((won: boolean) => {
+    if (gameEndedRef.current) return;
+    gameEndedRef.current = true;
+    if (tickerRef.current) clearInterval(tickerRef.current);
+    
+    const stars = won ? (tapsRef.current >= requiredTaps + 5 ? 3 : tapsRef.current >= requiredTaps + 2 ? 2 : 1) : 0;
+    setResult({
+      won,
+      message: won ? (stars === 3 ? 'INCREDIBLE!' : stars === 2 ? 'GREAT!' : 'PASSED!') : 'FAILED!',
+      stars,
+    });
+    setPhase('ended');
+  }, [requiredTaps]);
+
+  const handleTap = useCallback((cell: number) => {
+    if (phase !== 'playing' || gameEndedRef.current) return;
+    if (gridRef.current[cell] === null) return;
+
+    // Hit!
+    gridRef.current[cell] = null;
+    comboRef.current++;
+    tapsRef.current++;
+    
+    const newTapsLeft = requiredTaps - tapsRef.current;
+    setTapsLeft(Math.max(0, newTapsLeft));
+    
+    // Update progress bar
+    Animated.spring(progressAnim, {
+      toValue: Math.min(1, tapsRef.current / requiredTaps),
+      friction: 6,
       useNativeDriver: false,
     }).start();
-
-    // Countdown timer
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          endGame();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  // Calculate multiplier
-  const calculateMultiplier = useCallback((taps: number): number => {
-    const percentage = (taps / targetTaps) * 100;
     
-    if (percentage < 50) return 0.5;
-    if (percentage < 75) return 0.75;
-    if (percentage < 100) return 1.0;
-    if (percentage < 125) return 1.25;
-    if (percentage < 150) return 1.5;
-    return 2.0;
-  }, [targetTaps]);
+    // Haptic feedback
+    Vibration.vibrate(10);
 
-  // End the game
-  const endGame = useCallback(() => {
-    setGameState('complete');
-    const mult = calculateMultiplier(tapCount);
-    setFinalMultiplier(mult);
-    
-    // Haptic based on performance
-    if (Platform.OS === 'ios') {
-      HapticPatterns.miniGameResult(mult);
-    }
-  }, [tapCount, calculateMultiplier]);
-
-  // Update multiplier when tap count changes (for endGame callback)
-  useEffect(() => {
-    if (gameState === 'playing') {
-      // Just tracking for the callback
-    }
-  }, [tapCount, gameState]);
-
-  // Handle tap
-  const handleTap = useCallback(() => {
-    if (gameState !== 'playing') return;
-
-    // Increment tap
-    setTapCount((prev) => {
-      const newCount = prev + 1;
-      
-      // Haptic feedback - scales with taps
-      if (Platform.OS === 'ios') {
-        HapticPatterns.rapidFire(newCount);
-      } else {
-        Vibration.vibrate(10);
-      }
-      
-      return newCount;
-    });
-
-    // Button press animation
-    Animated.sequence([
-      Animated.timing(buttonScale, {
-        toValue: 0.9,
-        duration: 30,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonScale, {
-        toValue: 1,
-        duration: 30,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Tap count pop animation
-    Animated.sequence([
-      Animated.timing(tapCountScale, {
-        toValue: 1.2,
-        duration: 50,
-        useNativeDriver: true,
-      }),
-      Animated.timing(tapCountScale, {
-        toValue: 1,
-        duration: 50,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Screen shake on milestone taps
-    if (tapCount > 0 && tapCount % 10 === 0) {
+    // Hit animation — quick scale burst then fade
+    Animated.parallel([
       Animated.sequence([
-        Animated.timing(shakeAnim, { toValue: 5, duration: 25, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: -5, duration: 25, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 5, duration: 25, useNativeDriver: true }),
-        Animated.timing(shakeAnim, { toValue: 0, duration: 25, useNativeDriver: true }),
-      ]).start();
+        Animated.timing(cellScales[cell], { toValue: 1.4, duration: 80, useNativeDriver: false }),
+        Animated.timing(cellScales[cell], { toValue: 0, duration: 150, useNativeDriver: false }),
+      ]),
+      Animated.timing(cellOpacities[cell], { toValue: 0, duration: 200, useNativeDriver: false }),
+    ]).start();
+
+    // Check for WIN
+    if (tapsRef.current >= requiredTaps) {
+      endGame(true);
     }
-  }, [gameState, tapCount, buttonScale, tapCountScale, shakeAnim, calculateMultiplier]);
+  }, [phase, requiredTaps, endGame]);
 
-  // Handle done
-  const handleDone = () => {
-    onComplete(finalMultiplier, tapCount);
-    onClose();
-  };
+  const handleTimeUp = useCallback(() => {
+    // Time ran out — did they get enough taps?
+    endGame(tapsRef.current >= requiredTaps);
+  }, [requiredTaps, endGame]);
 
-  // Get multiplier color
-  const getMultiplierColor = (mult: number): string => {
-    if (mult >= 2.0) return '#FFD700'; // Gold
-    if (mult >= 1.5) return '#4CAF50'; // Green
-    if (mult >= 1.0) return config.tertiary; // Yellow
-    if (mult >= 0.75) return '#FF9800'; // Orange
-    return config.red; // Red
-  };
-
-  // Get progress color based on current tap percentage
-  const getCurrentProgress = () => {
-    const percentage = (tapCount / targetTaps) * 100;
-    if (percentage >= 100) return '#4CAF50';
-    if (percentage >= 75) return config.tertiary;
-    if (percentage >= 50) return '#FF9800';
-    return config.red;
-  };
-
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
-  });
+  const handleDone = useCallback(() => {
+    if (result?.won) {
+      const mult = result.stars === 3 ? 2.0 : result.stars === 2 ? 1.5 : 1.0;
+      onComplete(mult, tapsRef.current);
+    } else {
+      onClose();
+    }
+  }, [result, onComplete, onClose]);
 
   return (
-    <Modal
-      animationIn="zoomIn"
-      animationOut="zoomOut"
-      isVisible={visible}
-      onBackdropPress={gameState === 'ready' ? onClose : undefined}
+    <MiniGameShell
+      visible={visible}
+      title="Whack-a-Shark!"
+      subtitle={taskName}
+      timeLimit={timeLimitSeconds}
+      score={requiredTaps - tapsLeft}
+      objective={`Tap ${requiredTaps} sharks before time runs out!`}
+      objectiveIcon="S"
+      onTimeUp={handleTimeUp}
+      onClose={onClose}
+      phase={phase}
+      setPhase={setPhase}
+      result={result || undefined}
+      onDone={handleDone}
     >
-      <Animated.View
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          transform: [{ translateX: shakeAnim }],
-        }}
-      >
-        <View
-          style={{
-            width: Dimensions.get('window').width - 32,
-            position: 'relative',
-            alignItems: 'center',
-          }}
-        >
-          {/* Ribbon Header */}
-          <Ribbon text="Tap Challenge!" />
-
-          {/* Main Content Box */}
-          <View
-            style={{
-              backgroundColor: config.primary,
-              marginTop: '-10%',
-              width: '90%',
-              zIndex: 10,
-              shadowColor: '#000',
-              shadowOffset: { width: 2, height: 2 },
-              shadowRadius: 0,
-              shadowOpacity: 0.4,
-              borderColor: 'rgba(0, 0, 0, 0.4)',
-              borderWidth: 2,
-              borderRadius: 16,
-            }}
-          >
-            <View
-              style={{
-                borderRadius: 16,
-                overflow: 'hidden',
-              }}
-            >
-              <ImageBackground
-                source={require('../../assets/images/modals/daily_gift.png')}
-                resizeMode="cover"
-                style={{ width: '100%' }}
-              >
-                <View
-                  style={{
-                    paddingTop: 32,
-                    paddingHorizontal: 16,
-                    paddingBottom: 24,
-                    alignItems: 'center',
-                  }}
-                >
-                  {/* Task Name */}
-                  <Text
-                    style={{
-                      fontFamily: 'Knockout',
-                      fontSize: 16,
-                      color: 'white',
-                      textAlign: 'center',
-                      marginBottom: 12,
-                      opacity: 0.8,
-                    }}
-                  >
-                    {taskName}
-                  </Text>
-
-                  {/* Ready State */}
-                  {gameState === 'ready' && (
-                    <>
-                      <Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 24,
-                          color: config.tertiary,
-                          textAlign: 'center',
-                          textTransform: 'uppercase',
-                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                          textShadowOffset: { width: 2, height: 2 },
-                          textShadowRadius: 0,
-                          marginBottom: 8,
-                        }}
-                      >
-                        Tap as fast as you can!
-                      </Text>
-                      
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 16,
-                          color: 'rgba(255, 255, 255, 0.8)',
-                          textAlign: 'center',
-                          marginBottom: 24,
-                        }}
-                      >
-                        Target: {targetTaps} taps in {timeLimitSeconds} seconds
-                      </Text>
-
-                      <Button onPress={startGame}>
-                        <ImageBackground
-                          source={require('../../assets/images/yellow_button.png')}
-                          style={{
-                            paddingHorizontal: 48,
-                            paddingVertical: 14,
-                            alignItems: 'center',
-                          }}
-                          resizeMode="stretch"
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 22,
-                              color: config.primary,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            Start!
-                          </Text>
-                        </ImageBackground>
-                      </Button>
-
-                      <TouchableOpacity
-                        onPress={onClose}
-                        style={{ marginTop: 12 }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 14,
-                            color: 'rgba(255, 255, 255, 0.6)',
-                          }}
-                        >
-                          Skip (0.5x)
-                        </Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
-
-                  {/* Playing State */}
-                  {gameState === 'playing' && (
-                    <>
-                      {/* Timer */}
-                      <Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 48,
-                          color: timeLeft <= 3 ? config.red : config.tertiary,
-                          textAlign: 'center',
-                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                          textShadowOffset: { width: 2, height: 2 },
-                          textShadowRadius: 0,
-                        }}
-                      >
-                        {timeLeft}
-                      </Text>
-
-                      {/* Timer Bar */}
-                      <View
-                        style={{
-                          width: '100%',
-                          height: 12,
-                          backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                          borderRadius: 6,
-                          marginVertical: 12,
-                          overflow: 'hidden',
-                          borderWidth: 2,
-                          borderColor: 'rgba(255, 255, 255, 0.3)',
-                        }}
-                      >
-                        <Animated.View
-                          style={{
-                            height: '100%',
-                            width: progressWidth,
-                            backgroundColor: timeLeft <= 3 ? config.red : '#4CAF50',
-                            borderRadius: 4,
-                          }}
-                        />
-                      </View>
-
-                      {/* Tap Count */}
-                      <Animated.Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 72,
-                          color: getCurrentProgress(),
-                          textAlign: 'center',
-                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                          textShadowOffset: { width: 3, height: 3 },
-                          textShadowRadius: 0,
-                          transform: [{ scale: tapCountScale }],
-                        }}
-                      >
-                        {tapCount}
-                      </Animated.Text>
-
-                      {/* Target indicator */}
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 16,
-                          color: 'rgba(255, 255, 255, 0.7)',
-                          marginBottom: 16,
-                        }}
-                      >
-                        Target: {targetTaps}
-                      </Text>
-
-                      {/* TAP BUTTON */}
-                      <TouchableOpacity
-                        onPress={handleTap}
-                        activeOpacity={0.9}
-                      >
-                        <Animated.View
-                          style={{
-                            width: 150,
-                            height: 150,
-                            borderRadius: 75,
-                            backgroundColor: config.tertiary,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            borderWidth: 6,
-                            borderColor: 'white',
-                            shadowColor: '#000',
-                            shadowOffset: { width: 4, height: 4 },
-                            shadowRadius: 0,
-                            shadowOpacity: 0.4,
-                            transform: [{ scale: buttonScale }],
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 36,
-                              color: config.primary,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            TAP!
-                          </Text>
-                        </Animated.View>
-                      </TouchableOpacity>
-
-                      {/* Current multiplier preview */}
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 18,
-                          color: getMultiplierColor(calculateMultiplier(tapCount)),
-                          marginTop: 16,
-                        }}
-                      >
-                        Current: {calculateMultiplier(tapCount)}x
-                      </Text>
-                    </>
-                  )}
-
-                  {/* Complete State */}
-                  {gameState === 'complete' && (
-                    <>
-                      <Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 28,
-                          color: config.tertiary,
-                          textAlign: 'center',
-                          textTransform: 'uppercase',
-                          textShadowColor: 'rgba(0, 0, 0, 0.5)',
-                          textShadowOffset: { width: 2, height: 2 },
-                          textShadowRadius: 0,
-                          marginBottom: 8,
-                        }}
-                      >
-                        {finalMultiplier >= 1.5 ? '🔥 Amazing!' : 
-                         finalMultiplier >= 1.0 ? '👍 Nice!' : '😅 Almost!'}
-                      </Text>
-
-                      {/* Final tap count */}
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 20,
-                          color: 'white',
-                          marginBottom: 16,
-                        }}
-                      >
-                        {tapCount} / {targetTaps} taps
-                      </Text>
-
-                      {/* Multiplier Display */}
-                      <View
-                        style={{
-                          backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                          paddingHorizontal: 40,
-                          paddingVertical: 16,
-                          borderRadius: 16,
-                          marginBottom: 20,
-                          borderWidth: 3,
-                          borderColor: getMultiplierColor(finalMultiplier),
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: 'Shark',
-                            fontSize: 48,
-                            color: getMultiplierColor(finalMultiplier),
-                            textAlign: 'center',
-                          }}
-                        >
-                          {finalMultiplier}x
-                        </Text>
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 14,
-                            color: 'rgba(255, 255, 255, 0.7)',
-                            textAlign: 'center',
-                          }}
-                        >
-                          Multiplier
-                        </Text>
-                      </View>
-
-                      {/* Done Button */}
-                      <Button onPress={handleDone}>
-                        <ImageBackground
-                          source={require('../../assets/images/yellow_button.png')}
-                          style={{
-                            paddingHorizontal: 48,
-                            paddingVertical: 14,
-                            alignItems: 'center',
-                          }}
-                          resizeMode="stretch"
-                        >
-                          <Text
-                            style={{
-                              fontFamily: 'Shark',
-                              fontSize: 22,
-                              color: config.primary,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            Awesome!
-                          </Text>
-                        </ImageBackground>
-                      </Button>
-                    </>
-                  )}
-                </View>
-              </ImageBackground>
-            </View>
-          </View>
+      {/* Progress indicator - taps needed */}
+      <View style={gs.progressWrap}>
+        <View style={gs.progressBar}>
+          <Animated.View style={[gs.progressFill, {
+            width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+          }]} />
         </View>
-      </Animated.View>
-    </Modal>
+        <Text style={gs.progressText}>
+          {tapsLeft > 0 ? `${tapsLeft} more!` : 'COMPLETE!'}
+        </Text>
+      </View>
+
+      <View style={gs.grid}>
+        {Array.from({ length: GRID_SIZE }).map((_, i) => (
+          <TouchableOpacity
+            key={i}
+            style={gs.cell}
+            activeOpacity={0.7}
+            onPress={() => handleTap(i)}
+          >
+            <View style={gs.hole}>
+              <Animated.View style={[gs.target, {
+                transform: [{ scale: cellScales[i] }],
+                opacity: cellOpacities[i],
+              }]}>
+                <Text style={gs.targetText}>{FACES[i]}</Text>
+              </Animated.View>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={gs.hint}>Tap {requiredTaps} sharks before time runs out!</Text>
+    </MiniGameShell>
   );
 }
+
+const gs = StyleSheet.create({
+  progressWrap: { alignItems: 'center', marginBottom: 8 },
+  progressBar: { 
+    width: '80%', height: 12, backgroundColor: 'rgba(255,255,255,0.1)', 
+    borderRadius: 6, overflow: 'hidden' 
+  },
+  progressFill: { height: '100%', backgroundColor: '#4ade80', borderRadius: 6 },
+  progressText: { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 4 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', paddingVertical: 8 },
+  cell: { width: '30%', aspectRatio: 1, padding: 4 },
+  hole: {
+    flex: 1, backgroundColor: '#0f172a', borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: '#334155',
+  },
+  target: {
+    width: 50, height: 50, borderRadius: 25, backgroundColor: '#3b82f6',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  targetText: { color: '#fff', fontSize: 22, fontWeight: '900' },
+  hint: { color: 'rgba(255,255,255,0.4)', fontSize: 12, textAlign: 'center', marginTop: 4 },
+});

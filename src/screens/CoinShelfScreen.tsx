@@ -13,10 +13,12 @@ import {
 import * as Haptics from '../helpers/haptics';
 import { useNavigation } from '@react-navigation/native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faArrowLeft, faLock, faStar, faArrowUp } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faLock } from '@fortawesome/free-solid-svg-icons';
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import Button from '../components/Button';
+import CoinLevelingModal from '../components/CoinLevelingModal';
+import CoinUpgradeDemo from '../components/CoinUpgradeDemo';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import {
@@ -54,11 +56,11 @@ const taskToCoinLevel = (task: TaskType, playerLevel: number): RideCoinLevelType
     required_parts: [],
     player_level_required: requiredLevel,
     is_unlocked: isUnlocked,
-    current_perks: level > 0 ? [
-      { id: 1, name: 'Coin Boost', description: `${1 + level * 0.1}x coins`, icon_url: '', type: 'multiplier', value: 1 + level * 0.1 },
+    current_perks: level > 1 ? [
+      { id: 1, name: 'Tier Upgrade', description: `${['Silver', 'Gold', 'Prismatic', 'Legendary'][Math.min(level - 2, 3)]} coin appearance`, icon_url: '', type: 'cosmetic' as const, value: level },
     ] : [],
     next_level_perks: !isMax ? [
-      { id: 2, name: 'Next Boost', description: `${1 + (level + 1) * 0.1}x coins`, icon_url: '', type: 'multiplier', value: 1 + (level + 1) * 0.1 },
+      { id: 2, name: 'Next Tier', description: `${['Silver', 'Gold', 'Prismatic', 'Legendary'][Math.min(level - 1, 3)]} coin appearance`, icon_url: '', type: 'cosmetic' as const, value: level + 1 },
     ] : [],
     current_frame_url: '',
     next_frame_url: '',
@@ -72,16 +74,31 @@ export default function CoinShelfScreen() {
   const [selectedCoin, setSelectedCoin] = useState<RideCoinLevelType | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'max'>('all');
-  const [showLevelUp, setShowLevelUp] = useState(false);
-
   const modalScale = useRef(new Animated.Value(0)).current;
-  const coinRotate = useRef(new Animated.Value(0)).current;
 
-  // Load coins from API (TODO: implement)
+  // Load coins by fetching tasks from visited parks
   const loadCoins = useCallback(async () => {
-    // const response = await getCoins();
-    // setCoins(response.data);
-  }, []);
+    if (!player?.id) return;
+    try {
+      const parks = await visitedParks(player.id);
+      const allCoins: RideCoinLevelType[] = [];
+      for (const park of parks) {
+        const tasks = await getTasks(park.id);
+        for (const task of tasks) {
+          if (task.coin_url) {
+            allCoins.push(taskToCoinLevel(task, player.level ?? 1));
+          }
+        }
+      }
+      setCoins(allCoins);
+    } catch (err) {
+      console.warn('Failed to load coins:', err);
+    }
+  }, [player?.id, player?.level]);
+
+  useEffect(() => {
+    loadCoins();
+  }, [loadCoins]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -109,15 +126,6 @@ export default function CoinShelfScreen() {
       useNativeDriver: true,
     }).start();
 
-    // Spin animation for the coin
-    coinRotate.setValue(0);
-    Animated.loop(
-      Animated.timing(coinRotate, {
-        toValue: 1,
-        duration: 3000,
-        useNativeDriver: true,
-      })
-    ).start();
   };
 
   // Close modal
@@ -127,27 +135,6 @@ export default function CoinShelfScreen() {
       duration: 200,
       useNativeDriver: true,
     }).start(() => setSelectedCoin(null));
-  };
-
-  // Handle level up
-  const handleLevelUp = async () => {
-    if (!selectedCoin || !selectedCoin.is_unlocked) return;
-    
-    if (Platform.OS === 'ios') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    
-    setShowLevelUp(true);
-    
-    // TODO: API call to level up
-    // await levelUpCoin(selectedCoin.id);
-    
-    // Simulate level up
-    setTimeout(() => {
-      setShowLevelUp(false);
-      // Refresh coins list
-      loadCoins();
-    }, 2000);
   };
 
   // Get level color
@@ -172,16 +159,12 @@ export default function CoinShelfScreen() {
     return styles[Math.min(level, 5) as keyof typeof styles];
   };
 
-  const coinSpin = coinRotate.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
   // Render coin card
+  const TIER_COLORS_CARD = ['#a8a29e', '#cbd5e1', '#fbbf24', '#c4b5fd', '#fb923c'];
+
   const renderCoinCard = (coin: RideCoinLevelType) => {
-    const frameStyle = getFrameStyle(coin.current_level);
-    const levelColor = getLevelColor(coin.current_level, coin.max_level);
     const isMax = coin.current_level === coin.max_level;
+    const tierColor = TIER_COLORS_CARD[Math.min(coin.current_level - 1, 4)];
 
     return (
       <TouchableOpacity
@@ -199,13 +182,20 @@ export default function CoinShelfScreen() {
             borderRadius: 16,
             padding: 12,
             alignItems: 'center',
-            borderWidth: frameStyle.borderWidth,
-            borderColor: frameStyle.borderColor,
+            borderWidth: 2,
+            borderColor: tierColor,
             opacity: coin.is_unlocked ? 1 : 0.5,
-            shadowColor: frameStyle.shadowColor || '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowRadius: frameStyle.shadowColor ? 10 : 4,
-            shadowOpacity: frameStyle.shadowColor ? 0.5 : 0.3,
+            ...(Platform.OS === 'ios' && coin.current_level >= 3 ? {
+              shadowColor: tierColor,
+              shadowOffset: { width: 0, height: 0 },
+              shadowRadius: 10,
+              shadowOpacity: 0.5,
+            } : {
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowRadius: 4,
+              shadowOpacity: 0.3,
+            }),
           }}
         >
           {/* Locked overlay */}
@@ -213,10 +203,7 @@ export default function CoinShelfScreen() {
             <View
               style={{
                 position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
+                top: 0, left: 0, right: 0, bottom: 0,
                 backgroundColor: 'rgba(0, 0, 0, 0.6)',
                 borderRadius: 14,
                 alignItems: 'center',
@@ -225,65 +212,37 @@ export default function CoinShelfScreen() {
               }}
             >
               <FontAwesomeIcon icon={faLock} size={24} color="white" />
-              <Text
-                style={{
-                  fontFamily: 'Knockout',
-                  fontSize: 11,
-                  color: 'white',
-                  marginTop: 4,
-                }}
-              >
+              <Text style={{
+                fontFamily: 'Knockout', fontSize: 11,
+                color: 'white', marginTop: 4,
+              }}>
                 Level {coin.player_level_required}
               </Text>
             </View>
           )}
 
-          {/* Coin image */}
-          <View
-            style={{
-              width: 70,
-              height: 70,
-              borderRadius: 35,
-              backgroundColor: levelColor,
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: 8,
-              borderWidth: 3,
-              borderColor: 'white',
-            }}
-          >
-            {coin.coin_url ? (
-              <Image
-                source={{ uri: coin.coin_url }}
-                style={{ width: 50, height: 50 }}
-                contentFit="contain"
-              />
-            ) : (
-              <Text style={{ fontSize: 32 }}>🪙</Text>
-            )}
+          {/* Animated coin with tier effects */}
+          <View style={{ marginBottom: 4 }}>
+            <CoinUpgradeDemo
+              level={coin.current_level}
+              coinUrl={coin.coin_url}
+              size={56}
+            />
           </View>
 
           {/* Max badge */}
           {isMax && (
-            <View
-              style={{
-                position: 'absolute',
-                top: 8,
-                right: 8,
-                backgroundColor: '#FFD700',
-                paddingHorizontal: 6,
-                paddingVertical: 2,
-                borderRadius: 8,
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: 'Knockout',
-                  fontSize: 10,
-                  color: config.primary,
-                  fontWeight: 'bold',
-                }}
-              >
+            <View style={{
+              position: 'absolute',
+              top: 8, right: 8,
+              backgroundColor: '#fb923c',
+              paddingHorizontal: 6, paddingVertical: 2,
+              borderRadius: 8,
+            }}>
+              <Text style={{
+                fontFamily: 'Knockout', fontSize: 10,
+                color: 'white', fontWeight: 'bold',
+              }}>
                 MAX
               </Text>
             </View>
@@ -292,10 +251,8 @@ export default function CoinShelfScreen() {
           {/* Ride name */}
           <Text
             style={{
-              fontFamily: 'Knockout',
-              fontSize: 12,
-              color: 'white',
-              textAlign: 'center',
+              fontFamily: 'Knockout', fontSize: 12,
+              color: 'white', textAlign: 'center',
               marginBottom: 4,
             }}
             numberOfLines={2}
@@ -303,22 +260,16 @@ export default function CoinShelfScreen() {
             {coin.ride_name}
           </Text>
 
-          {/* Level indicator */}
-          <View
-            style={{
-              flexDirection: 'row',
-              justifyContent: 'center',
-              marginBottom: 4,
-            }}
-          >
+          {/* Level dots */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 4 }}>
             {Array.from({ length: coin.max_level }).map((_, i) => (
               <View
                 key={i}
                 style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: i < coin.current_level ? levelColor : 'rgba(255, 255, 255, 0.2)',
+                  width: 8, height: 8, borderRadius: 4,
+                  backgroundColor: i < coin.current_level
+                    ? TIER_COLORS_CARD[Math.min(i, 4)]
+                    : 'rgba(255, 255, 255, 0.15)',
                   marginHorizontal: 2,
                 }}
               />
@@ -326,13 +277,10 @@ export default function CoinShelfScreen() {
           </View>
 
           {/* Times collected */}
-          <Text
-            style={{
-              fontFamily: 'Knockout',
-              fontSize: 10,
-              color: 'rgba(255, 255, 255, 0.5)',
-            }}
-          >
+          <Text style={{
+            fontFamily: 'Knockout', fontSize: 10,
+            color: 'rgba(255, 255, 255, 0.5)',
+          }}>
             ×{coin.times_collected} collected
           </Text>
         </View>
@@ -367,75 +315,159 @@ export default function CoinShelfScreen() {
         <View style={{ width: 40 }} />
       </Topbar>
 
-      {/* Stats summary */}
-      <View
-        style={{
+      {/* ── Collection Progress Header ── */}
+      <View style={{
+        marginHorizontal: 16,
+        marginTop: 8,
+        marginBottom: 4,
+      }}>
+        {/* Progress bar */}
+        <View style={{
           flexDirection: 'row',
-          justifyContent: 'space-around',
-          paddingVertical: 12,
-          paddingHorizontal: 16,
-          backgroundColor: 'rgba(0, 0, 0, 0.2)',
-          marginHorizontal: 16,
-          marginTop: 8,
-          borderRadius: 12,
-        }}
-      >
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontFamily: 'Shark', fontSize: 24, color: config.tertiary }}>
-            {coins.filter(c => c.is_unlocked).length}
+          alignItems: 'center',
+          marginBottom: 8,
+          gap: 10,
+        }}>
+          <Text style={{
+            fontFamily: 'Knockout', fontSize: 11,
+            color: 'rgba(255,255,255,0.5)',
+            textTransform: 'uppercase',
+            letterSpacing: 1,
+          }}>
+            Park Coins
           </Text>
-          <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-            Unlocked
+          <View style={{
+            flex: 1, height: 6, borderRadius: 3,
+            backgroundColor: 'rgba(255,255,255,0.08)',
+            overflow: 'hidden',
+          }}>
+            <View style={{
+              height: '100%',
+              width: coins.length > 0
+                ? `${(coins.filter(c => c.times_collected > 0).length / coins.length) * 100}%`
+                : '0%',
+              borderRadius: 3,
+              backgroundColor: config.tertiary,
+            }} />
+          </View>
+          <Text style={{
+            fontFamily: 'Knockout', fontSize: 12,
+            color: config.tertiary,
+          }}>
+            {coins.filter(c => c.times_collected > 0).length}/{coins.length}
           </Text>
         </View>
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontFamily: 'Shark', fontSize: 24, color: '#FFD700' }}>
-            {coins.filter(c => c.current_level === c.max_level).length}
-          </Text>
-          <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-            Maxed
-          </Text>
-        </View>
-        <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontFamily: 'Shark', fontSize: 24, color: '#4CAF50' }}>
-            {coins.reduce((sum, c) => sum + c.times_collected, 0)}
-          </Text>
-          <Text style={{ fontFamily: 'Knockout', fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-            Total Collected
-          </Text>
+
+        {/* Inline stats row — real player stats */}
+        <View style={{
+          flexDirection: 'row',
+          gap: 12,
+          marginBottom: 10,
+        }}>
+          <View style={{
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: 'rgba(255,255,255,0.05)',
+            borderRadius: 10,
+            paddingVertical: 8,
+            paddingHorizontal: 10,
+            gap: 6,
+          }}>
+            <Text style={{ fontSize: 14 }}>🪙</Text>
+            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: config.tertiary }}>
+              {player?.coins ?? 0}
+            </Text>
+            <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+              Coins
+            </Text>
+          </View>
+          <View style={{
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: 'rgba(255,255,255,0.05)',
+            borderRadius: 10,
+            paddingVertical: 8,
+            paddingHorizontal: 10,
+            gap: 6,
+          }}>
+            <Text style={{ fontSize: 14 }}>🏰</Text>
+            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#fbbf24' }}>
+              {player?.park_coins_count ?? 0}
+            </Text>
+            <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+              Park Coins
+            </Text>
+          </View>
+          <View style={{
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: 'rgba(255,255,255,0.05)',
+            borderRadius: 10,
+            paddingVertical: 8,
+            paddingHorizontal: 10,
+            gap: 6,
+          }}>
+            <Text style={{ fontSize: 14 }}>✅</Text>
+            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#fb923c' }}>
+              {player?.completed_tasks_count ?? 0}
+            </Text>
+            <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+              Tasks
+            </Text>
+          </View>
         </View>
       </View>
 
-      {/* Filter tabs */}
-      <View
-        style={{
-          flexDirection: 'row',
-          paddingHorizontal: 16,
-          paddingVertical: 8,
-          gap: 8,
-        }}
-      >
-        {(['all', 'unlocked', 'max'] as const).map((f) => (
+      {/* ── Filter Pills ── */}
+      <View style={{
+        flexDirection: 'row',
+        paddingHorizontal: 16,
+        paddingBottom: 6,
+        gap: 8,
+      }}>
+        {([
+          { key: 'all' as const, label: 'All', count: coins.length },
+          { key: 'unlocked' as const, label: 'Ready', count: coins.filter(c => c.is_unlocked && c.current_level < c.max_level).length },
+          { key: 'max' as const, label: 'Maxed', count: coins.filter(c => c.current_level === c.max_level).length },
+        ]).map((f) => (
           <TouchableOpacity
-            key={f}
-            onPress={() => setFilter(f)}
+            key={f.key}
+            onPress={() => setFilter(f.key)}
             style={{
-              paddingHorizontal: 16,
-              paddingVertical: 8,
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 14,
+              paddingVertical: 7,
               borderRadius: 20,
-              backgroundColor: filter === f ? config.tertiary : 'rgba(255, 255, 255, 0.1)',
+              backgroundColor: filter === f.key ? config.tertiary : 'rgba(255, 255, 255, 0.06)',
+              borderWidth: 1.5,
+              borderColor: filter === f.key ? config.tertiary : 'rgba(255,255,255,0.1)',
+              gap: 6,
             }}
           >
-            <Text
-              style={{
-                fontFamily: 'Knockout',
-                fontSize: 14,
-                color: filter === f ? config.primary : 'white',
-                textTransform: 'uppercase',
-              }}
-            >
-              {f === 'max' ? 'Maxed' : f}
+            <Text style={{
+              fontFamily: 'Knockout', fontSize: 13,
+              color: filter === f.key ? config.primary : 'rgba(255,255,255,0.7)',
+              textTransform: 'uppercase',
+            }}>
+              {f.label}
             </Text>
+            <View style={{
+              backgroundColor: filter === f.key ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)',
+              borderRadius: 8,
+              paddingHorizontal: 5,
+              paddingVertical: 1,
+            }}>
+              <Text style={{
+                fontFamily: 'Knockout', fontSize: 11,
+                color: filter === f.key ? config.primary : 'rgba(255,255,255,0.5)',
+              }}>
+                {f.count}
+              </Text>
+            </View>
           </TouchableOpacity>
         ))}
       </View>
@@ -453,279 +485,46 @@ export default function CoinShelfScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="white" />
         }
       >
-        {filteredCoins.map(renderCoinCard)}
+        {filteredCoins.length === 0 ? (
+          <View style={{
+            width: '100%',
+            alignItems: 'center',
+            paddingVertical: 40,
+          }}>
+            <Text style={{ fontSize: 40, marginBottom: 12 }}>
+              {filter === 'max' ? '🏆' : '🪙'}
+            </Text>
+            <Text style={{
+              fontFamily: 'Knockout', fontSize: 16,
+              color: 'rgba(255,255,255,0.4)',
+              textAlign: 'center',
+            }}>
+              {filter === 'max'
+                ? 'No maxed coins yet — keep leveling!'
+                : filter === 'unlocked'
+                  ? 'No coins ready to level up'
+                  : 'Visit parks to start collecting!'}
+            </Text>
+          </View>
+        ) : filteredCoins.map(renderCoinCard)}
       </ScrollView>
 
-      {/* Coin Detail Modal */}
-      {selectedCoin && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <TouchableOpacity
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-            onPress={handleCloseModal}
-          />
-
-          <Animated.View
-            style={{
-              backgroundColor: config.primary,
-              borderRadius: 20,
-              padding: 24,
-              width: Dimensions.get('window').width - 48,
-              alignItems: 'center',
-              transform: [{ scale: modalScale }],
-              borderWidth: 3,
-              borderColor: getLevelColor(selectedCoin.current_level, selectedCoin.max_level),
-            }}
-          >
-            {/* Spinning coin */}
-            <Animated.View
-              style={{
-                width: 100,
-                height: 100,
-                borderRadius: 50,
-                backgroundColor: getLevelColor(selectedCoin.current_level, selectedCoin.max_level),
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 16,
-                borderWidth: 4,
-                borderColor: 'white',
-                transform: [{ rotateY: coinSpin }],
-              }}
-            >
-              <Text style={{ fontSize: 50 }}>🪙</Text>
-            </Animated.View>
-
-            {/* Ride name */}
-            <Text
-              style={{
-                fontFamily: 'Shark',
-                fontSize: 24,
-                color: 'white',
-                textTransform: 'uppercase',
-                textAlign: 'center',
-                marginBottom: 8,
-              }}
-            >
-              {selectedCoin.ride_name}
-            </Text>
-
-            {/* Level */}
-            <Text
-              style={{
-                fontFamily: 'Knockout',
-                fontSize: 18,
-                color: config.tertiary,
-                marginBottom: 16,
-              }}
-            >
-              Level {selectedCoin.current_level}/{selectedCoin.max_level}
-            </Text>
-
-            {/* Level dots */}
-            <View
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'center',
-                marginBottom: 20,
-              }}
-            >
-              {Array.from({ length: selectedCoin.max_level }).map((_, i) => (
-                <View
-                  key={i}
-                  style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: 8,
-                    backgroundColor: i < selectedCoin.current_level
-                      ? getLevelColor(selectedCoin.current_level, selectedCoin.max_level)
-                      : 'rgba(255, 255, 255, 0.2)',
-                    marginHorizontal: 4,
-                    borderWidth: 2,
-                    borderColor: 'rgba(255, 255, 255, 0.3)',
-                  }}
-                />
-              ))}
-            </View>
-
-            {/* Current perks */}
-            {selectedCoin.current_perks.length > 0 && (
-              <View style={{ width: '100%', marginBottom: 16 }}>
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    fontSize: 14,
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    marginBottom: 8,
-                  }}
-                >
-                  Current Perks:
-                </Text>
-                {selectedCoin.current_perks.map((perk) => (
-                  <View
-                    key={perk.id}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                      padding: 8,
-                      borderRadius: 8,
-                      marginBottom: 4,
-                    }}
-                  >
-                    <Text style={{ fontSize: 16, marginRight: 8 }}>✓</Text>
-                    <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: '#4CAF50' }}>
-                      {perk.description}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Next level perks */}
-            {selectedCoin.current_level < selectedCoin.max_level && selectedCoin.next_level_perks.length > 0 && (
-              <View style={{ width: '100%', marginBottom: 16 }}>
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    fontSize: 14,
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    marginBottom: 8,
-                  }}
-                >
-                  Next Level Unlocks:
-                </Text>
-                {selectedCoin.next_level_perks.map((perk) => (
-                  <View
-                    key={perk.id}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                      padding: 8,
-                      borderRadius: 8,
-                      marginBottom: 4,
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faStar} size={14} color={config.tertiary} style={{ marginRight: 8 }} />
-                    <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: 'white' }}>
-                      {perk.description}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Level up button */}
-            {selectedCoin.current_level < selectedCoin.max_level && (
-              <View style={{ width: '100%', alignItems: 'center' }}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'center',
-                    marginBottom: 12,
-                    gap: 16,
-                  }}
-                >
-                  <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
-                    ⚡ {selectedCoin.energy_to_next_level} Energy
-                  </Text>
-                  <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
-                    🔧 {selectedCoin.parts_to_next_level} Parts
-                  </Text>
-                </View>
-
-                <Button onPress={handleLevelUp}>
-                  <View
-                    style={{
-                      backgroundColor: config.tertiary,
-                      paddingHorizontal: 32,
-                      paddingVertical: 14,
-                      borderRadius: 12,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faArrowUp} size={16} color={config.primary} style={{ marginRight: 8 }} />
-                    <Text
-                      style={{
-                        fontFamily: 'Shark',
-                        fontSize: 18,
-                        color: config.primary,
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      Level Up!
-                    </Text>
-                  </View>
-                </Button>
-              </View>
-            )}
-
-            {/* Max level celebration */}
-            {selectedCoin.current_level === selectedCoin.max_level && (
-              <View
-                style={{
-                  backgroundColor: 'rgba(255, 215, 0, 0.2)',
-                  padding: 16,
-                  borderRadius: 12,
-                  alignItems: 'center',
-                }}
-              >
-                <Text style={{ fontSize: 32, marginBottom: 8 }}>🏆</Text>
-                <Text
-                  style={{
-                    fontFamily: 'Shark',
-                    fontSize: 18,
-                    color: '#FFD700',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Max Level!
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: 'Knockout',
-                    fontSize: 14,
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    marginTop: 4,
-                  }}
-                >
-                  Boss challenge available!
-                </Text>
-              </View>
-            )}
-
-            {/* Close button */}
-            <TouchableOpacity
-              onPress={handleCloseModal}
-              style={{
-                marginTop: 16,
-                paddingVertical: 8,
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: 'Knockout',
-                  fontSize: 14,
-                  color: 'rgba(255, 255, 255, 0.6)',
-                }}
-              >
-                Close
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      )}
+      {/* Coin Leveling Modal */}
+      <CoinLevelingModal
+        visible={selectedCoin !== null}
+        rideCoin={selectedCoin}
+        playerEnergy={player?.energy ?? 0}
+        playerParts={player?.ride_parts ?? 0}
+        onClose={handleCloseModal}
+        onLevelUp={async (id) => {
+          // TODO: API call to level up coin
+          // const res = await levelUpRideCoin(id);
+          // Simulate success for now
+          await new Promise(r => setTimeout(r, 1800));
+          await loadCoins();
+          return true;
+        }}
+      />
     </Wrapper>
   );
 }

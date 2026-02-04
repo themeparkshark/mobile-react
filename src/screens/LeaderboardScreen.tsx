@@ -1,5 +1,6 @@
 import { ImageBackground, View } from 'react-native';
 import InformationModal from '../components/InformationModal';
+import { InformationModalEnums } from '../models/information-modal-enums';
 import Tabs from '../components/Tabs';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -17,7 +18,7 @@ export default function LeaderboardScreen() {
           <TopbarText>Standings</TopbarText>
         </TopbarColumn>
         <TopbarColumn stretch={false}>
-          <InformationModal />
+          <InformationModal id={InformationModalEnums.LeaderboardScreen} />
         </TopbarColumn>
       </Topbar>
       <View

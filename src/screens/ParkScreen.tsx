@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { chunk } from 'lodash';
-import { useState } from 'react';
-import { ImageBackground, ScrollView, Text, View } from 'react-native';
+import { useContext, useState } from 'react';
+import { ImageBackground, Platform, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
 import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
@@ -20,11 +20,17 @@ import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import config from '../config';
+import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
+
+// Temp: View shim for LinearGradient until dev client is rebuilt with expo-linear-gradient
+const LinearGradient = ({ colors, style, children, start, end, ...rest }: any) => (
+  <View style={[style, { backgroundColor: colors?.[0] }]} {...rest}>{children}</View>
+);
 
 export default function ParkScreen({ route }) {
   const { park, player } = route.params;
@@ -40,6 +46,8 @@ export default function ParkScreen({ route }) {
     SecretTaskType[]
   >([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [parkCoinUrl, setParkCoinUrl] = useState<string | null>(null);
+  const { park: locationPark } = useContext(LocationContext);
   const { labels } = useCrumbs();
 
   const hasCompletedTask = (task: number) => {
@@ -74,7 +82,12 @@ export default function ParkScreen({ route }) {
       : require('../../assets/images/screens/park/bronze_placeholder.png');
 
   useAsyncEffect(async () => {
-    setCurrentPark(await getVisitedPark(park, player));
+    const visitedPark = await getVisitedPark(park, player);
+    setCurrentPark(visitedPark);
+    // Park coin URL: try locationPark from context (has coin_url from /me/current-park)
+    if (locationPark?.coin_url) {
+      setParkCoinUrl(locationPark.coin_url);
+    }
     setTasks(await getTasks(park));
     setSecretTasks(await getSecretTasks(park));
     setCompletedTasks(await getCompletedTasks(park, player));
@@ -117,61 +130,172 @@ export default function ParkScreen({ route }) {
               <ScrollView>
                 <View
                   style={{
-                    paddingTop: 32,
+                    paddingTop: 24,
                     paddingLeft: 16,
                     paddingRight: 16,
-                    paddingBottom: 32,
+                    paddingBottom: 24,
                   }}
                 >
-                  <View
-                    style={{
-                      backgroundColor: config.secondary,
-                      borderColor: 'white',
-                      borderWidth: 3,
-                      borderRadius: 10,
-                    }}
-                  >
-                    <View
+                  {/* ── Progress + Stats (Supercell-inspired) ── */}
+                  <View style={{ overflow: 'hidden', borderRadius: 18 }}>
+                    <LinearGradient
+                      colors={['#1a3a5c', '#0d1f33']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 0, y: 1 }}
                       style={{
-                        padding: 8,
+                        borderRadius: 18,
+                        borderWidth: 3,
+                        borderColor: '#3b82f6',
+                        ...(Platform.OS === 'ios' ? {
+                          shadowColor: '#3b82f6',
+                          shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 0.4,
+                          shadowRadius: 12,
+                        } : {}),
                       }}
                     >
-                      <Progress progress={currentPark.completion_rate} />
-                    </View>
-                    <View
-                      style={{
-                        padding: 8,
-                        borderTopColor: config.primary,
-                        borderTopWidth: 3,
-                      }}
-                    >
-                      <Text
+                      {/* ── Completion header band ── */}
+                      <LinearGradient
+                        colors={currentPark.completion_rate >= 100 ? ['#f59e0b', '#d97706'] : ['#2563eb', '#1d4ed8']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
                         style={{
-                          color: 'white',
-                          fontSize: 16,
-                          textAlign: 'center',
-                          fontFamily: 'Knockout',
-                          textTransform: 'uppercase',
-                          textShadowColor: 'rgba(0, 0, 0, .5)',
-                          textShadowOffset: {
-                            width: 1,
-                            height: 1,
-                          },
-                          textShadowRadius: 0,
+                          paddingVertical: 10,
+                          paddingHorizontal: 14,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 10,
                         }}
                       >
-                        {vsprintf(labels.park_tasks, [
-                          currentPark.completed_tasks_count +
-                            currentPark.completed_secret_tasks_count,
-                          currentPark.tasks_count +
-                            currentPark.secret_tasks_count,
-                          currentPark.park_coins_count,
-                          `coin${
-                            currentPark.park_coins_count === 1 ? '' : 's'
-                          }`,
-                        ])}
-                      </Text>
-                    </View>
+                        {/* Chunky progress bar */}
+                        <View style={{ flex: 1 }}>
+                          <View style={{
+                            height: 18, borderRadius: 9,
+                            backgroundColor: 'rgba(0,0,0,0.4)',
+                            overflow: 'hidden',
+                            borderWidth: 2,
+                            borderColor: 'rgba(255,255,255,0.25)',
+                          }}>
+                            <LinearGradient
+                              colors={currentPark.completion_rate >= 100 ? ['#fbbf24', '#f59e0b'] : ['#4ade80', '#22c55e']}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 0 }}
+                              style={{
+                                height: '100%',
+                                width: `${Math.min(currentPark.completion_rate, 100)}%`,
+                                borderRadius: 7,
+                              }}
+                            />
+                            {/* Centered text on bar */}
+                            <Text style={{
+                              position: 'absolute',
+                              width: '100%',
+                              textAlign: 'center',
+                              fontFamily: 'Shark',
+                              fontSize: 11,
+                              color: 'white',
+                              lineHeight: 14,
+                              top: 0,
+                              textShadowColor: 'rgba(0,0,0,0.8)',
+                              textShadowOffset: { width: 1, height: 1 },
+                              textShadowRadius: 0,
+                            }}>
+                              {currentPark.completed_tasks_count + currentPark.completed_secret_tasks_count}/{currentPark.tasks_count + currentPark.secret_tasks_count}
+                            </Text>
+                          </View>
+                        </View>
+                        {/* Completion % badge */}
+                        <View style={{
+                          backgroundColor: 'rgba(0,0,0,0.35)',
+                          borderRadius: 10,
+                          paddingHorizontal: 10,
+                          paddingVertical: 4,
+                          borderWidth: 2,
+                          borderColor: 'rgba(255,255,255,0.2)',
+                        }}>
+                          <Text style={{
+                            fontFamily: 'Shark', fontSize: 16,
+                            color: 'white',
+                            textShadowColor: 'rgba(0,0,0,0.5)',
+                            textShadowOffset: { width: 1, height: 1 },
+                            textShadowRadius: 0,
+                          }}>
+                            {Math.round(currentPark.completion_rate)}%
+                          </Text>
+                        </View>
+                      </LinearGradient>
+
+                      {/* ── Stats row ── */}
+                      <View style={{ flexDirection: 'row', padding: 10, gap: 8 }}>
+                        {[
+                          {
+                            value: currentPark.park_coins_count,
+                            label: 'Coins',
+                            coinUrl: parkCoinUrl,
+                            emoji: '🪙',
+                            colors: ['#065f46', '#064e3b'] as [string, string],
+                            borderColor: '#10b981',
+                          },
+                          {
+                            value: currentPark.completed_tasks_count,
+                            label: 'Tasks',
+                            coinUrl: null,
+                            emoji: '⭐',
+                            colors: ['#7c2d12', '#6b2107'] as [string, string],
+                            borderColor: '#f97316',
+                          },
+                          {
+                            value: currentPark.completed_secret_tasks_count,
+                            label: 'Secrets',
+                            coinUrl: null,
+                            emoji: '🔮',
+                            colors: ['#4c1d95', '#3b0f7a'] as [string, string],
+                            borderColor: '#8b5cf6',
+                          },
+                        ].map((stat) => (
+                          <View key={stat.label} style={{ flex: 1, overflow: 'hidden', borderRadius: 12 }}>
+                            <LinearGradient
+                              colors={stat.colors}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 0, y: 1 }}
+                              style={{
+                                alignItems: 'center',
+                                paddingVertical: 10,
+                                borderRadius: 12,
+                                borderWidth: 2,
+                                borderColor: stat.borderColor,
+                              }}
+                            >
+                              {stat.coinUrl ? (
+                                <Image
+                                  source={stat.coinUrl}
+                                  style={{ width: 28, height: 28, borderRadius: 14, marginBottom: 2 }}
+                                  contentFit="contain"
+                                />
+                              ) : (
+                                <Text style={{ fontSize: 18, marginBottom: 2 }}>{stat.emoji}</Text>
+                              )}
+                              <Text style={{
+                                fontFamily: 'Shark', fontSize: 24, color: 'white',
+                                textShadowColor: 'rgba(0,0,0,0.8)',
+                                textShadowOffset: { width: 2, height: 2 },
+                                textShadowRadius: 0,
+                              }}>
+                                {stat.value}
+                              </Text>
+                              <Text style={{
+                                fontFamily: 'Knockout', fontSize: 10,
+                                color: 'rgba(255,255,255,0.7)',
+                                textTransform: 'uppercase',
+                                letterSpacing: 0.5,
+                              }}>
+                                {stat.label}
+                              </Text>
+                            </LinearGradient>
+                          </View>
+                        ))}
+                      </View>
+                    </LinearGradient>
                   </View>
                 </View>
                 <View
@@ -349,10 +473,20 @@ export default function ParkScreen({ route }) {
                                         style={{
                                           width: 60,
                                           height: 60,
-                                          backgroundColor: 'rgba(0, 0, 0, .5)',
-                                          borderRadius: 50,
+                                          backgroundColor: 'rgba(0, 0, 0, .4)',
+                                          borderRadius: 30,
+                                          borderWidth: 2,
+                                          borderColor: 'rgba(168,130,255,0.15)',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
                                         }}
-                                      />
+                                      >
+                                        <Text style={{
+                                          fontSize: 22,
+                                          color: 'rgba(168,130,255,0.2)',
+                                          fontFamily: 'Shark',
+                                        }}>?</Text>
+                                      </View>
                                     )}
                                   </View>
                                 ))}
@@ -428,10 +562,20 @@ export default function ParkScreen({ route }) {
                                         style={{
                                           width: 60,
                                           height: 60,
-                                          backgroundColor: 'rgba(0, 0, 0, .5)',
-                                          borderRadius: 50,
+                                          backgroundColor: 'rgba(0, 0, 0, .4)',
+                                          borderRadius: 30,
+                                          borderWidth: 2,
+                                          borderColor: 'rgba(255,255,255,0.08)',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
                                         }}
-                                      />
+                                      >
+                                        <Text style={{
+                                          fontSize: 22,
+                                          color: 'rgba(255,255,255,0.15)',
+                                          fontFamily: 'Shark',
+                                        }}>?</Text>
+                                      </View>
                                     )}
                                   </View>
                                 ))}
@@ -510,10 +654,20 @@ export default function ParkScreen({ route }) {
                                         style={{
                                           width: 60,
                                           height: 60,
-                                          backgroundColor: 'rgba(0, 0, 0, .5)',
-                                          borderRadius: 50,
+                                          backgroundColor: 'rgba(0, 0, 0, .4)',
+                                          borderRadius: 30,
+                                          borderWidth: 2,
+                                          borderColor: 'rgba(255,255,255,0.08)',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
                                         }}
-                                      />
+                                      >
+                                        <Text style={{
+                                          fontSize: 22,
+                                          color: 'rgba(255,255,255,0.15)',
+                                          fontFamily: 'Shark',
+                                        }}>?</Text>
+                                      </View>
                                     )}
                                   </View>
                                 ))}

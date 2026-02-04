@@ -17,7 +17,8 @@ export const CurrencyProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [currenciesLoaded, setCurrenciesLoaded] = useState<boolean>(false);
 
   useEffect(() => {
-    setCurrenciesLoaded(Boolean(currencies.length));
+    console.log('🦈 Currencies updated:', currencies?.length, 'items');
+    setCurrenciesLoaded(Boolean(currencies?.length));
   }, [currencies]);
 
   const retrieveCurrencies = async () => {

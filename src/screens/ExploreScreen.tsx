@@ -1,12 +1,14 @@
 import { useFocusEffect } from '@react-navigation/native';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useState } from 'react';
-import { Text, View } from 'react-native';
+import React, { useCallback, useContext, useState, Suspense } from 'react';
+import { Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
 import { Callout, Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
+// Lazy load ARView to prevent camera module crash
+const ARView = React.lazy(() => import('../components/ARView'));
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Map from '../components/Map';
@@ -43,6 +45,7 @@ export default function ExploreScreen() {
   const [activePrepItem, setActivePrepItem] = useState<PrepItemType | null>(null);
   const [activePrepItemPivotId, setActivePrepItemPivotId] = useState<number | null>(null);
   const [showPrepItemModal, setShowPrepItemModal] = useState(false);
+  const [arMode, setArMode] = useState(false);
   
   const { refreshPlayer, player } = useContext(AuthContext);
   const { parkLoaded, location, park, permissionGranted } =
@@ -86,6 +89,7 @@ export default function ExploreScreen() {
       <Topbar>
         {player && (
           <>
+            {/* Park mode: show park coins */}
             {park && (
               <TopbarColumn>
                 <Currency
@@ -94,7 +98,8 @@ export default function ExploreScreen() {
                 />
               </TopbarColumn>
             )}
-            {theme?.currency && (
+            {/* Park mode: theme currency and other currencies */}
+            {park && theme?.currency && (
               <TopbarColumn>
                 <Currency
                   image={theme.currency.icon_url}
@@ -102,7 +107,7 @@ export default function ExploreScreen() {
                 />
               </TopbarColumn>
             )}
-            {currencies.map((currency) => (
+            {park && currencies.map((currency) => (
               <TopbarColumn key={currency.id}>
                 <Currency
                   image={currency.icon_url}
@@ -110,6 +115,43 @@ export default function ExploreScreen() {
                 />
               </TopbarColumn>
             ))}
+            {/* TRAVEL MODE: Coins | TRAVEL MODE | Keys */}
+            {!park && (
+              <>
+                {/* Left: First currency (coins) */}
+                <TopbarColumn>
+                  {currencies[0] && (
+                    <Currency
+                      image={currencies[0].icon_url}
+                      count={player[currencies[0].name.toLowerCase()]}
+                    />
+                  )}
+                </TopbarColumn>
+                {/* Center: TRAVEL MODE */}
+                <TopbarColumn>
+                  <Text style={{
+                    fontSize: 16,
+                    color: 'white',
+                    fontFamily: 'Shark',
+                    textTransform: 'uppercase',
+                    letterSpacing: 2,
+                    textShadowColor: 'rgba(0, 0, 0, .5)',
+                    textShadowOffset: { width: 2, height: 2 },
+                    textShadowRadius: 0,
+                    textAlign: 'center',
+                  }}>Travel Mode</Text>
+                </TopbarColumn>
+                {/* Right: Second currency (keys) */}
+                <TopbarColumn>
+                  {currencies[1] && (
+                    <Currency
+                      image={currencies[1].icon_url}
+                      count={player[currencies[1].name.toLowerCase()]}
+                    />
+                  )}
+                </TopbarColumn>
+              </>
+            )}
             {/* V2: Show tickets if player has any */}
             {(player.tickets ?? 0) > 0 && (
               <TopbarColumn>
@@ -258,8 +300,38 @@ export default function ExploreScreen() {
           </View>
         </>
       )}
-      {/* Park Mode Map - Only renders when at a park */}
-      {park && (
+      {/* AR / Map Toggle Button */}
+      {park && redeemables && (
+        <TouchableOpacity
+          onPress={() => setArMode((prev) => !prev)}
+          style={{
+            position: 'absolute',
+            top: 95,
+            right: 16,
+            zIndex: 20,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Shark' }}>
+            {arMode ? 'MAP' : 'AR'}
+          </Text>
+        </TouchableOpacity>
+      )}
+      {/* Park Mode View - Map or AR */}
+      {park && arMode && redeemables && (
+        <View style={{ flex: 1, marginTop: -8 }}>
+          <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" /></View>}>
+            <ARView redeemables={redeemables} onRefresh={() => getRedeemables()} />
+          </Suspense>
+        </View>
+      )}
+      {park && !arMode && (
       <View
         style={{
           flex: 1,

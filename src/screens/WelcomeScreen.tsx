@@ -70,7 +70,7 @@ export default function WelcomeScreen({ navigation }) {
             textTransform: 'uppercase',
           }}
         >
-          {labels.welcome}
+          {labels?.welcome || 'Welcome!'}
         </Text>
         <Text
           style={{

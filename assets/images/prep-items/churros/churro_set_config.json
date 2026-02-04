@@ -1,0 +1,663 @@
+{
+  "setId": "churro_set_001",
+  "setName": "Churro Collection",
+  "setDescription": "Collect all 40 delicious churro variants! Find them during the day while exploring.",
+  "setIcon": "churro_01.png",
+  "theme": "food",
+  "timeGate": {
+    "startHour": 6,
+    "endHour": 21,
+    "description": "Churros appear during daytime (6am - 9pm)"
+  },
+  "weatherGate": null,
+  "totalItems": 40,
+  "completionRewards": {
+    "energy": 500,
+    "xp": 1000,
+    "tickets": 50,
+    "title": "Churro Connoisseur",
+    "badge": "churro_master_badge.png"
+  },
+  "items": [
+    {
+      "id": 1,
+      "name": "Classic Cinnamon",
+      "rarity": "common",
+      "iconFile": "churro_01.png",
+      "wrapper": "green",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "Simple and delicious!"
+    },
+    {
+      "id": 2,
+      "name": "Sugar Dusted",
+      "rarity": "common",
+      "iconFile": "churro_02.png",
+      "wrapper": "green",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "The everyday favorite."
+    },
+    {
+      "id": 3,
+      "name": "Honey Glazed",
+      "rarity": "common",
+      "iconFile": "churro_03.png",
+      "wrapper": "yellow",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "A classic churro with that familiar taste."
+    },
+    {
+      "id": 4,
+      "name": "Brown Sugar",
+      "rarity": "common",
+      "iconFile": "churro_04.png",
+      "wrapper": "red",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "Simple and delicious!"
+    },
+    {
+      "id": 5,
+      "name": "Maple Swirl",
+      "rarity": "common",
+      "iconFile": "churro_05.png",
+      "wrapper": "orange",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "The everyday favorite."
+    },
+    {
+      "id": 6,
+      "name": "Vanilla Bean",
+      "rarity": "common",
+      "iconFile": "churro_06.png",
+      "wrapper": "white",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "A classic churro with that familiar taste."
+    },
+    {
+      "id": 7,
+      "name": "Caramel Drizzle",
+      "rarity": "common",
+      "iconFile": "churro_07.png",
+      "wrapper": "gold",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "Simple and delicious!"
+    },
+    {
+      "id": 8,
+      "name": "Dulce de Leche",
+      "rarity": "common",
+      "iconFile": "churro_08.png",
+      "wrapper": "tan",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "The everyday favorite."
+    },
+    {
+      "id": 9,
+      "name": "Butterscotch",
+      "rarity": "common",
+      "iconFile": "churro_09.png",
+      "wrapper": "yellow",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "A classic churro with that familiar taste."
+    },
+    {
+      "id": 10,
+      "name": "Toasted Coconut",
+      "rarity": "common",
+      "iconFile": "churro_10.png",
+      "wrapper": "white",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "Simple and delicious!"
+    },
+    {
+      "id": 11,
+      "name": "Churro Original",
+      "rarity": "common",
+      "iconFile": "churro_11.png",
+      "wrapper": "red",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "The everyday favorite."
+    },
+    {
+      "id": 12,
+      "name": "Cinnamon Toast",
+      "rarity": "common",
+      "iconFile": "churro_12.png",
+      "wrapper": "orange",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "A classic churro with that familiar taste."
+    },
+    {
+      "id": 13,
+      "name": "Golden Crisp",
+      "rarity": "common",
+      "iconFile": "churro_13.png",
+      "wrapper": "gold",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "Simple and delicious!"
+    },
+    {
+      "id": 14,
+      "name": "Sweet Cream",
+      "rarity": "common",
+      "iconFile": "churro_14.png",
+      "wrapper": "pink",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "The everyday favorite."
+    },
+    {
+      "id": 15,
+      "name": "Salted Caramel",
+      "rarity": "common",
+      "iconFile": "churro_15.png",
+      "wrapper": "blue",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "A classic churro with that familiar taste."
+    },
+    {
+      "id": 16,
+      "name": "Toffee Crunch",
+      "rarity": "common",
+      "iconFile": "churro_16.png",
+      "wrapper": "brown",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "Simple and delicious!"
+    },
+    {
+      "id": 17,
+      "name": "Praline",
+      "rarity": "common",
+      "iconFile": "churro_17.png",
+      "wrapper": "tan",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "The everyday favorite."
+    },
+    {
+      "id": 18,
+      "name": "Snickerdoodle",
+      "rarity": "common",
+      "iconFile": "churro_18.png",
+      "wrapper": "green",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "A classic churro with that familiar taste."
+    },
+    {
+      "id": 19,
+      "name": "Biscoff",
+      "rarity": "common",
+      "iconFile": "churro_19.png",
+      "wrapper": "red",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "Simple and delicious!"
+    },
+    {
+      "id": 20,
+      "name": "Cookie Butter",
+      "rarity": "common",
+      "iconFile": "churro_20.png",
+      "wrapper": "orange",
+      "rewards": {
+        "energy": 5,
+        "xp": 10,
+        "ticketChance": 0.05,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 60,
+      "despawnMinutes": 30,
+      "description": "The everyday favorite."
+    },
+    {
+      "id": 21,
+      "name": "Chocolate Dipped",
+      "rarity": "uncommon",
+      "iconFile": "churro_21.png",
+      "wrapper": "brown",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "A special twist on the classic!"
+    },
+    {
+      "id": 22,
+      "name": "Strawberry Frosted",
+      "rarity": "uncommon",
+      "iconFile": "churro_22.png",
+      "wrapper": "pink",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "Not your ordinary churro."
+    },
+    {
+      "id": 23,
+      "name": "Blueberry Bliss",
+      "rarity": "uncommon",
+      "iconFile": "churro_23.png",
+      "wrapper": "blue",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "A fan favorite flavor!"
+    },
+    {
+      "id": 24,
+      "name": "Matcha Green Tea",
+      "rarity": "uncommon",
+      "iconFile": "churro_24.png",
+      "wrapper": "green",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "A special twist on the classic!"
+    },
+    {
+      "id": 25,
+      "name": "Ube Purple Yam",
+      "rarity": "uncommon",
+      "iconFile": "churro_25.png",
+      "wrapper": "purple",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "Not your ordinary churro."
+    },
+    {
+      "id": 26,
+      "name": "Red Velvet",
+      "rarity": "uncommon",
+      "iconFile": "churro_26.png",
+      "wrapper": "red",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "A fan favorite flavor!"
+    },
+    {
+      "id": 27,
+      "name": "Orange Creamsicle",
+      "rarity": "uncommon",
+      "iconFile": "churro_27.png",
+      "wrapper": "orange",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "A special twist on the classic!"
+    },
+    {
+      "id": 28,
+      "name": "Lemon Zest",
+      "rarity": "uncommon",
+      "iconFile": "churro_28.png",
+      "wrapper": "yellow",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "Not your ordinary churro."
+    },
+    {
+      "id": 29,
+      "name": "Mint Chocolate",
+      "rarity": "uncommon",
+      "iconFile": "churro_29.png",
+      "wrapper": "green",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "A fan favorite flavor!"
+    },
+    {
+      "id": 30,
+      "name": "Cookies & Cream",
+      "rarity": "uncommon",
+      "iconFile": "churro_30.png",
+      "wrapper": "black",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "A special twist on the classic!"
+    },
+    {
+      "id": 31,
+      "name": "Pumpkin Spice",
+      "rarity": "uncommon",
+      "iconFile": "churro_31.png",
+      "wrapper": "orange",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "Not your ordinary churro."
+    },
+    {
+      "id": 32,
+      "name": "Birthday Cake",
+      "rarity": "uncommon",
+      "iconFile": "churro_32.png",
+      "wrapper": "pink",
+      "rewards": {
+        "energy": 10,
+        "xp": 25,
+        "ticketChance": 0.15,
+        "ticketAmount": 1
+      },
+      "spawnWeight": 25,
+      "despawnMinutes": 20,
+      "description": "A fan favorite flavor!"
+    },
+    {
+      "id": 33,
+      "name": "Cotton Candy",
+      "rarity": "rare",
+      "iconFile": "churro_33.png",
+      "wrapper": "pink",
+      "rewards": {
+        "energy": 20,
+        "xp": 50,
+        "ticketChance": 0.3,
+        "ticketAmount": 2
+      },
+      "spawnWeight": 12,
+      "despawnMinutes": 10,
+      "description": "A rare find! Lucky you!"
+    },
+    {
+      "id": 34,
+      "name": "Tropical Mango",
+      "rarity": "rare",
+      "iconFile": "churro_34.png",
+      "wrapper": "yellow",
+      "rewards": {
+        "energy": 20,
+        "xp": 50,
+        "ticketChance": 0.3,
+        "ticketAmount": 2
+      },
+      "spawnWeight": 12,
+      "despawnMinutes": 10,
+      "description": "These don't come around often!"
+    },
+    {
+      "id": 35,
+      "name": "Galaxy Swirl",
+      "rarity": "rare",
+      "iconFile": "churro_35.png",
+      "wrapper": "purple",
+      "rewards": {
+        "energy": 20,
+        "xp": 50,
+        "ticketChance": 0.3,
+        "ticketAmount": 2
+      },
+      "spawnWeight": 12,
+      "despawnMinutes": 10,
+      "description": "Collectors go wild for this one!"
+    },
+    {
+      "id": 36,
+      "name": "Electric Blue",
+      "rarity": "rare",
+      "iconFile": "churro_36.png",
+      "wrapper": "blue",
+      "rewards": {
+        "energy": 20,
+        "xp": 50,
+        "ticketChance": 0.3,
+        "ticketAmount": 2
+      },
+      "spawnWeight": 12,
+      "despawnMinutes": 10,
+      "description": "A rare find! Lucky you!"
+    },
+    {
+      "id": 37,
+      "name": "Watermelon Wave",
+      "rarity": "rare",
+      "iconFile": "churro_37.png",
+      "wrapper": "green",
+      "rewards": {
+        "energy": 20,
+        "xp": 50,
+        "ticketChance": 0.3,
+        "ticketAmount": 2
+      },
+      "spawnWeight": 12,
+      "despawnMinutes": 10,
+      "description": "These don't come around often!"
+    },
+    {
+      "id": 38,
+      "name": "Sunset Orange",
+      "rarity": "rare",
+      "iconFile": "churro_38.png",
+      "wrapper": "red",
+      "rewards": {
+        "energy": 20,
+        "xp": 50,
+        "ticketChance": 0.3,
+        "ticketAmount": 2
+      },
+      "spawnWeight": 12,
+      "despawnMinutes": 10,
+      "description": "Collectors go wild for this one!"
+    },
+    {
+      "id": 39,
+      "name": "Golden Churro",
+      "rarity": "legendary",
+      "iconFile": "churro_39.png",
+      "wrapper": "gold",
+      "rewards": {
+        "energy": 50,
+        "xp": 100,
+        "ticketChance": 1,
+        "ticketAmount": 5
+      },
+      "spawnWeight": 3,
+      "despawnMinutes": 5,
+      "description": "✨ The rarest of them all!"
+    },
+    {
+      "id": 40,
+      "name": "Rainbow Galaxy",
+      "rarity": "legendary",
+      "iconFile": "churro_40.png",
+      "wrapper": "rainbow",
+      "rewards": {
+        "energy": 50,
+        "xp": 100,
+        "ticketChance": 1,
+        "ticketAmount": 5
+      },
+      "spawnWeight": 3,
+      "despawnMinutes": 5,
+      "description": "🌟 LEGENDARY! An extremely rare churro!"
+    }
+  ]
+}

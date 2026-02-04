@@ -7,13 +7,17 @@ import client from '../../../client';
 export default async function redeemPrepItem(
   prepItemId: number,
   pivotId: number,
-  doubleRewards: boolean = false
+  doubleRewards: boolean = false,
+  latitude?: number,
+  longitude?: number
 ): Promise<RedeemPrepItemResponseType> {
   const { data } = await client.post<RedeemPrepItemResponseType>(
     `/prep-items/${prepItemId}/redeem`,
     {
       pivot_id: pivotId,
       double_rewards: doubleRewards,
+      lat: latitude,
+      lng: longitude,
     }
   );
 
