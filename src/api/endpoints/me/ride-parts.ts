@@ -1,14 +1,16 @@
 import client from '../../client';
 
 export interface RidePartsEntry {
-  task_id: number;
+  task_id: number | null;
+  secret_task_id: number | null;
   task_name: string;
   amount: number;
+  type: 'task' | 'secret_task';
 }
 
 /**
  * Get all ride parts for the current player.
- * Returns a map of task_id -> amount.
+ * Returns combined list of both regular task and secret task ride parts.
  */
 export async function getRideParts(): Promise<RidePartsEntry[]> {
   try {
@@ -21,7 +23,7 @@ export async function getRideParts(): Promise<RidePartsEntry[]> {
 }
 
 /**
- * Get ride parts for a specific task.
+ * Get ride parts for a specific task or secret task.
  */
 export async function getRidePartsForTask(taskId: number): Promise<number> {
   try {

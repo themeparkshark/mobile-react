@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import React, { useCallback, useContext, useState, useEffect, Suspense } from 'react';
@@ -45,26 +45,26 @@ export default function ExploreScreen() {
   const [failedTaskIds, setFailedTaskIds] = useState<Set<number>>(new Set());
   
   // Persist failed task IDs to storage (survives app restart, resets daily)
-  const FAILED_TASKS_KEY = '@failed_task_ids';
-  const FAILED_TASKS_DATE_KEY = '@failed_task_ids_date';
+  const FAILED_TASKS_KEY = 'failed_task_ids';
+  const FAILED_TASKS_DATE_KEY = 'failed_task_ids_date';
   
   // Load failed task IDs from storage on mount (reset if new day)
   useEffect(() => {
     const loadFailedTasks = async () => {
       try {
-        const storedDate = await AsyncStorage.getItem(FAILED_TASKS_DATE_KEY);
+        const storedDate = await SecureStore.getItemAsync(FAILED_TASKS_DATE_KEY);
         const today = dayjs().format('YYYY-MM-DD');
         
         // Reset failed tasks if it's a new day
         if (storedDate !== today) {
-          await AsyncStorage.removeItem(FAILED_TASKS_KEY);
-          await AsyncStorage.setItem(FAILED_TASKS_DATE_KEY, today);
+          await SecureStore.deleteItemAsync(FAILED_TASKS_KEY);
+          await SecureStore.setItemAsync(FAILED_TASKS_DATE_KEY, today);
           setFailedTaskIds(new Set());
           return;
         }
         
         // Load stored failed tasks
-        const stored = await AsyncStorage.getItem(FAILED_TASKS_KEY);
+        const stored = await SecureStore.getItemAsync(FAILED_TASKS_KEY);
         if (stored) {
           const ids = JSON.parse(stored) as number[];
           setFailedTaskIds(new Set(ids));
@@ -79,8 +79,8 @@ export default function ExploreScreen() {
   // Save failed task IDs to storage whenever they change
   useEffect(() => {
     if (failedTaskIds.size > 0) {
-      AsyncStorage.setItem(FAILED_TASKS_KEY, JSON.stringify([...failedTaskIds]));
-      AsyncStorage.setItem(FAILED_TASKS_DATE_KEY, dayjs().format('YYYY-MM-DD'));
+      SecureStore.setItemAsync(FAILED_TASKS_KEY, JSON.stringify([...failedTaskIds]));
+      SecureStore.setItemAsync(FAILED_TASKS_DATE_KEY, dayjs().format('YYYY-MM-DD'));
     }
   }, [failedTaskIds]);
   // Home mode state for prep items

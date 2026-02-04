@@ -82,11 +82,15 @@ export default function CoinShelfScreen() {
   const loadCoins = useCallback(async () => {
     if (!player?.id) return;
     try {
-      // Fetch ride parts first
+      // Fetch ride parts first (includes both tasks AND secret tasks)
       const rideParts = await getRideParts();
       const partsMap: Record<number, number> = {};
       rideParts.forEach((entry) => {
-        partsMap[entry.task_id] = entry.amount;
+        // Use task_id or secret_task_id as the key
+        const id = entry.task_id ?? entry.secret_task_id;
+        if (id) {
+          partsMap[id] = entry.amount;
+        }
       });
       setRidePartsMap(partsMap);
 
