@@ -51,8 +51,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     leading: true,
   });
 
-  // Dev joystick mock location
-  const [devMode, setDevMode] = useState<boolean>(false);
+  // Dev joystick mock location - auto-enable in dev for testing
+  const [devMode, setDevMode] = useState<boolean>(__DEV__);
   const devLocationRef = useRef<LocationType>({ latitude: DEV_DEFAULT_LAT, longitude: DEV_DEFAULT_LNG });
 
   const moveDevLocation = useCallback((dx: number, dy: number, speed: number) => {
