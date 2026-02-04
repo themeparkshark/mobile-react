@@ -41,6 +41,7 @@ export default function ExploreScreen() {
   const [activeRedeemable, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined
   >();
+  const [failedTaskIds, setFailedTaskIds] = useState<Set<number>>(new Set());
   // Home mode state for prep items
   const [activePrepItem, setActivePrepItem] = useState<PrepItemType | null>(null);
   const [activePrepItemPivotId, setActivePrepItemPivotId] = useState<number | null>(null);
@@ -81,8 +82,16 @@ export default function ExploreScreen() {
       return;
     }
 
-    setActiveRedeemable(await checkForRedeemable());
-  }, [park?.id, location?.latitude, location?.longitude, redeemables]);
+    const redeemable = await checkForRedeemable();
+    
+    // Don't show redeemable if it's a task that was failed locally
+    if (redeemable?.type === 'task' && failedTaskIds.has(redeemable.model.id)) {
+      setActiveRedeemable(undefined);
+      return;
+    }
+    
+    setActiveRedeemable(redeemable);
+  }, [park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds]);
 
   return (
     <Wrapper>
@@ -257,6 +266,8 @@ export default function ExploreScreen() {
                 await refreshPlayer();
               }}
               onTaskFailed={(taskId) => {
+                // Track failed task so it doesn't reappear
+                setFailedTaskIds((prev) => new Set([...prev, taskId]));
                 // Remove failed task from local state immediately
                 setRedeemables((prev) => {
                   if (!prev) return prev;
