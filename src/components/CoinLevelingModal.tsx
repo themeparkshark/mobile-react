@@ -384,81 +384,157 @@ export default function CoinLevelingModal({
                 {/* ══════════════════════════════════════ */}
                 {(state === 'preview' || state === 'confirm') && !isMaxLevel && (
                   <>
-                    {/* ── Next Level Unlock (single line) ── */}
-                    <Text style={{
-                      fontFamily: 'Knockout',
-                      fontSize: 13,
-                      color: nextTierColor,
-                      textAlign: 'center',
-                      marginBottom: 10,
+                    {/* ── Upgrade Cost Section ── */}
+                    <View style={{
+                      width: '100%',
+                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      borderRadius: 12,
+                      padding: 14,
+                      marginBottom: 12,
                     }}>
-                      ✨ Next: {nextTierName} appearance
-                    </Text>
+                      {/* Section Header */}
+                      <Text style={{
+                        fontFamily: 'Knockout',
+                        fontSize: 11,
+                        color: 'rgba(255,255,255,0.5)',
+                        textTransform: 'uppercase',
+                        letterSpacing: 1,
+                        marginBottom: 10,
+                        textAlign: 'center',
+                      }}>
+                        Upgrade Cost
+                      </Text>
 
-                    {/* ── Resource Bars (compact inline) ── */}
-                    <View style={{ width: '100%', gap: 6, marginBottom: 12 }}>
-                      {/* Energy */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={{ fontSize: 14 }}>⚡</Text>
-                        <View style={{
-                          flex: 1, height: 8, borderRadius: 4,
-                          backgroundColor: 'rgba(255,255,255,0.1)',
-                          overflow: 'hidden',
-                        }}>
-                          <Animated.View style={{
-                            height: '100%', width: energyBarWidth, borderRadius: 4,
-                            backgroundColor: hasEnergy ? '#66bb6a' : '#ef5350',
-                          }} />
+                      {/* Cost Row */}
+                      <View style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-around',
+                        marginBottom: 14,
+                      }}>
+                        {/* Energy Cost */}
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ fontSize: 24, marginBottom: 4 }}>⚡</Text>
+                          <Text style={{
+                            fontFamily: 'Shark',
+                            fontSize: 22,
+                            color: 'white',
+                          }}>
+                            {rideCoin.energy_to_next_level}
+                          </Text>
+                          <Text style={{
+                            fontFamily: 'Knockout',
+                            fontSize: 10,
+                            color: 'rgba(255,255,255,0.5)',
+                            textTransform: 'uppercase',
+                          }}>
+                            Energy
+                          </Text>
                         </View>
-                        <Text style={{
-                          fontFamily: 'Knockout', fontSize: 12, width: 50, textAlign: 'right',
-                          color: hasEnergy ? '#a5d6a7' : '#ef9a9a',
-                        }}>
-                          {playerEnergy}/{rideCoin.energy_to_next_level}
-                        </Text>
+
+                        {/* Divider */}
+                        <View style={{
+                          width: 1,
+                          backgroundColor: 'rgba(255,255,255,0.1)',
+                          marginVertical: 4,
+                        }} />
+
+                        {/* Ride Parts Cost */}
+                        <View style={{ alignItems: 'center' }}>
+                          <Text style={{ fontSize: 24, marginBottom: 4 }}>🔧</Text>
+                          <Text style={{
+                            fontFamily: 'Shark',
+                            fontSize: 22,
+                            color: 'white',
+                          }}>
+                            {rideCoin.parts_to_next_level}
+                          </Text>
+                          <Text style={{
+                            fontFamily: 'Knockout',
+                            fontSize: 10,
+                            color: 'rgba(255,255,255,0.5)',
+                            textTransform: 'uppercase',
+                          }}>
+                            Ride Parts
+                          </Text>
+                        </View>
                       </View>
 
-                      {/* Ride Parts */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Text style={{ fontSize: 14 }}>🔧</Text>
-                        <View style={{
-                          flex: 1, height: 8, borderRadius: 4,
-                          backgroundColor: 'rgba(255,255,255,0.1)',
-                          overflow: 'hidden',
-                        }}>
-                          <Animated.View style={{
-                            height: '100%', width: partsBarWidth, borderRadius: 4,
-                            backgroundColor: hasParts ? '#42a5f5' : '#ef5350',
-                          }} />
+                      {/* Divider Line */}
+                      <View style={{
+                        height: 1,
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        marginBottom: 10,
+                      }} />
+
+                      {/* Your Balance Section */}
+                      <Text style={{
+                        fontFamily: 'Knockout',
+                        fontSize: 11,
+                        color: 'rgba(255,255,255,0.5)',
+                        textTransform: 'uppercase',
+                        letterSpacing: 1,
+                        marginBottom: 8,
+                        textAlign: 'center',
+                      }}>
+                        Your Balance
+                      </Text>
+
+                      {/* Balance Row */}
+                      <View style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-around',
+                      }}>
+                        {/* Energy Balance */}
+                        <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
+                          <Text style={{ fontSize: 16 }}>⚡</Text>
+                          <Text style={{
+                            fontFamily: 'Shark',
+                            fontSize: 18,
+                            color: hasEnergy ? '#66bb6a' : '#ef5350',
+                          }}>
+                            {playerEnergy.toLocaleString()}
+                          </Text>
+                          {hasEnergy && (
+                            <Text style={{ fontSize: 12, color: '#66bb6a' }}>✓</Text>
+                          )}
                         </View>
-                        <Text style={{
-                          fontFamily: 'Knockout', fontSize: 12, width: 50, textAlign: 'right',
-                          color: hasParts ? '#90caf9' : '#ef9a9a',
-                        }}>
-                          {playerParts}/{rideCoin.parts_to_next_level}
-                        </Text>
+
+                        {/* Ride Parts Balance */}
+                        <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
+                          <Text style={{ fontSize: 16 }}>🔧</Text>
+                          <Text style={{
+                            fontFamily: 'Shark',
+                            fontSize: 18,
+                            color: hasParts ? '#66bb6a' : '#ef5350',
+                          }}>
+                            {playerParts.toLocaleString()}
+                          </Text>
+                          {hasParts && (
+                            <Text style={{ fontSize: 12, color: '#66bb6a' }}>✓</Text>
+                          )}
+                        </View>
                       </View>
                     </View>
 
                     {/* ── Level Up Button ── */}
                     <YellowButton
-                      text={canLevelUp ? 'Power Up!' : 'Need More Resources'}
+                      text={canLevelUp ? 'Power Up!' : 'Not Enough Resources'}
                       disabled={!canLevelUp}
                       onPress={handleLevelUp}
                     />
 
-                    {/* Helper text */}
+                    {/* Helper text for what you're missing */}
                     {!canLevelUp && (
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 11,
-                        color: 'rgba(255,255,255,0.35)',
-                        textAlign: 'center', marginTop: 6,
+                        color: 'rgba(255,255,255,0.4)',
+                        textAlign: 'center', marginTop: 8,
                       }}>
                         {!hasEnergy && !hasParts
-                          ? 'Complete tasks to earn more ⚡ and 🔧!'
+                          ? 'Win mini-games to earn ⚡ and 🔧'
                           : !hasEnergy
-                            ? 'Need more ⚡ energy!'
-                            : 'Need more 🔧 ride parts!'}
+                            ? `Need ${rideCoin.energy_to_next_level - playerEnergy} more ⚡`
+                            : `Need ${rideCoin.parts_to_next_level - playerParts} more 🔧`}
                       </Text>
                     )}
                   </>

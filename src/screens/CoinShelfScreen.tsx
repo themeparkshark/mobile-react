@@ -28,6 +28,7 @@ import {
 import { RIDE_PART_RARITY_CONFIG } from '../models/ride-part-type';
 import getTasks from '../api/endpoints/parks/getTasks';
 import visitedParks from '../api/endpoints/me/visited-parks';
+import { getRideParts, RidePartsEntry } from '../api/endpoints/me/ride-parts';
 import { TaskType } from '../models/task-type';
 
 // Mock coins for initial state (replaced when API loads)
@@ -74,12 +75,22 @@ export default function CoinShelfScreen() {
   const [selectedCoin, setSelectedCoin] = useState<RideCoinLevelType | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'max'>('all');
+  const [ridePartsMap, setRidePartsMap] = useState<Record<number, number>>({}); // task_id -> amount
   const modalScale = useRef(new Animated.Value(0)).current;
 
-  // Load coins by fetching tasks from visited parks
+  // Load coins by fetching tasks from visited parks + ride parts
   const loadCoins = useCallback(async () => {
     if (!player?.id) return;
     try {
+      // Fetch ride parts first
+      const rideParts = await getRideParts();
+      const partsMap: Record<number, number> = {};
+      rideParts.forEach((entry) => {
+        partsMap[entry.task_id] = entry.amount;
+      });
+      setRidePartsMap(partsMap);
+
+      // Fetch coins from visited parks
       const parks = await visitedParks(player.id);
       const allCoins: RideCoinLevelType[] = [];
       for (const park of parks) {
@@ -514,7 +525,7 @@ export default function CoinShelfScreen() {
         visible={selectedCoin !== null}
         rideCoin={selectedCoin}
         playerEnergy={player?.energy ?? 0}
-        playerParts={player?.ride_parts ?? 0}
+        playerParts={selectedCoin ? (ridePartsMap[selectedCoin.ride_id] ?? 0) : 0}
         onClose={handleCloseModal}
         onLevelUp={async (id) => {
           // TODO: API call to level up coin
