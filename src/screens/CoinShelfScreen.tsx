@@ -27,6 +27,7 @@ import {
 } from '../models/ride-coin-level-type';
 import { RIDE_PART_RARITY_CONFIG } from '../models/ride-part-type';
 import getTasks from '../api/endpoints/parks/getTasks';
+import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import visitedParks from '../api/endpoints/me/visited-parks';
 import { getRideParts, RidePartsEntry } from '../api/endpoints/me/ride-parts';
 import { TaskType } from '../models/task-type';
@@ -94,15 +95,27 @@ export default function CoinShelfScreen() {
       });
       setRidePartsMap(partsMap);
 
-      // Fetch coins from visited parks
+      // Fetch coins from visited parks (both regular tasks AND secret tasks)
       const parks = await visitedParks(player.id);
       const allCoins: RideCoinLevelType[] = [];
       for (const park of parks) {
+        // Regular tasks
         const tasks = await getTasks(park.id);
         for (const task of tasks) {
           if (task.coin_url) {
             allCoins.push(taskToCoinLevel(task, player.level ?? 1));
           }
+        }
+        // Secret tasks (same coin system!)
+        try {
+          const secretTasks = await getSecretTasks(park.id);
+          for (const task of secretTasks) {
+            if (task.coin_url) {
+              allCoins.push(taskToCoinLevel(task, player.level ?? 1));
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to fetch secret tasks for park:', park.id, e);
         }
       }
       setCoins(allCoins);
