@@ -268,12 +268,13 @@ export default function ExploreScreen() {
               onTaskFailed={(taskId) => {
                 // Track failed task so it doesn't reappear
                 setFailedTaskIds((prev) => new Set([...prev, taskId]));
-                // Remove failed task from local state immediately
+                // Remove failed task from local state immediately (check both tasks AND secret_tasks)
                 setRedeemables((prev) => {
                   if (!prev) return prev;
                   return {
                     ...prev,
                     tasks: prev.tasks.filter((t) => t.id !== taskId),
+                    secret_tasks: prev.secret_tasks.filter((t) => t.id !== taskId),
                   };
                 });
                 setActiveRedeemable(undefined);

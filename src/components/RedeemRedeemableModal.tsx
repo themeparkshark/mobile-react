@@ -27,6 +27,7 @@ import PostWinRewardsModal from './PostWinRewardsModal';
 import SpinWheel from './SpinWheel';
 import spendTickets from '../api/endpoints/me/spend-tickets';
 import failTask from '../api/endpoints/tasks/fail-task';
+import failSecretTask from '../api/endpoints/secret-tasks/fail-secret-task';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WHEEL_SIZE = Math.min(SCREEN_WIDTH * 0.7, 260);
@@ -245,6 +246,11 @@ export default function RedeemRedeemableModal({
       await failTask(task);
       // Also remove from local state immediately (don't wait for backend)
       onTaskFailed?.(task.id);
+    } else if (redeemable?.type === 'secret_task') {
+      const secretTask = redeemable.model as SecretTaskType;
+      await failSecretTask(secretTask);
+      // Also remove from local state immediately
+      onTaskFailed?.(secretTask.id);
     }
     
     setFlowState('lost');
