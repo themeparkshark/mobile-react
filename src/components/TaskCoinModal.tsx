@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
 import * as Haptics from '../helpers/haptics';
 import Button from '../components/Button';
@@ -9,6 +9,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
+import { getRideParts } from '../api/endpoints/me/ride-parts';
 
 /**
  * Converts a TaskType into a RideCoinLevelType for the leveling modal.
@@ -99,6 +100,7 @@ export default function TaskCoinModal({
   readonly timesCompleted?: number;
 }) {
   const [visible, setVisible] = useState(false);
+  const [taskRideParts, setTaskRideParts] = useState(0);
   const { player } = useContext(AuthContext);
 
   const level = Math.min(Math.max(Math.floor(timesCompleted / 3), 1), 5);
@@ -108,6 +110,27 @@ export default function TaskCoinModal({
     isSecretTask,
     player?.level ?? 1
   );
+
+  // Fetch ride parts for this specific task when modal opens
+  const loadRideParts = useCallback(async () => {
+    try {
+      const allParts = await getRideParts();
+      // Find parts for this task (regular or secret)
+      const entry = allParts.find((p) =>
+        isSecretTask ? p.secret_task_id === task.id : p.task_id === task.id
+      );
+      setTaskRideParts(entry?.amount ?? 0);
+    } catch (err) {
+      console.warn('Failed to load ride parts:', err);
+      setTaskRideParts(0);
+    }
+  }, [task.id, isSecretTask]);
+
+  useEffect(() => {
+    if (visible) {
+      loadRideParts();
+    }
+  }, [visible, loadRideParts]);
 
   const handleOpen = () => {
     if (Platform.OS === 'ios') {
@@ -147,7 +170,7 @@ export default function TaskCoinModal({
         visible={visible}
         rideCoin={rideCoin}
         playerEnergy={player?.energy ?? 0}
-        playerParts={player?.ride_parts ?? 0}
+        playerParts={taskRideParts}
         onClose={() => setVisible(false)}
         onLevelUp={async (id) => {
           // TODO: API call to level up coin

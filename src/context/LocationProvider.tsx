@@ -38,8 +38,9 @@ export const LocationContext = createContext<LocationContextType>(
 );
 
 // Default dev location: Magic Kingdom entrance
-const DEV_DEFAULT_LAT = 28.4177;
-const DEV_DEFAULT_LNG = -81.5812;
+// Universal Studios Hollywood
+const DEV_DEFAULT_LAT = 34.1381;
+const DEV_DEFAULT_LNG = -118.3534;
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();

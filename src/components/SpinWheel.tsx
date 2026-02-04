@@ -75,6 +75,7 @@ export default function SpinWheel({ spinning, landed, selectedIndex }: Props) {
     if (spinning && selectedIndex !== null) {
       const extraSpins = 4 + Math.random() * 2;
       const targetAngle = extraSpins * 360 + (selectedIndex * SEGMENT_ANGLE) + SEGMENT_ANGLE / 2;
+      console.log('🎡 SpinWheel spinning to:', { selectedIndex, segment: SEGMENTS[selectedIndex]?.name, targetAngle });
       
       // Play initial spin whoosh
       playSound(require('../../assets/sounds/redeem_modal_open.mp3'));

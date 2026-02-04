@@ -1,5 +1,7 @@
 import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { faCompass } from '@fortawesome/free-solid-svg-icons/faCompass';
+import { faPlus } from '@fortawesome/free-solid-svg-icons/faPlus';
+import { faMinus } from '@fortawesome/free-solid-svg-icons/faMinus';
 import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
@@ -12,7 +14,7 @@ import { LocationContext } from '../context/LocationProvider';
 
 type MapMode = 'north-up' | 'heading';
 
-export default function Map({ children }: { readonly children: ReactNode }) {
+export default function Map({ children, onPress }: { readonly children: ReactNode; readonly onPress?: () => void }) {
   const { location, heading, headingEnabled, setHeadingEnabled } = useContext(LocationContext);
   const { player } = useContext(AuthContext);
 
@@ -110,6 +112,25 @@ export default function Map({ children }: { readonly children: ReactNode }) {
         heading: mapMode === 'heading' && heading !== null ? heading : 0,
       }, { duration: 300 });
     }
+  };
+
+  // Zoom in/out functions
+  const zoomIn = async () => {
+    if (!mapRef.current) return;
+    const camera = await mapRef.current.getCamera();
+    mapRef.current.animateCamera({
+      ...camera,
+      altitude: Math.max(50, (camera.altitude || 200) * 0.5),
+    }, { duration: 200 });
+  };
+
+  const zoomOut = async () => {
+    if (!mapRef.current) return;
+    const camera = await mapRef.current.getCamera();
+    mapRef.current.animateCamera({
+      ...camera,
+      altitude: Math.min(10000, (camera.altitude || 200) * 2),
+    }, { duration: 200 });
   };
 
   // Animate compass icon to show current heading
@@ -263,6 +284,47 @@ export default function Map({ children }: { readonly children: ReactNode }) {
             color={config.primary}
           />
         </Pressable>
+
+        {/* Zoom controls */}
+        <Pressable
+          onPress={zoomIn}
+          style={{
+            padding: 12,
+            backgroundColor: 'rgba(255,255,255,0.9)',
+            borderRadius: 25,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.84,
+            elevation: 5,
+          }}
+        >
+          <FontAwesomeIcon
+            icon={faPlus}
+            size={26}
+            color={config.primary}
+          />
+        </Pressable>
+
+        <Pressable
+          onPress={zoomOut}
+          style={{
+            padding: 12,
+            backgroundColor: 'rgba(255,255,255,0.9)',
+            borderRadius: 25,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.84,
+            elevation: 5,
+          }}
+        >
+          <FontAwesomeIcon
+            icon={faMinus}
+            size={26}
+            color={config.primary}
+          />
+        </Pressable>
       </View>
 
       <MapView
@@ -276,10 +338,20 @@ export default function Map({ children }: { readonly children: ReactNode }) {
         showsCompass={false}
         rotateEnabled={mapMode === 'heading'}
         pitchEnabled={false}
+        scrollEnabled={true}
+        zoomEnabled={false}
+        zoomTapEnabled={false}
         loadingEnabled={true}
         userInterfaceStyle="light"
         onPanDrag={() => {
           setFocusedOnPlayer(false);
+          onPress?.();
+        }}
+        onPress={() => {
+          onPress?.();
+        }}
+        onMarkerDeselect={() => {
+          onPress?.();
         }}
       >
         {/* Animated shark player marker */}

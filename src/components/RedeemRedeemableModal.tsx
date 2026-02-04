@@ -76,6 +76,7 @@ export default function RedeemRedeemableModal({
   redeemable,
   onPress,
   onTaskFailed,
+  onTaskCompleted,
 }: {
   readonly close: () => void;
   readonly open?: boolean;
@@ -83,6 +84,7 @@ export default function RedeemRedeemableModal({
   readonly redeemable: CurrentRedeemableType;
   readonly onPress: () => void;
   readonly onTaskFailed?: (taskId: number) => void;
+  readonly onTaskCompleted?: (taskId: number, isSecretTask: boolean) => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { player, refreshPlayer } = useContext(AuthContext);
@@ -224,6 +226,12 @@ export default function RedeemRedeemableModal({
       }
       console.log('🏆 Task completed successfully!');
       refreshPlayer?.();
+      
+      // Remove completed task from map
+      const taskId = redeemable.model.id;
+      const isSecretTask = redeemable.type === 'secret_task';
+      onTaskCompleted?.(taskId, isSecretTask);
+      
       setFlowState('postwin');
     } catch (e) {
       console.error('🏆 Task completion error:', e);
@@ -234,7 +242,7 @@ export default function RedeemRedeemableModal({
       setEnergyEarned(Math.round(energy * multiplier));
       setFlowState('postwin');
     }
-  }, [redeemable, ticketCost, doubleXP, doubleCoins, refreshPlayer]);
+  }, [redeemable, ticketCost, doubleXP, doubleCoins, refreshPlayer, onTaskCompleted]);
 
   // Handle mini-game LOSS - tickets already spent, task removed, no rewards
   const handleGameLose = useCallback(async () => {

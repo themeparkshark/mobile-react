@@ -35,6 +35,7 @@ const SEGMENT_ANGLE = 360 / NUM_SEGMENTS;
 interface Props {
   visible: boolean;
   ticketCost: number;
+  targetGame?: GameType; // Pre-selected game to land on
   onClose: () => void;
   onGameSelected: (game: GameType) => void;
 }
@@ -42,6 +43,7 @@ interface Props {
 export default function GameWheelSpinner({
   visible,
   ticketCost,
+  targetGame,
   onClose,
   onGameSelected,
 }: Props) {
@@ -66,10 +68,18 @@ export default function GameWheelSpinner({
     setPhase('spinning');
     Vibration.vibrate(50);
     
+    // If targetGame is provided, land on that segment; otherwise pick random
+    let targetSegmentIndex: number;
+    if (targetGame) {
+      targetSegmentIndex = GAMES.findIndex(g => g.id === targetGame);
+      if (targetSegmentIndex === -1) targetSegmentIndex = Math.floor(Math.random() * NUM_SEGMENTS);
+    } else {
+      targetSegmentIndex = Math.floor(Math.random() * NUM_SEGMENTS);
+    }
+    
     const extraSpins = 4 + Math.random() * 3;
-    const randomSegment = Math.floor(Math.random() * NUM_SEGMENTS);
-    const randomOffset = randomSegment * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
-    const finalAngle = extraSpins * 360 + randomOffset;
+    const targetOffset = targetSegmentIndex * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
+    const finalAngle = extraSpins * 360 + targetOffset;
     
     Animated.timing(wheelRotation, {
       toValue: finalAngle,
@@ -78,9 +88,7 @@ export default function GameWheelSpinner({
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) {
-        const normalizedAngle = finalAngle % 360;
-        const segmentIndex = Math.floor(normalizedAngle / SEGMENT_ANGLE) % NUM_SEGMENTS;
-        const game = GAMES[segmentIndex];
+        const game = GAMES[targetSegmentIndex];
         
         setSelectedGame(game);
         setPhase('landed');
@@ -91,7 +99,7 @@ export default function GameWheelSpinner({
         }, 1500);
       }
     });
-  }, [phase, onGameSelected]);
+  }, [phase, targetGame, onGameSelected]);
 
   const wheelRotationDeg = wheelRotation.interpolate({
     inputRange: [0, 360],

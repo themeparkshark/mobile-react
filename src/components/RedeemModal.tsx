@@ -21,11 +21,13 @@ export default function RedeemModal({
   park,
   onPress,
   onTaskFailed,
+  onTaskCompleted,
 }: {
   readonly redeemable?: CurrentRedeemableType;
   readonly park: ParkType;
   readonly onPress: () => void;
   readonly onTaskFailed?: (taskId: number) => void;
+  readonly onTaskCompleted?: (taskId: number, isSecretTask: boolean) => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
@@ -130,6 +132,7 @@ export default function RedeemModal({
               park={park}
               onPress={() => onPress()}
               onTaskFailed={onTaskFailed}
+              onTaskCompleted={onTaskCompleted}
             />
           )}
         </>

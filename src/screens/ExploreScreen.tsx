@@ -3,9 +3,10 @@ import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import React, { useCallback, useContext, useState, useEffect, Suspense } from 'react';
-import { Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import { Callout, Marker } from 'react-native-maps';
+import { Text, TouchableOpacity, View, ActivityIndicator, Pressable } from 'react-native';
+import { Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
+import { TaskType } from '../models/task-type';
 import * as RootNavigation from '../RootNavigation';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 // Lazy load ARView to prevent camera module crash
@@ -15,7 +16,7 @@ import Button from '../components/Button';
 import Map from '../components/Map';
 import RedeemModal from '../components/RedeemModal';
 import PrepItemRedeemModal from '../components/PrepItemRedeemModal';
-import TaskListModal from '../components/TaskListModal';
+// TaskListModal removed - tasks now spawn on map Pokemon-style
 import Topbar from '../components/Topbar';
 import Currency from '../components/Topbar/Currency';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -31,9 +32,13 @@ import { PrepItemType } from '../models/prep-item-type';
 import Coin from './ExploreScreen/Coin';
 import Key from './ExploreScreen/Key';
 import HomeExplore from './ExploreScreen/HomeExplore';
+import ItemMarker from './ExploreScreen/ItemMarker';
 import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
+import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
+import TaskMarker from './ExploreScreen/TaskMarker';
+import VaultMarker from './ExploreScreen/VaultMarker';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -43,6 +48,7 @@ export default function ExploreScreen() {
     CurrentRedeemableType | undefined
   >();
   const [failedTaskIds, setFailedTaskIds] = useState<Set<number>>(new Set());
+  const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   
   // Persist failed task IDs to storage (survives app restart, resets daily)
   const FAILED_TASKS_KEY = 'failed_task_ids';
@@ -104,7 +110,16 @@ export default function ExploreScreen() {
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
-    setRedeemables(await currentRedeemables());
+    const data = await currentRedeemables();
+    console.log('🎯 Redeemables fetched:', {
+      tasks: data?.tasks?.length ?? 0,
+      coins: data?.coins?.length ?? 0,
+      keys: data?.keys?.length ?? 0,
+    });
+    if (data?.tasks?.length > 0) {
+      console.log('🎯 First task:', data.tasks[0]);
+    }
+    setRedeemables(data);
   };
 
   useAsyncEffect(async () => {
@@ -288,7 +303,7 @@ export default function ExploreScreen() {
                 })}
               </View>
             )}
-            <TaskListModal redeemables={redeemables} />
+{/* TaskListModal removed - tasks now spawn on map like Pokemon! */}
           </View>
           <View
             style={{
@@ -316,6 +331,18 @@ export default function ExploreScreen() {
                     ...prev,
                     tasks: prev.tasks.filter((t) => t.id !== taskId),
                     secret_tasks: prev.secret_tasks.filter((t) => t.id !== taskId),
+                  };
+                });
+                setActiveRedeemable(undefined);
+              }}
+              onTaskCompleted={(taskId, isSecretTask) => {
+                // Remove completed task from local state immediately
+                setRedeemables((prev) => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    tasks: isSecretTask ? prev.tasks : prev.tasks.filter((t) => t.id !== taskId),
+                    secret_tasks: isSecretTask ? prev.secret_tasks.filter((t) => t.id !== taskId) : prev.secret_tasks,
                   };
                 });
                 setActiveRedeemable(undefined);
@@ -402,95 +429,28 @@ export default function ExploreScreen() {
           marginTop: -8,
         }}
       >
-        <Map>
+        <Map onPress={() => setSelectedTask(null)}>
           {redeemables?.items
             .filter((item) => !item.is_hidden)
-            .map((item) => {
-              return (
-                <Marker
-                  key={item.id}
-                  coordinate={{
-                    latitude: item.latitude,
-                    longitude: item.longitude,
-                  }}
-                  centerOffset={{
-                    x: 0,
-                    y: 0,
-                  }}
-                  tracksViewChanges={false}
-                  stopPropagation={true}
-                >
-                  <Image
-                    source={require('../../assets/images/screens/explore/item_animation.gif')}
-                    contentFit="contain"
-                    style={{
-                      width: 70,
-                      height: 70,
-                    }}
-                  />
-                </Marker>
-              );
-            })}
+            .map((item) => (
+              <ItemMarker key={item.id} item={item} />
+            ))}
           {redeemables?.pins
             .filter((item) => !item.is_hidden)
-            .map((item) => {
-              return (
-                <Marker
-                  key={item.id}
-                  coordinate={{
-                    latitude: item.latitude,
-                    longitude: item.longitude,
-                  }}
-                  centerOffset={{
-                    x: 0,
-                    y: 0,
-                  }}
-                  tracksViewChanges={false}
-                  stopPropagation={true}
-                >
-                  <Image
-                    source={require('../../assets/images/screens/explore/pin_animation.gif')}
-                    contentFit="contain"
-                    style={{
-                      width: 70,
-                      height: 70,
-                    }}
-                  />
-                </Marker>
-              );
-            })}
-          {redeemables?.tasks.map((task) => {
-            return (
-              <Marker
-                key={task.id}
-                coordinate={{
-                  latitude: Number(task.latitude),
-                  longitude: Number(task.longitude),
-                }}
-              >
-                <Image
-                  source={require('../../assets/images/screens/explore/task_animation.gif')}
-                  style={{
-                    width: 120,
-                    height: 120,
-                  }}
-                  contentFit="contain"
-                />
-                <Callout>
-                  <Text
-                    style={{
-                      textAlign: 'center',
-                    }}
-                  >
-                    {task.name}
-                  </Text>
-                </Callout>
-              </Marker>
-            );
-          })}
+            .map((item) => (
+              <PinMarker key={item.id} item={item} />
+            ))}
+          {redeemables?.tasks?.map((task) => (
+            <TaskMarker
+              key={task.id}
+              task={task}
+              isSelected={selectedTask?.id === task.id}
+              onPress={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
+            />
+          ))}
           {redeemables?.coins
-            .filter((coin) =>
-              dayjs().isBetween(dayjs(coin.active_from), dayjs(coin.active_to))
+            ?.filter((coin) =>
+              !coin.active_from || !coin.active_to || dayjs().isBetween(dayjs(coin.active_from), dayjs(coin.active_to))
             )
             .map((coin) => {
               return (
@@ -500,34 +460,23 @@ export default function ExploreScreen() {
                     latitude: Number(coin.latitude),
                     longitude: Number(coin.longitude),
                   }}
+                  tappable={false}
+                  flat={true}
+                  tracksViewChanges={true}
+                  anchor={{ x: 0.5, y: 0.5 }}
                 >
-                  <Coin coin={coin} onExpire={() => getRedeemables()} />
+                  <View pointerEvents="none">
+                    <Coin coin={coin} onExpire={() => getRedeemables()} />
+                  </View>
                 </Marker>
               );
             })}
-          {redeemables?.vaults.map((vault) => {
-            return (
-              <Marker
-                key={vault.id}
-                coordinate={{
-                  latitude: Number(vault.latitude),
-                  longitude: Number(vault.longitude),
-                }}
-              >
-                <Image
-                  source={require('../../assets/images/screens/explore/vault_animation.gif')}
-                  style={{
-                    width: 70,
-                    height: 70,
-                  }}
-                  contentFit="contain"
-                />
-              </Marker>
-            );
-          })}
+          {redeemables?.vaults.map((vault) => (
+            <VaultMarker key={vault.id} vault={vault} />
+          ))}
           {redeemables?.keys
-            .filter((key) =>
-              dayjs().isBetween(dayjs(key.active_from), dayjs(key.active_to))
+            ?.filter((key) =>
+              !key.active_from || !key.active_to || dayjs().isBetween(dayjs(key.active_from), dayjs(key.active_to))
             )
             .map((key) => {
               return (
@@ -537,8 +486,14 @@ export default function ExploreScreen() {
                     latitude: Number(key.latitude),
                     longitude: Number(key.longitude),
                   }}
+                  tappable={false}
+                  flat={true}
+                  tracksViewChanges={true}
+                  anchor={{ x: 0.5, y: 0.5 }}
                 >
-                  <Key model={key} onExpire={() => getRedeemables()} />
+                  <View pointerEvents="none">
+                    <Key model={key} onExpire={() => getRedeemables()} />
+                  </View>
                 </Marker>
               );
             })}
@@ -557,11 +512,17 @@ export default function ExploreScreen() {
                     latitude: Number(redeemable.latitude),
                     longitude: Number(redeemable.longitude),
                   }}
+                  tappable={false}
+                  flat={true}
+                  tracksViewChanges={true}
+                  anchor={{ x: 0.5, y: 0.5 }}
                 >
-                  <Redeemable
-                    redeemable={redeemable}
-                    onExpire={() => getRedeemables()}
-                  />
+                  <View pointerEvents="none">
+                    <Redeemable
+                      redeemable={redeemable}
+                      onExpire={() => getRedeemables()}
+                    />
+                  </View>
                 </Marker>
               );
             })}
