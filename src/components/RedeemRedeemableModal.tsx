@@ -215,12 +215,11 @@ export default function RedeemRedeemableModal({
         setEnergyEarned(response.rewards.energy_earned);
         console.log('🏆 Task completed! Rewards:', response.rewards);
       } else if (redeemable.type === 'secret_task') {
-        await completeSecretTask(redeemable.model as SecretTaskType, doubleXP, doubleCoins);
-        // Secret tasks use local calculation for now
-        const parts = getRidePartsReward(ticketCost);
-        const energy = getEnergyReward(ticketCost);
-        setRidePartsEarned(Math.round(parts * multiplier));
-        setEnergyEarned(Math.round(energy * multiplier));
+        const response = await completeSecretTask(redeemable.model as SecretTaskType, doubleXP, doubleCoins);
+        // Use ACTUAL rewards from backend (secret tasks too!)
+        setRidePartsEarned(response.rewards.ride_parts_earned);
+        setEnergyEarned(response.rewards.energy_earned);
+        console.log('🏆 Secret task completed! Rewards:', response.rewards);
       }
       console.log('🏆 Task completed successfully!');
       refreshPlayer?.();
