@@ -1,6 +1,8 @@
-import { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
+import { useRef, useEffect, useContext } from 'react';
+import { View, Text, StyleSheet, Animated, Easing, Dimensions, Platform } from 'react-native';
 import Svg, { G, Path, Circle, Defs, LinearGradient, Stop, Text as SvgText } from 'react-native-svg';
+import * as Haptics from '../helpers/haptics';
+import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WHEEL_SIZE = Math.min(SCREEN_WIDTH * 0.8, 300);
@@ -66,11 +68,49 @@ interface Props {
 
 export default function SpinWheel({ spinning, landed, selectedIndex }: Props) {
   const rotation = useRef(new Animated.Value(0)).current;
+  const tickIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   
   useEffect(() => {
     if (spinning && selectedIndex !== null) {
       const extraSpins = 4 + Math.random() * 2;
       const targetAngle = extraSpins * 360 + (selectedIndex * SEGMENT_ANGLE) + SEGMENT_ANGLE / 2;
+      
+      // Play initial spin whoosh
+      playSound(require('../../assets/sounds/redeem_modal_open.mp3'));
+      
+      // Start tick haptics (simulating wheel clicking past pegs)
+      let tickCount = 0;
+      const maxTicks = 40;
+      let tickDelay = 50; // Start fast
+      
+      const doTick = () => {
+        if (tickCount >= maxTicks) {
+          // Final landing - big haptic + sound
+          if (Platform.OS === 'ios') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+          playSound(require('../../assets/sounds/purchase_item_success.mp3'));
+          return;
+        }
+        
+        // Tick haptic
+        if (Platform.OS === 'ios') {
+          Haptics.impactAsync(
+            tickCount > maxTicks * 0.7 
+              ? Haptics.ImpactFeedbackStyle.Heavy  // Heavier ticks as it slows
+              : Haptics.ImpactFeedbackStyle.Light
+          );
+        }
+        
+        tickCount++;
+        // Slow down the ticks as wheel decelerates (easing feel)
+        tickDelay = 50 + Math.pow(tickCount / maxTicks, 2) * 200;
+        tickIntervalRef.current = setTimeout(doTick, tickDelay);
+      };
+      
+      // Start ticking after a brief delay
+      tickIntervalRef.current = setTimeout(doTick, 100);
       
       Animated.timing(rotation, {
         toValue: targetAngle,
@@ -79,11 +119,20 @@ export default function SpinWheel({ spinning, landed, selectedIndex }: Props) {
         useNativeDriver: true,
       }).start();
     }
+    
+    return () => {
+      if (tickIntervalRef.current) {
+        clearTimeout(tickIntervalRef.current);
+      }
+    };
   }, [spinning, selectedIndex]);
   
   useEffect(() => {
     if (!spinning && !landed) {
       rotation.setValue(0);
+      if (tickIntervalRef.current) {
+        clearTimeout(tickIntervalRef.current);
+      }
     }
   }, [spinning, landed]);
 
