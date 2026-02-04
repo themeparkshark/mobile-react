@@ -256,6 +256,17 @@ export default function ExploreScreen() {
                 await getRedeemables();
                 await refreshPlayer();
               }}
+              onTaskFailed={(taskId) => {
+                // Remove failed task from local state immediately
+                setRedeemables((prev) => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    tasks: prev.tasks.filter((t) => t.id !== taskId),
+                  };
+                });
+                setActiveRedeemable(undefined);
+              }}
             />
           </View>
           <View

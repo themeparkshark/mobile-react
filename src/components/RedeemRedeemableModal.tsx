@@ -74,12 +74,14 @@ export default function RedeemRedeemableModal({
   park,
   redeemable,
   onPress,
+  onTaskFailed,
 }: {
   readonly close: () => void;
   readonly open?: boolean;
   readonly park: ParkType;
   readonly redeemable: CurrentRedeemableType;
   readonly onPress: () => void;
+  readonly onTaskFailed?: (taskId: number) => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { player, refreshPlayer } = useContext(AuthContext);
@@ -232,11 +234,14 @@ export default function RedeemRedeemableModal({
     
     // Remove the task from available tasks (like missing a Pokemon)
     if (redeemable?.type === 'task') {
-      await failTask(redeemable.model as TaskType);
+      const task = redeemable.model as TaskType;
+      await failTask(task);
+      // Also remove from local state immediately (don't wait for backend)
+      onTaskFailed?.(task.id);
     }
     
     setFlowState('lost');
-  }, [redeemable]);
+  }, [redeemable, onTaskFailed]);
 
   const handleLostClose = useCallback(() => {
     console.log('❌ Closing loss modal');
