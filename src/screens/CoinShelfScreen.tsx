@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from '../helpers/haptics';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faArrowLeft, faLock } from '@fortawesome/free-solid-svg-icons';
 import Wrapper from '../components/Wrapper';
@@ -107,9 +107,12 @@ export default function CoinShelfScreen() {
     }
   }, [player?.id, player?.level]);
 
-  useEffect(() => {
-    loadCoins();
-  }, [loadCoins]);
+  // Refresh data every time screen is focused (real-time updates)
+  useFocusEffect(
+    useCallback(() => {
+      loadCoins();
+    }, [loadCoins])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

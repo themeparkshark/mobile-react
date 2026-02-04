@@ -205,25 +205,33 @@ export default function RedeemRedeemableModal({
   // Tickets were already spent when they started the wheel
   const handleGameWin = useCallback(async (multiplier: number) => {
     console.log('🏆 Mini-game WON! Completing task...');
-    
-    const parts = getRidePartsReward(ticketCost);
-    const energy = getEnergyReward(ticketCost);
-    setRidePartsEarned(Math.round(parts * multiplier));
-    setEnergyEarned(Math.round(energy * multiplier));
 
     try {
-      // Complete the task - this gives XP, coins, park coin, etc.
+      // Complete the task - backend returns actual rewards
       if (redeemable.type === 'task') {
-        await completeTask(redeemable.model as TaskType, doubleXP, doubleCoins);
+        const response = await completeTask(redeemable.model as TaskType, doubleXP, doubleCoins);
+        // Use ACTUAL rewards from backend
+        setRidePartsEarned(response.rewards.ride_parts_earned);
+        setEnergyEarned(response.rewards.energy_earned);
+        console.log('🏆 Task completed! Rewards:', response.rewards);
       } else if (redeemable.type === 'secret_task') {
         await completeSecretTask(redeemable.model as SecretTaskType, doubleXP, doubleCoins);
+        // Secret tasks use local calculation for now
+        const parts = getRidePartsReward(ticketCost);
+        const energy = getEnergyReward(ticketCost);
+        setRidePartsEarned(Math.round(parts * multiplier));
+        setEnergyEarned(Math.round(energy * multiplier));
       }
       console.log('🏆 Task completed successfully!');
       refreshPlayer?.();
       setFlowState('postwin');
     } catch (e) {
       console.error('🏆 Task completion error:', e);
-      // Still show rewards even if API fails
+      // Fallback to local calculation if API fails
+      const parts = getRidePartsReward(ticketCost);
+      const energy = getEnergyReward(ticketCost);
+      setRidePartsEarned(Math.round(parts * multiplier));
+      setEnergyEarned(Math.round(energy * multiplier));
       setFlowState('postwin');
     }
   }, [redeemable, ticketCost, doubleXP, doubleCoins, refreshPlayer]);
