@@ -33,12 +33,6 @@
           <string>com.themeparkshark.app</string>
         </array>
       </dict>
-      <dict>
-        <key>CFBundleURLSchemes</key>
-        <array>
-          <string>exp+mobile-react</string>
-        </array>
-      </dict>
     </array>
     <key>CFBundleVersion</key>
     <string>20231218.4</string>

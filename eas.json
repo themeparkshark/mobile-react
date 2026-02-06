@@ -38,7 +38,7 @@
     },
     "production": {
       "env": {
-        "API_URL": "https://prod-app.themeparkshark.com/api"
+        "API_URL": "https://tps-api.on-forge.com/api"
       },
       "node": "18.18.0",
       "ios": {

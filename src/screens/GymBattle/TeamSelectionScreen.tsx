@@ -257,6 +257,15 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
         navigation?.goBack();
       }
     } catch (error: any) {
+      // If already on a team, just proceed
+      if (error.response?.status === 422 && error.response?.data?.current_team) {
+        if (route?.params?.onTeamSelected) {
+          route.params.onTeamSelected();
+        } else {
+          navigation?.goBack();
+        }
+        return;
+      }
       Alert.alert('Error', error.response?.data?.error || 'Failed to join team');
       setIsJoining(false);
     }
