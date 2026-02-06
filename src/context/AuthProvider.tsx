@@ -1,6 +1,6 @@
 import { AppleAuthenticationCredential } from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
-import Storage from 'expo-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, FC, ReactNode, useEffect, useRef, useState } from 'react';
 import { useAsyncEffect } from 'rooks';
 import client from '../api/client';
@@ -56,7 +56,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         // Token is invalid/expired - clear it and go to login
         console.log('🦈 Token invalid or expired - logging out');
         await SecureStore.deleteItemAsync('token');
-        await Storage.removeItem({ key: 'player' });
+        await AsyncStorage.removeItem('player');
         setToken('');
         setPlayer(null);
         hasInitialNavigated.current = false; // Allow navigation on next login
@@ -108,17 +108,14 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     console.log('🦈 refreshPlayer username:', response?.username);
     setPlayer(response);
 
-    Storage.setItem({
-      key: 'player',
-      value: JSON.stringify({ ...response }),
-    });
+    await AsyncStorage.setItem('player', JSON.stringify({ ...response }));
 
     return response;
   };
 
   const logout = async () => {
     RootNavigation.navigate('Login');
-    await Storage.removeItem({ key: 'player' });
+    await AsyncStorage.removeItem('player');
     await SecureStore.deleteItemAsync('token');
     setToken('');
     setPlayer(null);

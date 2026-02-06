@@ -1,4 +1,4 @@
-import { faEllipsis } from '@fortawesome/pro-light-svg-icons/faEllipsis';
+import { faEllipsis } from '@fortawesome/free-solid-svg-icons/faEllipsis';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';

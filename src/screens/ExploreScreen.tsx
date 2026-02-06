@@ -3,7 +3,8 @@ import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import React, { useCallback, useContext, useState, useEffect, Suspense } from 'react';
-import { Text, TouchableOpacity, View, ActivityIndicator, Pressable } from 'react-native';
+import { Text, TouchableOpacity, View, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import Modal from 'react-native-modal';
 import { Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
 import { TaskType } from '../models/task-type';
@@ -19,6 +20,7 @@ import PrepItemRedeemModal from '../components/PrepItemRedeemModal';
 // TaskListModal removed - tasks now spawn on map Pokemon-style
 import Topbar from '../components/Topbar';
 import Currency from '../components/Topbar/Currency';
+import TappableCurrency from '../components/Topbar/TappableCurrency';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
@@ -39,8 +41,29 @@ import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
 import TaskMarker from './ExploreScreen/TaskMarker';
 import VaultMarker from './ExploreScreen/VaultMarker';
+import CommunityCenterMarker from '../components/CommunityCenterMarker';
+import CommunityCenterModal from '../components/CommunityCenterModal';
+import getCommunityCenter, { CommunityCenter } from '../api/endpoints/community-center/getCommunityCenter';
+// Gym Battle imports
+import { BattleHUD, GymMarker, SwordMarker } from '../components/GymBattle';
+import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
+
+// Community Center range in meters (same as task buildings - config.mobile.redeem_radius)
+const COMMUNITY_CENTER_RANGE_METERS = 14;
+
+// Calculate distance between two coordinates in meters (Haversine formula)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000; // Earth's radius in meters
+  const toRad = (deg: number) => deg * (Math.PI / 180);
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 export default function ExploreScreen() {
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
@@ -95,6 +118,18 @@ export default function ExploreScreen() {
   const [showPrepItemModal, setShowPrepItemModal] = useState(false);
   const [arMode, setArMode] = useState(false);
   
+  // Community Center state
+  const [communityCenter, setCommunityCenter] = useState<CommunityCenter | null>(null);
+  const [showCommunityCenterModal, setShowCommunityCenterModal] = useState(false);
+  const [showTooFarModal, setShowTooFarModal] = useState(false);
+  const [tooFarDistance, setTooFarDistance] = useState<string>('');
+  
+  // Gym Battle state
+  const [gymData, setGymData] = useState<GymData | null>(null);
+  const [swords, setSwords] = useState<SwordSpawn[]>([]);
+  const [playerTeam, setPlayerTeam] = useState<TeamInfo | null>(null);
+  const [playerSwordCount, setPlayerSwordCount] = useState<number>(0);
+  
   const { refreshPlayer, player } = useContext(AuthContext);
   const { parkLoaded, location, park, permissionGranted } =
     useContext(LocationContext);
@@ -107,6 +142,34 @@ export default function ExploreScreen() {
     setActivePrepItemPivotId(pivotId);
     setShowPrepItemModal(true);
   }, []);
+
+  // Handler for Community Center tap - check if in range
+  const handleCommunityCenterPress = useCallback(() => {
+    if (!communityCenter || !location?.latitude || !location?.longitude) {
+      setTooFarDistance('unknown');
+      setShowTooFarModal(true);
+      return;
+    }
+    
+    const distance = calculateDistance(
+      location.latitude,
+      location.longitude,
+      communityCenter.latitude,
+      communityCenter.longitude
+    );
+    
+    if (distance > COMMUNITY_CENTER_RANGE_METERS) {
+      const distanceText = distance > 1000 
+        ? `${(distance / 1000).toFixed(1)}km` 
+        : `${Math.round(distance)}m`;
+      setTooFarDistance(distanceText);
+      setShowTooFarModal(true);
+      return;
+    }
+    
+    // Navigate to full-screen Community Center experience
+    RootNavigation.navigate('CommunityCenter', { parkId: park!.id, centerId: communityCenter.id });
+  }, [communityCenter, location]);
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
@@ -126,12 +189,124 @@ export default function ExploreScreen() {
     if (!park) {
       setRedeemables(null);
       setActiveRedeemable(undefined);
-
+      setCommunityCenter(null);
       return;
     }
 
     await getRedeemables();
+    
+    // Fetch community center for this park
+    const center = await getCommunityCenter(park.id);
+    setCommunityCenter(center);
   }, [park?.id]);
+  
+  // Refresh community center data
+  const refreshCommunityCenter = useCallback(async () => {
+    if (park?.id) {
+      const center = await getCommunityCenter(park.id);
+      setCommunityCenter(center);
+    }
+  }, [park?.id]);
+
+  // Fetch gym battle data
+  const fetchGymData = useCallback(async () => {
+    if (!park?.id) {
+      setGymData(null);
+      setSwords([]);
+      return;
+    }
+    try {
+      const [gym, swordsData] = await Promise.all([
+        getGym(park.id).catch(() => null),
+        getSwords(park.id).catch(() => ({ swords: [] })),
+      ]);
+      setGymData(gym);
+      setSwords(swordsData.swords);
+    } catch (error) {
+      console.log('Gym data fetch error:', error);
+    }
+  }, [park?.id]);
+
+  // Check player team and sword count on mount
+  useEffect(() => {
+    const checkTeamAndSwords = async () => {
+      try {
+        const team = await getMyTeam();
+        setPlayerTeam(team);
+        
+        // Also fetch sword count
+        const swordsData = await getMySwords();
+        setPlayerSwordCount(swordsData.swords);
+      } catch (error) {
+        console.log('Team/swords check error:', error);
+      }
+    };
+    if (player) {
+      checkTeamAndSwords();
+    }
+  }, [player?.id]);
+
+  // Fetch gym data when park changes and refresh periodically (even without team - to show marker)
+  useEffect(() => {
+    if (park?.id) {
+      fetchGymData();
+      const interval = setInterval(fetchGymData, 30000); // Refresh every 30s
+      return () => clearInterval(interval);
+    }
+  }, [park?.id, fetchGymData]);
+
+  // Handle gym marker press
+  // Gym range in meters (same as community center)
+  const GYM_RANGE_METERS = 25;
+
+  const handleGymPress = useCallback(() => {
+    if (!playerTeam?.has_team) {
+      RootNavigation.navigate('TeamSelection', { 
+        onTeamSelected: () => {
+          getMyTeam().then(setPlayerTeam);
+        }
+      });
+      return;
+    }
+    
+    // Check distance to gym
+    if (!gymData || !location?.latitude || !location?.longitude) {
+      setTooFarDistance('unknown');
+      setShowTooFarModal(true);
+      return;
+    }
+    
+    const distance = calculateDistance(
+      location.latitude,
+      location.longitude,
+      gymData.gym.latitude,
+      gymData.gym.longitude
+    );
+    
+    if (distance > GYM_RANGE_METERS) {
+      const distanceText = distance > 1000 
+        ? `${(distance / 1000).toFixed(1)}km` 
+        : `${Math.round(distance)}m`;
+      setTooFarDistance(distanceText);
+      setShowTooFarModal(true);
+      return;
+    }
+    
+    if (park?.id) {
+      RootNavigation.navigate('GymBattle', { parkId: park.id, coinUrl: park.coin_url });
+    }
+  }, [playerTeam, park?.id, gymData, location]);
+
+  // Handle sword claim
+  const handleSwordClaim = useCallback(async (swordId: number) => {
+    try {
+      const result = await claimSword(swordId);
+      setPlayerSwordCount(result.total_swords); // Update sword count in topbar
+      fetchGymData(); // Refresh to update sword list on map
+    } catch (error: any) {
+      console.log('Sword claim error:', error.response?.data?.error || error);
+    }
+  }, [fetchGymData]);
 
   useAsyncEffect(async () => {
     if (!park || !location?.latitude || !location?.longitude || !redeemables) {
@@ -160,6 +335,7 @@ export default function ExploreScreen() {
                 <Currency
                   image={park?.coin_url}
                   count={park?.park_coins_count}
+                  name="Park Coins"
                 />
               </TopbarColumn>
             )}
@@ -169,6 +345,7 @@ export default function ExploreScreen() {
                 <Currency
                   image={theme.currency.icon_url}
                   count={player[theme.currency.name.toLowerCase()]}
+                  name="Park Coins"
                 />
               </TopbarColumn>
             )}
@@ -177,18 +354,20 @@ export default function ExploreScreen() {
                 <Currency
                   image={currency.icon_url}
                   count={player[currency.name.toLowerCase()]}
+                  name={currency.name === 'Coins' ? 'Shark Coins' : currency.name}
                 />
               </TopbarColumn>
             ))}
             {/* TRAVEL MODE: Coins | TRAVEL MODE | Keys */}
             {!park && (
               <>
-                {/* Left: First currency (coins) */}
+                {/* Left: First currency (Shark Coins) */}
                 <TopbarColumn>
                   {currencies[0] && (
                     <Currency
                       image={currencies[0].icon_url}
                       count={player[currencies[0].name.toLowerCase()]}
+                      name="Shark Coins"
                     />
                   )}
                 </TopbarColumn>
@@ -206,33 +385,51 @@ export default function ExploreScreen() {
                     textAlign: 'center',
                   }}>Travel Mode</Text>
                 </TopbarColumn>
-                {/* Right: Second currency (keys) */}
+                {/* Right: Tickets (keys hidden - replaced by swords) */}
                 <TopbarColumn>
-                  {currencies[1] && (
-                    <Currency
-                      image={currencies[1].icon_url}
-                      count={player[currencies[1].name.toLowerCase()]}
-                    />
-                  )}
+                  <TappableCurrency name="Tickets" count={player.tickets ?? 0}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Image
+                        source={require('../../assets/images/ticket-icon.png')}
+                        style={{ width: 28, height: 28, marginRight: 4 }}
+                        contentFit="contain"
+                      />
+                      <Text style={{
+                        fontSize: 24,
+                        color: 'white',
+                        fontFamily: 'Shark',
+                        textShadowColor: 'rgba(0, 0, 0, .5)',
+                        textShadowOffset: { width: 2, height: 2 },
+                        textShadowRadius: 0,
+                      }}>{player.tickets ?? 0}</Text>
+                    </View>
+                  </TappableCurrency>
                 </TopbarColumn>
               </>
             )}
             {/* V2: Show tickets if player has any */}
             {(player.tickets ?? 0) > 0 && (
               <TopbarColumn>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 24, marginRight: 4 }}>🎟️</Text>
-                  <Text style={{
-                    fontSize: 24,
-                    color: 'white',
-                    fontFamily: 'Shark',
-                    textShadowColor: 'rgba(0, 0, 0, .5)',
-                    textShadowOffset: { width: 2, height: 2 },
-                    textShadowRadius: 0,
-                  }}>{player.tickets}</Text>
-                </View>
+                <TappableCurrency name="Tickets" count={player.tickets ?? 0}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Image
+                      source={require('../../assets/images/ticket-icon.png')}
+                      style={{ width: 28, height: 28, marginRight: 4 }}
+                      contentFit="contain"
+                    />
+                    <Text style={{
+                      fontSize: 24,
+                      color: 'white',
+                      fontFamily: 'Shark',
+                      textShadowColor: 'rgba(0, 0, 0, .5)',
+                      textShadowOffset: { width: 2, height: 2 },
+                      textShadowRadius: 0,
+                    }}>{player.tickets}</Text>
+                  </View>
+                </TappableCurrency>
               </TopbarColumn>
             )}
+            {/* Swords moved to bottom bar with energy */}
           </>
         )}
       </Topbar>
@@ -271,6 +468,25 @@ export default function ExploreScreen() {
               zIndex: 10,
             }}
           >
+            {/* Queue Times - moved from right side */}
+            <View style={{ marginBottom: 8 }}>
+              <Button
+                onPress={() => {
+                  RootNavigation.navigate('QueueTimes', {
+                    park: park.id,
+                  });
+                }}
+              >
+                <Image
+                  style={{
+                    width: 70,
+                    height: 72,
+                  }}
+                  source={require('../../assets/images/screens/explore/queuetimes.png')}
+                  contentFit="contain"
+                />
+              </Button>
+            </View>
             {park.stores.length > 0 && (
               <View
                 style={{
@@ -355,30 +571,66 @@ export default function ExploreScreen() {
               right: 16,
               bottom: 32,
               zIndex: 10,
+              alignItems: 'center',
             }}
           >
+            {/* Energy & Swords Display - Vertical Stack */}
             <View
               style={{
-                marginBottom: 8,
+                marginBottom: 12,
+                backgroundColor: '#1a1a2e',
+                borderRadius: 16,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderWidth: 3,
+                borderColor: '#FBBF24',
+                shadowColor: '#FBBF24',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.4,
+                shadowRadius: 12,
+                elevation: 8,
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
               }}
             >
-              <Button
-                onPress={() => {
-                  RootNavigation.navigate('QueueTimes', {
-                    park: park.id,
-                  });
-                }}
-              >
+              {/* Energy */}
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{
+                  backgroundColor: '#FBBF24',
+                  borderRadius: 8,
+                  padding: 4,
+                  marginRight: 6,
+                }}>
+                  <Text style={{ fontSize: 14 }}>⚡</Text>
+                </View>
+                <Text style={{ 
+                  fontSize: 20, 
+                  color: '#FBBF24', 
+                  fontFamily: 'Shark',
+                  textShadowColor: 'rgba(251, 191, 36, 0.6)',
+                  textShadowOffset: { width: 0, height: 2 },
+                  textShadowRadius: 10,
+                }}>{player?.energy ?? 0}</Text>
+              </View>
+              {/* Swords */}
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Image
-                  style={{
-                    width: 70,
-                    height: 72,
-                  }}
-                  source={require('../../assets/images/screens/explore/queuetimes.png')}
+                  source={require('../../assets/images/sword-icon.png')}
+                  style={{ width: 20, height: 20, marginRight: 6 }}
                   contentFit="contain"
                 />
-              </Button>
+                <Text style={{ 
+                  fontSize: 20, 
+                  color: playerSwordCount > 0 ? '#FBBF24' : '#64748B', 
+                  fontFamily: 'Shark',
+                  textShadowColor: 'rgba(251, 191, 36, 0.6)',
+                  textShadowOffset: { width: 0, height: 2 },
+                  textShadowRadius: 10,
+                }}>{playerSwordCount}</Text>
+              </View>
             </View>
+            {/* Profile Avatar */}
             {player?.inventory && (
               <Button
                 onPress={() => {
@@ -391,28 +643,10 @@ export default function ExploreScreen() {
           </View>
         </>
       )}
-      {/* AR / Map Toggle Button */}
-      {park && redeemables && (
-        <TouchableOpacity
-          onPress={() => setArMode((prev) => !prev)}
-          style={{
-            position: 'absolute',
-            top: 95,
-            right: 16,
-            zIndex: 20,
-            backgroundColor: 'rgba(0,0,0,0.7)',
-            borderRadius: 12,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <Text style={{ color: '#fff', fontSize: 13, fontFamily: 'Shark' }}>
-            {arMode ? 'MAP' : 'AR'}
-          </Text>
-        </TouchableOpacity>
+      {/* AR Toggle removed - feature disabled */}
+      {/* Gym Battle HUD - Always visible when in park with a team */}
+      {park && playerTeam?.has_team && gymData && (
+        <BattleHUD parkId={park.id} />
       )}
       {/* Park Mode View - Map or AR */}
       {park && arMode && redeemables && (
@@ -474,6 +708,7 @@ export default function ExploreScreen() {
           {redeemables?.vaults.map((vault) => (
             <VaultMarker key={vault.id} vault={vault} />
           ))}
+          {/* Keys - rare spawns! */}
           {redeemables?.keys
             ?.filter((key) =>
               !key.active_from || !key.active_to || dayjs().isBetween(dayjs(key.active_from), dayjs(key.active_to))
@@ -526,9 +761,183 @@ export default function ExploreScreen() {
                 </Marker>
               );
             })}
+          {/* Community Center Marker */}
+          {communityCenter && (
+            <CommunityCenterMarker
+              center={communityCenter}
+              onPress={handleCommunityCenterPress}
+            />
+          )}
+          {/* Gym Marker - show even without team so players can discover it */}
+          {gymData && (
+            <GymMarker
+              parkId={park.id}
+              latitude={gymData.gym.latitude}
+              longitude={gymData.gym.longitude}
+              onPress={handleGymPress}
+            />
+          )}
+          {/* Sword Markers */}
+          {swords.map((sword) => (
+            <SwordMarker
+              key={sword.id}
+              id={sword.id}
+              latitude={sword.latitude}
+              longitude={sword.longitude}
+              expiresAt={sword.expires_at}
+              onPress={() => handleSwordClaim(sword.id)}
+            />
+          ))}
         </Map>
       </View>
       )}
+      
+      {/* Community Center Modal */}
+      <CommunityCenterModal
+        visible={showCommunityCenterModal}
+        center={communityCenter}
+        onClose={() => setShowCommunityCenterModal(false)}
+        onAction={refreshCommunityCenter}
+      />
+      
+      {/* Too Far Away Modal */}
+      <Modal
+        isVisible={showTooFarModal}
+        onBackdropPress={() => setShowTooFarModal(false)}
+        animationIn="zoomIn"
+        animationOut="zoomOut"
+      >
+        <View style={tooFarStyles.container}>
+          <View style={tooFarStyles.iconContainer}>
+            <Text style={tooFarStyles.icon}>📍</Text>
+          </View>
+          <View style={tooFarStyles.content}>
+            <Text style={tooFarStyles.title}>Too Far Away!</Text>
+            <Text style={tooFarStyles.message}>
+              Walk closer to interact with this location.
+            </Text>
+            <View style={tooFarStyles.distanceBox}>
+              <View style={tooFarStyles.distanceRow}>
+                <Text style={tooFarStyles.distanceLabel}>You are</Text>
+                <Text style={tooFarStyles.distanceValue}>{tooFarDistance}</Text>
+              </View>
+              <View style={tooFarStyles.distanceDivider} />
+              <View style={tooFarStyles.distanceRow}>
+                <Text style={tooFarStyles.distanceLabel}>Need to be within</Text>
+                <Text style={tooFarStyles.distanceValueGreen}>25m</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={tooFarStyles.button}
+              onPress={() => setShowTooFarModal(false)}
+            >
+              <Text style={tooFarStyles.buttonText}>Got it!</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Wrapper>
   );
 }
+
+const tooFarStyles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#1a3a5c',
+    borderWidth: 4,
+    borderColor: '#f59e0b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    marginBottom: -40,
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  icon: {
+    fontSize: 36,
+  },
+  content: {
+    backgroundColor: '#1a3a5c',
+    borderRadius: 20,
+    width: '90%',
+    paddingTop: 50,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    borderWidth: 3,
+    borderColor: '#3b82f6',
+    alignItems: 'center',
+  },
+  title: {
+    fontFamily: 'Shark',
+    fontSize: 26,
+    color: '#f59e0b',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  message: {
+    fontFamily: 'Knockout',
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  distanceBox: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 12,
+    padding: 16,
+    width: '100%',
+    marginBottom: 24,
+  },
+  distanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  distanceDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginVertical: 4,
+  },
+  distanceLabel: {
+    fontFamily: 'Knockout',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  distanceValue: {
+    fontFamily: 'Shark',
+    fontSize: 20,
+    color: '#ef4444',
+  },
+  distanceValueGreen: {
+    fontFamily: 'Shark',
+    fontSize: 20,
+    color: '#4ade80',
+  },
+  button: {
+    backgroundColor: '#4ade80',
+    borderRadius: 14,
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+    shadowColor: '#4ade80',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  buttonText: {
+    fontFamily: 'Shark',
+    fontSize: 18,
+    color: 'white',
+    textAlign: 'center',
+  },
+});

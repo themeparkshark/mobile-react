@@ -12,15 +12,16 @@ export default {
     resizeMode: 'cover',
     backgroundColor: '#ffffff',
   },
-  runtimeVersion: {
-    policy: 'sdkVersion',
+  runtimeVersion: '1.4.0',
+  updates: {
+    url: 'https://u.expo.dev/aaf6495c-456b-4fbd-afb5-d429c1472ddb',
   },
   assetBundlePatterns: ['**/*'],
   ios: {
     buildNumber: '20231218.4',
     bitcode: 'Debug',
     usesAppleSignIn: true,
-    bundleIdentifier: 'com.dustinsparage.themeparkshark',
+    bundleIdentifier: 'com.themeparkshark.app',
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
         "Theme Park Shark requires your mobile device's location permissions to be enabled in order to find tasks and other redeemables near you.",

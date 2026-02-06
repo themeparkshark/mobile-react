@@ -41,7 +41,12 @@ export default function ParkCoins() {
 
   useEffect(() => {
     if (leaderboards.length) {
-      setSelectedLeaderboard(leaderboards[0].id);
+      // Default to "All Time" leaderboard if available, otherwise first
+      const allTime = leaderboards.find(lb => 
+        lb.duration_text?.toLowerCase().includes('all time') || 
+        lb.duration_text?.toLowerCase().includes('all-time')
+      );
+      setSelectedLeaderboard(allTime?.id ?? leaderboards[leaderboards.length - 1]?.id ?? leaderboards[0]?.id);
     }
   }, [leaderboards]);
 

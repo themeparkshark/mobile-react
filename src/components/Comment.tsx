@@ -1,5 +1,5 @@
-import { faReply } from '@fortawesome/pro-light-svg-icons/faReply';
-import { faTrash } from '@fortawesome/pro-light-svg-icons/faTrash';
+import { faReply } from '@fortawesome/free-solid-svg-icons/faReply';
+import { faTrash } from '@fortawesome/free-solid-svg-icons/faTrash';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useContext, useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';

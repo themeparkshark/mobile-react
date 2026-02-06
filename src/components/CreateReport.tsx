@@ -1,4 +1,4 @@
-import { faFlag } from '@fortawesome/pro-light-svg-icons/faFlag';
+import { faFlag } from '@fortawesome/free-solid-svg-icons/faFlag';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { useState } from 'react';
 import {

@@ -1,8 +1,6 @@
 import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { faCompass } from '@fortawesome/free-solid-svg-icons/faCompass';
-import { faPlus } from '@fortawesome/free-solid-svg-icons/faPlus';
-import { faMinus } from '@fortawesome/free-solid-svg-icons/faMinus';
-import { faLocationArrow } from '@fortawesome/pro-light-svg-icons/faLocationArrow';
+import { faLocationArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react';
@@ -114,25 +112,6 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
     }
   };
 
-  // Zoom in/out functions
-  const zoomIn = async () => {
-    if (!mapRef.current) return;
-    const camera = await mapRef.current.getCamera();
-    mapRef.current.animateCamera({
-      ...camera,
-      altitude: Math.max(50, (camera.altitude || 200) * 0.5),
-    }, { duration: 200 });
-  };
-
-  const zoomOut = async () => {
-    if (!mapRef.current) return;
-    const camera = await mapRef.current.getCamera();
-    mapRef.current.animateCamera({
-      ...camera,
-      altitude: Math.min(10000, (camera.altitude || 200) * 2),
-    }, { duration: 200 });
-  };
-
   // Animate compass icon to show current heading
   useEffect(() => {
     if (heading !== null && mapMode === 'heading') {
@@ -235,7 +214,7 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
       <View
         style={{
           position: 'absolute',
-          top: 48,
+          top: 72,
           right: 16,
           zIndex: 10,
           gap: 8,
@@ -284,47 +263,6 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
             color={config.primary}
           />
         </Pressable>
-
-        {/* Zoom controls */}
-        <Pressable
-          onPress={zoomIn}
-          style={{
-            padding: 12,
-            backgroundColor: 'rgba(255,255,255,0.9)',
-            borderRadius: 25,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            elevation: 5,
-          }}
-        >
-          <FontAwesomeIcon
-            icon={faPlus}
-            size={26}
-            color={config.primary}
-          />
-        </Pressable>
-
-        <Pressable
-          onPress={zoomOut}
-          style={{
-            padding: 12,
-            backgroundColor: 'rgba(255,255,255,0.9)',
-            borderRadius: 25,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            elevation: 5,
-          }}
-        >
-          <FontAwesomeIcon
-            icon={faMinus}
-            size={26}
-            color={config.primary}
-          />
-        </Pressable>
       </View>
 
       <MapView
@@ -338,9 +276,6 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
         showsCompass={false}
         rotateEnabled={mapMode === 'heading'}
         pitchEnabled={false}
-        scrollEnabled={true}
-        zoomEnabled={false}
-        zoomTapEnabled={false}
         loadingEnabled={true}
         userInterfaceStyle="light"
         onPanDrag={() => {
@@ -348,9 +283,6 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
           onPress?.();
         }}
         onPress={() => {
-          onPress?.();
-        }}
-        onMarkerDeselect={() => {
           onPress?.();
         }}
       >
@@ -364,6 +296,7 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
             anchor={{ x: 0.5, y: 0.65 }}
             flat={true}
             tracksViewChanges={true}
+            zIndex={9999}
           >
             <View style={styles.sharkMarkerContainer}>
               {/* Animated glow ring */}
@@ -376,7 +309,7 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
               {heading !== null && <View style={styles.sharkDirectionCone} />}
               {/* Player's avatar — bobs, tilts, breathes */}
               <Animated.View style={{
-                width: 50, height: 50,
+                width: 60, height: 60,
                 transform: [
                   { translateY: bobAnim },
                   { rotate: tiltAnim.interpolate({ inputRange: [-3, 3], outputRange: ['-3deg', '3deg'] }) },
@@ -384,34 +317,34 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
                 ],
               }}>
                 {player?.inventory?.skin_item?.no_eye_url ? (
-                  <View style={{ width: 50, height: 50, position: 'relative' }}>
+                  <View style={{ width: 60, height: 60, position: 'relative' }}>
                     {/* Base skin (no eyes) */}
                     <Image
                       source={{ uri: player.inventory.skin_item.no_eye_url }}
-                      style={{ width: 50, height: 50, position: 'absolute' }}
+                      style={{ width: 60, height: 60, position: 'absolute' }}
                       contentFit="contain"
                     />
                     {/* Animated eyes layer */}
                     <Image
                       source={require('../../assets/images/screens/inventory/blink.png')}
-                      style={{ width: 50, height: 50, position: 'absolute' }}
+                      style={{ width: 60, height: 60, position: 'absolute' }}
                       contentFit="contain"
                     />
                     {/* Equipped items layered on top */}
                     {player.inventory.body_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.body_item.paper_url }} style={{ width: 50, height: 50, position: 'absolute' }} contentFit="contain" />
+                      <Image source={{ uri: player.inventory.body_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
                     )}
                     {player.inventory.face_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.face_item.paper_url }} style={{ width: 50, height: 50, position: 'absolute' }} contentFit="contain" />
+                      <Image source={{ uri: player.inventory.face_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
                     )}
                     {player.inventory.head_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.head_item.paper_url }} style={{ width: 50, height: 50, position: 'absolute' }} contentFit="contain" />
+                      <Image source={{ uri: player.inventory.head_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
                     )}
                     {player.inventory.neck_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.neck_item.paper_url }} style={{ width: 50, height: 50, position: 'absolute' }} contentFit="contain" />
+                      <Image source={{ uri: player.inventory.neck_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
                     )}
                     {player.inventory.hand_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.hand_item.paper_url }} style={{ width: 50, height: 50, position: 'absolute' }} contentFit="contain" />
+                      <Image source={{ uri: player.inventory.hand_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
                     )}
                   </View>
                 ) : (
@@ -433,8 +366,8 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
 
 const styles = StyleSheet.create({
   sharkMarkerContainer: {
-    width: 86,
-    height: 96,
+    width: 100,
+    height: 110,
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingBottom: 3,
@@ -442,8 +375,8 @@ const styles = StyleSheet.create({
   outerGlowRing: {
     position: 'absolute',
     bottom: 0,
-    width: 60,
-    height: 18,
+    width: 72,
+    height: 22,
     borderRadius: 30,
     backgroundColor: 'rgba(33, 150, 243, 0.15)',
     borderWidth: 1.5,
@@ -452,8 +385,8 @@ const styles = StyleSheet.create({
   groundRing: {
     position: 'absolute',
     bottom: 3,
-    width: 46,
-    height: 14,
+    width: 55,
+    height: 17,
     borderRadius: 23,
     backgroundColor: 'rgba(33, 150, 243, 0.35)',
     borderWidth: 1.5,
@@ -462,9 +395,9 @@ const styles = StyleSheet.create({
   shadowDisc: {
     position: 'absolute',
     bottom: 6,
-    width: 30,
-    height: 10,
-    borderRadius: 15,
+    width: 36,
+    height: 12,
+    borderRadius: 18,
     backgroundColor: 'rgba(0, 0, 0, 0.25)',
   },
   sharkDirectionCone: {

@@ -10,6 +10,8 @@ import LottieView from 'lottie-react-native';
 import { PrepItemType } from '../models/prep-item-type';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
+import { useCurrencyFly } from '../context/CurrencyFlyProvider';
+import { CurrencyContext } from '../context/CurrencyProvider';
 import redeemPrepItem from '../api/endpoints/me/prep-items/redeem';
 import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
@@ -63,6 +65,8 @@ export default function PrepItemRedeemModal({
   } | null>(null);
   const { player, refreshPlayer } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
+  const { triggerFly } = useCurrencyFly();
+  const { currencies } = useContext(CurrencyContext);
 
   // Animation refs for collect celebration
   const itemScale = useRef(new Animated.Value(1)).current;
@@ -91,6 +95,20 @@ export default function PrepItemRedeemModal({
 
       setRewards(response.data.rewards);
       setStreakInfo(response.data.streak);
+      
+      // 🪙 Fly coins/energy to header!
+      const screenCenterX = Dimensions.get('window').width / 2;
+      const screenCenterY = Dimensions.get('window').height / 2;
+      
+      if (response.data.rewards.energy > 0 && currencies[0]?.icon_url) {
+        triggerFly({
+          imageUrl: currencies[0].icon_url,
+          amount: Math.min(response.data.rewards.energy, 8),
+          startX: screenCenterX,
+          startY: screenCenterY,
+          targetPosition: 'left',
+        });
+      }
       
       // Play celebration animations
       playCollectAnimation(prepItem.rarity);

@@ -1,4 +1,4 @@
-import { faComment } from '@fortawesome/pro-light-svg-icons/faComment';
+import { faComment } from '@fortawesome/free-solid-svg-icons/faComment';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
 import { truncate } from 'lodash';

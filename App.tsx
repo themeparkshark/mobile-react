@@ -21,6 +21,7 @@ import { NotificationProvider } from './src/context/NotificationProvider';
 import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import { ThemeProvider } from './src/context/ThemeProvider';
 import { WeatherProvider } from './src/context/WeatherProvider';
+import CurrencyFlyProvider from './src/context/CurrencyFlyProvider';
 
 export default function App() {
   return (
@@ -37,7 +38,9 @@ export default function App() {
                         <DailyGiftProvider>
                           <ThemeProvider>
                             <CurrencyProvider>
-                              <Root />
+                              <CurrencyFlyProvider>
+                                <Root />
+                              </CurrencyFlyProvider>
                             </CurrencyProvider>
                           </ThemeProvider>
                         </DailyGiftProvider>

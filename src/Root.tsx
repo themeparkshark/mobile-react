@@ -2,7 +2,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
 import { useKeepAwake } from 'expo-keep-awake';
-import { Storage } from 'expo-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useContext, useCallback } from 'react';
 import { View, StyleSheet as RNStyleSheet } from 'react-native';
 import { DevJoystick } from './components/DevJoystick';
@@ -48,6 +48,9 @@ import WelcomeScreen from './screens/WelcomeScreen';
 import SetCollectionScreen from './screens/SetCollectionScreen';
 import CoinShelfScreen from './screens/CoinShelfScreen';
 import MiniGameTesterScreen from './screens/MiniGameTesterScreen';
+import CommunityCenterScreen from './screens/CommunityCenterScreen';
+// Gym Battle Screens
+import { TeamSelectionScreen, GymBattleScreen } from './screens/GymBattle';
 
 const Stack = createNativeStackNavigator();
 
@@ -86,7 +89,7 @@ export default function App() {
     await retrieveTheme();
     await retrieveCurrencies();
 
-    Storage.getItem({ key: 'player' }).then((playerString: string) => {
+    AsyncStorage.getItem('player').then((playerString: string | null) => {
       if (playerString) {
         setPlayer({ ...JSON.parse(playerString) });
       }
@@ -215,6 +218,31 @@ export default function App() {
         {/* V2 Screens */}
         <Stack.Screen name="SetCollection" component={SetCollectionScreen} />
         <Stack.Screen name="CoinShelf" component={CoinShelfScreen} />
+        <Stack.Screen 
+          name="CommunityCenter" 
+          component={CommunityCenterScreen}
+          options={{
+            animation: 'slide_from_bottom',
+            gestureEnabled: true,
+          }}
+        />
+        {/* Gym Battle Screens */}
+        <Stack.Screen 
+          name="TeamSelection" 
+          component={TeamSelectionScreen}
+          options={{
+            animation: 'fade',
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen 
+          name="GymBattle" 
+          component={GymBattleScreen}
+          options={{
+            animation: 'slide_from_bottom',
+            gestureEnabled: true,
+          }}
+        />
         {__DEV__ && <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />}
       </Stack.Navigator>
     </NavigationContainer>

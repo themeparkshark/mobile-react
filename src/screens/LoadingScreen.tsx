@@ -14,6 +14,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
+import { getMyTeam } from '../api/endpoints/gym-battle';
 
 export default function LoadingScreen() {
   const { isReady, player } = useContext(AuthContext);
@@ -80,16 +81,40 @@ export default function LoadingScreen() {
 
   // Force navigate after 5 seconds regardless of state
   useTimeoutWhen(
-    () => {
-      console.log('🦈 Force navigating to Explore');
+    async () => {
+      console.log('🦈 Force navigating...');
+      // Check if player has a team
+      try {
+        const teamInfo = await getMyTeam();
+        if (!teamInfo.has_team) {
+          RootNavigation.navigate('TeamSelection', { isOnboarding: true });
+          return;
+        }
+      } catch (e) {
+        // Proceed to Explore on error
+      }
       RootNavigation.navigate('Explore');
     },
     5000,
-    isReady
+    isReady && hasUsername
   );
 
   useTimeoutWhen(
-    () => {
+    async () => {
+      // Check if player has a team
+      try {
+        const teamInfo = await getMyTeam();
+        if (!teamInfo.has_team) {
+          // No team - go to team selection
+          RootNavigation.navigate('TeamSelection', {
+            isOnboarding: true,
+          });
+          return;
+        }
+      } catch (e) {
+        // If team check fails, just proceed to Explore
+        console.log('Team check failed, proceeding to Explore');
+      }
       RootNavigation.navigate('Explore');
     },
     500,
@@ -98,9 +123,7 @@ export default function LoadingScreen() {
 
   return (
     <ImageBackground
-      source={{
-        uri: theme?.splash_screen_url,
-      }}
+      source={require('../../assets/images/loading-screen.png')}
       resizeMode="cover"
       style={{
         width: Dimensions.get('window').width,

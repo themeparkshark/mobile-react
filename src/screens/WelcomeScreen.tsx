@@ -119,8 +119,14 @@ export default function WelcomeScreen({ navigation }) {
 
             await refreshPlayer();
 
-            navigation.navigate('Membership', {
-              intro: true,
+            // Go to team selection first, then membership
+            navigation.navigate('TeamSelection', {
+              isOnboarding: true,
+              onTeamSelected: () => {
+                navigation.navigate('Membership', {
+                  intro: true,
+                });
+              },
             });
           }}
         />

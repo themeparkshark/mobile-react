@@ -8,6 +8,7 @@ import completeSecretTask from '../api/endpoints/me/secret-tasks/complete-secret
 import completeTask from '../api/endpoints/me/tasks/complete-task';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
+import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -92,6 +93,7 @@ export default function RedeemRedeemableModal({
   const [doubleXP, setDoubleXP] = useState<boolean>((player && player.is_subscribed) ?? false);
   const [doubleCoins, setDoubleCoins] = useState<boolean>((player && player.is_subscribed) ?? false);
   const { currencies } = useContext(CurrencyContext);
+  const { triggerFly } = useCurrencyFly();
 
   // Flow state
   const [flowState, setFlowState] = useState<FlowState>('preview');
@@ -208,6 +210,9 @@ export default function RedeemRedeemableModal({
   // Tickets were already spent when they started the wheel
   const handleGameWin = useCallback(async (multiplier: number) => {
     console.log('🏆 Mini-game WON! Completing task...');
+    
+    const screenCenterX = SCREEN_WIDTH / 2;
+    const screenCenterY = Dimensions.get('window').height / 2;
 
     try {
       // Complete the task - backend returns actual rewards
@@ -217,12 +222,34 @@ export default function RedeemRedeemableModal({
         setRidePartsEarned(response.rewards.ride_parts_earned);
         setEnergyEarned(response.rewards.energy_earned);
         console.log('🏆 Task completed! Rewards:', response.rewards);
+        
+        // 🪙 Fly coins to header!
+        if (currencies[0]?.icon_url) {
+          triggerFly({
+            imageUrl: currencies[0].icon_url,
+            amount: Math.min((redeemable.model as TaskType).coins * (doubleCoins ? 2 : 1), 10),
+            startX: screenCenterX,
+            startY: screenCenterY,
+            targetPosition: 'left',
+          });
+        }
       } else if (redeemable.type === 'secret_task') {
         const response = await completeSecretTask(redeemable.model as SecretTaskType, doubleXP, doubleCoins);
         // Use ACTUAL rewards from backend (secret tasks too!)
         setRidePartsEarned(response.rewards.ride_parts_earned);
         setEnergyEarned(response.rewards.energy_earned);
         console.log('🏆 Secret task completed! Rewards:', response.rewards);
+        
+        // 🪙 Fly coins to header!
+        if (currencies[0]?.icon_url) {
+          triggerFly({
+            imageUrl: currencies[0].icon_url,
+            amount: Math.min((redeemable.model as SecretTaskType).coins * (doubleCoins ? 2 : 1), 10),
+            startX: screenCenterX,
+            startY: screenCenterY,
+            targetPosition: 'left',
+          });
+        }
       }
       console.log('🏆 Task completed successfully!');
       refreshPlayer?.();
@@ -242,7 +269,7 @@ export default function RedeemRedeemableModal({
       setEnergyEarned(Math.round(energy * multiplier));
       setFlowState('postwin');
     }
-  }, [redeemable, ticketCost, doubleXP, doubleCoins, refreshPlayer, onTaskCompleted]);
+  }, [redeemable, ticketCost, doubleXP, doubleCoins, refreshPlayer, onTaskCompleted, currencies, triggerFly]);
 
   // Handle mini-game LOSS - tickets already spent, task removed, no rewards
   const handleGameLose = useCallback(async () => {
@@ -386,8 +413,24 @@ export default function RedeemRedeemableModal({
                       <YellowButton
                         text="Collect"
                         onPress={async () => {
-                          if (redeemable.type === 'coin') await redeemCoin(redeemable.model as CoinType, doubleXP);
-                          else if (redeemable.type === 'item' || redeemable.type === 'pin') await redeemItem(redeemable.model as ItemType, doubleXP, doubleCoins);
+                          const screenCenterX = SCREEN_WIDTH / 2;
+                          const screenCenterY = Dimensions.get('window').height / 2;
+                          
+                          if (redeemable.type === 'coin') {
+                            await redeemCoin(redeemable.model as CoinType, doubleXP);
+                            // 🪙 Fly coins to header!
+                            if (currencies[0]?.icon_url) {
+                              triggerFly({
+                                imageUrl: currencies[0].icon_url,
+                                amount: Math.min((redeemable.model as CoinType).coins, 10),
+                                startX: screenCenterX,
+                                startY: screenCenterY,
+                                targetPosition: 'left',
+                              });
+                            }
+                          } else if (redeemable.type === 'item' || redeemable.type === 'pin') {
+                            await redeemItem(redeemable.model as ItemType, doubleXP, doubleCoins);
+                          }
                           onPress();
                           playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
                           close();

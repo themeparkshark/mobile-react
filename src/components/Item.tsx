@@ -1,4 +1,4 @@
-import { faCircleCheck } from '@fortawesome/pro-light-svg-icons/faCircleCheck';
+import { faCircleCheck } from '@fortawesome/free-solid-svg-icons/faCircleCheck';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
 import { useContext } from 'react';
