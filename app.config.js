@@ -45,6 +45,7 @@ export default {
         },
       },
     ],
+    'expo-secure-store',
   ],
   scheme: 'mobile-react',
 };
