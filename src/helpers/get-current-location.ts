@@ -15,7 +15,9 @@ export default async function (): Promise<LocationType | undefined> {
       return;
     }
 
-    const location = await Location.getCurrentPositionAsync();
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Highest,
+    });
 
     return {
       latitude: location.coords.latitude,

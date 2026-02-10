@@ -74,7 +74,10 @@ export default function SpinWheel({ spinning, landed, selectedIndex }: Props) {
   useEffect(() => {
     if (spinning && selectedIndex !== null) {
       const extraSpins = 4 + Math.random() * 2;
-      const targetAngle = extraSpins * 360 + (selectedIndex * SEGMENT_ANGLE) + SEGMENT_ANGLE / 2;
+      // To land segment[i] under the top pointer, rotate so its center (i*90+45°) reaches 0° (top).
+      // That means rotate by (360 - (i*90+45)) so the segment comes TO the pointer, not away.
+      const segmentCenter = selectedIndex * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
+      const targetAngle = extraSpins * 360 + (360 - segmentCenter);
       console.log('🎡 SpinWheel spinning to:', { selectedIndex, segment: SEGMENTS[selectedIndex]?.name, targetAngle });
       
       // Play initial spin whoosh

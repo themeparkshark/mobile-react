@@ -13,6 +13,7 @@ import Modal from 'react-native-modal';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, BounceIn } from 'react-native-reanimated';
 import { placeCoin, getMyParkCoins, ParkCoin } from '../../api/endpoints/gym-battle';
+import { battleHUDEvents } from './battleHUDEvents';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -125,6 +126,7 @@ export default function PlaceCoinModal({
       });
       setState('success');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to place coin!');
       setState('error');

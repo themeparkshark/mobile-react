@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useContext, useRef } from 'react';
-import { Dimensions } from 'react-native';
+import { Dimensions, View } from 'react-native';
 import { useEffectOnceWhen } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
@@ -30,15 +30,19 @@ export default function SplashScreen() {
   }, Boolean(isReady && crumbsLoaded));
 
   return (
-    <Image
-      source={{
-        uri: theme?.splash_screen_url,
-      }}
-      contentFit="cover"
-      style={{
-        width: Dimensions.get('window').width,
-        height: Dimensions.get('window').height,
-      }}
-    />
+    <View style={{ flex: 1, backgroundColor: '#09268f' }}>
+      <Image
+        source={
+          theme?.splash_screen_url
+            ? { uri: theme.splash_screen_url }
+            : require('../../assets/images/loading-screen.png')
+        }
+        contentFit="cover"
+        style={{
+          width: Dimensions.get('window').width,
+          height: Dimensions.get('window').height,
+        }}
+      />
+    </View>
   );
 }

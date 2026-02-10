@@ -1,16 +1,15 @@
 import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
-import { faCompass } from '@fortawesome/free-solid-svg-icons/faCompass';
 import { faLocationArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Pressable, View, Easing, StyleSheet } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import { Animated, Dimensions, Platform, Pressable, View, Easing, StyleSheet } from 'react-native';
+import MapView, { MarkerAnimated, AnimatedRegion } from 'react-native-maps';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 
-type MapMode = 'north-up' | 'heading';
+// Map always rotates with heading. Single button recenters on player.
 
 export default function Map({ children, onPress }: { readonly children: ReactNode; readonly onPress?: () => void }) {
   const { location, heading, headingEnabled, setHeadingEnabled } = useContext(LocationContext);
@@ -22,6 +21,53 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const glowPulseAnim = useRef(new Animated.Value(0.3)).current;
   const shadowAnim = useRef(new Animated.Value(1)).current;
+
+  // Smooth position interpolation — glide between GPS updates like Uber/Pokémon GO
+  const animatedCoordinate = useRef(new AnimatedRegion({
+    latitude: location?.latitude || 0,
+    longitude: location?.longitude || 0,
+    latitudeDelta: 0,
+    longitudeDelta: 0,
+  })).current;
+
+  const markerRef = useRef<any>(null);
+  const prevLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    if (!location) return;
+
+    // Skip animation on first location (just set it)
+    if (!prevLocationRef.current) {
+      prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
+      animatedCoordinate.setValue({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0,
+        longitudeDelta: 0,
+      });
+      return;
+    }
+
+    prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
+
+    // Smooth glide to new position over 1 second
+    if (Platform.OS === 'ios') {
+      (animatedCoordinate as any).timing({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0,
+        longitudeDelta: 0,
+        duration: 1000,
+        useNativeDriver: false,
+      }).start();
+    } else {
+      // Android: use animateMarkerToCoordinate for native performance
+      markerRef.current?.animateMarkerToCoordinate(
+        { latitude: location.latitude, longitude: location.longitude },
+        1000
+      );
+    }
+  }, [location?.latitude, location?.longitude]);
 
   useEffect(() => {
     // Float bob — gentle up/down like swimming
@@ -66,80 +112,30 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
   }, []);
   const mapRef = useRef<MapView>(null);
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
-  const [mapMode, setMapMode] = useState<MapMode>('north-up');
-  
-  // Animated value for smooth compass icon rotation
-  const compassRotation = useRef(new Animated.Value(0)).current;
-  const lastHeadingRef = useRef<number>(0);
-  
   // Animated value for user location heading indicator
   const userHeadingRotation = useRef(new Animated.Value(0)).current;
   const lastUserHeadingRef = useRef<number>(0);
 
-  // Toggle between north-up and heading mode
-  const toggleMapMode = () => {
-    if (mapMode === 'north-up') {
-      setMapMode('heading');
-      setHeadingEnabled(true);
-      setFocusedOnPlayer(true);
-    } else {
-      setMapMode('north-up');
-      setHeadingEnabled(false);
-      // Reset map to north
-      if (mapRef.current && location) {
-        mapRef.current.animateCamera({
-          center: location,
-          altitude: 200,
-          heading: 0,
-        }, { duration: 300 });
-      }
-    }
-  };
+  // Always enable heading on mount
+  useEffect(() => {
+    setHeadingEnabled(true);
+  }, []);
 
-  // Re-center and re-enable following
+  // Single recenter button
   const recenterOnPlayer = () => {
     setFocusedOnPlayer(true);
-    if (mapMode === 'heading') {
-      setHeadingEnabled(true);
-    }
-    // Immediately animate camera to current location
     if (mapRef.current && location) {
       mapRef.current.animateCamera({
         center: location,
-        altitude: 200,
-        heading: mapMode === 'heading' && heading !== null ? heading : 0,
+        heading: heading !== null ? heading : 0,
       }, { duration: 300 });
     }
   };
 
-  // Animate compass icon to show current heading
-  useEffect(() => {
-    if (heading !== null && mapMode === 'heading') {
-      // Calculate shortest rotation path
-      let targetRotation = -heading; // Negative because icon should point opposite to show "north"
-      const currentRotation = lastHeadingRef.current;
-      let delta = targetRotation - currentRotation;
-      
-      // Handle wraparound
-      if (delta > 180) delta -= 360;
-      if (delta < -180) delta += 360;
-      
-      const newRotation = currentRotation + delta;
-      lastHeadingRef.current = newRotation;
-
-      Animated.timing(compassRotation, {
-        toValue: newRotation,
-        duration: 33,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [heading, mapMode]);
-
-  // Animate user location heading indicator
+  // User heading indicator always points forward when centered (map rotates under it)
   useEffect(() => {
     if (heading !== null) {
-      const targetRotation = mapMode === 'heading' ? 0 : heading;
+      const targetRotation = focusedOnPlayer ? 0 : heading;
       const currentRotation = lastUserHeadingRef.current;
       let delta = targetRotation - currentRotation;
       
@@ -156,43 +152,31 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
         useNativeDriver: true,
       }).start();
     }
-  }, [heading, mapMode]);
+  }, [heading, focusedOnPlayer]);
 
   // Update map camera when location or heading changes
+  // NEVER override zoom (altitude) - respect user's pinch-to-zoom level
   useEffect(() => {
     if (!mapRef?.current || !focusedOnPlayer || !location) {
       return;
     }
 
-    if (mapMode === 'heading' && heading !== null) {
+    if (heading !== null) {
       mapRef.current.animateCamera({
         center: location,
-        altitude: 200,
         heading: heading,
-      }, { duration: 100 }); // Smoother, less CPU-intensive
+      }, { duration: 100 });
     } else {
       mapRef.current.animateCamera({
         center: location,
-        altitude: 200,
-        heading: 0,
-      });
+      }, { duration: 100 });
     }
   }, [
     focusedOnPlayer,
     location?.latitude,
     location?.longitude,
     heading,
-    mapMode,
   ]);
-
-  const compassRotationStyle = {
-    transform: [{
-      rotate: compassRotation.interpolate({
-        inputRange: [-360, 360],
-        outputRange: ['-360deg', '360deg'],
-      }),
-    }],
-  };
 
   const userHeadingStyle = {
     transform: [{
@@ -220,35 +204,12 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
           gap: 8,
         }}
       >
-        {/* Compass / Heading toggle */}
-        <Pressable
-          onPress={toggleMapMode}
-          style={{
-            padding: 12,
-            backgroundColor: mapMode === 'heading' ? config.primary : 'rgba(255,255,255,0.9)',
-            borderRadius: 25,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            elevation: 5,
-          }}
-        >
-          <Animated.View style={mapMode === 'heading' ? compassRotationStyle : undefined}>
-            <FontAwesomeIcon
-              icon={faCompass}
-              size={26}
-              color={mapMode === 'heading' ? '#fff' : config.primary}
-            />
-          </Animated.View>
-        </Pressable>
-
-        {/* Re-center button */}
+        {/* Recenter button */}
         <Pressable
           onPress={recenterOnPlayer}
           style={{
             padding: 12,
-            backgroundColor: focusedOnPlayer ? 'rgba(255,255,255,0.9)' : 'rgba(200,200,200,0.9)',
+            backgroundColor: focusedOnPlayer ? config.primary : 'rgba(255,255,255,0.9)',
             borderRadius: 25,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 2 },
@@ -260,7 +221,7 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
           <FontAwesomeIcon
             icon={focusedOnPlayer ? faSolidArrow : faLocationArrow}
             size={26}
-            color={config.primary}
+            color={focusedOnPlayer ? '#fff' : config.primary}
           />
         </Pressable>
       </View>
@@ -274,7 +235,7 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
         showsUserLocation={false}
         showsIndoors={false}
         showsCompass={false}
-        rotateEnabled={mapMode === 'heading'}
+        rotateEnabled={true}
         pitchEnabled={false}
         loadingEnabled={true}
         userInterfaceStyle="light"
@@ -286,16 +247,14 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
           onPress?.();
         }}
       >
-        {/* Animated shark player marker */}
+        {/* Animated shark player marker — smooth glide between GPS updates */}
         {location && (
-          <Marker
-            coordinate={{
-              latitude: location.latitude,
-              longitude: location.longitude,
-            }}
+          <MarkerAnimated
+            ref={markerRef}
+            coordinate={animatedCoordinate as any}
             anchor={{ x: 0.5, y: 0.65 }}
             flat={true}
-            tracksViewChanges={true}
+            tracksViewChanges={false}
             zIndex={9999}
           >
             <View style={styles.sharkMarkerContainer}>
@@ -305,8 +264,8 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
               <View style={styles.groundRing} />
               {/* Animated shadow — shrinks when shark bobs up */}
               <Animated.View style={[styles.shadowDisc, { transform: [{ scaleX: shadowAnim }, { scaleY: shadowAnim }] }]} />
-              {/* Directional indicator */}
-              {heading !== null && <View style={styles.sharkDirectionCone} />}
+              {/* Directional indicator — only visible in heading mode */}
+              {heading !== null && focusedOnPlayer && <View style={styles.sharkDirectionCone} />}
               {/* Player's avatar — bobs, tilts, breathes */}
               <Animated.View style={{
                 width: 60, height: 60,
@@ -356,7 +315,7 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
                 )}
               </Animated.View>
             </View>
-          </Marker>
+          </MarkerAnimated>
         )}
         {children}
       </MapView>

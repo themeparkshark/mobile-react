@@ -1,68 +1,218 @@
 import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
+import { LinearGradient } from 'expo-linear-gradient';
 import { decode } from 'html-entities';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { useContext, useRef } from 'react';
+import { Animated, Text, TouchableWithoutFeedback, View } from 'react-native';
+import * as RootNavigation from '../../RootNavigation';
+import config from '../../config';
+import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import dayjs from '../../helpers/dayjs';
 import { EntryType } from '../../models/entry-type';
 
-export default function Entry({ entry }: { readonly entry: EntryType }) {
-  const date =
-    dayjs().diff(dayjs(entry.date), 'day') >= 7
-      ? dayjs(entry.date).format('MMM D, YYYY')
-      : dayjs(entry.date).startOf('second').fromNow();
+const tapSound = require('../../../assets/sounds/tap.mp3');
+
+function TimeBadge({ date }: { date: string }) {
+  const now = dayjs();
+  const published = dayjs(date);
+  const hoursAgo = now.diff(published, 'hour');
+  const daysAgo = now.diff(published, 'day');
+
+  let label: string;
+  let colors: [string, string];
+
+  if (hoursAgo < 1) {
+    label = 'JUST NOW';
+    colors = ['#ff4444', '#cc0000'];
+  } else if (hoursAgo < 24) {
+    label = `${hoursAgo}h AGO`;
+    colors = [config.secondary, '#0080cc'];
+  } else if (daysAgo < 2) {
+    label = 'YESTERDAY';
+    colors = ['#6c5ce7', '#4834d4'];
+  } else if (daysAgo < 7) {
+    label = `${daysAgo}d AGO`;
+    colors = ['#636e72', '#2d3436'];
+  } else {
+    label = published.format('MMM D');
+    colors = ['#636e72', '#2d3436'];
+  }
 
   return (
-    <View
+    <LinearGradient
+      colors={colors}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
       style={{
-        paddingLeft: 16,
-        paddingRight: 16,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
       }}
     >
-      <TouchableOpacity
+      <Text
         style={{
-          marginBottom: 32,
-          flexDirection: 'row',
+          fontFamily: 'Shark',
+          fontSize: 11,
+          color: 'white',
+          letterSpacing: 0.5,
         }}
-        onPress={() => WebBrowser.openBrowserAsync(entry.url)}
       >
-        {entry.featured_image && (
-          <View
-            style={{
-              flex: 1,
-              marginRight: 16,
-            }}
-          >
+        {label}
+      </Text>
+    </LinearGradient>
+  );
+}
+
+export default function Entry({
+  entry,
+  isFirst = false,
+}: {
+  readonly entry: EntryType;
+  readonly isFirst?: boolean;
+}) {
+  const { playSound } = useContext(SoundEffectContext);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const onPress = () => {
+    playSound(tapSound);
+    RootNavigation.navigate('Article', { entry });
+  };
+
+  const imageHeight = isFirst ? 220 : 180;
+
+  return (
+    <TouchableWithoutFeedback
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      onPress={onPress}
+    >
+      <Animated.View
+        style={{
+          marginHorizontal: 16,
+          marginBottom: 16,
+          borderRadius: 18,
+          overflow: 'hidden',
+          backgroundColor: 'white',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
+          elevation: 6,
+          transform: [{ scale: scaleAnim }],
+        }}
+      >
+        {/* Hero image */}
+        <View style={{ position: 'relative' }}>
+          {entry.featured_image ? (
             <Image
-              style={{
-                aspectRatio: 16 / 9,
-                borderRadius: 8,
-              }}
               source={entry.featured_image}
+              style={{
+                width: '100%',
+                height: imageHeight,
+              }}
               contentFit="cover"
+              transition={300}
             />
+          ) : (
+            <LinearGradient
+              colors={[config.primary, config.secondary]}
+              style={{
+                width: '100%',
+                height: imageHeight,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 40 }}>🦈</Text>
+            </LinearGradient>
+          )}
+
+          {/* Gradient fade at bottom of image */}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.5)']}
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 60,
+            }}
+          />
+
+          {/* Time badge overlaying image */}
+          <View style={{ position: 'absolute', top: 12, left: 12 }}>
+            <TimeBadge date={entry.date} />
           </View>
-        )}
+        </View>
+
+        {/* Content area */}
         <View
           style={{
-            flex: 1,
+            padding: 16,
+            paddingTop: 14,
           }}
         >
           <Text
             style={{
-              fontSize: 18,
+              fontFamily: 'Knockout',
+              fontSize: isFirst ? 20 : 17,
+              color: '#1a1a2e',
+              lineHeight: isFirst ? 26 : 22,
             }}
+            numberOfLines={3}
           >
             {decode(entry.title)}
           </Text>
-          <Text
+
+          {/* Read more hint */}
+          <View
             style={{
-              marginTop: 8,
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginTop: 10,
             }}
           >
-            {date}
-          </Text>
+            <Text
+              style={{
+                fontFamily: 'Knockout',
+                fontSize: 13,
+                color: config.secondary,
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+              }}
+            >
+              Read Article
+            </Text>
+            <Text
+              style={{
+                color: config.secondary,
+                fontSize: 13,
+                marginLeft: 4,
+              }}
+            >
+              →
+            </Text>
+          </View>
         </View>
-      </TouchableOpacity>
-    </View>
+      </Animated.View>
+    </TouchableWithoutFeedback>
   );
 }

@@ -1,11 +1,12 @@
 import { FlashList } from '@shopify/flash-list';
 import { useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useAsyncEffect, useDebounce } from 'rooks';
 import getFriendSuggestions from '../../api/endpoints/me/getFriendSuggestions';
 import searchPlayers from '../../api/endpoints/players/search';
 import FriendPlayer from '../../components/FriendPlayer';
 import Loading from '../../components/Loading';
+import SearchBar from '../../components/SearchBar';
 import useCrumbs from '../../hooks/useCrumbs';
 import { PlayerType } from '../../models/player-type';
 
@@ -19,6 +20,7 @@ export default function Suggestions() {
 
   useAsyncEffect(async () => {
     if (search.length < 3) {
+      setSearchResults([]);
       return;
     }
 
@@ -31,50 +33,42 @@ export default function Suggestions() {
   }, []);
 
   return (
-    <View style={{ padding: 16, flex: 1 }}>
+    <View style={{ paddingTop: 8, flex: 1 }}>
       {loading && <Loading />}
       {!loading && (
-        <View
-          style={{
-            flex: 1,
-          }}
-        >
-          <View
-            style={{
-              width: '100%',
-              alignItems: 'center',
+        <View style={{ flex: 1 }}>
+          <SearchBar
+            placeholder="Search all players..."
+            onChangeText={(text) => {
+              setSearchDebounced(text);
             }}
-          >
-            <TextInput
+            maxLength={14}
+            autoFocus
+          />
+
+          {/* Suggestions header when not searching */}
+          {!search.length && players.length > 0 && (
+            <Text
               style={{
-                borderWidth: 1,
-                paddingTop: 15,
-                paddingBottom: 15,
-                paddingLeft: 25,
-                paddingRight: 25,
-                borderRadius: 10,
-                backgroundColor: 'white',
-                fontSize: 20,
-                fontFamily: 'Knockout',
-                width: '55%',
-                textAlign: 'center',
+                fontFamily: 'Shark',
+                fontSize: 15,
+                color: 'white',
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+                paddingHorizontal: 20,
+                marginBottom: 8,
+                textShadowColor: 'rgba(0,0,0,0.6)',
+                textShadowOffset: { width: 1, height: 1 },
+                textShadowRadius: 2,
               }}
-              autoCapitalize="none"
-              onChangeText={(text) => {
-                setLoading(true);
-                setSearchDebounced(text);
-                setLoading(false);
-              }}
-              maxLength={14}
-              placeholder={labels.search_for_a_player}
-              returnKeyType="search"
-              enablesReturnKeyAutomatically
-              autoCorrect={false}
-            />
-          </View>
+            >
+              Suggested for you
+            </Text>
+          )}
+
           {!search.length && (
             <FlashList
-              contentContainerStyle={{ paddingBottom: 8 }}
+              contentContainerStyle={{ paddingBottom: 8, paddingHorizontal: 16 }}
               data={players}
               keyExtractor={(player) => player.id.toString()}
               renderItem={({ item }) => {
@@ -91,7 +85,7 @@ export default function Suggestions() {
           )}
           {!!searchResults.length && (
             <FlashList
-              contentContainerStyle={{ paddingBottom: 8 }}
+              contentContainerStyle={{ paddingBottom: 8, paddingHorizontal: 16 }}
               data={searchResults}
               keyExtractor={(player) => player.id.toString()}
               renderItem={({ item }) => {
@@ -100,16 +94,36 @@ export default function Suggestions() {
               estimatedItemSize={80}
             />
           )}
-          {!searchResults.length && !!search.length && (
+          {!searchResults.length && !!search.length && search.length >= 3 && (
             <Text
               style={{
                 textAlign: 'center',
-                fontSize: 24,
+                fontSize: 18,
                 fontFamily: 'Knockout',
-                paddingTop: 16,
+                paddingTop: 32,
+                color: 'white',
+                textShadowColor: 'rgba(0,0,0,0.5)',
+                textShadowOffset: { width: 1, height: 1 },
+                textShadowRadius: 2,
               }}
             >
-              {warnings.no_friend_suggestions}
+              No players found
+            </Text>
+          )}
+          {!!search.length && search.length < 3 && (
+            <Text
+              style={{
+                textAlign: 'center',
+                fontSize: 14,
+                fontFamily: 'Knockout',
+                paddingTop: 32,
+                color: 'rgba(255,255,255,0.7)',
+                textShadowColor: 'rgba(0,0,0,0.4)',
+                textShadowOffset: { width: 1, height: 1 },
+                textShadowRadius: 2,
+              }}
+            >
+              Type at least 3 characters to search
             </Text>
           )}
         </View>

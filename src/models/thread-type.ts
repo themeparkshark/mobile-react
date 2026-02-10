@@ -18,4 +18,5 @@ export interface ThreadType {
   readonly latest_comment: CommentType;
   readonly reactions: ReactionType[];
   readonly current_user_reaction: ReactionType;
+  readonly team: 'mouse' | 'globe' | 'shark' | null;
 }

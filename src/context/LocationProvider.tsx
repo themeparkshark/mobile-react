@@ -39,8 +39,8 @@ export const LocationContext = createContext<LocationContextType>(
 
 // Default dev location: Magic Kingdom entrance
 // Universal Studios Hollywood
-const DEV_DEFAULT_LAT = 34.1381;
-const DEV_DEFAULT_LNG = -118.3534;
+const DEV_DEFAULT_LAT = 40.7580;
+const DEV_DEFAULT_LNG = -73.9855;
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
@@ -48,7 +48,9 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const { player } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
-  const debouncedSetLocation = useDebounce(setLocation, 5000, {
+  // Reduced from 5s to 1s — smooth marker animation handles visual jitter,
+  // so we can allow more frequent updates for fluid shark movement
+  const debouncedSetLocation = useDebounce(setLocation, 1000, {
     leading: true,
   });
 
@@ -170,7 +172,9 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
 
     try {
-      const location = await Location.getCurrentPositionAsync();
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Highest,
+      });
 
       return {
         latitude: location.coords.latitude,
@@ -181,16 +185,34 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
+  // Minimum distance (meters) before location state updates
+  // Lowered from 10m to 3m — smooth marker animation handles visual jitter,
+  // so we can accept more frequent updates for fluid movement
+  const LOCATION_DISTANCE_FILTER_M = 3;
+
   const requestLocation = async () => {
     const newLocation = await getCurrentLocation();
+    if (!newLocation) return;
 
+    // Exact match — skip
     if (
-      newLocation &&
       location &&
       newLocation.longitude === location.longitude &&
       newLocation.latitude === location.latitude
     ) {
       return;
+    }
+
+    // Distance filter — ignore tiny GPS drift (< 10m)
+    if (location) {
+      const R = 6371e3;
+      const φ1 = (location.latitude * Math.PI) / 180;
+      const φ2 = (newLocation.latitude * Math.PI) / 180;
+      const Δφ = ((newLocation.latitude - location.latitude) * Math.PI) / 180;
+      const Δλ = ((newLocation.longitude - location.longitude) * Math.PI) / 180;
+      const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      if (dist < LOCATION_DISTANCE_FILTER_M) return;
     }
 
     debouncedSetLocation(newLocation);

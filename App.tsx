@@ -1,6 +1,8 @@
 import { LogBox } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
+import { ToastProvider } from './src/components/Toast';
 
 // Suppress common network error warnings in LogBox
 LogBox.ignoreLogs([
@@ -22,9 +24,11 @@ import { SoundEffectProvider } from './src/context/SoundEffectProvider';
 import { ThemeProvider } from './src/context/ThemeProvider';
 import { WeatherProvider } from './src/context/WeatherProvider';
 import CurrencyFlyProvider from './src/context/CurrencyFlyProvider';
+import { TutorialProvider } from './src/components/Tutorial';
 
 export default function App() {
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <ErrorBoundary>
       <AuthProvider>
         <SoundEffectProvider>
@@ -39,7 +43,11 @@ export default function App() {
                           <ThemeProvider>
                             <CurrencyProvider>
                               <CurrencyFlyProvider>
-                                <Root />
+                                <TutorialProvider>
+                                  <ToastProvider>
+                                    <Root />
+                                  </ToastProvider>
+                                </TutorialProvider>
                               </CurrencyFlyProvider>
                             </CurrencyProvider>
                           </ThemeProvider>
@@ -54,5 +62,6 @@ export default function App() {
         </SoundEffectProvider>
       </AuthProvider>
     </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }

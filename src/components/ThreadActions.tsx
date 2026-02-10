@@ -18,9 +18,10 @@ import { ThreadType } from '../models/thread-type';
 interface ThreadActionsProps {
   trigger: ReactNode;
   thread: ThreadType;
+  onDelete?: () => void;
 }
 
-const ThreadActions: React.FC<ThreadActionsProps> = ({ trigger, thread }) => {
+const ThreadActions: React.FC<ThreadActionsProps> = ({ trigger, thread, onDelete }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const { player } = useContext(AuthContext);
   const { labels, prompts, messages } = useCrumbs();
@@ -51,7 +52,8 @@ const ThreadActions: React.FC<ThreadActionsProps> = ({ trigger, thread }) => {
                 {
                   text: 'Ok',
                   onPress: () => {
-                    RootNavigation.goBack();
+                    if (onDelete) onDelete();
+                    else RootNavigation.goBack();
                   },
                 },
               ]);

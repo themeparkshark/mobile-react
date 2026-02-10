@@ -5,3 +5,4 @@ export { default as DefendMiniGameModal } from './DefendMiniGameModal';
 export { default as BattleHUD } from './BattleHUD';
 export { default as GymMarker } from './GymMarker';
 export { default as SwordMarker } from './SwordMarker';
+export { battleHUDEvents } from './battleHUDEvents';

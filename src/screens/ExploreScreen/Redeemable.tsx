@@ -1,11 +1,14 @@
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useEffect, useRef } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
-import { Animated, Text, View, Easing } from 'react-native';
+import { Text, View } from 'react-native';
 import { useTimeoutWhen } from 'rooks';
 import { RedeemableType } from '../../models/redeemable-type';
 
+/**
+ * Redeemable (swords/task items) — 100% STATIC layout (rendered inside <Marker>).
+ * No Animated transforms — prevents teleporting on react-native-maps.
+ */
 export default function Redeemable({
   redeemable,
   onExpire,
@@ -13,33 +16,6 @@ export default function Redeemable({
   readonly redeemable: RedeemableType;
   readonly onExpire: () => void;
 }) {
-  const floatAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0.5)).current;
-  const sparkleAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    // Float up and down
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, { toValue: -5, duration: 1300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(floatAnim, { toValue: 0, duration: 1300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    ).start();
-
-    // Glow pulse
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0.5, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    ).start();
-
-    // Sparkle rotation
-    Animated.loop(
-      Animated.timing(sparkleAnim, { toValue: 1, duration: 3000, easing: Easing.linear, useNativeDriver: true })
-    ).start();
-  }, []);
-
   useTimeoutWhen(
     () => {
       onExpire();
@@ -48,7 +24,6 @@ export default function Redeemable({
     !!redeemable.id
   );
 
-  // Get theme color or default to purple
   const themeColor = redeemable.theme?.currency?.color || '#9C27B0';
   const lightColor = themeColor + '30';
 
@@ -83,13 +58,10 @@ export default function Redeemable({
           )}
         />
       </View>
-      
-      {/* Redeemable with glow and float */}
-      <Animated.View style={{
-        transform: [{ translateY: floatAnim }],
-      }}>
-        {/* Glow ring */}
-        <Animated.View style={{
+
+      {/* Redeemable with static glow */}
+      <View>
+        <View style={{
           position: 'absolute',
           top: -8,
           left: -8,
@@ -97,10 +69,8 @@ export default function Redeemable({
           bottom: -8,
           borderRadius: 35,
           backgroundColor: themeColor,
-          opacity: glowAnim,
-          transform: [{ scale: 1.1 }],
+          opacity: 0.4,
         }} />
-        
         <Image
           source={{ uri: redeemable.theme?.currency?.map_url }}
           style={{
@@ -109,7 +79,7 @@ export default function Redeemable({
           }}
           contentFit="contain"
         />
-      </Animated.View>
+      </View>
     </View>
   );
 }

@@ -18,6 +18,10 @@ import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import config from '../config';
 import HapticPatterns from '../helpers/hapticPatterns';
+
+// Local asset icons for currency fly (must be hoisted to module level)
+const ENERGY_ICON = require('../../assets/images/energy.png');
+const TICKET_ICON = require('../../assets/images/ticket-icon.png');
 import {
   FloatingNumber,
   StarBurst,
@@ -57,9 +61,10 @@ export default function PrepItemRedeemModal({
   const [rewards, setRewards] = useState<{
     energy: number;
     tickets: number;
+    coins: number;
     experience: number;
   } | null>(null);
-  const [streakInfo, setStreakInfo] = useState<{
+  const [_streakInfo, setStreakInfo] = useState<{
     current: number;
     multiplier: number;
   } | null>(null);
@@ -77,6 +82,13 @@ export default function PrepItemRedeemModal({
 
   const handleCollect = async () => {
     if (!prepItem || !pivotId) return;
+
+    // Require location to collect — backend enforces 14m proximity
+    if (!location?.latitude || !location?.longitude) {
+      HapticPatterns.error();
+      onClose();
+      return;
+    }
 
     setIsCollecting(true);
     
@@ -96,17 +108,35 @@ export default function PrepItemRedeemModal({
       setRewards(response.data.rewards);
       setStreakInfo(response.data.streak);
       
-      // 🪙 Fly coins/energy to header!
+      // Fly reward icons to correct header targets
       const screenCenterX = Dimensions.get('window').width / 2;
       const screenCenterY = Dimensions.get('window').height / 2;
       
-      if (response.data.rewards.energy > 0 && currencies[0]?.icon_url) {
+      if (response.data.rewards.coins > 0 && currencies[0]?.icon_url) {
         triggerFly({
           imageUrl: currencies[0].icon_url,
-          amount: Math.min(response.data.rewards.energy, 8),
+          amount: Math.min(response.data.rewards.coins, 8),
           startX: screenCenterX,
           startY: screenCenterY,
-          targetPosition: 'left',
+          targetPosition: 'coins',
+        });
+      }
+      if (response.data.rewards.tickets > 0) {
+        triggerFly({
+          imageSource: TICKET_ICON,
+          amount: Math.min(response.data.rewards.tickets, 6),
+          startX: screenCenterX,
+          startY: screenCenterY + 20,
+          targetPosition: 'park_coins',
+        });
+      }
+      if (response.data.rewards.energy > 0) {
+        triggerFly({
+          imageSource: ENERGY_ICON,
+          amount: Math.min(response.data.rewards.energy, 6),
+          startX: screenCenterX,
+          startY: screenCenterY - 20,
+          targetPosition: 'park_coins',
         });
       }
       
@@ -177,7 +207,6 @@ export default function PrepItemRedeemModal({
     HapticPatterns.buttonTap();
     setShowRewards(false);
     setRewards(null);
-    setStreakInfo(null);
     setShowFloatingRewards(false);
     onCollected();
     onClose();
@@ -410,8 +439,8 @@ export default function PrepItemRedeemModal({
                           }}
                         >
                           <Box
-                            backgroundColor="#4cdcff"
-                            image={require('../../assets/images/screens/explore/xp.png')}
+                            backgroundColor="#d4f7d4"
+                            image={require('../../assets/images/energy.png')}
                             text={prepItem.energy_reward}
                             small
                             type="task"
@@ -427,9 +456,9 @@ export default function PrepItemRedeemModal({
                           }}
                         >
                           <Box
-                            backgroundColor="#4cdcff"
-                            image={require('../../assets/images/screens/explore/xp.png')}
-                            text={prepItem.ticket_reward}
+                            backgroundColor="#fff3d4"
+                            image={require('../../assets/images/ticket-icon.png')}
+                            text={`${prepItem.ticket_reward} 🎟️ or 🪙`}
                             small
                             type="task"
                           />
@@ -516,7 +545,7 @@ export default function PrepItemRedeemModal({
                       {prepItem.name}
                     </Text>
 
-                    {/* Rewards Received - using Box components like task modal */}
+                    {/* Rewards Received — actual amounts from API */}
                     <View
                       style={{
                         marginLeft: -4,
@@ -526,7 +555,7 @@ export default function PrepItemRedeemModal({
                         justifyContent: 'center',
                       }}
                     >
-                      {rewards?.energy && rewards.energy > 0 && (
+                      {rewards && rewards.energy > 0 && (
                         <View
                           style={{
                             width: '33.3333333%',
@@ -535,15 +564,15 @@ export default function PrepItemRedeemModal({
                           }}
                         >
                           <Box
-                            backgroundColor="#4cdcff"
-                            image={require('../../assets/images/screens/explore/xp.png')}
+                            backgroundColor="#d4f7d4"
+                            image={require('../../assets/images/energy.png')}
                             text={`+${rewards.energy}`}
                             small
                             type="task"
                           />
                         </View>
                       )}
-                      {rewards?.tickets && rewards.tickets > 0 && (
+                      {rewards && rewards.tickets > 0 && (
                         <View
                           style={{
                             width: '33.3333333%',
@@ -552,15 +581,32 @@ export default function PrepItemRedeemModal({
                           }}
                         >
                           <Box
-                            backgroundColor="#4cdcff"
-                            image={require('../../assets/images/screens/explore/xp.png')}
+                            backgroundColor="#fff3d4"
+                            image={require('../../assets/images/ticket-icon.png')}
                             text={`+${rewards.tickets}`}
                             small
                             type="task"
                           />
                         </View>
                       )}
-                      {rewards?.experience && rewards.experience > 0 && (
+                      {rewards && rewards.coins > 0 && (
+                        <View
+                          style={{
+                            width: '33.3333333%',
+                            paddingLeft: 4,
+                            paddingRight: 4,
+                          }}
+                        >
+                          <Box
+                            backgroundColor="#ffe7a2"
+                            image={require('../../assets/images/coingold.png')}
+                            text={`+${rewards.coins}`}
+                            small
+                            type="coin"
+                          />
+                        </View>
+                      )}
+                      {rewards && rewards.experience > 0 && (
                         <View
                           style={{
                             width: '33.3333333%',
@@ -578,37 +624,6 @@ export default function PrepItemRedeemModal({
                         </View>
                       )}
                     </View>
-
-                    {/* Streak Info */}
-                    {streakInfo && streakInfo.current > 0 && (
-                      <View
-                        style={{
-                          alignItems: 'center',
-                          marginTop: 12,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: 'Knockout',
-                            fontSize: 18,
-                            color: '#FF9800',
-                          }}
-                        >
-                          🔥 {streakInfo.current} day streak!
-                        </Text>
-                        {streakInfo.multiplier > 1 && (
-                          <Text
-                            style={{
-                              fontFamily: 'Knockout',
-                              fontSize: 14,
-                              color: config.tertiary,
-                            }}
-                          >
-                            {streakInfo.multiplier}x bonus applied!
-                          </Text>
-                        )}
-                      </View>
-                    )}
                   </>
                 )}
               </View>

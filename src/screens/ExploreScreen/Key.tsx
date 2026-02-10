@@ -1,12 +1,16 @@
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import { useContext, useEffect, useRef } from 'react';
+import { useContext } from 'react';
 import Countdown, { zeroPad } from 'react-countdown';
-import { Animated, Text, View, Easing } from 'react-native';
+import { Text, View } from 'react-native';
 import { useTimeoutWhen } from 'rooks';
 import { CurrencyContext } from '../../context/CurrencyProvider';
 import { KeyType } from '../../models/key-type';
 
+/**
+ * Key — 100% STATIC layout (rendered inside <Marker>).
+ * No Animated transforms — prevents teleporting on react-native-maps.
+ */
 export default function Key({
   model,
   onExpire,
@@ -15,38 +19,6 @@ export default function Key({
   readonly onExpire: () => void;
 }) {
   const { currencies } = useContext(CurrencyContext);
-  
-  // Gentle floating animation
-  const floatAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0.6)).current;
-  // Subtle rotation wobble for keys
-  const wobbleAnim = useRef(new Animated.Value(0)).current;
-  
-  useEffect(() => {
-    // Float up and down
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, { toValue: -4, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(floatAnim, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    ).start();
-    
-    // Subtle glow pulse
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0.6, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    ).start();
-    
-    // Little wobble rotation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(wobbleAnim, { toValue: 8, duration: 1000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(wobbleAnim, { toValue: -8, duration: 1000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
 
   useTimeoutWhen(
     () => {
@@ -87,19 +59,10 @@ export default function Key({
           )}
         />
       </View>
-      
-      {/* Key with glow, float and wobble */}
-      <Animated.View style={{
-        transform: [
-          { translateY: floatAnim },
-          { rotate: wobbleAnim.interpolate({
-            inputRange: [-8, 8],
-            outputRange: ['-8deg', '8deg'],
-          })},
-        ],
-      }}>
-        {/* Glow ring behind key */}
-        <Animated.View style={{
+
+      {/* Key with static glow */}
+      <View>
+        <View style={{
           position: 'absolute',
           top: -4,
           left: -4,
@@ -107,8 +70,7 @@ export default function Key({
           bottom: -4,
           borderRadius: 20,
           backgroundColor: '#4FC3F7',
-          opacity: glowAnim,
-          transform: [{ scale: 1.1 }],
+          opacity: 0.5,
         }} />
         <Image
           source={{ uri: currencies[1]?.map_url }}
@@ -118,7 +80,7 @@ export default function Key({
           }}
           contentFit="contain"
         />
-      </Animated.View>
+      </View>
     </View>
   );
 }

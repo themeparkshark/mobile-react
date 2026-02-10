@@ -21,8 +21,13 @@ export default async function me(): Promise<PlayerType | null> {
     }
     return player;
   } catch (error: any) {
-    console.error('🦈 Me API ERROR:', error?.response?.status, error?.message || error);
-    console.error('🦈 Me API error response:', JSON.stringify(error?.response?.data).substring(0, 300));
+    // 401 is expected during logout — don't spam error console
+    if (error?.response?.status === 401) {
+      console.log('🦈 Me API: 401 (not authenticated)');
+    } else {
+      console.error('🦈 Me API ERROR:', error?.response?.status, error?.message || error);
+      console.error('🦈 Me API error response:', JSON.stringify(error?.response?.data).substring(0, 300));
+    }
     return null;
   }
 }

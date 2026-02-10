@@ -75,7 +75,7 @@ export const MOCK_CHURRO_SET_LIST: PrepItemSetListItem = {
   id: 1,
   slug: 'churro_collection',
   name: 'Churro Collection',
-  description: 'Collect all 40 delicious churro variants! Find them during the day while exploring.',
+  description: 'Get your energy up before you get to the park. Go out in the world and collect some snacks!',
   icon_url: null,
   theme: 'food',
   theme_config: {
@@ -95,7 +95,7 @@ export const MOCK_CHURRO_SET_LIST: PrepItemSetListItem = {
   progress_percentage: progressPercentage,
   is_complete: false,
   completion_rewards: {
-    energy: 500,
+    energy: 200,
     tickets: 50,
     experience: 1000,
     title: 'Churro Connoisseur',
@@ -120,7 +120,7 @@ export const MOCK_CHURRO_SET_DETAIL = {
     id: 1,
     slug: 'churro_collection',
     name: 'Churro Collection',
-    description: 'Collect all 40 delicious churro variants! Find them during the day while exploring.',
+    description: 'Get your energy up before you get to the park. Go out in the world and collect some snacks!',
     icon_url: null,
     theme: 'food',
     theme_config: {
@@ -144,7 +144,7 @@ export const MOCK_CHURRO_SET_DETAIL = {
   items: CHURRO_ITEMS,
   items_by_rarity: groupByRarity(),
   completion_rewards: {
-    energy: 500,
+    energy: 200,
     tickets: 50,
     experience: 1000,
     title: 'Churro Connoisseur',

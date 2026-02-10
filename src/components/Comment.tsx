@@ -1,7 +1,7 @@
 import { faReply } from '@fortawesome/free-solid-svg-icons/faReply';
 import { faTrash } from '@fortawesome/free-solid-svg-icons/faTrash';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
@@ -15,6 +15,7 @@ import { CommentType } from '../models/comment-type';
 import Avatar from './Avatar';
 import Button from './Button';
 import CreateReport from './CreateReport';
+import RichText from './RichText';
 
 export default function Comment({
   comment,
@@ -30,6 +31,12 @@ export default function Comment({
   const [canLoadMore, setCanLoadMore] = useState<boolean>(
     comment.children_count > childrenLimit
   );
+
+  // Sync children when comment prop updates (e.g. after reply refresh)
+  useEffect(() => {
+    setChildren(comment.children);
+    setCanLoadMore(comment.children_count > childrenLimit);
+  }, [comment.children, comment.children_count]);
   const { labels } = useCrumbs();
   const { player } = useContext(AuthContext);
   const [isDeleted, setIsDeleted] = useState<boolean>(
@@ -88,15 +95,13 @@ export default function Comment({
             paddingRight: 3,
           }}
         >
-          <Text
-            style={{
-              fontSize: 16,
-              paddingBottom: 16,
-              lineHeight: 24,
-            }}
-          >
-            {isDeleted ? '[deleted]' : comment.content}
-          </Text>
+          {isDeleted ? (
+            <Text style={{ fontSize: 16, paddingBottom: 16, lineHeight: 24 }}>[deleted]</Text>
+          ) : (
+            <View style={{ paddingBottom: 16 }}>
+              <RichText style={{ fontSize: 16, lineHeight: 24 }}>{comment.content}</RichText>
+            </View>
+          )}
           <View
             style={{
               flexDirection: 'row',
@@ -163,7 +168,7 @@ export default function Comment({
           </View>
         </View>
       </View>
-      {comment.children.length > 0 && (
+      {children.length > 0 && (
         <View
           style={{
             marginLeft: 16,

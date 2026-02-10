@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { chunk } from 'lodash';
-import { useContext, useState } from 'react';
-import { ImageBackground, Platform, ScrollView, Text, View } from 'react-native';
+import { useContext, useState, useEffect } from 'react';
+import { Animated, ImageBackground, Platform, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
 import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
@@ -22,15 +22,14 @@ import TopbarText from '../components/Topbar/TopbarText';
 import config from '../config';
 import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
+import UnfoundCoinModal from '../components/UnfoundCoinModal';
+import { useTutorial } from '../components/Tutorial';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 
-// Temp: View shim for LinearGradient until dev client is rebuilt with expo-linear-gradient
-const LinearGradient = ({ colors, style, children, start, end, ...rest }: any) => (
-  <View style={[style, { backgroundColor: colors?.[0] }]} {...rest}>{children}</View>
-);
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ParkScreen({ route }) {
   const { park, player } = route.params;
@@ -49,6 +48,15 @@ export default function ParkScreen({ route }) {
   const [parkCoinUrl, setParkCoinUrl] = useState<string | null>(null);
   const { park: locationPark } = useContext(LocationContext);
   const { labels } = useCrumbs();
+  const { startTutorial, hasCompleted } = useTutorial();
+  
+  // Trigger park tutorial on first visit
+  useEffect(() => {
+    if (!hasCompleted('park')) {
+      const timer = setTimeout(() => startTutorial('park'), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const hasCompletedTask = (task: number) => {
     return completedTasks.find((completedTask) => completedTask.id === task);
@@ -124,7 +132,7 @@ export default function ParkScreen({ route }) {
             style={{
               flex: 1,
             }}
-            source={require('../../assets/images/screens/park/background.png')}
+            source={require('../../assets/images/screens/park/background-new.png')}
           >
             {currentPark && tasks && secretTasks && (
               <ScrollView>
@@ -136,166 +144,154 @@ export default function ParkScreen({ route }) {
                     paddingBottom: 24,
                   }}
                 >
-                  {/* ── Progress + Stats (Supercell-inspired) ── */}
-                  <View style={{ overflow: 'hidden', borderRadius: 18 }}>
-                    <LinearGradient
-                      colors={['#1a3a5c', '#0d1f33']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 0, y: 1 }}
+                  {/* ── Progress + Stats ── */}
+                  <View
+                    style={{
+                      backgroundColor: 'rgba(0,0,0,0.6)',
+                      borderRadius: 18,
+                      padding: 16,
+                    }}
+                  >
+                    {/* Completion % - big and bold */}
+                    <Text
                       style={{
-                        borderRadius: 18,
-                        borderWidth: 3,
-                        borderColor: '#3b82f6',
-                        ...(Platform.OS === 'ios' ? {
-                          shadowColor: '#3b82f6',
-                          shadowOffset: { width: 0, height: 4 },
-                          shadowOpacity: 0.4,
-                          shadowRadius: 12,
-                        } : {}),
+                        fontFamily: 'Shark',
+                        fontSize: 36,
+                        color: 'white',
+                        textAlign: 'center',
+                        textShadowColor: 'rgba(0,0,0,0.5)',
+                        textShadowOffset: { width: 1, height: 2 },
+                        textShadowRadius: 0,
                       }}
                     >
-                      {/* ── Completion header band ── */}
+                      {Math.round(currentPark.completion_rate)}% Complete
+                    </Text>
+
+                    {/* Progress bar */}
+                    <View
+                      style={{
+                        height: 16,
+                        borderRadius: 8,
+                        backgroundColor: 'rgba(0,0,0,0.35)',
+                        overflow: 'hidden',
+                        marginTop: 10,
+                        marginBottom: 6,
+                        borderWidth: 2,
+                        borderColor: 'rgba(255,255,255,0.15)',
+                      }}
+                    >
                       <LinearGradient
-                        colors={currentPark.completion_rate >= 100 ? ['#f59e0b', '#d97706'] : ['#2563eb', '#1d4ed8']}
+                        colors={
+                          currentPark.completion_rate >= 100
+                            ? ['#fbbf24', config.tertiary]
+                            : ['#4ade80', '#22c55e']
+                        }
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
                         style={{
-                          paddingVertical: 10,
-                          paddingHorizontal: 14,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 10,
+                          height: '100%',
+                          width: `${Math.min(currentPark.completion_rate, 100)}%`,
+                          borderRadius: 6,
                         }}
-                      >
-                        {/* Chunky progress bar */}
-                        <View style={{ flex: 1 }}>
-                          <View style={{
-                            height: 18, borderRadius: 9,
-                            backgroundColor: 'rgba(0,0,0,0.4)',
-                            overflow: 'hidden',
-                            borderWidth: 2,
-                            borderColor: 'rgba(255,255,255,0.25)',
-                          }}>
-                            <LinearGradient
-                              colors={currentPark.completion_rate >= 100 ? ['#fbbf24', '#f59e0b'] : ['#4ade80', '#22c55e']}
-                              start={{ x: 0, y: 0 }}
-                              end={{ x: 1, y: 0 }}
-                              style={{
-                                height: '100%',
-                                width: `${Math.min(currentPark.completion_rate, 100)}%`,
-                                borderRadius: 7,
-                              }}
+                      />
+                    </View>
+
+                    {/* Task count */}
+                    <Text
+                      style={{
+                        fontFamily: 'Shark',
+                        fontSize: 14,
+                        color: 'rgba(255,255,255,0.7)',
+                        textAlign: 'center',
+                        marginBottom: 16,
+                        textShadowColor: 'rgba(0,0,0,0.3)',
+                        textShadowOffset: { width: 1, height: 1 },
+                        textShadowRadius: 0,
+                      }}
+                    >
+                      {currentPark.completed_tasks_count +
+                        currentPark.completed_secret_tasks_count}{' '}
+                      / {currentPark.tasks_count + currentPark.secret_tasks_count}{' '}
+                      Tasks
+                    </Text>
+
+                    {/* Stats row */}
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      {[
+                        {
+                          value: currentPark.park_coins_count,
+                          label: 'Coins',
+                          coinUrl: parkCoinUrl,
+                          icon: require('../../assets/images/coingold.png'),
+                          emoji: '🪙',
+                        },
+                        {
+                          value: currentPark.completed_tasks_count,
+                          label: 'Tasks',
+                          coinUrl: null,
+                          icon: null,
+                          emoji: '⭐',
+                        },
+                        {
+                          value: currentPark.completed_secret_tasks_count,
+                          label: 'Secrets',
+                          coinUrl: null,
+                          icon: null,
+                          emoji: '🔮',
+                        },
+                      ].map((stat) => (
+                        <View
+                          key={stat.label}
+                          style={{
+                            flex: 1,
+                            backgroundColor: 'rgba(0,0,0,0.25)',
+                            borderRadius: 14,
+                            paddingVertical: 12,
+                            alignItems: 'center',
+                            borderWidth: 1.5,
+                            borderColor: 'rgba(255,255,255,0.1)',
+                          }}
+                        >
+                          {stat.icon && stat.coinUrl ? (
+                            <Image
+                              source={{ uri: stat.coinUrl }}
+                              style={{ width: 26, height: 26, marginBottom: 4 }}
+                              contentFit="contain"
                             />
-                            {/* Centered text on bar */}
-                            <Text style={{
-                              position: 'absolute',
-                              width: '100%',
-                              textAlign: 'center',
+                          ) : stat.icon && !stat.coinUrl ? (
+                            <Image
+                              source={stat.icon}
+                              style={{ width: 26, height: 26, marginBottom: 4 }}
+                              contentFit="contain"
+                            />
+                          ) : (
+                            <Text style={{ fontSize: 20, marginBottom: 4 }}>{stat.emoji}</Text>
+                          )}
+                          <Text
+                            style={{
                               fontFamily: 'Shark',
-                              fontSize: 11,
+                              fontSize: 24,
                               color: 'white',
-                              lineHeight: 14,
-                              top: 0,
-                              textShadowColor: 'rgba(0,0,0,0.8)',
+                              textShadowColor: 'rgba(0,0,0,0.5)',
                               textShadowOffset: { width: 1, height: 1 },
                               textShadowRadius: 0,
-                            }}>
-                              {currentPark.completed_tasks_count + currentPark.completed_secret_tasks_count}/{currentPark.tasks_count + currentPark.secret_tasks_count}
-                            </Text>
-                          </View>
-                        </View>
-                        {/* Completion % badge */}
-                        <View style={{
-                          backgroundColor: 'rgba(0,0,0,0.35)',
-                          borderRadius: 10,
-                          paddingHorizontal: 10,
-                          paddingVertical: 4,
-                          borderWidth: 2,
-                          borderColor: 'rgba(255,255,255,0.2)',
-                        }}>
-                          <Text style={{
-                            fontFamily: 'Shark', fontSize: 16,
-                            color: 'white',
-                            textShadowColor: 'rgba(0,0,0,0.5)',
-                            textShadowOffset: { width: 1, height: 1 },
-                            textShadowRadius: 0,
-                          }}>
-                            {Math.round(currentPark.completion_rate)}%
+                            }}
+                          >
+                            {stat.value}
+                          </Text>
+                          <Text
+                            style={{
+                              fontFamily: 'Shark',
+                              fontSize: 11,
+                              color: 'rgba(255,255,255,0.6)',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {stat.label}
                           </Text>
                         </View>
-                      </LinearGradient>
-
-                      {/* ── Stats row ── */}
-                      <View style={{ flexDirection: 'row', padding: 10, gap: 8 }}>
-                        {[
-                          {
-                            value: currentPark.park_coins_count,
-                            label: 'Coins',
-                            coinUrl: parkCoinUrl,
-                            emoji: '🪙',
-                            colors: ['#065f46', '#064e3b'] as [string, string],
-                            borderColor: '#10b981',
-                          },
-                          {
-                            value: currentPark.completed_tasks_count,
-                            label: 'Tasks',
-                            coinUrl: null,
-                            emoji: '⭐',
-                            colors: ['#7c2d12', '#6b2107'] as [string, string],
-                            borderColor: '#f97316',
-                          },
-                          {
-                            value: currentPark.completed_secret_tasks_count,
-                            label: 'Secrets',
-                            coinUrl: null,
-                            emoji: '🔮',
-                            colors: ['#4c1d95', '#3b0f7a'] as [string, string],
-                            borderColor: '#8b5cf6',
-                          },
-                        ].map((stat) => (
-                          <View key={stat.label} style={{ flex: 1, overflow: 'hidden', borderRadius: 12 }}>
-                            <LinearGradient
-                              colors={stat.colors}
-                              start={{ x: 0, y: 0 }}
-                              end={{ x: 0, y: 1 }}
-                              style={{
-                                alignItems: 'center',
-                                paddingVertical: 10,
-                                borderRadius: 12,
-                                borderWidth: 2,
-                                borderColor: stat.borderColor,
-                              }}
-                            >
-                              {stat.coinUrl ? (
-                                <Image
-                                  source={stat.coinUrl}
-                                  style={{ width: 28, height: 28, borderRadius: 14, marginBottom: 2 }}
-                                  contentFit="contain"
-                                />
-                              ) : (
-                                <Text style={{ fontSize: 18, marginBottom: 2 }}>{stat.emoji}</Text>
-                              )}
-                              <Text style={{
-                                fontFamily: 'Shark', fontSize: 24, color: 'white',
-                                textShadowColor: 'rgba(0,0,0,0.8)',
-                                textShadowOffset: { width: 2, height: 2 },
-                                textShadowRadius: 0,
-                              }}>
-                                {stat.value}
-                              </Text>
-                              <Text style={{
-                                fontFamily: 'Knockout', fontSize: 10,
-                                color: 'rgba(255,255,255,0.7)',
-                                textTransform: 'uppercase',
-                                letterSpacing: 0.5,
-                              }}>
-                                {stat.label}
-                              </Text>
-                            </LinearGradient>
-                          </View>
-                        ))}
-                      </View>
-                    </LinearGradient>
+                      ))}
+                    </View>
                   </View>
                 </View>
                 <View
@@ -305,7 +301,13 @@ export default function ParkScreen({ route }) {
                     paddingBottom: 32,
                   }}
                 >
-                  <View style={{ paddingBottom: 16 }}>
+                  <View style={{
+                    paddingBottom: 16,
+                    backgroundColor: 'rgba(0,0,0,0.6)',
+                    borderRadius: 18,
+                    padding: 12,
+                    marginBottom: 16,
+                  }}>
                     <View
                       style={{
                         position: 'relative',
@@ -414,7 +416,12 @@ export default function ParkScreen({ route }) {
                     </View>
                   </View>
                   {secretTasks && secretTasks.length > 0 && (
-                    <>
+                    <View style={{
+                      backgroundColor: 'rgba(0,0,0,0.6)',
+                      borderRadius: 18,
+                      padding: 12,
+                      marginBottom: 16,
+                    }}>
                       <Text
                         style={{
                           textAlign: 'center',
@@ -469,24 +476,7 @@ export default function ParkScreen({ route }) {
                                         isSecretTask
                                       />
                                     ) : (
-                                      <View
-                                        style={{
-                                          width: 60,
-                                          height: 60,
-                                          backgroundColor: 'rgba(0, 0, 0, .4)',
-                                          borderRadius: 30,
-                                          borderWidth: 2,
-                                          borderColor: 'rgba(168,130,255,0.15)',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                        }}
-                                      >
-                                        <Text style={{
-                                          fontSize: 22,
-                                          color: 'rgba(168,130,255,0.2)',
-                                          fontFamily: 'Shark',
-                                        }}>?</Text>
-                                      </View>
+                                      <UnfoundCoinModal task={secretTask} isSecret />
                                     )}
                                   </View>
                                 ))}
@@ -495,10 +485,15 @@ export default function ParkScreen({ route }) {
                           </View>
                         )
                       )}
-                    </>
+                    </View>
                   )}
                   {tasks && tasks.length > 0 && (
-                    <>
+                    <View style={{
+                      backgroundColor: 'rgba(0,0,0,0.6)',
+                      borderRadius: 18,
+                      padding: 12,
+                      marginBottom: 16,
+                    }}>
                       <Text
                         style={{
                           textAlign: 'center',
@@ -558,24 +553,7 @@ export default function ParkScreen({ route }) {
                                         }
                                       />
                                     ) : (
-                                      <View
-                                        style={{
-                                          width: 60,
-                                          height: 60,
-                                          backgroundColor: 'rgba(0, 0, 0, .4)',
-                                          borderRadius: 30,
-                                          borderWidth: 2,
-                                          borderColor: 'rgba(255,255,255,0.08)',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                        }}
-                                      >
-                                        <Text style={{
-                                          fontSize: 22,
-                                          color: 'rgba(255,255,255,0.15)',
-                                          fontFamily: 'Shark',
-                                        }}>?</Text>
-                                      </View>
+                                      <UnfoundCoinModal task={task} />
                                     )}
                                   </View>
                                 ))}
@@ -584,10 +562,15 @@ export default function ParkScreen({ route }) {
                           </View>
                         )
                       )}
-                    </>
+                    </View>
                   )}
                   {archivedTasks && archivedTasks.length > 0 && (
-                    <>
+                    <View style={{
+                      backgroundColor: 'rgba(0,0,0,0.6)',
+                      borderRadius: 18,
+                      padding: 12,
+                      marginBottom: 16,
+                    }}>
                       <Text
                         style={{
                           textAlign: 'center',
@@ -607,8 +590,8 @@ export default function ParkScreen({ route }) {
                         {labels.archived_tasks}
                       </Text>
                       {chunk(archivedTasks, 5).map(
-                        (tasks: TaskType[], index: number) => (
-                          <View key={index} style={{ paddingBottom: 16 }}>
+                        (rowTasks: TaskType[], rowIndex: number) => (
+                          <View key={rowIndex} style={{ paddingBottom: 16 }}>
                             <View style={{ position: 'relative', height: 105 }}>
                               <Image
                                 source={require('../../assets/images/screens/park/archivedshelf.png')}
@@ -629,7 +612,7 @@ export default function ParkScreen({ route }) {
                                   width: '100%',
                                 }}
                               >
-                                {archivedTasks.map((archivedTask, index) => (
+                                {rowTasks.map((archivedTask, index) => (
                                   <View
                                     key={archivedTask.id}
                                     style={{
@@ -650,24 +633,7 @@ export default function ParkScreen({ route }) {
                                         }
                                       />
                                     ) : (
-                                      <View
-                                        style={{
-                                          width: 60,
-                                          height: 60,
-                                          backgroundColor: 'rgba(0, 0, 0, .4)',
-                                          borderRadius: 30,
-                                          borderWidth: 2,
-                                          borderColor: 'rgba(255,255,255,0.08)',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                        }}
-                                      >
-                                        <Text style={{
-                                          fontSize: 22,
-                                          color: 'rgba(255,255,255,0.15)',
-                                          fontFamily: 'Shark',
-                                        }}>?</Text>
-                                      </View>
+                                      <UnfoundCoinModal task={archivedTask} isArchived />
                                     )}
                                   </View>
                                 ))}
@@ -676,7 +642,7 @@ export default function ParkScreen({ route }) {
                           </View>
                         )
                       )}
-                    </>
+                    </View>
                   )}
                 </View>
               </ScrollView>

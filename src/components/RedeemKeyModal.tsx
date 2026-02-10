@@ -13,6 +13,7 @@ import {
 import Modal from 'react-native-modal';
 import redeemKey from '../api/endpoints/me/keys/redeem-key';
 import { CurrencyContext } from '../context/CurrencyProvider';
+import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -42,6 +43,7 @@ export default function RedeemKeyModal({
     outputRange: ['0deg', '360deg'],
   });
   const { currencies } = useContext(CurrencyContext);
+  const { triggerFly } = useCurrencyFly();
   const currency = currencies[1];
 
   useEffect(() => {
@@ -118,7 +120,8 @@ export default function RedeemKeyModal({
           />
           <Lottie
             source={require('../../assets/animations/confetti.json')}
-            progress={progress}
+            autoPlay
+                  loop
             style={{
               position: 'absolute',
               width: 900,
@@ -202,6 +205,19 @@ export default function RedeemKeyModal({
               text="Collect"
               onPress={async () => {
                 await redeemKey(redeemable.model as KeyType, doubleKey);
+
+                // 🔑 Fly keys to header!
+                if (currency?.icon_url) {
+                  const screenCenterX = Dimensions.get('window').width / 2;
+                  const screenCenterY = Dimensions.get('window').height / 2;
+                  triggerFly({
+                    imageUrl: currency.icon_url,
+                    amount: doubleKey ? 2 : 1,
+                    startX: screenCenterX,
+                    startY: screenCenterY,
+                    targetPosition: 'keys',
+                  });
+                }
 
                 onPress();
                 playSound(

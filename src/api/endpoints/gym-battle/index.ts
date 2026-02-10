@@ -79,6 +79,15 @@ export interface GymData {
     is_underdog: boolean;
   };
   teammates_here: number;
+  battle_status?: {
+    is_active: boolean;
+    seconds_until_next_event: number;
+    next_event: 'ends' | 'starts';
+    battle_start_hour: number;
+    battle_end_hour: number;
+    current_hour: number;
+    timezone: string;
+  };
 }
 
 export async function getGym(parkId: number): Promise<GymData> {

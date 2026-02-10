@@ -18,6 +18,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { checkinGym } from '../../api/endpoints/gym-battle';
+import { battleHUDEvents } from './battleHUDEvents';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -105,6 +106,7 @@ export default function TapMiniGameModal({
         message: response.message,
       });
       setGameState('finished');
+      battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (error: any) {
       setResult({
         points: 0,

@@ -1,0 +1,23 @@
+# Include everything from .gitignore
+node_modules/
+.expo/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+.DS_Store
+.env
+.idea/
+tsconfig.tsbuildinfo
+
+# Additional exclusions for smaller archive
+.git
+android/
+__tests__/
+docs/
+.vscode/

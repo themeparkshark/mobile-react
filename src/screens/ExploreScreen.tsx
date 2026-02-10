@@ -22,6 +22,7 @@ import Topbar from '../components/Topbar';
 import Currency from '../components/Topbar/Currency';
 import TappableCurrency from '../components/Topbar/TappableCurrency';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
+import UsernameBanner from '../components/Topbar/UsernameBanner';
 import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
@@ -47,11 +48,16 @@ import getCommunityCenter, { CommunityCenter } from '../api/endpoints/community-
 // Gym Battle imports
 import { BattleHUD, GymMarker, SwordMarker } from '../components/GymBattle';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
+import { useTutorial } from '../components/Tutorial';
+import SignInButtons from '../components/SignInButtons';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
 // Community Center range in meters (same as task buildings - config.mobile.redeem_radius)
 const COMMUNITY_CENTER_RANGE_METERS = 14;
+
+// Prep item range in meters (same as community center)
+const PREP_ITEM_RANGE_METERS = 28;
 
 // Calculate distance between two coordinates in meters (Haversine formula)
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -135,13 +141,48 @@ export default function ExploreScreen() {
     useContext(LocationContext);
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
+  const { startTutorial, hasCompleted, registerRef } = useTutorial();
   
-  // Handler for when user approaches a prep item in home mode
+  // Trigger onboarding tutorial on first visit
+  useEffect(() => {
+    if (player && !hasCompleted('onboarding')) {
+      const timer = setTimeout(() => {
+        startTutorial('onboarding');
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [player]);
+  
+  // Handler for when user taps a prep item in home mode — enforce proximity
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
+    // Check distance before allowing collection
+    if (prepItem.latitude && prepItem.longitude && location?.latitude && location?.longitude) {
+      const distance = calculateDistance(
+        location.latitude,
+        location.longitude,
+        prepItem.latitude,
+        prepItem.longitude
+      );
+
+      if (distance > PREP_ITEM_RANGE_METERS) {
+        const distanceText = distance > 1000
+          ? `${(distance / 1000).toFixed(1)}km`
+          : `${Math.round(distance)}m`;
+        setTooFarDistance(distanceText);
+        setShowTooFarModal(true);
+        return;
+      }
+    } else if (!location?.latitude || !location?.longitude) {
+      // No location available — show too far modal with unknown distance
+      setTooFarDistance('unknown');
+      setShowTooFarModal(true);
+      return;
+    }
+
     setActivePrepItem(prepItem);
     setActivePrepItemPivotId(pivotId);
     setShowPrepItemModal(true);
-  }, []);
+  }, [location]);
 
   // Handler for Community Center tap - check if in range
   const handleCommunityCenterPress = useCallback(() => {
@@ -327,7 +368,8 @@ export default function ExploreScreen() {
   return (
     <Wrapper>
       <Topbar>
-        {player && (
+        {/* Topbar currencies — only for signed-in users */}
+        {player ? (
           <>
             {/* Park mode: show park coins */}
             {park && (
@@ -336,6 +378,7 @@ export default function ExploreScreen() {
                   image={park?.coin_url}
                   count={park?.park_coins_count}
                   name="Park Coins"
+                  flyTarget="park_coins"
                 />
               </TopbarColumn>
             )}
@@ -346,15 +389,17 @@ export default function ExploreScreen() {
                   image={theme.currency.icon_url}
                   count={player[theme.currency.name.toLowerCase()]}
                   name="Park Coins"
+                  flyTarget="theme_currency"
                 />
               </TopbarColumn>
             )}
-            {park && currencies.map((currency) => (
+            {park && currencies.map((currency, index) => (
               <TopbarColumn key={currency.id}>
                 <Currency
                   image={currency.icon_url}
                   count={player[currency.name.toLowerCase()]}
                   name={currency.name === 'Coins' ? 'Shark Coins' : currency.name}
+                  flyTarget={index === 0 ? 'coins' : 'keys'}
                 />
               </TopbarColumn>
             ))}
@@ -368,6 +413,7 @@ export default function ExploreScreen() {
                       image={currencies[0].icon_url}
                       count={player[currencies[0].name.toLowerCase()]}
                       name="Shark Coins"
+                      flyTarget="coins"
                     />
                   )}
                 </TopbarColumn>
@@ -407,8 +453,8 @@ export default function ExploreScreen() {
                 </TopbarColumn>
               </>
             )}
-            {/* V2: Show tickets if player has any */}
-            {(player.tickets ?? 0) > 0 && (
+            {/* Park mode: show tickets if player has any */}
+            {park && (player.tickets ?? 0) > 0 && (
               <TopbarColumn>
                 <TappableCurrency name="Tickets" count={player.tickets ?? 0}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -424,25 +470,51 @@ export default function ExploreScreen() {
                       textShadowColor: 'rgba(0, 0, 0, .5)',
                       textShadowOffset: { width: 2, height: 2 },
                       textShadowRadius: 0,
-                    }}>{player.tickets}</Text>
+                    }}>{player.tickets ?? 0}</Text>
                   </View>
                 </TappableCurrency>
               </TopbarColumn>
             )}
             {/* Swords moved to bottom bar with energy */}
           </>
+        ) : (
+          <TopbarColumn>
+            <Text style={{
+              fontSize: 16,
+              color: 'white',
+              fontFamily: 'Shark',
+              textTransform: 'uppercase',
+              letterSpacing: 2,
+              textShadowColor: 'rgba(0, 0, 0, .5)',
+              textShadowOffset: { width: 2, height: 2 },
+              textShadowRadius: 0,
+              textAlign: 'center',
+            }}>Guest Mode</Text>
+          </TopbarColumn>
         )}
       </Topbar>
-      {player && (
-        <>
-          {!permissionGranted && <PermissionsNotGranted />}
-          {/* Home Mode: Show prep items map instead of "Not at Park" message */}
-          {parkLoaded && !park && permissionGranted && (
-            <HomeExplore onPrepItemNearby={handlePrepItemNearby} />
-          )}
-        </>
+      {player && !permissionGranted && <PermissionsNotGranted />}
+      {/* Home Mode: Show prep items map instead of "Not at Park" message */}
+      {player && parkLoaded && !park && permissionGranted && (
+        <HomeExplore onPrepItemNearby={handlePrepItemNearby} />
       )}
-      {!player && <NotSignedIn />}
+      {/* Guest: Sign-in prompt */}
+      {!player && (
+        <View style={{ flex: 1, backgroundColor: '#d9d9d9', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <Image
+            source={require('../../assets/images/screens/login/logo.png')}
+            style={{ width: 260, height: 260 * (322 / 1284), marginBottom: 24 }}
+            contentFit="contain"
+          />
+          <Text style={{ color: '#333', fontFamily: 'Shark', fontSize: 22, textAlign: 'center', marginBottom: 8 }}>
+            Welcome to Theme Park Shark!
+          </Text>
+          <Text style={{ color: 'rgba(0,0,0,0.5)', fontFamily: 'Knockout', fontSize: 15, textAlign: 'center', marginBottom: 28, lineHeight: 22 }}>
+            Sign in to collect coins, battle at gyms, customize your shark, and explore theme parks!
+          </Text>
+          <SignInButtons />
+        </View>
+      )}
       
       {/* Prep Item Redeem Modal (Home Mode) */}
       <PrepItemRedeemModal
@@ -696,7 +768,7 @@ export default function ExploreScreen() {
                   }}
                   tappable={false}
                   flat={true}
-                  tracksViewChanges={true}
+                  tracksViewChanges={false}
                   anchor={{ x: 0.5, y: 0.5 }}
                 >
                   <View pointerEvents="none">
@@ -723,7 +795,7 @@ export default function ExploreScreen() {
                   }}
                   tappable={false}
                   flat={true}
-                  tracksViewChanges={true}
+                  tracksViewChanges={false}
                   anchor={{ x: 0.5, y: 0.5 }}
                 >
                   <View pointerEvents="none">
@@ -749,7 +821,7 @@ export default function ExploreScreen() {
                   }}
                   tappable={false}
                   flat={true}
-                  tracksViewChanges={true}
+                  tracksViewChanges={false}
                   anchor={{ x: 0.5, y: 0.5 }}
                 >
                   <View pointerEvents="none">
@@ -824,7 +896,7 @@ export default function ExploreScreen() {
               <View style={tooFarStyles.distanceDivider} />
               <View style={tooFarStyles.distanceRow}>
                 <Text style={tooFarStyles.distanceLabel}>Need to be within</Text>
-                <Text style={tooFarStyles.distanceValueGreen}>25m</Text>
+                <Text style={tooFarStyles.distanceValueGreen}>28m</Text>
               </View>
             </View>
             <TouchableOpacity

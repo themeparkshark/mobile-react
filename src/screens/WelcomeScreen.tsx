@@ -9,7 +9,9 @@ import {
   SafeAreaView,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import updatePlayer from '../api/endpoints/me/update-player';
 import { AuthContext } from '../context/AuthProvider';
@@ -17,9 +19,38 @@ import useCrumbs from '../hooks/useCrumbs';
 
 export default function WelcomeScreen({ navigation }) {
   const [username, setUsername] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
   const { player, refreshPlayer } = useContext(AuthContext);
   const rotate = useRef(new Animated.Value(0)).current;
   const { labels } = useCrumbs();
+  
+  const handleSubmit = async (name: string) => {
+    const trimmed = name.trim();
+    if (trimmed.length < 4) {
+      Alert.alert('Too Short', 'Your shark name must be at least 4 characters.');
+      return;
+    }
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await updatePlayer({ username: trimmed });
+      await refreshPlayer();
+      navigation.navigate('TeamSelection', {
+        isOnboarding: true,
+        onTeamSelected: () => {
+          navigation.navigate('Membership', { intro: true });
+        },
+      });
+    } catch (error: any) {
+      // Crash-proof error handling
+      const message = error?.response?.data?.errors?.username?.[0]
+        ?? error?.response?.data?.message
+        ?? 'Something went wrong. Please try again.';
+      Alert.alert(message, '', [{ text: 'Ok' }]);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const spin = rotate.interpolate({
     inputRange: [0, 1],
@@ -102,33 +133,7 @@ export default function WelcomeScreen({ navigation }) {
           maxLength={12}
           returnKeyType="next"
           enablesReturnKeyAutomatically
-          onSubmitEditing={async ({ nativeEvent }) => {
-            try {
-              await updatePlayer({
-                username: nativeEvent.text,
-              });
-            } catch (error) {
-              Alert.alert(error.response.data.errors.username[0], '', [
-                {
-                  text: 'Ok',
-                },
-              ]);
-
-              return;
-            }
-
-            await refreshPlayer();
-
-            // Go to team selection first, then membership
-            navigation.navigate('TeamSelection', {
-              isOnboarding: true,
-              onTeamSelected: () => {
-                navigation.navigate('Membership', {
-                  intro: true,
-                });
-              },
-            });
-          }}
+          onSubmitEditing={({ nativeEvent }) => handleSubmit(nativeEvent.text)}
         />
         <Text
           style={{
@@ -140,6 +145,33 @@ export default function WelcomeScreen({ navigation }) {
         >
           4 - 12 letters or numbers. No spaces.
         </Text>
+        {/* Submit button — many users don't know to press keyboard return */}
+        <TouchableOpacity
+          onPress={() => handleSubmit(username)}
+          disabled={submitting || username.trim().length < 4}
+          style={{
+            marginTop: 20,
+            backgroundColor: username.trim().length >= 4 ? '#fec90e' : 'rgba(255,255,255,0.3)',
+            paddingVertical: 14,
+            paddingHorizontal: 40,
+            borderRadius: 25,
+            opacity: submitting ? 0.6 : 1,
+          }}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#09268f" />
+          ) : (
+            <Text style={{
+              fontFamily: 'Shark',
+              fontSize: 20,
+              color: '#09268f',
+              textTransform: 'uppercase',
+              textAlign: 'center',
+            }}>
+              {labels?.letsgo || "Let's Go!"}
+            </Text>
+          )}
+        </TouchableOpacity>
         <View
           style={{
             width: '100%',

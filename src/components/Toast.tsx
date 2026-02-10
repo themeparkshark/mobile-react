@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, createContext, useContext, useCallback, Re
 import { Animated, StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-native';
 import * as Haptics from '../helpers/haptics';
 import { colors, shadows, borderRadius, spacing, typography } from '../design-system';
+import { onToast } from '../utils/toast';
 
 // Toast types
 type ToastType = 'success' | 'error' | 'warning' | 'info' | 'reward';
@@ -58,6 +59,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const hideToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  // Bridge: listen for global toast events from non-React code (e.g. axios interceptor)
+  useEffect(() => {
+    const unsub = onToast((event) => {
+      showToast({
+        type: event.type,
+        message: event.message,
+        icon: event.icon,
+        duration: event.duration,
+      });
+    });
+    return unsub;
+  }, [showToast]);
 
   return (
     <ToastContext.Provider value={{ showToast, hideToast }}>

@@ -13,6 +13,7 @@ import Modal from 'react-native-modal';
 import Lottie from 'lottie-react-native';
 import * as Haptics from '../helpers/haptics';
 import config from '../config';
+import HoloCoinPreview from './HoloCoinPreview';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import CoinUpgradeDemo from './CoinUpgradeDemo';
@@ -55,6 +56,7 @@ export default function CoinLevelingModal({
   onLevelUp,
 }: Props) {
   const [state, setState] = useState<ModalState>('preview');
+  const [holoVisible, setHoloVisible] = useState(false);
   const { refreshPlayer } = useContext(AuthContext);
 
   // ── Animations ──
@@ -294,11 +296,16 @@ export default function CoinLevelingModal({
                   ],
                   marginBottom: 0,
                 }}>
-                  <CoinUpgradeDemo
-                    level={state === 'success' ? nextLevel : currentLevel}
-                    coinUrl={rideCoin.coin_url}
-                    size={120}
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => state !== 'leveling' && setHoloVisible(true)}
+                  >
+                    <CoinUpgradeDemo
+                      level={state === 'success' ? nextLevel : currentLevel}
+                      coinUrl={rideCoin.coin_url}
+                      size={120}
+                    />
+                  </TouchableOpacity>
                 </Animated.View>
 
                 {/* ── Ride Name ── */}
@@ -715,6 +722,13 @@ export default function CoinLevelingModal({
           </View>
         </View>
       </Animated.View>
+
+      <HoloCoinPreview
+        visible={holoVisible}
+        coinUrl={rideCoin.coin_url}
+        name={rideCoin.ride_name}
+        onClose={() => setHoloVisible(false)}
+      />
     </Modal>
   );
 }

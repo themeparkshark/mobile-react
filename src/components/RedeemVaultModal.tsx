@@ -118,7 +118,8 @@ export default function RedeemVaultModal({
           />
           <Lottie
             source={require('../../assets/animations/confetti.json')}
-            progress={progress}
+            autoPlay
+                  loop
             style={{
               position: 'absolute',
               width: 900,

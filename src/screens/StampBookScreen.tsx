@@ -1,710 +1,434 @@
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { faLock, faCheck } from '@fortawesome/free-solid-svg-icons';
 import { Image } from 'expo-image';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Animated,
   Dimensions,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
-import { AuthContext } from '../context/AuthProvider';
-import config from '../config';
-import {
-  StampType,
-  StampCategory,
-  STAMP_CATEGORY_CONFIG,
-  STAMP_RARITY_CONFIG,
-} from '../models/stamp-type';
+import { getStamps, claimStampReward, StampData as ApiStampData } from '../api/endpoints/me/stamps';
 
-// Mock data - replace with API call
-const MOCK_STAMPS: StampType[] = [
-  {
-    id: 1,
-    name: 'First Steps',
-    description: 'Collect your first prep item',
-    icon_url: '',
-    category: 'exploration',
-    rarity: 'common',
-    is_earned: true,
-    earned_at: '2025-01-20',
-    progress: 100,
-    requirement_text: 'Collect 1 prep item',
-    rewards: { energy: 5, tickets: 1, experience: 25, ride_parts: 0 },
-    sort_order: 1,
-    is_hidden: false,
-    is_new: false,
-  },
-  {
-    id: 2,
-    name: 'Set Collector',
-    description: 'Complete your first item set',
-    icon_url: '',
-    category: 'collection',
-    rarity: 'uncommon',
-    is_earned: false,
-    progress: 60,
-    progress_text: '3/5 items collected',
-    requirement_text: 'Complete any item set',
-    rewards: { energy: 10, tickets: 3, experience: 100, ride_parts: 5 },
-    sort_order: 2,
-    is_hidden: false,
-    is_new: false,
-  },
-  {
-    id: 3,
-    name: 'Trivia Whiz',
-    description: 'Answer 10 trivia questions correctly',
-    icon_url: '',
-    category: 'trivia',
-    rarity: 'common',
-    is_earned: true,
-    earned_at: '2025-01-22',
-    progress: 100,
-    requirement_text: '10 correct trivia answers',
-    rewards: { energy: 5, tickets: 2, experience: 50, ride_parts: 0 },
-    sort_order: 3,
-    is_hidden: false,
-    is_new: true,
-  },
-  {
-    id: 4,
-    name: 'Week Warrior',
-    description: 'Maintain a 7-day collection streak',
-    icon_url: '',
-    category: 'streaks',
-    rarity: 'rare',
-    is_earned: false,
-    progress: 42,
-    progress_text: '3/7 days',
-    requirement_text: '7 day streak',
-    rewards: { energy: 20, tickets: 5, experience: 200, ride_parts: 10, title: 'Dedicated Collector' },
-    sort_order: 4,
-    is_hidden: false,
-    is_new: false,
-  },
-  {
-    id: 5,
-    name: 'Coin Connoisseur',
-    description: 'Level a ride coin to maximum',
-    icon_url: '',
-    category: 'leveling',
-    rarity: 'epic',
-    is_earned: false,
-    progress: 20,
-    progress_text: 'Level 1/5',
-    requirement_text: 'Max level any coin',
-    rewards: { energy: 50, tickets: 10, experience: 500, ride_parts: 50 },
-    sort_order: 5,
-    is_hidden: false,
-    is_new: false,
-  },
-  {
-    id: 6,
-    name: 'Line Champion',
-    description: 'Wait 2 hours in a single queue',
-    icon_url: '',
-    category: 'rides',
-    rarity: 'rare',
-    is_earned: false,
-    progress: 0,
-    requirement_text: 'Wait 120+ minutes',
-    rewards: { energy: 30, tickets: 5, experience: 300, ride_parts: 30 },
-    sort_order: 6,
-    is_hidden: false,
-    is_new: false,
-  },
-  {
-    id: 7,
-    name: '???',
-    description: 'Discover hidden secrets...',
-    icon_url: '',
-    category: 'secret',
-    rarity: 'legendary',
-    is_earned: false,
-    progress: 0,
-    requirement_text: '???',
-    rewards: { energy: 100, tickets: 20, experience: 1000, ride_parts: 100 },
-    sort_order: 99,
-    is_hidden: true,
-    is_new: false,
-  },
+// ── Assets ──────────────────────────────────────────────
+const BOOK_BG = require('../../assets/images/stampbook-bg.png');
+const STAMP_LOGO = require('../../assets/images/stamps/stamp-logo.png');
+const STAMP_01 = require('../../assets/images/stamps/stamp-01.png');
+const STAMP_02 = require('../../assets/images/stamps/stamp-02.png');
+const STAMP_03 = require('../../assets/images/stamps/stamp-03.png');
+const STAMP_04 = require('../../assets/images/stamps/stamp-04.png');
+const STAMP_05 = require('../../assets/images/stamps/stamp-05.png');
+const STAMP_06 = require('../../assets/images/stamps/stamp-06.png');
+const STAMP_07 = require('../../assets/images/stamps/stamp-07.png');
+const STAMP_08 = require('../../assets/images/stamps/stamp-08.png');
+
+const { width: SW } = Dimensions.get('window');
+const CARD_SIZE = (SW - 48) / 3; // 3 columns with gaps
+
+// ── Colors ──────────────────────────────────────────────
+const GOLD = '#C5933A';
+const GOLD_LIGHT = '#DEB155';
+const INK = '#3E2712';
+const INK_FAINT = '#A89278';
+const STAMP_EARNED_COLOR = '#4CAF50';
+const STAMP_LOCKED_COLOR = '#C4B69C';
+
+const RARITY_COLORS: Record<string, string> = {
+  common: '#78909C',
+  uncommon: '#4CAF50',
+  rare: '#2196F3',
+  epic: '#9C27B0',
+  legendary: '#FF9800',
+};
+
+// ── Image key mapping ───────────────────────────────────
+const IMAGE_KEY_MAP: Record<string, number> = {
+  'stamp-01': STAMP_01,
+  'stamp-02': STAMP_02,
+  'stamp-03': STAMP_03,
+  'stamp-04': STAMP_04,
+  'stamp-05': STAMP_05,
+  'stamp-06': STAMP_06,
+  'stamp-07': STAMP_07,
+  'stamp-08': STAMP_08,
+};
+
+// ── Stamp data ──────────────────────────────────────────
+interface StampData {
+  id: number;
+  name: string;
+  goal: string;
+  image?: number;
+  earned: boolean;
+  progress?: number;
+  progressText?: string;
+  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+}
+
+function apiToLocal(s: ApiStampData): StampData {
+  return {
+    id: s.id,
+    name: s.name,
+    goal: s.goal,
+    image: s.image_key ? IMAGE_KEY_MAP[s.image_key] : undefined,
+    earned: s.is_earned,
+    progress: s.progress_percentage,
+    progressText: s.progress_text,
+    rarity: s.rarity,
+  };
+}
+
+// Placeholder stamp image — locked silhouette style
+const PLACEHOLDER_IMAGE = STAMP_01; // Reuse stamp-01 as placeholder silhouette
+
+const ALL_STAMPS: StampData[] = [
+  // Events (have real art)
+  { id: 1, name: 'Treasure Hunter', goal: 'Collect 25 prep items', image: STAMP_01, earned: false, progress: 0, progressText: '0/25', rarity: 'rare' },
+  { id: 2, name: 'Deep Dive', goal: 'Collect 50 prep items', image: STAMP_02, earned: false, progress: 0, progressText: '0/50', rarity: 'uncommon' },
+  { id: 3, name: 'Shark Scholar', goal: 'Earn 30,000 XP', image: STAMP_03, earned: false, progress: 0, progressText: '0/30k', rarity: 'uncommon' },
+  { id: 4, name: 'Captain', goal: 'Earn 10,000 coins', image: STAMP_04, earned: false, progress: 0, progressText: '0/10k', rarity: 'epic' },
+  { id: 5, name: 'Pirate King', goal: 'Complete a collection set', image: STAMP_05, earned: false, rarity: 'epic' },
+  { id: 6, name: 'Wave Rider', goal: 'Maintain a 7-day streak', image: STAMP_06, earned: false, progress: 0, progressText: '0/7', rarity: 'rare' },
+  { id: 7, name: 'Explorer', goal: 'Visit 5 different parks', image: STAMP_07, earned: false, progress: 0, progressText: '0/5', rarity: 'rare' },
+  { id: 8, name: 'Beach Day', goal: 'Add 10 friends', image: STAMP_08, earned: false, progress: 0, progressText: '0/10', rarity: 'uncommon' },
+  // Regions (placeholder art)
+  { id: 10, name: 'Magic Kingdom', goal: 'Check in at Magic Kingdom', image: STAMP_07, earned: false, rarity: 'common' },
+  { id: 11, name: 'EPCOT', goal: 'Check in at EPCOT', image: STAMP_03, earned: false, rarity: 'common' },
+  { id: 12, name: 'Hollywood Studios', goal: 'Check in at Hollywood Studios', image: STAMP_04, earned: false, rarity: 'common' },
+  { id: 13, name: 'Animal Kingdom', goal: 'Check in at Animal Kingdom', image: STAMP_02, earned: false, rarity: 'common' },
+  { id: 14, name: 'Universal Studios', goal: 'Check in at Universal Studios', image: STAMP_05, earned: false, rarity: 'uncommon' },
+  { id: 15, name: 'Islands of Adv.', goal: 'Check in at Islands of Adventure', image: STAMP_01, earned: false, rarity: 'uncommon' },
+  { id: 16, name: 'Epic Universe', goal: 'Check in at Epic Universe', image: STAMP_06, earned: false, rarity: 'rare' },
+  { id: 17, name: 'Volcano Bay', goal: 'Check in at Volcano Bay', image: STAMP_08, earned: false, rarity: 'uncommon' },
+  // Achievements (placeholder art)
+  { id: 20, name: 'First Steps', goal: 'Collect your first prep item', image: STAMP_01, earned: false, progress: 0, progressText: '0/1', rarity: 'common' },
+  { id: 21, name: 'Set Collector', goal: 'Complete any collection set', image: STAMP_05, earned: false, rarity: 'uncommon' },
+  { id: 22, name: 'Week Warrior', goal: 'Maintain a 7-day streak', image: STAMP_06, earned: false, progress: 0, progressText: '0/7', rarity: 'rare' },
+  { id: 23, name: 'Coin Master', goal: 'Earn 10,000 total coins', image: STAMP_04, earned: false, progress: 0, progressText: '0/10k', rarity: 'epic' },
+  { id: 24, name: 'Social Shark', goal: 'Add 10 friends', image: STAMP_08, earned: false, progress: 0, progressText: '0/10', rarity: 'uncommon' },
+  { id: 25, name: 'XP Machine', goal: 'Earn 30,000 total XP', image: STAMP_03, earned: false, progress: 0, progressText: '0/30k', rarity: 'rare' },
+  { id: 26, name: 'Park Hopper', goal: 'Visit 5 different parks', image: STAMP_07, earned: false, progress: 0, progressText: '0/5', rarity: 'rare' },
+  { id: 27, name: '???', goal: 'Discover this hidden stamp...', image: STAMP_02, earned: false, rarity: 'legendary' },
 ];
 
-// Stamp Card Component
-function StampCard({ stamp, onPress }: { stamp: StampType; onPress: () => void }) {
-  const categoryConfig = STAMP_CATEGORY_CONFIG[stamp.category];
-  const rarityConfig = STAMP_RARITY_CONFIG[stamp.rarity];
-  const shineAnim = useRef(new Animated.Value(0)).current;
+// ── Stamp Card ──────────────────────────────────────────
+function StampCard({ stamp, index, onPress }: { stamp: StampData; index: number; onPress: () => void }) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
 
-  // Shine animation for rare+ stamps
   useEffect(() => {
-    if (stamp.is_earned && rarityConfig.shine) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(shineAnim, {
-            toValue: 1,
-            duration: 2000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(shineAnim, {
-            toValue: 0,
-            duration: 2000,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    }
-  }, [stamp.is_earned]);
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 300, delay: index * 40, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1, friction: 6, tension: 120, delay: index * 40, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
-  const shineOpacity = shineAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0, 0.5, 0],
-  });
+  const handlePressIn = () => {
+    Animated.spring(pressScale, { toValue: 0.92, friction: 8, useNativeDriver: true }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(pressScale, { toValue: 1, friction: 4, tension: 300, useNativeDriver: true }).start();
+  };
+
+  const rarityColor = RARITY_COLORS[stamp.rarity];
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.stampCard,
-        {
-          borderColor: stamp.is_earned ? rarityConfig.color : 'rgba(255, 255, 255, 0.1)',
-          opacity: stamp.is_earned ? 1 : 0.6,
-        },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      {/* New badge */}
-      {stamp.is_new && (
-        <View style={styles.newBadge}>
-          <Text style={styles.newBadgeText}>NEW!</Text>
-        </View>
-      )}
+    <Animated.View style={[cardStyles.wrapper, { opacity: fadeAnim, transform: [{ scale: Animated.multiply(scaleAnim, pressScale) }] }]}>
+      <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={onPress}>
+        <View style={[cardStyles.card, { borderColor: stamp.earned ? rarityColor : 'rgba(210,195,170,0.4)' }]}>
+          {/* Rarity stripe */}
+          <View style={[cardStyles.stripe, { backgroundColor: stamp.earned ? rarityColor : STAMP_LOCKED_COLOR }]} />
 
-      {/* Shine effect */}
-      {stamp.is_earned && rarityConfig.shine && (
-        <Animated.View
-          style={[
-            styles.shineOverlay,
-            { opacity: shineOpacity },
-          ]}
-        />
-      )}
-
-      {/* Icon */}
-      <View
-        style={[
-          styles.stampIcon,
-          {
-            backgroundColor: stamp.is_earned ? categoryConfig.color : 'rgba(255, 255, 255, 0.1)',
-          },
-        ]}
-      >
-        {stamp.is_hidden && !stamp.is_earned ? (
-          <Text style={styles.stampEmoji}>❓</Text>
-        ) : stamp.icon_url ? (
-          <Image
-            source={{ uri: stamp.icon_url }}
-            style={{ width: 40, height: 40 }}
-            contentFit="contain"
-          />
-        ) : (
-          <Text style={styles.stampEmoji}>{categoryConfig.icon}</Text>
-        )}
-      </View>
-
-      {/* Name */}
-      <Text style={styles.stampName} numberOfLines={1}>
-        {stamp.is_hidden && !stamp.is_earned ? '???' : stamp.name}
-      </Text>
-
-      {/* Progress bar (if not earned) */}
-      {!stamp.is_earned && (
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${stamp.progress}%`,
-                  backgroundColor: categoryConfig.color,
-                },
-              ]}
-            />
+          {/* Image */}
+          <View style={cardStyles.imageWrap}>
+            <Image source={stamp.image || STAMP_01} style={cardStyles.stampImage} contentFit="contain" />
+            {!stamp.earned && <View style={cardStyles.lockedOverlay} />}
           </View>
-          {stamp.progress_text && (
-            <Text style={styles.progressText}>{stamp.progress_text}</Text>
+
+          {/* Name */}
+          <Text style={[cardStyles.name, !stamp.earned && { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={1}>
+            {stamp.name}
+          </Text>
+
+          {/* Goal */}
+          <Text style={cardStyles.goal} numberOfLines={2}>{stamp.goal}</Text>
+
+          {/* Progress bar */}
+          {stamp.progress !== undefined && (
+            <View style={cardStyles.progressWrap}>
+              <View style={cardStyles.progressBg}>
+                <View style={[cardStyles.progressFill, { width: `${stamp.progress}%`, backgroundColor: rarityColor }]} />
+              </View>
+              {stamp.progressText && <Text style={cardStyles.progressText}>{stamp.progressText}</Text>}
+            </View>
+          )}
+
+          {/* Badge */}
+          {stamp.earned ? (
+            <View style={[cardStyles.badge, { backgroundColor: STAMP_EARNED_COLOR }]}>
+              <FontAwesomeIcon icon={faCheck} size={8} color="white" />
+            </View>
+          ) : (
+            <View style={[cardStyles.badge, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+              <FontAwesomeIcon icon={faLock} size={8} color="rgba(255,255,255,0.7)" />
+            </View>
           )}
         </View>
-      )}
-
-      {/* Earned checkmark */}
-      {stamp.is_earned && (
-        <View style={[styles.earnedBadge, { backgroundColor: rarityConfig.color }]}>
-          <Text style={styles.earnedText}>✓</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+      </Pressable>
+    </Animated.View>
   );
 }
 
-// Category Tab Component
-function CategoryTab({
-  category,
-  label,
-  icon,
-  color,
-  isActive,
-  onPress,
-  count,
-  earned,
-}: {
-  category: StampCategory;
-  label: string;
-  icon: string;
-  color: string;
-  isActive: boolean;
-  onPress: () => void;
-  count: number;
-  earned: number;
-}) {
-  return (
-    <TouchableOpacity
-      style={[
-        styles.categoryTab,
-        isActive && { backgroundColor: color },
-      ]}
-      onPress={onPress}
-    >
-      <Text style={styles.categoryIcon}>{icon}</Text>
-      <Text
-        style={[
-          styles.categoryLabel,
-          isActive && { color: config.primary },
-        ]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
-      <Text
-        style={[
-          styles.categoryCount,
-          isActive && { color: config.primary },
-        ]}
-      >
-        {earned}/{count}
-      </Text>
-    </TouchableOpacity>
-  );
-}
+// ── Main Screen ─────────────────────────────────────────
+let cachedApiStamps: StampData[] | null = null;
 
-/**
- * Stamp Book Screen - V2 Feature
- * 
- * Displays all achievements (stamps) organized by category.
- * Players can track progress and view earned stamps.
- */
 export default function StampBookScreen() {
-  const [stamps, setStamps] = useState<StampType[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<StampCategory | 'all'>('all');
-  const [selectedStamp, setSelectedStamp] = useState<StampType | null>(null);
-  const [loading, setLoading] = useState(true);
-  
-  const { player } = useContext(AuthContext);
+  const [stamps, setStamps] = useState<StampData[]>(cachedApiStamps || ALL_STAMPS);
+  const [selectedStamp, setSelectedStamp] = useState<StampData | null>(null);
+  const [claiming, setClaiming] = useState(false);
 
-  // Load stamps (replace with API call)
   useFocusEffect(
     useCallback(() => {
-      // Simulate API call
-      setTimeout(() => {
-        setStamps(MOCK_STAMPS);
-        setLoading(false);
-      }, 500);
+      (async () => {
+        try {
+          const resp = await getStamps();
+          const flat: StampData[] = [];
+          for (const arr of Object.values(resp.stamps)) {
+            for (const s of arr as ApiStampData[]) {
+              flat.push(apiToLocal(s));
+            }
+          }
+          cachedApiStamps = flat;
+          setStamps(flat);
+        } catch {
+          // Fall back to mock
+        }
+      })();
     }, [])
   );
 
-  // Filter stamps by category
-  const filteredStamps = selectedCategory === 'all'
-    ? stamps
-    : stamps.filter((s) => s.category === selectedCategory);
-
-  // Count stamps per category
-  const getCategoryStats = (category: StampCategory) => {
-    const categoryStamps = stamps.filter((s) => s.category === category);
-    return {
-      count: categoryStamps.length,
-      earned: categoryStamps.filter((s) => s.is_earned).length,
-    };
-  };
-
-  // Overall progress
-  const totalStamps = stamps.filter((s) => !s.is_hidden).length;
-  const earnedStamps = stamps.filter((s) => s.is_earned).length;
-  const progressPercentage = totalStamps > 0 ? (earnedStamps / totalStamps) * 100 : 0;
-
   return (
     <Wrapper>
-      <Topbar />
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <BackButton />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>Stamp Book</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>📖 Stamp Book</Text>
-        <View style={styles.overallProgress}>
-          <Text style={styles.progressLabel}>
-            {earnedStamps} / {totalStamps} Stamps
-          </Text>
-          <View style={styles.overallProgressBar}>
-            <View
-              style={[
-                styles.overallProgressFill,
-                { width: `${progressPercentage}%` },
-              ]}
-            />
-          </View>
-        </View>
-      </View>
+      <View style={styles.bookArea}>
+        {/* Book background */}
+        <Image source={BOOK_BG} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <View style={styles.darkOverlay} />
 
-      {/* Category Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoryContainer}
-        contentContainerStyle={styles.categoryContent}
-      >
-        <TouchableOpacity
-          style={[
-            styles.categoryTab,
-            selectedCategory === 'all' && { backgroundColor: config.tertiary },
-          ]}
-          onPress={() => setSelectedCategory('all')}
+        <ScrollView
+          style={[StyleSheet.absoluteFill, { zIndex: 5 }]}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.categoryIcon}>🏠</Text>
-          <Text
-            style={[
-              styles.categoryLabel,
-              selectedCategory === 'all' && { color: config.primary },
-            ]}
-          >
-            All
-          </Text>
-          <Text
-            style={[
-              styles.categoryCount,
-              selectedCategory === 'all' && { color: config.primary },
-            ]}
-          >
-            {earnedStamps}/{totalStamps}
-          </Text>
-        </TouchableOpacity>
-
-        {Object.entries(STAMP_CATEGORY_CONFIG).map(([key, cfg]) => {
-          const stats = getCategoryStats(key as StampCategory);
-          return (
-            <CategoryTab
-              key={key}
-              category={key as StampCategory}
-              label={cfg.label}
-              icon={cfg.icon}
-              color={cfg.color}
-              isActive={selectedCategory === key}
-              onPress={() => setSelectedCategory(key as StampCategory)}
-              count={stats.count}
-              earned={stats.earned}
-            />
-          );
-        })}
-      </ScrollView>
-
-      {/* Stamps Grid */}
-      <ScrollView
-        style={styles.stampsContainer}
-        contentContainerStyle={styles.stampsGrid}
-        showsVerticalScrollIndicator={false}
-      >
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading stamps...</Text>
+          {/* Logo */}
+          <View style={styles.logoWrap}>
+            <Image source={STAMP_LOGO} style={styles.logo} contentFit="contain" />
           </View>
-        ) : filteredStamps.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No stamps in this category yet!</Text>
-          </View>
-        ) : (
-          <View style={styles.gridWrapper}>
-            {filteredStamps.map((stamp) => (
-              <StampCard
-                key={stamp.id}
-                stamp={stamp}
-                onPress={() => setSelectedStamp(stamp)}
-              />
+
+          {/* Stamp grid */}
+          <View style={styles.grid}>
+            {stamps.map((stamp, i) => (
+              <StampCard key={stamp.id} stamp={stamp} index={i} onPress={() => setSelectedStamp(stamp)} />
             ))}
           </View>
-        )}
-      </ScrollView>
 
+          <View style={{ height: 30 }} />
+        </ScrollView>
+      </View>
       {/* Stamp Detail Modal */}
-      {selectedStamp && (
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setSelectedStamp(null)}
-        >
-          <View style={styles.modalContent}>
-            <View
-              style={[
-                styles.modalIcon,
-                {
-                  backgroundColor: STAMP_CATEGORY_CONFIG[selectedStamp.category].color,
-                  borderColor: STAMP_RARITY_CONFIG[selectedStamp.rarity].color,
-                },
-              ]}
-            >
-              {selectedStamp.icon_url ? (
+      <Modal
+        visible={!!selectedStamp}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedStamp(null)}
+      >
+        {selectedStamp && (
+          <Pressable style={modalStyles.overlay} onPress={() => setSelectedStamp(null)}>
+            <Pressable style={modalStyles.card} onPress={() => {}}>
+              {/* Stamp image */}
+              <View style={modalStyles.imageContainer}>
                 <Image
-                  source={{ uri: selectedStamp.icon_url }}
-                  style={{ width: 60, height: 60 }}
+                  source={selectedStamp.image || STAMP_01}
+                  style={modalStyles.stampImage}
                   contentFit="contain"
                 />
-              ) : (
-                <Text style={{ fontSize: 50 }}>
-                  {STAMP_CATEGORY_CONFIG[selectedStamp.category].icon}
-                </Text>
-              )}
-            </View>
-
-            <View
-              style={[
-                styles.rarityBadge,
-                { backgroundColor: STAMP_RARITY_CONFIG[selectedStamp.rarity].color },
-              ]}
-            >
-              <Text style={styles.rarityText}>
-                {STAMP_RARITY_CONFIG[selectedStamp.rarity].label}
-              </Text>
-            </View>
-
-            <Text style={styles.modalTitle}>{selectedStamp.name}</Text>
-            <Text style={styles.modalDescription}>{selectedStamp.description}</Text>
-
-            <View style={styles.modalRequirement}>
-              <Text style={styles.requirementLabel}>Requirement:</Text>
-              <Text style={styles.requirementText}>{selectedStamp.requirement_text}</Text>
-            </View>
-
-            {!selectedStamp.is_earned && selectedStamp.progress > 0 && (
-              <View style={styles.modalProgress}>
-                <View style={styles.modalProgressBar}>
-                  <View
-                    style={[
-                      styles.modalProgressFill,
-                      { width: `${selectedStamp.progress}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.modalProgressText}>
-                  {selectedStamp.progress_text || `${selectedStamp.progress}%`}
-                </Text>
+                {!selectedStamp.earned && <View style={modalStyles.lockedImageOverlay} />}
               </View>
-            )}
 
-            <View style={styles.modalRewards}>
-              <Text style={styles.rewardsLabel}>Rewards:</Text>
-              <View style={styles.rewardsRow}>
-                {selectedStamp.rewards.energy > 0 && (
-                  <View style={styles.rewardItem}>
-                    <Text style={styles.rewardIcon}>⚡</Text>
-                    <Text style={styles.rewardValue}>+{selectedStamp.rewards.energy}</Text>
-                  </View>
-                )}
-                {selectedStamp.rewards.tickets > 0 && (
-                  <View style={styles.rewardItem}>
-                    <Text style={styles.rewardIcon}>🎟️</Text>
-                    <Text style={styles.rewardValue}>+{selectedStamp.rewards.tickets}</Text>
-                  </View>
-                )}
-                {selectedStamp.rewards.experience > 0 && (
-                  <View style={styles.rewardItem}>
-                    <Text style={styles.rewardIcon}>⭐</Text>
-                    <Text style={styles.rewardValue}>+{selectedStamp.rewards.experience}</Text>
-                  </View>
-                )}
-                {selectedStamp.rewards.ride_parts > 0 && (
-                  <View style={styles.rewardItem}>
-                    <Text style={styles.rewardIcon}>🔧</Text>
-                    <Text style={styles.rewardValue}>+{selectedStamp.rewards.ride_parts}</Text>
-                  </View>
-                )}
+              {/* Rarity badge */}
+              <View style={[modalStyles.rarityBadge, { backgroundColor: RARITY_COLORS[selectedStamp.rarity] }]}>  
+                <Text style={modalStyles.rarityText}>{selectedStamp.rarity.toUpperCase()}</Text>
               </View>
-              {selectedStamp.rewards.title && (
-                <Text style={styles.titleReward}>
-                  🏆 Title: "{selectedStamp.rewards.title}"
-                </Text>
-              )}
-            </View>
 
-            {selectedStamp.is_earned && (
-              <View style={styles.earnedContainer}>
-                <Text style={styles.earnedLabel}>✓ Earned!</Text>
-                {selectedStamp.earned_at && (
-                  <Text style={styles.earnedDate}>
-                    {new Date(selectedStamp.earned_at).toLocaleDateString()}
+              {/* Name */}
+              <Text style={modalStyles.name}>{selectedStamp.name}</Text>
+
+              {/* Goal */}
+              <View style={modalStyles.goalBox}>
+                <Text style={modalStyles.goalLabel}>HOW TO EARN</Text>
+                <Text style={modalStyles.goalText}>{selectedStamp.goal}</Text>
+              </View>
+
+              {/* Progress */}
+              {selectedStamp.progress !== undefined && (
+                <View style={modalStyles.progressSection}>
+                  <View style={modalStyles.progressBarBg}>
+                    <View style={[modalStyles.progressBarFill, { width: `${selectedStamp.progress}%`, backgroundColor: RARITY_COLORS[selectedStamp.rarity] }]} />
+                  </View>
+                  <Text style={modalStyles.progressLabel}>
+                    {selectedStamp.progressText || `${selectedStamp.progress}%`}
                   </Text>
-                )}
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
-      )}
+                </View>
+              )}
+
+              {/* Status */}
+              {selectedStamp.earned ? (
+                <View style={modalStyles.earnedBox}>
+                  <FontAwesomeIcon icon={faCheck} size={14} color={STAMP_EARNED_COLOR} />
+                  <Text style={modalStyles.earnedText}>Earned!</Text>
+                </View>
+              ) : (
+                <View style={modalStyles.lockedBox}>
+                  <FontAwesomeIcon icon={faLock} size={14} color={STAMP_LOCKED_COLOR} />
+                  <Text style={modalStyles.lockedText}>Locked</Text>
+                </View>
+              )}
+
+              {/* Close hint */}
+              <Text style={modalStyles.closeHint}>Tap outside to close</Text>
+            </Pressable>
+          </Pressable>
+        )}
+      </Modal>
+
     </Wrapper>
   );
 }
 
-const { width } = Dimensions.get('window');
-const CARD_SIZE = (width - 48) / 3;
-
+// ── Styles ──────────────────────────────────────────────
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-  },
-  title: {
-    fontFamily: 'Shark',
-    fontSize: 28,
-    color: 'white',
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 0,
-    marginBottom: 12,
-  },
-  overallProgress: {
-    alignItems: 'center',
-  },
-  progressLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginBottom: 6,
-  },
-  overallProgressBar: {
-    width: '80%',
-    height: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 5,
+  bookArea: {
+    flex: 1,
+    position: 'relative',
     overflow: 'hidden',
   },
-  overallProgressFill: {
-    height: '100%',
-    backgroundColor: config.tertiary,
-    borderRadius: 5,
+  darkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    zIndex: 1,
+    pointerEvents: 'none',
   },
-  categoryContainer: {
-    maxHeight: 70,
-  },
-  categoryContent: {
+  scrollContent: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    paddingTop: 8,
   },
-  categoryTab: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  logoWrap: {
     alignItems: 'center',
-    marginRight: 8,
-    minWidth: 70,
+    marginBottom: 12,
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  categoryIcon: {
-    fontSize: 18,
+  logo: {
+    width: SW * 0.85,
+    height: SW * 0.32,
   },
-  categoryLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 10,
-    color: 'white',
-    marginTop: 2,
-  },
-  categoryCount: {
-    fontFamily: 'Knockout',
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.6)',
-  },
-  stampsContainer: {
-    flex: 1,
-  },
-  stampsGrid: {
-    padding: 12,
-  },
-  gridWrapper: {
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-  },
-  stampCard: {
-    width: CARD_SIZE,
-    aspectRatio: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    borderWidth: 2,
-    padding: 8,
-    alignItems: 'center',
     justifyContent: 'center',
+  },
+});
+
+const cardStyles = StyleSheet.create({
+  wrapper: {
+    width: CARD_SIZE,
+  },
+  card: {
+    backgroundColor: 'rgba(60,40,20,0.85)',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    padding: 6,
+    paddingTop: 8,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  newBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: config.red,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    zIndex: 10,
-  },
-  newBadgeText: {
-    fontFamily: 'Knockout',
-    fontSize: 8,
-    color: 'white',
-  },
-  shineOverlay: {
+  stripe: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    height: 3,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
   },
-  stampIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
+  imageWrap: {
+    width: CARD_SIZE * 0.75,
+    height: CARD_SIZE * 0.65,
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 4,
   },
-  stampEmoji: {
-    fontSize: 28,
+  stampImage: {
+    width: '100%',
+    height: '100%',
   },
-  stampName: {
+  lockedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  name: {
     fontFamily: 'Knockout',
     fontSize: 10,
-    color: 'white',
+    color: '#fff',
+    fontWeight: '600',
     textAlign: 'center',
   },
-  progressContainer: {
-    width: '100%',
-    marginTop: 4,
+  goal: {
+    fontFamily: 'Knockout',
+    fontSize: 8,
+    color: 'rgba(255,255,255,0.65)',
+    textAlign: 'center',
+    lineHeight: 10,
+    marginTop: 1,
+    paddingHorizontal: 2,
   },
-  progressBar: {
+  progressWrap: {
+    width: '90%',
+    alignItems: 'center',
+    marginTop: 3,
+  },
+  progressBg: {
     width: '100%',
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 2,
     overflow: 'hidden',
   },
@@ -714,200 +438,161 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontFamily: 'Knockout',
-    fontSize: 8,
-    color: 'rgba(255, 255, 255, 0.5)',
-    textAlign: 'center',
-    marginTop: 2,
+    fontSize: 7,
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: 1,
   },
-  earnedBadge: {
+  badge: {
     position: 'absolute',
-    bottom: 4,
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: 6,
+    right: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  earnedText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  loadingContainer: {
+});
+
+// ── Modal styles ────────────────────────────────────────
+const modalStyles = StyleSheet.create({
+  overlay: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
+    padding: 30,
   },
-  loadingText: {
-    fontFamily: 'Knockout',
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.6)',
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontFamily: 'Knockout',
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.6)',
-  },
-  // Modal styles
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: config.primary,
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
+  card: {
     width: '100%',
     maxWidth: 320,
+    backgroundColor: '#1a1510',
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  modalIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    borderColor: GOLD + '50',
     alignItems: 'center',
-    justifyContent: 'center',
+    padding: 24,
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  imageContainer: {
+    width: 180,
+    height: 160,
+    borderRadius: 12,
+    overflow: 'hidden',
     marginBottom: 12,
-    borderWidth: 4,
+  },
+  stampImage: {
+    width: '100%',
+    height: '100%',
+  },
+  lockedImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.15)',
   },
   rarityBadge: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 4,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   rarityText: {
     fontFamily: 'Knockout',
-    fontSize: 12,
-    color: config.primary,
-    textTransform: 'uppercase',
+    fontSize: 11,
+    color: '#fff',
+    fontWeight: '700',
+    letterSpacing: 1,
   },
-  modalTitle: {
+  name: {
     fontFamily: 'Shark',
-    fontSize: 22,
-    color: 'white',
+    fontSize: 24,
+    color: '#fff',
     textAlign: 'center',
-    marginBottom: 8,
-  },
-  modalDescription: {
-    fontFamily: 'Knockout',
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  modalRequirement: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    padding: 12,
-    width: '100%',
-    marginBottom: 12,
-  },
-  requirementLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.5)',
     textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  requirementText: {
-    fontFamily: 'Knockout',
-    fontSize: 14,
-    color: 'white',
-  },
-  modalProgress: {
-    width: '100%',
     marginBottom: 12,
   },
-  modalProgressBar: {
+  goalBox: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  goalLabel: {
+    fontFamily: 'Knockout',
+    fontSize: 9,
+    color: GOLD_LIGHT,
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  goalText: {
+    fontFamily: 'Knockout',
+    fontSize: 15,
+    color: '#fff',
+    lineHeight: 20,
+  },
+  progressSection: {
+    width: '100%',
+    marginBottom: 14,
+  },
+  progressBarBg: {
     width: '100%',
     height: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 4,
     overflow: 'hidden',
+    marginBottom: 4,
   },
-  modalProgressFill: {
+  progressBarFill: {
     height: '100%',
-    backgroundColor: config.tertiary,
     borderRadius: 4,
   },
-  modalProgressText: {
+  progressLabel: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: config.tertiary,
+    color: 'rgba(255,255,255,0.5)',
     textAlign: 'center',
-    marginTop: 4,
   },
-  modalRewards: {
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
-    borderRadius: 8,
-    padding: 12,
-    width: '100%',
+  earnedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(76,175,80,0.15)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
     marginBottom: 12,
   },
-  rewardsLabel: {
+  earnedText: {
     fontFamily: 'Knockout',
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.5)',
-    textTransform: 'uppercase',
-    marginBottom: 8,
+    fontSize: 16,
+    color: STAMP_EARNED_COLOR,
+    fontWeight: '700',
   },
-  rewardsRow: {
+  lockedBox: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    flexWrap: 'wrap',
-  },
-  rewardItem: {
     alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 12,
   },
-  rewardIcon: {
-    fontSize: 18,
-  },
-  rewardValue: {
+  lockedText: {
     fontFamily: 'Knockout',
-    fontSize: 14,
-    color: '#4CAF50',
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.4)',
   },
-  titleReward: {
+  closeHint: {
     fontFamily: 'Knockout',
-    fontSize: 12,
-    color: '#FFD700',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  earnedContainer: {
-    backgroundColor: 'rgba(76, 175, 80, 0.3)',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-    width: '100%',
-  },
-  earnedLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 18,
-    color: '#4CAF50',
-  },
-  earnedDate: {
-    fontFamily: 'Knockout',
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.25)',
     marginTop: 4,
   },
 });

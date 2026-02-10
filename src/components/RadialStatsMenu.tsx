@@ -63,8 +63,16 @@ function StatItem({ icon, label, value, index, visible, onPress }: StatItemProps
 export default function RadialStatsMenu() {
   const { player } = useContext(AuthContext);
   const [isOpen, setIsOpen] = useState(false);
+  const [tooltip, setTooltip] = useState<string | null>(null);
+  const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const showTooltip = (text: string) => {
+    if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+    setTooltip(text);
+    tooltipTimer.current = setTimeout(() => setTooltip(null), 2500);
+  };
 
   // Pulse animation for avatar when menu is closed (subtle attention getter)
   useEffect(() => {
@@ -104,6 +112,7 @@ export default function RadialStatsMenu() {
 
   const closeMenu = () => {
     setIsOpen(false);
+    setTooltip(null);
     Animated.timing(backdropAnim, {
       toValue: 0,
       duration: 200,
@@ -112,8 +121,8 @@ export default function RadialStatsMenu() {
   };
 
   const items = [
-    { icon: '⚡', label: 'Energy', value: formatNumber(energy), onPress: undefined },
-    { icon: '🎟️', label: 'Tickets', value: formatNumber(tickets), onPress: undefined },
+    { icon: '⚡', label: 'Energy', value: formatNumber(energy), onPress: () => showTooltip('Use this to upgrade your coins!') },
+    { icon: '🎟️', label: 'Tickets', value: formatNumber(tickets), onPress: () => showTooltip('Use these for rides at the park!') },
     { icon: '🔥', label: 'Streak', value: streak > 0 ? `${streak}d` : '0', onPress: undefined },
   ];
 
@@ -132,6 +141,16 @@ export default function RadialStatsMenu() {
             ]} 
           />
         </Pressable>
+      )}
+
+      {/* Tooltip bubble */}
+      {tooltip && (
+        <View style={styles.tooltipContainer}>
+          <View style={styles.tooltipBubble}>
+            <Text style={styles.tooltipText}>{tooltip}</Text>
+          </View>
+          <View style={styles.tooltipArrow} />
+        </View>
       )}
 
       {/* Stats popup - vertical stack above avatar */}
@@ -228,5 +247,44 @@ const styles = StyleSheet.create({
   },
   avatarWrapperActive: {
     borderColor: '#4CAF50',
+  },
+  tooltipContainer: {
+    position: 'absolute',
+    bottom: 80,
+    right: 70,
+    alignItems: 'flex-end',
+    zIndex: 30,
+  },
+  tooltipBubble: {
+    backgroundColor: 'rgba(30, 34, 42, 0.95)',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    maxWidth: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  tooltipText: {
+    fontFamily: 'Knockout',
+    fontSize: 13,
+    color: '#fff',
+    textAlign: 'center',
+  },
+  tooltipArrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: 'rgba(30, 34, 42, 0.95)',
+    alignSelf: 'flex-end',
+    marginRight: 12,
   },
 });

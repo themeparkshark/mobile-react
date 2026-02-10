@@ -1,3 +1,4 @@
+import { BlurView } from 'expo-blur';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { ReactNode, useContext } from 'react';
 import { Alert, View } from 'react-native';
@@ -13,40 +14,52 @@ export default function SignInButtons({
   const { labels, warnings } = useCrumbs();
 
   return (
-    <View
+    <BlurView
+      intensity={40}
+      tint="light"
       style={{
-        backgroundColor: 'rgba(255, 255, 255, .8)',
         marginLeft: 'auto',
         marginRight: 'auto',
-        padding: 16,
-        borderRadius: 5,
+        borderRadius: 20,
+        overflow: 'hidden',
       }}
     >
-      <AppleAuthentication.AppleAuthenticationButton
-        buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-        cornerRadius={5}
-        style={{ width: 200, height: 44 }}
-        onPress={async () => {
-          try {
-            const credential = await AppleAuthentication.signInAsync({
-              requestedScopes: [
-                AppleAuthentication.AppleAuthenticationScope.EMAIL,
-              ],
-            });
-
-            login(credential);
-          } catch (error) {
-            if (error.code !== 'ERR_REQUEST_CANCELED') {
-              Alert.alert(
-                warnings.something_went_wrong,
-                labels.please_try_again
-              );
-            }
-          }
+      <View
+        style={{
+          backgroundColor: 'rgba(255, 255, 255, 0.75)',
+          padding: 24,
+          borderRadius: 20,
+          alignItems: 'center',
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.3)',
         }}
-      />
-      {children}
-    </View>
+      >
+        <AppleAuthentication.AppleAuthenticationButton
+          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+          cornerRadius={12}
+          style={{ width: 220, height: 48 }}
+          onPress={async () => {
+            try {
+              const credential = await AppleAuthentication.signInAsync({
+                requestedScopes: [
+                  AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                ],
+              });
+
+              login(credential);
+            } catch (error) {
+              if (error.code !== 'ERR_REQUEST_CANCELED') {
+                Alert.alert(
+                  warnings.something_went_wrong,
+                  labels.please_try_again
+                );
+              }
+            }
+          }}
+        />
+        {children}
+      </View>
+    </BlurView>
   );
 }

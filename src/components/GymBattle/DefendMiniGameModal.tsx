@@ -12,6 +12,7 @@ import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
+import { battleHUDEvents } from './battleHUDEvents';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -306,6 +307,7 @@ export default function DefendMiniGameModal({
         message: response.message,
       });
       setGameState('finished');
+      battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (error: any) {
       setResult({
         points: 0,

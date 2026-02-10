@@ -12,7 +12,8 @@ import Constants from 'expo-constants';
 
 interface FlyingCoin {
   id: number;
-  imageUrl: string;
+  imageUrl?: string;
+  imageSource?: number; // local require() asset
   startX: number;
   startY: number;
   endX: number;
@@ -23,13 +24,14 @@ interface FlyingCoin {
 
 interface CurrencyFlyContextType {
   triggerFly: (params: {
-    imageUrl: string;
+    imageUrl?: string;
+    imageSource?: number; // local require() asset
     amount: number;
     startX: number;
     startY: number;
-    targetPosition?: 'left' | 'center' | 'right';
+    targetPosition?: string;
   }) => void;
-  registerTarget: (position: 'left' | 'center' | 'right', x: number, y: number) => void;
+  registerTarget: (name: string, x: number, y: number) => void;
 }
 
 export const CurrencyFlyContext = createContext<CurrencyFlyContextType>({
@@ -64,8 +66,8 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
     right: { x: SCREEN_WIDTH * 0.85, y: HEADER_Y },
   });
 
-  const registerTarget = useCallback((position: 'left' | 'center' | 'right', x: number, y: number) => {
-    targets.current[position] = { x, y };
+  const registerTarget = useCallback((name: string, x: number, y: number) => {
+    targets.current[name] = { x, y };
   }, []);
 
   // Play coin landing sound
@@ -89,18 +91,20 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
 
   const triggerFly = useCallback(({
     imageUrl,
+    imageSource,
     amount,
     startX,
     startY,
     targetPosition = 'left',
   }: {
-    imageUrl: string;
+    imageUrl?: string;
+    imageSource?: number;
     amount: number;
     startX: number;
     startY: number;
-    targetPosition?: 'left' | 'center' | 'right';
+    targetPosition?: string;
   }) => {
-    const target = targets.current[targetPosition];
+    const target = targets.current[targetPosition] || targets.current['left'];
     const numCoins = Math.min(Math.max(amount, 1), 10); // 1-10 coins max
     
     const newCoins: FlyingCoin[] = [];
@@ -118,6 +122,7 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
       newCoins.push({
         id,
         imageUrl,
+        imageSource,
         startX: startX + offsetX,
         startY: startY + offsetY,
         endX: target.x,
@@ -233,7 +238,7 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
               />
               {/* Coin image */}
               <Image
-                source={{ uri: coin.imageUrl }}
+                source={coin.imageSource ? coin.imageSource : { uri: coin.imageUrl }}
                 style={styles.coinImage}
                 contentFit="contain"
               />

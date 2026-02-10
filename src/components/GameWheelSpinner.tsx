@@ -78,8 +78,9 @@ export default function GameWheelSpinner({
     }
     
     const extraSpins = 4 + Math.random() * 3;
-    const targetOffset = targetSegmentIndex * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
-    const finalAngle = extraSpins * 360 + targetOffset;
+    // Rotate so target segment's center lands under the top pointer
+    const segmentCenter = targetSegmentIndex * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
+    const finalAngle = extraSpins * 360 + (360 - segmentCenter);
     
     Animated.timing(wheelRotation, {
       toValue: finalAngle,

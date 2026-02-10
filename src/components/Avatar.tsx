@@ -1,14 +1,18 @@
 import { Image } from 'expo-image';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 import config from '../config';
 import { PlayerType } from '../models/player-type';
 
 export default function Avatar({
   player,
   size = 'md',
+  showLevel = false,
+  showOnline = false,
 }: {
   readonly size?: 'sm' | 'md' | 'lg' | 'xl';
   readonly player: PlayerType;
+  readonly showLevel?: boolean;
+  readonly showOnline?: boolean;
 }) {
   const sizes = {
     sm: 50,
@@ -41,6 +45,53 @@ export default function Avatar({
         marginRight: size === 'md' ? 0 : 'auto',
       }}
     >
+      {/* Online indicator */}
+      {showOnline && (
+        <View
+          style={{
+            width: s / 4.5,
+            height: s / 4.5,
+            borderRadius: 999,
+            backgroundColor: '#22c55e',
+            borderWidth: 2,
+            borderColor: 'white',
+            position: 'absolute',
+            top: 2,
+            left: 2,
+            zIndex: 15,
+          }}
+        />
+      )}
+      {/* Level badge */}
+      {showLevel && player.experience_level && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: -2,
+            alignSelf: 'center',
+            backgroundColor: config.secondary,
+            borderRadius: 8,
+            paddingHorizontal: 6,
+            paddingVertical: 1,
+            borderWidth: 1.5,
+            borderColor: 'white',
+            zIndex: 15,
+            minWidth: 22,
+            alignItems: 'center',
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: 'Shark',
+              fontSize: size === 'sm' ? 8 : 10,
+              color: 'white',
+              textAlign: 'center',
+            }}
+          >
+            {player.experience_level.level}
+          </Text>
+        </View>
+      )}
       {!!player.verified_at && (
         <Image
           source={require('../../assets/images/screens/profile/verified.png')}

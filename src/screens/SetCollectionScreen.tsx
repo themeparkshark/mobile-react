@@ -3,6 +3,7 @@ import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  Easing,
   Platform,
   RefreshControl,
   ScrollView,
@@ -11,34 +12,29 @@ import {
   View,
   StyleSheet,
 } from 'react-native';
-// import { LinearGradient } from 'expo-linear-gradient';
-// Temp: Using View instead of LinearGradient until dev client is rebuilt
-const LinearGradient = ({ colors, style, children }: any) => (
-  <View style={[style, { backgroundColor: colors[0] }]}>{children}</View>
-);
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from '../helpers/haptics';
 import HapticPatterns from '../helpers/hapticPatterns';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { 
-  faArrowLeft, 
-  faLock, 
-  faStar, 
-  faCheck, 
-  faClock, 
-  faCloud,
+import {
+  faLock,
+  faStar,
+  faCheck,
+  faClock,
   faTrophy,
-  faFire,
   faGem,
 } from '@fortawesome/free-solid-svg-icons';
 import Wrapper from '../components/Wrapper';
-import Topbar from '../components/Topbar';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
 import Button from '../components/Button';
 import config from '../config';
 import { Modal } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
-import getPrepItemSets, { 
-  getPrepItemSet, 
+import getPrepItemSets, {
+  getPrepItemSet,
   claimSetRewards,
   PrepItemSetListItem,
   PrepItemSetItem,
@@ -95,22 +91,260 @@ const getChurroImage = (variantSlug: string) => {
 };
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const ITEM_SIZE = (SCREEN_WIDTH - 48) / 4; // 4 items per row with padding
+const ITEM_SIZE = (SCREEN_WIDTH - 56) / 4; // 4 items per row with padding
 
-// Rarity configuration
+// Rarity configuration — modern, softer palette
 const RARITY_CONFIG = {
-  1: { name: 'common', label: 'Common', color: '#4CAF50', bgColor: 'rgba(76, 175, 80, 0.15)' },
-  2: { name: 'uncommon', label: 'Uncommon', color: '#2196F3', bgColor: 'rgba(33, 150, 243, 0.15)' },
-  3: { name: 'rare', label: 'Rare', color: '#9C27B0', bgColor: 'rgba(156, 39, 176, 0.15)' },
-  4: { name: 'epic', label: 'Epic', color: '#FF9800', bgColor: 'rgba(255, 152, 0, 0.15)' },
-  5: { name: 'legendary', label: 'Legendary', color: '#FFD700', bgColor: 'rgba(255, 215, 0, 0.2)' },
+  1: { name: 'common', label: 'Common', color: '#22c55e', bgColor: 'rgba(34, 197, 94, 0.08)', glowColor: 'rgba(34, 197, 94, 0.2)' },
+  2: { name: 'uncommon', label: 'Uncommon', color: '#3b82f6', bgColor: 'rgba(59, 130, 246, 0.08)', glowColor: 'rgba(59, 130, 246, 0.2)' },
+  3: { name: 'rare', label: 'Rare', color: '#a855f7', bgColor: 'rgba(168, 85, 247, 0.08)', glowColor: 'rgba(168, 85, 247, 0.2)' },
+  4: { name: 'epic', label: 'Epic', color: '#ec4899', bgColor: 'rgba(236, 72, 153, 0.08)', glowColor: 'rgba(236, 72, 153, 0.2)' },
+  5: { name: 'legendary', label: 'Legendary', color: '#f59e0b', bgColor: 'rgba(245, 158, 11, 0.1)', glowColor: 'rgba(245, 158, 11, 0.3)' },
 };
+
+// Animated collection item card
+function CollectionCard({
+  item,
+  index,
+  onPress,
+}: {
+  item: PrepItemSetItem;
+  index: number;
+  onPress: (item: PrepItemSetItem) => void;
+}) {
+  const rarity = RARITY_CONFIG[item.rarity as keyof typeof RARITY_CONFIG] || RARITY_CONFIG[1];
+  const isCollected = item.is_collected;
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const pressAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      delay: index * 40,
+      useNativeDriver: true,
+      speed: 14,
+      bounciness: 6,
+    }).start();
+  }, []);
+
+  const handlePressIn = () => {
+    Animated.spring(pressAnim, {
+      toValue: 0.92,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(pressAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 8,
+    }).start();
+  };
+
+  return (
+    <Animated.View
+      style={{
+        width: ITEM_SIZE,
+        height: ITEM_SIZE + 20,
+        transform: [
+          { scale: Animated.multiply(scaleAnim, pressAnim) },
+        ],
+        opacity: scaleAnim,
+      }}
+    >
+      <TouchableOpacity
+        activeOpacity={1}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={() => {
+          HapticPatterns.buttonTap();
+          onPress(item);
+        }}
+        style={{ flex: 1 }}
+      >
+        <View
+          style={[
+            styles.collectionItem,
+            {
+              borderColor: isCollected ? rarity.color : 'rgba(0,0,0,0.06)',
+              borderWidth: isCollected ? 2 : 1,
+              backgroundColor: isCollected
+                ? 'white'
+                : '#f0f0f4',
+            },
+          ]}
+        >
+          {/* Rarity glow for collected items */}
+          {isCollected && (
+            <View
+              style={[
+                styles.itemGlow,
+                { backgroundColor: rarity.color, opacity: 0.15 },
+              ]}
+            />
+          )}
+
+          {/* Item Image */}
+          <View style={styles.itemImageContainer}>
+            {(() => {
+              const localImage = item.variant_slug
+                ? getChurroImage(item.variant_slug)
+                : null;
+
+              if (localImage) {
+                return (
+                  <Image
+                    source={localImage}
+                    style={[
+                      styles.itemImage,
+                      !isCollected && styles.itemImageLocked,
+                    ]}
+                    contentFit="contain"
+                  />
+                );
+              } else if (item.icon_url) {
+                return (
+                  <Image
+                    source={{ uri: item.icon_url }}
+                    style={[
+                      styles.itemImage,
+                      !isCollected && styles.itemImageLocked,
+                    ]}
+                    contentFit="contain"
+                  />
+                );
+              } else {
+                return (
+                  <View
+                    style={[
+                      styles.itemPlaceholder,
+                      { borderColor: 'rgba(0,0,0,0.1)' },
+                    ]}
+                  >
+                    {!isCollected && (
+                      <FontAwesomeIcon icon={faLock} size={18} color="rgba(0,0,0,0.12)" />
+                    )}
+                  </View>
+                );
+              }
+            })()}
+          </View>
+
+          {/* Lock overlay for uncollected */}
+          {!isCollected && (
+            <View style={styles.lockOverlay}>
+              <FontAwesomeIcon
+                icon={faLock}
+                size={16}
+                color="rgba(0,0,0,0.15)"
+              />
+            </View>
+          )}
+
+          {/* Collected count badge */}
+          {isCollected && (
+            <View
+              style={[
+                styles.collectedBadge,
+                { backgroundColor: rarity.color },
+              ]}
+            >
+              <Text style={styles.collectedBadgeText}>
+                {item.quantity_collected}
+              </Text>
+            </View>
+          )}
+
+          {/* Rarity indicator strip at bottom */}
+          <View
+            style={[
+              styles.rarityStrip,
+              { backgroundColor: rarity.color },
+            ]}
+          />
+        </View>
+
+        {/* Item name below card */}
+        <Text
+          style={[
+            styles.itemName,
+            { color: isCollected ? '#1a1a2e' : 'rgba(0,0,0,0.25)' },
+          ]}
+          numberOfLines={1}
+        >
+          {isCollected ? item.name : '???'}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// Circular progress ring component
+function ProgressRing({
+  progress,
+  size,
+  strokeWidth,
+  color,
+}: {
+  progress: number;
+  size: number;
+  strokeWidth: number;
+  color: string;
+}) {
+  // Since SVG isn't available, use a simplified ring with overlay
+  const angle = progress * 360;
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        borderWidth: strokeWidth,
+        borderColor: 'rgba(0,0,0,0.06)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+      }}
+    >
+      {/* Progress arc approximation using border */}
+      <View
+        style={{
+          position: 'absolute',
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: strokeWidth,
+          borderColor: 'transparent',
+          borderTopColor: color,
+          borderRightColor: progress > 0.25 ? color : 'transparent',
+          borderBottomColor: progress > 0.5 ? color : 'transparent',
+          borderLeftColor: progress > 0.75 ? color : 'transparent',
+          transform: [{ rotate: '-45deg' }],
+        }}
+      />
+      <Text
+        style={{
+          fontFamily: 'Shark',
+          fontSize: size * 0.28,
+          color: '#1a1a2e',
+          textAlign: 'center',
+        }}
+      >
+        {Math.round(progress * 100)}%
+      </Text>
+    </View>
+  );
+}
 
 export default function SetCollectionScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { player, refreshPlayer } = useContext(AuthContext);
-  
+
   const [sets, setSets] = useState<PrepItemSetListItem[]>([]);
   const [selectedSetSlug, setSelectedSetSlug] = useState<string | null>(
     (route.params as any)?.slug || null
@@ -122,14 +356,17 @@ export default function SetCollectionScreen() {
     items_by_rarity: any;
     completion_rewards: any;
   } | null>(null);
-  
+
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<PrepItemSetItem | null>(null);
-  
+  const [selectedItem, setSelectedItem] = useState<PrepItemSetItem | null>(
+    null
+  );
+
   const slideAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const headerFadeAnim = useRef(new Animated.Value(0)).current;
 
   // Load all sets (with mock data fallback)
   const loadSets = useCallback(async () => {
@@ -138,7 +375,6 @@ export default function SetCollectionScreen() {
       setSets(data);
     } catch (error) {
       console.log('API unavailable, using mock data');
-      // Use mock data when API is unavailable
       setSets([MOCK_CHURRO_SET_LIST]);
     } finally {
       setLoading(false);
@@ -146,31 +382,46 @@ export default function SetCollectionScreen() {
   }, []);
 
   // Load single set detail (with mock data fallback)
-  const loadSetDetail = useCallback(async (slug: string) => {
-    try {
-      const data = await getPrepItemSet(slug);
-      setSelectedSetData(data);
-      
-      // Animate progress bar
-      Animated.timing(progressAnim, {
-        toValue: data.progress.percentage / 100,
-        duration: 800,
-        useNativeDriver: false,
-      }).start();
-    } catch (error) {
-      console.log('API unavailable, using mock set detail');
-      // Use mock data when API is unavailable
-      if (slug === 'churro_collection') {
-        setSelectedSetData(MOCK_CHURRO_SET_DETAIL);
-        
-        Animated.timing(progressAnim, {
-          toValue: MOCK_CHURRO_SET_DETAIL.progress.percentage / 100,
-          duration: 800,
-          useNativeDriver: false,
-        }).start();
+  const loadSetDetail = useCallback(
+    async (slug: string) => {
+      try {
+        const data = await getPrepItemSet(slug);
+        setSelectedSetData(data);
+
+        Animated.parallel([
+          Animated.timing(progressAnim, {
+            toValue: data.progress.percentage / 100,
+            duration: 800,
+            useNativeDriver: false,
+          }),
+          Animated.timing(headerFadeAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      } catch (error) {
+        console.log('API unavailable, using mock set detail');
+        if (slug === 'churro_collection') {
+          setSelectedSetData(MOCK_CHURRO_SET_DETAIL);
+
+          Animated.parallel([
+            Animated.timing(progressAnim, {
+              toValue: MOCK_CHURRO_SET_DETAIL.progress.percentage / 100,
+              duration: 800,
+              useNativeDriver: false,
+            }),
+            Animated.timing(headerFadeAnim, {
+              toValue: 1,
+              duration: 500,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        }
       }
-    }
-  }, [progressAnim]);
+    },
+    [progressAnim, headerFadeAnim]
+  );
 
   // Initial load
   useEffect(() => {
@@ -186,7 +437,7 @@ export default function SetCollectionScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    HapticPatterns.refresh();
+    HapticPatterns.buttonTap();
     await loadSets();
     if (selectedSetSlug) {
       await loadSetDetail(selectedSetSlug);
@@ -195,22 +446,26 @@ export default function SetCollectionScreen() {
   }, [loadSets, loadSetDetail, selectedSetSlug]);
 
   // Open set detail
-  const openSet = useCallback((slug: string) => {
-    HapticPatterns.buttonTap();
-    setSelectedSetSlug(slug);
-    progressAnim.setValue(0);
-    
-    Animated.timing(slideAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, [slideAnim, progressAnim]);
+  const openSet = useCallback(
+    (slug: string) => {
+      HapticPatterns.buttonTap();
+      setSelectedSetSlug(slug);
+      progressAnim.setValue(0);
+      headerFadeAnim.setValue(0);
+
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    },
+    [slideAnim, progressAnim, headerFadeAnim]
+  );
 
   // Close set detail
   const closeSet = useCallback(() => {
     HapticPatterns.buttonTap();
-    
+
     Animated.timing(slideAnim, {
       toValue: 0,
       duration: 250,
@@ -224,16 +479,14 @@ export default function SetCollectionScreen() {
   // Claim completion rewards
   const handleClaimRewards = useCallback(async () => {
     if (!selectedSetSlug || claiming) return;
-    
+
     setClaiming(true);
     HapticPatterns.collect('legendary');
-    
+
     try {
       const result = await claimSetRewards(selectedSetSlug);
       await refreshPlayer();
       await loadSetDetail(selectedSetSlug);
-      
-      // Show celebration (TODO: implement celebration modal)
       HapticPatterns.achievement();
     } catch (error) {
       console.error('Failed to claim rewards:', error);
@@ -247,7 +500,8 @@ export default function SetCollectionScreen() {
   const renderSetCard = (set: PrepItemSetListItem) => {
     const progressPercent = set.progress_percentage;
     const themeColor = set.theme_config?.color || '#FF9800';
-    
+    const isComplete = set.is_complete;
+
     return (
       <TouchableOpacity
         key={set.id}
@@ -255,18 +509,53 @@ export default function SetCollectionScreen() {
         onPress={() => openSet(set.slug)}
         activeOpacity={0.85}
       >
-        <LinearGradient
-          colors={[themeColor + '20', themeColor + '40']}
-          style={styles.setCardGradient}
+        <View
+          style={[
+            styles.setCardInner,
+            isComplete && {
+              borderColor: 'rgba(255,215,0,0.5)',
+              shadowColor: '#FFD700',
+              shadowOpacity: 0.4,
+              shadowRadius: 12,
+            },
+          ]}
         >
+          {/* Gradient accent along left edge */}
+          <View
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 4,
+              borderTopLeftRadius: 16,
+              borderBottomLeftRadius: 16,
+              backgroundColor: themeColor,
+            }}
+          />
+
           {/* Set Icon */}
-          <View style={[styles.setIconContainer, { backgroundColor: themeColor + '30' }]}>
+          <View
+            style={[
+              styles.setIconContainer,
+              {
+                backgroundColor: themeColor + '25',
+                borderColor: themeColor + '50',
+              },
+            ]}
+          >
             {set.icon_url ? (
-              <Image source={{ uri: set.icon_url }} style={styles.setIcon} />
+              <Image
+                source={{ uri: set.icon_url }}
+                style={styles.setIcon}
+                contentFit="contain"
+              />
             ) : (
-              <Text style={styles.setIconEmoji}>
-                {set.theme === 'food' ? '🥨' : set.theme === 'night' ? '🌙' : '📦'}
-              </Text>
+              <Image
+                source={CHURRO_IMAGES[`churro_0${(set.id % 5) + 1}`] || CHURRO_IMAGES['churro_01']}
+                style={styles.setIcon}
+                contentFit="contain"
+              />
             )}
           </View>
 
@@ -276,15 +565,18 @@ export default function SetCollectionScreen() {
             <Text style={styles.setDescription} numberOfLines={1}>
               {set.description}
             </Text>
-            
+
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
               <View style={styles.progressBar}>
-                <View 
+                <View
                   style={[
-                    styles.progressFill, 
-                    { width: `${progressPercent}%`, backgroundColor: themeColor }
-                  ]} 
+                    styles.progressFill,
+                    {
+                      width: `${progressPercent}%`,
+                      backgroundColor: isComplete ? '#FFD700' : themeColor,
+                    },
+                  ]}
                 />
               </View>
               <Text style={styles.progressText}>
@@ -294,113 +586,22 @@ export default function SetCollectionScreen() {
           </View>
 
           {/* Completion Badge */}
-          {set.is_complete && (
+          {isComplete && (
             <View style={styles.completeBadge}>
-              <FontAwesomeIcon icon={faCheck} size={14} color="white" />
+              <FontAwesomeIcon icon={faStar} size={14} color="#FFD700" />
             </View>
           )}
 
           {/* Time Gate Indicator */}
           {set.time_gate && !set.time_gate.is_spawning_now && (
             <View style={styles.timeGateBadge}>
-              <FontAwesomeIcon icon={faClock} size={10} color="#666" />
+              <FontAwesomeIcon
+                icon={faClock}
+                size={10}
+                color="rgba(255,255,255,0.4)"
+              />
             </View>
           )}
-        </LinearGradient>
-      </TouchableOpacity>
-    );
-  };
-
-  // Render collection item
-  const renderCollectionItem = (item: PrepItemSetItem, index: number) => {
-    const rarity = RARITY_CONFIG[item.rarity as keyof typeof RARITY_CONFIG] || RARITY_CONFIG[1];
-    const isCollected = item.is_collected;
-    
-    return (
-      <TouchableOpacity
-        key={item.id}
-        style={[
-          styles.collectionItem,
-          { backgroundColor: isCollected ? rarity.bgColor : 'rgba(0,0,0,0.3)' },
-        ]}
-        activeOpacity={0.8}
-        onPress={() => {
-          HapticPatterns.buttonTap();
-          setSelectedItem(item);
-        }}
-      >
-        {/* Rarity glow for collected items */}
-        {isCollected && (
-          <View 
-            style={[
-              styles.itemGlow, 
-              { backgroundColor: rarity.color, opacity: 0.3 }
-            ]} 
-          />
-        )}
-
-        {/* Item Image */}
-        <View style={styles.itemImageContainer}>
-          {(() => {
-            const localImage = item.variant_slug ? getChurroImage(item.variant_slug) : null;
-            
-            if (localImage) {
-              return (
-                <Image
-                  source={localImage}
-                  style={[
-                    styles.itemImage,
-                    !isCollected && styles.itemImageLocked,
-                  ]}
-                  contentFit="contain"
-                />
-              );
-            } else if (item.icon_url) {
-              return (
-                <Image
-                  source={{ uri: item.icon_url }}
-                  style={[
-                    styles.itemImage,
-                    !isCollected && styles.itemImageLocked,
-                  ]}
-                  contentFit="contain"
-                />
-              );
-            } else {
-              return (
-                <View style={[styles.itemPlaceholder, { borderColor: rarity.color }]}>
-                  {isCollected ? (
-                    <Text style={styles.itemPlaceholderEmoji}>🥨</Text>
-                  ) : (
-                    <FontAwesomeIcon icon={faLock} size={20} color="#666" />
-                  )}
-                </View>
-              );
-            }
-          })()}
-        </View>
-
-        {/* Rarity indicator */}
-        <View style={[styles.rarityDot, { backgroundColor: rarity.color }]} />
-
-        {/* Collected checkmark */}
-        {isCollected && (
-          <View style={styles.collectedBadge}>
-            <FontAwesomeIcon icon={faCheck} size={8} color="white" />
-          </View>
-        )}
-
-        {/* Quantity badge - always show count */}
-        <View style={[
-          styles.quantityBadge,
-          !isCollected && styles.quantityBadgeEmpty
-        ]}>
-          <Text style={[
-            styles.quantityText,
-            !isCollected && styles.quantityTextEmpty
-          ]}>
-            {isCollected ? item.quantity_collected : 0}
-          </Text>
         </View>
       </TouchableOpacity>
     );
@@ -416,8 +617,10 @@ export default function SetCollectionScreen() {
       );
     }
 
-    const { set, progress, items, items_by_rarity, completion_rewards } = selectedSetData;
+    const { set, progress, items, items_by_rarity, completion_rewards } =
+      selectedSetData;
     const themeColor = set.theme_config?.color || '#FF9800';
+    const progressFrac = progress.total > 0 ? progress.collected / progress.total : 0;
 
     return (
       <ScrollView
@@ -425,81 +628,154 @@ export default function SetCollectionScreen() {
         contentContainerStyle={styles.detailContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#94a3b8"
+          />
         }
       >
         {/* Header */}
-        <LinearGradient
-          colors={[themeColor, themeColor + 'CC']}
-          style={styles.detailHeader}
-        >
-          <TouchableOpacity style={styles.backButton} onPress={closeSet}>
-            <FontAwesomeIcon icon={faArrowLeft} size={20} color="white" />
-          </TouchableOpacity>
-
-          <Text style={styles.detailTitle}>{set.name}</Text>
-          <Text style={styles.detailDescription}>{set.description}</Text>
-
-          {/* Time gate info */}
-          {set.time_gate && (
-            <View style={styles.timeGateInfo}>
-              <FontAwesomeIcon icon={faClock} size={12} color="rgba(255,255,255,0.8)" />
-              <Text style={styles.timeGateText}>{set.time_gate.description}</Text>
-              {set.time_gate.is_spawning_now ? (
-                <Text style={styles.timeGateActive}>● Active Now</Text>
-              ) : (
-                <Text style={styles.timeGateInactive}>○ Not Spawning</Text>
-              )}
-            </View>
-          )}
-
-          {/* Progress */}
-          <View style={styles.detailProgress}>
-            <Text style={styles.progressLabel}>Collection Progress</Text>
-            <View style={styles.detailProgressBar}>
-              <Animated.View
-                style={[
-                  styles.detailProgressFill,
-                  {
-                    width: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
+        <Animated.View style={{ opacity: headerFadeAnim }}>
+          <View
+            style={styles.detailHeader}
+          >
+            {/* Progress Ring + Title area */}
+            <View style={styles.headerContent}>
+              <ProgressRing
+                progress={progressFrac}
+                size={80}
+                strokeWidth={4}
+                color={progress.is_complete ? '#FFD700' : themeColor}
               />
+              <View style={styles.headerTextArea}>
+                <Text style={styles.detailTitle}>{set.name}</Text>
+                <Text style={styles.detailDescription}>
+                  {set.description}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.progressCount}>
-              {progress.collected} / {progress.total} ({progress.percentage}%)
-            </Text>
+
+            {/* Time gate info */}
+            {set.time_gate && (
+              <View style={styles.timeGateInfo}>
+                <FontAwesomeIcon
+                  icon={faClock}
+                  size={12}
+                  color="rgba(255,255,255,0.6)"
+                />
+                <Text style={styles.timeGateText}>
+                  {set.time_gate.description}
+                </Text>
+                {set.time_gate.is_spawning_now ? (
+                  <View style={styles.activeIndicator}>
+                    <View style={styles.activeDot} />
+                    <Text style={styles.timeGateActive}>Active Now</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.timeGateInactive}>Not Spawning</Text>
+                )}
+              </View>
+            )}
+
+            {/* Progress Bar */}
+            <View style={styles.detailProgress}>
+              <View style={styles.detailProgressBar}>
+                <Animated.View
+                  style={[
+                    styles.detailProgressFill,
+                    {
+                      width: progressAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '100%'],
+                      }),
+                      backgroundColor: progress.is_complete
+                        ? '#FFD700'
+                        : themeColor,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.progressCount}>
+                {progress.collected} / {progress.total}
+              </Text>
+            </View>
           </View>
-        </LinearGradient>
+        </Animated.View>
 
         {/* Completion Rewards */}
         <View style={styles.rewardsSection}>
-          <Text style={styles.sectionTitle}>
-            <FontAwesomeIcon icon={faTrophy} size={16} color="#FFD700" /> Completion Rewards
-          </Text>
+          <View style={styles.rewardsSectionHeader}>
+            <FontAwesomeIcon icon={faTrophy} size={16} color="#FFD700" />
+            <Text style={styles.sectionTitle}>Completion Rewards</Text>
+          </View>
           <View style={styles.rewardsGrid}>
             <View style={styles.rewardItem}>
-              <Text style={styles.rewardEmoji}>⚡</Text>
-              <Text style={styles.rewardValue}>+{completion_rewards.energy}</Text>
+              <View
+                style={[
+                  styles.rewardIconBg,
+                  { backgroundColor: 'rgba(212,247,212,0.25)' },
+                ]}
+              >
+                <Image
+                  source={require('../../assets/images/energy.png')}
+                  style={styles.rewardIconImage}
+                />
+              </View>
+              <Text style={styles.rewardValue}>
+                +{completion_rewards.energy}
+              </Text>
               <Text style={styles.rewardLabel}>Energy</Text>
             </View>
             <View style={styles.rewardItem}>
-              <Text style={styles.rewardEmoji}>🎟️</Text>
-              <Text style={styles.rewardValue}>+{completion_rewards.tickets}</Text>
+              <View
+                style={[
+                  styles.rewardIconBg,
+                  { backgroundColor: 'rgba(255,243,212,0.25)' },
+                ]}
+              >
+                <Image
+                  source={require('../../assets/images/ticket-icon.png')}
+                  style={styles.rewardIconImage}
+                />
+              </View>
+              <Text style={styles.rewardValue}>
+                +{completion_rewards.tickets}
+              </Text>
               <Text style={styles.rewardLabel}>Tickets</Text>
             </View>
             <View style={styles.rewardItem}>
-              <Text style={styles.rewardEmoji}>⭐</Text>
-              <Text style={styles.rewardValue}>+{completion_rewards.experience}</Text>
+              <View
+                style={[
+                  styles.rewardIconBg,
+                  { backgroundColor: 'rgba(76,220,255,0.25)' },
+                ]}
+              >
+                <Image
+                  source={require('../../assets/images/screens/explore/xp.png')}
+                  style={styles.rewardIconImage}
+                />
+              </View>
+              <Text style={styles.rewardValue}>
+                +{completion_rewards.experience}
+              </Text>
               <Text style={styles.rewardLabel}>XP</Text>
             </View>
             {completion_rewards.title && (
               <View style={styles.rewardItem}>
-                <Text style={styles.rewardEmoji}>🏆</Text>
-                <Text style={styles.rewardValue} numberOfLines={1}>
+                <View
+                  style={[
+                    styles.rewardIconBg,
+                    { backgroundColor: 'rgba(255,215,0,0.15)' },
+                  ]}
+                >
+                  <FontAwesomeIcon
+                    icon={faTrophy}
+                    size={16}
+                    color="#FFD700"
+                  />
+                </View>
+                <Text style={[styles.rewardValue, { fontSize: 11 }]} numberOfLines={2}>
                   {completion_rewards.title}
                 </Text>
                 <Text style={styles.rewardLabel}>Title</Text>
@@ -509,41 +785,86 @@ export default function SetCollectionScreen() {
 
           {/* Claim Button */}
           {progress.is_complete && (
-            <Button onPress={handleClaimRewards} hasPermission={!claiming}>
-              <View style={styles.claimButton}>
+            <Button
+              onPress={handleClaimRewards}
+              hasPermission={!claiming}
+            >
+              <LinearGradient
+                colors={['#FFD700', '#FFA000']}
+                style={styles.claimButton}
+              >
+                <FontAwesomeIcon
+                  icon={faStar}
+                  size={18}
+                  color="white"
+                />
                 <Text style={styles.claimButtonText}>
-                  {claiming ? 'Claiming...' : '🎉 Claim Rewards!'}
+                  {claiming ? 'Claiming...' : 'Claim Rewards!'}
                 </Text>
-              </View>
+              </LinearGradient>
             </Button>
           )}
         </View>
 
         {/* Collection Grid - By Rarity */}
         {Object.entries(items_by_rarity)
-          .filter(([_, items]) => (items as PrepItemSetItem[]).length > 0)
+          .filter(
+            ([_, items]) => (items as PrepItemSetItem[]).length > 0
+          )
           .map(([rarityName, rarityItems]) => {
             const items = rarityItems as PrepItemSetItem[];
-            const rarityNum = { legendary: 5, epic: 4, rare: 3, uncommon: 2, common: 1 }[rarityName] || 1;
-            const rarityConfig = RARITY_CONFIG[rarityNum as keyof typeof RARITY_CONFIG];
-            const collectedCount = items.filter(i => i.is_collected).length;
+            const rarityNum =
+              {
+                legendary: 5,
+                epic: 4,
+                rare: 3,
+                uncommon: 2,
+                common: 1,
+              }[rarityName] || 1;
+            const rarityConfig =
+              RARITY_CONFIG[rarityNum as keyof typeof RARITY_CONFIG];
+            const collectedCount = items.filter(
+              (i) => i.is_collected
+            ).length;
 
             return (
               <View key={rarityName} style={styles.raritySection}>
                 <View style={styles.raritySectionHeader}>
-                  <View style={[styles.rarityBadge, { backgroundColor: rarityConfig.color }]}>
-                    <Text style={styles.rarityBadgeText}>{rarityConfig.label}</Text>
+                  <View
+                    style={[
+                      styles.rarityBadge,
+                      { backgroundColor: rarityConfig.color },
+                    ]}
+                  >
+                    <Image
+                      source={CHURRO_IMAGES['churro_01']}
+                      style={{ width: 14, height: 14, marginRight: 4 }}
+                      contentFit="contain"
+                    />
+                    <Text style={styles.rarityBadgeText}>
+                      {rarityConfig.label}
+                    </Text>
                   </View>
                   <Text style={styles.rarityCount}>
                     {collectedCount}/{items.length}
                   </Text>
                 </View>
                 <View style={styles.collectionGrid}>
-                  {items.map((item, index) => renderCollectionItem(item, index))}
+                  {items.map((item, index) => (
+                    <CollectionCard
+                      key={item.id}
+                      item={item}
+                      index={index}
+                      onPress={setSelectedItem}
+                    />
+                  ))}
                 </View>
               </View>
             );
           })}
+
+        {/* Bottom spacer */}
+        <View style={{ height: 40 }} />
       </ScrollView>
     );
   };
@@ -551,12 +872,13 @@ export default function SetCollectionScreen() {
   return (
     <Wrapper>
       <Topbar>
-        <View style={styles.topbarContent}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.topbarBack}>
-            <FontAwesomeIcon icon={faArrowLeft} size={20} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.topbarTitle}>Collections</Text>
-        </View>
+        <TopbarColumn stretch={false}>
+          <BackButton onPress={selectedSetSlug ? closeSet : undefined} />
+        </TopbarColumn>
+        <TopbarColumn>
+          <TopbarText>{selectedSetData?.set?.name || 'Collections'}</TopbarText>
+        </TopbarColumn>
+        <TopbarColumn stretch={false} />
       </Topbar>
 
       {/* Main Content - Set List or Detail */}
@@ -568,20 +890,55 @@ export default function SetCollectionScreen() {
             contentContainerStyle={styles.setListContent}
             showsVerticalScrollIndicator={false}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor="#94a3b8"
+              />
             }
           >
             {loading ? (
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading collections...</Text>
+                <Text style={styles.loadingText}>
+                  Loading collections...
+                </Text>
               </View>
             ) : sets.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyEmoji}>📦</Text>
-                <Text style={styles.emptyText}>No collections available</Text>
+                <FontAwesomeIcon
+                  icon={faGem}
+                  size={48}
+                  color="rgba(0,0,0,0.1)"
+                />
+                <Text style={styles.emptyText}>
+                  No collections available
+                </Text>
               </View>
             ) : (
-              sets.map(renderSetCard)
+              <>
+                {sets.map(renderSetCard)}
+                {/* Coming Soon placeholders */}
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <View key={`coming-${i}`} style={styles.comingSoonCard}>
+                    <View style={styles.comingSoonInner}>
+                      <View style={styles.comingSoonIconContainer}>
+                        <FontAwesomeIcon icon={faLock} size={20} color="rgba(0,0,0,0.12)" />
+                      </View>
+                      <View style={styles.setInfo}>
+                        <Text style={styles.comingSoonTitle}>A New Collection Awaits</Text>
+                        <Text style={styles.comingSoonSubtitle}>Coming Soon</Text>
+                        {/* Placeholder progress bar */}
+                        <View style={[styles.progressContainer, { marginTop: 10 }]}>
+                          <View style={styles.progressBar}>
+                            <View style={[styles.progressFill, { width: '0%', backgroundColor: '#cbd5e1' }]} />
+                          </View>
+                          <Text style={styles.progressText}>? / ?</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </>
             )}
           </ScrollView>
         )}
@@ -623,56 +980,142 @@ export default function SetCollectionScreen() {
           <View style={styles.modalContent}>
             {selectedItem && (
               <>
-                {/* Item Image */}
-                <View style={styles.modalImageContainer}>
-                  {(() => {
-                    const localImage = selectedItem.variant_slug ? getChurroImage(selectedItem.variant_slug) : null;
-                    if (localImage) {
-                      return (
-                        <Image
-                          source={localImage}
-                          style={styles.modalImage}
-                          contentFit="contain"
-                        />
-                      );
-                    } else if (selectedItem.icon_url) {
-                      return (
-                        <Image
-                          source={{ uri: selectedItem.icon_url }}
-                          style={styles.modalImage}
-                          contentFit="contain"
-                        />
-                      );
-                    } else {
-                      return <Text style={styles.modalPlaceholder}>🥨</Text>;
-                    }
-                  })()}
+                {/* Rarity glow ring */}
+                <View
+                  style={[
+                    styles.modalGlowRing,
+                    {
+                      borderColor: (
+                        RARITY_CONFIG[
+                          selectedItem.rarity as keyof typeof RARITY_CONFIG
+                        ] || RARITY_CONFIG[1]
+                      ).color,
+                      shadowColor: (
+                        RARITY_CONFIG[
+                          selectedItem.rarity as keyof typeof RARITY_CONFIG
+                        ] || RARITY_CONFIG[1]
+                      ).color,
+                    },
+                  ]}
+                >
+                  {/* Item Image */}
+                  <View style={styles.modalImageContainer}>
+                    {(() => {
+                      const localImage = selectedItem.variant_slug
+                        ? getChurroImage(selectedItem.variant_slug)
+                        : null;
+                      if (localImage) {
+                        return (
+                          <Image
+                            source={localImage}
+                            style={styles.modalImage}
+                            contentFit="contain"
+                          />
+                        );
+                      } else if (selectedItem.icon_url) {
+                        return (
+                          <Image
+                            source={{ uri: selectedItem.icon_url }}
+                            style={styles.modalImage}
+                            contentFit="contain"
+                          />
+                        );
+                      } else {
+                        return (
+                          <Image
+                            source={CHURRO_IMAGES['churro_01']}
+                            style={{ width: 64, height: 64, opacity: 0.3 }}
+                            contentFit="contain"
+                          />
+                        );
+                      }
+                    })()}
+                  </View>
                 </View>
 
                 {/* Item Name */}
-                <Text style={styles.modalItemName}>{selectedItem.name}</Text>
+                <Text style={styles.modalItemName}>
+                  {selectedItem.name}
+                </Text>
 
                 {/* Rarity */}
-                <View style={[
-                  styles.modalRarityBadge,
-                  { backgroundColor: (RARITY_CONFIG[selectedItem.rarity as keyof typeof RARITY_CONFIG] || RARITY_CONFIG[1]).color }
-                ]}>
+                <View
+                  style={[
+                    styles.modalRarityBadge,
+                    {
+                      backgroundColor: (
+                        RARITY_CONFIG[
+                          selectedItem.rarity as keyof typeof RARITY_CONFIG
+                        ] || RARITY_CONFIG[1]
+                      ).color,
+                    },
+                  ]}
+                >
+                  <Image
+                    source={CHURRO_IMAGES['churro_01']}
+                    style={{ width: 14, height: 14, marginRight: 4 }}
+                    contentFit="contain"
+                  />
                   <Text style={styles.modalRarityText}>
-                    {(RARITY_CONFIG[selectedItem.rarity as keyof typeof RARITY_CONFIG] || RARITY_CONFIG[1]).label}
+                    {
+                      (
+                        RARITY_CONFIG[
+                          selectedItem.rarity as keyof typeof RARITY_CONFIG
+                        ] || RARITY_CONFIG[1]
+                      ).label
+                    }
                   </Text>
                 </View>
 
                 {/* Collection Status */}
-                <Text style={styles.modalStatus}>
-                  {selectedItem.is_collected
-                    ? `✅ Collected${selectedItem.quantity_collected > 1 ? ` (×${selectedItem.quantity_collected})` : ''}`
-                    : '🔒 Not Yet Collected'}
-                </Text>
+                <View style={styles.modalStatusRow}>
+                  {selectedItem.is_collected ? (
+                    <>
+                      <FontAwesomeIcon
+                        icon={faCheck}
+                        size={14}
+                        color="#4CAF50"
+                      />
+                      <Text
+                        style={[
+                          styles.modalStatus,
+                          { color: '#4CAF50' },
+                        ]}
+                      >
+                        Collected
+                        {selectedItem.quantity_collected > 1
+                          ? ` (x${selectedItem.quantity_collected})`
+                          : ''}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <FontAwesomeIcon
+                        icon={faLock}
+                        size={14}
+                        color="rgba(255,255,255,0.5)"
+                      />
+                      <Text style={styles.modalStatus}>
+                        Not Yet Collected
+                      </Text>
+                    </>
+                  )}
+                </View>
+
+                {/* Description */}
+                {selectedItem.description && (
+                  <Text style={styles.modalDescription}>
+                    {selectedItem.description}
+                  </Text>
+                )}
 
                 {/* Hint if not collected */}
-                {!selectedItem.is_collected && selectedItem.hint && (
-                  <Text style={styles.modalHint}>💡 {selectedItem.hint}</Text>
-                )}
+                {!selectedItem.is_collected &&
+                  (selectedItem as any).hint && (
+                    <Text style={styles.modalHint}>
+                      {(selectedItem as any).hint}
+                    </Text>
+                  )}
 
                 {/* Close button */}
                 <TouchableOpacity
@@ -693,23 +1136,8 @@ export default function SetCollectionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f0f4f8',
   },
-  topbarContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  topbarBack: {
-    padding: 8,
-    marginRight: 12,
-  },
-  topbarTitle: {
-    fontFamily: 'Shark',
-    fontSize: 24,
-    color: 'white',
-    textTransform: 'uppercase',
-  },
-  
   // Set List
   setList: {
     flex: 1,
@@ -719,33 +1147,37 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   setCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    marginBottom: 4,
   },
-  setCardGradient: {
+  setCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
+    paddingLeft: 18,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 18,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   setIconContainer: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 14,
+    borderWidth: 1,
   },
   setIcon: {
-    width: 40,
-    height: 40,
-  },
-  setIconEmoji: {
-    fontSize: 28,
+    width: 36,
+    height: 36,
   },
   setInfo: {
     flex: 1,
@@ -753,55 +1185,98 @@ const styles = StyleSheet.create({
   setName: {
     fontFamily: 'Shark',
     fontSize: 18,
-    color: 'white',
+    color: '#1a1a2e',
     textTransform: 'uppercase',
   },
   setDescription: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
+    color: '#64748b',
     marginTop: 2,
   },
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 10,
   },
   progressBar: {
     flex: 1,
-    height: 6,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 3,
-    marginRight: 8,
+    height: 8,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 4,
+    marginRight: 10,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 4,
   },
   progressText: {
     fontFamily: 'Knockout',
-    fontSize: 12,
-    color: 'white',
+    fontSize: 13,
+    color: '#64748b',
     minWidth: 40,
     textAlign: 'right',
   },
   completeBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#4CAF50',
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   timeGateBadge: {
     position: 'absolute',
-    bottom: 8,
-    right: 8,
+    bottom: 10,
+    right: 10,
     padding: 4,
+  },
+  comingSoonCard: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 4,
+    opacity: 0.5,
+  },
+  comingSoonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    paddingLeft: 18,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+    borderStyle: 'dashed',
+  },
+  comingSoonIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
+    borderStyle: 'dashed',
+  },
+  comingSoonTitle: {
+    fontFamily: 'Shark',
+    fontSize: 16,
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+  },
+  comingSoonSubtitle: {
+    fontFamily: 'Knockout',
+    fontSize: 12,
+    color: '#cbd5e1',
+    marginTop: 2,
   },
 
   // Detail View
@@ -811,7 +1286,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: config.primary,
+    backgroundColor: '#f0f4f8',
   },
   detailScroll: {
     flex: 1,
@@ -821,95 +1296,108 @@ const styles = StyleSheet.create({
   },
   detailHeader: {
     padding: 20,
-    paddingTop: 60,
+    paddingTop: 16,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
-  backButton: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    padding: 8,
-    zIndex: 10,
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  headerTextArea: {
+    flex: 1,
   },
   detailTitle: {
     fontFamily: 'Shark',
-    fontSize: 28,
-    color: 'white',
+    fontSize: 26,
+    color: '#1a1a2e',
     textTransform: 'uppercase',
-    textAlign: 'center',
-    marginTop: 20,
   },
   detailDescription: {
     fontFamily: 'Knockout',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
+    fontSize: 13,
+    color: '#64748b',
     marginTop: 4,
   },
   timeGateInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    gap: 6,
+    marginTop: 14,
+    gap: 8,
   },
   timeGateText: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#64748b',
+  },
+  activeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#4CAF50',
   },
   timeGateActive: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: '#4CAF50',
+    color: '#22c55e',
   },
   timeGateInactive: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
+    color: '#94a3b8',
   },
   detailProgress: {
-    marginTop: 20,
+    marginTop: 16,
     alignItems: 'center',
   },
-  progressLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
-    textTransform: 'uppercase',
-  },
   detailProgressBar: {
-    width: '80%',
-    height: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 6,
-    marginTop: 8,
+    width: '100%',
+    height: 10,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 5,
     overflow: 'hidden',
   },
   detailProgressFill: {
     height: '100%',
-    backgroundColor: 'white',
-    borderRadius: 6,
+    borderRadius: 5,
   },
   progressCount: {
-    fontFamily: 'Shark',
-    fontSize: 16,
-    color: 'white',
+    fontFamily: 'Knockout',
+    fontSize: 14,
+    color: '#64748b',
     marginTop: 8,
   },
 
   // Rewards Section
   rewardsSection: {
     padding: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'white',
     margin: 16,
-    borderRadius: 16,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  rewardsSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
   },
   sectionTitle: {
     fontFamily: 'Shark',
     fontSize: 16,
-    color: 'white',
+    color: '#1a1a2e',
     textTransform: 'uppercase',
-    marginBottom: 12,
   },
   rewardsGrid: {
     flexDirection: 'row',
@@ -917,29 +1405,42 @@ const styles = StyleSheet.create({
   },
   rewardItem: {
     alignItems: 'center',
+    flex: 1,
   },
-  rewardEmoji: {
-    fontSize: 24,
+  rewardIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  rewardIconImage: {
+    width: 26,
+    height: 26,
   },
   rewardValue: {
     fontFamily: 'Knockout',
-    fontSize: 18,
-    color: config.tertiary,
-    marginTop: 4,
+    fontSize: 16,
+    color: '#1a1a2e',
+    marginTop: 2,
   },
   rewardLabel: {
     fontFamily: 'Knockout',
     fontSize: 10,
-    color: 'rgba(255,255,255,0.6)',
+    color: '#94a3b8',
     textTransform: 'uppercase',
+    marginTop: 2,
   },
   claimButton: {
-    backgroundColor: '#4CAF50',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     paddingVertical: 16,
     paddingHorizontal: 32,
-    borderRadius: 12,
+    borderRadius: 14,
     marginTop: 16,
-    alignItems: 'center',
   },
   claimButtonText: {
     fontFamily: 'Shark',
@@ -950,18 +1451,20 @@ const styles = StyleSheet.create({
 
   // Rarity Sections
   raritySection: {
-    marginTop: 16,
+    marginTop: 20,
     paddingHorizontal: 16,
   },
   raritySectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   rarityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 12,
   },
   rarityBadgeText: {
@@ -973,7 +1476,7 @@ const styles = StyleSheet.create({
   rarityCount: {
     fontFamily: 'Knockout',
     fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+    color: '#94a3b8',
   },
 
   // Collection Grid
@@ -983,13 +1486,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   collectionItem: {
-    width: ITEM_SIZE,
-    height: ITEM_SIZE,
-    borderRadius: 12,
+    flex: 1,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     overflow: 'hidden',
+    paddingTop: 8,
+    paddingBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   itemGlow: {
     position: 'absolute',
@@ -997,11 +1506,11 @@ const styles = StyleSheet.create({
     left: -10,
     right: -10,
     bottom: -10,
-    borderRadius: 20,
+    borderRadius: 24,
   },
   itemImageContainer: {
-    width: '70%',
-    height: '70%',
+    width: '75%',
+    height: '65%',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1010,62 +1519,62 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   itemImageLocked: {
-    opacity: 0.3,
+    opacity: 0.12,
   },
   itemPlaceholder: {
     width: '100%',
     height: '100%',
     borderRadius: 8,
-    borderWidth: 2,
+    borderWidth: 1,
     borderStyle: 'dashed',
+    borderColor: 'rgba(0,0,0,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  itemPlaceholderEmoji: {
-    fontSize: 24,
+  itemName: {
+    fontFamily: 'Knockout',
+    fontSize: 9,
+    textAlign: 'center',
+    marginTop: 3,
   },
-  rarityDot: {
+  lockOverlay: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rarityStrip: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
   },
   collectedBadge: {
     position: 'absolute',
-    bottom: 4,
+    top: 4,
     right: 4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#4CAF50',
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
-  quantityBadge: {
-    position: 'absolute',
-    bottom: 4,
-    left: 4,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    minWidth: 20,
-    alignItems: 'center',
-  },
-  quantityBadgeEmpty: {
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  quantityText: {
-    fontFamily: 'Knockout',
-    fontSize: 10,
+  collectedBadgeText: {
+    fontFamily: 'Shark',
+    fontSize: 11,
     color: 'white',
-  },
-  quantityTextEmpty: {
-    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
   },
 
   // Loading & Empty States
@@ -1078,72 +1587,80 @@ const styles = StyleSheet.create({
   loadingText: {
     fontFamily: 'Knockout',
     fontSize: 16,
-    color: 'rgba(255,255,255,0.6)',
+    color: '#94a3b8',
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
-  },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: 12,
+    padding: 60,
+    gap: 16,
   },
   emptyText: {
     fontFamily: 'Knockout',
     fontSize: 16,
-    color: 'rgba(255,255,255,0.6)',
+    color: '#94a3b8',
     textAlign: 'center',
   },
 
   // Item Detail Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalContent: {
-    backgroundColor: '#1E222A',
-    borderRadius: 20,
-    padding: 24,
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 28,
     alignItems: 'center',
-    width: '80%',
-    maxWidth: 320,
+    width: '82%',
+    maxWidth: 340,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 20,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 24,
   },
-  modalImageContainer: {
-    width: 120,
-    height: 120,
+  modalGlowRing: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    backgroundColor: '#f8fafc',
+  },
+  modalImageContainer: {
+    width: 100,
+    height: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalImage: {
     width: '100%',
     height: '100%',
   },
-  modalPlaceholder: {
-    fontSize: 64,
-  },
   modalItemName: {
     fontFamily: 'Shark',
-    fontSize: 22,
-    color: 'white',
+    fontSize: 24,
+    color: '#1a1a2e',
     textTransform: 'uppercase',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   modalRarityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 6,
-    borderRadius: 12,
-    marginBottom: 12,
+    borderRadius: 14,
+    marginBottom: 14,
   },
   modalRarityText: {
     fontFamily: 'Knockout',
@@ -1151,16 +1668,28 @@ const styles = StyleSheet.create({
     color: 'white',
     textTransform: 'uppercase',
   },
+  modalStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   modalStatus: {
     fontFamily: 'Knockout',
     fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#64748b',
+  },
+  modalDescription: {
+    fontFamily: 'Knockout',
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
     marginBottom: 8,
   },
   modalHint: {
     fontFamily: 'Knockout',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    color: '#f59e0b',
     textAlign: 'center',
     fontStyle: 'italic',
     marginBottom: 12,
@@ -1168,9 +1697,13 @@ const styles = StyleSheet.create({
   modalCloseButton: {
     backgroundColor: config.tertiary,
     paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    marginTop: 8,
+    paddingHorizontal: 36,
+    borderRadius: 14,
+    marginTop: 12,
+    shadowColor: config.tertiary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   modalCloseText: {
     fontFamily: 'Shark',

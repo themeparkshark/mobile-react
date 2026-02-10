@@ -10,25 +10,16 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
+import { useNavigation } from '@react-navigation/native';
 import { getGym, GymData } from '../../api/endpoints/gym-battle';
+import { battleHUDEvents } from './battleHUDEvents';
 
-// Calculate time until park close (default 10pm local) - LIVE with seconds
-function getTimeUntilClose(): string {
-  const now = new Date();
-  const closeTime = new Date();
-  closeTime.setHours(22, 0, 0, 0); // 10pm
-  
-  // If past 10pm, battle is over
-  if (now >= closeTime) {
-    return '0:00:00';
-  }
-  
-  const diffMs = closeTime.getTime() - now.getTime();
-  const hours = Math.floor(diffMs / (1000 * 60 * 60));
-  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
-  
-  // Format as H:MM:SS or MM:SS
+// Format seconds into H:MM:SS or MM:SS
+function formatCountdown(totalSeconds: number): string {
+  if (totalSeconds <= 0) return '0:00';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
   if (hours > 0) {
     return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   }
@@ -63,15 +54,26 @@ export default function BattleHUD({ parkId }: Props) {
   const [showInfo, setShowInfo] = useState(false);
   const [pulseAnim] = useState(new Animated.Value(1));
   const [shimmerAnim] = useState(new Animated.Value(0));
-  const [countdown, setCountdown] = useState(getTimeUntilClose());
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [battleActive, setBattleActive] = useState(true);
+  const countdown = remainingSeconds != null ? formatCountdown(remainingSeconds) : '--:--';
 
-  // Update countdown every second for urgency
+  // Sync countdown from API data, then tick locally every second
   useEffect(() => {
+    if (gymData?.battle_status) {
+      setRemainingSeconds(gymData.battle_status.seconds_until_next_event);
+      setBattleActive(gymData.battle_status.is_active);
+    }
+  }, [gymData?.battle_status?.seconds_until_next_event]);
+
+  // Tick countdown every second (only when we have real data)
+  useEffect(() => {
+    if (remainingSeconds == null) return;
     const timer = setInterval(() => {
-      setCountdown(getTimeUntilClose());
+      setRemainingSeconds(prev => prev != null ? Math.max(0, prev - 1) : null);
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [remainingSeconds != null]);
 
   const fetchGym = useCallback(async () => {
     try {
@@ -82,10 +84,28 @@ export default function BattleHUD({ parkId }: Props) {
     }
   }, [parkId]);
 
+  // Poll every 10s for near-real-time score updates
   useEffect(() => {
     fetchGym();
-    const interval = setInterval(fetchGym, 30000);
+    const interval = setInterval(fetchGym, 10000);
     return () => clearInterval(interval);
+  }, [fetchGym]);
+
+  // Refresh immediately when returning from GymBattleScreen
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchGym();
+    });
+    return unsubscribe;
+  }, [navigation, fetchGym]);
+
+  // Listen for explicit refresh events (fired after checkin/placeCoin/attack/defend)
+  useEffect(() => {
+    const unsubscribe = battleHUDEvents.subscribe(() => {
+      fetchGym();
+    });
+    return unsubscribe;
   }, [fetchGym]);
 
   // Shimmer animation for premium feel
@@ -167,7 +187,7 @@ export default function BattleHUD({ parkId }: Props) {
               <View style={styles.leftSection}>
                 {player && (
                   <View style={[styles.myTeamBadge, { backgroundColor: TEAM_COLORS[player.team] }]}>
-                    <Text style={styles.myTeamText}>{TEAM_EMOJIS[player.team]} {player.team.toUpperCase()}</Text>
+                    <Text style={styles.myTeamText}>{TEAM_EMOJIS[player.team]} TEAM</Text>
                   </View>
                 )}
               </View>
@@ -221,13 +241,18 @@ export default function BattleHUD({ parkId }: Props) {
         >
           <View style={styles.modalContent}>
             <BlurView intensity={80} tint="dark" style={styles.modalBlur}>
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <View>
                 <Text style={styles.modalTitle}>⚔️ ARENA BATTLE</Text>
-                <Text style={styles.modalSubtitle}>{gym.name}</Text>
+                
+                {/* Timer */}
+                <View style={styles.timerSection}>
+                  <Text style={styles.timerLabel}>BATTLE ENDS IN</Text>
+                  <Text style={styles.timerValue}>{countdown}</Text>
+                </View>
 
                 {/* Current Standings */}
                 <View style={styles.standingsSection}>
-                  <Text style={styles.sectionTitle}>CURRENT STANDINGS</Text>
+                  <Text style={styles.sectionTitle}>STANDINGS</Text>
                   {(['mouse', 'globe', 'shark'] as const)
                     .sort((a, b) => scores[b] - scores[a])
                     .map((team, index) => (
@@ -248,36 +273,31 @@ export default function BattleHUD({ parkId }: Props) {
                 <View style={styles.infoSection}>
                   <Text style={styles.sectionTitle}>HOW IT WORKS</Text>
                   <Text style={styles.infoText}>
-                    👆 <Text style={styles.infoBold}>Check in</Text> every 30 min for +20 points{'\n'}
-                    🪙 <Text style={styles.infoBold}>Place a coin</Text> for bonus points{'\n'}
-                    ⚔️ <Text style={styles.infoBold}>Find swords</Text> to attack enemy teams{'\n'}
-                    🏆 <Text style={styles.infoBold}>Win</Text> when time expires to get rewards!
+                    👆 <Text style={styles.infoBold}>Check in</Text> every 30 min · +20 pts{'\n'}
+                    🪙 <Text style={styles.infoBold}>Place a coin</Text> · bonus pts{'\n'}
+                    ⚔️ <Text style={styles.infoBold}>Find swords</Text> · attack enemies{'\n'}
+                    🏆 <Text style={styles.infoBold}>Win</Text> when timer hits 0 · get rewards!
                   </Text>
                 </View>
 
-                {/* Winning Team Rewards */}
-                <View style={styles.perksSection}>
-                  <Text style={styles.sectionTitle}>🏆 WINNING TEAM REWARDS</Text>
-                  <Text style={styles.perkSubtitle}>When time expires, if your team wins you get:</Text>
-                  <Text style={styles.perkItem}>🪙 1,000 Shark Coins</Text>
-                  <Text style={styles.perkItem}>⭐ 100 XP</Text>
-                  <Text style={styles.perkItem}>⚡ 10 Energy</Text>
-                  <Text style={styles.perkItem}>⚔️ 2 Swords</Text>
-                </View>
-
-                {/* Your Status */}
-                {player && (
-                  <View style={styles.statusSection}>
-                    <Text style={styles.sectionTitle}>YOUR STATUS</Text>
-                    <Text style={styles.statusText}>
-                      Team: {TEAM_EMOJIS[player.team]} {TEAM_NAMES[player.team]}{'\n'}
-                      Today's contribution: {player.today_contribution} pts{'\n'}
-                      Swords: ⚔️ {player.swords}
-                    </Text>
+                {/* Rewards + Status side by side */}
+                <View style={styles.bottomRow}>
+                  <View style={styles.rewardsCol}>
+                    <Text style={styles.sectionTitle}>🏆 WIN REWARDS</Text>
+                    <Text style={styles.rewardItem}>🪙 1,000 Coins</Text>
+                    <Text style={styles.rewardItem}>⭐ 100 XP</Text>
+                    <Text style={styles.rewardItem}>⚡ 10 Energy</Text>
+                    <Text style={styles.rewardItem}>⚔️ 2 Swords</Text>
                   </View>
-                )}
-
-                <Text style={styles.hint}>Walk to the arena marker on the map to participate!</Text>
+                  {player && (
+                    <View style={styles.statusCol}>
+                      <Text style={styles.sectionTitle}>YOUR STATUS</Text>
+                      <Text style={styles.statusLine}>{TEAM_EMOJIS[player.team]} {TEAM_NAMES[player.team]}</Text>
+                      <Text style={styles.statusLine}>📊 {player.today_contribution} pts today</Text>
+                      <Text style={styles.statusLine}>⚔️ {player.swords} swords</Text>
+                    </View>
+                  )}
+                </View>
 
                 <TouchableOpacity 
                   style={styles.closeButton}
@@ -285,7 +305,7 @@ export default function BattleHUD({ parkId }: Props) {
                 >
                   <Text style={styles.closeButtonText}>GOT IT!</Text>
                 </TouchableOpacity>
-              </ScrollView>
+              </View>
             </BlurView>
           </View>
         </TouchableOpacity>
@@ -438,106 +458,115 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   modalTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '900',
     color: '#FBBF24',
     textAlign: 'center',
+    marginBottom: 8,
   },
-  modalSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
-    marginBottom: 20,
+  timerSection: {
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    paddingVertical: 8,
   },
-  sectionTitle: {
-    fontSize: 12,
+  timerLabel: {
+    fontSize: 10,
     fontWeight: '800',
     color: 'rgba(255,255,255,0.5)',
     letterSpacing: 1,
-    marginBottom: 8,
+  },
+  timerValue: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#EF4444',
+    fontVariant: ['tabular-nums'],
+  },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 1,
+    marginBottom: 6,
   },
   standingsSection: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   standingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 5,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   standingRank: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '800',
     color: 'rgba(255,255,255,0.5)',
-    width: 30,
+    width: 26,
   },
   standingEmoji: {
-    fontSize: 20,
-    marginRight: 10,
+    fontSize: 16,
+    marginRight: 8,
   },
   standingName: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
   },
   standingScore: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   infoSection: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   infoText: {
-    fontSize: 14,
+    fontSize: 12,
     color: 'rgba(255,255,255,0.8)',
-    lineHeight: 24,
+    lineHeight: 20,
   },
   infoBold: {
     fontWeight: '700',
     color: 'white',
   },
-  perksSection: {
-    marginBottom: 16,
+  bottomRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 14,
   },
-  perkItem: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 4,
-  },
-  perkSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.6)',
-    marginBottom: 10,
-    fontStyle: 'italic',
-  },
-  statusSection: {
+  rewardsCol: {
+    flex: 1,
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    borderRadius: 10,
+    padding: 10,
   },
-  statusText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    lineHeight: 22,
-  },
-  hint: {
+  rewardItem: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    marginBottom: 16,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 2,
+  },
+  statusCol: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 10,
+    padding: 10,
+  },
+  statusLine: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 2,
   },
   closeButton: {
     backgroundColor: '#22C55E',
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 12,
     alignItems: 'center',
   },
   closeButtonText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
 });

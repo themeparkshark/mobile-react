@@ -10,6 +10,7 @@ import Modal from 'react-native-modal';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, BounceIn } from 'react-native-reanimated';
 import { attackGym } from '../../api/endpoints/gym-battle';
+import { battleHUDEvents } from './battleHUDEvents';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -69,6 +70,7 @@ export default function SwordAttackModal({
       });
       setState('success');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (err: any) {
       setError(err.response?.data?.error || 'Attack failed!');
       setState('error');

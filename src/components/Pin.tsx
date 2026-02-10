@@ -1,33 +1,26 @@
 import { Image } from 'expo-image';
-import { Text, View } from 'react-native';
-import Tooltip from 'rn-tooltip';
+import { useContext, useState } from 'react';
+import { Pressable } from 'react-native';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { PinType } from '../models/pin-type';
+import HoloPinPreview from './HoloPinPreview';
 
 export default function Pin({ pin }: { readonly pin: PinType }) {
+  const [showPreview, setShowPreview] = useState(false);
+  const { playSound } = useContext(SoundEffectContext);
+
   return (
-    <View
-      key={pin.item.id}
-      style={{
-        padding: 8,
-        width: '30%',
-      }}
-    >
-      <Tooltip
-        actionType="press"
-        height="auto"
-        popover={
-          <Text
-            style={{
-              fontFamily: 'Knockout',
-              fontSize: 20,
-            }}
-          >
-            {pin.item.name}
-          </Text>
-        }
-        withOverlay={false}
-        backgroundColor="white"
-        pointerColor="white"
+    <>
+      <Pressable
+        key={pin.item.id}
+        onPress={() => {
+          playSound(require('../../assets/sounds/tap.mp3'));
+          setShowPreview(true);
+        }}
+        style={{
+          padding: 8,
+          width: '30%',
+        }}
       >
         <Image
           source={pin.item.icon_url}
@@ -38,7 +31,12 @@ export default function Pin({ pin }: { readonly pin: PinType }) {
           }}
           contentFit="contain"
         />
-      </Tooltip>
-    </View>
+      </Pressable>
+      <HoloPinPreview
+        pin={pin}
+        visible={showPreview}
+        onClose={() => setShowPreview(false)}
+      />
+    </>
   );
 }

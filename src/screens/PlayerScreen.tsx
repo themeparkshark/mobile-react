@@ -34,7 +34,7 @@ export default function PlayerScreen({ route, navigation }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [currentPlayer, setCurrentPlayer] = useState<PlayerType>();
   const [parks, setParks] = useState<ParkType[]>([]);
-  const { purchaseItem } = usePurchaseItem();
+  const { purchaseItem, purchaseModal } = usePurchaseItem();
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const { addFriend, removeFriend, acceptFriend } = useFriends();
   const { complimentPlayer } = useCompliment();
@@ -147,6 +147,7 @@ export default function PlayerScreen({ route, navigation }) {
 
   return (
     <>
+      {purchaseModal}
       <Topbar>
         <TopbarColumn stretch={false}>
           <BackButton />
@@ -197,8 +198,20 @@ export default function PlayerScreen({ route, navigation }) {
             >
               <Experience player={currentPlayer} />
               <PlayerButtons buttons={buttons} />
-              {currentPlayer.is_subscribed && <Subscribed />}
-              {currentPlayer.verified_at && <Verified />}
+              {(currentPlayer.is_subscribed || currentPlayer.verified_at) && (
+                <View style={{ flexDirection: 'row', marginTop: 12, marginHorizontal: 8, gap: 8 }}>
+                  {currentPlayer.is_subscribed && (
+                    <View style={{ flex: 1 }}>
+                      <Subscribed />
+                    </View>
+                  )}
+                  {currentPlayer.verified_at && (
+                    <View style={{ flex: 1 }}>
+                      <Verified />
+                    </View>
+                  )}
+                </View>
+              )}
               <Heading text="Statistics" />
               <Stats player={currentPlayer} />
               {parks.length > 0 && (

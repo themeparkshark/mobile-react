@@ -114,6 +114,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   const logout = async () => {
+    hasInitialNavigated.current = false; // Allow navigation on next login
     RootNavigation.navigate('Login');
     await AsyncStorage.removeItem('player');
     await SecureStore.deleteItemAsync('token');

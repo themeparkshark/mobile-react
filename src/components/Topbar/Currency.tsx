@@ -1,15 +1,29 @@
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 import shortenNumber from '../../helpers/shorten-number';
+import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 
 interface CurrencyProps {
   image: string;
   count: number;
   name?: string;
+  flyTarget?: string;
 }
 
-export default function Currency({ image, count, name }: CurrencyProps) {
+export default function Currency({ image, count, name, flyTarget }: CurrencyProps) {
+  const { registerTarget } = useCurrencyFly();
+  const containerRef = useRef<View>(null);
+
+  const measureAndRegister = useCallback(() => {
+    if (flyTarget && containerRef.current) {
+      containerRef.current.measureInWindow((x, y, width, height) => {
+        if (x !== undefined && y !== undefined) {
+          registerTarget(flyTarget, x + width / 2, y + height / 2);
+        }
+      });
+    }
+  }, [flyTarget, registerTarget]);
   const [displayCount, setDisplayCount] = useState(count);
   const [showTooltip, setShowTooltip] = useState(false);
   const prevCount = useRef(count);
@@ -161,7 +175,7 @@ export default function Currency({ image, count, name }: CurrencyProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} ref={containerRef} onLayout={measureAndRegister}>
       <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
         <View style={styles.currencyRow}>
           <Animated.View

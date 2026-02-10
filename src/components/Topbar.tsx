@@ -1,32 +1,85 @@
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
-import { ReactElement, ReactNode, useContext } from 'react';
-import { Dimensions, ImageBackground, SafeAreaView, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { ReactElement, ReactNode, useContext, useRef, useState } from 'react';
+import { Animated, Dimensions, ImageBackground, Pressable, SafeAreaView, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
-import Button from '../components/Button';
 import { ThemeContext } from '../context/ThemeProvider';
+import { SoundEffectContext, SoundEffectContextType } from '../context/SoundEffectProvider';
 import Broadcasts from './Broadcasts';
 
-export function BackButton({ onPress }: { readonly onPress?: () => void }) {
-  return (
-    <Button
-      onPress={async () => {
-        if (onPress) {
-          await onPress();
-        }
+const BACK_SOUND = require('../../assets/sounds/button_press.mp3');
 
-        RootNavigation.goBack();
-      }}
+export function BackButton({ onPress }: { readonly onPress?: () => void }) {
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
+  const scale = useRef(new Animated.Value(1)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+  const [hasPressed, setHasPressed] = useState(false);
+
+  const handlePressIn = () => {
+    Animated.timing(scale, {
+      toValue: 0.82,
+      duration: 80,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 3,
+      tension: 200,
+      useNativeDriver: true,
+    }).start();
+
+    // Quick wiggle rotation
+    Animated.sequence([
+      Animated.timing(rotate, { toValue: -1, duration: 60, useNativeDriver: true }),
+      Animated.timing(rotate, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(rotate, { toValue: -0.5, duration: 50, useNativeDriver: true }),
+      Animated.timing(rotate, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const handlePress = async () => {
+    if (hasPressed) return;
+    setHasPressed(true);
+    playSound(BACK_SOUND);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (onPress) await onPress();
+    RootNavigation.goBack();
+    setHasPressed(false);
+  };
+
+  const rotateInterpolate = rotate.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-8deg', '8deg'],
+  });
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
     >
-      <Image
-        source={require('../../assets/images/screens/explore/back.png')}
+      <Animated.View
         style={{
-          width: 35,
-          height: 35,
+          transform: [
+            { scale },
+            { rotate: rotateInterpolate },
+          ],
         }}
-        contentFit="contain"
-      />
-    </Button>
+      >
+        <Image
+          source={require('../../assets/images/screens/explore/back.png')}
+          style={{
+            width: 35,
+            height: 35,
+          }}
+          contentFit="contain"
+        />
+      </Animated.View>
+    </Pressable>
   );
 }
 

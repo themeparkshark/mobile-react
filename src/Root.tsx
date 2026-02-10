@@ -27,6 +27,7 @@ import InventoryScreen from './screens/InventoryScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import MembershipScreen from './screens/MembershipScreen';
+import ArticleScreen from './screens/ArticleScreen';
 import NewsScreen from './screens/NewsScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import ParkScreen from './screens/ParkScreen';
@@ -46,11 +47,25 @@ import WatchScreen from './screens/WatchScreen';
 import WelcomeScreen from './screens/WelcomeScreen';
 // V2 Screens
 import SetCollectionScreen from './screens/SetCollectionScreen';
+import StampBookScreen from './screens/StampBookScreen';
 import CoinShelfScreen from './screens/CoinShelfScreen';
 import MiniGameTesterScreen from './screens/MiniGameTesterScreen';
 import CommunityCenterScreen from './screens/CommunityCenterScreen';
+import SharkParkScreen from './screens/SharkParkScreen';
 // Gym Battle Screens
 import { TeamSelectionScreen, GymBattleScreen } from './screens/GymBattle';
+// Ride Tracker Screens
+import RideTrackerScreen from './screens/RideTracker/RideTrackerScreen';
+import RideLogScreen from './screens/RideTracker/RideLogScreen';
+import RideHistoryScreen from './screens/RideTracker/RideHistoryScreen';
+import RideStatsScreen from './screens/RideTracker/RideStatsScreen';
+import RideDetailScreen from './screens/RideTracker/RideDetailScreen';
+import RideAchievementsScreen from './screens/RideTracker/RideAchievementsScreen';
+import RideWrappedScreen from './screens/RideTracker/RideWrappedScreen';
+import RideCollectionsScreen from './screens/RideTracker/RideCollectionsScreen';
+import RideWishlistScreen from './screens/RideTracker/RideWishlistScreen';
+import RideOnboardingScreen from './screens/RideTracker/RideOnboardingScreen';
+import RideBatchConfirmScreen from './screens/RideTracker/RideBatchConfirmScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -111,6 +126,9 @@ export default function App() {
         initialRouteName="Splash"
         screenOptions={{
           headerShown: false,
+          animation: 'slide_from_right',
+          animationDuration: 250,
+          gestureEnabled: true,
         }}
       >
         <Stack.Screen
@@ -136,9 +154,6 @@ export default function App() {
         <Stack.Screen
           name="Inventory"
           component={InventoryScreen}
-          options={{
-            gestureEnabled: false,
-          }}
         />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
@@ -155,7 +170,8 @@ export default function App() {
           name="Membership"
           component={MembershipScreen}
           options={{
-            gestureEnabled: false,
+            animation: 'slide_from_bottom',
+            gestureEnabled: true,
           }}
         />
         <Stack.Screen name="Watch" component={WatchScreen} />
@@ -215,9 +231,12 @@ export default function App() {
             gestureEnabled: false,
           }}
         />
+        <Stack.Screen name="Article" component={ArticleScreen} />
         {/* V2 Screens */}
         <Stack.Screen name="SetCollection" component={SetCollectionScreen} />
+        <Stack.Screen name="StampBook" component={StampBookScreen} />
         <Stack.Screen name="CoinShelf" component={CoinShelfScreen} />
+        <Stack.Screen name="SharkPark" component={SharkParkScreen} />
         <Stack.Screen 
           name="CommunityCenter" 
           component={CommunityCenterScreen}
@@ -231,7 +250,7 @@ export default function App() {
           name="TeamSelection" 
           component={TeamSelectionScreen}
           options={{
-            animation: 'fade',
+            animation: 'slide_from_bottom',
             gestureEnabled: false,
           }}
         />
@@ -243,6 +262,18 @@ export default function App() {
             gestureEnabled: true,
           }}
         />
+        {/* Ride Tracker */}
+        <Stack.Screen name="RideTracker" component={RideTrackerScreen} />
+        <Stack.Screen name="RideLog" component={RideLogScreen} options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="RideHistory" component={RideHistoryScreen} />
+        <Stack.Screen name="RideStats" component={RideStatsScreen} />
+        <Stack.Screen name="RideDetail" component={RideDetailScreen} />
+        <Stack.Screen name="RideAchievements" component={RideAchievementsScreen} />
+        <Stack.Screen name="RideWrapped" component={RideWrappedScreen} options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="RideCollections" component={RideCollectionsScreen} />
+        <Stack.Screen name="RideWishlist" component={RideWishlistScreen} />
+        <Stack.Screen name="RideOnboarding" component={RideOnboardingScreen} options={{ animation: 'fade', gestureEnabled: false }} />
+        <Stack.Screen name="RideBatchConfirm" component={RideBatchConfirmScreen} options={{ animation: 'slide_from_bottom' }} />
         {__DEV__ && <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />}
       </Stack.Navigator>
     </NavigationContainer>

@@ -78,22 +78,24 @@ export default function RedeemModal({
 
   return (
     <>
-      <Animated.View
-        style={{
-          transform: [
-            {
-              translateY: animated,
-            },
-          ],
-        }}
-      >
-        <YellowButton
-          onPress={async () => {
-            setModalVisible(true);
+      {redeemable && (
+        <Animated.View
+          style={{
+            transform: [
+              {
+                translateY: animated,
+              },
+            ],
           }}
-          text={'Redeem'}
-        />
-      </Animated.View>
+        >
+          <YellowButton
+            onPress={async () => {
+              setModalVisible(true);
+            }}
+            text={'Redeem'}
+          />
+        </Animated.View>
+      )}
       {redeemable && (
         <>
           {redeemable?.type === 'redeemable' && (

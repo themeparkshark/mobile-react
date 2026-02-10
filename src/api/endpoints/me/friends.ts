@@ -18,3 +18,18 @@ export default async function getFriends(
 
   return data.data;
 }
+
+/** Search friends by username (server-side) — returns all matches */
+export async function searchFriends(query: string): Promise<PlayerType[]> {
+  const { data } = await client.get<ApiResponseType<PlayerType[]>>(
+    '/me/friends',
+    {
+      params: {
+        search: query,
+        perPage: 50,
+      },
+    }
+  );
+
+  return data.data;
+}

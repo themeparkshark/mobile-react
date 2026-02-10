@@ -1,10 +1,17 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
-import { Animated, Text, View, Easing, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet } from 'react-native';
 import { Marker } from 'react-native-maps';
 import Countdown, { zeroPad } from 'react-countdown';
 import { TaskType } from '../../models/task-type';
 
+/**
+ * TaskMarker — 100% STATIC children inside <Marker>.
+ *
+ * react-native-maps recalculates marker anchor whenever child layout shifts.
+ * ANY Animated transform (even with useNativeDriver) causes teleporting.
+ * All animations stripped — marker is rock-solid stationary.
+ */
 export default function TaskMarker({
   task,
   isSelected,
@@ -14,79 +21,9 @@ export default function TaskMarker({
   readonly isSelected: boolean;
   readonly onPress: () => void;
 }) {
-  const bounceAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.4)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  
-  // Glow pulse animation - runs continuously
-  useEffect(() => {
-    const glowPulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 1,
-          duration: 1200,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 0.4,
-          duration: 1200,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    
-    const ringPulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.15,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    
-    glowPulse.start();
-    ringPulse.start();
-    
-    return () => {
-      glowPulse.stop();
-      ringPulse.stop();
-    };
-  }, []);
-  
-  // Bounce animation when tapped
-  useEffect(() => {
-    if (isSelected) {
-      Animated.sequence([
-        Animated.timing(bounceAnim, {
-          toValue: 1.15,
-          duration: 100,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.spring(bounceAnim, {
-          toValue: 1,
-          friction: 4,
-          tension: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [isSelected]);
-
   const expiresAt = task.active_to ? new Date(task.active_to + 'Z') : null;
   const minsLeft = expiresAt ? Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / 60000)) : null;
-  
-  // Ring color based on time left
+
   const ringColor = minsLeft !== null && minsLeft < 5 ? '#ef4444' : '#4ade80';
   const timerUrgent = minsLeft !== null && minsLeft < 5;
 
@@ -98,10 +35,11 @@ export default function TaskMarker({
       }}
       onPress={onPress}
       stopPropagation={true}
-      tracksViewChanges={true}
+      tracksViewChanges={false}
+      anchor={{ x: 0.5, y: 0.9 }}
     >
       <View style={styles.container}>
-        {/* Timer badge - always visible, matches coin/key style */}
+        {/* Timer badge */}
         {expiresAt && (
           <View style={[
             styles.timerBadge,
@@ -120,53 +58,45 @@ export default function TaskMarker({
             />
           </View>
         )}
-        
-        {/* Task name tooltip - only when selected */}
-        {isSelected && (
-          <View style={styles.tooltipContainer}>
-            <View style={styles.tooltip}>
-              <Text style={styles.tooltipTitle}>
-                {task.name}
-              </Text>
-            </View>
-            <View style={styles.tooltipArrow} />
+
+        {/* Task name tooltip - always rendered, toggle opacity to avoid layout shift */}
+        <View style={[styles.tooltipContainer, { opacity: isSelected ? 1 : 0 }]}>
+          <View style={styles.tooltip}>
+            <Text style={styles.tooltipTitle}>
+              {task.name}
+            </Text>
           </View>
-        )}
-        
-        {/* Glowing base ring */}
-        <Animated.View
+          <View style={styles.tooltipArrow} />
+        </View>
+
+        {/* Static glow rings (no animation) */}
+        <View
           style={[
             styles.glowRingOuter,
             {
-              opacity: glowAnim,
-              transform: [{ scale: pulseAnim }],
               shadowColor: ringColor,
               borderColor: ringColor,
             },
           ]}
         />
-        <Animated.View
+        <View
           style={[
             styles.glowRingInner,
             {
-              opacity: glowAnim.interpolate({
-                inputRange: [0.4, 1],
-                outputRange: [0.6, 1],
-              }),
               borderColor: ringColor,
               backgroundColor: `${ringColor}20`,
             },
           ]}
         />
-        
-        {/* Task building with bounce */}
-        <Animated.View style={[styles.buildingContainer, { transform: [{ scale: bounceAnim }] }]}>
+
+        {/* Task building — static, no scale transform */}
+        <View style={styles.buildingContainer}>
           <Image
             source={require('../../../assets/images/screens/explore/task_animation.gif')}
             style={styles.buildingImage}
             contentFit="contain"
           />
-        </Animated.View>
+        </View>
       </View>
     </Marker>
   );
@@ -253,6 +183,7 @@ const styles = StyleSheet.create({
     height: 35,
     borderRadius: 40,
     borderWidth: 3,
+    opacity: 0.7,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.8,
     shadowRadius: 12,
@@ -265,6 +196,7 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 32,
     borderWidth: 2,
+    opacity: 0.8,
   },
   buildingContainer: {
     zIndex: 5,

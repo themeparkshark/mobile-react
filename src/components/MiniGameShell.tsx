@@ -287,12 +287,7 @@ export default function MiniGameShell({
             </View>
           )}
 
-          {/* Close button - only during countdown/playing */}
-          {(phase === 'countdown' || phase === 'playing') && (
-            <TouchableOpacity style={s.closeBtn} onPress={onClose}>
-              <Text style={s.closeBtnText}>X</Text>
-            </TouchableOpacity>
-          )}
+          {/* No close button during gameplay - tickets are already spent! */}
         </View>
       </View>
     </View>

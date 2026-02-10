@@ -1,9 +1,27 @@
 import { Image, ImageSource } from 'expo-image';
-import { useEffect, useRef, useState, useMemo } from 'react';
-import { Animated, Text, View } from 'react-native';
+import { useEffect, useState, useMemo, useRef } from 'react';
+import { Text, View } from 'react-native';
 import { PrepItemType } from '../../models/prep-item-type';
 import config from '../../config';
 import dayjs from 'dayjs';
+
+/** Pulse cycle for in-range markers (toggles between two static visual states) */
+function usePulse(enabled: boolean, intervalMs = 800): boolean {
+  const [bright, setBright] = useState(true);
+  const ref = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      setBright(true);
+      if (ref.current) clearInterval(ref.current);
+      return;
+    }
+    ref.current = setInterval(() => setBright((b) => !b), intervalMs);
+    return () => { if (ref.current) clearInterval(ref.current); };
+  }, [enabled, intervalMs]);
+
+  return bright;
+}
 
 // Local churro images map - React Native requires static imports
 const CHURRO_IMAGES: Record<string, ImageSource> = {
@@ -81,52 +99,19 @@ function getChurroImage(name: string): ImageSource | null {
 interface Props {
   prepItem: PrepItemType;
   onExpire: () => void;
+  inRange?: boolean;
 }
 
 /**
- * Prep item marker for the home map.
- * Styled to match app's AAA quality standards.
+ * PrepItem — 100% STATIC layout (rendered inside <Marker>).
+ * No Animated transforms — prevents teleporting on react-native-maps.
  */
-export default function PrepItem({ prepItem, onExpire }: Props) {
+export default function PrepItem({ prepItem, onExpire, inRange = false }: Props) {
   const [timeRemaining, setTimeRemaining] = useState<string>('');
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.3)).current;
+  const bright = usePulse(inRange);
 
   // Get local image for churros
   const localImage = useMemo(() => getChurroImage(prepItem.name), [prepItem.name]);
-
-  // Pulse animation for attention
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 0.6,
-          duration: 1000,
-          useNativeDriver: false,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 0.3,
-          duration: 1000,
-          useNativeDriver: false,
-        }),
-      ])
-    ).start();
-  }, []);
 
   // Countdown timer
   useEffect(() => {
@@ -164,28 +149,43 @@ export default function PrepItem({ prepItem, onExpire }: Props) {
   const imageSource = localImage || (prepItem.icon_url ? { uri: prepItem.icon_url } : null);
 
   return (
-    <Animated.View
+    <View
       style={{
         alignItems: 'center',
         justifyContent: 'center',
         width: 80,
         height: 80,
-        transform: [{ scale: pulseAnim }],
       }}
     >
-      {/* Glow effect based on rarity */}
-      <Animated.View
+      {/* Outer pulse ring — only visible when in range */}
+      {inRange && (
+        <View
+          style={{
+            position: 'absolute',
+            width: bright ? 78 : 72,
+            height: bright ? 78 : 72,
+            borderRadius: bright ? 39 : 36,
+            borderWidth: 3,
+            borderColor: bright ? '#4AFF6F' : '#2DD855',
+            backgroundColor: 'transparent',
+            opacity: bright ? 0.9 : 0.4,
+          }}
+        />
+      )}
+
+      {/* Glow effect based on rarity — brighter when in range + pulsing */}
+      <View
         style={{
           position: 'absolute',
-          width: 70,
-          height: 70,
-          borderRadius: 35,
-          backgroundColor: rarityConfig.color,
-          opacity: glowAnim,
+          width: inRange && bright ? 74 : 70,
+          height: inRange && bright ? 74 : 70,
+          borderRadius: inRange && bright ? 37 : 35,
+          backgroundColor: inRange ? '#4AFF6F' : rarityConfig.color,
+          opacity: inRange ? (bright ? 0.6 : 0.3) : 0.4,
         }}
       />
 
-      {/* White outline circle */}
+      {/* White outline circle — green border when in range */}
       <View
         style={{
           position: 'absolute',
@@ -193,12 +193,12 @@ export default function PrepItem({ prepItem, onExpire }: Props) {
           height: 60,
           borderRadius: 30,
           borderWidth: 3,
-          borderColor: 'white',
+          borderColor: inRange ? (bright ? '#4AFF6F' : '#2DD855') : 'white',
           backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          shadowColor: '#000',
+          shadowColor: inRange ? '#4AFF6F' : '#000',
           shadowOffset: { width: 2, height: 2 },
-          shadowRadius: 0,
-          shadowOpacity: 0.3,
+          shadowRadius: inRange ? 6 : 0,
+          shadowOpacity: inRange ? (bright ? 0.8 : 0.4) : 0.3,
         }}
       />
 
@@ -277,6 +277,6 @@ export default function PrepItem({ prepItem, onExpire }: Props) {
           shadowOpacity: 0.3,
         }}
       />
-    </Animated.View>
+    </View>
   );
 }

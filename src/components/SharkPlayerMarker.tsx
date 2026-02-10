@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
-import { Animated, View, StyleSheet } from 'react-native';
+import { Animated, Easing, View, StyleSheet } from 'react-native';
 import config from '../config';
 
 interface Props {
@@ -14,37 +14,74 @@ interface Props {
  */
 export default function SharkPlayerMarker({ heading, imageUrl }: Props) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const bobAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0.4)).current;
   const rotationAnim = useRef(new Animated.Value(heading)).current;
   const lastHeadingRef = useRef<number>(heading);
 
-  // Pulse animation
+  // Pulse + bob + glow — all perfect symmetric loops with sine easing
   useEffect(() => {
+    // Pulse: 1 → 1.08 → 1 → 0.96 → 1 (breathe in/out)
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
           toValue: 1.08,
           duration: 1000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.96,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
           duration: 1000,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
       ])
     ).start();
 
+    // Bob: 0 → up → down → 0 (symmetric float)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(bobAnim, {
+          toValue: -5,
+          duration: 900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bobAnim, {
+          toValue: 5,
+          duration: 1800,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bobAnim, {
+          toValue: 0,
+          duration: 900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Glow: 0.4 → 0.7 → 0.4 (smooth breathe)
     Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnim, {
           toValue: 0.7,
-          duration: 1200,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: false,
         }),
         Animated.timing(glowAnim, {
           toValue: 0.4,
-          duration: 1200,
+          duration: 1500,
+          easing: Easing.inOut(Easing.sin),
           useNativeDriver: false,
         }),
       ])
@@ -74,6 +111,7 @@ export default function SharkPlayerMarker({ heading, imageUrl }: Props) {
 
   const rotationStyle = {
     transform: [
+      { translateY: bobAnim },
       { scale: pulseAnim },
       {
         rotate: rotationAnim.interpolate({

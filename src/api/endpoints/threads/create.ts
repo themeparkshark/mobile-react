@@ -6,6 +6,7 @@ import client from '../../client';
 export default async function createThread(thread: {
   readonly title: string;
   readonly content?: string;
+  readonly team?: 'mouse' | 'globe' | 'shark' | null;
 }): Promise<ThreadType> {
   try {
     const { data } = await client.post<ApiResponseType<ThreadType>>(

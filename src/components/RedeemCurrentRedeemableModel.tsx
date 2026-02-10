@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import Modal from 'react-native-modal';
 import redeemRedeemables from '../api/endpoints/me/redeemables/redeem-redeemables';
+import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -32,6 +33,7 @@ export default function RedeemCurrentRedeemableModel({
   readonly onPress: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
+  const { triggerFly } = useCurrencyFly();
   const progress = useRef(new Animated.Value(0)).current;
   const rotate = useRef(new Animated.Value(0)).current;
   const [doubleRedeemable, setDoubleRedeemable] = useState<boolean>(false);
@@ -114,7 +116,8 @@ export default function RedeemCurrentRedeemableModel({
           />
           <Lottie
             source={require('../../assets/animations/confetti.json')}
-            progress={progress}
+            autoPlay
+                  loop
             style={{
               position: 'absolute',
               width: 900,
@@ -200,6 +203,19 @@ export default function RedeemCurrentRedeemableModel({
               text="Collect"
               onPress={async () => {
                 await redeemRedeemables(redeemable, doubleRedeemable);
+
+                // 🗡️ Fly currency to header!
+                if (redeemable.theme?.currency?.icon_url) {
+                  const screenCenterX = Dimensions.get('window').width / 2;
+                  const screenCenterY = Dimensions.get('window').height / 2;
+                  triggerFly({
+                    imageUrl: redeemable.theme.currency.icon_url,
+                    amount: doubleRedeemable ? 2 : 1,
+                    startX: screenCenterX,
+                    startY: screenCenterY,
+                    targetPosition: 'theme_currency',
+                  });
+                }
 
                 onPress();
                 playSound(

@@ -7,144 +7,210 @@ import {
   View,
   StyleSheet,
 } from 'react-native';
+import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
 import Lottie from 'lottie-react-native';
+import * as Haptics from 'expo-haptics';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 
 interface Props {
   visible: boolean;
   rideName: string;
+  taskCoinUrl?: string; // the ride/task coin image
+  coinsEarned: number;
+  xpEarned: number;
   ridePartsEarned: number;
   energyEarned: number;
+  parkCoinProgress?: boolean; // whether this contributed to a park coin
   onClose: () => void;
 }
 
 /**
- * Post-win rewards modal showing ride parts + energy earned after
- * completing a mini-game. This appears AFTER the main redeem modal.
+ * Post-win rewards modal showing EVERYTHING earned after completing a mini-game.
+ * Shark Coins, XP, Ride Parts, Energy, and Park Coin progress.
  */
 export default function PostWinRewardsModal({
   visible,
   rideName,
+  taskCoinUrl,
+  coinsEarned,
+  xpEarned,
   ridePartsEarned,
   energyEarned,
+  parkCoinProgress = true,
   onClose,
 }: Props) {
-  const progress = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-  const partsScale = useRef(new Animated.Value(0)).current;
-  const energyScale = useRef(new Animated.Value(0)).current;
+  const cardScale = useRef(new Animated.Value(0)).current;
+  const rowAnims = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
 
   useEffect(() => {
     if (visible) {
-      // Reset
-      scaleAnim.setValue(0);
-      partsScale.setValue(0);
-      energyScale.setValue(0);
+      cardScale.setValue(0);
+      rowAnims.forEach(a => a.setValue(0));
 
-      // Confetti loop
-      Animated.loop(
-        Animated.timing(progress, {
-          toValue: 1,
-          duration: 2250,
-          useNativeDriver: true,
-        })
-      ).start();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Staggered reveal animation
+      // Card bounces in, then rows stagger
       Animated.sequence([
-        Animated.spring(scaleAnim, {
+        Animated.spring(cardScale, {
           toValue: 1,
           tension: 60,
           friction: 8,
           useNativeDriver: true,
         }),
-        Animated.delay(200),
-        Animated.spring(partsScale, {
-          toValue: 1,
-          tension: 80,
-          friction: 6,
-          useNativeDriver: true,
-        }),
-        Animated.delay(100),
-        Animated.spring(energyScale, {
-          toValue: 1,
-          tension: 80,
-          friction: 6,
-          useNativeDriver: true,
-        }),
+        Animated.stagger(120, rowAnims.map(anim =>
+          Animated.spring(anim, {
+            toValue: 1,
+            tension: 80,
+            friction: 6,
+            useNativeDriver: true,
+          })
+        )),
       ]).start();
     }
   }, [visible]);
+
+  const rewards = [
+    {
+      icon: taskCoinUrl ? { uri: taskCoinUrl } : null,
+      emoji: undefined,
+      amount: 1,
+      label: `${rideName} Coin`,
+      color: '#4cdcff',
+      bgColor: '#0a2a3e',
+      show: !!taskCoinUrl,
+      isTaskCoin: true,
+    },
+    {
+      icon: require('../../assets/images/coingold.png'),
+      amount: coinsEarned,
+      label: 'Shark Coins',
+      color: '#FFD700',
+      bgColor: '#3b2800',
+      show: coinsEarned > 0,
+    },
+    {
+      icon: require('../../assets/images/screens/explore/xp.png'),
+      amount: xpEarned,
+      label: 'Experience',
+      color: '#4ade80',
+      bgColor: '#0a2e14',
+      show: xpEarned > 0,
+    },
+    {
+      icon: null,
+      emoji: '⚙️',
+      amount: ridePartsEarned,
+      label: `${rideName} Ride Parts`,
+      color: '#818cf8',
+      bgColor: '#1e1b4b',
+      show: ridePartsEarned > 0,
+    },
+    {
+      icon: null,
+      emoji: '⚡',
+      amount: energyEarned,
+      label: 'Energy',
+      color: '#fbbf24',
+      bgColor: '#3b2800',
+      show: energyEarned > 0,
+    },
+    {
+      icon: null,
+      emoji: '🏅',
+      amount: null,
+      label: 'Park Coin Progress',
+      color: '#f472b6',
+      bgColor: '#4a0e2b',
+      show: parkCoinProgress,
+      isProgress: true,
+    },
+  ];
+
+  const visibleRewards = rewards.filter(r => r.show);
 
   return (
     <Modal
       animationIn="fadeIn"
       animationOut="fadeOut"
       isVisible={visible}
-      onSwipeComplete={onClose}
-      swipeDirection="down"
+      onBackdropPress={onClose}
+      backdropOpacity={0.85}
     >
       <View style={styles.container}>
-        <Pressable style={styles.backdrop} onPress={onClose}>
-          <Lottie
-            source={require('../../assets/animations/confetti.json')}
-            progress={progress}
-            style={styles.confetti}
-          />
-        </Pressable>
+        {/* Confetti */}
+        <Lottie
+          source={require('../../assets/animations/confetti.json')}
+          autoPlay
+          loop
+          style={styles.confetti}
+        />
 
         <Animated.View
           style={[
             styles.card,
-            { transform: [{ scale: scaleAnim }] },
+            { transform: [{ scale: cardScale }] },
           ]}
         >
-          <Ribbon text="Bonus Loot!" />
+          <Ribbon text="Challenge Complete!" />
 
           <View style={styles.content}>
             <Text style={styles.subtitle}>
-              You unlocked bonus rewards!
+              You conquered {rideName}!
             </Text>
 
-            {/* Ride Parts */}
-            <Animated.View
-              style={[
-                styles.rewardRow,
-                { transform: [{ scale: partsScale }] },
-              ]}
-            >
-              <View style={styles.rewardIcon}>
-                <Text style={styles.rewardEmoji}>⚙️</Text>
-              </View>
-              <View style={styles.rewardInfo}>
-                <Text style={styles.rewardAmount}>
-                  +{ridePartsEarned}
-                </Text>
-                <Text style={styles.rewardLabel}>
-                  {rideName} Ride Parts
-                </Text>
-              </View>
-            </Animated.View>
-
-            {/* Energy */}
-            <Animated.View
-              style={[
-                styles.rewardRow,
-                { transform: [{ scale: energyScale }] },
-              ]}
-            >
-              <View style={[styles.rewardIcon, { backgroundColor: '#FFB300' }]}>
-                <Text style={styles.rewardEmoji}>⚡</Text>
-              </View>
-              <View style={styles.rewardInfo}>
-                <Text style={styles.rewardAmount}>
-                  +{energyEarned}
-                </Text>
-                <Text style={styles.rewardLabel}>Energy</Text>
-              </View>
-            </Animated.View>
+            {/* Reward rows */}
+            {visibleRewards.map((reward, index) => (
+              <Animated.View
+                key={reward.label}
+                style={[
+                  styles.rewardRow,
+                  { backgroundColor: reward.bgColor },
+                  {
+                    transform: [{ scale: rowAnims[index] ?? new Animated.Value(1) }],
+                    opacity: rowAnims[index] ?? 1,
+                  },
+                ]}
+              >
+                <View style={[
+                  styles.rewardIconCircle,
+                  { backgroundColor: `${reward.color}25` },
+                  reward.isTaskCoin && { width: 52, height: 52, borderRadius: 26, borderWidth: 2, borderColor: `${reward.color}60` },
+                ]}>
+                  {reward.icon ? (
+                    <Image
+                      source={reward.icon}
+                      style={{ width: reward.isTaskCoin ? 40 : 32, height: reward.isTaskCoin ? 40 : 32 }}
+                      contentFit="contain"
+                    />
+                  ) : (
+                    <Text style={styles.rewardEmoji}>{reward.emoji}</Text>
+                  )}
+                </View>
+                <View style={styles.rewardInfo}>
+                  {reward.isProgress ? (
+                    <Text style={[styles.rewardProgress, { color: reward.color }]}>
+                      +1 Step Closer!
+                    </Text>
+                  ) : (
+                    <Text style={[styles.rewardAmount, { color: reward.color }]}>
+                      +{reward.amount}
+                    </Text>
+                  )}
+                  <Text style={styles.rewardLabel}>
+                    {reward.label}
+                  </Text>
+                </View>
+              </Animated.View>
+            ))}
 
             <Text style={styles.hint}>
               Use Ride Parts + Energy to level up your ride coins!
@@ -165,11 +231,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  backdrop: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute',
   },
   confetti: {
     position: 'absolute',
@@ -200,52 +261,56 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 14,
+    fontFamily: 'Knockout',
+    fontSize: 15,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   rewardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+    padding: 12,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  rewardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#6C63FF',
+  rewardIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: 12,
   },
   rewardEmoji: {
-    fontSize: 24,
+    fontSize: 22,
   },
   rewardInfo: {
     flex: 1,
   },
   rewardAmount: {
-    color: '#FFD700',
-    fontSize: 24,
+    fontSize: 22,
+    fontWeight: 'bold',
+    fontFamily: 'Shark',
+  },
+  rewardProgress: {
+    fontSize: 16,
     fontWeight: 'bold',
     fontFamily: 'Shark',
   },
   rewardLabel: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 13,
-    marginTop: 2,
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontFamily: 'Knockout',
+    fontSize: 12,
+    marginTop: 1,
   },
   hint: {
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: 'rgba(255, 255, 255, 0.35)',
     fontSize: 11,
     textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 16,
+    marginTop: 10,
+    marginBottom: 14,
     fontStyle: 'italic',
   },
   buttonContainer: {

@@ -20,6 +20,7 @@ import TapMiniGameModal from '../../components/GymBattle/TapMiniGameModal';
 import SwordAttackModal from '../../components/GymBattle/SwordAttackModal';
 import PlaceCoinModal from '../../components/GymBattle/PlaceCoinModal';
 import DefendMiniGameModal from '../../components/GymBattle/DefendMiniGameModal';
+import { battleHUDEvents } from '../../components/GymBattle/battleHUDEvents';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -531,31 +532,37 @@ export default function GymBattleScreen({ navigation, route }: Props) {
   const screenOpacity = useRef(new Animated.Value(0)).current;
   const screenScale = useRef(new Animated.Value(1.1)).current;
 
-  // Countdown to park close (10pm) - same as HUD
+  // Countdown synced from API battle_status, ticks locally every second
+  const [battleSeconds, setBattleSeconds] = useState<number | null>(null);
+  
   useEffect(() => {
-    const updateCountdown = () => {
-      const now = new Date();
-      const parkClose = new Date();
-      parkClose.setHours(22, 0, 0, 0); // 10pm
-      
-      // If past 10pm, battle is over
-      if (now >= parkClose) {
-        setCountdown('0:00:00');
-        return;
-      }
-      
-      const diff = parkClose.getTime() - now.getTime();
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const secs = Math.floor((diff % (1000 * 60)) / 1000);
-      
-      setCountdown(`${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
+    if (gymData?.battle_status?.seconds_until_next_event != null) {
+      setBattleSeconds(gymData.battle_status.seconds_until_next_event);
+    }
+  }, [gymData?.battle_status?.seconds_until_next_event]);
+
+  useEffect(() => {
+    const formatTime = (totalSecs: number | null) => {
+      if (totalSecs == null) return '--:--:--';
+      if (totalSecs <= 0) return '0:00:00';
+      const h = Math.floor(totalSecs / 3600);
+      const m = Math.floor((totalSecs % 3600) / 60);
+      const s = totalSecs % 60;
+      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
     
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
+    setCountdown(formatTime(battleSeconds));
+    if (battleSeconds == null) return;
+    const interval = setInterval(() => {
+      setBattleSeconds(prev => {
+        if (prev == null) return null;
+        const next = Math.max(0, prev - 1);
+        setCountdown(formatTime(next));
+        return next;
+      });
+    }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [battleSeconds]);
 
   // Attack cooldown timer - use gymData.player since player isn't in scope yet
   useEffect(() => {
@@ -733,8 +740,9 @@ export default function GymBattleScreen({ navigation, route }: Props) {
       // Show toast with points earned
       setPillarToast(`+${result.points_earned} points! 🦈`);
       setTimeout(() => setPillarToast(null), 2000);
-      // Refetch gym data
+      // Refetch gym data + notify BattleHUD on ExploreScreen
       fetchGym();
+      battleHUDEvents.emit();
     } catch (error) {
       console.error('Check-in failed:', error);
       setPillarToast('Check-in failed');

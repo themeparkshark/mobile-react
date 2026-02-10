@@ -9,16 +9,19 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-import { useAsyncEffect } from 'rooks';
+import { useAsyncEffect, useWillUnmount } from 'rooks';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
+import updateInventory from '../api/endpoints/me/inventory/update-inventory';
 import Item from '../components/Item';
+import HapticPatterns from '../helpers/hapticPatterns';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import { AuthContext } from '../context/AuthProvider';
+import { MusicContext } from '../context/MusicProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
@@ -33,6 +36,15 @@ export default function InventoryScreen() {
   const { refreshPlayer } = useContext(AuthContext);
   const [page, setPage] = useState<number>(1);
   const { playSound } = useContext(SoundEffectContext);
+  const { overrideTrack, restoreMusic } = useContext(MusicContext);
+
+  // Play inventory music on mount, restore on unmount
+  useAsyncEffect(async () => {
+    await overrideTrack(require('../../assets/music/inventory.mp3'));
+  }, []);
+  useWillUnmount(() => {
+    restoreMusic();
+  });
 
   const requestItems = async (page: number) => {
     if (!currentItemType) {
@@ -89,6 +101,12 @@ export default function InventoryScreen() {
           >
             <Playercard
               inventory={player.inventory}
+              onItemTap={async (item) => {
+                playSound(require('../../assets/sounds/whoosh.mp3'));
+                HapticPatterns.buttonTap();
+                await updateInventory(item);
+                await refreshPlayer();
+              }}
               style={{
                 position: 'absolute',
                 width: Dimensions.get('window').width,

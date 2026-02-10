@@ -1,8 +1,10 @@
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
+  Easing,
   ImageBackground,
   SafeAreaView,
   Text,
@@ -22,11 +24,212 @@ import TopbarText from '../components/Topbar/TopbarText';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import useCrumbs from '../hooks/useCrumbs';
+import usePurchaseItem from '../hooks/usePurchaseItem';
 import { CatalogType } from '../models/catalog-type';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
+import { useTutorial } from '../components/Tutorial';
 import Item from './StoreScreen/Item';
+
+const SCREEN_W = Dimensions.get('window').width;
+
+/** Bobbing + tilting shark shopkeeper — perfect symmetric loops */
+function AnimatedShark({ imageUrl }: { imageUrl: string | undefined }) {
+  const bob = useRef(new Animated.Value(0)).current;
+  const tilt = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Bob: center → up → center → down → center (perfect symmetric loop)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(bob, {
+          toValue: -8,
+          duration: 900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bob, {
+          toValue: 0,
+          duration: 900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bob, {
+          toValue: 8,
+          duration: 900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bob, {
+          toValue: 0,
+          duration: 900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Tilt: center → right → center → left → center (same symmetric pattern)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(tilt, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(tilt, {
+          toValue: 0,
+          duration: 1200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(tilt, {
+          toValue: -1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(tilt, {
+          toValue: 0,
+          duration: 1200,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  const rotation = tilt.interpolate({
+    inputRange: [-1, 1],
+    outputRange: ['-3deg', '3deg'],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        transform: [{ translateY: bob }, { rotate: rotation }],
+        alignItems: 'center',
+        flex: 1,
+      }}
+    >
+      <Image
+        source={imageUrl}
+        style={{
+          width: SCREEN_W - 25,
+          height: '100%',
+          marginLeft: 'auto',
+          marginRight: 'auto',
+        }}
+        contentFit="contain"
+      />
+    </Animated.View>
+  );
+}
+
+/** Floating bubble particles */
+function StoreBubbles() {
+  const bubbles = useRef(
+    Array.from({ length: 8 }, (_, i) => ({
+      id: i,
+      x: Math.random() * (SCREEN_W - 40) + 20,
+      size: Math.random() * 10 + 6,
+      duration: Math.random() * 2000 + 3000,
+      delay: Math.random() * 2000,
+      opacity: Math.random() * 0.3 + 0.15,
+    }))
+  ).current;
+
+  return (
+    <>
+      {bubbles.map((b) => (
+        <SingleBubble key={b.id} {...b} />
+      ))}
+    </>
+  );
+}
+
+function SingleBubble({
+  x,
+  size,
+  duration,
+  delay,
+  opacity,
+}: {
+  x: number;
+  size: number;
+  duration: number;
+  delay: number;
+  opacity: number;
+}) {
+  const anim = useRef(new Animated.Value(0)).current;
+  const wobble = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      Animated.loop(
+        Animated.timing(anim, {
+          toValue: 1,
+          duration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(wobble, {
+            toValue: 1,
+            duration: duration * 0.4,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(wobble, {
+            toValue: -1,
+            duration: duration * 0.4,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    }, delay);
+
+    return () => clearTimeout(timeout);
+  }, []);
+
+  const translateY = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [180, -20],
+  });
+
+  const translateX = wobble.interpolate({
+    inputRange: [-1, 1],
+    outputRange: [-8, 8],
+  });
+
+  const scale = anim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.5, 1, 0.3],
+  });
+
+  return (
+    <Animated.View
+      style={{
+        position: 'absolute',
+        left: x,
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: 'rgba(255,255,255,0.5)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+        opacity,
+        transform: [{ translateY }, { translateX }, { scale }],
+      }}
+    />
+  );
+}
 
 export default function StoreScreen({ route }) {
   const { store } = route.params;
@@ -37,7 +240,17 @@ export default function StoreScreen({ route }) {
   const { player } = useContext(AuthContext);
   const { labels } = useCrumbs();
   const { currencies } = useContext(CurrencyContext);
+  const { startTutorial, hasCompleted } = useTutorial();
+  const { purchaseItem, purchaseModal } = usePurchaseItem();
   const [page, setPage] = useState<number>(1);
+
+  // Trigger store tutorial on first visit
+  useEffect(() => {
+    if (!hasCompleted('store')) {
+      const timer = setTimeout(() => startTutorial('store'), 800);
+      return () => clearTimeout(timer);
+    }
+  }, []);
   const [rotation, setRotation] = useState<StoreRotation | null>(null);
 
   const fetchItems = async (page: number) => {
@@ -81,6 +294,7 @@ export default function StoreScreen({ route }) {
 
   return (
     <>
+      {purchaseModal}
       <Topbar purple={currentStore?.is_secret_store ?? false}>
         <TopbarColumn stretch={false}>
           <BackButton />
@@ -174,18 +388,13 @@ export default function StoreScreen({ route }) {
                 height: 180,
                 paddingTop: 16,
                 paddingBottom: 16,
+                overflow: 'hidden',
               }}
             >
-              <Image
-                source={catalog?.promotion_image_url}
-                style={{
-                  width: Dimensions.get('window').width - 25,
-                  height: '100%',
-                  marginLeft: 'auto',
-                  marginRight: 'auto',
-                }}
-                contentFit="contain"
-              />
+              {/* Floating bubbles */}
+              <StoreBubbles />
+              {/* Animated shark */}
+              <AnimatedShark imageUrl={catalog?.promotion_image_url} />
             </View>
             {items && items?.length > 0 && (
               <View
@@ -204,7 +413,7 @@ export default function StoreScreen({ route }) {
                   numColumns={3}
                   renderItem={({ item }) => (
                     <View style={{ padding: 8, flex: 1 }}>
-                      <Item item={item as ItemType} />
+                      <Item item={item as ItemType} onPurchase={purchaseItem} />
                     </View>
                   )}
                   estimatedItemSize={80}

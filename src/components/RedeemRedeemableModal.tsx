@@ -99,6 +99,20 @@ export default function RedeemRedeemableModal({
   const [flowState, setFlowState] = useState<FlowState>('preview');
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [selectedGameData, setSelectedGameData] = useState<typeof GAMES[0] | null>(null);
+  const selectedIndexRef = useRef<number | null>(null);
+  const flowStateRef = useRef<FlowState>('preview');
+
+  // Keep ref in sync so callbacks always have current flowState
+  useEffect(() => { flowStateRef.current = flowState; }, [flowState]);
+
+  // Safe close — only allows closing during preview state
+  const safeClose = useCallback(() => {
+    if (flowStateRef.current === 'preview') {
+      close();
+    }
+  }, [close]);
+  const [coinsEarned, setCoinsEarned] = useState(0);
+  const [xpEarned, setXpEarned] = useState(0);
   const [ridePartsEarned, setRidePartsEarned] = useState(0);
   const [energyEarned, setEnergyEarned] = useState(0);
 
@@ -124,6 +138,9 @@ export default function RedeemRedeemableModal({
       setFlowState('preview');
       setSelectedGame(null);
       setSelectedGameData(null);
+      selectedIndexRef.current = null;
+      setCoinsEarned(0);
+      setXpEarned(0);
       setRidePartsEarned(0);
       setEnergyEarned(0);
       // Wheel animation reset handled by SpinWheel
@@ -183,11 +200,12 @@ export default function RedeemRedeemableModal({
     console.log('🎡 handleSpin called');
     Vibration.vibrate(50);
     
-    // Pick the game FIRST so SpinWheel knows where to land
+    // Pick the game FIRST — store index in ref for immediate access by SpinWheel
     const randomSegment = Math.floor(Math.random() * NUM_SEGMENTS);
     const game = GAMES[randomSegment];
     
-    console.log('🎡 Will land on:', game.name, game.id);
+    console.log('🎡 Will land on:', game.name, game.id, 'index:', randomSegment);
+    selectedIndexRef.current = randomSegment;
     setSelectedGame(game.id);
     setSelectedGameData(game);
     setFlowState('spinning');
@@ -219,6 +237,8 @@ export default function RedeemRedeemableModal({
       if (redeemable.type === 'task') {
         const response = await completeTask(redeemable.model as TaskType, doubleXP, doubleCoins);
         // Use ACTUAL rewards from backend
+        setCoinsEarned(response.rewards.coins_earned);
+        setXpEarned(response.rewards.xp_earned);
         setRidePartsEarned(response.rewards.ride_parts_earned);
         setEnergyEarned(response.rewards.energy_earned);
         console.log('🏆 Task completed! Rewards:', response.rewards);
@@ -230,12 +250,14 @@ export default function RedeemRedeemableModal({
             amount: Math.min((redeemable.model as TaskType).coins * (doubleCoins ? 2 : 1), 10),
             startX: screenCenterX,
             startY: screenCenterY,
-            targetPosition: 'left',
+            targetPosition: 'coins',
           });
         }
       } else if (redeemable.type === 'secret_task') {
         const response = await completeSecretTask(redeemable.model as SecretTaskType, doubleXP, doubleCoins);
         // Use ACTUAL rewards from backend (secret tasks too!)
+        setCoinsEarned(response.rewards.coins_earned);
+        setXpEarned(response.rewards.xp_earned);
         setRidePartsEarned(response.rewards.ride_parts_earned);
         setEnergyEarned(response.rewards.energy_earned);
         console.log('🏆 Secret task completed! Rewards:', response.rewards);
@@ -247,7 +269,7 @@ export default function RedeemRedeemableModal({
             amount: Math.min((redeemable.model as SecretTaskType).coins * (doubleCoins ? 2 : 1), 10),
             startX: screenCenterX,
             startY: screenCenterY,
-            targetPosition: 'left',
+            targetPosition: 'coins',
           });
         }
       }
@@ -263,6 +285,9 @@ export default function RedeemRedeemableModal({
     } catch (e) {
       console.error('🏆 Task completion error:', e);
       // Fallback to local calculation if API fails
+      const task = redeemable.model as TaskType;
+      setCoinsEarned(Math.round((task.coins ?? 10) * multiplier));
+      setXpEarned(Math.round((task.experience ?? 25) * multiplier));
       const parts = getRidePartsReward(ticketCost);
       const energy = getEnergyReward(ticketCost);
       setRidePartsEarned(Math.round(parts * multiplier));
@@ -315,8 +340,11 @@ export default function RedeemRedeemableModal({
         animationOut="zoomOut"
         swipeDirection={flowState === 'preview' ? 'down' : undefined}
         isVisible={showModal}
-        onSwipeComplete={() => flowState === 'preview' && close()}
+        onSwipeComplete={safeClose}
+        onBackdropPress={safeClose}
+        onBackButtonPress={safeClose}
         backdropOpacity={flowState === 'preview' ? 0.5 : 0.95}
+        useNativeDriverForBackdrop
       >
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           
@@ -327,12 +355,13 @@ export default function RedeemRedeemableModal({
                 style={{ width: '100%', height: '100%', position: 'absolute' }}
                 onPress={() => {
                   playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
-                  close();
+                  safeClose();
                 }}
               >
                 <Lottie
                   source={require('../../assets/animations/confetti.json')}
-                  progress={progress}
+                  autoPlay
+                  loop
                   style={{ position: 'absolute', width: 900, height: 400, top: 15, zIndex: 20, left: -80 }}
                 />
               </Pressable>
@@ -425,7 +454,7 @@ export default function RedeemRedeemableModal({
                                 amount: Math.min((redeemable.model as CoinType).coins, 10),
                                 startX: screenCenterX,
                                 startY: screenCenterY,
-                                targetPosition: 'left',
+                                targetPosition: 'coins',
                               });
                             }
                           } else if (redeemable.type === 'item' || redeemable.type === 'pin') {
@@ -452,7 +481,7 @@ export default function RedeemRedeemableModal({
               <SpinWheel
                 spinning={flowState === 'spinning' || flowState === 'landed'}
                 landed={flowState === 'landed'}
-                selectedIndex={selectedGame ? GAMES.findIndex(g => g.id === selectedGame) : null}
+                selectedIndex={selectedIndexRef.current}
               />
 
               {flowState === 'wheel' && (
@@ -510,8 +539,18 @@ export default function RedeemRedeemableModal({
       <PostWinRewardsModal
         visible={open === true && flowState === 'postwin'}
         rideName={taskName}
+        taskCoinUrl={
+          redeemable?.type === 'task'
+            ? (redeemable.model as TaskType)?.coin_url
+            : redeemable?.type === 'secret_task'
+              ? (redeemable.model as SecretTaskType)?.coin_url
+              : undefined
+        }
+        coinsEarned={coinsEarned}
+        xpEarned={xpEarned}
         ridePartsEarned={ridePartsEarned}
         energyEarned={energyEarned}
+        parkCoinProgress={true}
         onClose={handlePostWinClose}
       />
     </>

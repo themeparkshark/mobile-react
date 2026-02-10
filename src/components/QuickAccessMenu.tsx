@@ -12,11 +12,8 @@ import {
   faBars, 
   faTimes, 
   faLayerGroup, 
-  faCoins, 
-  faBook, 
-  faShark,
-  faGear,
-  faTrophy
+  faBook,
+  faGamepad,
 } from '@fortawesome/free-solid-svg-icons';
 import * as RootNavigation from '../RootNavigation';
 import config from '../config';
@@ -39,14 +36,6 @@ const MENU_ITEMS: MenuItem[] = [
     screen: 'SetCollection',
   },
   {
-    id: 'coins',
-    label: 'Coin Shelf',
-    icon: faCoins,
-    color: '#FFD700',
-    screen: 'Profile',
-    params: { scrollTo: 'parks' },
-  },
-  {
     id: 'stamps',
     label: 'Stamp Book',
     icon: faBook,
@@ -54,11 +43,11 @@ const MENU_ITEMS: MenuItem[] = [
     screen: 'StampBook',
   },
   {
-    id: 'leaderboard',
-    label: 'Leaderboard',
-    icon: faTrophy,
-    color: config.tertiary,
-    screen: 'Leaderboard',
+    id: 'sharkpark',
+    label: 'Shark Park',
+    icon: faGamepad,
+    color: '#09268f',
+    screen: 'SharkPark',
   },
 ];
 
