@@ -3,8 +3,9 @@ import TapChallengeMiniGame from './TapChallengeMiniGame';
 import TimingMiniGame from './TimingMiniGame';
 import MemoryMatchMiniGame from './MemoryMatchMiniGame';
 import TriviaMiniGame from './TriviaMiniGame';
+import SharkMiniGame from './SharkMiniGame';
 
-type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia';
+type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark';
 
 interface Props {
   visible: boolean;
@@ -48,7 +49,7 @@ export default function MiniGameSelector({
       return;
     }
 
-    const allGames: MiniGameType[] = ['tap', 'timing', 'memory', 'trivia'];
+    const allGames: MiniGameType[] = ['tap', 'timing', 'memory', 'trivia', 'shark'];
     const available = allGames.filter(g => !excludeGames.includes(g));
     if (available.length === 0) {
       setSelectedGame('trivia');
@@ -111,6 +112,16 @@ export default function MiniGameSelector({
           timeLimitSeconds={15}
           onClose={onClose}
           onComplete={handleComplete}
+        />
+      );
+    case 'shark':
+      return (
+        <SharkMiniGame
+          visible={visible}
+          taskName={taskName}
+          targetScore={5}
+          onClose={onClose}
+          onComplete={(mult, payload) => handleComplete(mult, payload)}
         />
       );
     default:

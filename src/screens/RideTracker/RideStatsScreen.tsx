@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getRideStats, RideStatsType } from '../../api/endpoints/player-rides';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import { colors } from '../../design-system';
@@ -64,7 +65,7 @@ export default function RideStatsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color={colors.secondary} style={{ marginTop: 60 }} />
+        <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 60 }} />
       </SafeAreaView>
     );
   }
@@ -79,13 +80,13 @@ export default function RideStatsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-          <Text style={styles.backBtn}>← Back</Text>
+      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
+          <Text style={styles.backChevron}>‹</Text>
         </Pressable>
-        <Text style={styles.title}>Ride Stats</Text>
-        <View style={{ width: 60 }} />
-      </View>
+        <Text style={styles.title}>RIDE STATS</Text>
+        <View style={{ width: 40 }} />
+      </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* Big Stats */}
@@ -98,7 +99,7 @@ export default function RideStatsScreen() {
         {/* Per Park */}
         {stats.per_park.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Rides by Park</Text>
+            <Text style={styles.sectionTitle}>RIDES BY PARK</Text>
             {stats.per_park.map(p => (
               <View key={p.park_id} style={styles.parkRow}>
                 <Text style={styles.parkName}>{p.park_name}</Text>
@@ -114,7 +115,7 @@ export default function RideStatsScreen() {
         {/* Top Rated */}
         {stats.top_rated.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Top Rated Rides</Text>
+            <Text style={styles.sectionTitle}>TOP RATED RIDES</Text>
             {stats.top_rated.slice(0, 5).map((r, i) => (
               <View key={r.id} style={styles.rankRow}>
                 <Text style={styles.rankNum}>#{i + 1}</Text>
@@ -131,7 +132,7 @@ export default function RideStatsScreen() {
         {/* Most Ridden */}
         {stats.most_ridden.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Most Ridden</Text>
+            <Text style={styles.sectionTitle}>MOST RIDDEN</Text>
             {stats.most_ridden.slice(0, 5).map((r, i) => (
               <View key={r.id} style={styles.rankRow}>
                 <Text style={styles.rankNum}>#{i + 1}</Text>
@@ -146,29 +147,18 @@ export default function RideStatsScreen() {
         {stats.total_rides > 0 && (
           <Pressable
             onPress={() => navigation.navigate('RideWrapped')}
-            style={({ pressed }) => [{
-              backgroundColor: 'rgba(254,201,14,0.15)',
-              borderRadius: 14,
-              padding: 16,
-              marginTop: 20,
-              marginBottom: 10,
-              borderWidth: 1,
-              borderColor: 'rgba(254,201,14,0.3)',
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 12,
-            }, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [styles.wrappedCTA, pressed && { opacity: 0.85 }]}
           >
-            <Text style={{ fontSize: 28 }}>🎁</Text>
+            <Text style={styles.wrappedIcon}>🎁</Text>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.tertiary, fontSize: 16, fontWeight: '700', fontFamily: 'Shark' }}>
+              <Text style={styles.wrappedTitle}>
                 View Your Ride Wrapped
               </Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>
+              <Text style={styles.wrappedSubtitle}>
                 See your monthly ride summary
               </Text>
             </View>
-            <Text style={{ color: colors.textMuted, fontSize: 16 }}>→</Text>
+            <Text style={styles.wrappedArrow}>→</Text>
           </Pressable>
         )}
 
@@ -184,37 +174,132 @@ export default function RideStatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgDark },
+  container: { flex: 1, backgroundColor: '#e8f4fd' },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    paddingHorizontal: 16, 
+    paddingVertical: 16,
+    paddingBottom: 20,
   },
-  backBtn: { color: colors.secondary, fontSize: 16, fontWeight: '600' },
-  title: { color: colors.textPrimary, fontSize: 20, fontWeight: '700', fontFamily: 'Shark' },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backChevron: { 
+    color: '#FFFFFF', 
+    fontSize: 24, 
+    fontWeight: '600',
+    marginLeft: -2,
+  },
+  title: { 
+    color: '#FFFFFF', 
+    fontSize: 20, 
+    fontWeight: '700', 
+    fontFamily: 'Shark',
+    letterSpacing: 2,
+  },
   content: { padding: 16, paddingBottom: 60 },
   statGrid: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   statCard: {
-    flex: 1, backgroundColor: colors.bgMedium, borderRadius: 14, padding: 16, alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    flex: 1, 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 20, 
+    padding: 16, 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
   },
   statIcon: { fontSize: 28, marginBottom: 4 },
-  statNumber: { fontSize: 32, fontWeight: '800', color: colors.textPrimary, fontFamily: 'Shark' },
-  statLabel: { fontSize: 12, color: colors.textSecondary, marginTop: 4, textAlign: 'center' },
-  sectionTitle: { color: colors.tertiary, fontSize: 16, fontWeight: '700', marginBottom: 12, marginTop: 20, textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'Shark' },
-  parkRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
-  parkName: { color: colors.textPrimary, fontSize: 13, width: 100, fontWeight: '600' },
-  parkBar: { flex: 1, height: 8, backgroundColor: colors.bgLight, borderRadius: 4, overflow: 'hidden' },
-  parkBarFill: { height: '100%', backgroundColor: colors.secondary, borderRadius: 4 },
-  parkCount: { color: colors.textSecondary, fontSize: 13, fontWeight: '700', width: 32, textAlign: 'right' },
-  rankRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.bgMedium,
-    borderRadius: 10, padding: 12, marginBottom: 8,
+  statNumber: { 
+    fontSize: 32, 
+    fontWeight: '800', 
+    color: '#09268f', 
+    fontFamily: 'Shark' 
   },
-  rankNum: { color: colors.tertiary, fontSize: 16, fontWeight: '800', width: 32 },
-  rankName: { color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
-  rankScore: { color: colors.secondary, fontSize: 16, fontWeight: '700' },
+  statLabel: { fontSize: 12, color: '#475569', marginTop: 4, textAlign: 'center' },
+  sectionTitle: { 
+    color: '#1a1a2e', 
+    fontSize: 16, 
+    fontWeight: '700', 
+    marginBottom: 12, 
+    marginTop: 20, 
+    textTransform: 'uppercase', 
+    letterSpacing: 2, 
+    fontFamily: 'Knockout' 
+  },
+  parkRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
+  parkName: { color: '#1a1a2e', fontSize: 13, width: 100, fontWeight: '600' },
+  parkBar: { 
+    flex: 1, 
+    height: 8, 
+    backgroundColor: 'rgba(255,255,255,0.6)', 
+    borderRadius: 4, 
+    overflow: 'hidden' 
+  },
+  parkBarFill: { 
+    height: '100%', 
+    backgroundColor: '#09268f', 
+    borderRadius: 4 
+  },
+  parkCount: { color: '#475569', fontSize: 13, fontWeight: '700', width: 32, textAlign: 'right' },
+  rankRow: {
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12, 
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16, 
+    padding: 12, 
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  rankNum: { color: '#fec90e', fontSize: 16, fontWeight: '800', width: 32 },
+  rankName: { color: '#1a1a2e', fontSize: 14, fontWeight: '600' },
+  rankScore: { color: '#09268f', fontSize: 16, fontWeight: '700' },
+  wrappedCTA: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 20,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: '#fec90e',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#fec90e',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  wrappedIcon: { fontSize: 28 },
+  wrappedTitle: { 
+    color: '#fec90e', 
+    fontSize: 16, 
+    fontWeight: '700', 
+    fontFamily: 'Shark' 
+  },
+  wrappedSubtitle: { 
+    color: '#475569', 
+    fontSize: 13, 
+    marginTop: 2 
+  },
+  wrappedArrow: { color: '#94a3b8', fontSize: 16 },
   emptyContainer: { alignItems: 'center', paddingVertical: 60 },
   emptyEmoji: { fontSize: 48 },
-  emptyText: { color: colors.textSecondary, fontSize: 15, marginTop: 12 },
-  errorText: { color: colors.error, textAlign: 'center', marginTop: 60, fontSize: 16 },
+  emptyText: { color: '#475569', fontSize: 15, marginTop: 12 },
+  errorText: { color: '#ef4444', textAlign: 'center', marginTop: 60, fontSize: 16 },
 });

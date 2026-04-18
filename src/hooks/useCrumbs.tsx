@@ -5,11 +5,11 @@ export default function useCrumbs() {
   const { crumbs } = useContext(CrumbContext);
 
   return {
-    errors: crumbs?.errors ?? {},
-    labels: crumbs?.labels ?? {},
-    messages: crumbs?.messages ?? {},
-    prompts: crumbs?.prompts ?? {},
-    urls: crumbs?.urls ?? {},
-    warnings: crumbs?.warnings ?? {},
+    errors: crumbs?.errors ?? ({} as CrumbsType['errors']),
+    labels: crumbs?.labels ?? ({} as CrumbsType['labels']),
+    messages: crumbs?.messages ?? ({} as CrumbsType['messages']),
+    prompts: crumbs?.prompts ?? ({} as CrumbsType['prompts']),
+    urls: crumbs?.urls ?? ({} as CrumbsType['urls']),
+    warnings: crumbs?.warnings ?? ({} as CrumbsType['warnings']),
   };
 }

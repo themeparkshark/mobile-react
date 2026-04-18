@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>SHARKY</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cyan:#32e6d3;
+    --cyan-deep:#0d7f7a;
+    --coral:#ff6b9a;
+    --coral-deep:#c9305f;
+    --cream:#f4f6fa;
+    --sun:#ffe28a;
+    --ink:#061224;
+    --navy:#0a1f3a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#02060f;font-family:'Press Start 2P',system-ui,sans-serif;color:var(--cream);-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:manipulation;}
+  body{position:fixed;inset:0;}
+  canvas{display:block;position:absolute;inset:0;}
+
+  /* Cinematic overlays for "studio" feel */
+  #vignette{
+    position:absolute;inset:0;pointer-events:none;z-index:5;
+    background:radial-gradient(ellipse at center, transparent 45%, rgba(2,8,20,0.55) 100%);
+  }
+  #grade{
+    position:absolute;inset:0;pointer-events:none;z-index:6;
+    background:linear-gradient(180deg, rgba(50,230,211,0.05) 0%, transparent 50%, rgba(10,31,58,0.18) 100%);
+    mix-blend-mode:soft-light;
+  }
+  #grain{
+    position:absolute;inset:0;pointer-events:none;z-index:7;opacity:0.035;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.9  0 0 0 0 0.95  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");
+  }
+
+  #ui{position:absolute;inset:0;pointer-events:none;z-index:10;}
+
+  /* Score HUD */
+  #hud{
+    position:absolute;top:calc(3.2vh + env(safe-area-inset-top));right:calc(4.4vw + env(safe-area-inset-right));
+    text-align:center;opacity:0;transition:opacity .35s ease;
+  }
+  #hud.show{opacity:1;}
+  #hud .lbl{
+    font-size:clamp(10px,1.05vw,14px);color:var(--cream);letter-spacing:.35em;
+    text-shadow:0 2px 0 rgba(6,18,36,.75);
+    margin-bottom:.6em;
+  }
+  #hud .num{
+    font-size:clamp(44px,10vw,88px);color:var(--cream);line-height:1;
+    text-shadow:
+      4px 4px 0 var(--coral),
+      8px 8px 0 rgba(6,18,36,.65);
+  }
+
+  /* Footer watermark */
+  #wm{
+    position:absolute;left:calc(3.2vw + env(safe-area-inset-left));
+    bottom:calc(3vh + env(safe-area-inset-bottom));
+    font-size:clamp(9px,2.4vw,12px);color:#9fe8df;letter-spacing:.55em;
+    display:flex;align-items:center;gap:.9em;text-shadow:0 2px 0 rgba(0,0,0,.55);
+  }
+  #wm .d{color:var(--sun);transform:translateY(-1px);}
+
+  /* Start screen */
+  #start{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2.4em;pointer-events:auto;cursor:pointer;
+  }
+  #start .title{
+    font-size:clamp(36px,10vw,92px);color:var(--cyan);letter-spacing:.08em;line-height:1;
+    text-shadow:
+      5px 5px 0 var(--coral),
+      10px 10px 0 rgba(6,18,36,.55);
+    transform:translateY(-2vh);white-space:nowrap;
+  }
+  #start .cta{
+    font-size:clamp(16px,4vw,26px);color:var(--cream);letter-spacing:.32em;
+    padding:.9em 1.6em;border:3px solid var(--sun);
+    background:rgba(50,230,211,0.12);
+    box-shadow:
+      6px 6px 0 var(--coral),
+      -6px -6px 0 var(--cyan);
+    animation:pulse 1.15s ease-in-out infinite;
+    backdrop-filter:blur(2px);
+    -webkit-backdrop-filter:blur(2px);
+  }
+  #start .tip{
+    font-size:clamp(10px,2.4vw,14px);color:#aeeae3;letter-spacing:.28em;text-shadow:0 2px 0 rgba(0,0,0,.5);
+  }
+  #start .tip .key{
+    display:inline-block;padding:.35em .6em;margin:0 .3em;
+    border:2px solid #aeeae3;color:#aeeae3;font-size:.85em;
+  }
+  @keyframes pulse{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(-4px) scale(1.02);}}
+
+  /* Game Over */
+  #over{
+    position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:1.1em;pointer-events:auto;
+    background:radial-gradient(ellipse at center, rgba(6,18,36,.35) 0%, rgba(3,10,24,.82) 80%);
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  }
+  #over.show{display:flex;animation:fade .35s ease;}
+  @keyframes fade{from{opacity:0;}to{opacity:1;}}
+  #over .title{
+    font-size:clamp(38px,11vw,110px);color:var(--coral);letter-spacing:.06em;line-height:1;
+    text-shadow:
+      4px 4px 0 var(--ink),
+      8px 8px 0 rgba(6,18,36,.65);
+    margin-bottom:.25em;white-space:nowrap;
+  }
+  #over .final{font-size:clamp(11px,2.6vw,15px);color:var(--cream);letter-spacing:.38em;opacity:.95;}
+  #over .score{
+    font-size:clamp(64px,18vw,130px);color:var(--sun);line-height:1;margin:.1em 0 .25em;
+    text-shadow:
+      5px 5px 0 var(--coral),
+      10px 10px 0 rgba(6,18,36,.65);
+  }
+  #over .best{
+    font-size:clamp(14px,3.5vw,20px);color:var(--cream);letter-spacing:.38em;
+  }
+  #over .best .v{color:var(--coral);margin-left:.9em;text-shadow:3px 3px 0 rgba(6,18,36,.6);}
+  #over .btn{
+    margin-top:1.3em;font-size:clamp(16px,4.5vw,28px);color:var(--ink);letter-spacing:.14em;
+    padding:.8em 1.6em;background:var(--sun);border:none;
+    box-shadow:
+      -5px -5px 0 var(--cyan),
+      5px 5px 0 var(--coral),
+      10px 10px 0 rgba(6,18,36,.45);
+    cursor:pointer;font-family:inherit;transition:transform .08s ease;
+  }
+  #over .btn:hover{transform:translate(-1px,-1px);}
+  #over .btn:active{transform:translate(3px,3px);box-shadow:-2px -2px 0 var(--cyan),2px 2px 0 var(--coral),4px 4px 0 rgba(6,18,36,.4);}
+  #over .restart{
+    margin-top:.6em;font-size:clamp(10px,2.4vw,14px);color:#aeeae3;letter-spacing:.34em;
+  }
+  #over .restart .key{
+    display:inline-block;padding:.35em .65em;margin:0 .35em;border:2px solid #aeeae3;font-size:.85em;
+  }
+
+  /* Flash overlay for crash */
+  #flash{position:absolute;inset:0;background:#ff6b9a;opacity:0;pointer-events:none;transition:opacity .25s ease;z-index:8;}
+  #flash.go{opacity:.45;transition:opacity .05s;}
+
+  /* Score pop */
+  #pop{
+    position:absolute;top:14vh;left:50%;transform:translateX(-50%) translateY(0);
+    font-size:clamp(18px,2vw,28px);color:var(--sun);letter-spacing:.3em;opacity:0;
+    text-shadow:3px 3px 0 var(--ink);
+    pointer-events:none;z-index:11;
+  }
+  #pop.fire{animation:pop .7s ease-out;}
+  @keyframes pop{0%{opacity:0;transform:translateX(-50%) translateY(20px) scale(.8);}20%{opacity:1;}100%{opacity:0;transform:translateX(-50%) translateY(-40px) scale(1.15);}}
+</style>
+</head>
+<body>
+<div id="grade"></div>
+<div id="vignette"></div>
+<div id="grain"></div>
+<div id="ui">
+  <div id="hud"><div class="lbl">SCORE</div><div class="num" id="scoreNum">0</div></div>
+  <div id="pop">+1</div>
+  <div id="start">
+    <div class="title">SHARKY</div>
+    <div class="cta">TAP TO SWIM</div>
+    <div class="tip">PRESS <span class="key">SPACE</span> OR CLICK</div>
+  </div>
+  <div id="over">
+    <div class="title">GAME OVER</div>
+    <div class="final">FINAL SCORE</div>
+    <div class="score" id="finalScore">0</div>
+    <div class="best">BEST <span class="v" id="bestScore">0</span></div>
+    <button class="btn" id="flyAgain">SWIM AGAIN</button>
+    <div class="restart">PRESS <span class="key">SPACE</span> TO RESTART</div>
+  </div>
+  <div id="wm"><span class="d">◆</span>SHARKY<span class="d">◆</span></div>
+</div>
+<div id="flash"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ---------- Palette ----------
+const C = {
+  waterTop:   new THREE.Color('#5ccfe6'),   // bright turquoise surface
+  waterMid:   new THREE.Color('#1e95c8'),
+  waterDeep:  new THREE.Color('#0b4a7a'),
+  waterAbyss: new THREE.Color('#062a48'),
+  fogColor:   new THREE.Color('#1e78a8'),
+  causticHi:  new THREE.Color('#8ff5ff'),
+  sunRay:     new THREE.Color('#aee8ff'),
+  sand:       new THREE.Color('#d9c07a'),
+  sandDeep:   new THREE.Color('#8a6a32'),
+  coralA:     new THREE.Color('#ff6b9a'),
+  coralB:     new THREE.Color('#ff8f4a'),
+  coralC:     new THREE.Color('#ffd065'),
+  coralD:     new THREE.Color('#6ee0c8'),
+  coralE:     new THREE.Color('#c978ff'),
+  rockBase:   new THREE.Color('#2b4466'),
+  rockHi:     new THREE.Color('#4a6b8c'),
+  sharkTop:   new THREE.Color('#5c93b0'),
+  sharkMid:   new THREE.Color('#7cb0c9'),
+  sharkBelly: new THREE.Color('#f4f6fa'),
+  sharkEye:   new THREE.Color('#0a0f14'),
+  sharkPink:  new THREE.Color('#ffb3c9'),
+  bubble:     new THREE.Color('#cef2ff'),
+  fish:       new THREE.Color('#ffcc4a'),
+  fishB:      new THREE.Color('#ff7aa8'),
+};
+
+// Coral obstacle color sets (body, cap, glow)
+const CORAL_SETS = [
+  { body:'#ff6b9a', cap:'#c9305f', bright:'#ffa2c0' }, // pink
+  { body:'#ff8f4a', cap:'#b8511a', bright:'#ffc092' }, // orange
+  { body:'#ffd065', cap:'#b88820', bright:'#ffe8a4' }, // yellow
+  { body:'#6ee0c8', cap:'#1e7a66', bright:'#a8f0df' }, // teal
+  { body:'#c978ff', cap:'#6a2fa0', bright:'#e4b2ff' }, // purple
+  { body:'#ff9ac0', cap:'#aa4872', bright:'#ffc8dc' }, // rose
+];
+
+// ---------- Renderer / Scene / Camera ----------
+const canvas = document.createElement('canvas');
+document.body.appendChild(canvas);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+// Deep-water exponential fog: things fade to blue haze
+scene.fog = new THREE.FogExp2(0x1e78a8, 0.022);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 400);
+// Camera rig aims at a point OFFSET to the right of the shark — the shark
+// ends up on the left third of frame, giving the player runway to read
+// incoming obstacles (classic Flappy Bird composition).
+const CAM_LOOK_X = 1.8;
+function fitCamera(){
+  const ar = innerWidth / innerHeight;
+  if(ar < 0.8){
+    camera.fov = 62;
+    camera.position.set(CAM_LOOK_X, 3.0, 13.5);
+  } else if(ar < 1.2){
+    camera.fov = 56;
+    camera.position.set(CAM_LOOK_X, 2.6, 12);
+  } else {
+    camera.fov = 50;
+    camera.position.set(CAM_LOOK_X, 2.3, 11);
+  }
+  camera.aspect = ar;
+  camera.updateProjectionMatrix();
+}
+fitCamera();
+camera.lookAt(0, 2.2, 0);
+
+// ---------- Lights ----------
+// Cool ambient + warm sun from above mimics filtered sunlight through water.
+const amb = new THREE.AmbientLight(0xbee8f8, 1.1);
+scene.add(amb);
+const hemi = new THREE.HemisphereLight(0xdff4ff, 0x1e78a8, 1.4);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffeec8, 1.1);
+sun.position.set(-6, 22, 6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far  = 80;
+sun.shadow.camera.left = -30;
+sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30;
+sun.shadow.camera.bottom = -30;
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+// Cool rim from front for shark silhouette
+const rim = new THREE.DirectionalLight(0x6ee0c8, 0.4);
+rim.position.set(8, 2, 12);
+scene.add(rim);
+
+// ---------- Water sky dome ----------
+const waterUniforms = {
+  cTop:   { value: C.waterTop },
+  cMid:   { value: C.waterMid },
+  cDeep:  { value: C.waterDeep },
+  cAbyss: { value: C.waterAbyss },
+  cCaust: { value: C.causticHi },
+  time:   { value: 0 },
+};
+const waterSky = new THREE.Mesh(
+  new THREE.SphereGeometry(300, 32, 16),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: waterUniforms,
+    vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      varying vec3 vP;
+      uniform vec3 cTop,cMid,cDeep,cAbyss,cCaust;
+      uniform float time;
+      void main(){
+        vec3 n = normalize(vP);
+        float y = n.y;
+        vec3 col;
+        if(y > 0.55)      col = mix(cMid,  cTop,   smoothstep(0.55,0.95,y));
+        else if(y > 0.15) col = mix(cDeep, cMid,   smoothstep(0.15,0.55,y));
+        else if(y > -0.2) col = mix(cAbyss,cDeep,  smoothstep(-0.2,0.15,y));
+        else              col = cAbyss;
+        // Surface shimmer at top
+        float surf = smoothstep(0.7, 0.95, y);
+        float shimmer = sin(n.x*30.0 + time*2.0) * sin(n.z*25.0 + time*1.6);
+        col += cCaust * surf * max(shimmer, 0.0) * 0.25;
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  })
+);
+scene.add(waterSky);
+
+// ---------- Seabed with caustic shader ----------
+function makeSeabed(){
+  const g = new THREE.PlaneGeometry(260, 180, 80, 50);
+  g.rotateX(-Math.PI/2);
+  const pos = g.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x = pos.getX(i), z = pos.getZ(i);
+    const n =
+      Math.sin(x*0.2)*Math.cos(z*0.18)*0.6 +
+      Math.sin(x*0.9+z*0.7)*0.25 +
+      Math.sin(x*2.1)*0.08;
+    pos.setY(i, n);
+    // flatten lane under the shark
+    if(Math.abs(z) < 2.0 && Math.abs(x) < 3.5) pos.setY(i, -0.05);
+  }
+  g.computeVertexNormals();
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      time:        { value: 0 },
+      sandHi:      { value: C.sand },
+      sandLo:      { value: C.sandDeep },
+      causticCol:  { value: C.causticHi },
+      sunDir:      { value: new THREE.Vector3(-6, 22, 6).normalize() },
+      fogColor:    { value: C.fogColor },
+      fogDensity:  { value: 0.022 },
+    },
+    vertexShader: `
+      varying vec3 vW;
+      varying vec3 vN;
+      varying float vDist;
+      void main(){
+        vec4 wp = modelMatrix * vec4(position,1.0);
+        vW = wp.xyz;
+        vN = normalize(normalMatrix * normal);
+        vec4 mv = viewMatrix * wp;
+        vDist = -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      uniform float time;
+      uniform vec3 sandHi, sandLo, causticCol, sunDir, fogColor;
+      uniform float fogDensity;
+      varying vec3 vW; varying vec3 vN; varying float vDist;
+
+      // Cheap caustic: three offset sines blended with noise-like shape
+      float caustic(vec2 p, float t){
+        float v = sin(p.x*1.8 + t*1.1) + sin(p.y*2.1 + t*0.9)
+                + sin((p.x+p.y)*1.4 + t*1.3) + sin((p.x-p.y)*1.1 + t*0.7);
+        v = v * 0.25;
+        return pow(max(v, 0.0), 3.0);
+      }
+
+      void main(){
+        // base sand gradient by height
+        float h = clamp((vW.y + 4.0)/2.5, 0.0, 1.0);
+        vec3 base = mix(sandLo, sandHi, h);
+        // sun lambert
+        float ndl = max(dot(vN, normalize(sunDir)), 0.0);
+        base *= (0.55 + 0.55*ndl);
+        // caustic from "above" projected onto XZ
+        float c = caustic(vW.xz*0.35, time);
+        base += causticCol * c * 1.2;
+        // secondary wider caustic
+        float c2 = caustic(vW.xz*0.12 + vec2(3.0,1.0), time*0.6);
+        base += causticCol * c2 * 0.4;
+        // depth-based fog
+        float fogF = 1.0 - exp(- (fogDensity * vDist) * (fogDensity * vDist));
+        fogF = clamp(fogF, 0.0, 1.0);
+        vec3 outC = mix(base, fogColor, fogF);
+        gl_FragColor = vec4(outC, 1.0);
+      }
+    `,
+    fog: false, // we handle fog manually to avoid clash
+  });
+
+  const m = new THREE.Mesh(g, mat);
+  m.position.y = -3.8;
+  m.receiveShadow = true;
+  return m;
+}
+const seabed = makeSeabed();
+scene.add(seabed);
+
+// ---------- Background rocks (layered) ----------
+function makeRocks(count, spanX, yBase, height, color, z){
+  const group = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color, flatShading:true });
+  for(let i=0;i<count;i++){
+    const h = height*(0.5 + Math.random()*1.0);
+    const r = 2.2 + Math.random()*2.8;
+    const cone = new THREE.ConeGeometry(r, h, 5 + (Math.random()*2|0));
+    const m = new THREE.Mesh(cone, mat);
+    m.position.set(
+      (Math.random()-0.5)*spanX,
+      yBase + h/2,
+      z + (Math.random()-0.5)*6
+    );
+    m.rotation.y = Math.random()*Math.PI;
+    m.rotation.z = (Math.random()-0.5)*0.15;
+    m.receiveShadow = true;
+    group.add(m);
+  }
+  return group;
+}
+scene.add(makeRocks(8,  130, -3.8, 7.0, C.waterDeep,  -44));
+scene.add(makeRocks(12, 110, -3.8, 5.8, C.rockBase,   -30));
+scene.add(makeRocks(16, 90,  -3.8, 4.6, C.rockHi,     -20));
+
+// ---------- God rays (additive tinted planes from above) ----------
+function makeGodRays(){
+  const group = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({
+    color: C.sunRay,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    opacity: 0.08,
+  });
+  for(let i=0;i<10;i++){
+    const w = 1.5 + Math.random()*2.8;
+    const h = 34;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat.clone());
+    m.material.opacity = 0.05 + Math.random()*0.1;
+    m.position.set(
+      -18 + i*4 + (Math.random()-0.5)*2,
+      10,
+      -12 + (Math.random()-0.5)*6
+    );
+    m.rotation.z = (Math.random()-0.5)*0.35;
+    m.rotation.y = (Math.random()-0.5)*0.2;
+    m.userData = { baseX: m.position.x, phase: Math.random()*Math.PI*2 };
+    group.add(m);
+  }
+  return group;
+}
+const godRays = makeGodRays();
+scene.add(godRays);
+
+// ---------- Swaying kelp (foreground accent) ----------
+const kelps = [];
+function makeKelp(x, z){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color: 0x1b6b4a, flatShading:true });
+  let y = -3.6;
+  let prev = new THREE.Vector3(0, y, 0);
+  const segments = 10;
+  for(let i=0;i<segments;i++){
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.22), mat);
+    seg.position.copy(prev);
+    seg.position.y += 0.4;
+    g.add(seg);
+    prev.y += 0.75;
+  }
+  g.position.set(x, 0, z);
+  g.userData = { segs: g.children, phase: Math.random()*Math.PI*2 };
+  kelps.push(g);
+  return g;
+}
+for(let i=0;i<6;i++){
+  const k = makeKelp(-18 + Math.random()*36, -8 - Math.random()*6);
+  scene.add(k);
+}
+
+// ---------- Fish schools (parallax decoration) ----------
+const fishes = [];
+function makeFish(color){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({ color, flatShading:true });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.18, 0.12), mat);
+  g.add(body);
+  const tailShape = new THREE.Shape();
+  tailShape.moveTo(0, 0);
+  tailShape.lineTo(-0.18, 0.12);
+  tailShape.lineTo(-0.18, -0.12);
+  const tail = new THREE.Mesh(new THREE.ExtrudeGeometry(tailShape, {depth:0.05, bevelEnabled:false}), mat);
+  tail.position.set(-0.18, 0, -0.025);
+  g.add(tail);
+  return g;
+}
+function makeSchool(count, zDepth, colorSet){
+  const school = new THREE.Group();
+  for(let i=0;i<count;i++){
+    const f = makeFish(colorSet[i%colorSet.length]);
+    f.position.set(
+      (Math.random()-0.5)*22,
+      2 + Math.random()*6,
+      zDepth + (Math.random()-0.5)*3
+    );
+    f.userData = { speed: 0.4+Math.random()*0.6, phase: Math.random()*Math.PI*2, baseY: f.position.y };
+    school.add(f);
+    fishes.push(f);
+  }
+  return school;
+}
+scene.add(makeSchool(14, -14, [0xffcc4a, 0xff9a40, 0xffd86a]));
+scene.add(makeSchool(10, -22, [0xff7aa8, 0xc978ff, 0x6ee0c8]));
+
+// ---------- Bubbles (continuous particle stream) ----------
+const bubbles = [];
+const bubbleMat = new THREE.MeshLambertMaterial({
+  color: C.bubble,
+  transparent: true,
+  opacity: 0.55,
+  depthWrite: false,
+  emissive: 0x4fbfd6,
+  emissiveIntensity: 0.25,
+});
+function spawnBubble(initial=false){
+  const r = 0.06 + Math.random()*0.16;
+  const b = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), bubbleMat);
+  b.position.set(
+    (Math.random()-0.5)*34,
+    initial ? -4 + Math.random()*16 : -4 - Math.random()*1,
+    (Math.random()-0.5)*6 - 1
+  );
+  b.userData = {
+    vy: 0.7 + Math.random()*1.6,
+    sway: Math.random()*Math.PI*2,
+    swaySpeed: 0.6 + Math.random()*1.4,
+    scale: r,
+  };
+  scene.add(b);
+  bubbles.push(b);
+}
+for(let i=0;i<80;i++) spawnBubble(true);
+
+// ---------- Shark ----------
+const shark = new THREE.Group();
+scene.add(shark);
+const sharkBody = new THREE.Group();
+shark.add(sharkBody);
+
+// Chibi shark: oversized head, tiny body, huge eyes, pink blush. Maximum cute.
+const sharkTopMat   = new THREE.MeshLambertMaterial({ color: 0x5a9cbf, flatShading:true });
+const sharkMidMat   = new THREE.MeshLambertMaterial({ color: 0x7fbfd8, flatShading:true });
+const sharkBellyMat = new THREE.MeshLambertMaterial({ color: 0xfdfeff, flatShading:true });
+const sharkBlushMat = new THREE.MeshLambertMaterial({ color: 0xff9ec0, flatShading:true, transparent:true, opacity:0.9 });
+const sharkPinkMat  = new THREE.MeshLambertMaterial({ color: 0xff6a9a, flatShading:true });
+
+// Smaller and chibi proportions — shorter silhouette, visible features.
+sharkBody.scale.set(0.95, 0.95, 0.95);
+
+// HEAD (the biggest part — dominant, rounded-feeling via stacked boxes)
+const head = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.95, 0.90), sharkMidMat);
+head.position.set(0.45, 0.0, 0);
+head.castShadow = true;
+sharkBody.add(head);
+// darker top of head
+const headTop = new THREE.Mesh(new THREE.BoxGeometry(1.03, 0.22, 0.88), sharkTopMat);
+headTop.position.set(0.45, 0.42, 0);
+sharkBody.add(headTop);
+// white underside of head
+const headBelly = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.35, 0.89), sharkBellyMat);
+headBelly.position.set(0.45, -0.32, 0);
+sharkBody.add(headBelly);
+
+// BODY (smaller, narrower — behind head)
+const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.70, 0.65), sharkMidMat);
+body.position.set(-0.35, 0.05, 0);
+body.castShadow = true;
+sharkBody.add(body);
+const bodyTop = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.16, 0.63), sharkTopMat);
+bodyTop.position.set(-0.35, 0.35, 0);
+sharkBody.add(bodyTop);
+const bodyBelly = new THREE.Mesh(new THREE.BoxGeometry(0.59, 0.26, 0.64), sharkBellyMat);
+bodyBelly.position.set(-0.35, -0.24, 0);
+sharkBody.add(bodyBelly);
+
+// TAIL STEM (tiny, connects to caudal fin)
+const tailStem = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.32, 0.28), sharkMidMat);
+tailStem.position.set(-0.75, 0.02, 0);
+tailStem.castShadow = true;
+sharkBody.add(tailStem);
+
+// SNOUT — rounded front nose
+const snout = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.55, 0.55), sharkMidMat);
+snout.position.set(1.05, -0.05, 0);
+snout.castShadow = true;
+sharkBody.add(snout);
+const snoutBelly = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.18, 0.56), sharkBellyMat);
+snoutBelly.position.set(1.05, -0.3, 0);
+sharkBody.add(snoutBelly);
+
+// Rounded-nose tip
+const noseTip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.35, 0.38), sharkMidMat);
+noseTip.position.set(1.25, -0.1, 0);
+sharkBody.add(noseTip);
+
+// DORSAL — shorter, rounder, cuter
+const dorsalShape = new THREE.Shape();
+dorsalShape.moveTo(0, 0);
+dorsalShape.lineTo(0.5, 0);
+dorsalShape.lineTo(0.15, 0.5);
+dorsalShape.lineTo(0, 0);
+const dorsal = new THREE.Mesh(
+  new THREE.ExtrudeGeometry(dorsalShape, { depth: 0.1, bevelEnabled:false }),
+  sharkTopMat
+);
+dorsal.position.set(-0.1, 0.42, -0.05);
+dorsal.castShadow = true;
+sharkBody.add(dorsal);
+
+// TAIL PIVOT + caudal fin
+const tailPivot = new THREE.Group();
+tailPivot.position.set(-0.88, 0, 0);
+sharkBody.add(tailPivot);
+const caudalShape = new THREE.Shape();
+caudalShape.moveTo(0, 0);
+caudalShape.lineTo(-0.42, 0.55);
+caudalShape.lineTo(-0.18, 0.15);
+caudalShape.lineTo(-0.12, 0);
+caudalShape.lineTo(-0.18, -0.12);
+caudalShape.lineTo(-0.38, -0.42);
+caudalShape.lineTo(0, 0);
+const caudal = new THREE.Mesh(
+  new THREE.ExtrudeGeometry(caudalShape, { depth: 0.1, bevelEnabled:false }),
+  sharkTopMat
+);
+caudal.position.set(0, 0, -0.05);
+caudal.castShadow = true;
+tailPivot.add(caudal);
+
+// PECTORAL FINS — small, angled back
+function makePec(side){
+  const pivot = new THREE.Group();
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(-0.22, -0.35);
+  shape.lineTo(0.28, -0.05);
+  shape.lineTo(0, 0);
+  const m = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled:false }),
+    sharkTopMat
+  );
+  m.castShadow = true;
+  pivot.add(m);
+  pivot.position.set(0.35, -0.22, side*0.47);
+  pivot.rotation.y = side * Math.PI/2;
+  pivot.rotation.z = side * 0.25;
+  return pivot;
+}
+const pecL = makePec(1);
+const pecR = makePec(-1);
+sharkBody.add(pecL, pecR);
+
+// HUGE KAWAII EYES — oversized relative to head
+function makeEye(zSign){
+  const g = new THREE.Group();
+  // White sclera
+  const white = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.32, 0.05), new THREE.MeshBasicMaterial({color:0xffffff}));
+  g.add(white);
+  // Big black pupil
+  const black = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.02), new THREE.MeshBasicMaterial({color:0x0a0f14}));
+  black.position.z = 0.04;
+  g.add(black);
+  // Twin sparkle highlights (two different sizes)
+  const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.01), new THREE.MeshBasicMaterial({color:0xffffff}));
+  s1.position.set(0.05, 0.05, 0.06);
+  g.add(s1);
+  const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.01), new THREE.MeshBasicMaterial({color:0xffffff}));
+  s2.position.set(-0.04, -0.04, 0.06);
+  g.add(s2);
+  g.position.set(0.7, 0.12, zSign*0.48);
+  g.rotation.y = zSign*Math.PI/2;
+  return g;
+}
+sharkBody.add(makeEye(1));
+sharkBody.add(makeEye(-1));
+
+// PINK BLUSH CHEEKS
+function makeBlush(zSign){
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.04), sharkBlushMat);
+  b.position.set(0.75, -0.08, zSign*0.48);
+  b.rotation.y = zSign*Math.PI/2;
+  return b;
+}
+sharkBody.add(makeBlush(1));
+sharkBody.add(makeBlush(-1));
+
+// SMILE — wider cartoon curve (two short bars forming a curve)
+const smileL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.12), sharkPinkMat);
+smileL.position.set(1.11, -0.22, -0.14);
+sharkBody.add(smileL);
+const smileR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.12), sharkPinkMat);
+smileR.position.set(1.11, -0.22, 0.14);
+sharkBody.add(smileR);
+// center mouth
+const mouthMid = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.14), sharkPinkMat);
+mouthMid.position.set(1.13, -0.26, 0);
+sharkBody.add(mouthMid);
+
+// GILLS — subtle (smaller, fewer)
+for(let gi=0;gi<2;gi++){
+  for(const side of [-1,1]){
+    const g = new THREE.Mesh(
+      new THREE.BoxGeometry(0.03, 0.18, 0.04),
+      new THREE.MeshLambertMaterial({ color: 0x355878 })
+    );
+    g.position.set(0.35 - gi*0.11, 0.0, side*0.46);
+    sharkBody.add(g);
+  }
+}
+
+shark.position.set(0, 1.4, 0);
+shark.userData = { tailPivot, pecL, pecR };
+
+// ---------- Coral tower obstacles ----------
+const GAP  = 5.5;
+const PILLAR_W = 1.4;
+const GROUND_Y = -3.8;
+const CEIL_Y   = 11;
+const SPAWN_X  = 22;
+const KILL_X   = -12;
+const LANE_Z   = 0;
+
+const pillars = [];
+
+function makeAnemone(material, radius){
+  const g = new THREE.Group();
+  const count = 8;
+  for(let i=0;i<count;i++){
+    const a = (i/count)*Math.PI*2;
+    const t = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08, 0.5, 5),
+      material
+    );
+    t.position.set(Math.cos(a)*radius*0.4, 0.2, Math.sin(a)*radius*0.4);
+    t.rotation.x = Math.cos(a)*0.3;
+    t.rotation.z = Math.sin(a)*0.3;
+    g.add(t);
+  }
+  return g;
+}
+
+function makePillar(){
+  const set = CORAL_SETS[(Math.random()*CORAL_SETS.length)|0];
+  const group = new THREE.Group();
+  const bodyMat   = new THREE.MeshLambertMaterial({ color: new THREE.Color(set.body),   flatShading:true });
+  const capMat    = new THREE.MeshLambertMaterial({ color: new THREE.Color(set.cap),    flatShading:true });
+  const brightMat = new THREE.MeshLambertMaterial({
+    color: new THREE.Color(set.bright),
+    emissive: new THREE.Color(set.bright),
+    emissiveIntensity: 0.55,
+    flatShading:true
+  });
+
+  const gapY = THREE.MathUtils.lerp(GROUND_Y + 3.0, CEIL_Y - 3.0, Math.random());
+  const topLen = (CEIL_Y - (gapY + GAP/2));
+  const botLen = ((gapY - GAP/2) - GROUND_Y);
+
+  // Bottom tower (multi-segment for organic feel)
+  const bot = new THREE.Mesh(new THREE.BoxGeometry(PILLAR_W, botLen, PILLAR_W), bodyMat);
+  bot.position.set(0, GROUND_Y + botLen/2, 0);
+  bot.castShadow = true; bot.receiveShadow = true;
+  group.add(bot);
+  // bumpy outer coral segments on bottom
+  const bumpCount = Math.max(1, Math.floor(botLen / 1.2));
+  for(let i=0;i<bumpCount;i++){
+    const b = new THREE.Mesh(
+      new THREE.BoxGeometry(PILLAR_W*1.18, 0.35, PILLAR_W*1.18),
+      capMat
+    );
+    b.position.set(0, GROUND_Y + (i+0.5)*(botLen/bumpCount), 0);
+    b.castShadow = true;
+    group.add(b);
+  }
+  // cap + bright rim + anemone tufts
+  const botCap = new THREE.Mesh(new THREE.BoxGeometry(PILLAR_W*1.35, 0.45, PILLAR_W*1.35), capMat);
+  botCap.position.set(0, GROUND_Y + botLen + 0.22, 0);
+  botCap.castShadow = true;
+  group.add(botCap);
+  const botRim = new THREE.Mesh(new THREE.BoxGeometry(PILLAR_W*1.35, 0.14, PILLAR_W*1.35), brightMat);
+  botRim.position.set(0, GROUND_Y + botLen + 0.47, 0);
+  group.add(botRim);
+  const botAn = makeAnemone(brightMat, PILLAR_W);
+  botAn.position.set(0, GROUND_Y + botLen + 0.55, 0);
+  group.add(botAn);
+
+  // Top tower (mirrored)
+  const top = new THREE.Mesh(new THREE.BoxGeometry(PILLAR_W, topLen, PILLAR_W), bodyMat);
+  top.position.set(0, CEIL_Y - topLen/2, 0);
+  top.castShadow = true; top.receiveShadow = true;
+  group.add(top);
+  const bumpCountT = Math.max(1, Math.floor(topLen / 1.2));
+  for(let i=0;i<bumpCountT;i++){
+    const b = new THREE.Mesh(
+      new THREE.BoxGeometry(PILLAR_W*1.18, 0.35, PILLAR_W*1.18),
+      capMat
+    );
+    b.position.set(0, CEIL_Y - (i+0.5)*(topLen/bumpCountT), 0);
+    b.castShadow = true;
+    group.add(b);
+  }
+  const topCap = new THREE.Mesh(new THREE.BoxGeometry(PILLAR_W*1.35, 0.45, PILLAR_W*1.35), capMat);
+  topCap.position.set(0, CEIL_Y - topLen - 0.22, 0);
+  topCap.castShadow = true;
+  group.add(topCap);
+  const topRim = new THREE.Mesh(new THREE.BoxGeometry(PILLAR_W*1.35, 0.14, PILLAR_W*1.35), brightMat);
+  topRim.position.set(0, CEIL_Y - topLen - 0.47, 0);
+  group.add(topRim);
+  const topAn = makeAnemone(brightMat, PILLAR_W);
+  topAn.position.set(0, CEIL_Y - topLen - 0.55, 0);
+  topAn.rotation.x = Math.PI;
+  group.add(topAn);
+
+  group.position.set(SPAWN_X, 0, LANE_Z);
+  group.userData = {
+    scored:false,
+    gapY,
+    topY: CEIL_Y - topLen,
+    botY: GROUND_Y + botLen,
+    botAn, topAn,
+  };
+  scene.add(group);
+  pillars.push(group);
+  return group;
+}
+
+// ---------- Particles (crash burst) ----------
+const burst = [];
+function makeBurst(x,y,z){
+  const mats = [
+    new THREE.MeshLambertMaterial({ color: C.coralA, flatShading:true }),
+    new THREE.MeshLambertMaterial({ color: C.bubble, transparent:true, opacity:0.7, emissive:0x4fbfd6, emissiveIntensity:0.3 }),
+    new THREE.MeshLambertMaterial({ color: C.sun, flatShading:true }),
+  ];
+  for(let i=0;i<32;i++){
+    const sz = 0.1 + Math.random()*0.22;
+    const mat = mats[i%mats.length];
+    const geom = i%3===1 ? new THREE.SphereGeometry(sz,6,5) : new THREE.BoxGeometry(sz,sz,sz);
+    const p = new THREE.Mesh(geom, mat);
+    p.position.set(x,y,z);
+    const dir = new THREE.Vector3(
+      (Math.random()-0.5)*2,
+      Math.random()*2.3 + 0.5,
+      (Math.random()-0.5)*2,
+    ).multiplyScalar(4 + Math.random()*4);
+    p.userData = { vel:dir, life:1.4, spin:new THREE.Vector3(Math.random()*5,Math.random()*5,Math.random()*5), isBubble: i%3===1 };
+    scene.add(p);
+    burst.push(p);
+  }
+}
+
+// ---------- Swim trail (bubbles from tail on stroke) ----------
+const trail = [];
+const trailMat = new THREE.MeshLambertMaterial({
+  color: C.bubble, transparent:true, opacity:0.7, depthWrite:false,
+  emissive:0x4fbfd6, emissiveIntensity:0.35
+});
+function emitTrail(){
+  for(let i=0;i<4;i++){
+    const r = 0.06 + Math.random()*0.12;
+    const b = new THREE.Mesh(new THREE.SphereGeometry(r, 6, 5), trailMat);
+    b.position.set(
+      shark.position.x - 1.0 + (Math.random()-0.5)*0.3,
+      shark.position.y - 0.1 + (Math.random()-0.5)*0.3,
+      (Math.random()-0.5)*0.5
+    );
+    b.userData = {
+      life: 0.9,
+      vx: -1.5 + Math.random()*-0.8,
+      vy: 0.8 + Math.random()*0.8,
+      vz: (Math.random()-0.5)*0.5,
+    };
+    scene.add(b);
+    trail.push(b);
+  }
+}
+
+// ---------- Score sparkles (stars burst at pillar passed) ----------
+const sparks = [];
+const sparkMats = [
+  new THREE.MeshBasicMaterial({ color: 0xffe28a }),
+  new THREE.MeshBasicMaterial({ color: 0xffd065 }),
+  new THREE.MeshBasicMaterial({ color: 0xffffff }),
+  new THREE.MeshBasicMaterial({ color: 0x6ee0c8 }),
+];
+function emitSparkles(x,y,z){
+  for(let i=0;i<14;i++){
+    const sz = 0.08 + Math.random()*0.12;
+    const m = sparkMats[i%sparkMats.length];
+    const s = new THREE.Mesh(new THREE.BoxGeometry(sz,sz,sz), m);
+    s.position.set(x,y,z);
+    const ang = Math.random()*Math.PI*2;
+    const spd = 2 + Math.random()*3;
+    s.userData = {
+      life: 0.7,
+      vel: new THREE.Vector3(Math.cos(ang)*spd, Math.sin(ang)*spd, (Math.random()-0.5)*2),
+      spin: new THREE.Vector3(Math.random()*8, Math.random()*8, Math.random()*8),
+    };
+    scene.add(s);
+    sparks.push(s);
+  }
+}
+
+// ---------- State ----------
+const STATE = { START:0, PLAY:1, DEAD:2 };
+let state = STATE.START;
+let vy = 0;
+const BASE_SPEED = 4.4;
+const MAX_SPEED  = 6.2;
+const GRAVITY    = -17;
+const FLAP       = 7.2;
+let scrollSpeed = BASE_SPEED;
+let score = 0;
+let best  = Number(localStorage.getItem('sharky-best') || 0);
+let timeSinceSpawn = 0;
+const SPAWN_INTERVAL = 2.6;
+let pitchTarget = 0;
+let tailBoost = 0; // extra tail sway amplitude after a swim stroke
+let idleT = 0;
+let shake = 0;     // camera shake amount (decays)
+let deathSpin = 0; // accumulates during death animation
+
+const hud = document.getElementById('hud');
+const scoreNum = document.getElementById('scoreNum');
+const over = document.getElementById('over');
+const finalScore = document.getElementById('finalScore');
+const bestScore = document.getElementById('bestScore');
+const startScr = document.getElementById('start');
+const flash = document.getElementById('flash');
+const popEl = document.getElementById('pop');
+
+bestScore.textContent = best;
+
+// ---------- React Native bridge ----------
+// When embedded inside a WebView, post structured events so the host app can
+// handle haptics, analytics, and reward calculation. No-op in a plain browser.
+function postToRN(msg){
+  try{
+    if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){
+      window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+    }
+  }catch(e){}
+}
+
+// ---------- Audio ----------
+const AC = window.AudioContext || window.webkitAudioContext;
+let actx = null;
+function ensureAudio(){ if(!actx) actx = new AC(); return actx; }
+function beep(freq, dur=0.08, type='sine', gain=0.09){
+  try{
+    const ctx = ensureAudio();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = gain;
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    o.stop(ctx.currentTime + dur + 0.02);
+  }catch(e){}
+}
+function bubbleSound(){
+  // short rising tone for swim
+  beep(320, 0.08, 'sine', 0.08);
+  setTimeout(()=>beep(480, 0.06, 'sine', 0.06), 40);
+}
+
+// ---------- Input ----------
+function flapInput(){
+  if(state === STATE.START){
+    startGame();
+    vy = FLAP;
+    tailBoost = 1;
+    emitTrail();
+    bubbleSound();
+    postToRN({ type:'start' });
+    postToRN({ type:'flap' });
+    return;
+  }
+  if(state === STATE.PLAY){
+    vy = FLAP;
+    tailBoost = 1;
+    emitTrail();
+    bubbleSound();
+    postToRN({ type:'flap' });
+    return;
+  }
+}
+addEventListener('keydown', e => {
+  if(e.code === 'Space'){
+    e.preventDefault();
+    if(state === STATE.DEAD) resetGame();
+    else flapInput();
+  }
+});
+function onPointer(e){
+  if(e.target && e.target.closest && e.target.closest('#flyAgain')) return;
+  if(state === STATE.DEAD) return;
+  flapInput();
+  if(e.cancelable) e.preventDefault();
+}
+addEventListener('mousedown', onPointer);
+addEventListener('touchstart', onPointer, { passive:false });
+addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('gesturestart', e => e.preventDefault());
+let lastTap = 0;
+addEventListener('touchend', e => {
+  const now = Date.now();
+  if(now - lastTap < 300) e.preventDefault();
+  lastTap = now;
+}, { passive:false });
+
+document.getElementById('flyAgain').addEventListener('click', () => resetGame());
+
+// ---------- Lifecycle ----------
+function startGame(){
+  state = STATE.PLAY;
+  startScr.style.display = 'none';
+  hud.classList.add('show');
+  vy = 0;
+  scrollSpeed = BASE_SPEED;
+  score = 0;
+  scoreNum.textContent = '0';
+  timeSinceSpawn = SPAWN_INTERVAL - 0.3;
+  shark.position.set(0, 1.4, 0);
+  shark.rotation.set(0,0,0);
+}
+function resetGame(){
+  for(const p of pillars) scene.remove(p);
+  pillars.length = 0;
+  for(const b of burst) scene.remove(b);
+  burst.length = 0;
+  for(const s of sparks) scene.remove(s);
+  sparks.length = 0;
+  for(const t of trail) scene.remove(t);
+  trail.length = 0;
+  over.classList.remove('show');
+  shark.visible = true;
+  pitchTarget = 0;
+  shark.rotation.set(0,0,0);
+  deathSpin = 0;
+  shake = 0;
+  startGame();
+}
+function die(){
+  if(state !== STATE.PLAY) return;
+  state = STATE.DEAD;
+  flash.classList.add('go');
+  setTimeout(()=>flash.classList.remove('go'), 120);
+  makeBurst(shark.position.x, shark.position.y, shark.position.z);
+  shake = 0.8;
+  beep(200, 0.2, 'sine', 0.12);
+  setTimeout(()=>beep(140, 0.3, 'sine', 0.12), 100);
+  const isNewBest = score > best;
+  if(isNewBest){
+    best = score;
+    localStorage.setItem('sharky-best', String(best));
+  }
+  finalScore.textContent = score;
+  bestScore.textContent  = best;
+  hud.classList.remove('show');
+  setTimeout(()=>over.classList.add('show'), 900);
+  postToRN({ type:'gameover', score, best, isNewBest });
+}
+
+// ---------- Resize ----------
+function onResize(){
+  renderer.setSize(innerWidth, innerHeight);
+  fitCamera();
+}
+addEventListener('resize', onResize);
+addEventListener('orientationchange', () => setTimeout(onResize, 120));
+
+// ---------- Main loop ----------
+const clock = new THREE.Clock();
+function tick(){
+  const dt = Math.min(clock.getDelta(), 1/30);
+  const t  = clock.elapsedTime;
+
+  // Update shader time uniforms
+  waterUniforms.time.value = t;
+  seabed.material.uniforms.time.value = t;
+
+  // Tail sway: continuous + boost after stroke
+  tailBoost = Math.max(0, tailBoost - dt*1.8);
+  const sway = Math.sin(t * 7.5) * (0.35 + tailBoost*0.4);
+  shark.userData.tailPivot.rotation.y = sway;
+
+  // Pectoral flap
+  const pec = Math.sin(t*4.5) * 0.15;
+  shark.userData.pecL.rotation.z = 0.3 + pec;
+  shark.userData.pecR.rotation.z = -0.3 - pec;
+
+  // Bubbles rise
+  for(const b of bubbles){
+    b.position.y += b.userData.vy * dt;
+    b.position.x += Math.sin(t*b.userData.swaySpeed + b.userData.sway) * 0.4 * dt;
+    if(b.position.y > 13){
+      b.position.y = -4 - Math.random()*1;
+      b.position.x = (Math.random()-0.5)*34;
+    }
+  }
+
+  // Fish drift
+  for(const f of fishes){
+    f.position.x += f.userData.speed * dt;
+    f.position.y = f.userData.baseY + Math.sin(t*0.9 + f.userData.phase)*0.35;
+    f.rotation.z = Math.sin(t*1.6 + f.userData.phase)*0.15;
+    if(f.position.x > 14){ f.position.x = -14; f.userData.baseY = 2 + Math.random()*6; }
+  }
+
+  // God rays subtle drift
+  for(const r of godRays.children){
+    r.position.x = r.userData.baseX + Math.sin(t*0.3 + r.userData.phase)*0.6;
+    r.material.opacity = 0.04 + (Math.sin(t*0.8 + r.userData.phase)+1)*0.04;
+  }
+
+  // Kelp sway
+  for(const k of kelps){
+    const segs = k.userData.segs;
+    for(let i=0;i<segs.length;i++){
+      const s = segs[i];
+      const amp = (i/segs.length) * 0.3;
+      s.position.x = Math.sin(t*1.2 + k.userData.phase + i*0.3) * amp;
+      s.rotation.z = Math.sin(t*1.2 + k.userData.phase + i*0.3) * amp * 0.2;
+    }
+  }
+
+  if(state === STATE.START){
+    idleT += dt;
+    // Float the shark higher on start screen so it's visible above the button
+    shark.position.y = 4.2 + Math.sin(idleT*1.8)*0.35;
+    shark.position.x = Math.sin(idleT*1.2)*0.4;
+    shark.rotation.z = Math.sin(idleT*1.5)*0.08;
+    shark.rotation.y = Math.sin(idleT*0.7)*0.1;
+  }
+
+  if(state === STATE.PLAY){
+    // Physics
+    vy += GRAVITY * dt;
+    shark.position.y += vy * dt;
+
+    // Pitch: rising tips snout up (+Z rotation since shark faces +X)
+    pitchTarget = THREE.MathUtils.clamp(vy * 0.07, -0.8, 0.5);
+    shark.rotation.z += (pitchTarget - shark.rotation.z) * Math.min(1, dt*9);
+
+    // Spawn pillars
+    timeSinceSpawn += dt;
+    if(timeSinceSpawn >= SPAWN_INTERVAL){
+      timeSinceSpawn = 0;
+      makePillar();
+    }
+
+    // Scroll pillars + score/collision
+    for(let i=pillars.length-1;i>=0;i--){
+      const p = pillars[i];
+      p.position.x -= scrollSpeed * dt;
+
+      // Score
+      if(!p.userData.scored && p.position.x < shark.position.x - 0.2){
+        p.userData.scored = true;
+        score++;
+        scoreNum.textContent = score;
+        popEl.classList.remove('fire'); void popEl.offsetWidth; popEl.classList.add('fire');
+        emitSparkles(shark.position.x + 0.3, shark.position.y + 0.2, 0);
+        tailBoost = 1.2; // extra wiggle on score
+        shake = 0.12;
+        beep(880, 0.09, 'triangle', 0.08);
+        postToRN({ type:'score', score });
+        if(score % 12 === 0 && scrollSpeed < MAX_SPEED){
+          scrollSpeed = Math.min(MAX_SPEED, scrollSpeed + 0.3);
+          beep(1200, 0.1, 'triangle', 0.08);
+          emitSparkles(shark.position.x, shark.position.y, 0);
+          shake = 0.25;
+        }
+      }
+
+      // Wiggle anemones
+      if(p.userData.botAn) p.userData.botAn.rotation.y = Math.sin(t*2 + p.position.x*0.5)*0.2;
+      if(p.userData.topAn) p.userData.topAn.rotation.y = Math.cos(t*2 + p.position.x*0.5)*0.2;
+
+      // Collision AABB (tuned for smaller chibi shark)
+      const bx = shark.position.x, by = shark.position.y;
+      const px = p.position.x;
+      const halfW = PILLAR_W*0.55;
+      if(Math.abs(bx - px) < halfW + 0.28){
+        const bot = p.userData.botY;
+        const top = p.userData.topY;
+        if(by - 0.38 < bot || by + 0.38 > top){
+          die();
+        }
+      }
+
+      if(p.position.x < KILL_X){
+        scene.remove(p);
+        pillars.splice(i,1);
+      }
+    }
+
+    if(shark.position.y > CEIL_Y - 0.5){ shark.position.y = CEIL_Y - 0.5; vy = Math.min(vy, 0); }
+    if(shark.position.y < GROUND_Y + 0.55){ shark.position.y = GROUND_Y + 0.55; die(); }
+  }
+
+  if(state === STATE.DEAD){
+    // Cute death: shark spins and sinks
+    vy += GRAVITY * 0.6 * dt;
+    shark.position.y += vy * dt;
+    deathSpin += dt*9;
+    shark.rotation.z = deathSpin;
+    shark.rotation.x = deathSpin*0.5;
+    if(shark.position.y < GROUND_Y + 0.4){
+      shark.position.y = GROUND_Y + 0.4;
+      vy = 0;
+    }
+  }
+
+  // Burst (mixed particles with gravity-ish drift)
+  for(let i=burst.length-1;i>=0;i--){
+    const b = burst[i];
+    b.userData.life -= dt;
+    if(b.userData.isBubble){
+      b.userData.vel.y += 4 * dt;
+      b.material.opacity = Math.max(0, b.userData.life * 0.7);
+    } else {
+      b.userData.vel.y += GRAVITY * 0.6 * dt;
+    }
+    b.position.addScaledVector(b.userData.vel, dt);
+    b.rotation.x += b.userData.spin.x * dt;
+    b.rotation.y += b.userData.spin.y * dt;
+    b.rotation.z += b.userData.spin.z * dt;
+    if(b.userData.life <= 0){
+      scene.remove(b);
+      burst.splice(i,1);
+    }
+  }
+
+  // Score sparkles
+  for(let i=sparks.length-1;i>=0;i--){
+    const s = sparks[i];
+    s.userData.life -= dt;
+    s.userData.vel.multiplyScalar(0.93);
+    s.position.addScaledVector(s.userData.vel, dt);
+    s.rotation.x += s.userData.spin.x * dt;
+    s.rotation.y += s.userData.spin.y * dt;
+    s.rotation.z += s.userData.spin.z * dt;
+    const scl = Math.max(0, s.userData.life / 0.7);
+    s.scale.setScalar(scl);
+    if(s.userData.life <= 0){
+      scene.remove(s);
+      sparks.splice(i,1);
+    }
+  }
+
+  // Swim trail bubbles
+  for(let i=trail.length-1;i>=0;i--){
+    const b = trail[i];
+    b.userData.life -= dt;
+    b.position.x += b.userData.vx * dt;
+    b.position.y += b.userData.vy * dt;
+    b.position.z += b.userData.vz * dt;
+    b.material.opacity = Math.max(0, b.userData.life*0.7);
+    const scl = Math.max(0.2, b.userData.life);
+    b.scale.setScalar(scl);
+    if(b.userData.life <= 0){
+      scene.remove(b);
+      trail.splice(i,1);
+    }
+  }
+
+  // Camera: aspect-aware base + follow + shake. Look-at is OFFSET right so the
+  // shark sits on the left third of the frame with runway on the right.
+  const ar = innerWidth/innerHeight;
+  const baseY = ar < 0.8 ? 3.0 : ar < 1.2 ? 2.6 : 2.3;
+  const targetY = baseY + shark.position.y*0.09;
+  camera.position.y += (targetY - camera.position.y) * Math.min(1,dt*2.5);
+  shake = Math.max(0, shake - dt*2);
+  const shakeX = (Math.random()-0.5) * shake;
+  const shakeY = (Math.random()-0.5) * shake;
+  camera.position.x = CAM_LOOK_X + shakeX;
+  camera.lookAt(CAM_LOOK_X + shakeX*0.5, shark.position.y*0.22 + 1.5 + shakeY, 0);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>

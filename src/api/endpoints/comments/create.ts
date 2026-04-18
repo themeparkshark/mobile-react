@@ -7,7 +7,7 @@ export default async function createComment(
   thread: number,
   comment: string,
   parent?: number | null
-): Promise<CommentType> {
+): Promise<CommentType | null> {
   try {
     const { data } = await client.post<ApiResponseType<CommentType>>(
       `/threads/${thread}/comments`,
@@ -18,11 +18,13 @@ export default async function createComment(
     );
 
     return data.data;
-  } catch (error) {
-    Alert.alert(error.response.data.message, '', [
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } } };
+    Alert.alert(axiosError.response?.data?.message ?? 'Error creating comment', '', [
       {
         text: 'Ok',
       },
     ]);
+    return null;
   }
 }

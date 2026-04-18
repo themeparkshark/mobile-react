@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { getWishlist, toggleWishlist, WishlistRide } from '../../api/endpoints/rides/wishlist';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
@@ -72,16 +73,16 @@ export default function RideWishlistScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-          <Text style={styles.backBtn}>← Back</Text>
+      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
+          <Text style={styles.backChevron}>‹</Text>
         </Pressable>
-        <Text style={styles.title}>Want to Ride 🎢</Text>
-        <View style={{ width: 60 }} />
-      </View>
+        <Text style={styles.title}>WISHLIST</Text>
+        <View style={{ width: 40 }} />
+      </LinearGradient>
 
       {loading ? (
-        <ActivityIndicator size="large" color={colors.secondary} style={{ marginTop: 60 }} />
+        <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 60 }} />
       ) : (
         <FlatList
           data={rides}
@@ -94,7 +95,7 @@ export default function RideWishlistScreen() {
             />
           )}
           contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.secondary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyEmoji}>⭐</Text>
@@ -111,29 +112,76 @@ export default function RideWishlistScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgDark },
+  container: { flex: 1, backgroundColor: '#e8f4fd' },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    paddingHorizontal: 16, 
+    paddingVertical: 16,
+    paddingBottom: 20,
   },
-  backBtn: { color: colors.secondary, fontSize: 16, fontWeight: '600' },
-  title: { color: colors.textPrimary, fontSize: 20, fontWeight: '700', fontFamily: 'Shark' },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backChevron: { 
+    color: '#FFFFFF', 
+    fontSize: 24, 
+    fontWeight: '600',
+    marginLeft: -2,
+  },
+  title: { 
+    color: '#FFFFFF', 
+    fontSize: 20, 
+    fontWeight: '700', 
+    fontFamily: 'Shark',
+    letterSpacing: 2,
+  },
   content: { padding: 16, paddingBottom: 60 },
   item: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.bgMedium, borderRadius: 12, padding: 14, marginBottom: 8,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 16, 
+    padding: 14, 
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   itemLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  itemName: { color: colors.textPrimary, fontSize: 15, fontWeight: '600' },
-  itemPark: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  itemName: { color: '#1a1a2e', fontSize: 15, fontWeight: '600' },
+  itemPark: { color: '#475569', fontSize: 12, marginTop: 2 },
   removeBtn: {
-    width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(244,67,54,0.15)',
-    justifyContent: 'center', alignItems: 'center',
+    width: 28, 
+    height: 28, 
+    borderRadius: 14, 
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    justifyContent: 'center', 
+    alignItems: 'center',
   },
-  removeBtnText: { color: colors.error, fontSize: 14, fontWeight: '700' },
+  removeBtnText: { color: '#ef4444', fontSize: 14, fontWeight: '700' },
   emptyContainer: { alignItems: 'center', paddingVertical: 60 },
   emptyEmoji: { fontSize: 60 },
-  emptyTitle: { color: colors.textPrimary, fontSize: 22, fontWeight: '700', marginTop: 16, fontFamily: 'Shark' },
-  emptySubtitle: { color: colors.textSecondary, fontSize: 15, marginTop: 8, textAlign: 'center' },
+  emptyTitle: { 
+    color: '#1a1a2e', 
+    fontSize: 22, 
+    fontWeight: '700', 
+    marginTop: 16, 
+    fontFamily: 'Shark' 
+  },
+  emptySubtitle: { 
+    color: '#475569', 
+    fontSize: 15, 
+    marginTop: 8, 
+    textAlign: 'center' 
+  },
 });

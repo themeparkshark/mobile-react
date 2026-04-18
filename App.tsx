@@ -1,7 +1,19 @@
-import { LogBox } from 'react-native';
+import { LogBox, View, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
+
+const ErrorFallback = ({ error, resetError }: { error: Error; resetError: () => void }) => {
+  // Defensive: handle non-Error values to prevent Hermes .stack crash
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>Something went wrong</Text>
+      <Text style={{ marginBottom: 20, textAlign: 'center' }}>{message}</Text>
+      <Text style={{ color: '#007AFF' }} onPress={resetError}>Try again</Text>
+    </View>
+  );
+};
 import { ToastProvider } from './src/components/Toast';
 
 // Suppress common network error warnings in LogBox
@@ -29,7 +41,8 @@ import { TutorialProvider } from './src/components/Tutorial';
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-    <ErrorBoundary>
+    {/* @ts-ignore */}
+    <ErrorBoundary FallbackComponent={ErrorFallback}>
       <AuthProvider>
         <SoundEffectProvider>
           <MusicProvider>

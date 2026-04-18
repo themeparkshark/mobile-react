@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { Camera } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
 import { Magnetometer } from 'expo-sensors';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -198,19 +198,19 @@ function FloatingMarker({ children, inRange }: { children: React.ReactNode; inRa
 
 export default function ARView({ redeemables, onRefresh }: ARViewProps) {
   const { location } = useContext(LocationContext);
-  const [cameraPermission, setCameraPermission] = useState<boolean | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [heading, setHeading] = useState<number>(0);
   const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
   const smoothedHeadingRef = useRef<number>(0);
   const lastUpdateRef = useRef<number>(0);
+  const cameraPermission = permission?.granted ?? null;
 
   // Request permission on mount
   useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setCameraPermission(status === 'granted');
-    })();
-  }, []);
+    if (!permission?.granted && permission?.canAskAgain) {
+      requestPermission();
+    }
+  }, [permission, requestPermission]);
 
   // Magnetometer subscription with smoothing
   useEffect(() => {
@@ -462,7 +462,7 @@ export default function ARView({ redeemables, onRefresh }: ARViewProps) {
 
   return (
     <View style={styles.container}>
-      <Camera style={StyleSheet.absoluteFill} type={'back' as any} />
+      <CameraView style={StyleSheet.absoluteFill} facing="back" />
 
       {/* AR overlay */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">

@@ -15,8 +15,9 @@ import TopbarText from '../components/Topbar/TopbarText';
 import MiniGameSelector from '../components/MiniGameSelector';
 import PostWinRewardsModal from '../components/PostWinRewardsModal';
 import { CoinUpgradeDemoScreen } from '../components/CoinUpgradeDemo';
+import AnimatedShark from '../components/AnimatedShark';
 
-type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'random';
+type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'random';
 
 const GAMES: { type: GameType; label: string; emoji: string; desc: string }[] = [
   { type: 'random', label: 'Random', emoji: '[?]', desc: 'Randomly picks a mini-game' },
@@ -24,6 +25,7 @@ const GAMES: { type: GameType; label: string; emoji: string; desc: string }[] = 
   { type: 'timing', label: 'Rhythm Tap', emoji: '[>]', desc: 'Time your taps in the hit zone' },
   { type: 'memory', label: 'Memory Match', emoji: '[=]', desc: 'Find matching pairs of cards' },
   { type: 'trivia', label: 'Park Trivia', emoji: '[Q]', desc: 'Answer Disney park questions' },
+  { type: 'shark', label: 'Sharky Swim', emoji: '[~]', desc: 'Swim through coral, Flappy-style 3D' },
 ];
 
 export default function MiniGameTesterScreen() {
@@ -81,6 +83,19 @@ export default function MiniGameTesterScreen() {
                   onPress={() => handlePlay(game.type)}
                 />
               ))}
+            </Section>
+
+            <Section header={'Skia Animated Shark (Proof of Concept)'.toUpperCase()}>
+              <Cell
+                cellContentView={
+                  <View style={{ alignItems: 'center', paddingVertical: 20, backgroundColor: '#1a1a2e' }}>
+                    <AnimatedShark size={120} />
+                    <Text style={{ color: '#888', fontSize: 12, marginTop: 8 }}>
+                      Skia Atlas + Reanimated — 36 frames @ 60fps
+                    </Text>
+                  </View>
+                }
+              />
             </Section>
 
             <Section header={'Coin Upgrade Levels'.toUpperCase()}>

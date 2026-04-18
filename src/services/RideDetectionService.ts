@@ -4,14 +4,25 @@
  * Full GPS-based ride detection with AsyncStorage queuing,
  * dwell time analysis, re-ride detection, background location tracking,
  * wait times integration, and batch confirmation support.
+ * 
+ * KEY BEHAVIOR:
+ * - Detections ALWAYS queue to AsyncStorage (for background persistence)
+ * - If onForegroundDetection callback is set AND the app is active,
+ *   the callback is ALSO called so the UI can show an immediate popup
+ * - Nothing is auto-logged. User must confirm every detection.
+ * 
+ * RIDES CACHE: Rides are persisted to AsyncStorage so the background
+ * task can load them in a fresh JS context (after app kill).
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import { AppState } from 'react-native';
 import { RideType } from '../api/endpoints/rides';
 
 const STORAGE_KEY = 'pending_ride_detections';
+const RIDES_CACHE_KEY = 'ride_detection_rides_cache';
 const DEFAULT_RIDE_RADIUS = 50; // fallback meters
 const DEFAULT_MIN_DWELL_MS = 90_000; // 1.5 min default
 const MAX_WALKTHROUGH_MS = 60_000; // anything under 1 min = walk-through
@@ -42,8 +53,6 @@ interface ZoneState {
   lastSeenAt: number;
   rideDurationMinutes: number | null;
   minDwellMs: number;
-  detectionCount: number;
-  lastDetectionTime: number;
 }
 
 function haversineDistance(
@@ -69,7 +78,6 @@ function calculateConfidence(
   rideDurationMin: number | null,
   waitTimeMin: number | null,
 ): 'high' | 'medium' | 'low' {
-  // If we have wait time + ride duration, use combined expected dwell
   if (rideDurationMin != null && waitTimeMin != null) {
     const expectedMs = (rideDurationMin + waitTimeMin) * 60_000;
     const ratio = dwellMs / expectedMs;
@@ -78,7 +86,6 @@ function calculateConfidence(
     return 'low';
   }
 
-  // Ride duration only
   if (rideDurationMin != null) {
     const expectedMs = rideDurationMin * 60_000;
     const ratio = dwellMs / expectedMs;
@@ -87,7 +94,6 @@ function calculateConfidence(
     return 'low';
   }
 
-  // No duration info at all
   return dwellMs > 180_000 ? 'medium' : 'low';
 }
 
@@ -98,16 +104,86 @@ class RideDetectionService {
   private running = false;
   private currentWaitTimes: Map<number, number> = new Map();
 
+  /**
+   * Persistent re-ride / cooldown tracking.
+   * Survives zone state deletion (which happens on every zone exit).
+   * Key: rideId, Value: { lastDetectionTime, detectionCount }
+   */
+  private rideHistory: Map<number, { lastDetectionTime: number; detectionCount: number }> = new Map();
+
+  /**
+   * Mutex for AsyncStorage writes to prevent race conditions
+   * when multiple rides exit on the same location update.
+   */
+  private writeQueue: Promise<void> = Promise.resolve();
+
+  /**
+   * Flag to snapshot AppState at detection time BEFORE any async work,
+   * preventing stale reads after app transitions.
+   */
+  private lastKnownAppState: string = AppState.currentState;
+
+  /**
+   * Callback for foreground detections.
+   * Set by useRideDetection when app is in foreground.
+   */
+  onForegroundDetection: ((detection: DetectedRide) => void) | null = null;
+
+  constructor() {
+    // Track AppState synchronously so we always have a fresh value
+    AppState.addEventListener('change', (state) => {
+      this.lastKnownAppState = state;
+    });
+  }
+
   setRides(rides: RideType[]) {
     this.rides = rides.filter(r => r.lat != null && r.lng != null);
+    // Cache to AsyncStorage for background task (BUG 3 fix)
+    this.cacheRides();
+  }
+
+  setCurrentWaitTimes(waitTimes: Map<number, number>) {
+    this.currentWaitTimes = waitTimes;
   }
 
   /**
-   * Store current wait times (minutes) keyed by ride ID.
-   * Called from the wait times polling code.
+   * Cache rides to AsyncStorage so the background task can load them
+   * in a fresh JS context after app kill.
    */
-  setCurrentWaitTimes(waitTimes: Map<number, number>) {
-    this.currentWaitTimes = waitTimes;
+  private async cacheRides(): Promise<void> {
+    try {
+      // Only cache the fields needed for detection to keep storage small
+      const minimal = this.rides.map(r => ({
+        id: r.id,
+        name: r.name,
+        type: r.type,
+        park_id: r.park_id,
+        lat: r.lat,
+        lng: r.lng,
+        radius: r.radius,
+        ride_duration_minutes: r.ride_duration_minutes,
+        min_dwell_minutes: r.min_dwell_minutes,
+      }));
+      await AsyncStorage.setItem(RIDES_CACHE_KEY, JSON.stringify(minimal));
+    } catch (e) {
+      console.warn('Failed to cache rides for background detection:', e);
+    }
+  }
+
+  /**
+   * Load rides from cache. Called by background task when rides array is empty.
+   */
+  async loadRidesFromCache(): Promise<void> {
+    if (this.rides.length > 0) return; // Already loaded
+    try {
+      const raw = await AsyncStorage.getItem(RIDES_CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw) as RideType[];
+        this.rides = cached.filter(r => r.lat != null && r.lng != null);
+      }
+    } catch (e) {
+      console.warn('Failed to load rides from cache:', e);
+    }
   }
 
   async startDetection(): Promise<boolean> {
@@ -134,10 +210,19 @@ class RideDetectionService {
     try {
       const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
       if (bgStatus === 'granted') {
+        // Stop existing task first to prevent duplicates (BUG 4 mitigation)
+        const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+        if (isRegistered) {
+          await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+        }
+
         await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
           accuracy: Location.Accuracy.High,
           timeInterval: 15000,
           distanceInterval: 10,
+          // Only deliver updates when app is NOT in foreground
+          // (foreground watcher handles active state)
+          pausesUpdatesAutomatically: true,
           showsBackgroundLocationIndicator: true,
           foregroundService: {
             notificationTitle: 'Theme Park Shark',
@@ -168,12 +253,12 @@ class RideDetectionService {
       console.warn('Failed to stop background location:', e);
     }
 
-    // Finalize any open zone states
+    // Finalize any open zone states — await each sequentially (BUG 2 fix)
     const now = Date.now();
     for (const [rideId, state] of Array.from(this.zoneStates.entries())) {
       const dwellMs = now - state.enteredAt;
       if (dwellMs > state.minDwellMs && dwellMs > MAX_WALKTHROUGH_MS) {
-        this.queueDetection(state, dwellMs, now);
+        await this.queueDetection(state, dwellMs, now);
       }
     }
     this.zoneStates.clear();
@@ -196,7 +281,9 @@ class RideDetectionService {
         }
 
         if (dwellMs > state.minDwellMs) {
-          this.queueDetection(state, dwellMs, now);
+          // Snapshot foreground state BEFORE async work (BUG 6 fix)
+          const wasActive = this.lastKnownAppState === 'active';
+          this.enqueueWrite(() => this.queueDetection(state, dwellMs, now, wasActive));
         }
 
         this.zoneStates.delete(rideId);
@@ -208,12 +295,12 @@ class RideDetectionService {
     // Check for zone enters
     for (const ride of nearbyRides) {
       if (!this.zoneStates.has(ride.id)) {
-        const existing = this.zoneStates.get(ride.id);
-        if (existing && now - existing.lastDetectionTime < DETECTION_COOLDOWN_MS) {
+        // Check cooldown from rideHistory (BUG 1 fix - was checking zoneStates which is always empty here)
+        const history = this.rideHistory.get(ride.id);
+        if (history && now - history.lastDetectionTime < DETECTION_COOLDOWN_MS) {
           continue;
         }
 
-        // Calculate min dwell: prefer min_dwell_minutes, then ride_duration_minutes, then default
         let minDwellMs = DEFAULT_MIN_DWELL_MS;
         if (ride.min_dwell_minutes != null) {
           minDwellMs = ride.min_dwell_minutes * 60_000;
@@ -230,8 +317,6 @@ class RideDetectionService {
           lastSeenAt: now,
           rideDurationMinutes: ride.ride_duration_minutes,
           minDwellMs,
-          detectionCount: existing ? existing.detectionCount + 1 : 1,
-          lastDetectionTime: existing?.lastDetectionTime || 0,
         });
       }
     }
@@ -246,8 +331,27 @@ class RideDetectionService {
     });
   }
 
-  private async queueDetection(state: ZoneState, dwellMs: number, exitTime: number) {
-    const isReRide = state.detectionCount > 1;
+  /**
+   * Enqueue an async write operation to prevent race conditions (BUG 2 fix).
+   * All AsyncStorage writes go through this serial queue.
+   */
+  private enqueueWrite(fn: () => Promise<void>): void {
+    this.writeQueue = this.writeQueue.then(fn).catch(e => {
+      console.error('Write queue error:', e);
+    });
+  }
+
+  private async queueDetection(state: ZoneState, dwellMs: number, exitTime: number, wasActive?: boolean) {
+    // Update ride history for cooldown + re-ride tracking (BUG 1 fix)
+    const history = this.rideHistory.get(state.rideId);
+    const detectionCount = history ? history.detectionCount + 1 : 1;
+    const isReRide = history != null && (exitTime - history.lastDetectionTime) < RE_RIDE_GAP_MS;
+
+    this.rideHistory.set(state.rideId, {
+      lastDetectionTime: exitTime,
+      detectionCount,
+    });
+
     const waitTime = this.currentWaitTimes.get(state.rideId) ?? null;
     const confidence = calculateConfidence(dwellMs, state.rideDurationMinutes, waitTime);
 
@@ -265,6 +369,7 @@ class RideDetectionService {
       detectedAt: Date.now(),
     };
 
+    // Persist to AsyncStorage (survives app kill, background, etc.)
     try {
       const existing = await this.getPendingDetections();
       existing.push(detection);
@@ -273,7 +378,17 @@ class RideDetectionService {
       console.error('Failed to queue ride detection:', e);
     }
 
-    state.lastDetectionTime = Date.now();
+    // Use the pre-snapshotted AppState (BUG 6 fix)
+    // Default to checking current state if wasActive wasn't passed (e.g., from stopDetection)
+    const shouldFireForeground = wasActive ?? (this.lastKnownAppState === 'active');
+
+    if (this.onForegroundDetection && shouldFireForeground) {
+      try {
+        this.onForegroundDetection(detection);
+      } catch (e) {
+        console.warn('Foreground detection callback error:', e);
+      }
+    }
   }
 
   async getPendingDetections(): Promise<DetectedRide[]> {
@@ -290,13 +405,23 @@ class RideDetectionService {
   }
 
   async removePendingDetection(id: string): Promise<void> {
-    const detections = await this.getPendingDetections();
-    const filtered = detections.filter(d => d.id !== id);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    // Run through write queue to prevent races
+    return new Promise<void>((resolve) => {
+      this.enqueueWrite(async () => {
+        const detections = await this.getPendingDetections();
+        const filtered = detections.filter(d => d.id !== id);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+        resolve();
+      });
+    });
   }
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  getWaitTimeForRide(rideId: number): number | null {
+    return this.currentWaitTimes.get(rideId) ?? null;
   }
 }
 
@@ -309,6 +434,10 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
     console.error('Background location error:', error);
     return;
   }
+
+  // BUG 3 fix: load rides from cache if not already loaded
+  await rideDetectionService.loadRidesFromCache();
+
   const { locations } = data as { locations: Location.LocationObject[] };
   if (locations?.length) {
     const latest = locations[locations.length - 1];
@@ -320,6 +449,7 @@ export function startDetection() { return rideDetectionService.startDetection();
 export function stopDetection() { return rideDetectionService.stopDetection(); }
 export function getPendingDetections() { return rideDetectionService.getPendingDetections(); }
 export function clearPendingDetections() { return rideDetectionService.clearPendingDetections(); }
+export function removePendingDetection(id: string) { return rideDetectionService.removePendingDetection(id); }
 export function setDetectionRides(rides: RideType[]) { rideDetectionService.setRides(rides); }
 
 export default rideDetectionService;

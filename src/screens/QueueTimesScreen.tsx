@@ -1,5 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Pressable,
@@ -8,11 +8,11 @@ import {
   StyleSheet,
   Text,
   View,
+  StatusBar,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import getWikiTimes, { WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
 import {
   CLOSED_COLOR,
   DOWN_COLOR,
@@ -20,6 +20,7 @@ import {
   REFURB_COLOR,
   WAIT_COLOR_TIERS,
 } from '../constants/parkWaitTimes';
+import { LocationContext } from '../context/LocationProvider';
 
 // --- Types ---
 type SortMode = 'wait-desc' | 'wait-asc' | 'name';
@@ -152,8 +153,30 @@ const SortButton = ({
   </Pressable>
 );
 
+// Park group center coordinates for proximity sorting
+const PARK_GROUP_COORDS: Record<string, { latitude: number; longitude: number }> = {
+  'Walt Disney World': { latitude: 28.3852, longitude: -81.5639 },
+  'Disneyland Resort': { latitude: 33.8121, longitude: -117.9190 },
+  'Universal Orlando': { latitude: 28.4722, longitude: -81.4677 },
+  'Universal Hollywood': { latitude: 34.1381, longitude: -118.3534 },
+};
+
+function distanceBetween(
+  lat1: number, lon1: number, lat2: number, lon2: number
+): number {
+  const R = 6371e3;
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dp = ((lat2 - lat1) * Math.PI) / 180;
+  const dl = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // --- Main Screen ---
 export default function QueueTimesScreen({ route }: { route: any }) {
+  const navigation = useNavigation();
+  const { location } = useContext(LocationContext);
   const [attractions, setAttractions] = useState<WikiLiveEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -228,7 +251,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   const totalCount = attractions.length;
   const currentParkName = PARK_DISPLAY_ORDER.find((p) => p.id === selectedPark)?.name ?? 'Park';
 
-  // Group parks for display
+  // Group parks for display, sorted by proximity to user's location
   const groupedParks = useMemo(() => {
     const groups: { group: string; parks: typeof PARK_DISPLAY_ORDER }[] = [];
     let lastGroup = '';
@@ -239,17 +262,39 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       }
       groups[groups.length - 1].parks.push(p);
     }
+
+    // Sort groups by distance to user — nearest park group shows first
+    if (location) {
+      groups.sort((a, b) => {
+        const coordsA = PARK_GROUP_COORDS[a.group];
+        const coordsB = PARK_GROUP_COORDS[b.group];
+        if (!coordsA || !coordsB) return 0;
+        const distA = distanceBetween(location.latitude, location.longitude, coordsA.latitude, coordsA.longitude);
+        const distB = distanceBetween(location.latitude, location.longitude, coordsB.latitude, coordsB.longitude);
+        return distA - distB;
+      });
+    }
+
     return groups;
-  }, []);
+  }, [location?.latitude, location?.longitude]);
 
   return (
     <View style={styles.container}>
-      <Topbar>
-        <BackButton />
-        <TopbarColumn>
-          <TopbarText>Wait Times</TopbarText>
-        </TopbarColumn>
-      </Topbar>
+      <StatusBar barStyle="light-content" backgroundColor="#38BDF8" />
+      
+      {/* Header with LinearGradient */}
+      <LinearGradient
+        colors={['#38BDF8', '#0EA5E9', '#09268f']}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Text style={styles.backButtonText}>←</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>WAIT TIMES</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+      </LinearGradient>
 
       {/* Park Selector */}
       <View style={styles.parkSelectorContainer}>
@@ -320,7 +365,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
           estimatedItemSize={80}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3B82F6" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />
           }
         />
       )}
@@ -329,107 +374,139 @@ export default function QueueTimesScreen({ route }: { route: any }) {
 }
 
 // --- Styles ---
-const PRIMARY_BLUE = '#3B82F6';
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#e8f4fd',
+  },
+  header: {
+    paddingTop: 44,
+    paddingBottom: 12,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    height: 44,
+  },
+  backButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'Shark',
+  },
+  headerSpacer: {
+    width: 32,
   },
   parkSelectorContainer: {
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
   },
   parkScrollContent: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
   },
   parkGroup: {
-    marginRight: 20,
+    marginRight: 24,
   },
   groupLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#9CA3AF',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#94a3b8',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 6,
+    marginBottom: 8,
+    fontFamily: 'Knockout',
   },
   groupPills: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
   },
   pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   pillSelected: {
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#0EA5E9',
   },
   pillText: {
     fontSize: 13,
-    fontWeight: '500',
-    color: '#6B7280',
+    fontWeight: '600',
+    color: '#475569',
   },
   pillTextSelected: {
-    color: '#FFFFFF',
+    color: '#0EA5E9',
   },
   statusBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    paddingVertical: 12,
   },
   statusText2: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '600',
   },
   statusRight: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   updatedText: {
-    fontSize: 12,
-    color: '#9CA3AF',
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '500',
   },
   controlsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    paddingVertical: 12,
   },
   sortRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
   },
   sortBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   sortBtnActive: {
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#0EA5E9',
   },
   sortBtnText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#6B7280',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
   },
   sortBtnTextActive: {
-    color: '#FFFFFF',
+    color: '#0EA5E9',
   },
   skeletonContainer: {
     padding: 16,
@@ -441,19 +518,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   badge: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -464,34 +541,37 @@ const styles = StyleSheet.create({
   },
   cardCenter: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 16,
   },
   rideName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    lineHeight: 20,
   },
   statusText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 2,
+    fontSize: 13,
+    color: '#94a3b8',
+    marginTop: 4,
+    fontWeight: '500',
   },
   llBadge: {
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginLeft: 8,
+    backgroundColor: '#fec90e',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 12,
   },
   llText: {
     fontSize: 11,
     fontWeight: '700',
-    color: PRIMARY_BLUE,
+    color: '#09268f',
   },
   llTime: {
     fontSize: 10,
-    color: '#6B7280',
-    marginTop: 1,
+    color: '#09268f',
+    marginTop: 2,
+    fontWeight: '600',
   },
 });

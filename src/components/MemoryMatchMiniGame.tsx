@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Animated, Dimensions, Easing, Vibration } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Animated,
+  Dimensions,
+  Easing,
+} from 'react-native';
+import * as Haptics from 'expo-haptics';
 import MiniGameShell from './MiniGameShell';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface Props {
   visible: boolean;
@@ -11,12 +21,114 @@ interface Props {
   onComplete: (multiplier: number, timeBonus: number) => void;
 }
 
-// Unicode escapes for emoji (raw emoji breaks Metro Babel)
-const CARD_FACES = [
-  '\u{1F3A2}', '\u{1F3E0}', '\u{1F680}', '\u{2B50}',
-  '\u{1F30A}', '\u{1F3AA}', '\u{1F3A1}', '\u{1F382}',
+// =============================================================================
+// THEME PARK CARD DESIGNS - AAA Quality Icons
+// =============================================================================
+interface CardDesign {
+  emoji: string;
+  label: string;
+  gradient: [string, string];
+  glowColor: string;
+}
+
+const CARD_DESIGNS: CardDesign[] = [
+  { emoji: '🏰', label: 'Castle', gradient: ['#667eea', '#764ba2'], glowColor: '#a78bfa' },
+  { emoji: '🎢', label: 'Coaster', gradient: ['#f093fb', '#f5576c'], glowColor: '#fb7185' },
+  { emoji: '🦈', label: 'Shark', gradient: ['#4facfe', '#00f2fe'], glowColor: '#22d3ee' },
+  { emoji: '🎡', label: 'Wheel', gradient: ['#43e97b', '#38f9d7'], glowColor: '#34d399' },
+  { emoji: '🚀', label: 'Rocket', gradient: ['#fa709a', '#fee140'], glowColor: '#fbbf24' },
+  { emoji: '🍦', label: 'Treats', gradient: ['#a8edea', '#fed6e3'], glowColor: '#fda4af' },
+  { emoji: '🎭', label: 'Show', gradient: ['#ff9a9e', '#fecfef'], glowColor: '#f9a8d4' },
+  { emoji: '⚡', label: 'Flash', gradient: ['#ffecd2', '#fcb69f'], glowColor: '#fdba74' },
+  { emoji: '🌙', label: 'Night', gradient: ['#2c3e50', '#4ca1af'], glowColor: '#67e8f9' },
+  { emoji: '🎪', label: 'Circus', gradient: ['#eb3349', '#f45c43'], glowColor: '#f87171' },
+  { emoji: '🗺️', label: 'Map', gradient: ['#11998e', '#38ef7d'], glowColor: '#4ade80' },
+  { emoji: '🎬', label: 'Action', gradient: ['#fc4a1a', '#f7b733'], glowColor: '#fb923c' },
 ];
 
+// =============================================================================
+// PARTICLE SYSTEM - For match celebrations
+// =============================================================================
+interface Particle {
+  id: number;
+  x: Animated.Value;
+  y: Animated.Value;
+  scale: Animated.Value;
+  opacity: Animated.Value;
+  rotation: Animated.Value;
+  color: string;
+}
+
+function createParticles(count: number, color: string): Particle[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    x: new Animated.Value(0),
+    y: new Animated.Value(0),
+    scale: new Animated.Value(0),
+    opacity: new Animated.Value(1),
+    rotation: new Animated.Value(0),
+    color,
+  }));
+}
+
+function animateParticleBurst(particles: Particle[], duration: number = 600) {
+  particles.forEach((p, i) => {
+    const angle = (i / particles.length) * Math.PI * 2;
+    const distance = 60 + Math.random() * 40;
+    const targetX = Math.cos(angle) * distance;
+    const targetY = Math.sin(angle) * distance;
+
+    p.x.setValue(0);
+    p.y.setValue(0);
+    p.scale.setValue(0);
+    p.opacity.setValue(1);
+    p.rotation.setValue(0);
+
+    Animated.parallel([
+      Animated.timing(p.x, {
+        toValue: targetX,
+        duration,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(p.y, {
+        toValue: targetY,
+        duration,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(p.scale, {
+          toValue: 1,
+          duration: duration * 0.3,
+          easing: Easing.out(Easing.back(2)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(p.scale, {
+          toValue: 0,
+          duration: duration * 0.7,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(p.opacity, {
+        toValue: 0,
+        duration,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(p.rotation, {
+        toValue: Math.random() * 4 - 2,
+        duration,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  });
+}
+
+// =============================================================================
+// SHUFFLE UTILITY
+// =============================================================================
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -26,226 +138,399 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-const screenWidth = Dimensions.get('window').width;
+const { width: screenWidth } = Dimensions.get('window');
 
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
 export default function MemoryMatchMiniGame({
   visible,
   taskName,
-  pairs = 4,
-  timeLimitSeconds = 20,
+  pairs = 6,
+  timeLimitSeconds = 30,
   onClose,
   onComplete,
 }: Props) {
   const totalCards = pairs * 2;
-  const cols = 4;
-  const cardSize = Math.floor((screenWidth * 0.85 - 48) / cols) - 8;
+  const cols = pairs <= 4 ? 4 : pairs <= 6 ? 4 : 4;
+  const cardSize = Math.floor((screenWidth * 0.88 - 32) / cols) - 10;
 
+  // Game state
   const [phase, setPhase] = useState<'instructions' | 'countdown' | 'playing' | 'ended'>('instructions');
   const [pairsLeft, setPairsLeft] = useState(pairs);
+  const [combo, setCombo] = useState(0);
   const [result, setResult] = useState<{ won: boolean; message: string; stars: number } | null>(null);
   const [, forceRender] = useState(0);
 
-  // Game state refs
+  // Refs for game logic
   const cardsRef = useRef<number[]>([]);
   const flippedRef = useRef<number[]>([]);
   const matchedRef = useRef<Set<number>>(new Set());
   const lockedRef = useRef(false);
-  const movesRef = useRef(0);
-  const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const comboRef = useRef(0);
   const startTimeRef = useRef(0);
   const gameEndedRef = useRef(false);
+  const checkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Per-card animations
-  const flipAnims = useRef(Array.from({ length: 16 }, () => new Animated.Value(0))).current;
-  const scaleAnims = useRef(Array.from({ length: 16 }, () => new Animated.Value(1))).current;
-  const shakeAnims = useRef(Array.from({ length: 16 }, () => new Animated.Value(0))).current;
+  // Per-card animations - TRUE 3D FLIP
+  const flipAnims = useRef(Array.from({ length: 24 }, () => new Animated.Value(0))).current;
+  const scaleAnims = useRef(Array.from({ length: 24 }, () => new Animated.Value(1))).current;
+  const shakeXAnims = useRef(Array.from({ length: 24 }, () => new Animated.Value(0))).current;
+  const glowAnims = useRef(Array.from({ length: 24 }, () => new Animated.Value(0))).current;
+  const entranceAnims = useRef(Array.from({ length: 24 }, () => new Animated.Value(0))).current;
 
-  // Screen flash for matches
+  // Global effects
+  const screenShakeX = useRef(new Animated.Value(0)).current;
+  const screenShakeY = useRef(new Animated.Value(0)).current;
   const flashAnim = useRef(new Animated.Value(0)).current;
-
-  // Progress
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const comboScaleAnim = useRef(new Animated.Value(0)).current;
+  const comboOpacityAnim = useRef(new Animated.Value(0)).current;
 
-  // Reset
+  // Particles for match celebration
+  const [particles, setParticles] = useState<Particle[]>([]);
+  const [particlePosition, setParticlePosition] = useState({ x: 0, y: 0 });
+
+  // Timer warning state
+  const [timeWarning, setTimeWarning] = useState(false);
+
+  // =============================================================================
+  // RESET ON VISIBLE
+  // =============================================================================
   useEffect(() => {
     if (visible) {
-      cardsRef.current = shuffle([
-        ...Array.from({ length: pairs }, (_, i) => i),
-        ...Array.from({ length: pairs }, (_, i) => i),
-      ]);
+      // Pick random card designs for this game
+      const shuffledDesigns = shuffle([...Array(CARD_DESIGNS.length).keys()]).slice(0, pairs);
+      cardsRef.current = shuffle([...shuffledDesigns, ...shuffledDesigns]);
+
       flippedRef.current = [];
       matchedRef.current = new Set();
       lockedRef.current = false;
-      movesRef.current = 0;
+      comboRef.current = 0;
       startTimeRef.current = Date.now();
       gameEndedRef.current = false;
+
       setPairsLeft(pairs);
+      setCombo(0);
       setResult(null);
       setPhase('instructions');
+      setTimeWarning(false);
+      setParticles([]);
+
+      // Reset all animations
       flipAnims.forEach(a => a.setValue(0));
       scaleAnims.forEach(a => a.setValue(1));
-      shakeAnims.forEach(a => a.setValue(0));
+      shakeXAnims.forEach(a => a.setValue(0));
+      glowAnims.forEach(a => a.setValue(0));
+      entranceAnims.forEach(a => a.setValue(0));
       flashAnim.setValue(0);
       progressAnim.setValue(0);
+      comboScaleAnim.setValue(0);
+      comboOpacityAnim.setValue(0);
+      screenShakeX.setValue(0);
+      screenShakeY.setValue(0);
     }
     return () => {
       if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
     };
   }, [visible, pairs]);
 
+  // =============================================================================
+  // CARD ENTRANCE CASCADE - When game starts
+  // =============================================================================
+  useEffect(() => {
+    if (phase === 'playing') {
+      // Staggered entrance animation
+      entranceAnims.forEach((anim, i) => {
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const delay = (row * 60) + (col * 30);
+
+        setTimeout(() => {
+          anim.setValue(0);
+          Animated.spring(anim, {
+            toValue: 1,
+            friction: 6,
+            tension: 100,
+            useNativeDriver: true,
+          }).start();
+        }, delay);
+      });
+
+      // Light haptic for game start
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, [phase]);
+
+  // =============================================================================
+  // END GAME
+  // =============================================================================
   const endGame = useCallback((won: boolean, timeBonus: number = 0) => {
     if (gameEndedRef.current) return;
     gameEndedRef.current = true;
-    
-    const stars = won ? (timeBonus > timeLimitSeconds * 0.5 ? 3 : timeBonus > timeLimitSeconds * 0.25 ? 2 : 1) : 0;
-    setResult({
-      won,
-      message: won ? (stars === 3 ? 'LIGHTNING!' : stars === 2 ? 'QUICK!' : 'PASSED!') : 'FAILED!',
-      stars,
-    });
+
+    const maxTime = timeLimitSeconds;
+    const stars = won
+      ? timeBonus > maxTime * 0.6 ? 3 : timeBonus > maxTime * 0.3 ? 2 : 1
+      : 0;
+
+    const messages = won
+      ? stars === 3 ? 'PERFECT!' : stars === 2 ? 'GREAT!' : 'NICE!'
+      : 'TIME UP!';
+
+    setResult({ won, message: messages, stars });
     setPhase('ended');
+
+    if (won) {
+      // Victory haptic pattern
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Victory screen flash
+      flashAnim.setValue(0.4);
+      Animated.timing(flashAnim, { toValue: 0, duration: 400, useNativeDriver: false }).start();
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   }, [timeLimitSeconds]);
 
-  // Tap press-in effect (instant feedback)
-  const pressIn = (index: number) => {
-    Animated.timing(scaleAnims[index], {
-      toValue: 0.9, duration: 60, useNativeDriver: false,
-    }).start();
-  };
-
-  const pressOut = (index: number) => {
-    Animated.spring(scaleAnims[index], {
-      toValue: 1, friction: 3, tension: 100, useNativeDriver: false,
-    }).start();
-  };
-
-  const flipCard = (index: number, toFront: boolean) => {
+  // =============================================================================
+  // 3D CARD FLIP ANIMATION
+  // =============================================================================
+  const flipCard = (index: number, toFront: boolean, duration: number = 250) => {
     Animated.timing(flipAnims[index], {
       toValue: toFront ? 1 : 0,
-      duration: 180,
-      easing: Easing.out(Easing.ease),
-      useNativeDriver: false,
+      duration,
+      easing: Easing.inOut(Easing.ease),
+      useNativeDriver: true,
     }).start();
   };
 
-  const shakeCards = (a: number, b: number) => {
-    Vibration.vibrate([0, 30, 20, 30]);
-    [a, b].forEach(idx => {
-      Animated.sequence([
-        Animated.timing(shakeAnims[idx], { toValue: 8, duration: 50, useNativeDriver: false }),
-        Animated.timing(shakeAnims[idx], { toValue: -8, duration: 50, useNativeDriver: false }),
-        Animated.timing(shakeAnims[idx], { toValue: 6, duration: 50, useNativeDriver: false }),
-        Animated.timing(shakeAnims[idx], { toValue: -6, duration: 50, useNativeDriver: false }),
-        Animated.timing(shakeAnims[idx], { toValue: 0, duration: 50, useNativeDriver: false }),
-      ]).start();
-    });
+  // =============================================================================
+  // SCREEN SHAKE
+  // =============================================================================
+  const triggerScreenShake = (intensity: number = 4) => {
+    Animated.sequence([
+      Animated.timing(screenShakeX, { toValue: intensity, duration: 30, useNativeDriver: true }),
+      Animated.timing(screenShakeX, { toValue: -intensity, duration: 30, useNativeDriver: true }),
+      Animated.timing(screenShakeX, { toValue: intensity * 0.5, duration: 30, useNativeDriver: true }),
+      Animated.timing(screenShakeX, { toValue: 0, duration: 30, useNativeDriver: true }),
+    ]).start();
   };
 
-  const celebrateMatch = (a: number, b: number) => {
-    Vibration.vibrate(10);
+  // =============================================================================
+  // CARD SHAKE (Mismatch)
+  // =============================================================================
+  const shakeCards = (indices: number[]) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
-    // Bounce matched cards with stagger
+    indices.forEach((idx) => {
+      Animated.sequence([
+        Animated.timing(shakeXAnims[idx], { toValue: 10, duration: 40, useNativeDriver: true }),
+        Animated.timing(shakeXAnims[idx], { toValue: -10, duration: 40, useNativeDriver: true }),
+        Animated.timing(shakeXAnims[idx], { toValue: 8, duration: 40, useNativeDriver: true }),
+        Animated.timing(shakeXAnims[idx], { toValue: -8, duration: 40, useNativeDriver: true }),
+        Animated.timing(shakeXAnims[idx], { toValue: 0, duration: 40, useNativeDriver: true }),
+      ]).start();
+    });
+
+    triggerScreenShake(3);
+  };
+
+  // =============================================================================
+  // MATCH CELEBRATION
+  // =============================================================================
+  const celebrateMatch = (a: number, b: number, cardDesign: CardDesign) => {
+    // Heavy haptic for match
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    // Glow animation on matched cards
+    [a, b].forEach((idx) => {
+      Animated.sequence([
+        Animated.timing(glowAnims[idx], { toValue: 1, duration: 200, useNativeDriver: false }),
+        Animated.timing(glowAnims[idx], { toValue: 0.6, duration: 300, useNativeDriver: false }),
+      ]).start();
+    });
+
+    // Bounce animation with overshoot
     [a, b].forEach((idx, i) => {
       setTimeout(() => {
         Animated.sequence([
-          Animated.timing(scaleAnims[idx], { toValue: 1.2, duration: 120, useNativeDriver: false }),
-          Animated.spring(scaleAnims[idx], { toValue: 1, friction: 3, useNativeDriver: false }),
+          Animated.timing(scaleAnims[idx], {
+            toValue: 1.25,
+            duration: 150,
+            easing: Easing.out(Easing.back(2)),
+            useNativeDriver: true,
+          }),
+          Animated.spring(scaleAnims[idx], {
+            toValue: 1,
+            friction: 4,
+            tension: 200,
+            useNativeDriver: true,
+          }),
         ]).start();
-      }, i * 80);
+      }, i * 50);
     });
 
     // Screen flash
-    flashAnim.setValue(0.25);
-    Animated.timing(flashAnim, { toValue: 0, duration: 300, useNativeDriver: false }).start();
+    flashAnim.setValue(0.2);
+    Animated.timing(flashAnim, { toValue: 0, duration: 250, useNativeDriver: false }).start();
+
+    // Particle burst
+    const newParticles = createParticles(12, cardDesign.glowColor);
+    setParticles(newParticles);
+    setTimeout(() => animateParticleBurst(newParticles), 10);
+
+    // Clear particles after animation
+    setTimeout(() => setParticles([]), 700);
   };
 
+  // =============================================================================
+  // COMBO POPUP
+  // =============================================================================
+  const showComboPopup = (comboCount: number) => {
+    comboScaleAnim.setValue(0);
+    comboOpacityAnim.setValue(1);
+
+    Animated.sequence([
+      Animated.spring(comboScaleAnim, {
+        toValue: 1,
+        friction: 4,
+        tension: 150,
+        useNativeDriver: true,
+      }),
+      Animated.delay(400),
+      Animated.parallel([
+        Animated.timing(comboScaleAnim, {
+          toValue: 0.5,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(comboOpacityAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  };
+
+  // =============================================================================
+  // HANDLE TAP
+  // =============================================================================
   const handleTap = useCallback((index: number) => {
     if (phase !== 'playing' || gameEndedRef.current) return;
     if (lockedRef.current) return;
     if (flippedRef.current.includes(index)) return;
     if (matchedRef.current.has(index)) return;
 
-    flippedRef.current.push(index);
-    flipCard(index, true);
+    // Instant tap feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Satisfying tap bounce
+    // Anticipation: quick scale down then up
     Animated.sequence([
-      Animated.timing(scaleAnims[index], { toValue: 1.1, duration: 80, useNativeDriver: false }),
-      Animated.spring(scaleAnims[index], { toValue: 1, friction: 4, useNativeDriver: false }),
+      Animated.timing(scaleAnims[index], { toValue: 0.92, duration: 50, useNativeDriver: true }),
+      Animated.spring(scaleAnims[index], { toValue: 1.05, friction: 5, tension: 200, useNativeDriver: true }),
+      Animated.spring(scaleAnims[index], { toValue: 1, friction: 6, useNativeDriver: true }),
     ]).start();
 
+    flippedRef.current.push(index);
+    flipCard(index, true);
     forceRender(n => n + 1);
 
     if (flippedRef.current.length === 2) {
       lockedRef.current = true;
-      movesRef.current++;
       const [a, b] = flippedRef.current;
 
       if (cardsRef.current[a] === cardsRef.current[b]) {
-        // MATCH!
+        // ========== MATCH! ==========
         matchedRef.current.add(a);
         matchedRef.current.add(b);
-        
+
         const newPairsLeft = pairs - matchedRef.current.size / 2;
         setPairsLeft(Math.max(0, newPairsLeft));
-        
-        // Update progress
+
+        // Combo system
+        comboRef.current++;
+        setCombo(comboRef.current);
+        if (comboRef.current >= 2) {
+          showComboPopup(comboRef.current);
+        }
+
+        // Progress bar animation
         Animated.spring(progressAnim, {
           toValue: matchedRef.current.size / totalCards,
           friction: 6,
           useNativeDriver: false,
         }).start();
-        
+
+        const cardDesign = CARD_DESIGNS[cardsRef.current[a]];
+        celebrateMatch(a, b, cardDesign);
+
         flippedRef.current = [];
         lockedRef.current = false;
-        celebrateMatch(a, b);
 
-        // Check for WIN
+        // Check win
         if (matchedRef.current.size === totalCards) {
-          const elapsed = (Date.now() - startTimeRef.current) / 1000;
-          const timeBonus = Math.max(0, timeLimitSeconds - elapsed);
-          endGame(true, timeBonus);
+          setTimeout(() => {
+            const elapsed = (Date.now() - startTimeRef.current) / 1000;
+            const timeBonus = Math.max(0, timeLimitSeconds - elapsed);
+            endGame(true, timeBonus);
+          }, 300);
         }
+
         forceRender(n => n + 1);
       } else {
-        // NO MATCH — shake then flip back (faster)
+        // ========== NO MATCH ==========
+        comboRef.current = 0;
+        setCombo(0);
+
         checkTimeoutRef.current = setTimeout(() => {
-          shakeCards(a, b);
+          shakeCards([a, b]);
+
           setTimeout(() => {
-            flipCard(a, false);
-            setTimeout(() => flipCard(b, false), 60);
+            flipCard(a, false, 200);
+            setTimeout(() => flipCard(b, false, 200), 80);
             flippedRef.current = [];
             lockedRef.current = false;
             forceRender(n => n + 1);
-          }, 200);
-        }, 400);
+          }, 250);
+        }, 500);
       }
     }
-  }, [phase, totalCards, timeLimitSeconds, pairs, endGame]);
+  }, [phase, pairs, totalCards, timeLimitSeconds, endGame]);
 
+  // =============================================================================
+  // TIME UP HANDLER
+  // =============================================================================
   const handleTimeUp = useCallback(() => {
     if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current);
     endGame(false);
   }, [endGame]);
 
+  // =============================================================================
+  // DONE HANDLER
+  // =============================================================================
   const handleDone = useCallback(() => {
     if (result?.won) {
-      const mult = result.stars === 3 ? 2.0 : result.stars === 2 ? 1.5 : 1.0;
+      // Base multiplier from stars, boosted by combo
+      let mult = result.stars === 3 ? 2.0 : result.stars === 2 ? 1.5 : 1.0;
       onComplete(mult, 0);
     } else {
       onClose();
     }
   }, [result, onComplete, onClose]);
 
+  // =============================================================================
+  // RENDER
+  // =============================================================================
   return (
     <MiniGameShell
       visible={visible}
-      title="Memory Match!"
+      title="Memory Match"
       subtitle={taskName}
       timeLimit={timeLimitSeconds}
       score={pairs - pairsLeft}
-      objective={`Match all ${pairs} pairs before time runs out!`}
-      objectiveIcon="?"
+      objective={`Match all ${pairs} pairs!`}
+      objectiveIcon="🧠"
       onTimeUp={handleTimeUp}
       onClose={onClose}
       phase={phase}
@@ -253,127 +538,389 @@ export default function MemoryMatchMiniGame({
       result={result || undefined}
       onDone={handleDone}
     >
-      {/* Screen flash overlay */}
       <Animated.View
-        pointerEvents="none"
         style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: '#4ade80', opacity: flashAnim, zIndex: 50, borderRadius: 16,
+          flex: 1,
+          transform: [{ translateX: screenShakeX }, { translateY: screenShakeY }],
         }}
-      />
+      >
+        {/* Screen flash overlay */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.flashOverlay, { opacity: flashAnim }]}
+        />
 
-      {/* Progress indicator */}
-      <View style={ms.progressWrap}>
-        <View style={ms.progressBar}>
-          <Animated.View style={[ms.progressFill, {
-            width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-          }]} />
-        </View>
-        <Text style={ms.progressText}>
-          {pairsLeft > 0 ? `${pairsLeft} pairs left!` : 'COMPLETE!'}
-        </Text>
-      </View>
+        {/* Combo popup */}
+        {combo >= 2 && (
+          <Animated.View
+            style={[
+              styles.comboPopup,
+              {
+                opacity: comboOpacityAnim,
+                transform: [{ scale: comboScaleAnim }],
+              },
+            ]}
+          >
+            <Text style={styles.comboText}>{combo}x COMBO!</Text>
+          </Animated.View>
+        )}
 
-      <View style={ms.grid}>
-        {Array.from({ length: totalCards }).map((_, i) => {
-          const cardFace = cardsRef.current[i];
-          const isMatched = matchedRef.current.has(i);
-
-          const frontOpacity = flipAnims[i].interpolate({
-            inputRange: [0, 0.5, 0.5, 1],
-            outputRange: [0, 0, 1, 1],
-          });
-          const backOpacity = flipAnims[i].interpolate({
-            inputRange: [0, 0.5, 0.5, 1],
-            outputRange: [1, 1, 0, 0],
-          });
-
-          return (
-            <TouchableOpacity
-              key={i}
-              activeOpacity={1}
-              onPressIn={() => pressIn(i)}
-              onPressOut={() => pressOut(i)}
-              onPress={() => handleTap(i)}
-              style={{ margin: 4 }}
-            >
-              <Animated.View style={[
-                ms.cardOuter,
+        {/* Progress bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressTrack}>
+            <Animated.View
+              style={[
+                styles.progressFill,
                 {
-                  width: cardSize, height: cardSize * 1.15,
+                  width: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                },
+              ]}
+            />
+          </View>
+          <Text style={styles.progressLabel}>
+            {pairsLeft > 0 ? `${pairsLeft} pairs left` : '✨ Complete!'}
+          </Text>
+        </View>
+
+        {/* Particle container */}
+        <View style={styles.particleContainer} pointerEvents="none">
+          {particles.map((p) => (
+            <Animated.View
+              key={p.id}
+              style={[
+                styles.particle,
+                {
+                  backgroundColor: p.color,
+                  opacity: p.opacity,
                   transform: [
-                    { scale: scaleAnims[i] },
-                    { translateX: shakeAnims[i] },
+                    { translateX: p.x },
+                    { translateY: p.y },
+                    { scale: p.scale },
+                    { rotate: p.rotation.interpolate({
+                      inputRange: [-2, 2],
+                      outputRange: ['-180deg', '180deg'],
+                    })},
                   ],
                 },
-              ]}>
-                {/* Back */}
-                <Animated.View style={[ms.cardInner, ms.cardBack, { opacity: backOpacity }]}>
-                  <Text style={ms.cardBackText}>?</Text>
-                  <View style={ms.cardBackDecor} />
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Card grid */}
+        <View style={styles.grid}>
+          {Array.from({ length: totalCards }).map((_, i) => {
+            if (i >= cardsRef.current.length) return null;
+
+            const cardIndex = cardsRef.current[i];
+            const design = CARD_DESIGNS[cardIndex];
+            const isMatched = matchedRef.current.has(i);
+
+            // 3D flip interpolations
+            const rotateY = flipAnims[i].interpolate({
+              inputRange: [0, 1],
+              outputRange: ['0deg', '180deg'],
+            });
+
+            const backRotateY = flipAnims[i].interpolate({
+              inputRange: [0, 1],
+              outputRange: ['180deg', '360deg'],
+            });
+
+            // Visibility based on rotation
+            const frontOpacity = flipAnims[i].interpolate({
+              inputRange: [0, 0.5, 0.5, 1],
+              outputRange: [0, 0, 1, 1],
+            });
+
+            const backOpacity = flipAnims[i].interpolate({
+              inputRange: [0, 0.5, 0.5, 1],
+              outputRange: [1, 1, 0, 0],
+            });
+
+            // Entrance animation
+            const entranceTranslateY = entranceAnims[i].interpolate({
+              inputRange: [0, 1],
+              outputRange: [-100, 0],
+            });
+
+            // Glow intensity for matched cards
+            const glowOpacity = glowAnims[i];
+
+            return (
+              <TouchableOpacity
+                key={i}
+                activeOpacity={1}
+                onPress={() => handleTap(i)}
+                style={styles.cardTouchable}
+              >
+                <Animated.View
+                  style={[
+                    styles.cardContainer,
+                    {
+                      width: cardSize,
+                      height: cardSize * 1.2,
+                      opacity: entranceAnims[i],
+                      transform: [
+                        { translateY: entranceTranslateY },
+                        { translateX: shakeXAnims[i] },
+                        { scale: scaleAnims[i] },
+                      ],
+                    },
+                  ]}
+                >
+                  {/* Match glow effect */}
+                  {isMatched && (
+                    <Animated.View
+                      style={[
+                        styles.matchGlow,
+                        {
+                          backgroundColor: design.glowColor,
+                          opacity: glowOpacity.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 0.6],
+                          }),
+                        },
+                      ]}
+                    />
+                  )}
+
+                  {/* Card back (face down) */}
+                  <Animated.View
+                    style={[
+                      styles.card,
+                      styles.cardBack,
+                      {
+                        opacity: backOpacity,
+                        transform: [{ perspective: 1000 }, { rotateY }],
+                      },
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={['#4f46e5', '#7c3aed']}
+                      style={styles.cardBackGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    >
+                      <View style={styles.cardBackPattern}>
+                        <Text style={styles.cardBackLogo}>🦈</Text>
+                      </View>
+                      <View style={styles.cardBackShine} />
+                    </LinearGradient>
+                  </Animated.View>
+
+                  {/* Card front (face up) */}
+                  <Animated.View
+                    style={[
+                      styles.card,
+                      styles.cardFront,
+                      {
+                        opacity: frontOpacity,
+                        transform: [{ perspective: 1000 }, { rotateY: backRotateY }],
+                      },
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={design.gradient}
+                      style={styles.cardFrontGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    >
+                      <Text style={styles.cardEmoji}>{design.emoji}</Text>
+                      <Text style={styles.cardLabel}>{design.label}</Text>
+                      {isMatched && <View style={styles.matchedBadge}><Text style={styles.matchedCheck}>✓</Text></View>}
+                    </LinearGradient>
+                  </Animated.View>
                 </Animated.View>
-                {/* Front */}
-                <Animated.View style={[
-                  ms.cardInner, ms.cardFront,
-                  {
-                    opacity: frontOpacity,
-                    backgroundColor: isMatched ? '#16a34a' : '#1e293b',
-                    borderColor: isMatched ? '#4ade80' : '#475569',
-                  },
-                ]}>
-                  <Text style={ms.cardEmoji}>{CARD_FACES[cardFace] || '?'}</Text>
-                  {isMatched && <View style={ms.matchGlow} />}
-                </Animated.View>
-              </Animated.View>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      <Text style={ms.hint}>Match all {pairs} pairs before time runs out!</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.hintText}>Tap cards to flip • Match all pairs to win!</Text>
+      </Animated.View>
     </MiniGameShell>
   );
 }
 
-const ms = StyleSheet.create({
-  progressWrap: { alignItems: 'center', marginBottom: 8 },
-  progressBar: { 
-    width: '80%', height: 12, backgroundColor: 'rgba(255,255,255,0.1)', 
-    borderRadius: 6, overflow: 'hidden' 
+// =============================================================================
+// STYLES
+// =============================================================================
+const styles = StyleSheet.create({
+  flashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#4ade80',
+    zIndex: 100,
+    borderRadius: 16,
   },
-  progressFill: { height: '100%', backgroundColor: '#4ade80', borderRadius: 6 },
-  progressText: { color: '#fff', fontSize: 18, fontWeight: '800', marginTop: 4 },
+  comboPopup: {
+    position: 'absolute',
+    top: '35%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 90,
+  },
+  comboText: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: '#fbbf24',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  progressContainer: {
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 20,
+  },
+  progressTrack: {
+    width: '100%',
+    height: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#4ade80',
+    borderRadius: 5,
+  },
+  progressLabel: {
+    marginTop: 6,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  particleContainer: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 0,
+    height: 0,
+    zIndex: 80,
+  },
+  particle: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
   grid: {
-    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingVertical: 8,
   },
-  cardOuter: {
-    borderRadius: 14, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 5,
-    elevation: 5,
+  cardTouchable: {
+    margin: 5,
   },
-  cardInner: {
-    position: 'absolute', width: '100%', height: '100%',
-    borderRadius: 14, justifyContent: 'center', alignItems: 'center',
-    borderWidth: 3,
+  cardContainer: {
+    position: 'relative',
+  },
+  matchGlow: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    right: -8,
+    bottom: -8,
+    borderRadius: 20,
+    zIndex: -1,
+  },
+  card: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 14,
+    backfaceVisibility: 'hidden',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
   },
   cardBack: {
-    backgroundColor: '#6366f1', borderColor: '#818cf8',
+    zIndex: 2,
   },
-  cardBackText: {
-    color: '#e0e7ff', fontSize: 32, fontWeight: '900',
+  cardBackGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 3,
+    borderColor: '#818cf8',
   },
-  cardBackDecor: {
-    position: 'absolute', width: '75%', height: '75%',
-    borderRadius: 100, borderWidth: 2, borderColor: 'rgba(255,255,255,0.12)',
+  cardBackPattern: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  cardFront: { borderWidth: 3 },
-  cardEmoji: { fontSize: 38 },
-  matchGlow: {
-    position: 'absolute', width: '130%', height: '130%',
-    borderRadius: 20, backgroundColor: 'rgba(74, 222, 128, 0.15)',
+  cardBackLogo: {
+    fontSize: 28,
   },
-  hint: {
-    color: 'rgba(255,255,255,0.4)', fontSize: 12,
-    textAlign: 'center', marginTop: 4,
+  cardBackShine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+  },
+  cardFront: {
+    zIndex: 1,
+  },
+  cardFrontGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  cardEmoji: {
+    fontSize: 36,
+    marginBottom: 4,
+  },
+  cardLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  matchedBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#22c55e',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  matchedCheck: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  hintText: {
+    textAlign: 'center',
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    marginTop: 8,
   },
 });

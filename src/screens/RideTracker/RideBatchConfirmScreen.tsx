@@ -10,7 +10,8 @@ import { logRide, LogRidePayload } from '../../api/endpoints/player-rides';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import ReactionPicker from '../../components/RideTracker/ReactionPicker';
 import ConfettiBurst from '../../components/RideTracker/ConfettiBurst';
-import { DetectedRide } from '../../services/RideDetectionService';
+import { DetectedRide, clearPendingDetections } from '../../services/RideDetectionService';
+import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { colors, shadows } from '../../design-system';
 
 // ─── Types ───
@@ -152,6 +153,18 @@ export default function RideBatchConfirmScreen() {
 
   const selectedRides = rides.filter(r => r.selected);
 
+  // If user backs out at ANY phase before summary, clear the queue so they
+  // don't get prompted again for the same rides (BUG 18 fix)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      if (phase !== 'summary') {
+        clearPendingDetections();
+        rideDetectionEmitter.emit('pendingCleared');
+      }
+    });
+    return unsubscribe;
+  }, [navigation, phase]);
+
   const toggleRide = useCallback((id: string) => {
     setRides(prev => prev.map(r => r.id === id ? { ...r, selected: !r.selected } : r));
   }, []);
@@ -184,6 +197,10 @@ export default function RideBatchConfirmScreen() {
         console.error(`Failed to log ride ${ride.rideName}:`, e);
       }
     }
+    // Clear ALL pending detections — we've handled everything
+    await clearPendingDetections();
+    rideDetectionEmitter.emit('pendingCleared');
+
     setTotalXp(xpTotal);
     setSubmitting(false);
     setShowConfetti(true);

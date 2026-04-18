@@ -48,23 +48,40 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
       return;
     }
 
+    // Calculate distance to scale animation duration —
+    // short steps (walking) get a quick glide, longer jumps (GPS catch-up) get more time
+    const prev = prevLocationRef.current;
+    const R = 6371e3;
+    const p1 = (prev.latitude * Math.PI) / 180;
+    const p2 = (location.latitude * Math.PI) / 180;
+    const dp = ((location.latitude - prev.latitude) * Math.PI) / 180;
+    const dl = ((location.longitude - prev.longitude) * Math.PI) / 180;
+    const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+    const distMeters = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    // Duration scales with distance:
+    // ~500ms for small walking steps (1-3m) — keeps shark responsive
+    // ~1000ms for normal strides (5-10m) — smooth and natural
+    // ~1500ms max for GPS catch-up jumps — no jarring teleports
+    const glideDuration = Math.min(1500, Math.max(500, distMeters * 80));
+
     prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
 
-    // Smooth glide to new position over 1 second
+    // Smooth glide to new position
     if (Platform.OS === 'ios') {
       (animatedCoordinate as any).timing({
         latitude: location.latitude,
         longitude: location.longitude,
         latitudeDelta: 0,
         longitudeDelta: 0,
-        duration: 1000,
+        duration: glideDuration,
         useNativeDriver: false,
       }).start();
     } else {
       // Android: use animateMarkerToCoordinate for native performance
       markerRef.current?.animateMarkerToCoordinate(
         { latitude: location.latitude, longitude: location.longitude },
-        1000
+        glideDuration
       );
     }
   }, [location?.latitude, location?.longitude]);
@@ -128,6 +145,7 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
       mapRef.current.animateCamera({
         center: location,
         heading: heading !== null ? heading : 0,
+        altitude: 200,
       }, { duration: 300 });
     }
   };
@@ -161,16 +179,10 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
       return;
     }
 
-    if (heading !== null) {
-      mapRef.current.animateCamera({
-        center: location,
-        heading: heading,
-      }, { duration: 100 });
-    } else {
-      mapRef.current.animateCamera({
-        center: location,
-      }, { duration: 100 });
-    }
+    const cam: any = { center: location };
+    if (heading !== null) cam.heading = heading;
+
+    mapRef.current.setCamera(cam);
   }, [
     focusedOnPlayer,
     location?.latitude,
@@ -232,6 +244,13 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
           width: Dimensions.get('window').width,
           height: '100%',
         }}
+        initialCamera={{
+          center: location || { latitude: 34.1381, longitude: -118.3534 },
+          heading: 0,
+          pitch: 0,
+          altitude: 200,
+          zoom: 17,
+        }}
         showsUserLocation={false}
         showsIndoors={false}
         showsCompass={false}
@@ -240,8 +259,19 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
         loadingEnabled={true}
         userInterfaceStyle="light"
         onPanDrag={() => {
-          setFocusedOnPlayer(false);
           onPress?.();
+        }}
+        onRegionChangeComplete={(region) => {
+          // After any gesture ends, check if map center drifted away from player
+          // Zoom keeps center near player — only a real pan moves it far
+          if (location && focusedOnPlayer) {
+            const latDiff = Math.abs(region.latitude - location.latitude);
+            const lngDiff = Math.abs(region.longitude - location.longitude);
+            // ~50 meters threshold — if center moved further than this, user panned away
+            if (latDiff > 0.0005 || lngDiff > 0.0005) {
+              setFocusedOnPlayer(false);
+            }
+          }
         }}
         onPress={() => {
           onPress?.();

@@ -16,3 +16,7 @@ web-build/
 .env
 .idea/
 tsconfig.tsbuildinfo
+
+# Build artifacts (too large for git)
+build-*.ipa
+*.ipa

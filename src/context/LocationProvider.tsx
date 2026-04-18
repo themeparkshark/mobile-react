@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import { createContext, FC, ReactNode, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import { Platform } from 'react-native';
 import { useAsyncEffect, useDebounce, useIntervalWhen } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import { LocationType } from '../models/location-type';
@@ -37,10 +38,9 @@ export const LocationContext = createContext<LocationContextType>(
   {} as LocationContextType
 );
 
-// Default dev location: Magic Kingdom entrance
-// Universal Studios Hollywood
-const DEV_DEFAULT_LAT = 40.7580;
-const DEV_DEFAULT_LNG = -73.9855;
+// Default dev location: Universal Studios Hollywood
+const DEV_DEFAULT_LAT = 34.1381;
+const DEV_DEFAULT_LNG = -118.3534;
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
@@ -48,9 +48,9 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const { player } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
-  // Reduced from 5s to 1s — smooth marker animation handles visual jitter,
-  // so we can allow more frequent updates for fluid shark movement
-  const debouncedSetLocation = useDebounce(setLocation, 1000, {
+  // Fast debounce — the AnimatedRegion glide in Map.tsx handles visual smoothing,
+  // so we want location state to update as quickly as possible
+  const debouncedSetLocation = useDebounce(setLocation, 400, {
     leading: true,
   });
 
@@ -86,6 +86,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [headingEnabled, setHeadingEnabled] = useState<boolean>(false);
   const smoothedHeadingRef = useRef<number | null>(null);
   const headingSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const positionSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const lastLocationRef = useRef<LocationType | null>(null);
 
   // Normalize heading to handle 0/360 wraparound smoothly
   const normalizeHeadingDelta = (current: number, target: number): number => {
@@ -186,9 +188,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   // Minimum distance (meters) before location state updates
-  // Lowered from 10m to 3m — smooth marker animation handles visual jitter,
-  // so we can accept more frequent updates for fluid movement
-  const LOCATION_DISTANCE_FILTER_M = 3;
+  // 1m is tight enough to feel responsive while still filtering GPS noise
+  const LOCATION_DISTANCE_FILTER_M = 1;
 
   const requestLocation = async () => {
     const newLocation = await getCurrentLocation();
@@ -215,6 +216,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       if (dist < LOCATION_DISTANCE_FILTER_M) return;
     }
 
+    lastLocationRef.current = newLocation;
     debouncedSetLocation(newLocation);
   };
 
@@ -245,11 +247,77 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     await requestPark();
   }, [player, permissionGranted, location?.latitude, location?.longitude]);
 
+  // Continuous position watcher — streams GPS updates from the OS
+  // instead of polling with getCurrentPositionAsync every 5s.
+  // This is what makes the shark actively follow you as you walk.
+  useEffect(() => {
+    // Don't start watcher in dev mode (joystick handles it) or without permissions
+    if ((devMode && __DEV__) || !permissionGranted || !player?.username) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const startWatching = async () => {
+      try {
+        positionSubscriptionRef.current = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.BestForNavigation,
+            // iOS: emit update after moving ~1 meter
+            distanceInterval: 1,
+            // Android: emit at least every 500ms for fluid tracking
+            ...(Platform.OS === 'android' ? { timeInterval: 500 } : {}),
+          },
+          (locationUpdate) => {
+            if (cancelled) return;
+
+            const newLoc: LocationType = {
+              latitude: locationUpdate.coords.latitude,
+              longitude: locationUpdate.coords.longitude,
+            };
+
+            // Distance filter — skip tiny GPS drift
+            const prev = lastLocationRef.current;
+            if (prev) {
+              const R = 6371e3;
+              const p1 = (prev.latitude * Math.PI) / 180;
+              const p2 = (newLoc.latitude * Math.PI) / 180;
+              const dp = ((newLoc.latitude - prev.latitude) * Math.PI) / 180;
+              const dl = ((newLoc.longitude - prev.longitude) * Math.PI) / 180;
+              const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+              const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+              if (dist < LOCATION_DISTANCE_FILTER_M) return;
+            }
+
+            lastLocationRef.current = newLoc;
+            debouncedSetLocation(newLoc);
+          }
+        );
+      } catch (error) {
+        console.error('Failed to start position watcher:', error);
+      }
+    };
+
+    startWatching();
+
+    return () => {
+      cancelled = true;
+      if (positionSubscriptionRef.current) {
+        positionSubscriptionRef.current.remove();
+        positionSubscriptionRef.current = null;
+      }
+    };
+  }, [devMode, permissionGranted, player?.username]);
+
+  // Fallback poll — only fires if watchPositionAsync somehow stalls
+  // (some Android devices throttle background location callbacks)
   useIntervalWhen(
     async () => {
-      await requestLocation();
+      if (!positionSubscriptionRef.current) {
+        await requestLocation();
+      }
     },
-    5000,
+    10000,
     Boolean(player && permissionGranted && player.username),
     true
   );
@@ -266,6 +334,11 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     setPark(undefined);
     setHeading(null);
     smoothedHeadingRef.current = null;
+    lastLocationRef.current = null;
+    if (positionSubscriptionRef.current) {
+      positionSubscriptionRef.current.remove();
+      positionSubscriptionRef.current = null;
+    }
   };
 
   return (

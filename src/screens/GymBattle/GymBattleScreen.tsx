@@ -533,6 +533,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
   const screenScale = useRef(new Animated.Value(1.1)).current;
 
   // Countdown synced from API battle_status, ticks locally every second
+  const battleActive = gymData?.battle_status?.is_active ?? false;
   const [battleSeconds, setBattleSeconds] = useState<number | null>(null);
   
   useEffect(() => {
@@ -900,7 +901,9 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             
             {/* Countdown */}
             <View style={[styles.statBox, styles.countdownBox]}>
-              <Text style={styles.statLabel}>RESETS IN</Text>
+              <Text style={styles.statLabel}>
+                {gymData?.battle_status?.next_event === 'starts' ? 'STARTS IN' : 'RESETS IN'}
+              </Text>
               <Text style={styles.countdownText}>{countdown}</Text>
             </View>
             
@@ -943,7 +946,11 @@ export default function GymBattleScreen({ navigation, route }: Props) {
           <View style={styles.actionRow}>
             {/* Defend button - 30 min cooldown */}
             <View style={{ alignItems: 'center' }}>
-              {player && defendCooldown > 0 ? (
+              {!battleActive && player ? (
+                <View style={styles.cooldownBadge}>
+                  <Text style={styles.cooldownText}>WAITING</Text>
+                </View>
+              ) : player && defendCooldown > 0 ? (
                 <View style={styles.cooldownBadge}>
                   <Text style={styles.cooldownText}>
                     {Math.floor(defendCooldown / 60)}:{(defendCooldown % 60).toString().padStart(2, '0')}
@@ -956,7 +963,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
               ) : null}
               <AnimatedButton 
                 onPress={handleDefend}
-                disabled={defendCooldown > 0}
+                disabled={!battleActive || defendCooldown > 0}
                 source={require('../../../assets/images/btn-defend.png')}
                 style={styles.actionBtnImage}
               />
@@ -964,7 +971,11 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             
             {/* Check In button */}
             <View style={{ alignItems: 'center' }}>
-              {player && !canCheckIn ? (
+              {!battleActive && player ? (
+                <View style={styles.cooldownBadge}>
+                  <Text style={styles.cooldownText}>WAITING</Text>
+                </View>
+              ) : player && !canCheckIn ? (
                 <View style={styles.cooldownBadge}>
                   <Text style={styles.cooldownText}>
                     {checkinCooldown > 0 
@@ -979,7 +990,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
               ) : null}
               <AnimatedButton 
                 onPress={handleCheckIn}
-                disabled={!canCheckIn}
+                disabled={!battleActive || !canCheckIn}
                 source={require('../../../assets/images/btn-checkin.png')}
                 style={styles.actionBtnImage}
               />
@@ -987,7 +998,11 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             
             {/* Battle button */}
             <View style={{ alignItems: 'center' }}>
-              {player && !canAttack ? (
+              {!battleActive && player ? (
+                <View style={styles.cooldownBadge}>
+                  <Text style={styles.cooldownText}>WAITING</Text>
+                </View>
+              ) : player && !canAttack ? (
                 attackCooldown > 0 ? (
                   <View style={styles.cooldownBadge}>
                     <Text style={styles.cooldownText}>
@@ -1010,7 +1025,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
               ) : null}
               <AnimatedButton 
                 onPress={handleBattle}
-                disabled={!canAttack}
+                disabled={!battleActive || !canAttack}
                 source={require('../../../assets/images/btn-battle.png')}
                 style={styles.actionBtnImage}
               />
@@ -1020,7 +1035,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
           {/* Leave a Coin button */}
           <AnimatedButton 
             onPress={handleLeaveCoin}
-            disabled={hasPlacedToday}
+            disabled={!battleActive || hasPlacedToday}
             source={require('../../../assets/images/btn-leavecoin.png')}
             style={styles.leaveCoinBtnImage}
             noShimmer

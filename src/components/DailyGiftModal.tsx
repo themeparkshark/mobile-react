@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Dimensions, ImageBackground, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { useTimeoutWhen } from 'rooks';
@@ -78,13 +78,11 @@ export default function DailyGiftModal({
   const { labels } = useCrumbs();
   const { player, refreshPlayer } = useContext(AuthContext);
 
-  useTimeoutWhen(
-    () => {
+  useEffect(() => {
+    if (!dailyGift.redeemed_at && player?.username) {
       setModalVisible(true);
-    },
-    5000,
-    Boolean(!dailyGift.redeemed_at && player?.username)
-  );
+    }
+  }, [dailyGift.id, dailyGift.redeemed_at, player?.username]);
 
   const claimReward = async () => {
     setModalVisible(false);

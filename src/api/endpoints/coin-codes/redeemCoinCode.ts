@@ -5,7 +5,7 @@ import client from '../../client';
 
 export default async function redeemCoinCode(
   code: string
-): Promise<CoinCodeType> {
+): Promise<CoinCodeType | null> {
   try {
     const response = await client.post<ApiResponseType<CoinCodeType>>(
       '/coin-codes/redeem',
@@ -15,11 +15,13 @@ export default async function redeemCoinCode(
     );
 
     return response.data.data;
-  } catch (error) {
-    Alert.alert(error.response.data.message, '', [
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } } };
+    Alert.alert(axiosError.response?.data?.message ?? 'Error redeeming code', '', [
       {
         text: 'Ok',
       },
     ]);
+    return null;
   }
 }

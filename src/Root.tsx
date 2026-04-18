@@ -20,6 +20,7 @@ import { CrumbContext } from './context/CrumbProvider';
 import { CurrencyContext } from './context/CurrencyProvider';
 import { ThemeContext } from './context/ThemeProvider';
 import { useAxiosSetup } from './hooks/useAxiosSetup';
+import { useAppUpdates } from './hooks/useAppUpdates';
 import LoginScreen from './screens/Auth/LoginScreen';
 import ExploreScreen from './screens/ExploreScreen';
 import FriendsScreen from './screens/FriendsScreen';
@@ -50,6 +51,7 @@ import SetCollectionScreen from './screens/SetCollectionScreen';
 import StampBookScreen from './screens/StampBookScreen';
 import CoinShelfScreen from './screens/CoinShelfScreen';
 import MiniGameTesterScreen from './screens/MiniGameTesterScreen';
+import PostWinRewardsPreviewScreen from './screens/PostWinRewardsPreviewScreen';
 import CommunityCenterScreen from './screens/CommunityCenterScreen';
 import SharkParkScreen from './screens/SharkParkScreen';
 // Gym Battle Screens
@@ -66,11 +68,13 @@ import RideCollectionsScreen from './screens/RideTracker/RideCollectionsScreen';
 import RideWishlistScreen from './screens/RideTracker/RideWishlistScreen';
 import RideOnboardingScreen from './screens/RideTracker/RideOnboardingScreen';
 import RideBatchConfirmScreen from './screens/RideTracker/RideBatchConfirmScreen';
+import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   useKeepAwake();
+  useAppUpdates();
   const { setPlayer } = useContext(AuthContext);
   const { setCrumbs, crumbsLoaded } = useContext(CrumbContext);
   const { retrieveCurrencies, currenciesLoaded } = useContext(CurrencyContext);
@@ -123,7 +127,7 @@ export default function App() {
     <View style={{ flex: 1 }}>
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
-        initialRouteName="Splash"
+        initialRouteName={__DEV__ ? "PostWinRewardsPreview" : "Splash"}
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
@@ -275,7 +279,9 @@ export default function App() {
         <Stack.Screen name="RideOnboarding" component={RideOnboardingScreen} options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="RideBatchConfirm" component={RideBatchConfirmScreen} options={{ animation: 'slide_from_bottom' }} />
         {__DEV__ && <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />}
+        {__DEV__ && <Stack.Screen name="PostWinRewardsPreview" component={PostWinRewardsPreviewScreen} />}
       </Stack.Navigator>
+      <RideDetectionOverlay />
     </NavigationContainer>
     {__DEV__ && devMode && currentLocation && (
       <DevJoystick

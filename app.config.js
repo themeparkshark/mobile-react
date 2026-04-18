@@ -18,7 +18,7 @@ export default {
   },
   assetBundlePatterns: ['**/*'],
   ios: {
-    buildNumber: '20260208.3',
+    buildNumber: '20260226.1',
     bitcode: 'Debug',
     usesAppleSignIn: true,
     bundleIdentifier: 'com.themeparkshark.app',

@@ -21,3 +21,9 @@ android/
 __tests__/
 docs/
 .vscode/
+*.ipa
+*.tar.gz
+build-*.ipa
+ios/Pods/
+ios/build/
+dist/

@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { getRideCollections, RideCollection } from '../../api/endpoints/rides/collections';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
@@ -40,7 +41,7 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({ collection, 
       <View style={styles.progressRow}>
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${progress}%` },
-            collection.is_complete && { backgroundColor: colors.success }]} />
+            collection.is_complete && { backgroundColor: '#22c55e' }]} />
         </View>
         <Text style={styles.progressText}>
           {collection.completed_items}/{collection.total_items}
@@ -100,20 +101,20 @@ export default function RideCollectionsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-          <Text style={styles.backBtn}>← Back</Text>
+      <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
+          <Text style={styles.backChevron}>‹</Text>
         </Pressable>
-        <Text style={styles.title}>Collections</Text>
-        <View style={{ width: 60 }} />
-      </View>
+        <Text style={styles.title}>COLLECTIONS</Text>
+        <View style={{ width: 40 }} />
+      </LinearGradient>
 
       {loading ? (
-        <ActivityIndicator size="large" color={colors.secondary} style={{ marginTop: 60 }} />
+        <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 60 }} />
       ) : (
         <ScrollView
           contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.secondary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
         >
           {collections.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -138,42 +139,102 @@ export default function RideCollectionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgDark },
+  container: { flex: 1, backgroundColor: '#e8f4fd' },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    paddingHorizontal: 16, 
+    paddingVertical: 16,
+    paddingBottom: 20,
   },
-  backBtn: { color: colors.secondary, fontSize: 16, fontWeight: '600' },
-  title: { color: colors.textPrimary, fontSize: 20, fontWeight: '700', fontFamily: 'Shark' },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backChevron: { 
+    color: '#FFFFFF', 
+    fontSize: 24, 
+    fontWeight: '600',
+    marginLeft: -2,
+  },
+  title: { 
+    color: '#FFFFFF', 
+    fontSize: 20, 
+    fontWeight: '700', 
+    fontFamily: 'Shark',
+    letterSpacing: 2,
+  },
   content: { padding: 16, paddingBottom: 60 },
   // Collection card
   collCard: {
-    backgroundColor: colors.bgMedium, borderRadius: 16, padding: 16, marginBottom: 14,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', ...shadows.md,
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 20, 
+    padding: 16, 
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   collHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   collIcon: { fontSize: 36 },
-  collName: { color: colors.textPrimary, fontSize: 18, fontWeight: '700', fontFamily: 'Knockout' },
-  collDesc: { color: colors.textSecondary, fontSize: 13, marginTop: 2 },
+  collName: { 
+    color: '#1a1a2e', 
+    fontSize: 18, 
+    fontWeight: '700', 
+    fontFamily: 'Knockout' 
+  },
+  collDesc: { color: '#475569', fontSize: 13, marginTop: 2 },
   completeBadge: { fontSize: 24 },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  progressBar: { flex: 1, height: 6, backgroundColor: colors.bgDark, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: colors.secondary, borderRadius: 3 },
-  progressText: { color: colors.textSecondary, fontSize: 13, fontWeight: '700', width: 40 },
+  progressBar: { 
+    flex: 1, 
+    height: 6, 
+    backgroundColor: '#e8f4fd', 
+    borderRadius: 3, 
+    overflow: 'hidden' 
+  },
+  progressFill: { 
+    height: '100%', 
+    backgroundColor: '#0EA5E9', 
+    borderRadius: 3 
+  },
+  progressText: { color: '#475569', fontSize: 13, fontWeight: '700', width: 40 },
   itemsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   itemChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: colors.bgDark, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5,
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4,
+    backgroundColor: '#e8f4fd', 
+    borderRadius: 8, 
+    paddingHorizontal: 8, 
+    paddingVertical: 5,
   },
-  itemChipDone: { backgroundColor: 'rgba(76,175,80,0.15)', borderWidth: 1, borderColor: 'rgba(76,175,80,0.3)' },
-  itemName: { color: colors.textSecondary, fontSize: 11, maxWidth: 100 },
-  itemNameDone: { color: colors.success },
-  itemCheck: { color: colors.success, fontSize: 12, fontWeight: '700' },
-  moreText: { color: colors.textMuted, fontSize: 11, alignSelf: 'center' },
+  itemChipDone: { 
+    backgroundColor: 'rgba(34,197,94,0.15)', 
+    borderWidth: 1, 
+    borderColor: 'rgba(34,197,94,0.3)' 
+  },
+  itemName: { color: '#475569', fontSize: 11, maxWidth: 100 },
+  itemNameDone: { color: '#22c55e' },
+  itemCheck: { color: '#22c55e', fontSize: 12, fontWeight: '700' },
+  moreText: { color: '#94a3b8', fontSize: 11, alignSelf: 'center' },
   rewardsRow: { flexDirection: 'row', gap: 16, marginTop: 4 },
-  rewardText: { color: colors.textMuted, fontSize: 12 },
+  rewardText: { color: '#94a3b8', fontSize: 12 },
   emptyContainer: { alignItems: 'center', paddingVertical: 60 },
   emptyEmoji: { fontSize: 60 },
-  emptyTitle: { color: colors.textPrimary, fontSize: 22, fontWeight: '700', marginTop: 16, fontFamily: 'Shark' },
-  emptySubtitle: { color: colors.textSecondary, fontSize: 15, marginTop: 8 },
+  emptyTitle: { 
+    color: '#1a1a2e', 
+    fontSize: 22, 
+    fontWeight: '700', 
+    marginTop: 16, 
+    fontFamily: 'Shark' 
+  },
+  emptySubtitle: { color: '#475569', fontSize: 15, marginTop: 8 },
 });

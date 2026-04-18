@@ -28,6 +28,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
+import { useRideDetection } from '../hooks/useRideDetection';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
@@ -142,6 +143,11 @@ export default function ExploreScreen() {
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted, registerRef } = useTutorial();
+
+  // Ride detection — always runs when user has location permission and is logged in.
+  // Does NOT depend on park context (backend park detection can fail/lag).
+  // Loads ALL rides and detects based on GPS proximity to ride coordinates.
+  useRideDetection(!!permissionGranted && !!player);
   
   // Trigger onboarding tutorial on first visit
   useEffect(() => {
@@ -702,11 +708,11 @@ export default function ExploreScreen() {
                 }}>{playerSwordCount}</Text>
               </View>
             </View>
-            {/* Profile Avatar */}
-            {player?.inventory && (
+            {/* Profile Avatar - navigates to Park Profile */}
+            {player && (
               <Button
                 onPress={() => {
-                  RootNavigation.navigate('Inventory');
+                  RootNavigation.navigate('Park', { park: park.id, player: player.id });
                 }}
               >
                 <Avatar player={player} size="lg" />

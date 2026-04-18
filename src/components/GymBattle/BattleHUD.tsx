@@ -211,9 +211,9 @@ export default function BattleHUD({ parkId }: Props) {
               <View style={styles.rightSection}>
                 <View style={styles.clockBadge}>
                   <Text style={styles.clockIcon}>⏱️</Text>
-                  <Text style={styles.clockTime}>{countdown}</Text>
+                  <Text style={styles.clockTime}>{battleActive ? countdown : 'Soon'}</Text>
                 </View>
-                <Text style={styles.tapHintText}>Tap for info</Text>
+                <Text style={styles.tapHintText}>{battleActive ? 'Tap for info' : 'Starts soon'}</Text>
               </View>
             </View>
           </BlurView>
@@ -246,8 +246,8 @@ export default function BattleHUD({ parkId }: Props) {
                 
                 {/* Timer */}
                 <View style={styles.timerSection}>
-                  <Text style={styles.timerLabel}>BATTLE ENDS IN</Text>
-                  <Text style={styles.timerValue}>{countdown}</Text>
+                  <Text style={styles.timerLabel}>{battleActive ? 'BATTLE ENDS IN' : 'NEXT BATTLE'}</Text>
+                  <Text style={styles.timerValue}>{battleActive ? countdown : `Starts in ${countdown}`}</Text>
                 </View>
 
                 {/* Current Standings */}

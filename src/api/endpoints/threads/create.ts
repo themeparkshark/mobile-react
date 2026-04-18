@@ -7,7 +7,7 @@ export default async function createThread(thread: {
   readonly title: string;
   readonly content?: string;
   readonly team?: 'mouse' | 'globe' | 'shark' | null;
-}): Promise<ThreadType> {
+}): Promise<ThreadType | null> {
   try {
     const { data } = await client.post<ApiResponseType<ThreadType>>(
       '/threads',
@@ -15,11 +15,13 @@ export default async function createThread(thread: {
     );
 
     return data.data;
-  } catch (error) {
-    Alert.alert(error.response.data.message, '', [
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } } };
+    Alert.alert(axiosError.response?.data?.message ?? 'Error creating thread', '', [
       {
         text: 'Ok',
       },
     ]);
+    return null;
   }
 }
