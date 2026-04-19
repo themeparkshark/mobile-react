@@ -1,13 +1,12 @@
 /**
- * QueueGameScreen — Filament native 3D scene.
+ * QueueGameScreen — Filament native 3D (debug visibility pass).
  *
- * Third revision: dropped the custom onTouchStart/Move/End handlers that
- * collided with Filament's internal touch-dispatch. Model onPress works
- * on its own because the library wires it via the shared TouchHandlerContext.
- *
- * Camera orbit gestures will come back later through the right API
- * (useCameraManipulator has internal hooks that need a worklet rigged
- * via RenderCallbackContext, not ad-hoc onTouch props).
+ * Previous render showed nothing. Adding:
+ *   - Skybox in a vivid color so we can confirm Filament is drawing AT ALL
+ *   - DebugBox wireframe wrapped around the Model to visualize its
+ *     bounding box regardless of whether materials render
+ *   - Default Model transform (no scale tweak yet) at origin, so we see
+ *     its authored size before we start fitting the viewport around it
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -18,10 +17,7 @@ import {
   Pressable,
   SafeAreaView,
   StatusBar,
-  Animated,
-  Easing,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faXmark, faBolt } from '@fortawesome/free-solid-svg-icons';
@@ -32,45 +28,46 @@ import {
   Camera,
   DefaultLight,
   Model,
+  Skybox,
+  DebugBox,
 } from 'react-native-filament';
 
 import config from '../config';
 
 const SHARK_GLB = require('../../assets/models/shark-avatar.glb');
 
-// --- 3D scene: all Filament children, camera + light + hero model. ---
-
 function Scene({ onTapHero, rotationY }: { onTapHero: () => void; rotationY: number }) {
   return (
     <FilamentView style={StyleSheet.absoluteFill}>
-      <Camera cameraPosition={[0, 1.1, 4.8]} cameraTarget={[0, 0, 0]} />
+      {/* Pull camera back far enough to see pretty much any reasonable model */}
+      <Camera cameraPosition={[0, 1, 12]} cameraTarget={[0, 0, 0]} />
       <DefaultLight />
+      {/* Vivid skybox so we know the scene is rendering even if the model is off-screen or invisible */}
+      <Skybox colorInHex="#1a3b6e" />
       <Model
         source={SHARK_GLB}
         castShadow
         receiveShadow
-        scale={[1.4, 1.4, 1.4]}
         rotate={[0, rotationY, 0]}
         onPress={onTapHero}
-      />
+      >
+        {/* Draws a wireframe around the model's actual bounding box */}
+        <DebugBox />
+      </Model>
     </FilamentView>
   );
 }
-
-// --- Screen wrapper: gradient background + HUD + rotation animator. ---
 
 export default function QueueGameScreen({ navigation }: any) {
   const [score, setScore] = useState(0);
   const [rotationY, setRotationY] = useState(0);
 
-  // Auto-rotate the hero slowly on Y (JS-driven since we removed orbit input).
-  // 6-second loop, smooth linear spin.
   useEffect(() => {
     let raf: number;
-    let start = Date.now();
+    const start = Date.now();
     const loop = () => {
       const t = (Date.now() - start) / 1000;
-      setRotationY((t * (2 * Math.PI)) / 6);
+      setRotationY((t * (2 * Math.PI)) / 8);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -90,16 +87,11 @@ export default function QueueGameScreen({ navigation }: any) {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
-      <LinearGradient
-        colors={['#0b1b3a', '#1a3b6e', '#2b6cb0', '#4c9cd6']}
-        style={StyleSheet.absoluteFill}
-      />
 
       <FilamentScene>
         <Scene onTapHero={handleTap} rotationY={rotationY} />
       </FilamentScene>
 
-      {/* HUD */}
       <SafeAreaView style={styles.topBar} pointerEvents="box-none">
         <Pressable
           onPress={handleClose}
@@ -117,8 +109,10 @@ export default function QueueGameScreen({ navigation }: any) {
       </SafeAreaView>
 
       <SafeAreaView style={styles.bottomBar} pointerEvents="none">
-        <Text style={styles.hintText}>Filament 3D Native</Text>
-        <Text style={styles.hintSub}>Tap the shark to score</Text>
+        <Text style={styles.hintText}>Filament debug — skybox + wireframe</Text>
+        <Text style={styles.hintSub}>
+          Blue skybox should be visible. White wireframe = shark bounds.
+        </Text>
       </SafeAreaView>
     </View>
   );
@@ -174,7 +168,7 @@ const styles = StyleSheet.create({
   hintText: {
     color: '#fff',
     fontFamily: 'Shark',
-    fontSize: 20,
+    fontSize: 18,
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
