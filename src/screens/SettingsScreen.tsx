@@ -212,48 +212,44 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Developer (debug only) */}
-        {__DEV__ && (
-          <>
-            <SectionHeader title="Developer" />
-            <View style={styles.card}>
-              <SettingsRow
-                icon={faLocationCrosshairs}
-                iconColor="#64748b"
-                iconBg="rgba(100, 116, 139, 0.1)"
-                title="GPS Joystick"
-                detail="Simulate movement with on-screen joystick"
-                accessory={
-                  <Switch
-                    trackColor={{ false: '#e2e8f0', true: config.secondary }}
-                    onValueChange={() => setDevMode(!devMode)}
-                    value={devMode}
-                  />
-                }
+        {/* Developer */}
+        <SectionHeader title="Developer" />
+        <View style={styles.card}>
+          <SettingsRow
+            icon={faLocationCrosshairs}
+            iconColor="#64748b"
+            iconBg="rgba(100, 116, 139, 0.1)"
+            title="GPS Joystick"
+            detail="Simulate movement with on-screen joystick"
+            accessory={
+              <Switch
+                trackColor={{ false: '#e2e8f0', true: config.secondary }}
+                onValueChange={() => setDevMode(!devMode)}
+                value={devMode}
               />
-              <SettingsRow
-                icon={faGamepad}
-                iconColor="#64748b"
-                iconBg="rgba(100, 116, 139, 0.1)"
-                title="Mini-Game Tester"
-                detail="Play and test all mini-games"
-                onPress={() => (navigation as any).navigate('MiniGameTester')}
-              />
-              <SettingsRow
-                icon={faRotateRight}
-                iconColor="#64748b"
-                iconBg="rgba(100, 116, 139, 0.1)"
-                title="Reset Tutorials"
-                detail="Show onboarding tutorial again"
-                isLast
-                onPress={() => {
-                  resetTutorials();
-                  Alert.alert('Tutorials Reset', 'All tutorials will show again on next visit.');
-                }}
-              />
-            </View>
-          </>
-        )}
+            }
+          />
+          <SettingsRow
+            icon={faGamepad}
+            iconColor="#64748b"
+            iconBg="rgba(100, 116, 139, 0.1)"
+            title="Mini-Game Tester"
+            detail="Play and test all mini-games"
+            onPress={() => (navigation as any).navigate('MiniGameTester')}
+          />
+          <SettingsRow
+            icon={faRotateRight}
+            iconColor="#64748b"
+            iconBg="rgba(100, 116, 139, 0.1)"
+            title="Reset Tutorials"
+            detail="Show onboarding tutorial again"
+            isLast
+            onPress={() => {
+              resetTutorials();
+              Alert.alert('Tutorials Reset', 'All tutorials will show again on next visit.');
+            }}
+          />
+        </View>
 
         {/* Help */}
         <SectionHeader title="Help" />

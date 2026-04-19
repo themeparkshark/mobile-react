@@ -278,8 +278,9 @@ export default function App() {
         <Stack.Screen name="RideWishlist" component={RideWishlistScreen} />
         <Stack.Screen name="RideOnboarding" component={RideOnboardingScreen} options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="RideBatchConfirm" component={RideBatchConfirmScreen} options={{ animation: 'slide_from_bottom' }} />
-        {__DEV__ && <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />}
-        {__DEV__ && <Stack.Screen name="PostWinRewardsPreview" component={PostWinRewardsPreviewScreen} />}
+        <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />
+        <Stack.Screen name="PostWinRewardsPreview" component={PostWinRewardsPreviewScreen} />
+
       </Stack.Navigator>
       <RideDetectionOverlay />
     </NavigationContainer>
