@@ -53,6 +53,7 @@ import CoinShelfScreen from './screens/CoinShelfScreen';
 import MiniGameTesterScreen from './screens/MiniGameTesterScreen';
 import PostWinRewardsPreviewScreen from './screens/PostWinRewardsPreviewScreen';
 import QueueGameScreen from './screens/QueueGameScreen';
+import BananaBasketScreen from './screens/BananaBasketScreen';
 import CommunityCenterScreen from './screens/CommunityCenterScreen';
 import SharkParkScreen from './screens/SharkParkScreen';
 // Gym Battle Screens
@@ -285,6 +286,11 @@ export default function App() {
           name="QueueGame"
           component={QueueGameScreen}
           options={{ animation: 'none', gestureEnabled: false }}
+        />
+        <Stack.Screen
+          name="BananaBasket"
+          component={BananaBasketScreen}
+          options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
         />
 
       </Stack.Navigator>

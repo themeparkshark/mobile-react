@@ -12,29 +12,23 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
   :root{
-    --yellow:#ffd83a;
-    --yellow-deep:#b38a0a;
-    --orange:#ff7a2a;
-    --pink:#ff4f7a;
-    --cream:#fff7e0;
-    --navy:#2a1a0a;
-    --brown:#6a4824;
-    --lab:#2d1a09;
+    --yellow:#ffd32a;--yellow-deep:#c48a00;
+    --red:#e4352b;--green:#5bb12e;--orange:#ff7a1f;
+    --cream:#fff6dd;--dark:#100603;--wood:#4a2b18;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{width:100%;height:100%;overflow:hidden;background:#1a0e03;font-family:'Press Start 2P',system-ui,sans-serif;color:var(--cream);-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0b0603;font-family:'Press Start 2P',system-ui,sans-serif;color:var(--cream);-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
   body{position:fixed;inset:0;}
   canvas{display:block;position:absolute;inset:0;}
 
-  #vignette{position:absolute;inset:0;pointer-events:none;z-index:5;background:radial-gradient(ellipse at center, transparent 50%, rgba(10,4,0,0.65) 100%);}
-  #grade{position:absolute;inset:0;pointer-events:none;z-index:6;background:linear-gradient(180deg, rgba(255,216,58,0.06) 0%, transparent 50%, rgba(42,26,10,0.2) 100%);mix-blend-mode:soft-light;}
-  #grain{position:absolute;inset:0;pointer-events:none;z-index:7;opacity:0.04;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.9  0 0 0 0 0.88  0 0 0 0 0.6  0 0 0 1 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");}
+  #vignette{position:absolute;inset:0;pointer-events:none;z-index:5;background:radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.8) 100%);}
+  #grade{position:absolute;inset:0;pointer-events:none;z-index:6;background:linear-gradient(180deg, rgba(255,180,60,0.08) 0%, transparent 50%, rgba(20,8,2,0.3) 100%);mix-blend-mode:soft-light;}
+  #grain{position:absolute;inset:0;pointer-events:none;z-index:7;opacity:0.06;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 0.9  0 0 0 0 0.6  0 0 0 1 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");}
 
   #ui{position:absolute;inset:0;pointer-events:none;z-index:10;}
 
-  /* Score HUD */
   #hud{
-    position:absolute;top:calc(3.2vh + env(safe-area-inset-top));left:0;right:0;
+    position:absolute;top:calc(3vh + env(safe-area-inset-top));left:0;right:0;
     display:flex;justify-content:space-between;align-items:flex-start;
     padding:0 calc(4.4vw + env(safe-area-inset-right)) 0 calc(4.4vw + env(safe-area-inset-left));
     opacity:0;transition:opacity .35s ease;
@@ -42,51 +36,59 @@
   #hud.show{opacity:1;}
   #hud .col{text-align:center;}
   #hud .col.right{text-align:right;}
-  #hud .lbl{font-size:clamp(9px,0.95vw,12px);color:var(--cream);letter-spacing:.35em;text-shadow:0 2px 0 rgba(10,4,0,.75);margin-bottom:.6em;}
-  #hud .num{font-size:clamp(36px,8vw,72px);color:var(--yellow);line-height:1;text-shadow:3px 3px 0 var(--orange),6px 6px 0 rgba(10,4,0,.65);}
-  #hud .num.time{color:var(--cream);text-shadow:3px 3px 0 var(--pink),6px 6px 0 rgba(10,4,0,.65);}
+  #hud .lbl{font-size:clamp(9px,0.95vw,12px);color:var(--cream);letter-spacing:.35em;text-shadow:0 2px 0 rgba(10,4,0,.85);margin-bottom:.6em;}
+  #hud .num{font-size:clamp(36px,8vw,72px);color:var(--yellow);line-height:1;text-shadow:3px 3px 0 var(--orange),6px 6px 0 rgba(10,4,0,.9);}
+  #hud .num.time{color:var(--cream);text-shadow:3px 3px 0 var(--red),6px 6px 0 rgba(10,4,0,.9);}
 
-  /* Start screen */
+  #combo{
+    position:absolute;top:calc(32vh + env(safe-area-inset-top));left:0;right:0;text-align:center;
+    pointer-events:none;opacity:0;transform:scale(.5);transition:opacity .15s, transform .15s;
+  }
+  #combo.show{opacity:1;transform:scale(1);}
+  #combo .x{font-size:clamp(40px,13vw,120px);color:var(--yellow);text-shadow:4px 4px 0 var(--red),8px 8px 0 rgba(10,4,0,.9);}
+  #combo .lbl{font-size:clamp(10px,2.5vw,16px);color:var(--cream);letter-spacing:.5em;margin-top:.4em;}
+
   #start{
     position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:2em;pointer-events:auto;cursor:pointer;padding:0 6vw;text-align:center;
   }
   #start .title{
     font-size:clamp(32px,9vw,80px);color:var(--yellow);letter-spacing:.08em;line-height:1.1;
-    text-shadow:4px 4px 0 var(--orange),8px 8px 0 rgba(10,4,0,.7);
+    text-shadow:4px 4px 0 var(--red),8px 8px 0 rgba(10,4,0,.9);
   }
   #start .title span{display:block;}
   #start .title .t2{color:var(--cream);margin-top:.2em;}
   #start .sub{font-size:clamp(10px,2.3vw,14px);color:var(--cream);letter-spacing:.3em;opacity:.9;}
   #start .cta{
-    margin-top:1em;padding:1.1em 2.2em;background:var(--yellow);color:var(--lab);
+    margin-top:1em;padding:1.1em 2.2em;background:var(--yellow);color:var(--dark);
     font-size:clamp(14px,3.5vw,22px);letter-spacing:.25em;border:none;border-radius:0;
-    box-shadow:0 6px 0 var(--orange),0 12px 0 rgba(10,4,0,.7);
+    box-shadow:0 6px 0 var(--red),0 12px 0 rgba(10,4,0,.9);
     transform:translateY(0);transition:transform .1s ease,box-shadow .1s ease;
     font-family:inherit;cursor:pointer;
   }
-  #start .cta:active{transform:translateY(4px);box-shadow:0 2px 0 var(--orange),0 6px 0 rgba(10,4,0,.7);}
+  #start .cta:active{transform:translateY(4px);box-shadow:0 2px 0 var(--red),0 6px 0 rgba(10,4,0,.9);}
 
-  /* Game over screen */
   #gameover{
     position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
     gap:1.6em;pointer-events:auto;padding:0 6vw;text-align:center;
-    background:rgba(10,4,0,0.5);
+    background:rgba(10,4,0,0.7);
   }
   #gameover.show{display:flex;}
   #gameover .bigscore{
     font-size:clamp(60px,18vw,160px);color:var(--yellow);line-height:1;
-    text-shadow:4px 4px 0 var(--orange),8px 8px 0 rgba(10,4,0,.7);
+    text-shadow:4px 4px 0 var(--red),8px 8px 0 rgba(10,4,0,.9);
   }
   #gameover .lbl{font-size:clamp(10px,2.2vw,14px);color:var(--cream);letter-spacing:.35em;}
   #gameover .best{font-size:clamp(12px,2.8vw,18px);color:var(--yellow);letter-spacing:.25em;}
-  #gameover .best.newbest{color:var(--pink);animation:pulse 0.8s ease-in-out infinite alternate;}
+  #gameover .best.newbest{color:var(--red);animation:pulse 0.8s ease-in-out infinite alternate;}
   @keyframes pulse{from{transform:scale(1);}to{transform:scale(1.08);}}
 
-  /* Stream of +1/+5 floaties */
-  .float{position:absolute;font-size:clamp(18px,4vw,28px);color:var(--yellow);text-shadow:2px 2px 0 var(--orange),4px 4px 0 rgba(10,4,0,.7);pointer-events:none;animation:rise 0.9s ease-out forwards;z-index:12;}
+  .float{position:absolute;font-size:clamp(22px,5vw,34px);text-shadow:2px 2px 0 rgba(10,4,0,0.9),4px 4px 0 rgba(10,4,0,0.5);pointer-events:none;animation:rise 0.95s ease-out forwards;z-index:12;}
+  .float.yellow{color:var(--yellow);}
   .float.gold{color:#ffb300;}
-  .float.bad{color:var(--pink);}
+  .float.red{color:var(--red);}
+  .float.orange{color:var(--orange);}
+  .float.bad{color:#ff4b7a;}
   @keyframes rise{0%{opacity:0;transform:translateY(0) scale(0.5);}15%{opacity:1;transform:translateY(-20px) scale(1.2);}100%{opacity:0;transform:translateY(-80px) scale(0.8);}}
 </style>
 </head>
@@ -100,9 +102,10 @@
     <div class="col"><div class="lbl">SCORE</div><div class="num" id="score">0</div></div>
     <div class="col right"><div class="lbl">TIME</div><div class="num time" id="time">60</div></div>
   </div>
+  <div id="combo"><div class="x" id="comboX">x2</div><div class="lbl">COMBO</div></div>
   <div id="start">
     <div class="title"><span>BANANA</span><span class="t2">BASKET</span></div>
-    <div class="sub">DRAG LEFT / RIGHT TO CATCH</div>
+    <div class="sub">DRAG TO CATCH FRUIT</div>
     <button class="cta">TAP TO START</button>
   </div>
   <div id="gameover">
@@ -124,31 +127,33 @@
 <script type="module">
 import * as THREE from 'three';
 
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
 // Bridge to React Native host
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
 function postToRN(msg){
   if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){
     window.ReactNativeWebView.postMessage(JSON.stringify(msg));
   }
 }
 
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
 // DOM refs
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('c');
 const scoreEl = document.getElementById('score');
 const timeEl = document.getElementById('time');
 const hud = document.getElementById('hud');
+const comboEl = document.getElementById('combo');
+const comboXEl = document.getElementById('comboX');
 const startScreen = document.getElementById('start');
 const gameOverScreen = document.getElementById('gameover');
 const finalScoreEl = document.getElementById('finalScore');
 const bestScoreEl = document.getElementById('bestScore');
 const playAgainBtn = document.getElementById('playAgain');
 
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
 // Renderer / Scene / Camera
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -156,259 +161,484 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a0e03);
-scene.fog = new THREE.FogExp2(0x1a0e03, 0.04);
+scene.background = new THREE.Color(0x1a0a04);
+scene.fog = new THREE.FogExp2(0x120604, 0.05);
 
-// Camera sits slightly above floor, angled down slightly.
-const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 60);
-camera.position.set(0, 2.2, 8.5);
-camera.lookAt(0, 1.2, 0);
+// Camera — closer, slightly down, for drama
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 60);
+camera.position.set(0, 2.6, 7.5);
+camera.lookAt(0, 1.6, 0);
 
-// ────────────────────────────────────────────────────────────────
-// Lighting — lab ambience: warm key, cool fill, ambient wash
-// ────────────────────────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0xffe1a0, 0.55));
-scene.add(new THREE.HemisphereLight(0xffd089, 0x402010, 0.45));
+// ──────────────────────────────────────────────────────────────────
+// Lighting — Fruit Ninja-ish warm key + cool rim
+// ──────────────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0xffe1a0, 0.35));
+scene.add(new THREE.HemisphereLight(0xffcc80, 0x301810, 0.4));
 
-const key = new THREE.DirectionalLight(0xffe7b0, 2.2);
-key.position.set(3.5, 9, 4);
+const key = new THREE.DirectionalLight(0xfff0c0, 2.6);
+key.position.set(4, 10, 5);
 key.castShadow = true;
 key.shadow.mapSize.set(1024, 1024);
 key.shadow.camera.near = 0.5;
-key.shadow.camera.far = 25;
-key.shadow.camera.left = -8;
-key.shadow.camera.right = 8;
-key.shadow.camera.top = 10;
-key.shadow.camera.bottom = -4;
+key.shadow.camera.far = 30;
+key.shadow.camera.left = -10; key.shadow.camera.right = 10;
+key.shadow.camera.top = 12;   key.shadow.camera.bottom = -4;
 key.shadow.bias = -0.0008;
 scene.add(key);
 
-const rim = new THREE.DirectionalLight(0x7acfff, 0.55);
-rim.position.set(-4, 3, 2);
+const rim = new THREE.DirectionalLight(0x80c8ff, 0.8);
+rim.position.set(-6, 4, -2);
 scene.add(rim);
 
-// ────────────────────────────────────────────────────────────────
-// Factory environment: floor, back wall, conveyor belts, ceiling lights
-// ────────────────────────────────────────────────────────────────
-const floorMat = new THREE.MeshStandardMaterial({
-  color: 0x3c2414, roughness: 0.9, metalness: 0.1,
-});
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), floorMat);
-floor.rotation.x = -Math.PI / 2;
-floor.position.y = -0.5;
-floor.receiveShadow = true;
-scene.add(floor);
+const warmRim = new THREE.DirectionalLight(0xff6030, 0.6);
+warmRim.position.set(5, 1, -3);
+scene.add(warmRim);
 
-// Tiled tile grid overlay on floor (subtle)
-for(let i=-6;i<=6;i++){
-  for(let j=-2;j<=4;j++){
-    if((i+j)%2===0) continue;
-    const tile = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.98, 0.98),
-      new THREE.MeshStandardMaterial({color:0x2d1909, roughness:1, metalness:0}),
-    );
-    tile.rotation.x = -Math.PI / 2;
-    tile.position.set(i, -0.499, j - 1);
-    tile.receiveShadow = true;
-    scene.add(tile);
+// ──────────────────────────────────────────────────────────────────
+// Procedural wood-plank texture (CanvasTexture)
+// ──────────────────────────────────────────────────────────────────
+function makeWoodTexture(w = 512, h = 512) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+
+  // Base brown
+  ctx.fillStyle = '#4a2b18';
+  ctx.fillRect(0, 0, w, h);
+
+  // Horizontal plank lines
+  const plankHeight = 64;
+  for (let y = 0; y < h; y += plankHeight) {
+    // Plank shading
+    const grad = ctx.createLinearGradient(0, y, 0, y + plankHeight);
+    const base = 50 + Math.floor(Math.random() * 25);
+    grad.addColorStop(0, `rgb(${base+10},${Math.floor((base+10)*0.55)},${Math.floor((base+10)*0.32)})`);
+    grad.addColorStop(0.5, `rgb(${base+22},${Math.floor((base+22)*0.55)},${Math.floor((base+22)*0.32)})`);
+    grad.addColorStop(1, `rgb(${base-5},${Math.floor((base-5)*0.55)},${Math.floor((base-5)*0.32)})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, y, w, plankHeight - 2);
+
+    // Wood grain lines
+    for (let g = 0; g < 16; g++) {
+      ctx.strokeStyle = `rgba(20, 10, 4, ${0.08 + Math.random() * 0.18})`;
+      ctx.lineWidth = 0.6 + Math.random() * 1.2;
+      ctx.beginPath();
+      const gy = y + 4 + Math.random() * (plankHeight - 8);
+      ctx.moveTo(0, gy);
+      for (let x = 0; x < w; x += 32) {
+        ctx.lineTo(x, gy + (Math.random() - 0.5) * 5);
+      }
+      ctx.stroke();
+    }
+
+    // Knots (random)
+    if (Math.random() < 0.3) {
+      const kx = Math.random() * w;
+      const ky = y + plankHeight / 2;
+      const r = 6 + Math.random() * 8;
+      const kg = ctx.createRadialGradient(kx, ky, 0, kx, ky, r);
+      kg.addColorStop(0, 'rgba(18, 8, 3, 0.95)');
+      kg.addColorStop(0.6, 'rgba(30, 16, 8, 0.7)');
+      kg.addColorStop(1, 'rgba(60, 36, 20, 0)');
+      ctx.fillStyle = kg;
+      ctx.beginPath();
+      ctx.arc(kx, ky, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Plank separator (dark line)
+    ctx.fillStyle = 'rgba(8, 3, 1, 0.9)';
+    ctx.fillRect(0, y + plankHeight - 2, w, 2);
   }
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
 }
 
-// Back wall — yellow-brown with panels
-const wallMat = new THREE.MeshStandardMaterial({color: 0x8a5a1e, roughness: 0.85, metalness: 0.2});
-const backWall = new THREE.Mesh(new THREE.PlaneGeometry(40, 16), wallMat);
+const woodTex = makeWoodTexture(512, 512);
+woodTex.repeat.set(3, 2);
+
+// ──────────────────────────────────────────────────────────────────
+// Environment: back wall + ground plane (both wood)
+// ──────────────────────────────────────────────────────────────────
+const backWall = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 16),
+  new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85, metalness: 0.05 }),
+);
 backWall.position.set(0, 4, -8);
 backWall.receiveShadow = true;
 scene.add(backWall);
 
-// Wall panels — darker brown squares
-for(let x=-3;x<=3;x++){
-  const panel = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.5, 2.2),
-    new THREE.MeshStandardMaterial({color:0x5a3a14, roughness:0.9, metalness:0.15}),
-  );
-  panel.position.set(x*1.7, 3.2, -7.98);
-  scene.add(panel);
-}
+const groundTex = makeWoodTexture(512, 512);
+groundTex.repeat.set(4, 4);
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.9, metalness: 0.05 }),
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.6;
+ground.receiveShadow = true;
+scene.add(ground);
 
-// Ceiling light boxes
-for(let i=-1;i<=1;i++){
-  const box = new THREE.Mesh(
-    new THREE.BoxGeometry(1.6, 0.25, 0.8),
-    new THREE.MeshStandardMaterial({color:0xffc050, emissive:0xffcc66, emissiveIntensity:0.8, roughness:0.4}),
-  );
-  box.position.set(i*3, 7.2, -4);
-  scene.add(box);
-}
-
-// Conveyor rails — cylindrical bars on back wall
-for(let y=2;y<=5;y+=1.3){
-  const rail = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.12, 0.12, 14, 12),
-    new THREE.MeshStandardMaterial({color:0x2a2a2a, roughness:0.3, metalness:0.9}),
-  );
-  rail.rotation.z = Math.PI / 2;
-  rail.position.set(0, y, -7.6);
-  rail.castShadow = true;
-  scene.add(rail);
-}
-
-// ────────────────────────────────────────────────────────────────
-// Player basket — yellow bucket with rim
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
+// Player basket
+// ──────────────────────────────────────────────────────────────────
 const basket = new THREE.Group();
-const bodyMat = new THREE.MeshStandardMaterial({color: 0xffd83a, roughness: 0.55, metalness: 0.1});
-const rimMat  = new THREE.MeshStandardMaterial({color: 0xd09808, roughness: 0.45, metalness: 0.3});
+
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8d5a2b, roughness: 0.8, metalness: 0.05 });
+const rimMat  = new THREE.MeshStandardMaterial({ color: 0x5c3714, roughness: 0.7, metalness: 0.1 });
 
 const basketBody = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.85, 0.60, 0.85, 20, 1, true),
+  new THREE.CylinderGeometry(1.0, 0.72, 1.0, 22, 1, true),
   bodyMat,
 );
 basketBody.castShadow = true;
 basket.add(basketBody);
 
 const basketRim = new THREE.Mesh(
-  new THREE.TorusGeometry(0.85, 0.08, 10, 24),
+  new THREE.TorusGeometry(1.0, 0.09, 10, 28),
   rimMat,
 );
 basketRim.rotation.x = Math.PI / 2;
-basketRim.position.y = 0.42;
+basketRim.position.y = 0.5;
 basket.add(basketRim);
 
 const basketBottom = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.60, 0.60, 0.08, 20),
+  new THREE.CylinderGeometry(0.72, 0.72, 0.1, 22),
   rimMat,
 );
-basketBottom.position.y = -0.42;
+basketBottom.position.y = -0.5;
 basket.add(basketBottom);
 
-// Face on the basket — two eyes and a smile
-const eyeMat = new THREE.MeshStandardMaterial({color:0x1a0e03, roughness:0.5});
-const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), eyeMat);
-eyeL.position.set(-0.22, 0.08, 0.72);
-basket.add(eyeL);
-const eyeR = eyeL.clone(); eyeR.position.x = 0.22; basket.add(eyeR);
-const smile = new THREE.Mesh(
-  new THREE.TorusGeometry(0.14, 0.03, 8, 16, Math.PI),
-  eyeMat,
-);
-smile.rotation.z = Math.PI;
-smile.position.set(0, -0.1, 0.72);
-basket.add(smile);
+// Weave bands around the basket (subtle horizontal stripes)
+for (let i = 0; i < 3; i++) {
+  const band = new THREE.Mesh(
+    new THREE.TorusGeometry(0.95 - i * 0.04, 0.03, 8, 24),
+    new THREE.MeshStandardMaterial({ color: 0x4a2a10, roughness: 0.9 }),
+  );
+  band.rotation.x = Math.PI / 2;
+  band.position.y = 0.2 - i * 0.35;
+  basket.add(band);
+}
 
-basket.position.set(0, 0.05, 1.5);
+basket.position.set(0, 0.1, 1.4);
 scene.add(basket);
 
-// ────────────────────────────────────────────────────────────────
-// Banana factory: procedural curved bananas
-// Variants: common (yellow), gold (bonus), rotten (penalty)
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
+// FRUIT GEOMETRY
+// Procedural but with real character — not torus-segment macaroni
+// ──────────────────────────────────────────────────────────────────
+
+// --- BANANA: J-curve TubeGeometry + tapered ends + brown tips ---
 function makeBanana(variant) {
   const g = new THREE.Group();
 
-  const colors = {
-    common: { body: 0xffdc3c, tip: 0x6e4620, emissive: 0x000000 },
-    gold:   { body: 0xffd700, tip: 0xe49800, emissive: 0xffa500 },
-    rotten: { body: 0x6a4e18, tip: 0x3a2a0a, emissive: 0x000000 },
-  }[variant] || { body: 0xffdc3c, tip: 0x6e4620, emissive: 0x000000 };
+  // Curve: J-shape from one tip to the other
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.35, -0.20, 0),
+    new THREE.Vector3(-0.18, 0.18, 0),
+    new THREE.Vector3( 0.06, 0.30, 0),
+    new THREE.Vector3( 0.28, 0.24, 0),
+    new THREE.Vector3( 0.40, 0.06, 0),
+  ]);
+  curve.tension = 0.4;
 
-  // Curved banana shape via torus segment
-  const bodyGeom = new THREE.TorusGeometry(0.28, 0.14, 10, 18, Math.PI * 0.8);
+  const tubeRad = 0.10;
+  const tubularSegs = 48;
+  const radialSegs = 14;
+  const tube = new THREE.TubeGeometry(curve, tubularSegs, tubeRad, radialSegs, false);
+
+  // Taper the tube: scale each cross-section's radius down toward the endpoints
+  const pos = tube.attributes.position;
+  const vCount = pos.count;
+  // tube vertex layout: (tubularSegs+1) rings × (radialSegs+1) verts/ring
+  for (let i = 0; i <= tubularSegs; i++) {
+    const t = i / tubularSegs;
+    // Taper factor: thick in middle, thin at ends
+    const taper = 1 - Math.pow(Math.abs(t - 0.5) * 2, 2.5) * 0.7;
+    // Recover this ring's center (approx) by averaging the ring verts
+    let cx = 0, cy = 0, cz = 0;
+    const base = i * (radialSegs + 1);
+    for (let r = 0; r <= radialSegs; r++) {
+      const idx = base + r;
+      cx += pos.getX(idx); cy += pos.getY(idx); cz += pos.getZ(idx);
+    }
+    cx /= (radialSegs + 1); cy /= (radialSegs + 1); cz /= (radialSegs + 1);
+    // Scale each vert toward the ring center
+    for (let r = 0; r <= radialSegs; r++) {
+      const idx = base + r;
+      const dx = pos.getX(idx) - cx;
+      const dy = pos.getY(idx) - cy;
+      const dz = pos.getZ(idx) - cz;
+      pos.setXYZ(idx, cx + dx * taper, cy + dy * taper, cz + dz * taper);
+    }
+  }
+  tube.computeVertexNormals();
+
+  const palette = {
+    common: { body: 0xffd32a, tip: 0x3a2010, emissive: 0x000000 },
+    gold:   { body: 0xffd700, tip: 0x806020, emissive: 0xffaa00 },
+    rotten: { body: 0x7a5a20, tip: 0x1a0e04, emissive: 0x000000 },
+  }[variant] || { body: 0xffd32a, tip: 0x3a2010, emissive: 0x000000 };
+
   const bodyMat = new THREE.MeshStandardMaterial({
-    color: colors.body, roughness: 0.35, metalness: 0.1,
-    emissive: colors.emissive,
-    emissiveIntensity: variant === 'gold' ? 0.45 : 0,
+    color: palette.body,
+    roughness: 0.45,
+    metalness: 0.05,
+    emissive: palette.emissive,
+    emissiveIntensity: variant === 'gold' ? 0.4 : 0,
   });
-  const body = new THREE.Mesh(bodyGeom, bodyMat);
+  const body = new THREE.Mesh(tube, bodyMat);
   body.castShadow = true;
   g.add(body);
 
-  // Tip stem
-  const tip = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.045, 0.08, 0.2, 8),
-    new THREE.MeshStandardMaterial({color: colors.tip, roughness: 0.9}),
-  );
-  tip.position.set(0.26, 0.26, 0);
-  tip.rotation.z = -Math.PI / 4;
-  g.add(tip);
+  // Brown cone tips on both ends
+  const tipMat = new THREE.MeshStandardMaterial({ color: palette.tip, roughness: 0.9 });
+  const tip0 = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 8), tipMat);
+  curve.getPointAt(0, tip0.position);
+  const tan0 = curve.getTangentAt(0.001);
+  tip0.lookAt(tip0.position.clone().sub(tan0));
+  tip0.rotateX(Math.PI / 2);
+  g.add(tip0);
 
-  // Gold halo ring for bonus bananas
+  const tip1 = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.10, 8), tipMat);
+  curve.getPointAt(1, tip1.position);
+  const tan1 = curve.getTangentAt(0.999);
+  tip1.lookAt(tip1.position.clone().add(tan1));
+  tip1.rotateX(Math.PI / 2);
+  g.add(tip1);
+
+  // Gold halo ring for bonus
   if (variant === 'gold') {
     const halo = new THREE.Mesh(
-      new THREE.RingGeometry(0.38, 0.55, 20),
-      new THREE.MeshBasicMaterial({color: 0xffff80, transparent: true, opacity: 0.45, side: THREE.DoubleSide}),
+      new THREE.RingGeometry(0.48, 0.68, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffff80, transparent: true, opacity: 0.45, side: THREE.DoubleSide }),
     );
     halo.userData.isHalo = true;
     g.add(halo);
   }
 
-  g.userData.variant = variant;
-  g.userData.spinAxis = new THREE.Vector3(Math.random()-0.5, 1, Math.random()-0.5).normalize();
-  g.userData.spinSpeed = 1.5 + Math.random() * 2;
-  g.userData.fallSpeed = variant === 'gold' ? 6.5 : (variant === 'rotten' ? 4.5 : 5.2);
-  g.userData.sway = Math.random() * Math.PI * 2;
+  // Brown spots for common bananas
+  if (variant === 'common' && Math.random() < 0.6) {
+    for (let i = 0; i < 3; i++) {
+      const spot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.015 + Math.random() * 0.015, 6, 6),
+        new THREE.MeshStandardMaterial({ color: 0x5a3010, roughness: 1 }),
+      );
+      const t = 0.2 + Math.random() * 0.6;
+      const p = curve.getPointAt(t);
+      const n = curve.getTangentAt(t).cross(new THREE.Vector3(0, 0, 1)).normalize();
+      p.add(n.multiplyScalar(0.095));
+      spot.position.copy(p);
+      g.add(spot);
+    }
+  }
+
+  g.userData.kind = 'banana';
+  g.userData.splashColor = variant === 'gold' ? 0xffcc33 : (variant === 'rotten' ? 0x6a4020 : 0xffd32a);
   return g;
 }
 
-// ────────────────────────────────────────────────────────────────
-// Particle burst pool (caught bananas emit particles)
-// ────────────────────────────────────────────────────────────────
+// --- APPLE: red icosphere with dent at top + stem + leaf ---
+function makeApple() {
+  const g = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(0.36, 24, 20),
+    new THREE.MeshStandardMaterial({ color: 0xd4261b, roughness: 0.35, metalness: 0.15 }),
+  );
+  // Squash slightly at poles so it reads more apple-shaped
+  body.scale.set(1, 0.95, 1);
+  // Dent at top — push top-center verts inward
+  const bp = body.geometry.attributes.position;
+  for (let i = 0; i < bp.count; i++) {
+    const y = bp.getY(i);
+    if (y > 0.30) {
+      const x = bp.getX(i); const z = bp.getZ(i);
+      const d = Math.sqrt(x * x + z * z);
+      if (d < 0.15) {
+        bp.setY(i, y - 0.05 * (0.15 - d) / 0.15);
+      }
+    }
+  }
+  body.geometry.computeVertexNormals();
+  body.castShadow = true;
+  g.add(body);
+
+  // Stem
+  const stem = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.022, 0.03, 0.12, 8),
+    new THREE.MeshStandardMaterial({ color: 0x5c3a18, roughness: 1 }),
+  );
+  stem.position.y = 0.38;
+  stem.rotation.z = 0.2;
+  g.add(stem);
+
+  // Leaf
+  const leaf = new THREE.Mesh(
+    new THREE.SphereGeometry(0.07, 10, 6),
+    new THREE.MeshStandardMaterial({ color: 0x3ea02a, roughness: 0.7 }),
+  );
+  leaf.scale.set(1.6, 0.45, 0.4);
+  leaf.position.set(0.10, 0.40, 0);
+  leaf.rotation.z = -0.4;
+  g.add(leaf);
+
+  // Shine highlight (small bright sphere slightly offset)
+  const shine = new THREE.Mesh(
+    new THREE.SphereGeometry(0.08, 10, 10),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25 }),
+  );
+  shine.position.set(-0.15, 0.12, 0.28);
+  shine.scale.set(1, 1.4, 0.6);
+  g.add(shine);
+
+  g.userData.kind = 'apple';
+  g.userData.splashColor = 0xd4261b;
+  return g;
+}
+
+// --- ORANGE: orange sphere with bumpy surface + tiny leaves ---
+function makeOrange() {
+  const g = new THREE.Group();
+
+  const sph = new THREE.SphereGeometry(0.34, 32, 24);
+  // Bumpy surface via random vertex displacement (orange peel dimples)
+  const pos = sph.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    const len = Math.sqrt(x * x + y * y + z * z);
+    const nx = x / len, ny = y / len, nz = z / len;
+    const bump = (Math.sin(nx * 18) * Math.sin(ny * 18) * Math.sin(nz * 18)) * 0.006;
+    pos.setXYZ(i, x + nx * bump, y + ny * bump, z + nz * bump);
+  }
+  sph.computeVertexNormals();
+
+  const body = new THREE.Mesh(
+    sph,
+    new THREE.MeshStandardMaterial({ color: 0xff7a1f, roughness: 0.75, metalness: 0.02 }),
+  );
+  body.castShadow = true;
+  g.add(body);
+
+  // Tiny green stem button on top
+  const stem = new THREE.Mesh(
+    new THREE.SphereGeometry(0.04, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x2a7818, roughness: 1 }),
+  );
+  stem.scale.set(1.6, 0.5, 1.6);
+  stem.position.y = 0.34;
+  g.add(stem);
+
+  // Two micro leaves
+  for (let i = 0; i < 2; i++) {
+    const leaf = new THREE.Mesh(
+      new THREE.SphereGeometry(0.04, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x45a022, roughness: 0.7 }),
+    );
+    leaf.scale.set(1.3, 0.4, 0.3);
+    leaf.position.set(Math.cos(i * Math.PI) * 0.07, 0.36, Math.sin(i * Math.PI) * 0.07);
+    leaf.rotation.z = (i === 0 ? 0.3 : -0.3);
+    g.add(leaf);
+  }
+
+  g.userData.kind = 'orange';
+  g.userData.splashColor = 0xff7a1f;
+  return g;
+}
+
+// --- ROTTEN FRUIT (penalty): muddy brown sphere with dark spots ---
+function makeRotten() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(0.32, 16, 12),
+    new THREE.MeshStandardMaterial({ color: 0x4a3018, roughness: 1, metalness: 0 }),
+  );
+  body.castShadow = true;
+  g.add(body);
+  for (let i = 0; i < 6; i++) {
+    const spot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x1a0e04, roughness: 1 }),
+    );
+    spot.scale.set(1, 0.3, 1);
+    const a = (i / 6) * Math.PI * 2;
+    spot.position.set(Math.cos(a) * 0.28, (i % 2) * 0.1 - 0.05, Math.sin(a) * 0.28);
+    g.add(spot);
+  }
+  g.userData.kind = 'rotten';
+  g.userData.splashColor = 0x2a1808;
+  return g;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Object spawner with weighted variants
+// ──────────────────────────────────────────────────────────────────
+function spawnObject() {
+  const roll = Math.random();
+  let obj, variant, value;
+  if (roll < 0.06) {
+    obj = makeBanana('gold'); variant = 'gold'; value = 5;
+  } else if (roll < 0.18) {
+    obj = makeRotten(); variant = 'rotten'; value = -2;
+  } else if (roll < 0.42) {
+    obj = makeApple(); variant = 'apple'; value = 2;
+  } else if (roll < 0.62) {
+    obj = makeOrange(); variant = 'orange'; value = 2;
+  } else {
+    obj = makeBanana('common'); variant = 'common'; value = 1;
+  }
+
+  const x = (Math.random() * 2 - 1) * 3.2;
+  const z = 1.0 + Math.random() * 0.4;
+  obj.position.set(x, 9.0, z);
+  obj.userData.variant = variant;
+  obj.userData.value = value;
+  obj.userData.spinAxis = new THREE.Vector3(Math.random() - 0.5, 1, Math.random() - 0.5).normalize();
+  obj.userData.spinSpeed = 2 + Math.random() * 2.5;
+  obj.userData.fallSpeed = 5 + Math.random() * 2;
+  obj.userData.sway = Math.random() * Math.PI * 2;
+  scene.add(obj);
+  fallingObjects.push(obj);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Juice splash particles
+// ──────────────────────────────────────────────────────────────────
 const particles = [];
 
-function emitBurst(x, y, z, color, count = 14) {
+function emitSplash(x, y, z, color, count = 18) {
   for (let i = 0; i < count; i++) {
     const p = new THREE.Mesh(
-      new THREE.SphereGeometry(0.05 + Math.random()*0.05, 6, 6),
-      new THREE.MeshStandardMaterial({color, emissive: color, emissiveIntensity: 0.6}),
+      new THREE.SphereGeometry(0.04 + Math.random() * 0.05, 6, 6),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5, roughness: 0.3 }),
     );
     p.position.set(x, y, z);
-    const dir = new THREE.Vector3(
-      (Math.random()-0.5) * 4,
-      Math.random() * 3 + 1,
-      (Math.random()-0.5) * 2,
-    );
-    p.userData = { vel: dir, life: 0.9, spin: Math.random() * 4 - 2 };
+    const speed = 3 + Math.random() * 3;
+    const ang = Math.random() * Math.PI * 2;
+    const elev = Math.random() * Math.PI * 0.5;
+    p.userData = {
+      vel: new THREE.Vector3(
+        Math.cos(ang) * Math.cos(elev) * speed,
+        Math.sin(elev) * speed + 1.5,
+        Math.sin(ang) * Math.cos(elev) * speed,
+      ),
+      life: 0.9 + Math.random() * 0.3,
+      spin: (Math.random() - 0.5) * 6,
+    };
     scene.add(p);
     particles.push(p);
   }
 }
 
-// ────────────────────────────────────────────────────────────────
-// Falling object pool
-// ────────────────────────────────────────────────────────────────
-const fallingObjects = [];
-
-function spawnObject() {
-  const roll = Math.random();
-  let variant;
-  if (roll < 0.08) variant = 'gold';
-  else if (roll < 0.22) variant = 'rotten';
-  else variant = 'common';
-
-  const obj = makeBanana(variant);
-  const x = (Math.random() * 2 - 1) * 3.2;
-  const z = 1.0 + Math.random() * 0.4;
-  obj.position.set(x, 8.5, z);
-  scene.add(obj);
-  fallingObjects.push(obj);
-}
-
-// ────────────────────────────────────────────────────────────────
-// Floating +N score indicators (HTML-space)
-// ────────────────────────────────────────────────────────────────
-function showFloater(text, screenX, screenY, klass = '') {
-  const el = document.createElement('div');
-  el.className = 'float ' + klass;
-  el.textContent = text;
-  el.style.left = (screenX - 20) + 'px';
-  el.style.top  = (screenY - 20) + 'px';
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 900);
-}
-
+// ──────────────────────────────────────────────────────────────────
+// Floating +N / combo score popups
+// ──────────────────────────────────────────────────────────────────
 function worldToScreen(pos) {
   const v = pos.clone().project(camera);
   return {
@@ -417,60 +647,78 @@ function worldToScreen(pos) {
   };
 }
 
-// ────────────────────────────────────────────────────────────────
-// Game state
-// ────────────────────────────────────────────────────────────────
-const GAME_DURATION = 60;      // seconds
-const SPAWN_INITIAL = 0.85;     // seconds between spawns at start
-const SPAWN_MIN     = 0.28;     // at end of game
+function showFloater(text, screenX, screenY, klass = 'yellow') {
+  const el = document.createElement('div');
+  el.className = 'float ' + klass;
+  el.textContent = text;
+  el.style.left = (screenX - 20) + 'px';
+  el.style.top = (screenY - 20) + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 950);
+}
 
-let state = 'start';  // 'start' | 'playing' | 'gameover'
+let comboTimeout = null;
+function showCombo(mult) {
+  if (comboTimeout) { clearTimeout(comboTimeout); comboTimeout = null; }
+  comboXEl.textContent = 'x' + mult;
+  comboEl.classList.add('show');
+  comboTimeout = setTimeout(() => comboEl.classList.remove('show'), 1100);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Game state
+// ──────────────────────────────────────────────────────────────────
+const GAME_DURATION = 60;
+const SPAWN_INITIAL = 0.85;
+const SPAWN_MIN = 0.26;
+
+let state = 'start';
 let score = 0;
 let best = parseInt(localStorage.getItem('bananaBest') || '0', 10);
 let timeLeft = GAME_DURATION;
 let spawnAccum = 0;
 let gameTime = 0;
 
-// ────────────────────────────────────────────────────────────────
-// Input: drag anywhere to move basket horizontally (follows finger X)
-// ────────────────────────────────────────────────────────────────
-let targetX = 0;
+// Combo tracker
+let comboCount = 0;
+let lastCatchAt = 0;
 
+const fallingObjects = [];
+
+// ──────────────────────────────────────────────────────────────────
+// Input — basket follows finger X
+// ──────────────────────────────────────────────────────────────────
+let targetX = 0;
 function ndcToWorldX(clientX) {
-  // Map finger X to world X range (−3.2 … 3.2)
-  const nx = (clientX / innerWidth) * 2 - 1; // −1 … 1
+  const nx = (clientX / innerWidth) * 2 - 1;
   return nx * 3.4;
 }
 canvas.addEventListener('touchmove', (e) => {
   if (state !== 'playing') return;
   e.preventDefault();
-  if (e.touches && e.touches.length > 0) {
-    targetX = ndcToWorldX(e.touches[0].clientX);
-  }
+  if (e.touches && e.touches.length > 0) targetX = ndcToWorldX(e.touches[0].clientX);
 }, { passive: false });
 canvas.addEventListener('touchstart', (e) => {
   if (state !== 'playing') return;
-  if (e.touches && e.touches.length > 0) {
-    targetX = ndcToWorldX(e.touches[0].clientX);
-  }
+  if (e.touches && e.touches.length > 0) targetX = ndcToWorldX(e.touches[0].clientX);
 }, { passive: true });
 
-// ────────────────────────────────────────────────────────────────
-// Start / restart flow
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
+// Start / restart
+// ──────────────────────────────────────────────────────────────────
 function startGame() {
   state = 'playing';
   score = 0;
   timeLeft = GAME_DURATION;
   spawnAccum = 0;
   gameTime = 0;
+  comboCount = 0;
   targetX = basket.position.x;
   scoreEl.textContent = '0';
   timeEl.textContent = GAME_DURATION;
   startScreen.style.display = 'none';
   gameOverScreen.classList.remove('show');
   hud.classList.add('show');
-  // Clear any leftover falling objects
   for (const o of fallingObjects) scene.remove(o);
   fallingObjects.length = 0;
   postToRN({ type: 'start' });
@@ -481,7 +729,7 @@ function endGame() {
   const isNewBest = score > best;
   if (isNewBest) {
     best = score;
-    try { localStorage.setItem('bananaBest', String(best)); } catch(e){}
+    try { localStorage.setItem('bananaBest', String(best)); } catch (e) {}
   }
   finalScoreEl.textContent = score;
   bestScoreEl.textContent = 'BEST ' + best;
@@ -494,49 +742,75 @@ function endGame() {
 startScreen.addEventListener('click', startGame);
 playAgainBtn.addEventListener('click', (e) => { e.stopPropagation(); startGame(); });
 
-// ────────────────────────────────────────────────────────────────
-// Scoring + catch feedback
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
+// Catch logic + scoring + combo
+// ──────────────────────────────────────────────────────────────────
 function handleCatch(obj) {
   const variant = obj.userData.variant;
-  let delta, color, klass, fx;
-  if (variant === 'gold') { delta = 5; color = 0xffd700; klass = 'gold'; fx = '+5'; }
-  else if (variant === 'rotten') { delta = -2; color = 0xff4f7a; klass = 'bad'; fx = '-2'; }
-  else { delta = 1; color = 0xffdc3c; klass = ''; fx = '+1'; }
+  const value = obj.userData.value;
 
+  // Combo: rewarded for catches within 1.2s of previous good catch
+  const now = gameTime;
+  if (value > 0 && (now - lastCatchAt) < 1.2) {
+    comboCount += 1;
+  } else {
+    comboCount = value > 0 ? 1 : 0;
+  }
+  lastCatchAt = now;
+
+  const multiplier = value > 0 && comboCount >= 3 ? (comboCount >= 6 ? 3 : 2) : 1;
+  const delta = value * multiplier;
   score = Math.max(0, score + delta);
   scoreEl.textContent = score;
 
-  emitBurst(obj.position.x, obj.position.y, obj.position.z, color, variant === 'gold' ? 22 : 12);
+  const color = obj.userData.splashColor;
+  emitSplash(obj.position.x, obj.position.y, obj.position.z, color, variant === 'gold' ? 26 : 16);
 
   const s = worldToScreen(obj.position);
+  let klass;
+  let fx;
+  if (variant === 'gold') { klass = 'gold'; fx = '+' + delta; }
+  else if (variant === 'rotten') { klass = 'bad'; fx = delta.toString(); }
+  else if (variant === 'apple') { klass = 'red'; fx = '+' + delta; }
+  else if (variant === 'orange') { klass = 'orange'; fx = '+' + delta; }
+  else { klass = 'yellow'; fx = '+' + delta; }
   showFloater(fx, s.x, s.y, klass);
 
+  if (multiplier > 1) showCombo(multiplier);
+
   postToRN({ type: 'catch', variant, score });
+
+  // Camera shake impulse (visual pop)
+  shakeAmount = Math.min(0.15, shakeAmount + (variant === 'gold' ? 0.12 : 0.06));
 }
 
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
 // Main loop
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
+const baseCamPos = new THREE.Vector3(0, 2.6, 7.5);
+let shakeAmount = 0;
 
 function tick() {
   requestAnimationFrame(tick);
   const dt = Math.min(clock.getDelta(), 1/30);
 
-  // Basket follows finger with smoothed lerp (responsive but not jittery)
-  basket.position.x += (targetX - basket.position.x) * Math.min(1, dt * 12);
+  // Basket follow
+  basket.position.x += (targetX - basket.position.x) * Math.min(1, dt * 14);
   basket.position.x = Math.max(-3.5, Math.min(3.5, basket.position.x));
-  // Basket tilts toward motion direction
   const vx = (targetX - basket.position.x);
-  basket.rotation.z += (-vx * 0.4 - basket.rotation.z) * Math.min(1, dt * 10);
+  basket.rotation.z += (-vx * 0.35 - basket.rotation.z) * Math.min(1, dt * 10);
+
+  // Camera shake decay
+  shakeAmount = Math.max(0, shakeAmount - dt * 0.4);
+  camera.position.x = baseCamPos.x + (Math.random() - 0.5) * shakeAmount;
+  camera.position.y = baseCamPos.y + (Math.random() - 0.5) * shakeAmount * 0.5;
 
   if (state === 'playing') {
     gameTime += dt;
     timeLeft = Math.max(0, GAME_DURATION - gameTime);
     timeEl.textContent = Math.ceil(timeLeft);
 
-    // Spawn rate ramps up over time
     const t = Math.min(1, gameTime / GAME_DURATION);
     const spawnInterval = SPAWN_INITIAL + (SPAWN_MIN - SPAWN_INITIAL) * t;
     spawnAccum += dt;
@@ -552,15 +826,11 @@ function tick() {
   for (let i = fallingObjects.length - 1; i >= 0; i--) {
     const o = fallingObjects[i];
     o.userData.sway += dt * 2;
-
     o.position.y -= o.userData.fallSpeed * dt;
     o.position.x += Math.sin(o.userData.sway) * dt * 0.5;
+    o.rotateOnAxis(o.userData.spinAxis, o.userData.spinSpeed * dt);
 
-    // Rotate
-    const axis = o.userData.spinAxis;
-    o.rotateOnAxis(axis, o.userData.spinSpeed * dt);
-
-    // Gold halo scale pulse
+    // Halo pulse
     o.children.forEach((c) => {
       if (c.userData && c.userData.isHalo) {
         const s = 1 + Math.sin(gameTime * 6) * 0.18;
@@ -569,12 +839,11 @@ function tick() {
       }
     });
 
-    // Catch test — when object crosses basket plane
     const withinBasket =
-      o.position.y < 0.45 &&
+      o.position.y < 0.55 &&
       o.position.y > -0.35 &&
-      Math.abs(o.position.x - basket.position.x) < 0.95 &&
-      Math.abs(o.position.z - basket.position.z) < 0.9;
+      Math.abs(o.position.x - basket.position.x) < 1.05 &&
+      Math.abs(o.position.z - basket.position.z) < 1.0;
 
     if (withinBasket && state === 'playing') {
       handleCatch(o);
@@ -583,8 +852,11 @@ function tick() {
       continue;
     }
 
-    // Missed — fell past basket
     if (o.position.y < -1.5) {
+      if (o.userData.value > 0 && state === 'playing') {
+        // Missed a good fruit — reset combo
+        comboCount = 0;
+      }
       scene.remove(o);
       fallingObjects.splice(i, 1);
     }
@@ -593,23 +865,21 @@ function tick() {
   // Update particles
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
-    p.userData.vel.y -= 9 * dt; // gravity
+    p.userData.vel.y -= 9 * dt;
     p.position.x += p.userData.vel.x * dt;
     p.position.y += p.userData.vel.y * dt;
     p.position.z += p.userData.vel.z * dt;
     p.rotation.z += p.userData.spin * dt;
     p.userData.life -= dt;
-    if (p.material.opacity !== undefined) {
-      p.material.transparent = true;
-      p.material.opacity = Math.max(0, p.userData.life / 0.9);
-    }
-    if (p.userData.life <= 0) {
+    p.material.transparent = true;
+    p.material.opacity = Math.max(0, p.userData.life / 0.9);
+    if (p.userData.life <= 0 || p.position.y < -2) {
       scene.remove(p);
       particles.splice(i, 1);
     }
   }
 
-  // Basket idle breathing scale
+  // Basket gentle breathing scale
   const pulse = 1 + Math.sin(gameTime * 3) * 0.02;
   basket.scale.set(pulse, pulse, pulse);
 
@@ -618,16 +888,15 @@ function tick() {
 
 tick();
 
-// ────────────────────────────────────────────────────────────────
-// Resize handling
-// ────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────
+// Resize
+// ──────────────────────────────────────────────────────────────────
 addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 });
 
-// ready
 postToRN({ type: 'ready' });
 </script>
 </body>

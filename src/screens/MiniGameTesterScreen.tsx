@@ -102,9 +102,16 @@ export default function MiniGameTesterScreen() {
 
             <Section header={'Queue Mini-Games (3D)'.toUpperCase()}>
               <Cell
-                title="[3D]  Filament Native (New Arch)"
+                title="[3D]  Banana Basket"
                 cellStyle="Subtitle"
-                detail="PBR lighting, Metal, drag to orbit, tap to score"
+                detail="Despicable Me queue — wood scene, bananas/apples/oranges, combo multiplier"
+                accessory="DisclosureIndicator"
+                onPress={() => navigation.navigate('BananaBasket')}
+              />
+              <Cell
+                title="[3D]  Filament Native (proof)"
+                cellStyle="Subtitle"
+                detail="Native Metal + New Arch, rotating wireframe cube"
                 accessory="DisclosureIndicator"
                 onPress={() => navigation.navigate('QueueGame')}
               />
