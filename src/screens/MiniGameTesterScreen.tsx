@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -29,6 +30,7 @@ const GAMES: { type: GameType; label: string; emoji: string; desc: string }[] = 
 ];
 
 export default function MiniGameTesterScreen() {
+  const navigation = useNavigation<any>();
   const [activeGame, setActiveGame] = useState<GameType | null>(null);
   const [showPostWin, setShowPostWin] = useState(false);
   const [lastResult, setLastResult] = useState<string>('');
@@ -104,7 +106,7 @@ export default function MiniGameTesterScreen() {
                 cellStyle="Subtitle"
                 detail="Despicable Me queue — drag to catch falling bananas"
                 accessory="DisclosureIndicator"
-                onPress={() => (navigation as any).navigate('QueueGame')}
+                onPress={() => navigation.navigate('QueueGame')}
               />
             </Section>
 
