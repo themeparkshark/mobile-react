@@ -39,21 +39,28 @@ const SHARK_GLB = require('../../assets/models/shark-avatar.glb');
 function Scene({ onTapHero, rotationY }: { onTapHero: () => void; rotationY: number }) {
   return (
     <FilamentView style={StyleSheet.absoluteFill}>
-      {/* Pull camera back far enough to see pretty much any reasonable model */}
-      <Camera cameraPosition={[0, 1, 12]} cameraTarget={[0, 0, 0]} />
+      <Camera cameraPosition={[0, 1, 8]} cameraTarget={[0, 0, 0]} />
       <DefaultLight />
-      {/* Vivid skybox so we know the scene is rendering even if the model is off-screen or invisible */}
       <Skybox colorInHex="#1a3b6e" />
+
+      {/*
+        STAND-ALONE DEBUG CUBE at origin.
+        If this wireframe shows on the blue skybox, Filament is drawing
+        geometry correctly — which means the shark GLB load is our bug.
+        If it still doesn't show, something deeper in the render pipeline.
+      */}
+      <DebugBox halfExtent={[1, 1, 1]} rotate={[0, rotationY, 0]} />
+
+      {/* Separate model test — also at origin, with an explicit position. */}
       <Model
         source={SHARK_GLB}
         castShadow
         receiveShadow
+        position={[0, 0, 0]}
+        scale={[1, 1, 1]}
         rotate={[0, rotationY, 0]}
         onPress={onTapHero}
-      >
-        {/* Draws a wireframe around the model's actual bounding box */}
-        <DebugBox />
-      </Model>
+      />
     </FilamentView>
   );
 }
