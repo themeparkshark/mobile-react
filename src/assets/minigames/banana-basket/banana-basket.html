@@ -164,8 +164,9 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a0a04);
-scene.fog = new THREE.FogExp2(0x120604, 0.05);
+// Cool deep purple — Gru's lab. Fog tightens the depth, hides the far wall gracefully.
+scene.background = new THREE.Color(0x15102a);
+scene.fog = new THREE.FogExp2(0x0d0820, 0.045);
 
 // Camera — closer, slightly down, for drama
 const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 60);
@@ -198,60 +199,62 @@ warmRim.position.set(5, 1, -3);
 scene.add(warmRim);
 
 // ──────────────────────────────────────────────────────────────────
-// Procedural wood-plank texture (CanvasTexture)
+// Procedural lab-tile textures (CanvasTexture) — Gru-lab vibe without
+// IP infringement: pale tiled walls, purple trim, warning stripes.
 // ──────────────────────────────────────────────────────────────────
-function makeWoodTexture(w = 512, h = 512) {
+function makeLabTileTexture(w = 512, h = 512) {
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
 
-  // Base brown
-  ctx.fillStyle = '#4a2b18';
+  // Base: off-white lab wall
+  ctx.fillStyle = '#d8d3c8';
   ctx.fillRect(0, 0, w, h);
 
-  // Horizontal plank lines
-  const plankHeight = 64;
-  for (let y = 0; y < h; y += plankHeight) {
-    // Plank shading
-    const grad = ctx.createLinearGradient(0, y, 0, y + plankHeight);
-    const base = 50 + Math.floor(Math.random() * 25);
-    grad.addColorStop(0, `rgb(${base+10},${Math.floor((base+10)*0.55)},${Math.floor((base+10)*0.32)})`);
-    grad.addColorStop(0.5, `rgb(${base+22},${Math.floor((base+22)*0.55)},${Math.floor((base+22)*0.32)})`);
-    grad.addColorStop(1, `rgb(${base-5},${Math.floor((base-5)*0.55)},${Math.floor((base-5)*0.32)})`);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, y, w, plankHeight - 2);
-
-    // Wood grain lines
-    for (let g = 0; g < 16; g++) {
-      ctx.strokeStyle = `rgba(20, 10, 4, ${0.08 + Math.random() * 0.18})`;
-      ctx.lineWidth = 0.6 + Math.random() * 1.2;
-      ctx.beginPath();
-      const gy = y + 4 + Math.random() * (plankHeight - 8);
-      ctx.moveTo(0, gy);
-      for (let x = 0; x < w; x += 32) {
-        ctx.lineTo(x, gy + (Math.random() - 0.5) * 5);
-      }
-      ctx.stroke();
+  // Tile grid — 64x64 tiles
+  const tile = 64;
+  for (let y = 0; y < h; y += tile) {
+    for (let x = 0; x < w; x += tile) {
+      // Each tile a slightly varied off-white
+      const v = 210 + Math.floor(Math.random() * 20);
+      ctx.fillStyle = `rgb(${v},${v - 4},${v - 14})`;
+      ctx.fillRect(x + 1, y + 1, tile - 2, tile - 2);
+      // Subtle highlight corner
+      ctx.fillStyle = `rgba(255,255,255,${0.08 + Math.random() * 0.06})`;
+      ctx.fillRect(x + 2, y + 2, tile / 3, 3);
+      // Subtle shadow bottom
+      ctx.fillStyle = 'rgba(40,30,20,0.08)';
+      ctx.fillRect(x + 2, y + tile - 5, tile - 4, 2);
     }
+  }
 
-    // Knots (random)
-    if (Math.random() < 0.3) {
-      const kx = Math.random() * w;
-      const ky = y + plankHeight / 2;
-      const r = 6 + Math.random() * 8;
-      const kg = ctx.createRadialGradient(kx, ky, 0, kx, ky, r);
-      kg.addColorStop(0, 'rgba(18, 8, 3, 0.95)');
-      kg.addColorStop(0.6, 'rgba(30, 16, 8, 0.7)');
-      kg.addColorStop(1, 'rgba(60, 36, 20, 0)');
-      ctx.fillStyle = kg;
-      ctx.beginPath();
-      ctx.arc(kx, ky, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  // Grout lines
+  ctx.fillStyle = '#6a5a4a';
+  for (let y = 0; y < h; y += tile) ctx.fillRect(0, y, w, 2);
+  for (let x = 0; x < w; x += tile) ctx.fillRect(x, 0, 2, h);
 
-    // Plank separator (dark line)
-    ctx.fillStyle = 'rgba(8, 3, 1, 0.9)';
-    ctx.fillRect(0, y + plankHeight - 2, w, 2);
+  // Purple trim band across the middle (Gru's lair accent)
+  const trimY = Math.floor(h / 2) - 10;
+  ctx.fillStyle = '#3d2b5a';
+  ctx.fillRect(0, trimY, w, 20);
+  ctx.fillStyle = '#2a1d3d';
+  ctx.fillRect(0, trimY, w, 3);
+  ctx.fillRect(0, trimY + 17, w, 3);
+  // Yellow hazard dashes on the trim
+  for (let x = 0; x < w; x += 40) {
+    ctx.fillStyle = '#f4c93a';
+    ctx.fillRect(x + 6, trimY + 7, 16, 6);
+  }
+
+  // Occasional scuff / stain
+  for (let i = 0; i < 12; i++) {
+    const sx = Math.random() * w, sy = Math.random() * h;
+    const r = 3 + Math.random() * 10;
+    const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+    sg.addColorStop(0, 'rgba(40,30,20,0.22)');
+    sg.addColorStop(1, 'rgba(40,30,20,0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
   }
 
   const tex = new THREE.CanvasTexture(cv);
@@ -260,30 +263,168 @@ function makeWoodTexture(w = 512, h = 512) {
   return tex;
 }
 
-const woodTex = makeWoodTexture(512, 512);
-woodTex.repeat.set(3, 2);
+function makeLabFloorTexture(w = 512, h = 512) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+
+  // Dark metallic floor with diamond-plate pattern
+  ctx.fillStyle = '#2a2230';
+  ctx.fillRect(0, 0, w, h);
+
+  const tile = 48;
+  for (let y = 0; y < h; y += tile) {
+    for (let x = 0; x < w; x += tile) {
+      // Alternating tile shade
+      const dark = ((x / tile) + (y / tile)) % 2 === 0;
+      ctx.fillStyle = dark ? '#1e1828' : '#26202e';
+      ctx.fillRect(x, y, tile, tile);
+      // Diamond-plate diagonal highlights
+      ctx.strokeStyle = 'rgba(170,155,200,0.10)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 6, y + tile - 6);
+      ctx.lineTo(x + tile - 6, y + 6);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x + 6, y + 6);
+      ctx.lineTo(x + tile - 6, y + tile - 6);
+      ctx.stroke();
+    }
+  }
+  // Grout
+  ctx.fillStyle = '#0a0612';
+  for (let y = 0; y < h; y += tile) ctx.fillRect(0, y, w, 1);
+  for (let x = 0; x < w; x += tile) ctx.fillRect(x, 0, 1, h);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
 
 // ──────────────────────────────────────────────────────────────────
-// Environment: back wall + ground plane (both wood)
+// Environment: lab walls + metallic floor + beakers + pipes
 // ──────────────────────────────────────────────────────────────────
+const wallTex = makeLabTileTexture(512, 512);
+wallTex.repeat.set(4, 2);
 const backWall = new THREE.Mesh(
   new THREE.PlaneGeometry(40, 16),
-  new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85, metalness: 0.05 }),
+  new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.6, metalness: 0.05 }),
 );
 backWall.position.set(0, 4, -8);
 backWall.receiveShadow = true;
 scene.add(backWall);
 
-const groundTex = makeWoodTexture(512, 512);
-groundTex.repeat.set(4, 4);
+const floorTex = makeLabFloorTexture(512, 512);
+floorTex.repeat.set(6, 6);
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(40, 40),
-  new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.9, metalness: 0.05 }),
+  new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.45, metalness: 0.55 }),
 );
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.6;
 ground.receiveShadow = true;
 scene.add(ground);
+
+// Glass beakers on a back shelf — 6 beakers of varying colored liquids
+const shelfGroup = new THREE.Group();
+shelfGroup.position.set(0, 1.0, -7.3);
+scene.add(shelfGroup);
+
+// Metal shelf plank
+const shelfPlank = new THREE.Mesh(
+  new THREE.BoxGeometry(14, 0.15, 0.6),
+  new THREE.MeshStandardMaterial({ color: 0x4a4050, roughness: 0.4, metalness: 0.7 }),
+);
+shelfPlank.castShadow = true;
+shelfPlank.receiveShadow = true;
+shelfGroup.add(shelfPlank);
+
+const beakerColors = [0x5be8b1, 0xff66cc, 0x3ac0ff, 0xffd83a, 0xa050ff, 0x5bb12e];
+for (let i = 0; i < 6; i++) {
+  const x = (i - 2.5) * 2.2;
+  // Beaker glass (thin cylinder + slight neck)
+  const beaker = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.26, 0.28, 0.7, 16, 1, false),
+    new THREE.MeshPhysicalMaterial({
+      color: 0xeaf4ff, roughness: 0.05, metalness: 0,
+      transmission: 0.9, thickness: 0.2, transparent: true, opacity: 0.35,
+    }),
+  );
+  beaker.position.set(x, 0.45, 0);
+  shelfGroup.add(beaker);
+  // Liquid inside — shorter cylinder, emissive-ish
+  const liquid = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.24, 0.26, 0.42, 16),
+    new THREE.MeshStandardMaterial({
+      color: beakerColors[i],
+      emissive: beakerColors[i],
+      emissiveIntensity: 0.55,
+      roughness: 0.3,
+    }),
+  );
+  liquid.position.set(x, 0.3, 0);
+  shelfGroup.add(liquid);
+}
+
+// Ceiling pipes — chrome cylinders crossing the scene
+for (let i = 0; i < 3; i++) {
+  const pipe = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.18, 18, 12),
+    new THREE.MeshStandardMaterial({ color: 0xb8b8c4, roughness: 0.25, metalness: 0.85 }),
+  );
+  pipe.rotation.z = Math.PI / 2;
+  pipe.position.set(0, 6.2 + i * 0.5, -6 + i * 0.8);
+  pipe.castShadow = true;
+  scene.add(pipe);
+  // Joint rings along the pipe
+  for (let j = -3; j <= 3; j += 2) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.22, 0.05, 8, 16),
+      new THREE.MeshStandardMaterial({ color: 0x3d2b5a, roughness: 0.4, metalness: 0.7 }),
+    );
+    ring.rotation.y = Math.PI / 2;
+    ring.position.set(j * 1.5, 6.2 + i * 0.5, -6 + i * 0.8);
+    scene.add(ring);
+  }
+}
+
+// Warning sign on wall — yellow/black diagonal stripes
+const warnCv = document.createElement('canvas');
+warnCv.width = 256; warnCv.height = 128;
+const wctx = warnCv.getContext('2d');
+wctx.fillStyle = '#222';
+wctx.fillRect(0, 0, 256, 128);
+wctx.save();
+wctx.translate(128, 64);
+wctx.rotate(Math.PI / 8);
+for (let s = -200; s < 200; s += 24) {
+  wctx.fillStyle = s % 48 === 0 ? '#ffcc00' : '#111';
+  wctx.fillRect(s, -120, 18, 240);
+}
+wctx.restore();
+// "CAUTION" text
+wctx.fillStyle = '#ffcc00';
+wctx.font = 'bold 28px monospace';
+wctx.textAlign = 'center';
+wctx.fillText('CAUTION', 128, 76);
+const warnTex = new THREE.CanvasTexture(warnCv);
+warnTex.colorSpace = THREE.SRGBColorSpace;
+const warnSign = new THREE.Mesh(
+  new THREE.PlaneGeometry(2, 1),
+  new THREE.MeshStandardMaterial({ map: warnTex, roughness: 0.7, metalness: 0.1 }),
+);
+warnSign.position.set(-5, 3.8, -7.96);
+scene.add(warnSign);
+
+// Purple accent spotlights on the wall
+const purpleSpotL = new THREE.PointLight(0xa050ff, 3, 10, 2);
+purpleSpotL.position.set(-5, 3, -5);
+scene.add(purpleSpotL);
+const purpleSpotR = new THREE.PointLight(0xa050ff, 3, 10, 2);
+purpleSpotR.position.set(5, 3, -5);
+scene.add(purpleSpotR);
 
 // ──────────────────────────────────────────────────────────────────
 // Player basket
@@ -552,7 +693,7 @@ function makeOrange() {
   return g;
 }
 
-// --- ROTTEN FRUIT (penalty): muddy brown sphere with dark spots ---
+// --- ROTTEN FRUIT (small penalty): muddy brown sphere with dark spots ---
 function makeRotten() {
   const g = new THREE.Group();
   const body = new THREE.Mesh(
@@ -576,6 +717,58 @@ function makeRotten() {
   return g;
 }
 
+// --- FART CLOUD (big penalty): wispy green/yellow cloud of overlapping
+// semi-transparent spheres with a subtle pulsing glow. Pure comedy penalty.
+function makeFartCloud() {
+  const g = new THREE.Group();
+  // 6 overlapping puffs for a fluffy cloud silhouette
+  const palette = [0xb5d14b, 0x9bc13d, 0xa0c13d, 0xc8d880, 0x8bb33a, 0xadd16f];
+  for (let i = 0; i < 6; i++) {
+    const r = 0.18 + Math.random() * 0.12;
+    const puff = new THREE.Mesh(
+      new THREE.SphereGeometry(r, 12, 10),
+      new THREE.MeshStandardMaterial({
+        color: palette[i],
+        emissive: palette[i],
+        emissiveIntensity: 0.35,
+        roughness: 0.85,
+        transparent: true,
+        opacity: 0.82,
+      }),
+    );
+    const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+    puff.position.set(
+      Math.cos(a) * 0.22,
+      (Math.random() - 0.5) * 0.22,
+      Math.sin(a) * 0.22,
+    );
+    puff.userData.offset = Math.random() * Math.PI * 2;
+    puff.userData.baseR = r;
+    g.add(puff);
+  }
+  // Stink lines — 3 tiny upward-pointing cones above the cloud
+  for (let i = 0; i < 3; i++) {
+    const line = new THREE.Mesh(
+      new THREE.ConeGeometry(0.025, 0.14, 6),
+      new THREE.MeshStandardMaterial({
+        color: 0xa0b840,
+        emissive: 0xa0b840,
+        emissiveIntensity: 0.4,
+        transparent: true,
+        opacity: 0.7,
+      }),
+    );
+    line.position.set((i - 1) * 0.14, 0.34 + Math.random() * 0.08, 0);
+    line.userData.wiggle = Math.random() * Math.PI * 2;
+    line.userData.isStinkLine = true;
+    g.add(line);
+  }
+  g.userData.kind = 'fart';
+  g.userData.splashColor = 0xa0c13d;
+  g.userData.isFart = true; // flag for per-frame wobble
+  return g;
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Object spawner with weighted variants
 // ──────────────────────────────────────────────────────────────────
@@ -584,24 +777,29 @@ function spawnObject() {
   let obj, variant, value;
   if (roll < 0.06) {
     obj = makeBanana('gold'); variant = 'gold'; value = 5;
-  } else if (roll < 0.18) {
+  } else if (roll < 0.16) {
+    // Fart cloud — the signature penalty. Bigger hit than rotten.
+    obj = makeFartCloud(); variant = 'fart'; value = -3;
+  } else if (roll < 0.24) {
     obj = makeRotten(); variant = 'rotten'; value = -2;
-  } else if (roll < 0.42) {
+  } else if (roll < 0.46) {
     obj = makeApple(); variant = 'apple'; value = 2;
-  } else if (roll < 0.62) {
+  } else if (roll < 0.66) {
     obj = makeOrange(); variant = 'orange'; value = 2;
   } else {
     obj = makeBanana('common'); variant = 'common'; value = 1;
   }
 
-  const x = (Math.random() * 2 - 1) * 3.2;
-  const z = 1.0 + Math.random() * 0.4;
+  // Narrowed spawn X so every object stays reachable by the basket.
+  const x = (Math.random() * 2 - 1) * 2.6;
+  const z = 1.0 + Math.random() * 0.3;
   obj.position.set(x, 9.0, z);
   obj.userData.variant = variant;
   obj.userData.value = value;
   obj.userData.spinAxis = new THREE.Vector3(Math.random() - 0.5, 1, Math.random() - 0.5).normalize();
-  obj.userData.spinSpeed = 2 + Math.random() * 2.5;
-  obj.userData.fallSpeed = 5 + Math.random() * 2;
+  // Fart cloud falls slower and spins less — eerie drift
+  obj.userData.spinSpeed = variant === 'fart' ? 0.8 : (2 + Math.random() * 2.5);
+  obj.userData.fallSpeed = variant === 'fart' ? 3.4 : (5 + Math.random() * 2);
   obj.userData.sway = Math.random() * Math.PI * 2;
   scene.add(obj);
   fallingObjects.push(obj);
@@ -770,6 +968,7 @@ function handleCatch(obj) {
   let klass;
   let fx;
   if (variant === 'gold') { klass = 'gold'; fx = '+' + delta; }
+  else if (variant === 'fart') { klass = 'bad'; fx = 'PEE-YEW ' + delta; }
   else if (variant === 'rotten') { klass = 'bad'; fx = delta.toString(); }
   else if (variant === 'apple') { klass = 'red'; fx = '+' + delta; }
   else if (variant === 'orange') { klass = 'orange'; fx = '+' + delta; }
@@ -830,12 +1029,21 @@ function tick() {
     o.position.x += Math.sin(o.userData.sway) * dt * 0.5;
     o.rotateOnAxis(o.userData.spinAxis, o.userData.spinSpeed * dt);
 
-    // Halo pulse
+    // Halo pulse + fart-cloud wobble + stink-line wiggle
     o.children.forEach((c) => {
       if (c.userData && c.userData.isHalo) {
         const s = 1 + Math.sin(gameTime * 6) * 0.18;
         c.scale.set(s, s, 1);
         c.rotation.z += dt * 1.2;
+      }
+      if (o.userData.isFart && c.userData && c.userData.baseR != null) {
+        const pulse = 1 + Math.sin(gameTime * 4 + c.userData.offset) * 0.08;
+        c.scale.set(pulse, pulse, pulse);
+      }
+      if (o.userData.isFart && c.userData && c.userData.isStinkLine) {
+        c.userData.wiggle += dt * 4;
+        c.position.y += Math.sin(c.userData.wiggle) * dt * 0.1;
+        c.rotation.z = Math.sin(c.userData.wiggle) * 0.25;
       }
     });
 
