@@ -52,6 +52,7 @@ import StampBookScreen from './screens/StampBookScreen';
 import CoinShelfScreen from './screens/CoinShelfScreen';
 import MiniGameTesterScreen from './screens/MiniGameTesterScreen';
 import PostWinRewardsPreviewScreen from './screens/PostWinRewardsPreviewScreen';
+import QueueGameScreen from './screens/QueueGameScreen';
 import CommunityCenterScreen from './screens/CommunityCenterScreen';
 import SharkParkScreen from './screens/SharkParkScreen';
 // Gym Battle Screens
@@ -280,6 +281,11 @@ export default function App() {
         <Stack.Screen name="RideBatchConfirm" component={RideBatchConfirmScreen} options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />
         <Stack.Screen name="PostWinRewardsPreview" component={PostWinRewardsPreviewScreen} />
+        <Stack.Screen
+          name="QueueGame"
+          component={QueueGameScreen}
+          options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+        />
 
       </Stack.Navigator>
       <RideDetectionOverlay />
