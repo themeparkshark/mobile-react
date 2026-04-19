@@ -78,6 +78,7 @@
     "react-native-tableview-simple": "^4.3.1",
     "react-native-view-shot": "~4.0.3",
     "react-native-web": "~0.19.13",
+    "react-native-webview": "13.12.5",
     "rn-tooltip": "^3.0.3",
     "rooks": "^7.4.3",
     "sprintf-js": "^1.1.2",
