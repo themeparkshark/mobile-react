@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Banana Basket</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --yellow:#ffd83a;
+    --yellow-deep:#b38a0a;
+    --orange:#ff7a2a;
+    --pink:#ff4f7a;
+    --cream:#fff7e0;
+    --navy:#2a1a0a;
+    --brown:#6a4824;
+    --lab:#2d1a09;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;overflow:hidden;background:#1a0e03;font-family:'Press Start 2P',system-ui,sans-serif;color:var(--cream);-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;touch-action:none;}
+  body{position:fixed;inset:0;}
+  canvas{display:block;position:absolute;inset:0;}
+
+  #vignette{position:absolute;inset:0;pointer-events:none;z-index:5;background:radial-gradient(ellipse at center, transparent 50%, rgba(10,4,0,0.65) 100%);}
+  #grade{position:absolute;inset:0;pointer-events:none;z-index:6;background:linear-gradient(180deg, rgba(255,216,58,0.06) 0%, transparent 50%, rgba(42,26,10,0.2) 100%);mix-blend-mode:soft-light;}
+  #grain{position:absolute;inset:0;pointer-events:none;z-index:7;opacity:0.04;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.9  0 0 0 0 0.88  0 0 0 0 0.6  0 0 0 1 0'/></filter><rect width='200' height='200' filter='url(%23n)'/></svg>");}
+
+  #ui{position:absolute;inset:0;pointer-events:none;z-index:10;}
+
+  /* Score HUD */
+  #hud{
+    position:absolute;top:calc(3.2vh + env(safe-area-inset-top));left:0;right:0;
+    display:flex;justify-content:space-between;align-items:flex-start;
+    padding:0 calc(4.4vw + env(safe-area-inset-right)) 0 calc(4.4vw + env(safe-area-inset-left));
+    opacity:0;transition:opacity .35s ease;
+  }
+  #hud.show{opacity:1;}
+  #hud .col{text-align:center;}
+  #hud .col.right{text-align:right;}
+  #hud .lbl{font-size:clamp(9px,0.95vw,12px);color:var(--cream);letter-spacing:.35em;text-shadow:0 2px 0 rgba(10,4,0,.75);margin-bottom:.6em;}
+  #hud .num{font-size:clamp(36px,8vw,72px);color:var(--yellow);line-height:1;text-shadow:3px 3px 0 var(--orange),6px 6px 0 rgba(10,4,0,.65);}
+  #hud .num.time{color:var(--cream);text-shadow:3px 3px 0 var(--pink),6px 6px 0 rgba(10,4,0,.65);}
+
+  /* Start screen */
+  #start{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2em;pointer-events:auto;cursor:pointer;padding:0 6vw;text-align:center;
+  }
+  #start .title{
+    font-size:clamp(32px,9vw,80px);color:var(--yellow);letter-spacing:.08em;line-height:1.1;
+    text-shadow:4px 4px 0 var(--orange),8px 8px 0 rgba(10,4,0,.7);
+  }
+  #start .title span{display:block;}
+  #start .title .t2{color:var(--cream);margin-top:.2em;}
+  #start .sub{font-size:clamp(10px,2.3vw,14px);color:var(--cream);letter-spacing:.3em;opacity:.9;}
+  #start .cta{
+    margin-top:1em;padding:1.1em 2.2em;background:var(--yellow);color:var(--lab);
+    font-size:clamp(14px,3.5vw,22px);letter-spacing:.25em;border:none;border-radius:0;
+    box-shadow:0 6px 0 var(--orange),0 12px 0 rgba(10,4,0,.7);
+    transform:translateY(0);transition:transform .1s ease,box-shadow .1s ease;
+    font-family:inherit;cursor:pointer;
+  }
+  #start .cta:active{transform:translateY(4px);box-shadow:0 2px 0 var(--orange),0 6px 0 rgba(10,4,0,.7);}
+
+  /* Game over screen */
+  #gameover{
+    position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    gap:1.6em;pointer-events:auto;padding:0 6vw;text-align:center;
+    background:rgba(10,4,0,0.5);
+  }
+  #gameover.show{display:flex;}
+  #gameover .bigscore{
+    font-size:clamp(60px,18vw,160px);color:var(--yellow);line-height:1;
+    text-shadow:4px 4px 0 var(--orange),8px 8px 0 rgba(10,4,0,.7);
+  }
+  #gameover .lbl{font-size:clamp(10px,2.2vw,14px);color:var(--cream);letter-spacing:.35em;}
+  #gameover .best{font-size:clamp(12px,2.8vw,18px);color:var(--yellow);letter-spacing:.25em;}
+  #gameover .best.newbest{color:var(--pink);animation:pulse 0.8s ease-in-out infinite alternate;}
+  @keyframes pulse{from{transform:scale(1);}to{transform:scale(1.08);}}
+
+  /* Stream of +1/+5 floaties */
+  .float{position:absolute;font-size:clamp(18px,4vw,28px);color:var(--yellow);text-shadow:2px 2px 0 var(--orange),4px 4px 0 rgba(10,4,0,.7);pointer-events:none;animation:rise 0.9s ease-out forwards;z-index:12;}
+  .float.gold{color:#ffb300;}
+  .float.bad{color:var(--pink);}
+  @keyframes rise{0%{opacity:0;transform:translateY(0) scale(0.5);}15%{opacity:1;transform:translateY(-20px) scale(1.2);}100%{opacity:0;transform:translateY(-80px) scale(0.8);}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="vignette"></div>
+<div id="grade"></div>
+<div id="grain"></div>
+<div id="ui">
+  <div id="hud">
+    <div class="col"><div class="lbl">SCORE</div><div class="num" id="score">0</div></div>
+    <div class="col right"><div class="lbl">TIME</div><div class="num time" id="time">60</div></div>
+  </div>
+  <div id="start">
+    <div class="title"><span>BANANA</span><span class="t2">BASKET</span></div>
+    <div class="sub">DRAG LEFT / RIGHT TO CATCH</div>
+    <button class="cta">TAP TO START</button>
+  </div>
+  <div id="gameover">
+    <div class="lbl">FINAL SCORE</div>
+    <div class="bigscore" id="finalScore">0</div>
+    <div class="best" id="bestScore">BEST 0</div>
+    <button class="cta" id="playAgain" style="margin-top:1em;">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ────────────────────────────────────────────────────────────────
+// Bridge to React Native host
+// ────────────────────────────────────────────────────────────────
+function postToRN(msg){
+  if(window.ReactNativeWebView && window.ReactNativeWebView.postMessage){
+    window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+// DOM refs
+// ────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const scoreEl = document.getElementById('score');
+const timeEl = document.getElementById('time');
+const hud = document.getElementById('hud');
+const startScreen = document.getElementById('start');
+const gameOverScreen = document.getElementById('gameover');
+const finalScoreEl = document.getElementById('finalScore');
+const bestScoreEl = document.getElementById('bestScore');
+const playAgainBtn = document.getElementById('playAgain');
+
+// ────────────────────────────────────────────────────────────────
+// Renderer / Scene / Camera
+// ────────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a0e03);
+scene.fog = new THREE.FogExp2(0x1a0e03, 0.04);
+
+// Camera sits slightly above floor, angled down slightly.
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 60);
+camera.position.set(0, 2.2, 8.5);
+camera.lookAt(0, 1.2, 0);
+
+// ────────────────────────────────────────────────────────────────
+// Lighting — lab ambience: warm key, cool fill, ambient wash
+// ────────────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0xffe1a0, 0.55));
+scene.add(new THREE.HemisphereLight(0xffd089, 0x402010, 0.45));
+
+const key = new THREE.DirectionalLight(0xffe7b0, 2.2);
+key.position.set(3.5, 9, 4);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 25;
+key.shadow.camera.left = -8;
+key.shadow.camera.right = 8;
+key.shadow.camera.top = 10;
+key.shadow.camera.bottom = -4;
+key.shadow.bias = -0.0008;
+scene.add(key);
+
+const rim = new THREE.DirectionalLight(0x7acfff, 0.55);
+rim.position.set(-4, 3, 2);
+scene.add(rim);
+
+// ────────────────────────────────────────────────────────────────
+// Factory environment: floor, back wall, conveyor belts, ceiling lights
+// ────────────────────────────────────────────────────────────────
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0x3c2414, roughness: 0.9, metalness: 0.1,
+});
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.5;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Tiled tile grid overlay on floor (subtle)
+for(let i=-6;i<=6;i++){
+  for(let j=-2;j<=4;j++){
+    if((i+j)%2===0) continue;
+    const tile = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.98, 0.98),
+      new THREE.MeshStandardMaterial({color:0x2d1909, roughness:1, metalness:0}),
+    );
+    tile.rotation.x = -Math.PI / 2;
+    tile.position.set(i, -0.499, j - 1);
+    tile.receiveShadow = true;
+    scene.add(tile);
+  }
+}
+
+// Back wall — yellow-brown with panels
+const wallMat = new THREE.MeshStandardMaterial({color: 0x8a5a1e, roughness: 0.85, metalness: 0.2});
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(40, 16), wallMat);
+backWall.position.set(0, 4, -8);
+backWall.receiveShadow = true;
+scene.add(backWall);
+
+// Wall panels — darker brown squares
+for(let x=-3;x<=3;x++){
+  const panel = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.5, 2.2),
+    new THREE.MeshStandardMaterial({color:0x5a3a14, roughness:0.9, metalness:0.15}),
+  );
+  panel.position.set(x*1.7, 3.2, -7.98);
+  scene.add(panel);
+}
+
+// Ceiling light boxes
+for(let i=-1;i<=1;i++){
+  const box = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.25, 0.8),
+    new THREE.MeshStandardMaterial({color:0xffc050, emissive:0xffcc66, emissiveIntensity:0.8, roughness:0.4}),
+  );
+  box.position.set(i*3, 7.2, -4);
+  scene.add(box);
+}
+
+// Conveyor rails — cylindrical bars on back wall
+for(let y=2;y<=5;y+=1.3){
+  const rail = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.12, 14, 12),
+    new THREE.MeshStandardMaterial({color:0x2a2a2a, roughness:0.3, metalness:0.9}),
+  );
+  rail.rotation.z = Math.PI / 2;
+  rail.position.set(0, y, -7.6);
+  rail.castShadow = true;
+  scene.add(rail);
+}
+
+// ────────────────────────────────────────────────────────────────
+// Player basket — yellow bucket with rim
+// ────────────────────────────────────────────────────────────────
+const basket = new THREE.Group();
+const bodyMat = new THREE.MeshStandardMaterial({color: 0xffd83a, roughness: 0.55, metalness: 0.1});
+const rimMat  = new THREE.MeshStandardMaterial({color: 0xd09808, roughness: 0.45, metalness: 0.3});
+
+const basketBody = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.85, 0.60, 0.85, 20, 1, true),
+  bodyMat,
+);
+basketBody.castShadow = true;
+basket.add(basketBody);
+
+const basketRim = new THREE.Mesh(
+  new THREE.TorusGeometry(0.85, 0.08, 10, 24),
+  rimMat,
+);
+basketRim.rotation.x = Math.PI / 2;
+basketRim.position.y = 0.42;
+basket.add(basketRim);
+
+const basketBottom = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.60, 0.60, 0.08, 20),
+  rimMat,
+);
+basketBottom.position.y = -0.42;
+basket.add(basketBottom);
+
+// Face on the basket — two eyes and a smile
+const eyeMat = new THREE.MeshStandardMaterial({color:0x1a0e03, roughness:0.5});
+const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), eyeMat);
+eyeL.position.set(-0.22, 0.08, 0.72);
+basket.add(eyeL);
+const eyeR = eyeL.clone(); eyeR.position.x = 0.22; basket.add(eyeR);
+const smile = new THREE.Mesh(
+  new THREE.TorusGeometry(0.14, 0.03, 8, 16, Math.PI),
+  eyeMat,
+);
+smile.rotation.z = Math.PI;
+smile.position.set(0, -0.1, 0.72);
+basket.add(smile);
+
+basket.position.set(0, 0.05, 1.5);
+scene.add(basket);
+
+// ────────────────────────────────────────────────────────────────
+// Banana factory: procedural curved bananas
+// Variants: common (yellow), gold (bonus), rotten (penalty)
+// ────────────────────────────────────────────────────────────────
+function makeBanana(variant) {
+  const g = new THREE.Group();
+
+  const colors = {
+    common: { body: 0xffdc3c, tip: 0x6e4620, emissive: 0x000000 },
+    gold:   { body: 0xffd700, tip: 0xe49800, emissive: 0xffa500 },
+    rotten: { body: 0x6a4e18, tip: 0x3a2a0a, emissive: 0x000000 },
+  }[variant] || { body: 0xffdc3c, tip: 0x6e4620, emissive: 0x000000 };
+
+  // Curved banana shape via torus segment
+  const bodyGeom = new THREE.TorusGeometry(0.28, 0.14, 10, 18, Math.PI * 0.8);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: colors.body, roughness: 0.35, metalness: 0.1,
+    emissive: colors.emissive,
+    emissiveIntensity: variant === 'gold' ? 0.45 : 0,
+  });
+  const body = new THREE.Mesh(bodyGeom, bodyMat);
+  body.castShadow = true;
+  g.add(body);
+
+  // Tip stem
+  const tip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.045, 0.08, 0.2, 8),
+    new THREE.MeshStandardMaterial({color: colors.tip, roughness: 0.9}),
+  );
+  tip.position.set(0.26, 0.26, 0);
+  tip.rotation.z = -Math.PI / 4;
+  g.add(tip);
+
+  // Gold halo ring for bonus bananas
+  if (variant === 'gold') {
+    const halo = new THREE.Mesh(
+      new THREE.RingGeometry(0.38, 0.55, 20),
+      new THREE.MeshBasicMaterial({color: 0xffff80, transparent: true, opacity: 0.45, side: THREE.DoubleSide}),
+    );
+    halo.userData.isHalo = true;
+    g.add(halo);
+  }
+
+  g.userData.variant = variant;
+  g.userData.spinAxis = new THREE.Vector3(Math.random()-0.5, 1, Math.random()-0.5).normalize();
+  g.userData.spinSpeed = 1.5 + Math.random() * 2;
+  g.userData.fallSpeed = variant === 'gold' ? 6.5 : (variant === 'rotten' ? 4.5 : 5.2);
+  g.userData.sway = Math.random() * Math.PI * 2;
+  return g;
+}
+
+// ────────────────────────────────────────────────────────────────
+// Particle burst pool (caught bananas emit particles)
+// ────────────────────────────────────────────────────────────────
+const particles = [];
+
+function emitBurst(x, y, z, color, count = 14) {
+  for (let i = 0; i < count; i++) {
+    const p = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05 + Math.random()*0.05, 6, 6),
+      new THREE.MeshStandardMaterial({color, emissive: color, emissiveIntensity: 0.6}),
+    );
+    p.position.set(x, y, z);
+    const dir = new THREE.Vector3(
+      (Math.random()-0.5) * 4,
+      Math.random() * 3 + 1,
+      (Math.random()-0.5) * 2,
+    );
+    p.userData = { vel: dir, life: 0.9, spin: Math.random() * 4 - 2 };
+    scene.add(p);
+    particles.push(p);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+// Falling object pool
+// ────────────────────────────────────────────────────────────────
+const fallingObjects = [];
+
+function spawnObject() {
+  const roll = Math.random();
+  let variant;
+  if (roll < 0.08) variant = 'gold';
+  else if (roll < 0.22) variant = 'rotten';
+  else variant = 'common';
+
+  const obj = makeBanana(variant);
+  const x = (Math.random() * 2 - 1) * 3.2;
+  const z = 1.0 + Math.random() * 0.4;
+  obj.position.set(x, 8.5, z);
+  scene.add(obj);
+  fallingObjects.push(obj);
+}
+
+// ────────────────────────────────────────────────────────────────
+// Floating +N score indicators (HTML-space)
+// ────────────────────────────────────────────────────────────────
+function showFloater(text, screenX, screenY, klass = '') {
+  const el = document.createElement('div');
+  el.className = 'float ' + klass;
+  el.textContent = text;
+  el.style.left = (screenX - 20) + 'px';
+  el.style.top  = (screenY - 20) + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 900);
+}
+
+function worldToScreen(pos) {
+  const v = pos.clone().project(camera);
+  return {
+    x: (v.x * 0.5 + 0.5) * innerWidth,
+    y: (-v.y * 0.5 + 0.5) * innerHeight,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────
+// Game state
+// ────────────────────────────────────────────────────────────────
+const GAME_DURATION = 60;      // seconds
+const SPAWN_INITIAL = 0.85;     // seconds between spawns at start
+const SPAWN_MIN     = 0.28;     // at end of game
+
+let state = 'start';  // 'start' | 'playing' | 'gameover'
+let score = 0;
+let best = parseInt(localStorage.getItem('bananaBest') || '0', 10);
+let timeLeft = GAME_DURATION;
+let spawnAccum = 0;
+let gameTime = 0;
+
+// ────────────────────────────────────────────────────────────────
+// Input: drag anywhere to move basket horizontally (follows finger X)
+// ────────────────────────────────────────────────────────────────
+let targetX = 0;
+
+function ndcToWorldX(clientX) {
+  // Map finger X to world X range (−3.2 … 3.2)
+  const nx = (clientX / innerWidth) * 2 - 1; // −1 … 1
+  return nx * 3.4;
+}
+canvas.addEventListener('touchmove', (e) => {
+  if (state !== 'playing') return;
+  e.preventDefault();
+  if (e.touches && e.touches.length > 0) {
+    targetX = ndcToWorldX(e.touches[0].clientX);
+  }
+}, { passive: false });
+canvas.addEventListener('touchstart', (e) => {
+  if (state !== 'playing') return;
+  if (e.touches && e.touches.length > 0) {
+    targetX = ndcToWorldX(e.touches[0].clientX);
+  }
+}, { passive: true });
+
+// ────────────────────────────────────────────────────────────────
+// Start / restart flow
+// ────────────────────────────────────────────────────────────────
+function startGame() {
+  state = 'playing';
+  score = 0;
+  timeLeft = GAME_DURATION;
+  spawnAccum = 0;
+  gameTime = 0;
+  targetX = basket.position.x;
+  scoreEl.textContent = '0';
+  timeEl.textContent = GAME_DURATION;
+  startScreen.style.display = 'none';
+  gameOverScreen.classList.remove('show');
+  hud.classList.add('show');
+  // Clear any leftover falling objects
+  for (const o of fallingObjects) scene.remove(o);
+  fallingObjects.length = 0;
+  postToRN({ type: 'start' });
+}
+
+function endGame() {
+  state = 'gameover';
+  const isNewBest = score > best;
+  if (isNewBest) {
+    best = score;
+    try { localStorage.setItem('bananaBest', String(best)); } catch(e){}
+  }
+  finalScoreEl.textContent = score;
+  bestScoreEl.textContent = 'BEST ' + best;
+  bestScoreEl.classList.toggle('newbest', isNewBest);
+  gameOverScreen.classList.add('show');
+  hud.classList.remove('show');
+  postToRN({ type: 'gameover', score, best, isNewBest });
+}
+
+startScreen.addEventListener('click', startGame);
+playAgainBtn.addEventListener('click', (e) => { e.stopPropagation(); startGame(); });
+
+// ────────────────────────────────────────────────────────────────
+// Scoring + catch feedback
+// ────────────────────────────────────────────────────────────────
+function handleCatch(obj) {
+  const variant = obj.userData.variant;
+  let delta, color, klass, fx;
+  if (variant === 'gold') { delta = 5; color = 0xffd700; klass = 'gold'; fx = '+5'; }
+  else if (variant === 'rotten') { delta = -2; color = 0xff4f7a; klass = 'bad'; fx = '-2'; }
+  else { delta = 1; color = 0xffdc3c; klass = ''; fx = '+1'; }
+
+  score = Math.max(0, score + delta);
+  scoreEl.textContent = score;
+
+  emitBurst(obj.position.x, obj.position.y, obj.position.z, color, variant === 'gold' ? 22 : 12);
+
+  const s = worldToScreen(obj.position);
+  showFloater(fx, s.x, s.y, klass);
+
+  postToRN({ type: 'catch', variant, score });
+}
+
+// ────────────────────────────────────────────────────────────────
+// Main loop
+// ────────────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 1/30);
+
+  // Basket follows finger with smoothed lerp (responsive but not jittery)
+  basket.position.x += (targetX - basket.position.x) * Math.min(1, dt * 12);
+  basket.position.x = Math.max(-3.5, Math.min(3.5, basket.position.x));
+  // Basket tilts toward motion direction
+  const vx = (targetX - basket.position.x);
+  basket.rotation.z += (-vx * 0.4 - basket.rotation.z) * Math.min(1, dt * 10);
+
+  if (state === 'playing') {
+    gameTime += dt;
+    timeLeft = Math.max(0, GAME_DURATION - gameTime);
+    timeEl.textContent = Math.ceil(timeLeft);
+
+    // Spawn rate ramps up over time
+    const t = Math.min(1, gameTime / GAME_DURATION);
+    const spawnInterval = SPAWN_INITIAL + (SPAWN_MIN - SPAWN_INITIAL) * t;
+    spawnAccum += dt;
+    while (spawnAccum >= spawnInterval) {
+      spawnAccum -= spawnInterval;
+      spawnObject();
+    }
+
+    if (timeLeft <= 0) endGame();
+  }
+
+  // Update falling objects
+  for (let i = fallingObjects.length - 1; i >= 0; i--) {
+    const o = fallingObjects[i];
+    o.userData.sway += dt * 2;
+
+    o.position.y -= o.userData.fallSpeed * dt;
+    o.position.x += Math.sin(o.userData.sway) * dt * 0.5;
+
+    // Rotate
+    const axis = o.userData.spinAxis;
+    o.rotateOnAxis(axis, o.userData.spinSpeed * dt);
+
+    // Gold halo scale pulse
+    o.children.forEach((c) => {
+      if (c.userData && c.userData.isHalo) {
+        const s = 1 + Math.sin(gameTime * 6) * 0.18;
+        c.scale.set(s, s, 1);
+        c.rotation.z += dt * 1.2;
+      }
+    });
+
+    // Catch test — when object crosses basket plane
+    const withinBasket =
+      o.position.y < 0.45 &&
+      o.position.y > -0.35 &&
+      Math.abs(o.position.x - basket.position.x) < 0.95 &&
+      Math.abs(o.position.z - basket.position.z) < 0.9;
+
+    if (withinBasket && state === 'playing') {
+      handleCatch(o);
+      scene.remove(o);
+      fallingObjects.splice(i, 1);
+      continue;
+    }
+
+    // Missed — fell past basket
+    if (o.position.y < -1.5) {
+      scene.remove(o);
+      fallingObjects.splice(i, 1);
+    }
+  }
+
+  // Update particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.userData.vel.y -= 9 * dt; // gravity
+    p.position.x += p.userData.vel.x * dt;
+    p.position.y += p.userData.vel.y * dt;
+    p.position.z += p.userData.vel.z * dt;
+    p.rotation.z += p.userData.spin * dt;
+    p.userData.life -= dt;
+    if (p.material.opacity !== undefined) {
+      p.material.transparent = true;
+      p.material.opacity = Math.max(0, p.userData.life / 0.9);
+    }
+    if (p.userData.life <= 0) {
+      scene.remove(p);
+      particles.splice(i, 1);
+    }
+  }
+
+  // Basket idle breathing scale
+  const pulse = 1 + Math.sin(gameTime * 3) * 0.02;
+  basket.scale.set(pulse, pulse, pulse);
+
+  renderer.render(scene, camera);
+}
+
+tick();
+
+// ────────────────────────────────────────────────────────────────
+// Resize handling
+// ────────────────────────────────────────────────────────────────
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// ready
+postToRN({ type: 'ready' });
+</script>
+</body>
+</html>

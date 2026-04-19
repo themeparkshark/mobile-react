@@ -98,11 +98,11 @@ export default function MiniGameTesterScreen() {
               />
             </Section>
 
-            <Section header={'Queue Mini-Games (3D — Filament)'.toUpperCase()}>
+            <Section header={'Queue Mini-Games (3D)'.toUpperCase()}>
               <Cell
-                title="[3D]  Queue Game — Smoke Test"
+                title="[3D]  Banana Basket"
                 cellStyle="Subtitle"
-                detail="Filament + GLB shark, drag to orbit, tap to score"
+                detail="Despicable Me queue — drag to catch falling bananas"
                 accessory="DisclosureIndicator"
                 onPress={() => (navigation as any).navigate('QueueGame')}
               />
