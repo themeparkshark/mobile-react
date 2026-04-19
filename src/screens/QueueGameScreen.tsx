@@ -44,23 +44,13 @@ function Scene({ onTapHero, rotationY }: { onTapHero: () => void; rotationY: num
       <Skybox colorInHex="#1a3b6e" />
 
       {/*
-        STAND-ALONE DEBUG CUBE at origin.
-        If this wireframe shows on the blue skybox, Filament is drawing
-        geometry correctly — which means the shark GLB load is our bug.
-        If it still doesn't show, something deeper in the render pipeline.
+        Shark-avatar.glb crashes Filament's GLTF loader — confirmed by
+        the cube rendering first then the process dying once the Model
+        tries to parse the shark. Engine is proven; the model is the bug.
+        Leaving a rotating wireframe cube here as "Filament proof of life"
+        until we have a Filament-clean GLB (Meshy output or Sketchfab CC0).
       */}
       <DebugBox halfExtent={[1, 1, 1]} rotate={[0, rotationY, 0]} />
-
-      {/* Separate model test — also at origin, with an explicit position. */}
-      <Model
-        source={SHARK_GLB}
-        castShadow
-        receiveShadow
-        position={[0, 0, 0]}
-        scale={[1, 1, 1]}
-        rotate={[0, rotationY, 0]}
-        onPress={onTapHero}
-      />
     </FilamentView>
   );
 }
