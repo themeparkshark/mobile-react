@@ -1,22 +1,16 @@
 /**
- * QueueGameScreen — Filament native 3D scene (New Architecture).
+ * QueueGameScreen — Filament native 3D scene.
  *
- * This is the ambitious path: full PBR rendering on native Metal via
- * react-native-filament, not HTML WebView. Requires `newArchEnabled: true`
- * in ios/Podfile.properties.json (flipped today) because the Nitro bridge
- * underneath Filament needs TurboModules.
+ * Third revision: dropped the custom onTouchStart/Move/End handlers that
+ * collided with Filament's internal touch-dispatch. Model onPress works
+ * on its own because the library wires it via the shared TouchHandlerContext.
  *
- * Scene layout:
- *   - Orbit camera (drag to rotate around target)
- *   - Default IBL environment + directional key light with shadows
- *   - Hero model: shark-avatar.glb, scaled up, casting+receiving shadows
- *   - Tap anywhere to rack up a score (haptic feedback on each tap)
- *
- * Next step once this ships smooth on device: replace the hero shark with
- * a falling-fruits layout for the real Banana Basket game on Filament.
+ * Camera orbit gestures will come back later through the right API
+ * (useCameraManipulator has internal hooks that need a worklet rigged
+ * via RenderCallbackContext, not ad-hoc onTouch props).
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -24,6 +18,8 @@ import {
   Pressable,
   SafeAreaView,
   StatusBar,
+  Animated,
+  Easing,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -36,68 +32,50 @@ import {
   Camera,
   DefaultLight,
   Model,
-  useCameraManipulator,
 } from 'react-native-filament';
 
 import config from '../config';
 
 const SHARK_GLB = require('../../assets/models/shark-avatar.glb');
 
-// --- Inner scene component — all Filament children live in here. ---
+// --- 3D scene: all Filament children, camera + light + hero model. ---
 
-function Scene({ onTapHero }: { onTapHero: () => void }) {
-  // Orbit camera: user drags to rotate around the origin. `cameraManipulator`
-  // captures gestures at the FilamentView level and updates the camera each
-  // frame via Filament's RenderCallback pipeline.
-  const cameraManipulator = useCameraManipulator({
-    orbitHomePosition: [0, 1.2, 4.5],
-    targetPosition: [0, 0, 0],
-    orbitSpeed: [0.004, 0.004],
-  });
-
-  const onTouchStart = useCallback(
-    (event: any) => {
-      'worklet';
-      cameraManipulator?.grabBegin?.(event.nativeEvent.x, event.nativeEvent.y, false);
-    },
-    [cameraManipulator]
-  );
-  const onTouchMove = useCallback(
-    (event: any) => {
-      'worklet';
-      cameraManipulator?.grabUpdate?.(event.nativeEvent.x, event.nativeEvent.y);
-    },
-    [cameraManipulator]
-  );
-  const onTouchEnd = useCallback(() => {
-    'worklet';
-    cameraManipulator?.grabEnd?.();
-  }, [cameraManipulator]);
-
+function Scene({ onTapHero, rotationY }: { onTapHero: () => void; rotationY: number }) {
   return (
-    <FilamentView
-      style={StyleSheet.absoluteFill}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-    >
-      <Camera cameraManipulator={cameraManipulator} />
+    <FilamentView style={StyleSheet.absoluteFill}>
+      <Camera cameraPosition={[0, 1.1, 4.8]} cameraTarget={[0, 0, 0]} />
       <DefaultLight />
       <Model
         source={SHARK_GLB}
         castShadow
         receiveShadow
         scale={[1.4, 1.4, 1.4]}
+        rotate={[0, rotationY, 0]}
         onPress={onTapHero}
       />
     </FilamentView>
   );
 }
 
-// --- Screen wrapper: gradient background + HUD on top of Filament view. ---
+// --- Screen wrapper: gradient background + HUD + rotation animator. ---
 
 export default function QueueGameScreen({ navigation }: any) {
   const [score, setScore] = useState(0);
+  const [rotationY, setRotationY] = useState(0);
+
+  // Auto-rotate the hero slowly on Y (JS-driven since we removed orbit input).
+  // 6-second loop, smooth linear spin.
+  useEffect(() => {
+    let raf: number;
+    let start = Date.now();
+    const loop = () => {
+      const t = (Date.now() - start) / 1000;
+      setRotationY((t * (2 * Math.PI)) / 6);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   const handleClose = useCallback(() => {
     Haptics.selectionAsync();
@@ -118,7 +96,7 @@ export default function QueueGameScreen({ navigation }: any) {
       />
 
       <FilamentScene>
-        <Scene onTapHero={handleTap} />
+        <Scene onTapHero={handleTap} rotationY={rotationY} />
       </FilamentScene>
 
       {/* HUD */}
@@ -140,7 +118,7 @@ export default function QueueGameScreen({ navigation }: any) {
 
       <SafeAreaView style={styles.bottomBar} pointerEvents="none">
         <Text style={styles.hintText}>Filament 3D Native</Text>
-        <Text style={styles.hintSub}>Drag to orbit • Tap the model to score</Text>
+        <Text style={styles.hintSub}>Tap the shark to score</Text>
       </SafeAreaView>
     </View>
   );
