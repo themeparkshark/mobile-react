@@ -1,13 +1,16 @@
 /**
- * QueueGameScreen — Minimal Filament smoke test.
+ * QueueGameScreen — Empty-scene Filament smoke test.
  *
- * Deliberately stripped down: FilamentScene + FilamentView + Camera +
- * DefaultLight + Model, nothing else. If this renders, Filament works
- * and we layer complexity on top one piece at a time (camera manipulator,
- * touch handlers, HUD, game loop).
+ * Third pass. Previous version with Model + Camera crashed the process on
+ * entry (SIGKILL, likely OOM from the 6.4MB shark-avatar.glb OR a Metal
+ * surface init race inside the stack animator). This version strips to
+ * absolute minimum: FilamentScene + FilamentView + DefaultLight, no camera
+ * props, no model. If we see a gradient background through the empty
+ * Filament view without a crash, the engine mounts cleanly — then we add
+ * a tiny test mesh, then the shark, then gameplay.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import {
   View,
   Text,
@@ -26,19 +29,15 @@ import {
   FilamentView,
   Camera,
   DefaultLight,
-  Model,
 } from 'react-native-filament';
 
-const SHARK_GLB = require('../../assets/models/shark-avatar.glb');
-
-// --- Inner scene: only the 3D pieces, all inside <FilamentScene>. ---
+// --- 3D scene: just lights, no geometry yet. ---
 
 function Scene() {
   return (
     <FilamentView style={StyleSheet.absoluteFill}>
       <Camera />
       <DefaultLight />
-      <Model source={SHARK_GLB} />
     </FilamentView>
   );
 }
@@ -46,17 +45,10 @@ function Scene() {
 // --- Screen wrapper: HUD + host. ---
 
 export default function QueueGameScreen({ navigation }: any) {
-  const [tapCount, setTapCount] = useState(0);
-
   const handleClose = useCallback(() => {
     Haptics.selectionAsync();
     navigation?.goBack?.();
   }, [navigation]);
-
-  const bumpTap = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setTapCount((n) => n + 1);
-  }, []);
 
   return (
     <View style={styles.root}>
@@ -70,10 +62,6 @@ export default function QueueGameScreen({ navigation }: any) {
         <Scene />
       </FilamentScene>
 
-      {/* Transparent tap layer on top of the scene — bumps a counter so we
-          can see the screen is responsive even without FilamentView touch. */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={bumpTap} />
-
       <SafeAreaView style={styles.topBar} pointerEvents="box-none">
         <Pressable
           onPress={handleClose}
@@ -83,15 +71,13 @@ export default function QueueGameScreen({ navigation }: any) {
         >
           <FontAwesomeIcon icon={faXmark} size={22} color="#fff" />
         </Pressable>
-        <View style={styles.tapPill}>
-          <Text style={styles.tapText}>Taps: {tapCount}</Text>
-        </View>
       </SafeAreaView>
 
       <SafeAreaView style={styles.bottomBar} pointerEvents="none">
-        <Text style={styles.hintText}>3D smoke test</Text>
+        <Text style={styles.hintText}>Filament mount test</Text>
         <Text style={styles.hintSub}>
-          If you see the shark: Filament works. Next: game loop.
+          If you see this without a crash, the engine is healthy — we add a
+          test cube next.
         </Text>
       </SafeAreaView>
     </View>
@@ -105,9 +91,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 8,
   },
@@ -118,19 +101,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tapPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  tapText: {
-    color: '#fff',
-    fontFamily: 'Shark',
-    fontSize: 16,
   },
   bottomBar: {
     position: 'absolute',

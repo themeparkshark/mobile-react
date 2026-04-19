@@ -284,7 +284,7 @@ export default function App() {
         <Stack.Screen
           name="QueueGame"
           component={QueueGameScreen}
-          options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+          options={{ animation: 'none', gestureEnabled: false }}
         />
 
       </Stack.Navigator>
