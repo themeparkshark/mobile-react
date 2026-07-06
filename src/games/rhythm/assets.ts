@@ -25,16 +25,13 @@ export type OptionalImageSource = number | null;
 
 /**
  * Concentric timing-ring texture. manifest id: `rhythm-ring`.
- * Uncomment when src/assets/games/rhythm/rhythm-ring.png exists.
+ * Bundled — the @3x lands and Metro picks the right density automatically.
  */
-export const RING_IMAGE: OptionalImageSource =
-  // require('../../assets/games/rhythm/rhythm-ring.png');
-  null;
+export const RING_IMAGE: OptionalImageSource = require('../../assets/games/rhythm/rhythm-ring.png');
 
 /**
  * Radial perfect-hit burst texture. manifest id: `rhythm-hit-flare`.
- * Uncomment when src/assets/games/rhythm/rhythm-hit-flare.png exists.
+ * Bundled. Currently unused by the field (procedural burst is retained for
+ * pooled 60fps particles); exported for future flare overlays / other games.
  */
-export const HIT_FLARE_IMAGE: OptionalImageSource =
-  // require('../../assets/games/rhythm/rhythm-hit-flare.png');
-  null;
+export const HIT_FLARE_IMAGE: OptionalImageSource = require('../../assets/games/rhythm/rhythm-hit-flare.png');

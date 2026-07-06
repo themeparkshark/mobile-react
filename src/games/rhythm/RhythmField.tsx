@@ -25,7 +25,7 @@
 
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
-import { Canvas, Circle, Group } from '@shopify/react-native-skia';
+import { Canvas, Circle, Group, Image, useImage } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
   runOnJS,
@@ -49,6 +49,7 @@ import {
   type Judgment,
 } from './constants';
 import type { RoundPlan, Target } from './patterns';
+import { RING_IMAGE } from './assets';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -238,12 +239,23 @@ export function RhythmField({
     [onJudge, doEmit], // clockMs / targetsSv are stable SharedValues
   );
 
+  // Optional bundled ring texture. null while loading / if unavailable → each
+  // TargetRing falls back to its crisp procedural Skia stroke, so the field is
+  // always fully playable regardless of asset state.
+  const ringImage = useImage(RING_IMAGE ?? undefined);
+
   return (
     <GestureDetector gesture={tap}>
       <View style={StyleSheet.absoluteFill} collapsable={false}>
         <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
           {fieldTargets.map((tg) => (
-            <TargetRing key={tg.id} target={tg} clockMs={clockMs} feverSv={feverSv} />
+            <TargetRing
+              key={tg.id}
+              target={tg}
+              clockMs={clockMs}
+              feverSv={feverSv}
+              ringImage={ringImage}
+            />
           ))}
         </Canvas>
       </View>
@@ -262,10 +274,12 @@ function TargetRing({
   target,
   clockMs,
   feverSv,
+  ringImage,
 }: {
   target: FieldTarget;
   clockMs: SharedValue<number>;
   feverSv: SharedValue<number>;
+  ringImage: ReturnType<typeof useImage>;
 }) {
   // Approach ring radius: RING_START at spawn → TARGET_RADIUS at hitTime.
   const approachRadius = useDerivedValue(() => {
@@ -275,6 +289,11 @@ function TargetRing({
     const r = RING_START_RADIUS + (TARGET_RADIUS - RING_START_RADIUS) * Math.min(t, 1);
     return r;
   }, [target]);
+
+  // Textured-ring geometry (Skia <Image> takes x/y/width/height, not r).
+  const imgSize = useDerivedValue(() => approachRadius.value * 2, [target]);
+  const imgX = useDerivedValue(() => target.x - approachRadius.value, [target]);
+  const imgY = useDerivedValue(() => target.y - approachRadius.value, [target]);
 
   const approachOpacity = useDerivedValue(() => {
     const now = clockMs.value;
@@ -317,16 +336,29 @@ function TargetRing({
         color={RHYTHM_COLORS.target}
         opacity={fillOpacity}
       />
-      {/* Shrinking approach ring. */}
-      <Circle
-        cx={target.x}
-        cy={target.y}
-        r={approachRadius}
-        color={ringColor}
-        style="stroke"
-        strokeWidth={RING_STROKE}
-        opacity={approachOpacity}
-      />
+      {/* Shrinking approach ring — textured when the asset is loaded, else a
+          crisp procedural stroke (identical timing feel either way). */}
+      {ringImage ? (
+        <Image
+          image={ringImage}
+          x={imgX}
+          y={imgY}
+          width={imgSize}
+          height={imgSize}
+          fit="contain"
+          opacity={approachOpacity}
+        />
+      ) : (
+        <Circle
+          cx={target.x}
+          cy={target.y}
+          r={approachRadius}
+          color={ringColor}
+          style="stroke"
+          strokeWidth={RING_STROKE}
+          opacity={approachOpacity}
+        />
+      )}
     </Group>
   );
 }
