@@ -21,6 +21,7 @@ import {
   WAIT_COLOR_TIERS,
 } from '../constants/parkWaitTimes';
 import { LocationContext } from '../context/LocationProvider';
+import { resolveRideContext } from '../services/lineplay/resolveRide';
 
 // --- Types ---
 type SortMode = 'wait-desc' | 'wait-asc' | 'name';
@@ -97,26 +98,45 @@ const SkeletonCard = () => {
   );
 };
 
-const RideCard = ({ entry }: { entry: WikiLiveEntry }) => {
+const RideCard = ({
+  entry,
+  onStartSession,
+}: {
+  entry: WikiLiveEntry;
+  onStartSession: (entry: WikiLiveEntry) => void;
+}) => {
   const badge = getBadgeInfo(entry);
   const ll = entry.queue?.RETURN_TIME;
   const hasLL = ll?.state === 'AVAILABLE';
   const returnTime = hasLL ? formatReturnTime(ll?.returnStart) : null;
+  // A Line Session only makes sense while the ride is operating.
+  const canStartSession = entry.status === 'OPERATING';
 
   return (
-    <View style={[styles.card, { borderLeftColor: badge.color, borderLeftWidth: 3 }]}>
-      <View style={[styles.badge, { backgroundColor: badge.color }]}>
-        <Text style={styles.badgeText}>{badge.text}</Text>
-      </View>
-      <View style={styles.cardCenter}>
-        <Text style={styles.rideName} numberOfLines={2}>{entry.name}</Text>
-        <Text style={styles.statusText}>{badge.statusText}</Text>
-      </View>
-      {hasLL && (
-        <View style={styles.llBadge}>
-          <Text style={styles.llText}>LL</Text>
-          {returnTime && <Text style={styles.llTime}>{returnTime}</Text>}
+    <View style={[styles.card, { borderLeftColor: badge.color, borderLeftWidth: 3, flexWrap: 'wrap' }]}>
+      <View style={styles.cardRow}>
+        <View style={[styles.badge, { backgroundColor: badge.color }]}>
+          <Text style={styles.badgeText}>{badge.text}</Text>
         </View>
+        <View style={styles.cardCenter}>
+          <Text style={styles.rideName} numberOfLines={2}>{entry.name}</Text>
+          <Text style={styles.statusText}>{badge.statusText}</Text>
+        </View>
+        {hasLL && (
+          <View style={styles.llBadge}>
+            <Text style={styles.llText}>LL</Text>
+            {returnTime && <Text style={styles.llTime}>{returnTime}</Text>}
+          </View>
+        )}
+      </View>
+      {canStartSession && (
+        <Pressable
+          onPress={() => onStartSession(entry)}
+          style={({ pressed }) => [styles.sessionBtn, pressed && styles.sessionBtnPressed]}
+          hitSlop={6}
+        >
+          <Text style={styles.sessionBtnText}>▶  Start Line Session</Text>
+        </Pressable>
       )}
     </View>
   );
@@ -228,6 +248,22 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     setRefreshing(true);
     fetchData(false);
   }, [fetchData]);
+
+  // Start a LinePlay session for a wait-times row. Resolves the numeric ride id
+  // by name (queue-times entries are name-keyed) then navigates to LinePlay.
+  const handleStartSession = useCallback(
+    async (entry: WikiLiveEntry) => {
+      const postedWait = entry.queue?.STANDBY?.waitTime ?? null;
+      const ride = await resolveRideContext(selectedPark, entry.name, postedWait);
+      if (!ride) {
+        // No matching numeric ride — silently ignore (row action just no-ops).
+        console.warn('No ride match for Line Session:', entry.name);
+        return;
+      }
+      (navigation as any).navigate('LinePlay', { ride });
+    },
+    [navigation, selectedPark],
+  );
 
   // Filter & sort
   const processedData = useMemo(() => {
@@ -361,7 +397,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
         <FlashList
           data={processedData}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <RideCard entry={item} />}
+          renderItem={({ item }) => <RideCard entry={item} onStartSession={handleStartSession} />}
           estimatedItemSize={80}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -539,9 +575,31 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
   cardCenter: {
     flex: 1,
     marginLeft: 16,
+  },
+  sessionBtn: {
+    marginTop: 12,
+    width: '100%',
+    backgroundColor: '#09268f',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  sessionBtnPressed: {
+    opacity: 0.85,
+  },
+  sessionBtnText: {
+    color: '#fec90e',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   rideName: {
     fontSize: 16,

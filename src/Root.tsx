@@ -56,6 +56,7 @@ import QueueGameScreen from './screens/QueueGameScreen';
 import BananaBasketScreen from './screens/BananaBasketScreen';
 import CommunityCenterScreen from './screens/CommunityCenterScreen';
 import SharkParkScreen from './screens/SharkParkScreen';
+import LinePlayScreen from './screens/LinePlay/LinePlayScreen';
 // Gym Battle Screens
 import { TeamSelectionScreen, GymBattleScreen } from './screens/GymBattle';
 // Ride Tracker Screens
@@ -163,6 +164,11 @@ export default function App() {
         />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
+        <Stack.Screen
+          name="LinePlay"
+          component={LinePlayScreen}
+          options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+        />
         <Stack.Screen name="Friends" component={FriendsScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen
