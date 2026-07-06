@@ -37,6 +37,7 @@ import {
   Haptic,
   playSfx,
   useCombo,
+  useShake,
   GAME_COLORS,
   JUICE,
   type GameResult,
@@ -96,10 +97,15 @@ export function RhythmTapGame({
 
   const combo = useCombo();
   const particleRef = useRef<ParticleHandle>(null);
+  // JS-thread mirror of fever so the (stable) burst callback can read it
+  // without re-creating on every combo change.
+  const feverRef = useRef(false);
 
   // Fever + beat-bar visuals.
   const feverProgress = useSharedValue(0); // 0 → normal, 1 → fever
   const beatPulse = useSharedValue(0);
+  // Screen shake for misses (capped at MAX_SHAKE_MS inside the primitive).
+  const missShake = useShake();
 
   // -- Reset on (re)open. -----------------------------------------------------
   useEffect(() => {
@@ -122,6 +128,7 @@ export function RhythmTapGame({
 
   // Drive fever visuals off the combo state.
   useEffect(() => {
+    feverRef.current = combo.fever;
     feverProgress.value = withTiming(combo.fever ? 1 : 0, { duration: 260 });
   }, [combo.fever, feverProgress]);
 
@@ -132,7 +139,9 @@ export function RhythmTapGame({
       statsRef.current[judgment] += 1;
 
       if (judgment === 'miss') {
+        // Shake + streak reset (master-plan miss feedback).
         combo.miss();
+        missShake.shake(10, 110);
         Haptic.warning();
         playSfx('fail');
         return;
@@ -157,7 +166,7 @@ export function RhythmTapGame({
         playSfx('tap');
       }
     },
-    [combo],
+    [combo, missShake],
   );
 
   // -- Metronome beat (JS thread). --------------------------------------------
@@ -177,14 +186,22 @@ export function RhythmTapGame({
   // -- Hit burst (JS thread; called from the field's worklet). ----------------
   const emitBurst = useCallback((x: number, y: number, judgment: Judgment) => {
     const color = JUDGMENT_COLOR[judgment];
+    // Fever doubles the particle count (master-plan fever spec).
+    const feverMul = feverRef.current ? 2 : 1;
     if (judgment === 'perfect') {
-      // Gold burst, doubled particles in fever.
-      const count = 26;
-      particleRef.current?.burst({ x, y, preset: 'burst', count, colors: [color, GAME_COLORS.coral], size: 8 });
+      // Gold + coral burst — the big-hit payoff.
+      particleRef.current?.burst({
+        x,
+        y,
+        preset: 'burst',
+        count: 26 * feverMul,
+        colors: [color, GAME_COLORS.coral],
+        size: 8,
+      });
     } else if (judgment === 'great') {
-      particleRef.current?.burst({ x, y, preset: 'burst', count: 14, colors: [color], size: 6 });
+      particleRef.current?.burst({ x, y, preset: 'burst', count: 14 * feverMul, colors: [color], size: 6 });
     } else if (judgment === 'good') {
-      particleRef.current?.burst({ x, y, preset: 'burst', count: 8, colors: [color], size: 5 });
+      particleRef.current?.burst({ x, y, preset: 'burst', count: 8 * feverMul, colors: [color], size: 5 });
     }
   }, []);
 
@@ -284,7 +301,7 @@ export function RhythmTapGame({
       onComplete={onComplete}
       onClose={onClose}
     >
-      <Animated.View style={[StyleSheet.absoluteFill, styles.bg, bgStyle]}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.bg, bgStyle, missShake.style]}>
         {/* Fever bottom-glow layer (simple gradient shift via two stacked views). */}
         <View style={[StyleSheet.absoluteFill, styles.bgBottom]} pointerEvents="none" />
 
