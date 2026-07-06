@@ -96,14 +96,29 @@
       "knockout_fraction": 0.638,
       "model": "openai/gpt-image-2",
       "quality": "high"
+    },
+    "rhythm-ring": {
+      "game": "rhythm",
+      "generated_at": "2026-07-06T05:07:38.767732+00:00",
+      "gen_seconds": 51.2,
+      "knockout_fraction": 0.723,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "rhythm-hit-flare": {
+      "game": "rhythm",
+      "generated_at": "2026-07-06T05:07:38.767732+00:00",
+      "gen_seconds": 68.0,
+      "knockout_fraction": 0.706,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
     }
   },
   "last_run": {
-    "at": "2026-07-06T04:47:37.502537+00:00",
-    "only": "sharky",
+    "at": "2026-07-06T05:07:38.767732+00:00",
+    "only": "rhythm",
     "force": false,
     "counts": {
-      "skipped": 5,
       "ok": 2
     }
   }
