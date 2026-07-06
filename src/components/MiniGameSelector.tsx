@@ -1,11 +1,22 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import TapChallengeMiniGame from './TapChallengeMiniGame';
 import TimingMiniGame from './TimingMiniGame';
 import MemoryMatchMiniGame from './MemoryMatchMiniGame';
 import TriviaMiniGame from './TriviaMiniGame';
 import SharkMiniGame from './SharkMiniGame';
+// Queue Kit natives (2026-07-06 Wave 3): GameKit-based rebuilds. Legacy
+// components above stay importable so USE_QUEUE_KIT_GAMES=false is a
+// one-line rollback to the old games.
+import { WhackAShark } from '../games/whack';
+import { RhythmTapGame } from '../games/rhythm';
+import { MemoryGame } from '../games/memory';
+import { TriviaGame, createTaskTriviaSource } from '../games/trivia';
+import { SharkySwim } from '../games/sharky';
+import { BananaBasketGame } from '../games/banana-basket';
 
-type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark';
+const USE_QUEUE_KIT_GAMES = true;
+
+type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana';
 
 interface Props {
   visible: boolean;
@@ -49,7 +60,9 @@ export default function MiniGameSelector({
       return;
     }
 
-    const allGames: MiniGameType[] = ['tap', 'timing', 'memory', 'trivia', 'shark'];
+    const allGames: MiniGameType[] = USE_QUEUE_KIT_GAMES
+      ? ['tap', 'timing', 'memory', 'trivia', 'shark', 'banana']
+      : ['tap', 'timing', 'memory', 'trivia', 'shark'];
     const available = allGames.filter(g => !excludeGames.includes(g));
     if (available.length === 0) {
       setSelectedGame('trivia');
@@ -64,7 +77,51 @@ export default function MiniGameSelector({
     onComplete(multiplier, rewards);
   }, [onComplete]);
 
+  // One deterministic seed per game mount so runs are replayable in telemetry.
+  const seed = useMemo(() => Math.floor(Math.random() * 0x7fffffff), [visible, selectedGame]);
+
   if (!visible || !selectedGame) return null;
+
+  if (USE_QUEUE_KIT_GAMES) {
+    switch (selectedGame) {
+      case 'tap':
+        return (
+          <WhackAShark visible={visible} seed={seed} onClose={onClose}
+            onComplete={(mult, meta) => handleComplete(mult, meta)} />
+        );
+      case 'timing':
+        return (
+          <RhythmTapGame visible={visible} onClose={onClose}
+            onComplete={(mult, meta) => handleComplete(mult, meta)} />
+        );
+      case 'memory':
+        return (
+          <MemoryGame visible={visible} seed={seed} onClose={onClose}
+            onComplete={(mult, meta) => handleComplete(mult, meta)} />
+        );
+      case 'trivia':
+        return (
+          <TriviaGame
+            visible={visible}
+            seed={seed}
+            title={taskName}
+            source={createTaskTriviaSource({ taskId })}
+            onClose={onClose}
+            onComplete={(mult, meta) => handleComplete(mult, meta)}
+          />
+        );
+      case 'shark':
+        return (
+          <SharkySwim visible={visible} seed={seed} onClose={onClose}
+            onComplete={(mult, meta) => handleComplete(mult, meta)} />
+        );
+      case 'banana':
+        return (
+          <BananaBasketGame visible={visible} seed={seed} onClose={onClose}
+            onComplete={(mult, meta) => handleComplete(mult, meta)} />
+        );
+    }
+  }
 
   switch (selectedGame) {
     case 'tap':

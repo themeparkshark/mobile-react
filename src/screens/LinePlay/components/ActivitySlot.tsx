@@ -40,6 +40,7 @@ const GAME_LABELS: Record<string, string> = {
   memory: 'Memory Match+',
   trivia: 'Ride Trivia',
   shark: 'Sharky Swim',
+  banana: 'Banana Basket',
 };
 
 export default function ActivitySlot({

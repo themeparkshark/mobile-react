@@ -38,6 +38,13 @@ import Animated, {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { colors, spacing, borderRadius, shadows } from '../../design-system';
 import { useLinePlaySession } from '../../services/lineplay/useLinePlaySession';
+// Wave 3 (2026-07-06): real GameKit games mount in the playlist slots.
+import { WhackAShark } from '../../games/whack';
+import { RhythmTapGame } from '../../games/rhythm';
+import { MemoryGame } from '../../games/memory';
+import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
+import { SharkySwim } from '../../games/sharky';
+import { BananaBasketGame } from '../../games/banana-basket';
 import type { RideContext, ActivityItem } from '../../services/lineplay/LinePlaySession';
 import {
   PredictionCard,
@@ -80,11 +87,50 @@ export default function LinePlayScreen() {
     void Haptics.selectionAsync();
   }, []);
 
-  const handlePlayGame = useCallback((_item: Extract<ActivityItem, { kind: 'minigame' }>) => {
-    // Wave 2 wires the real game mount here. For now this is a no-op stub so
-    // the slot is interactive without a dependency on the game engine.
+  const [activeGame, setActiveGame] =
+    useState<Extract<ActivityItem, { kind: 'minigame' }> | null>(null);
+
+  const handlePlayGame = useCallback((item: Extract<ActivityItem, { kind: 'minigame' }>) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveGame(item);
   }, []);
+
+  const handleGameDone = useCallback(() => {
+    // Games show their own GameShellV2 results screen; session rewards stay
+    // server-side via the inline timer — nothing is granted per round here.
+    setActiveGame(null);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
+
+  const renderActiveGame = () => {
+    if (!activeGame || !ride) return null;
+    const common = {
+      visible: true,
+      seed: activeGame.seed,
+      onClose: handleGameDone,
+      onComplete: (_mult: number, _meta?: Record<string, unknown>) => handleGameDone(),
+    };
+    switch (activeGame.gameId) {
+      case 'tap': return <WhackAShark {...common} />;
+      case 'timing': return <RhythmTapGame visible onClose={common.onClose} onComplete={common.onComplete} />;
+      case 'memory': return <MemoryGame {...common} />;
+      case 'shark': return <SharkySwim {...common} />;
+      case 'banana': return <BananaBasketGame {...common} />;
+      case 'trivia':
+        return (
+          <TriviaGame
+            {...common}
+            title="Line Trivia"
+            source={createLinePlayTriviaSource({
+              rideId: ride.rideId,
+              parkId: ride.parkId,
+              seed: activeGame.seed,
+            })}
+          />
+        );
+      default: return null;
+    }
+  };
 
   const handleEndSession = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -186,6 +232,9 @@ export default function LinePlayScreen() {
           )}
         </View>
       </SafeAreaView>
+
+      {/* Wave 3: mounted GameKit game (GameShellV2 renders its own Modal) */}
+      {renderActiveGame()}
 
       {/* Auto-pause toast */}
       {snapshot.state === 'paused' && snapshot.pauseReason === 'lineMoving' && (

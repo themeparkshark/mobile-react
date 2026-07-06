@@ -80,7 +80,7 @@ export interface RideContext {
  * carries the concrete game id so the screen can mount the right game later
  * (Wave 2). trivia/lore/prediction items are resolved by the content loaders.
  */
-export type MiniGameId = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark';
+export type MiniGameId = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana';
 
 export type ActivityItem =
   | { readonly kind: 'minigame'; readonly id: string; readonly gameId: MiniGameId; readonly seed: number }
@@ -155,7 +155,7 @@ const WAIT_CACHE_PREFIX = 'lineplay_wait_cache_';
 /** Round-robin order for the playlist generator. */
 const ROUND_ROBIN: ReadonlyArray<ActivityItem['kind']> = ['minigame', 'trivia', 'lore', 'prediction'];
 /** Minigames cycled through for 'minigame' slots. */
-const MINIGAME_CYCLE: ReadonlyArray<MiniGameId> = ['shark', 'tap', 'timing', 'memory'];
+const MINIGAME_CYCLE: ReadonlyArray<MiniGameId> = ['shark', 'tap', 'banana', 'timing', 'memory'];
 
 function haversineMeters(a: LocationSample, b: LocationSample): number {
   const R = 6371000;
