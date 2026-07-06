@@ -139,14 +139,16 @@
     {
       "id": "shark-pop-2",
       "game": "whack",
-      "prompt": "the same cute blue shark head fully popped up tall toward the viewer, mouth wide happy, stretched pose, identical colors and size, pop frame 2 of 3",
+      "base_frame": "shark-pop-1",
+      "prompt": "Keep this exact same shark character identical: same blue body, same face, same eyes, same teeth, same outline style and weight, same colors, same framing and size, same centered position on the same green background. Only change the pose for the next frame of a pop-up cycle: stretch the shark fully popped up tall toward the viewer, mouth open wide in a happy grin, an eager overshoot stretch pose.",
       "size": "1024x1024",
       "needs_transparency": true
     },
     {
       "id": "shark-pop-3",
       "game": "whack",
-      "prompt": "the same cute blue shark head dazed with spiral dizzy eyes after being tapped, mouth in an oof, identical colors and size, pop frame 3 of 3",
+      "base_frame": "shark-pop-1",
+      "prompt": "Keep this exact same shark character identical: same blue body, same face outline, same teeth, same outline style and weight, same colors, same framing and size, same centered position on the same green background. Only change the pose and expression for the final frame after being tapped: give it spiral dizzy dazed eyes and a woozy oof mouth, a squashed knocked-back recoil pose.",
       "size": "1024x1024",
       "needs_transparency": true
     },
