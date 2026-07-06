@@ -51,6 +51,7 @@ import SetCollectionScreen from './screens/SetCollectionScreen';
 import StampBookScreen from './screens/StampBookScreen';
 import CoinShelfScreen from './screens/CoinShelfScreen';
 import MiniGameTesterScreen from './screens/MiniGameTesterScreen';
+import GameKitGymScreen from './screens/GameKitGymScreen';
 import PostWinRewardsPreviewScreen from './screens/PostWinRewardsPreviewScreen';
 import QueueGameScreen from './screens/QueueGameScreen';
 import BananaBasketScreen from './screens/BananaBasketScreen';
@@ -287,6 +288,7 @@ export default function App() {
         <Stack.Screen name="RideOnboarding" component={RideOnboardingScreen} options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="RideBatchConfirm" component={RideBatchConfirmScreen} options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />
+        <Stack.Screen name="GameKitGym" component={GameKitGymScreen} />
         <Stack.Screen name="PostWinRewardsPreview" component={PostWinRewardsPreviewScreen} />
         <Stack.Screen
           name="QueueGame"

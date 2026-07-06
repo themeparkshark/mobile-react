@@ -87,6 +87,19 @@ export default function MiniGameTesterScreen() {
               ))}
             </Section>
 
+            <Section
+              header={'GameKit Engine (Wave 1)'.toUpperCase()}
+              footer="Exercises every gamekit primitive at 60fps."
+            >
+              <Cell
+                title="[GYM]  GameKit Gym"
+                cellStyle="Subtitle"
+                detail="Particles, shake, combo, FPS counter — engine stress test"
+                accessory="DisclosureIndicator"
+                onPress={() => navigation.navigate('GameKitGym')}
+              />
+            </Section>
+
             <Section header={'Skia Animated Shark (Proof of Concept)'.toUpperCase()}>
               <Cell
                 cellContentView={
