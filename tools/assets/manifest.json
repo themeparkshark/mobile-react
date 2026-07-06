@@ -1,0 +1,249 @@
+{
+  "_comment": "Queue Kit asset manifest. Prompts here are the SUBJECT only. generate.py prepends STYLE_PREFIX and appends the category background/negative suffixes so the locked style can never drift. size = generated base (=@3x). needs_transparency drives chroma-key knockout. See STYLE.md.",
+  "_version": 1,
+  "assets": [
+    {
+      "id": "particle-star",
+      "game": "gamekit",
+      "prompt": "a single gold five-point star pickup, centered, flat cel shading",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "particle-bubble",
+      "game": "gamekit",
+      "prompt": "a single glossy round blue water bubble with a small highlight, centered",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "particle-coin",
+      "game": "gamekit",
+      "prompt": "a single gold coin shown flat face-on, thick rim, blank face with no engraving",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "particle-confetti",
+      "game": "gamekit",
+      "prompt": "a small scatter cluster of five simple flat confetti rectangles in navy blue gold and coral, tumbling",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "particle-spark",
+      "game": "gamekit",
+      "prompt": "a single four-point sparkle spark shape in bright gold, centered, tapered points",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+
+    {
+      "id": "shark-swim-1",
+      "game": "sharky",
+      "prompt": "a cute chubby cartoon blue shark mascot in profile facing right, tail swept down, mouth in a happy grin, 3/4 flat side view, swim frame 1 of 3",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "shark-swim-2",
+      "game": "sharky",
+      "base_frame": "shark-swim-1",
+      "prompt": "Keep this exact same shark character identical: same blue body, same cape, same gold medallion, same face, same outline style, same size and framing. Only change the pose for the next frame of a swim cycle: sweep the tail to the opposite side and adjust the fins as if mid-swim stroke.",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "shark-swim-3",
+      "game": "sharky",
+      "base_frame": "shark-swim-1",
+      "prompt": "Keep this exact same shark character identical: same blue body, same cape, same gold medallion, same face, same outline style, same size and framing. Only change the pose for the next frame of a swim cycle: angle the body slightly upward with the tail swept up and fins spread wide as if pushing forward.",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "shark-ring",
+      "game": "sharky",
+      "prompt": "a single gold torus bonus ring seen face-on, thick even band, hollow transparent center, coral inner edge accent",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "ocean-layer-back",
+      "game": "sharky",
+      "prompt": "a full-bleed underwater ocean background, deep navy to blue vertical gradient in flat cel bands, faint distant light rays, empty open water with no creatures, seamless left-right tiling",
+      "size": "1536x1024",
+      "needs_transparency": false,
+      "category": "background"
+    },
+    {
+      "id": "ocean-layer-mid",
+      "game": "sharky",
+      "prompt": "a full-bleed row of rounded flat coral and seaweed silhouettes along the bottom in blue and coral tones, top two-thirds empty, meant to sit in front of the ocean, seamless left-right tiling",
+      "size": "1536x1024",
+      "needs_transparency": true,
+      "category": "background"
+    },
+    {
+      "id": "ocean-layer-front",
+      "game": "sharky",
+      "prompt": "a full-bleed foreground band of large bold rounded kelp and rock shapes hugging the bottom edge in dark navy, most of the frame empty, meant to scroll fastest in front, seamless left-right tiling",
+      "size": "1536x1024",
+      "needs_transparency": true,
+      "category": "background"
+    },
+
+    {
+      "id": "basket",
+      "game": "banana-basket",
+      "prompt": "a single woven picnic basket seen from a slight 3/4 top angle, open top facing up ready to catch, warm tan weave with navy rim",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "banana",
+      "game": "banana-basket",
+      "prompt": "a single bright yellow banana, gentle curve, small brown tips, centered",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "bomb",
+      "game": "banana-basket",
+      "prompt": "a single round black cartoon bomb with a short lit fuse and a tiny flat flame, centered",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "golden-churro",
+      "game": "banana-basket",
+      "prompt": "a single golden ridged churro stick dusted with sugar, glowing gold value item, diagonal, centered",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+
+    {
+      "id": "hole",
+      "game": "whack",
+      "prompt": "a single empty round dark hole opening seen from a slight 3/4 top angle, navy rim ring, dark flat interior, like a mole hole cover plate",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "shark-pop-1",
+      "game": "whack",
+      "prompt": "a cute blue shark head popping partway up and out toward the viewer, mouth in a grin, anticipation squash pose low, pop frame 1 of 3",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "shark-pop-2",
+      "game": "whack",
+      "prompt": "the same cute blue shark head fully popped up tall toward the viewer, mouth wide happy, stretched pose, identical colors and size, pop frame 2 of 3",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "shark-pop-3",
+      "game": "whack",
+      "prompt": "the same cute blue shark head dazed with spiral dizzy eyes after being tapped, mouth in an oof, identical colors and size, pop frame 3 of 3",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "anglerfish-decoy",
+      "game": "whack",
+      "prompt": "a grumpy dark anglerfish decoy head with a glowing lure and jagged teeth, coral warning accents, do-not-tap penalty character, popping up toward the viewer",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "golden-shark",
+      "game": "whack",
+      "prompt": "a special shiny gold shark head popping up toward the viewer, gold body with navy outline, sparkle accents, bonus x5 character, mouth in a big grin",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+
+    {
+      "id": "rhythm-ring",
+      "game": "rhythm",
+      "prompt": "a single clean concentric timing ring, a thick outer navy ring and a thin inner blue ring, hollow transparent center, perfectly symmetric",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+    {
+      "id": "rhythm-hit-flare",
+      "game": "rhythm",
+      "prompt": "a bright radial burst flare of gold and coral tapered rays exploding outward from a small center, celebratory perfect-hit effect",
+      "size": "1024x1024",
+      "needs_transparency": true
+    },
+
+    {
+      "id": "card-back",
+      "game": "memory",
+      "prompt": "a memory game card back, rounded rectangle portrait card, navy border frame with a centered gold shark emblem badge on a blue field, symmetric",
+      "size": "1024x1536",
+      "needs_transparency": true,
+      "category": "ui"
+    },
+    {
+      "id": "deck-ocean-shark",
+      "game": "memory",
+      "prompt": "a face-up memory card front showing a single centered cute blue shark icon on a plain light card, rounded rectangle portrait card with navy border, ocean deck",
+      "size": "1024x1536",
+      "needs_transparency": true,
+      "category": "ui"
+    },
+    {
+      "id": "deck-ocean-crab",
+      "game": "memory",
+      "prompt": "a face-up memory card front showing a single centered cute coral crab icon on a plain light card, rounded rectangle portrait card with navy border, ocean deck matching set",
+      "size": "1024x1536",
+      "needs_transparency": true,
+      "category": "ui"
+    },
+    {
+      "id": "deck-park-coaster",
+      "game": "memory",
+      "prompt": "a face-up memory card front showing a single centered stylized roller coaster loop icon on a plain light card, rounded rectangle portrait card with navy border, theme park deck",
+      "size": "1024x1536",
+      "needs_transparency": true,
+      "category": "ui"
+    },
+    {
+      "id": "deck-park-ferriswheel",
+      "game": "memory",
+      "prompt": "a face-up memory card front showing a single centered stylized ferris wheel icon on a plain light card, rounded rectangle portrait card with navy border, theme park deck matching set",
+      "size": "1024x1536",
+      "needs_transparency": true,
+      "category": "ui"
+    },
+
+    {
+      "id": "waitcard-generic",
+      "game": "lineplay",
+      "prompt": "a wide decorative header banner art of a stylized theme park skyline with a coaster hill and flags at golden hour, warm inviting, empty lower area left clear for an overlaid wait-time card, no characters",
+      "size": "1536x1024",
+      "needs_transparency": false,
+      "category": "background"
+    },
+    {
+      "id": "waitcard-water-park",
+      "game": "lineplay",
+      "prompt": "a wide decorative header banner art of a stylized water park with looping blue water slides and splash shapes, bright and playful, empty lower area left clear for an overlaid wait-time card, no characters",
+      "size": "1536x1024",
+      "needs_transparency": false,
+      "category": "background"
+    },
+    {
+      "id": "lore-card-frame",
+      "game": "lineplay",
+      "prompt": "an ornate rounded rectangle card frame border only, thick navy outline with gold corner flourishes and a small shark crest at the top center, completely empty hollow transparent interior for text",
+      "size": "1024x1536",
+      "needs_transparency": true,
+      "category": "ui"
+    }
+  ]
+}

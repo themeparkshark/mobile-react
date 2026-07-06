@@ -1,0 +1,110 @@
+{
+  "assets": {
+    "particle-star": {
+      "game": "gamekit",
+      "generated_at": "2026-07-06T04:34:53.065239+00:00",
+      "gen_seconds": 37.2,
+      "knockout_fraction": 0.717,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "particle-bubble": {
+      "game": "gamekit",
+      "generated_at": "2026-07-06T04:34:53.065239+00:00",
+      "gen_seconds": 29.7,
+      "knockout_fraction": 0.627,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "particle-coin": {
+      "game": "gamekit",
+      "generated_at": "2026-07-06T04:34:53.065239+00:00",
+      "gen_seconds": 38.0,
+      "knockout_fraction": 0.531,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "particle-confetti": {
+      "game": "gamekit",
+      "generated_at": "2026-07-06T04:34:53.065239+00:00",
+      "gen_seconds": 29.9,
+      "knockout_fraction": 0.876,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "particle-spark": {
+      "game": "gamekit",
+      "generated_at": "2026-07-06T04:34:53.065239+00:00",
+      "gen_seconds": 27.4,
+      "knockout_fraction": 0.853,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "shark-swim-1": {
+      "game": "sharky",
+      "generated_at": "2026-07-06T04:41:28.359449+00:00",
+      "gen_seconds": 66.5,
+      "knockout_fraction": 0.706,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "shark-swim-2": {
+      "game": "sharky",
+      "generated_at": "2026-07-06T04:47:37.502537+00:00",
+      "gen_seconds": 48.3,
+      "knockout_fraction": 0.706,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "shark-swim-3": {
+      "game": "sharky",
+      "generated_at": "2026-07-06T04:47:37.502537+00:00",
+      "gen_seconds": 44.0,
+      "knockout_fraction": 0.721,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "shark-ring": {
+      "game": "sharky",
+      "generated_at": "2026-07-06T04:41:28.359449+00:00",
+      "gen_seconds": 72.6,
+      "knockout_fraction": 0.647,
+      "model": "openai/gpt-image-2",
+      "quality": "high",
+      "note": "two-pass knockout (interior pocket cleared)"
+    },
+    "ocean-layer-back": {
+      "game": "sharky",
+      "generated_at": "2026-07-06T04:41:28.359449+00:00",
+      "gen_seconds": 56.0,
+      "knockout_fraction": null,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "ocean-layer-mid": {
+      "game": "sharky",
+      "generated_at": "2026-07-06T04:41:28.359449+00:00",
+      "gen_seconds": 51.4,
+      "knockout_fraction": 0.68,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    },
+    "ocean-layer-front": {
+      "game": "sharky",
+      "generated_at": "2026-07-06T04:41:28.359449+00:00",
+      "gen_seconds": 60.3,
+      "knockout_fraction": 0.638,
+      "model": "openai/gpt-image-2",
+      "quality": "high"
+    }
+  },
+  "last_run": {
+    "at": "2026-07-06T04:47:37.502537+00:00",
+    "only": "sharky",
+    "force": false,
+    "counts": {
+      "skipped": 5,
+      "ok": 2
+    }
+  }
+}
