@@ -3,7 +3,7 @@ import 'dotenv/config';
 export default {
   name: 'Theme Park Shark',
   slug: 'mobile-react',
-  version: '1.5.0',
+  version: '1.6.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
@@ -18,7 +18,7 @@ export default {
   },
   assetBundlePatterns: ['**/*'],
   ios: {
-    buildNumber: '20260226.1',
+    buildNumber: '20260926.1',
     bitcode: 'Debug',
     usesAppleSignIn: true,
     bundleIdentifier: 'com.themeparkshark.app',

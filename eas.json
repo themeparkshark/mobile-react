@@ -49,6 +49,20 @@
       "cache": {
         "customPaths": []
       }
+    },
+    "testflight": {
+      "extends": "production",
+      "distribution": "store",
+      "env": {
+        "API_URL": "https://jackets-gap-families-country.trycloudflare.com/api",
+        "EXPO_PUBLIC_API_URL": "https://jackets-gap-families-country.trycloudflare.com/api"
+      },
+      "node": "20.18.0",
+      "ios": {
+        "resourceClass": "m-medium",
+        "image": "latest"
+      },
+      "channel": "testflight"
     }
   },
   "submit": {
@@ -59,6 +73,9 @@
         "ascApiKeyId": "SVSYL5BWU2",
         "ascAppId": "6758812566"
       }
+    },
+    "testflight": {
+      "extends": "production"
     }
   }
 }
