@@ -278,7 +278,14 @@ export default function App() {
         <Stack.Screen
           name="LinePlay"
           component={LinePlayScreen}
-          initialParams={isLinePlayFlowPreview ? { ride: {
+          initialParams={isLinePlayFlowPreview ? { ride: process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE_ID ? {
+            // Dev only: a real local-backend ride, so verified Parts and the
+            // Lock Screen Live Activity run end to end.
+            rideId: Number(process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE_ID),
+            rideName: process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE_NAME ?? 'Ride',
+            parkId: Number(process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_PARK_ID ?? 1),
+            postedWaitMinutes: 35, postedWaitObservedAt: Date.now(), lineRewardsReady: true,
+          } : {
             rideId: 0,
             rideName: linePlayPreviewBigThunder ? 'Big Thunder Mountain Railroad' : 'Space Mountain',
             rideSlug: linePlayPreviewBigThunder ? 'big-thunder-mountain-railroad-8' : 'space-mountain-2',

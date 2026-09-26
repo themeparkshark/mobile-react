@@ -51,25 +51,27 @@
 	<string>Allow $(PRODUCT_NAME) to access your camera</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Theme Park Shark uses your location to show nearby home collectibles, park rides, and queue activities.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Theme Park Shark uses your location to show nearby home collectibles, park rides, and queue activities.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Allow $(PRODUCT_NAME) to access your microphone</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Allow $(PRODUCT_NAME) to access your device motion</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arm64</string>
-	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>location</string>
 	</array>
 	<key>UIRequiresFullScreen</key>
 	<false/>

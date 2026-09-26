@@ -10,15 +10,48 @@
 		13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB01A68108700A75B9A /* AppDelegate.mm */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
+		28437B8F04B50C60BE43EC97 /* LinePlayWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 221C1969083120D85CD5B49C /* LinePlayWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		320F9AAD158FEE6EE29D215F /* LinePlayWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A42BC7813DF6388987F6700 /* LinePlayWidgetBundle.swift */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
+		79BBD12CE181BC86A809DACC /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 94308893D4B83077F06FEA51 /* SwiftUI.framework */; };
+		83798C42611D315C95562EEF /* LinePlayAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 130E662FDC58D5F38F3E3CF5 /* LinePlayAttributes.swift */; };
+		92FC45BD2109AC61B98381DE /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ACE9002990BDBEC25E421CF5 /* WidgetKit.framework */; };
+		9303019BC3516579B8D4BC89 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FBF00E417228CF945A96A984 /* Foundation.framework */; };
 		96905EF65AED1B983A6B3ABC /* libPods-ThemeParkShark.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 58EEBF8E8E6FB1BC6CAF49B5 /* libPods-ThemeParkShark.a */; };
 		9D44B178881D476392279FA5 /* noop-file.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66DD9390D7E448BCA6005268 /* noop-file.swift */; };
+		A2F2E54558C0F60D2B95902A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 48FBFE94AA80A0DEF04639AF /* Assets.xcassets */; };
 		B18059E884C0ABDD17F3DC3D /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		D6E17D85E83F77BC5C9F1051 /* LinePlayLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728E520FDB399EE8A478C49B /* LinePlayLiveActivity.swift */; };
 		ECBD07BD44648D79E3659BA7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5F51505253681F60964A1349 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		755DA952BBFA917E7B28F0C6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3837534F8231292799E5B190;
+			remoteInfo = LinePlayWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		FB93DF78836704DF67C4A55C /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				28437B8F04B50C60BE43EC97 /* LinePlayWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		130E662FDC58D5F38F3E3CF5 /* LinePlayAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinePlayAttributes.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* ThemeParkShark.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ThemeParkShark.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FAF1A68108700A75B9A /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AppDelegate.h; path = ThemeParkShark/AppDelegate.h; sourceTree = "<group>"; };
 		13B07FB01A68108700A75B9A /* AppDelegate.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; name = AppDelegate.mm; path = ThemeParkShark/AppDelegate.mm; sourceTree = "<group>"; };
@@ -26,15 +59,23 @@
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = ThemeParkShark/Info.plist; sourceTree = "<group>"; };
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = ThemeParkShark/main.m; sourceTree = "<group>"; };
 		1CA1847588D846E9B2A53205 /* ThemeParkShark-Bridging-Header.h */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.c.h; name = "ThemeParkShark-Bridging-Header.h"; path = "ThemeParkShark/ThemeParkShark-Bridging-Header.h"; sourceTree = "<group>"; };
+		221C1969083120D85CD5B49C /* LinePlayWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LinePlayWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A42BC7813DF6388987F6700 /* LinePlayWidgetBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinePlayWidgetBundle.swift; sourceTree = "<group>"; };
+		48FBFE94AA80A0DEF04639AF /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		558370AE17DD10F8443692A7 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		58EEBF8E8E6FB1BC6CAF49B5 /* libPods-ThemeParkShark.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-ThemeParkShark.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5F51505253681F60964A1349 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = ThemeParkShark/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		66DD9390D7E448BCA6005268 /* noop-file.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = "noop-file.swift"; path = "ThemeParkShark/noop-file.swift"; sourceTree = "<group>"; };
 		6C2E3173556A471DD304B334 /* Pods-ThemeParkShark.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ThemeParkShark.debug.xcconfig"; path = "Target Support Files/Pods-ThemeParkShark/Pods-ThemeParkShark.debug.xcconfig"; sourceTree = "<group>"; };
+		728E520FDB399EE8A478C49B /* LinePlayLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LinePlayLiveActivity.swift; sourceTree = "<group>"; };
 		7A4D352CD337FB3A3BF06240 /* Pods-ThemeParkShark.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ThemeParkShark.release.xcconfig"; path = "Target Support Files/Pods-ThemeParkShark/Pods-ThemeParkShark.release.xcconfig"; sourceTree = "<group>"; };
+		94308893D4B83077F06FEA51 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = ThemeParkShark/SplashScreen.storyboard; sourceTree = "<group>"; };
+		ACE9002990BDBEC25E421CF5 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		FAC715A2D49A985799AEE119 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-ThemeParkShark/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		FBF00E417228CF945A96A984 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -43,6 +84,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				96905EF65AED1B983A6B3ABC /* libPods-ThemeParkShark.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3A5E103A04A7CEABBB1DE952 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9303019BC3516579B8D4BC89 /* Foundation.framework in Frameworks */,
+				92FC45BD2109AC61B98381DE /* WidgetKit.framework in Frameworks */,
+				79BBD12CE181BC86A809DACC /* SwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,6 +122,9 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				58EEBF8E8E6FB1BC6CAF49B5 /* libPods-ThemeParkShark.a */,
+				B3DA4038C311F52E1EBDFDF9 /* iOS */,
+				ACE9002990BDBEC25E421CF5 /* WidgetKit.framework */,
+				94308893D4B83077F06FEA51 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -91,6 +145,7 @@
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				D65327D7A22EEC0BE12398D9 /* Pods */,
 				D7E4C46ADA2E9064B798F356 /* ExpoModulesProviders */,
+				BF2EC173F5B6E9F6814F58A3 /* LinePlayWidget */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -101,6 +156,7 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* ThemeParkShark.app */,
+				221C1969083120D85CD5B49C /* LinePlayWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -113,6 +169,14 @@
 			name = ThemeParkShark;
 			sourceTree = "<group>";
 		};
+		B3DA4038C311F52E1EBDFDF9 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				FBF00E417228CF945A96A984 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
 			isa = PBXGroup;
 			children = (
@@ -120,6 +184,19 @@
 			);
 			name = Supporting;
 			path = ThemeParkShark/Supporting;
+			sourceTree = "<group>";
+		};
+		BF2EC173F5B6E9F6814F58A3 /* LinePlayWidget */ = {
+			isa = PBXGroup;
+			children = (
+				3A42BC7813DF6388987F6700 /* LinePlayWidgetBundle.swift */,
+				728E520FDB399EE8A478C49B /* LinePlayLiveActivity.swift */,
+				130E662FDC58D5F38F3E3CF5 /* LinePlayAttributes.swift */,
+				48FBFE94AA80A0DEF04639AF /* Assets.xcassets */,
+				558370AE17DD10F8443692A7 /* Info.plist */,
+			);
+			name = LinePlayWidget;
+			path = LinePlayWidget;
 			sourceTree = "<group>";
 		};
 		D65327D7A22EEC0BE12398D9 /* Pods */ = {
@@ -151,6 +228,7 @@
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
+				FB93DF78836704DF67C4A55C /* Embed App Extensions */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				3A1C62635FBBF0313D22AFF1 /* [CP] Embed Pods Frameworks */,
@@ -159,11 +237,29 @@
 			buildRules = (
 			);
 			dependencies = (
+				DBB85C3B5B8CF1627708B0C5 /* PBXTargetDependency */,
 			);
 			name = ThemeParkShark;
 			productName = ThemeParkShark;
 			productReference = 13B07F961A680F5B00A75B9A /* ThemeParkShark.app */;
 			productType = "com.apple.product-type.application";
+		};
+		3837534F8231292799E5B190 /* LinePlayWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5234193850F98CD8800CAA01 /* Build configuration list for PBXNativeTarget "LinePlayWidget" */;
+			buildPhases = (
+				AE346C15D7B43C94BA5E57F2 /* Sources */,
+				3A5E103A04A7CEABBB1DE952 /* Frameworks */,
+				A53936EA2D5055C148CBB31C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LinePlayWidget;
+			productName = LinePlayWidget;
+			productReference = 221C1969083120D85CD5B49C /* LinePlayWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -192,6 +288,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* ThemeParkShark */,
+				3837534F8231292799E5B190 /* LinePlayWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -205,6 +302,14 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				ECBD07BD44648D79E3659BA7 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A53936EA2D5055C148CBB31C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A2F2E54558C0F60D2B95902A /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -370,7 +475,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AE346C15D7B43C94BA5E57F2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				320F9AAD158FEE6EE29D215F /* LinePlayWidgetBundle.swift in Sources */,
+				D6E17D85E83F77BC5C9F1051 /* LinePlayLiveActivity.swift in Sources */,
+				83798C42611D315C95562EEF /* LinePlayAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DBB85C3B5B8CF1627708B0C5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = LinePlayWidget;
+			target = 3837534F8231292799E5B190 /* LinePlayWidget */;
+			targetProxy = 755DA952BBFA917E7B28F0C6 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
@@ -437,6 +561,30 @@
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
+		};
+		70336DEEB78F9ACEA0070009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RZD44CR3XS;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LinePlayWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = LinePlay;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = com.themeparkshark.app.LinePlayWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 		83CBBA201A601CBA00E9B192 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -558,6 +706,31 @@
 			};
 			name = Release;
 		};
+		CDC3F17E22C531CBB91FD33C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RZD44CR3XS;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LinePlayWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = LinePlay;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.themeparkshark.app.LinePlayWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -566,6 +739,15 @@
 			buildConfigurations = (
 				13B07F941A680F5B00A75B9A /* Debug */,
 				13B07F951A680F5B00A75B9A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5234193850F98CD8800CAA01 /* Build configuration list for PBXNativeTarget "LinePlayWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CDC3F17E22C531CBB91FD33C /* Release */,
+				70336DEEB78F9ACEA0070009 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

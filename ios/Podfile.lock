@@ -184,6 +184,8 @@ PODS:
     - libavif/core
     - libdav1d (>= 0.6.0)
   - libdav1d (1.2.0)
+  - LinePlayActivity (1.0.0):
+    - ExpoModulesCore
   - lottie-ios (4.5.0)
   - lottie-react-native (7.1.0):
     - DoubleConversion
@@ -2242,6 +2244,7 @@ DEPENDENCIES:
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
+  - LinePlayActivity (from `../modules/lineplay-activity/ios`)
   - lottie-react-native (from `../node_modules/lottie-react-native`)
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCT-Folly/Fabric (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
@@ -2421,6 +2424,8 @@ EXTERNAL SOURCES:
   hermes-engine:
     :podspec: "../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
     :tag: hermes-2024-11-12-RNv0.76.2-5b4aa20c719830dcf5684832b89a6edb95ac3d64
+  LinePlayActivity:
+    :path: "../modules/lineplay-activity/ios"
   lottie-react-native:
     :path: "../node_modules/lottie-react-native"
   RCT-Folly:
@@ -2618,6 +2623,7 @@ SPEC CHECKSUMS:
   hermes-engine: 9e868dc7be781364296d6ee2f56d0c1a9ef0bb11
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
+  LinePlayActivity: 466cd420d6309e6ad436bb790099134c24c89410
   lottie-ios: a881093fab623c467d3bce374367755c272bdd59
   lottie-react-native: 4ba06e2e4985c53dda6595a880f780e7ff551df1
   nanopb: 438bc412db1928dac798aa6fd75726007be04262

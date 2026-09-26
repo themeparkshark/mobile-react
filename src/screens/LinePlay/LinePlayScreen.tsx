@@ -138,6 +138,8 @@ function tabLabel(screen: string): string {
   return screen === 'Leaderboard' ? 'Standings' : screen;
 }
 
+import { useLinePlayLiveActivity } from '../../services/lineplay/useLinePlayLiveActivity';
+
 export default function LinePlayScreen() {
   const navigation = useNavigation();
   const route = useRoute<any>();
@@ -590,6 +592,17 @@ export default function LinePlayScreen() {
   const activityPages = linePlayPages<
     ActivityItem | { kind: 'signal' | 'puzzle'; id: string }
   >(chapterPages, sharedPages);
+  useLinePlayLiveActivity({
+    rideName: ride?.rideName ?? 'LinePlay',
+    state: snapshot.state,
+    rewardTracking: snapshot.serverSessionId != null && !snapshot.rewardUnavailable,
+    creditedParts: snapshot.creditedParts,
+    verifiedEligibleSeconds: snapshot.verifiedEligibleSeconds,
+    verifiedPresenceAt: snapshot.verifiedPresenceAt,
+    partIntervalSeconds: snapshot.partIntervalSeconds,
+    sessionPartCap: snapshot.sessionPartCap,
+    partsRemainingToday: snapshot.partsRemainingToday,
+  });
   const arcadeChoices = queueArcadeDestinations(activityPages, completedActivityIds)
     .map(choice => ({
       id: choice.id,

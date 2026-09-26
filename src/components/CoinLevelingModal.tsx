@@ -170,11 +170,21 @@ export default function CoinLevelingModal({
       useNativeDriver: true,
     });
 
-    Animated.parallel([shake, chargeUp, scaleUp]).start();
+    // The charge always plays out in full so the pop lands at the peak, even
+    // when the server answers instantly. Haptics climb with the charge.
+    const charged = new Promise<void>((resolve) => {
+      Animated.parallel([shake, chargeUp, scaleUp]).start(() => resolve());
+    });
+    const chargeTicks = Platform.OS === 'ios' ? [
+      [400, Haptics.ImpactFeedbackStyle.Light],
+      [800, Haptics.ImpactFeedbackStyle.Medium],
+      [1200, Haptics.ImpactFeedbackStyle.Heavy],
+    ].map(([ms, style]) => setTimeout(() => Haptics.impactAsync(style as any), ms as number)) : [];
 
     // Phase 2: Flash + success
     try {
-      const success = await onLevelUp(rideCoin.id);
+      const [success] = await Promise.all([onLevelUp(rideCoin.id), charged]);
+      chargeTicks.forEach(clearTimeout);
 
       if (success) {
         playSound(require('../../assets/sounds/reward.mp3'));
@@ -202,6 +212,7 @@ export default function CoinLevelingModal({
         throw new Error('Level up failed');
       }
     } catch {
+      chargeTicks.forEach(clearTimeout);
       setState('preview');
       shakeAnim.setValue(0);
       coinScale.setValue(1);
