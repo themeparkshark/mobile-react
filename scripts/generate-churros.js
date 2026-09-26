@@ -1,3 +1,4 @@
+// Needs sharp (not an app dependency): npm i --no-save sharp
 /**
  * Generate 40 Churro Variants for Theme Park Shark
  * 

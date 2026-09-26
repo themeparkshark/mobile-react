@@ -1,3 +1,4 @@
+// Needs sharp (not an app dependency): npm i --no-save sharp
 /**
  * Theme Park Shark Rain Parade collectible art. Deterministic source SVGs and
  * bundled PNGs keep every variant available offline at map and book size.

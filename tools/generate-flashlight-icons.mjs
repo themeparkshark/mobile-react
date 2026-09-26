@@ -1,3 +1,4 @@
+// Needs sharp (not an app dependency): npm i --no-save sharp
 /**
  * Deterministic code-native art for the Night Lights collection.
  * Eight decorated shark-world torches in five colorways yield 40 distinct

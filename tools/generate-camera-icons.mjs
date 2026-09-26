@@ -1,3 +1,4 @@
+// Needs sharp (not an app dependency): npm i --no-save sharp
 /** Camera Crew collectible badges. Run: node tools/generate-camera-icons.mjs */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
