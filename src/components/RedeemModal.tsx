@@ -92,7 +92,8 @@ export default function RedeemModal({
             onPress={async () => {
               setModalVisible(true);
             }}
-            text={'Redeem'}
+            text={redeemable.type === 'task' ? 'Play Ride!'
+              : redeemable.type === 'secret_task' ? 'Play Secret!' : 'Redeem'}
           />
         </Animated.View>
       )}

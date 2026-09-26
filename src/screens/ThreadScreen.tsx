@@ -32,19 +32,21 @@ import useCrumbs from '../hooks/useCrumbs';
 import { CommentType } from '../models/comment-type';
 import { ThreadType } from '../models/thread-type';
 import config from '../config';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { ParamListBase } from '@react-navigation/native';
 
 // ── Sort Filter Pills ─────────────────────────────────────
 const SORT_FILTERS = [
   { label: 'New', value: 'latest', icon: faBolt, color: '#00a5f5' },
   { label: 'Reactions', value: 'most_reactions', icon: faHeart, color: '#ef4444' },
-];
+] as const;
 
 function SortPills({
   active,
   onSelect,
 }: {
-  active: string;
-  onSelect: (value: string) => void;
+  active: 'latest' | 'most_reactions';
+  onSelect: (value: 'latest' | 'most_reactions') => void;
 }) {
   return (
     <ScrollView
@@ -361,8 +363,8 @@ function CommentCard({ comment, index, onReplyPress }: { comment: CommentType; i
 }
 
 // ── Main Screen ───────────────────────────────────────────
-export default function ThreadScreen({ route }) {
-  const { thread } = route.params;
+export default function ThreadScreen({ route }: NativeStackScreenProps<ParamListBase, 'Thread'>) {
+  const { thread } = route.params as { thread: number };
   const { setActiveComment, reactionTypes } = useContext(ForumContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [currentThread, setCurrentThread] = useState<ThreadType>();
@@ -370,7 +372,7 @@ export default function ThreadScreen({ route }) {
   const [comments, setComments] = useState<CommentType[]>([]);
   const { player } = useContext(AuthContext);
   const { warnings, labels } = useCrumbs();
-  const [activeSort, setActiveSort] = useState<string>('latest');
+  const [activeSort, setActiveSort] = useState<'latest' | 'most_reactions'>('latest');
 
   const fetchComments = async (p: number) => {
     if (!currentThread) return;

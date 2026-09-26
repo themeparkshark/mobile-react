@@ -29,8 +29,10 @@ export default async function currentPark(
     }
     return data?.data ?? null;
   } catch (error: any) {
-    // 422 is expected when not at a park - don't use console.error (triggers dev modal)
-    console.log('🦈 Not at a park or fetch failed:', error?.message || error);
-    return null;
+    // The location check returns 422 outside a park. Preserve real network
+    // failures for the caller so a queue guest does not lose the known park
+    // every time connectivity drops.
+    if (error?.response?.status === 422) return null;
+    throw error;
   }
 }

@@ -4,7 +4,8 @@ import client from '../../client';
 export default async function getCrumbs(): Promise<any> {
   console.log('🦈 Fetching crumbs...');
   try {
-    const response = await client.get('/crumbs');
+    // Splash waits for this request; do not strand sign-in on a slow API.
+    const response = await client.get('/crumbs', { timeout: 10000 });
     let data = response.data;
     
     // Parse if string

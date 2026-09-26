@@ -25,12 +25,15 @@ import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import usePurchaseItem from '../hooks/usePurchaseItem';
+import currencyBalance from '../helpers/currency-balance';
 import { CatalogType } from '../models/catalog-type';
 import { InformationModalEnums } from '../models/information-modal-enums';
 import { ItemType } from '../models/item-type';
 import { StoreType } from '../models/store-type';
 import { useTutorial } from '../components/Tutorial';
 import Item from './StoreScreen/Item';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { ParamListBase } from '@react-navigation/native';
 
 const SCREEN_W = Dimensions.get('window').width;
 
@@ -231,8 +234,8 @@ function SingleBubble({
   );
 }
 
-export default function StoreScreen({ route }) {
-  const { store } = route.params;
+export default function StoreScreen({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
+  const { store } = route.params as { store: number };
   const [currentStore, setCurrentStore] = useState<StoreType>();
   const [catalog, setCatalog] = useState<CatalogType>();
   const [items, setItems] = useState<ItemType[]>([]);
@@ -372,7 +375,7 @@ export default function StoreScreen({ route }) {
                           marginLeft: 8,
                         }}
                       >
-                        {player[currency.name.toLowerCase()] ?? 0}{' '}
+                        {player ? currencyBalance(player, currency.name) : 0}{' '}
                         {currency.name}
                       </Text>
                     </View>
@@ -405,7 +408,7 @@ export default function StoreScreen({ route }) {
                 }}
               >
                 <FlashList
-                  data={items as ReadonlyArray<ItemType[]>}
+                  data={items}
                   contentContainerStyle={{
                     padding: 8,
                     backgroundColor: 'rgba(255, 255, 255, .6)',
@@ -413,11 +416,11 @@ export default function StoreScreen({ route }) {
                   numColumns={3}
                   renderItem={({ item }) => (
                     <View style={{ padding: 8, flex: 1 }}>
-                      <Item item={item as ItemType} onPurchase={purchaseItem} />
+                      <Item item={item} onPurchase={purchaseItem} />
                     </View>
                   )}
                   estimatedItemSize={80}
-                  keyExtractor={(item) => item.id}
+                  keyExtractor={(item) => String(item.id)}
                   onEndReached={() => {
                     setPage((prevState) => prevState + 1);
                   }}

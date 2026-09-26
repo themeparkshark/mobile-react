@@ -86,7 +86,9 @@ interface RhythmFieldProps {
 function layoutTargets(plan: RoundPlan): FieldTarget[] {
   const cx = SCREEN_W / 2;
   const cy = SCREEN_H * 0.46;
-  const spreadX = SCREEN_W * 0.26;
+  // Keep the full approach ring on-screen, including its first large frame.
+  const spreadX = Math.min(SCREEN_W * 0.10,
+    Math.max(0, cx - TARGET_RADIUS * RING_START_SCALE - 12));
   const spreadY = SCREEN_H * 0.14;
   return plan.targets.map((t: Target, i: number) => {
     // Lissajous-ish placement keyed to index → smooth, deterministic wandering.
@@ -128,7 +130,9 @@ export function RhythmField({
   const lastBeatSv = useSharedValue(-1);
   const finishedSv = useSharedValue(0);
   const feverSv = useSharedValue(fever ? 1 : 0);
-  feverSv.value = fever ? 1 : 0;
+  useEffect(() => {
+    feverSv.value = fever ? 1 : 0;
+  }, [fever, feverSv]);
 
   // -- The fixed-timestep loop advances the clock and auto-misses stragglers. -
   const loop = useGameLoop({

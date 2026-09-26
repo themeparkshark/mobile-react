@@ -115,7 +115,7 @@ export default function HoloCoinPreview({ visible, coinUrl, name, onClose }: Pro
     { top: '50%', left: '82%', size: 4 },
     { top: '72%', left: '30%', size: 3 },
     { top: '78%', left: '68%', size: 4 },
-  ];
+  ] as const;
 
   return (
     <Modal
@@ -159,7 +159,7 @@ export default function HoloCoinPreview({ visible, coinUrl, name, onClose }: Pro
                   holoStyle,
                 ]}
               >
-                {[
+                {([
                   { color: 'rgba(255,50,50,0.35)', top: '0%' },
                   { color: 'rgba(255,180,0,0.3)', top: '14%' },
                   { color: 'rgba(255,255,50,0.3)', top: '28%' },
@@ -167,7 +167,7 @@ export default function HoloCoinPreview({ visible, coinUrl, name, onClose }: Pro
                   { color: 'rgba(50,200,255,0.3)', top: '56%' },
                   { color: 'rgba(130,50,255,0.3)', top: '70%' },
                   { color: 'rgba(255,50,200,0.3)', top: '84%' },
-                ].map((band, i) => (
+                ] as const).map((band, i) => (
                   <View
                     key={i}
                     style={{

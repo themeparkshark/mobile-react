@@ -11,7 +11,12 @@ import { LocationContext } from '../context/LocationProvider';
 
 // Map always rotates with heading. Single button recenters on player.
 
-export default function Map({ children, onPress }: { readonly children: ReactNode; readonly onPress?: () => void }) {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72 }: {
+  readonly children: ReactNode;
+  readonly onPress?: () => void;
+  readonly focusCoordinate?: { latitude: number; longitude: number; requestId?: number } | null;
+  readonly controlsTop?: number;
+}) {
   const { location, heading, headingEnabled, setHeadingEnabled } = useContext(LocationContext);
   const { player } = useContext(AuthContext);
 
@@ -129,6 +134,12 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
   }, []);
   const mapRef = useRef<MapView>(null);
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
+  useEffect(() => {
+    if (!focusCoordinate || !Number.isFinite(focusCoordinate.latitude) ||
+      !Number.isFinite(focusCoordinate.longitude)) return;
+    setFocusedOnPlayer(false);
+    mapRef.current?.animateCamera({ center: focusCoordinate, heading: 0, altitude: 250 }, { duration: 450 });
+  }, [focusCoordinate?.latitude, focusCoordinate?.longitude, focusCoordinate?.requestId]);
   // Animated value for user location heading indicator
   const userHeadingRotation = useRef(new Animated.Value(0)).current;
   const lastUserHeadingRef = useRef<number>(0);
@@ -210,7 +221,7 @@ export default function Map({ children, onPress }: { readonly children: ReactNod
       <View
         style={{
           position: 'absolute',
-          top: 72,
+          top: controlsTop,
           right: 16,
           zIndex: 10,
           gap: 8,

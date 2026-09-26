@@ -1,28 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, Dimensions,
+  View, Text, ScrollView, Pressable, StyleSheet,
   RefreshControl, Animated, Easing,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { getPlayerRides, getRideStats, PlayerRideType, RideStatsType } from '../../api/endpoints/player-rides';
 import { getRideProfileStats, RideProfileStats } from '../../api/endpoints/player-rides/profileStats';
 import RideCard from '../../components/RideTracker/RideCard';
-import SharkRating from '../../components/RideTracker/SharkRating';
-import { colors } from '../../design-system';
-
-const { width } = Dimensions.get('window');
+import Wrapper from '../../components/Wrapper';
+import Topbar, { BackButton } from '../../components/Topbar';
+import TopbarColumn from '../../components/Topbar/TopbarColumn';
+import TopbarText from '../../components/Topbar/TopbarText';
 
 // ─── Rider Levels (based on rides logged) ───
 const RIDER_LEVELS = [
-  { min: 0, title: 'Guppy', emoji: '🐟' },
-  { min: 11, title: 'Reef Shark', emoji: '🦈' },
-  { min: 51, title: 'Bull Shark', emoji: '🦈' },
-  { min: 101, title: 'Tiger Shark', emoji: '🐅' },
-  { min: 251, title: 'Great White', emoji: '🦈' },
-  { min: 501, title: 'Megalodon', emoji: '🦷' },
+  { min: 0, title: 'Guppy' },
+  { min: 11, title: 'Reef Shark' },
+  { min: 51, title: 'Bull Shark' },
+  { min: 101, title: 'Tiger Shark' },
+  { min: 251, title: 'Great White' },
+  { min: 501, title: 'Megalodon' },
 ];
 
 function getRiderLevel(count: number) {
@@ -84,8 +84,8 @@ function CountUp({ to, style, duration = 800 }: { to: number; style?: any; durat
 }
 
 // ─── Menu Row ───
-function MenuRow({ icon, iconBg, title, sub, onPress, delay = 0, badge }: {
-  icon: string; iconBg: [string, string]; title: string; sub: string; onPress: () => void; delay?: number; badge?: string;
+function MenuRow({ icon, title, sub, onPress, delay = 0, badge }: {
+  icon: number; title: string; sub: string; onPress: () => void; delay?: number; badge?: string;
 }) {
   return (
     <FadeIn delay={delay}>
@@ -93,15 +93,13 @@ function MenuRow({ icon, iconBg, title, sub, onPress, delay = 0, badge }: {
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); }}
         style={({ pressed }) => [s.menuRow, pressed && { backgroundColor: '#f0f4f8', transform: [{ scale: 0.99 }] }]}
       >
-        <LinearGradient colors={iconBg} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.menuRowIconWrap}>
-          <Text style={s.menuRowIcon}>{icon}</Text>
-        </LinearGradient>
+        <Image source={icon} style={s.menuRowIcon} contentFit="contain" />
         <View style={{ flex: 1 }}>
           <Text style={s.menuRowTitle}>{title}</Text>
           <Text style={s.menuRowSub}>{sub}</Text>
         </View>
         {badge && (
-          <View style={[s.menuRowBadge, { backgroundColor: iconBg[0] }]}>
+          <View style={s.menuRowBadge}>
             <Text style={s.menuRowBadgeText}>{badge}</Text>
           </View>
         )}
@@ -117,19 +115,35 @@ function MenuRow({ icon, iconBg, title, sub, onPress, delay = 0, badge }: {
 
 export default function RideTrackerScreen() {
   const nav = useNavigation<any>();
+  const preview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_TRACKER_PREVIEW === '1';
   const [stats, setStats] = useState<RideStatsType | null>(null);
   const [profile, setProfile] = useState<RideProfileStats | null>(null);
   const [recent, setRecent] = useState<PlayerRideType[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadUnavailable, setLoadUnavailable] = useState(false);
 
   const load = useCallback(async () => {
+    if (preview) {
+      setStats({ total_rides: 24, unique_rides: 14, per_park: [], top_rated: [],
+        most_ridden: [{ id: 1, name: 'Space Mountain', type: 'coaster', park_id: 2, ride_count: 4 }],
+        current_streak: 2 });
+      setProfile(null);
+      setRecent([]);
+      setLoadUnavailable(false);
+      return;
+    }
     try {
       const [st, ri, pr] = await Promise.all([
         getRideStats(), getPlayerRides({ per_page: 5 }), getRideProfileStats().catch(() => null),
       ]);
       setStats(st); setRecent(ri.data); if (pr) setProfile(pr);
-    } catch (e) { console.error(e); }
-  }, []);
+      setLoadUnavailable(false);
+    } catch {
+      // Keep previously loaded journal data and avoid logging an Axios object
+      // into React Native LogBox while the ride service is unavailable.
+      setLoadUnavailable(true);
+    }
+  }, [preview]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   const onRefresh = useCallback(async () => { setRefreshing(true); await load(); setRefreshing(false); }, [load]);
@@ -141,45 +155,35 @@ export default function RideTrackerScreen() {
   const toNext = next && stats ? next.min - stats.total_rides : 0;
 
   return (
-    <View style={s.root}>
+    <Wrapper>
+      <Topbar>
+        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
+        <TopbarColumn><TopbarText>Ride Tracker</TopbarText></TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
       <ScrollView
+        style={s.root}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 28 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
       >
-        {/* ══ HEADER ══ */}
+        {/* Ride journal hero below the app's original curved header. */}
         <LinearGradient
-          colors={['#7DD3FC', '#38BDF8', '#0EA5E9', '#0284C7']}
+          colors={['#2BA9E9', '#1179CB', '#0757A3']}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={s.header}
         >
-          <SafeAreaView edges={['top']}>
-            <View style={s.nav}>
-              <Pressable onPress={() => nav.goBack()} hitSlop={16} style={({ pressed }) => [s.navBtn, pressed && { opacity: 0.6 }]}>
-                <Text style={s.navBtnText}>‹</Text>
-              </Pressable>
-              <Text style={s.navTitle}>RIDE TRACKER</Text>
-              <View style={{ width: 40 }} />
+          <View style={s.heroCenter}>
+            <View style={s.heroCopy}>
+              <Text style={s.heroEyebrow}>YOUR RIDE JOURNAL</Text>
+              {has ? <CountUp to={stats.total_rides} style={s.heroNum} />
+                : <Text style={s.heroNum}>{loadUnavailable ? '—' : '0'}</Text>}
+              <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'JOURNAL OFFLINE' : 'RIDES LOGGED'}</Text>
             </View>
-
-            {/* Big Ride Count + Rank */}
-            {has ? (
-              <FadeIn delay={100}>
-                <View style={s.heroCenter}>
-                  <Text style={s.heroEmoji}>{lvl.emoji}</Text>
-                  <CountUp to={stats.total_rides} style={s.heroNum} />
-                  <Text style={s.heroLabel}>RIDES LOGGED</Text>
-                </View>
-              </FadeIn>
-            ) : (
-              <View style={s.heroCenter}>
-                <Text style={s.heroEmoji}>🎢</Text>
-                <Text style={s.heroNum}>0</Text>
-                <Text style={s.heroLabel}>RIDES LOGGED</Text>
-              </View>
-            )}
-          </SafeAreaView>
+            <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
+              style={s.heroShark} contentFit="contain" accessibilityLabel="Theme Park Shark with a park ticket and coin" />
+          </View>
         </LinearGradient>
 
         {/* ══ RANK CARD (overlaps header) ══ */}
@@ -191,7 +195,7 @@ export default function RideTrackerScreen() {
                   <View style={s.rankPill}>
                     <Text style={s.rankPillText}>{lvl.title.toUpperCase()}</Text>
                   </View>
-                  {next && <Text style={s.rankNext}>{toNext} to {next.title} {next.emoji}</Text>}
+                  {next && <Text style={s.rankNext}>{toNext} to {next.title}</Text>}
                 </View>
                 <ProgressBar progress={prog} />
               </View>
@@ -200,6 +204,13 @@ export default function RideTrackerScreen() {
         )}
 
         <View style={[s.content, !has && { paddingTop: 16 }]}>
+
+          {loadUnavailable && (
+            <Text style={{ color: '#315C7C', fontFamily: 'Knockout', fontSize: 15,
+              textAlign: 'center', marginBottom: 14 }}>
+              Ride details are unavailable. Pull down to retry.
+            </Text>
+          )}
 
           {/* ── Log a Ride ── */}
           <FadeIn delay={has ? 250 : 100}>
@@ -213,7 +224,8 @@ export default function RideTrackerScreen() {
                 end={{ x: 1, y: 1 }}
                 style={s.logBtnInner}
               >
-                <Text style={s.logBtnEmoji}>🎢</Text>
+                <Image source={require('../../../assets/images/screens/explore/list.png')}
+                  style={s.logBtnIcon} contentFit="contain" />
                 <View style={{ flex: 1 }}>
                   <Text style={s.logBtnTitle}>Log a Ride</Text>
                   <Text style={s.logBtnSub}>Track your theme park adventures</Text>
@@ -247,28 +259,28 @@ export default function RideTrackerScreen() {
           <FadeIn delay={400}><Text style={s.sectionTitle}>EXPLORE</Text></FadeIn>
           <View style={s.menuList}>
             <MenuRow
-              icon="📜" iconBg={['#ef4444', '#dc2626']}
+              icon={require('../../../assets/images/screens/explore/list.png')}
               title="Ride History" sub="Every ride you've logged"
               onPress={() => nav.navigate('RideHistory')} delay={420}
             />
             <MenuRow
-              icon="📊" iconBg={['#3b82f6', '#1d4ed8']}
+              icon={require('../../../assets/images/toolbar/leaderboard.png')}
               title="Stats & Insights" sub="Patterns, favorites, milestones"
               onPress={() => nav.navigate('RideStats')} delay={450}
             />
             <MenuRow
-              icon="📚" iconBg={['#8b5cf6', '#7c3aed']}
+              icon={require('../../../assets/images/screens/profile/pin_collections.png')}
               title="Collections" sub="Ride every mountain, coaster, and more"
               onPress={() => nav.navigate('RideCollections')} delay={480}
             />
             <MenuRow
-              icon="🏆" iconBg={['#f59e0b', '#d97706']}
+              icon={require('../../../assets/images/screens/explore/stampbook.png')}
               title="Achievements" sub="Badges you've unlocked"
               onPress={() => nav.navigate('RideAchievements')} delay={510}
               badge={profile?.achievement_count ? `${profile.achievement_count}` : undefined}
             />
             <MenuRow
-              icon="🎁" iconBg={['#ec4899', '#db2777']}
+              icon={require('../../../assets/images/screens/explore/tasklist.png')}
               title="Wrapped" sub="Your personalized ride recap"
               onPress={() => nav.navigate('RideWrapped')} delay={540}
             />
@@ -280,11 +292,10 @@ export default function RideTrackerScreen() {
               <Text style={s.sectionTitle}>MOST RIDDEN</Text>
               <View style={s.card}>
                 {stats.most_ridden.slice(0, 3).map((r, i) => {
-                  const medals = ['🥇', '🥈', '🥉'];
                   return (
                     <React.Fragment key={r.id}>
                       <View style={s.mostRow}>
-                        <Text style={s.mostMedal}>{medals[i]}</Text>
+                        <Text style={s.mostMedal}>{i + 1}</Text>
                         <Text style={s.mostName} numberOfLines={1}>{r.name}</Text>
                         <View style={s.mostChip}>
                           <Text style={s.mostChipText}>{r.ride_count}×</Text>
@@ -314,11 +325,12 @@ export default function RideTrackerScreen() {
           )}
 
           {/* ── Empty State ── */}
-          {!has && (
+          {!has && !loadUnavailable && (
             <FadeIn delay={200}>
               <View style={s.card}>
                 <View style={{ alignItems: 'center', paddingVertical: 24 }}>
-                  <Text style={{ fontSize: 56, marginBottom: 12 }}>🦈</Text>
+                  <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
+                    style={s.emptyShark} contentFit="contain" />
                   <Text style={s.emptyTitle}>Start Your Ride Journal!</Text>
                   <Text style={s.emptySub}>
                     Track every ride, earn achievements, and level up your rider rank!
@@ -329,7 +341,7 @@ export default function RideTrackerScreen() {
           )}
         </View>
       </ScrollView>
-    </View>
+    </Wrapper>
   );
 }
 
@@ -338,26 +350,16 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#dbeefe' },
 
   // Header
-  header: { paddingBottom: 40 },
-  nav: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
-  },
-  navBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  navBtnText: { color: '#fff', fontSize: 28, fontWeight: '300', marginTop: -2 },
-  navTitle: {
-    color: '#fff', fontSize: 18, fontWeight: '900', fontFamily: 'Shark', letterSpacing: 1,
-    textShadowColor: 'rgba(0,0,0,0.15)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
-  },
+  header: { paddingBottom: 23 },
 
   // Hero
-  heroCenter: { alignItems: 'center', paddingTop: 8, paddingBottom: 12 },
-  heroEmoji: { fontSize: 48, marginBottom: 2 },
+  heroCenter: { minHeight: 142, flexDirection: 'row', alignItems: 'center',
+    paddingLeft: 25, paddingRight: 8, paddingTop: 2 },
+  heroCopy: { flex: 1, zIndex: 1 },
+  heroEyebrow: { color: '#C7EFFF', fontSize: 13, fontFamily: 'Knockout', letterSpacing: 1.4 },
+  heroShark: { width: 150, height: 134, marginRight: -9, alignSelf: 'flex-end' },
   heroNum: {
-    color: '#fff', fontSize: 56, fontWeight: '900', fontFamily: 'Shark',
+    color: '#fff', fontSize: 53, fontWeight: '900', fontFamily: 'Shark',
     textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4,
   },
   heroLabel: {
@@ -389,7 +391,7 @@ const s = StyleSheet.create({
   logBtnInner: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 18, gap: 14,
   },
-  logBtnEmoji: { fontSize: 36 },
+  logBtnIcon: { width: 45, height: 45 },
   logBtnTitle: { color: '#fff', fontSize: 20, fontWeight: '900', fontFamily: 'Shark' },
   logBtnSub: { color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 1 },
   logBtnArrow: { color: '#fff', fontSize: 24, fontWeight: '600' },
@@ -428,12 +430,12 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 14, gap: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
-  menuRowIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  menuRowIcon: { fontSize: 22 },
-  menuRowTitle: { fontSize: 16, fontWeight: '800', color: '#1a1a2e' },
-  menuRowSub: { fontSize: 12, color: '#94a3b8', marginTop: 1 },
+  menuRowIcon: { width: 48, height: 48 },
+  menuRowTitle: { fontSize: 17, fontFamily: 'Knockout', color: '#103F75' },
+  menuRowSub: { fontSize: 13, color: '#51718D', marginTop: 1 },
   menuRowChevron: { fontSize: 22, color: '#cbd5e1', fontWeight: '300' },
-  menuRowBadge: { borderRadius: 10, minWidth: 22, height: 22, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center' },
+  menuRowBadge: { borderRadius: 10, minWidth: 22, height: 22, paddingHorizontal: 7,
+    backgroundColor: '#0877CA', alignItems: 'center', justifyContent: 'center' },
   menuRowBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
 
   // Cards
@@ -442,7 +444,7 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
   mostRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  mostMedal: { fontSize: 24, width: 36, textAlign: 'center' },
+  mostMedal: { fontSize: 16, fontFamily: 'Shark', color: '#8A5B08', width: 30, textAlign: 'center' },
   mostName: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1a1a2e' },
   mostChip: { backgroundColor: '#e8f4fd', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
   mostChipText: { fontSize: 13, fontWeight: '700', color: '#09268f' },
@@ -451,4 +453,5 @@ const s = StyleSheet.create({
   // Empty
   emptyTitle: { fontSize: 22, fontWeight: '900', fontFamily: 'Shark', color: '#1a1a2e', marginBottom: 8 },
   emptySub: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, paddingHorizontal: 16 },
+  emptyShark: { width: 100, height: 88, marginBottom: 8 },
 });

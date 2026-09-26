@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { createContext, FC, ReactNode, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import { createContext, FC, ReactNode, MutableRefObject, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { useAsyncEffect, useDebounce, useIntervalWhen } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
@@ -7,6 +7,7 @@ import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
 import { AuthContext } from './AuthProvider';
 import { setDevModeEnabled, setDevLocation as setGlobalDevLocation } from '../helpers/dev-location-store';
+import { shouldRefreshParkLookup, type ParkLookupRecord } from './parkLookupPolicy';
 
 // Smoothing factor for heading (lower = smoother but laggier, higher = more responsive but jittery)
 // Tuned for snappy but stable
@@ -19,6 +20,9 @@ const FAST_TURN_SMOOTHING = 0.75; // very responsive when turning
 
 export interface LocationContextType {
   readonly location: LocationType | undefined;
+  /** Latest raw OS sample, even when map movement is filtered as GPS drift. */
+  readonly latestLocationSampleRef: MutableRefObject<(LocationType & { timestamp: number;
+    accuracyMeters?: number | null; speedMps?: number | null }) | null>;
   readonly heading: number | null;
   readonly headingEnabled: boolean;
   readonly setHeadingEnabled: (enabled: boolean) => void;
@@ -27,7 +31,9 @@ export interface LocationContextType {
   readonly requestPark: () => void;
   readonly park?: ParkType;
   readonly parkLoaded: boolean;
+  readonly parkLookupRecord: ParkLookupRecord | null;
   readonly permissionGranted: boolean;
+  readonly setAccuracyMode: (mode: 'navigation' | 'queue') => void;
   // Dev joystick support
   readonly devMode: boolean;
   readonly setDevMode: (enabled: boolean) => void;
@@ -44,10 +50,13 @@ const DEV_DEFAULT_LNG = -118.3534;
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
+  const latestLocationSampleRef = useRef<(LocationType & { timestamp: number;
+    accuracyMeters?: number | null; speedMps?: number | null }) | null>(null);
   const [park, setPark] = useState<ParkType>();
-  const { player } = useContext(AuthContext);
+  const { player, refreshPlayer } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
+  const [accuracyMode, setAccuracyMode] = useState<'navigation' | 'queue'>('navigation');
   // Fast debounce — the AnimatedRegion glide in Map.tsx handles visual smoothing,
   // so we want location state to update as quickly as possible
   const debouncedSetLocation = useDebounce(setLocation, 400, {
@@ -65,6 +74,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       longitude: prev.longitude + dx * speed,
     };
     devLocationRef.current = newLoc;
+    latestLocationSampleRef.current = { ...newLoc, timestamp: Date.now() };
     setGlobalDevLocation(newLoc);
     setLocation(newLoc);
   }, []);
@@ -74,6 +84,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     if (devMode && __DEV__) {
       setDevModeEnabled(true);
       setGlobalDevLocation(devLocationRef.current);
+      latestLocationSampleRef.current = { ...devLocationRef.current, timestamp: Date.now() };
       setLocation(devLocationRef.current);
       setPermissionGranted(true);
     } else {
@@ -88,6 +99,12 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const headingSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const positionSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const lastLocationRef = useRef<LocationType | null>(null);
+  const parkLookupRef = useRef<ParkLookupRecord | null>(null);
+  const [parkLookupRecord, setParkLookupRecord] = useState<ParkLookupRecord | null>(null);
+  const parkLookupPromiseRef = useRef<Promise<void> | null>(null);
+  const [parkLookupVersion, setParkLookupVersion] = useState(0);
+  const currentPlayerIdRef = useRef(player?.id);
+  currentPlayerIdRef.current = player?.id;
 
   // Normalize heading to handle 0/360 wraparound smoothly
   const normalizeHeadingDelta = (current: number, target: number): number => {
@@ -220,32 +237,75 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     debouncedSetLocation(newLocation);
   };
 
+  const lookupParkAt = (coordinates: LocationType): Promise<void> => {
+    if (parkLookupPromiseRef.current) return parkLookupPromiseRef.current;
+    const playerId = player?.id;
+    const lookup = (async () => {
+      try {
+        const newPark = await currentPark(coordinates.latitude, coordinates.longitude);
+        if (currentPlayerIdRef.current !== playerId) return;
+        parkLookupRef.current = { ...coordinates, at: Date.now(), outcome: newPark ? 'park' : 'outside' };
+        setParkLookupRecord(parkLookupRef.current);
+        setParkLoaded(true);
+        setPark(newPark ?? undefined);
+        if ((newPark?.welcome_tickets_granted ?? 0) > 0) {
+          try {
+            await refreshPlayer();
+          } catch (error) {
+            console.warn('Could not refresh Tickets after park check-in:', error);
+          }
+        }
+      } catch (error) {
+        if (currentPlayerIdRef.current !== playerId) return;
+        parkLookupRef.current = { ...coordinates, at: Date.now(), outcome: 'error' };
+        setParkLookupRecord(parkLookupRef.current);
+        // A temporary connection failure should not erase a known park.
+        setParkLoaded(true);
+      }
+    })();
+    parkLookupPromiseRef.current = lookup;
+    void lookup.finally(() => {
+      if (parkLookupPromiseRef.current === lookup) parkLookupPromiseRef.current = null;
+      setParkLookupVersion(value => value + 1);
+    });
+    return lookup;
+  };
+
   const requestPark = async () => {
     if (!location) {
       await requestLocation();
       setParkLoaded(false);
-      setPark(null);
+      setPark(undefined);
       return;
     }
-
-    try {
-      const newPark = await currentPark(location.latitude, location.longitude);
-
-      setParkLoaded(true);
-      setPark(newPark);
-    } catch (error) {
-      setParkLoaded(true);
-      setPark(null);
-    }
+    await lookupParkAt(location);
   };
 
-  useAsyncEffect(async () => {
-    if (!player || !permissionGranted || !location) {
-      return;
-    }
+  useEffect(() => {
+    parkLookupRef.current = null;
+    setParkLookupRecord(null);
+    setParkLoaded(false);
+    setPark(undefined);
+  }, [player?.id]);
 
-    await requestPark();
-  }, [player, permissionGranted, location?.latitude, location?.longitude]);
+  useEffect(() => {
+    if (!player?.id || !permissionGranted || !location || parkLookupPromiseRef.current ||
+        !shouldRefreshParkLookup(location, parkLookupRef.current)) return;
+    void lookupParkAt(location);
+  }, [player?.id, permissionGranted, location?.latitude, location?.longitude, parkLookupVersion]);
+
+  // A stationary guest still needs to recover from a failed check and refresh
+  // a verified outside-park status when the park boundary may have changed.
+  useEffect(() => {
+    if (!player?.id || !permissionGranted || !location) return;
+    const timer = setInterval(() => {
+      if (!parkLookupPromiseRef.current &&
+          shouldRefreshParkLookup(location, parkLookupRef.current)) {
+        void lookupParkAt(location);
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [player?.id, permissionGranted, location?.latitude, location?.longitude]);
 
   // Continuous position watcher — streams GPS updates from the OS
   // instead of polling with getCurrentPositionAsync every 5s.
@@ -260,13 +320,15 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
     const startWatching = async () => {
       try {
-        positionSubscriptionRef.current = await Location.watchPositionAsync(
+        const subscription = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.BestForNavigation,
-            // iOS: emit update after moving ~1 meter
-            distanceInterval: 1,
-            // Android: emit at least every 500ms for fluid tracking
-            ...(Platform.OS === 'android' ? { timeInterval: 500 } : {}),
+            accuracy: accuracyMode === 'queue'
+              ? Location.Accuracy.High : Location.Accuracy.BestForNavigation,
+            // Queue play needs nearby samples for server heartbeats, but the
+            // stationary guest does not need meter-by-meter map animation.
+            distanceInterval: accuracyMode === 'queue' ? 3 : 1,
+            ...(Platform.OS === 'android'
+              ? { timeInterval: accuracyMode === 'queue' ? 3000 : 500 } : {}),
           },
           (locationUpdate) => {
             if (cancelled) return;
@@ -275,6 +337,9 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
               latitude: locationUpdate.coords.latitude,
               longitude: locationUpdate.coords.longitude,
             };
+            latestLocationSampleRef.current = { ...newLoc, timestamp: locationUpdate.timestamp,
+              accuracyMeters: locationUpdate.coords.accuracy,
+              speedMps: locationUpdate.coords.speed };
 
             // Distance filter — skip tiny GPS drift
             const prev = lastLocationRef.current;
@@ -293,6 +358,10 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
             debouncedSetLocation(newLoc);
           }
         );
+        // The mode or screen can change while the native watcher starts.
+        // Never leave that older subscription alive after effect cleanup.
+        if (cancelled) subscription.remove();
+        else positionSubscriptionRef.current = subscription;
       } catch (error) {
         console.error('Failed to start position watcher:', error);
       }
@@ -307,7 +376,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         positionSubscriptionRef.current = null;
       }
     };
-  }, [devMode, permissionGranted, player?.username]);
+  }, [devMode, permissionGranted, player?.username, accuracyMode]);
 
   // Fallback poll — only fires if watchPositionAsync somehow stalls
   // (some Android devices throttle background location callbacks)
@@ -329,12 +398,15 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }, []);
 
   const reset = () => {
+    parkLookupRef.current = null;
+    setParkLookupRecord(null);
     setLocation(undefined);
     setParkLoaded(false);
     setPark(undefined);
     setHeading(null);
     smoothedHeadingRef.current = null;
     lastLocationRef.current = null;
+    latestLocationSampleRef.current = null;
     if (positionSubscriptionRef.current) {
       positionSubscriptionRef.current.remove();
       positionSubscriptionRef.current = null;
@@ -345,6 +417,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     <LocationContext.Provider
       value={{
         location,
+        latestLocationSampleRef,
         heading,
         headingEnabled,
         setHeadingEnabled,
@@ -353,7 +426,9 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         reset,
         park,
         parkLoaded,
+        parkLookupRecord,
         permissionGranted,
+        setAccuracyMode,
         devMode,
         setDevMode,
         moveDevLocation,

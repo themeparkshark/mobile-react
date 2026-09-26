@@ -1,18 +1,44 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet, Animated, ScrollView,
-  ActivityIndicator,
+  ActivityIndicator, ImageBackground,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
-import { logRide, LogRidePayload } from '../../api/endpoints/player-rides';
+import { logRide } from '../../api/endpoints/player-rides';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import ReactionPicker from '../../components/RideTracker/ReactionPicker';
 import ConfettiBurst from '../../components/RideTracker/ConfettiBurst';
-import { DetectedRide, clearPendingDetections } from '../../services/RideDetectionService';
+import { DetectedRide, removePendingDetection } from '../../services/RideDetectionService';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { colors, shadows } from '../../design-system';
+import Wrapper from '../../components/Wrapper';
+import Topbar from '../../components/Topbar';
+import TopbarColumn from '../../components/Topbar/TopbarColumn';
+import TopbarText from '../../components/Topbar/TopbarText';
+import { saveDetectedRideBatch } from '../../services/rideJournalBatch';
+
+function BatchShell({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
+  return (
+    <Wrapper>
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <Pressable onPress={onBack} accessibilityRole="button" accessibilityLabel="Return to Ride Tracker">
+            <Image source={require('../../../assets/images/screens/explore/back.png')}
+              style={{ width: 35, height: 35 }} contentFit="contain" />
+          </Pressable>
+        </TopbarColumn>
+        <TopbarColumn><TopbarText>Ride Journal</TopbarText></TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
+      <ImageBackground source={require('../../../assets/images/seaweed_background.png')}
+        style={batchStyles.container} resizeMode="cover">
+        {children}
+      </ImageBackground>
+    </Wrapper>
+  );
+}
 
 // ─── Types ───
 interface ConfirmedRide extends DetectedRide {
@@ -52,10 +78,12 @@ const DetectionRow: React.FC<DetectionRowProps> = React.memo(({ ride, onToggle }
   return (
     <Pressable
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onToggle(); }}
+      accessibilityRole="checkbox" accessibilityState={{ checked: ride.selected }}
+      accessibilityLabel={`${ride.rideName}, ${levelLabel(ride.confidence)} confidence`}
       style={[batchStyles.row, !ride.selected && batchStyles.rowDeselected]}
     >
-      <View style={batchStyles.checkbox}>
-        <Text style={{ fontSize: 18 }}>{ride.selected ? '✅' : '⬜'}</Text>
+      <View style={[batchStyles.checkbox, ride.selected && batchStyles.checkboxSelected]}>
+        {ride.selected && <Text style={batchStyles.checkboxTick}>✓</Text>}
       </View>
       <View style={{ flex: 1 }}>
         <Text style={batchStyles.rideName}>{ride.rideName}</Text>
@@ -68,6 +96,10 @@ const DetectionRow: React.FC<DetectionRowProps> = React.memo(({ ride, onToggle }
   );
 });
 DetectionRow.displayName = 'DetectionRow';
+
+function levelLabel(level: 'high' | 'medium' | 'low'): string {
+  return level === 'medium' ? 'medium' : level;
+}
 
 // ─── Quick Rating Card ───
 interface QuickRateProps {
@@ -124,7 +156,7 @@ const QuickRateCard: React.FC<QuickRateProps> = React.memo(({
           style={batchStyles.confirmRateBtn}
         >
           <Text style={batchStyles.confirmRateBtnText}>
-            {rating > 0 ? `Rate ${rating}🦈` : 'Confirm'}
+            {rating > 0 ? `Save ${rating}-Star Rating` : 'Continue'}
           </Text>
         </Pressable>
       </View>
@@ -148,22 +180,25 @@ export default function RideBatchConfirmScreen() {
   const [rateIndex, setRateIndex] = useState(0);
   const [ratings, setRatings] = useState<Map<string, RatingState>>(new Map());
   const [submitting, setSubmitting] = useState(false);
-  const [totalXp, setTotalXp] = useState(0);
+  const [savedRideIds, setSavedRideIds] = useState<Set<string>>(new Set());
+  const [failedRideIds, setFailedRideIds] = useState<Set<string>>(new Set());
   const [showConfetti, setShowConfetti] = useState(false);
 
   const selectedRides = rides.filter(r => r.selected);
 
-  // If user backs out at ANY phase before summary, clear the queue so they
-  // don't get prompted again for the same rides (BUG 18 fix)
+  // Dismiss only the detections shown here. A new detection may arrive while
+  // the guest reviews this screen, and failed saves must stay retryable.
   useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', () => {
-      if (phase !== 'summary') {
-        clearPendingDetections();
+    const unsubscribe = navigation.addListener('beforeRemove', (event: any) => {
+      if (submitting) {
+        event.preventDefault();
+      } else if (phase !== 'summary') {
+        void Promise.allSettled(detections.map(d => removePendingDetection(d.id)));
         rideDetectionEmitter.emit('pendingCleared');
       }
     });
     return unsubscribe;
-  }, [navigation, phase]);
+  }, [navigation, phase, submitting]);
 
   const toggleRide = useCallback((id: string) => {
     setRides(prev => prev.map(r => r.id === id ? { ...r, selected: !r.selected } : r));
@@ -171,42 +206,29 @@ export default function RideBatchConfirmScreen() {
 
   const handleConfirmAndRate = useCallback(() => {
     if (selectedRides.length === 0) return;
+    void Promise.allSettled(rides.filter(r => !r.selected).map(r => removePendingDetection(r.id)));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPhase('rate');
     setRateIndex(0);
-  }, [selectedRides]);
+  }, [selectedRides, rides]);
 
   const ratingsRef = useRef(ratings);
   useEffect(() => { ratingsRef.current = ratings; }, [ratings]);
 
   const submitAllRides = useCallback(async (finalRatings: Map<string, RatingState>) => {
     setSubmitting(true);
-    let xpTotal = 0;
-    for (const ride of selectedRides) {
-      const rateState = finalRatings.get(ride.id);
-      try {
-        const payload: LogRidePayload = {
-          ride_id: ride.rideId,
-          rating: rateState?.rating || undefined,
-          reaction: rateState?.reaction || undefined,
-          rode_at: new Date(ride.enteredAt).toISOString(),
-        };
-        const result = await logRide(payload);
-        xpTotal += result.xp_earned || 10;
-      } catch (e) {
-        console.error(`Failed to log ride ${ride.rideName}:`, e);
-      }
-    }
-    // Clear ALL pending detections — we've handled everything
-    await clearPendingDetections();
+    const { savedIds, failedIds } = await saveDetectedRideBatch(
+      selectedRides, finalRatings, savedRideIds, logRide, removePendingDetection,
+    );
     rideDetectionEmitter.emit('pendingCleared');
 
-    setTotalXp(xpTotal);
+    setSavedRideIds(savedIds);
+    setFailedRideIds(failedIds);
     setSubmitting(false);
-    setShowConfetti(true);
+    setShowConfetti(savedIds.size > 0);
     setPhase('summary');
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [selectedRides]);
+    if (savedIds.size > 0) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [selectedRides, savedRideIds]);
 
   const handleRate = useCallback((rating: number, reaction: string | null) => {
     const ride = selectedRides[rateIndex];
@@ -231,19 +253,18 @@ export default function RideBatchConfirmScreen() {
   // ─── Select Phase ───
   if (phase === 'select') {
     return (
-      <SafeAreaView style={batchStyles.container}>
-        <View style={batchStyles.header}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-            <Text style={batchStyles.backBtn}>✕</Text>
-          </Pressable>
-          <Text style={batchStyles.title}>Auto-Detected Rides</Text>
-          <View style={{ width: 40 }} />
+      <BatchShell onBack={() => navigation.goBack()}>
+        <View style={batchStyles.selectHero}>
+          <View style={{ flex: 1 }}>
+            <Text style={batchStyles.eyebrow}>YOUR PARK DAY</Text>
+            <Text style={batchStyles.subtitle}>Remember Your Rides</Text>
+          </View>
+          <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
+            style={batchStyles.selectShark} contentFit="contain" />
         </View>
-
-        <Text style={batchStyles.subtitle}>Looks like you had a busy day! 🎢</Text>
         <Text style={batchStyles.description}>
-          We detected {rides.length} ride{rides.length !== 1 ? 's' : ''} based on your location.
-          Toggle which ones to log.
+          We noticed {rides.length} possible ride{rides.length !== 1 ? 's' : ''} from your location.
+          Choose the ones you actually rode for your journal.
         </Text>
 
         <FlatList
@@ -262,11 +283,11 @@ export default function RideBatchConfirmScreen() {
             style={[batchStyles.confirmBtn, selectedRides.length === 0 && { opacity: 0.4 }]}
           >
             <Text style={batchStyles.confirmBtnText}>
-              Confirm & Rate ({selectedRides.length}) 🦈
+              Rate {selectedRides.length} {selectedRides.length === 1 ? 'Ride' : 'Rides'}
             </Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </BatchShell>
     );
   }
 
@@ -274,21 +295,23 @@ export default function RideBatchConfirmScreen() {
   if (phase === 'rate') {
     if (submitting) {
       return (
-        <SafeAreaView style={[batchStyles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator size="large" color={colors.secondary} />
+        <BatchShell onBack={() => navigation.goBack()}>
+          <View style={batchStyles.submittingCenter}>
+          <ActivityIndicator size="large" color="#0B67A9" />
           <Text style={batchStyles.submittingText}>Logging your rides...</Text>
-        </SafeAreaView>
+          </View>
+        </BatchShell>
       );
     }
 
     return (
-      <SafeAreaView style={batchStyles.container}>
+      <BatchShell onBack={() => navigation.goBack()}>
         {/* Progress bar */}
         <View style={batchStyles.progressBar}>
           <View style={[batchStyles.progressFill, { width: `${((rateIndex + 1) / selectedRides.length) * 100}%` }]} />
         </View>
 
-        <ScrollView contentContainerStyle={{ flex: 1, justifyContent: 'center', padding: 20 }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }}>
           <QuickRateCard
             rideName={selectedRides[rateIndex].rideName}
             currentIndex={rateIndex}
@@ -297,31 +320,42 @@ export default function RideBatchConfirmScreen() {
             onSkip={handleSkip}
           />
         </ScrollView>
-      </SafeAreaView>
+      </BatchShell>
     );
   }
 
   // ─── Summary Phase ───
   return (
-    <SafeAreaView style={batchStyles.container}>
+    <BatchShell onBack={() => navigation.goBack()}>
       <ConfettiBurst trigger={showConfetti} />
       <ScrollView contentContainerStyle={batchStyles.summaryContent}>
-        <Text style={batchStyles.summaryEmoji}>🎉</Text>
-        <Text style={batchStyles.summaryTitle}>All Done!</Text>
-        <Text style={batchStyles.summaryXp}>+{totalXp} XP Earned</Text>
+        <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
+          style={batchStyles.summaryShark} contentFit="contain" />
+        <Text style={batchStyles.summaryTitle}>
+          {failedRideIds.size === selectedRides.length
+            ? 'Rides Not Saved Yet'
+            : failedRideIds.size > 0 ? 'Some Rides Need Another Try' : 'Ride Memories Saved!'}
+        </Text>
+        <Text style={batchStyles.summaryXp}>
+          {failedRideIds.size === selectedRides.length
+            ? 'The journal could not connect. Try again when you have a signal.'
+            : failedRideIds.size > 0
+            ? `${failedRideIds.size} ${failedRideIds.size === 1 ? 'ride is' : 'rides are'} still waiting to save`
+            : 'Added to your ride journal'}
+        </Text>
 
-        <View style={batchStyles.summaryStats}>
+        {savedRideIds.size > 0 && <View style={batchStyles.summaryStats}>
           <View style={batchStyles.summaryStat}>
-            <Text style={batchStyles.summaryStatVal}>{selectedRides.length}</Text>
-            <Text style={batchStyles.summaryStatLabel}>Rides Logged</Text>
+            <Text style={batchStyles.summaryStatVal}>{savedRideIds.size}</Text>
+            <Text style={batchStyles.summaryStatLabel}>Memories Saved</Text>
           </View>
           <View style={batchStyles.summaryStat}>
             <Text style={batchStyles.summaryStatVal}>
-              {Array.from(ratings.values()).filter(r => r.rating > 0).length}
+              {selectedRides.filter(ride => savedRideIds.has(ride.id) && (ratings.get(ride.id)?.rating ?? 0) > 0).length}
             </Text>
             <Text style={batchStyles.summaryStatLabel}>Rated</Text>
           </View>
-        </View>
+        </View>}
 
         {/* Logged rides list */}
         {selectedRides.map(ride => {
@@ -329,15 +363,23 @@ export default function RideBatchConfirmScreen() {
           return (
             <View key={ride.id} style={batchStyles.summaryRide}>
               <Text style={batchStyles.summaryRideName}>{ride.rideName}</Text>
+              <Text style={[batchStyles.summaryRideStatus, !savedRideIds.has(ride.id) && batchStyles.summaryRideFailed]}>
+                {savedRideIds.has(ride.id) ? 'Saved' : 'Not saved'}
+              </Text>
               {r && r.rating > 0 && (
-                <Text style={batchStyles.summaryRideRating}>
-                  {'🦈'.repeat(r.rating)}
-                </Text>
+                <SharkRating rating={r.rating} readonly size={20} />
               )}
               {r?.reaction && <Text style={{ fontSize: 20 }}>{r.reaction}</Text>}
             </View>
           );
         })}
+
+        {failedRideIds.size > 0 && (
+          <Pressable onPress={() => submitAllRides(ratings)} disabled={submitting}
+            style={[batchStyles.confirmBtn, submitting && { opacity: 0.55 }]}>
+            <Text style={batchStyles.confirmBtnText}>{submitting ? 'Saving...' : 'Retry Unsaved Rides'}</Text>
+          </Pressable>
+        )}
 
         <Pressable
           onPress={() => navigation.goBack()}
@@ -346,90 +388,99 @@ export default function RideBatchConfirmScreen() {
           <Text style={batchStyles.doneBtnText}>Back to Ride Tracker</Text>
         </Pressable>
       </ScrollView>
-    </SafeAreaView>
+    </BatchShell>
   );
 }
 
 const batchStyles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgDark },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+  container: { flex: 1, backgroundColor: '#DFF3FF' },
+  selectHero: {
+    flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 16,
+    backgroundColor: 'rgba(255,255,255,0.93)', borderRadius: 20,
+    borderWidth: 2, borderColor: '#84CAEE', paddingLeft: 18, overflow: 'hidden',
   },
-  backBtn: { color: colors.textSecondary, fontSize: 22 },
-  title: { color: colors.textPrimary, fontSize: 18, fontWeight: '700', fontFamily: 'Shark' },
+  selectShark: { width: 112, height: 112, alignSelf: 'flex-end', marginRight: -6 },
+  eyebrow: { color: '#126BAB', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
   subtitle: {
-    color: colors.textPrimary, fontSize: 22, fontWeight: '800', fontFamily: 'Shark',
-    textAlign: 'center', marginTop: 8,
+    color: '#0B4B83', fontSize: 25, fontFamily: 'Shark', marginTop: 5,
   },
   description: {
-    color: colors.textSecondary, fontSize: 14, textAlign: 'center',
-    paddingHorizontal: 24, marginTop: 8, marginBottom: 16, lineHeight: 20,
+    color: '#315C7C', fontSize: 14,
+    paddingHorizontal: 24, marginTop: 14, marginBottom: 16, lineHeight: 20,
   },
   list: { paddingHorizontal: 16, paddingBottom: 100 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: colors.bgMedium, borderRadius: 14, padding: 14, marginBottom: 8,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.94)', borderRadius: 14, padding: 14, marginBottom: 8,
+    borderWidth: 2, borderColor: '#BADFF4',
   },
   rowDeselected: { opacity: 0.5 },
-  checkbox: { width: 28, alignItems: 'center' },
-  rideName: { color: colors.textPrimary, fontSize: 16, fontWeight: '700' },
-  rideDetail: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  checkbox: {
+    width: 27, height: 27, borderRadius: 8, borderWidth: 2,
+    borderColor: '#84CAEE', backgroundColor: '#FFFFFF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rideName: { color: '#173A5B', fontSize: 16, fontWeight: '700' },
+  rideDetail: { color: '#426883', fontSize: 12, marginTop: 2 },
   badge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 11, fontWeight: '700' },
-  footer: { padding: 16, paddingBottom: 20 },
+  footer: { padding: 16, paddingBottom: 80 },
+  checkboxSelected: { backgroundColor: '#1179CB', borderColor: '#0B4B83' },
+  checkboxTick: { color: '#FFFFFF', fontSize: 19, fontWeight: '900', lineHeight: 22 },
   confirmBtn: {
-    backgroundColor: colors.secondary, borderRadius: 14, paddingVertical: 16,
-    alignItems: 'center', ...shadows.md,
+    backgroundColor: '#F6C847', borderRadius: 14, paddingVertical: 16,
+    alignItems: 'center', width: '100%', ...shadows.md,
   },
-  confirmBtnText: { color: '#fff', fontSize: 18, fontWeight: '800', fontFamily: 'Shark' },
+  confirmBtnText: { color: '#174064', fontSize: 18, fontWeight: '800', fontFamily: 'Shark' },
   // Rate phase
   progressBar: {
-    height: 4, backgroundColor: colors.bgMedium, marginHorizontal: 16, marginTop: 12,
-    borderRadius: 2, overflow: 'hidden',
+    height: 8, backgroundColor: '#B7DBEF', marginHorizontal: 20, marginTop: 20,
+    borderRadius: 4, overflow: 'hidden',
   },
-  progressFill: { height: '100%', backgroundColor: colors.tertiary, borderRadius: 2 },
+  progressFill: { height: '100%', backgroundColor: '#F6C847', borderRadius: 4 },
   rateCard: {
-    backgroundColor: colors.bgMedium, borderRadius: 20, padding: 24,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 24,
+    borderWidth: 2, borderColor: '#84CAEE',
   },
-  rateCounter: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginBottom: 8 },
+  rateCounter: { color: '#126BAB', fontSize: 13, textAlign: 'center', marginBottom: 8, fontWeight: '800' },
   rateRideName: {
-    color: colors.textPrimary, fontSize: 24, fontWeight: '800', fontFamily: 'Shark',
+    color: '#0B4B83', fontSize: 27, fontWeight: '800', fontFamily: 'Shark',
     textAlign: 'center', marginBottom: 24,
   },
-  rateLabel: { color: colors.textSecondary, fontSize: 14, fontWeight: '600', marginBottom: 10, marginTop: 8 },
+  rateLabel: { color: '#315C7C', fontSize: 14, fontWeight: '700', marginBottom: 10, marginTop: 8 },
   rateActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
   skipBtn: {
-    flex: 1, backgroundColor: colors.bgDark, borderRadius: 12, paddingVertical: 14,
-    alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    flex: 1, backgroundColor: '#E7F5FC', borderRadius: 12, paddingVertical: 14,
+    alignItems: 'center', borderWidth: 1, borderColor: '#84CAEE',
   },
-  skipBtnText: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
+  skipBtnText: { color: '#315C7C', fontSize: 16, fontWeight: '600' },
   confirmRateBtn: {
-    flex: 2, backgroundColor: colors.tertiary, borderRadius: 12, paddingVertical: 14,
+    flex: 2, backgroundColor: '#F6C847', borderRadius: 12, paddingVertical: 14,
     alignItems: 'center',
   },
-  confirmRateBtnText: { color: '#000', fontSize: 16, fontWeight: '800', fontFamily: 'Knockout' },
-  submittingText: { color: colors.textSecondary, fontSize: 16, marginTop: 16 },
+  confirmRateBtnText: { color: '#174064', fontSize: 16, fontWeight: '800', fontFamily: 'Shark' },
+  submittingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  submittingText: { color: '#315C7C', fontSize: 16, marginTop: 16 },
   // Summary
-  summaryContent: { alignItems: 'center', padding: 24, paddingTop: 60 },
-  summaryEmoji: { fontSize: 72 },
-  summaryTitle: { color: colors.textPrimary, fontSize: 32, fontWeight: '900', fontFamily: 'Shark', marginTop: 12 },
-  summaryXp: { color: colors.tertiary, fontSize: 22, fontWeight: '700', marginTop: 4 },
+  summaryContent: { alignItems: 'center', padding: 20, paddingTop: 25, paddingBottom: 55 },
+  summaryShark: { width: 132, height: 132 },
+  summaryTitle: { color: '#0B4B83', fontSize: 29, fontWeight: '900', fontFamily: 'Shark', marginTop: 8, textAlign: 'center' },
+  summaryXp: { color: '#315C7C', fontSize: 16, fontWeight: '600', marginTop: 6, textAlign: 'center' },
   summaryStats: { flexDirection: 'row', gap: 30, marginTop: 24, marginBottom: 24 },
   summaryStat: { alignItems: 'center' },
-  summaryStatVal: { color: colors.textPrimary, fontSize: 32, fontWeight: '800', fontFamily: 'Shark' },
-  summaryStatLabel: { color: colors.textSecondary, fontSize: 13, marginTop: 2 },
+  summaryStatVal: { color: '#0B4B83', fontSize: 32, fontWeight: '800', fontFamily: 'Shark' },
+  summaryStatLabel: { color: '#315C7C', fontSize: 13, marginTop: 2 },
   summaryRide: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%',
-    backgroundColor: colors.bgMedium, borderRadius: 12, padding: 14, marginBottom: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%', flexWrap: 'wrap',
+    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 12, padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: '#84CAEE',
   },
-  summaryRideName: { color: colors.textPrimary, fontSize: 15, fontWeight: '600', flex: 1 },
-  summaryRideRating: { fontSize: 14 },
+  summaryRideName: { color: '#173A5B', fontSize: 15, fontWeight: '700', flex: 1 },
+  summaryRideStatus: { color: '#126BAB', fontSize: 12, fontWeight: '800' },
+  summaryRideFailed: { color: '#A24130' },
   doneBtn: {
-    backgroundColor: colors.bgMedium, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 40,
-    marginTop: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#FFFFFF', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 40,
+    marginTop: 14, borderWidth: 1, borderColor: '#84CAEE',
   },
-  doneBtnText: { color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
+  doneBtnText: { color: '#174064', fontSize: 16, fontWeight: '600' },
 });

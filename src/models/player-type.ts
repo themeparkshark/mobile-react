@@ -26,6 +26,8 @@ export interface PlayerType {
   readonly name: string;
   readonly park_coins: number;
   readonly park_coins_count: number;
+  readonly ride_coins_collected?: number;
+  readonly coin_upgrades?: number;
   readonly screen_name: string;
   readonly token: string;
   readonly total_experience: number;
@@ -42,8 +44,24 @@ export interface PlayerType {
   readonly player_level?: number;
   readonly xp_to_next_level?: number;
   readonly current_xp?: number;
-  readonly title?: string;
+  readonly title?: string | null;
+  readonly featured_ride_coin?: FeaturedRideCoinType | null;
   readonly active_cosmetics?: PlayerCosmeticType[];
+}
+
+export interface FeaturedRideCoinType {
+  readonly id: number;
+  readonly ride_name: string;
+  readonly coin_url: string;
+  readonly current_level: number;
+  readonly max_level: number;
+  readonly times_collected: number;
+  readonly latest_edition?: {
+    readonly name: string;
+    readonly color: string;
+    readonly project_title: string;
+    readonly source: 'Ride challenge' | 'LinePlay';
+  } | null;
 }
 
 /**

@@ -1,14 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Text, View, TouchableOpacity, StyleSheet, Easing } from 'react-native';
+import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 
 interface TappableCurrencyProps {
   name: string;
   count: number;
   children: React.ReactNode;
+  flyTarget?: string;
 }
 
-export default function TappableCurrency({ name, count, children }: TappableCurrencyProps) {
+export default function TappableCurrency({ name, count, children, flyTarget }: TappableCurrencyProps) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const { registerTarget } = useCurrencyFly();
+  const containerRef = useRef<View>(null);
+  const measureAndRegister = useCallback(() => {
+    if (!flyTarget || !containerRef.current) return;
+    containerRef.current.measureInWindow((x, y, width, height) => {
+      if (x !== undefined && y !== undefined) {
+        registerTarget(flyTarget, x + width / 2, y + height / 2);
+      }
+    });
+  }, [flyTarget, registerTarget]);
   
   // Tooltip animation
   const tooltipAnim = useRef(new Animated.Value(0)).current;
@@ -79,7 +91,7 @@ export default function TappableCurrency({ name, count, children }: TappableCurr
   };
 
   return (
-    <View style={styles.container}>
+    <View ref={containerRef} onLayout={measureAndRegister} style={styles.container}>
       <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
         <View>
           {/* Glow removed - was causing distracting yellow border */}

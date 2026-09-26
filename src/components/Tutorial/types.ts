@@ -8,12 +8,14 @@
 export type TutorialStepId =
   // Onboarding flow (first time in ExploreScreen)
   | 'welcome'
-  | 'map_intro'
-  | 'player_marker'
-  | 'tasks_intro'
-  | 'coins_intro'
-  | 'currencies'
-  | 'bottom_nav'
+  | 'home_hunt'
+  | 'home_goal'
+  | 'home_collection'
+  | 'park_ride'
+  | 'park_queue'
+  | 'park_mastery'
+  | 'park_arrival_coin'
+  | 'park_arrival_line'
   | 'explore_done'
   // Deferred tutorials (trigger on first encounter)
   | 'park_intro'
@@ -23,7 +25,7 @@ export type TutorialStepId =
   | 'friends_intro'
   | 'pin_collections_intro';
 
-export type TutorialSequence = 'onboarding' | 'park' | 'store' | 'gym' | 'community_center' | 'friends' | 'pins';
+export type TutorialSequence = 'onboarding' | 'park_arrival' | 'park' | 'store' | 'gym' | 'community_center' | 'friends' | 'pins';
 
 export interface SpotlightTarget {
   /** Absolute x position on screen */
@@ -78,6 +80,8 @@ export interface TutorialStep {
 }
 
 export interface TutorialContextType {
+  /** Whether saved tutorial progress has loaded. */
+  isReady: boolean;
   /** Whether any tutorial is currently active */
   isActive: boolean;
   /** Current step being shown */
@@ -87,7 +91,7 @@ export interface TutorialContextType {
   /** Total steps in the active sequence */
   totalSteps: number;
   /** Start a tutorial sequence */
-  startTutorial: (sequence: TutorialSequence) => void;
+  startTutorial: (sequence: TutorialSequence, options?: { inPark?: boolean }) => void;
   /** Advance to next step */
   nextStep: () => void;
   /** Skip the current tutorial sequence */

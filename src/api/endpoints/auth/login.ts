@@ -6,19 +6,18 @@ export default async function login(
   user: string,
   identity_token: string
 ): Promise<PlayerType> {
-  console.log('🦈 Login API: sending request...');
   const response = await client.post<ApiResponseType<PlayerType>>(
     '/auth/login',
     {
       user,
       identity_token,
-    }
+    },
+    { timeout: 15000 }
   );
 
-  console.log('🦈 Login API: raw response status:', response.status);
-  console.log('🦈 Login API: response.data:', JSON.stringify(response.data).substring(0, 500));
-  console.log('🦈 Login API: response.data.data:', JSON.stringify(response.data?.data).substring(0, 500));
-  console.log('🦈 Login API: token in data.data?', !!response.data?.data?.token);
-
-  return response.data.data;
+  const player = response.data?.data;
+  if (typeof player?.token !== 'string' || !player.token.trim()) {
+    throw new Error('Sign-in did not return a session.');
+  }
+  return player;
 }

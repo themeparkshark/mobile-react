@@ -120,6 +120,7 @@ export function createTaskTriviaSource(opts: TaskTriviaOptions): TriviaSource {
 export interface LinePlayTriviaOptions {
   rideId?: number;
   parkId?: number;
+  chapterId?: string;
   /** Deterministic seed so the round is stable/replayable. */
   seed: number;
   /** How many questions this round serves. Defaults to LINEPLAY_ROUND_QUESTIONS. */
@@ -150,7 +151,7 @@ export function createLinePlayTriviaSource(
     async next(): Promise<TriviaCard | null> {
       if (index >= count) return null;
       // Vary selection per slot with the round seed; content.ts is deterministic.
-      const q = await fetchRideTrivia(opts.rideId, opts.parkId, opts.seed + index);
+      const q = await fetchRideTrivia(opts.rideId, opts.parkId, opts.seed + index, opts.chapterId);
       currentCorrect = q.correctIndex;
       currentChoiceCount = q.choices.length;
       const card: TriviaCard = {
@@ -159,6 +160,8 @@ export function createLinePlayTriviaSource(
         choices: q.choices,
         difficulty: q.difficulty,
         timeLimitSeconds: secs,
+        fact: q.fact,
+        source: q.source,
       };
       index += 1;
       return card;

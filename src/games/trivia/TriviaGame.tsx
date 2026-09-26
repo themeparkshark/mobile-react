@@ -29,6 +29,7 @@ import React, {
   useState,
 } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -72,9 +73,12 @@ interface TriviaGameProps {
   /** Deterministic seed carried into meta for replay/telemetry. */
   seed: number;
   personalBest?: number;
+  /** Let queue guests read authored facts at their own pace between questions. */
+  readableFacts?: boolean;
   /** Preserved external contract (matches MiniGameSelector). */
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
+  onQuit?: (resume: () => void) => void;
 }
 
 type Phase = 'loading' | 'answering' | 'revealing' | 'done';
@@ -86,8 +90,10 @@ export function TriviaGame({
   subtitle,
   seed,
   personalBest,
+  readableFacts = false,
   onComplete,
   onClose,
+  onQuit,
 }: TriviaGameProps) {
   const [card, setCard] = useState<TriviaCard | null>(null);
   const [phase, setPhase] = useState<Phase>('loading');
@@ -106,10 +112,13 @@ export function TriviaGame({
   const answeredRef = useRef(0);
   const serverMultRef = useRef<number | undefined>(undefined);
   const gradingRef = useRef(false);
+  const advancingRef = useRef(false);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tickTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pausedRef = useRef(false);
   const secondsLeftRef = useRef(0);
+  const timeoutRef = useRef<() => void>(() => {});
+  const finishRoundRef = useRef<() => void>(() => {});
 
   // Countdown: shared fraction (UI thread) + mirrored seconds (JS, for label).
   const fraction = useSharedValue(1);
@@ -146,6 +155,9 @@ export function TriviaGame({
     correctCountRef.current = 0;
     answeredRef.current = 0;
     serverMultRef.current = undefined;
+    pausedRef.current = false;
+    gradingRef.current = false;
+    advancingRef.current = false;
     setPhase('loading');
     return () => {
       clearTimers();
@@ -165,7 +177,7 @@ export function TriviaGame({
       next = null;
     }
     if (!next) {
-      finishRound();
+      finishRoundRef.current();
       return;
     }
     setCard(next);
@@ -217,7 +229,7 @@ export function TriviaGame({
         if (left <= 0) {
           if (tickTimer.current) clearInterval(tickTimer.current);
           tickTimer.current = null;
-          handleTimeout();
+          timeoutRef.current();
         }
       }, 100);
     },
@@ -259,8 +271,21 @@ export function TriviaGame({
     [phase, removed, source],
   );
 
+  const advanceFromReveal = useCallback(() => {
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+    if (advanceTimer.current) {
+      clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+    setQuestionIndex((q) => q + 1);
+    gradingRef.current = false;
+    loadNext();
+  }, [loadNext]);
+
   const applyReveal = useCallback(
     (chosen: number, correct: boolean, correctIndex: number) => {
+      advancingRef.current = false;
       const n = card?.choices.length ?? 0;
       const states: TileState[] = new Array(n).fill('dimmed');
       if (correct) {
@@ -304,14 +329,13 @@ export function TriviaGame({
       });
       setTileStates(states);
 
-      advanceTimer.current = setTimeout(() => {
-        setQuestionIndex((q) => q + 1);
-        gradingRef.current = false;
-        loadNext();
-      }, REVEAL_MS);
+      // Let queue guests read and share authored clues; the short automatic
+      // reveal remains for task trivia and questions without a fact.
+      if (!readableFacts || !card?.fact)
+        advanceTimer.current = setTimeout(advanceFromReveal, REVEAL_MS);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [card, streak, fever, removed],
+    [card, streak, fever, removed, advanceFromReveal, readableFacts],
   );
 
   const handleTimeout = useCallback(() => {
@@ -332,6 +356,7 @@ export function TriviaGame({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, source, applyReveal]);
+  timeoutRef.current = handleTimeout;
 
   // -- 50/50 lifeline. -------------------------------------------------------
   const lifelineAvailable = useMemo(() => {
@@ -385,6 +410,7 @@ export function TriviaGame({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [score, seed, source, clearTimers]);
+  finishRoundRef.current = finishRound;
 
   // -- Shell hooks. ----------------------------------------------------------
   const onStart = useCallback(() => {
@@ -409,7 +435,7 @@ export function TriviaGame({
 
   const cardStyle = useAnimatedStyle(() => ({
     opacity: cardOpacity.value,
-    transform: [{ scale: cardScale.value }],
+    transform: [{ translateY: (1 - cardScale.value) * 18 }],
   }));
 
   const currentStreakMult = 1 + Math.min(streak, FEVER_STREAK);
@@ -430,8 +456,16 @@ export function TriviaGame({
       onResume={onResume}
       onComplete={onComplete}
       onClose={onClose}
+      onQuit={onQuit}
     >
       <View style={styles.field}>
+        <Image
+          source={require('../../../assets/images/screens/lineplay/whack-underwater-playfield-v1.png')}
+          style={StyleSheet.absoluteFillObject}
+          contentFit="cover"
+          pointerEvents="none"
+        />
+        <View pointerEvents="none" style={styles.oceanTint} />
         {/* Top row: progress + countdown ring. */}
         <View style={styles.topRow}>
           <Text style={styles.progress}>
@@ -439,7 +473,7 @@ export function TriviaGame({
               ? `Q${Math.min(questionIndex + 1, source.totalQuestions)} / ${source.totalQuestions}`
               : `Q${questionIndex + 1}`}
           </Text>
-          {card ? (
+          {card && phase === 'answering' ? (
             <CountdownRing
               fraction={fraction}
               secondsLeft={secondsLeft}
@@ -453,8 +487,18 @@ export function TriviaGame({
         {/* Question card. */}
         {card ? (
           <Animated.View style={[styles.card, cardStyle]}>
-            <Text style={styles.difficulty}>{card.difficulty.toUpperCase()}</Text>
-            <Text style={styles.question}>{card.question}</Text>
+            {readableFacts && phase === 'revealing' && card.fact ? (
+              <>
+                <Text style={styles.difficulty}>SHARK FACT</Text>
+                <Text style={styles.question}>{card.fact}</Text>
+                {card.source ? <Text style={styles.factSource}>Source: {card.source}</Text> : null}
+              </>
+            ) : (
+              <>
+                <Text style={styles.difficulty}>{card.difficulty.toUpperCase()}</Text>
+                <Text style={styles.question}>{card.question}</Text>
+              </>
+            )}
           </Animated.View>
         ) : (
           <View style={styles.card}>
@@ -476,8 +520,21 @@ export function TriviaGame({
           ))}
         </View>
 
+        {readableFacts && phase === 'revealing' && card?.fact ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={questionIndex + 1 >= source.totalQuestions ? 'See trivia results' : 'Next trivia question'}
+            style={styles.continueButton}
+            onPress={advanceFromReveal}
+          >
+            <Text style={styles.continueText}>
+              {questionIndex + 1 >= source.totalQuestions ? 'SEE RESULTS' : 'NEXT QUESTION'}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
         {/* 50/50 lifeline. Rendered when the mode allows it; disabled once used. */}
-        {lifelineAvailable ? (
+        {lifelineAvailable && phase === 'answering' ? (
           <TouchableOpacity
             style={[styles.lifeline, (lifelineUsed || phase !== 'answering') && styles.lifelineOff]}
             onPress={onLifeline}
@@ -487,8 +544,8 @@ export function TriviaGame({
           </TouchableOpacity>
         ) : null}
 
-        {/* Fire meter climbs the right edge. */}
-        <StreakMeter streak={streak} fever={fever} />
+        {/* Two-question ride sprints cannot reach fever, so keep answers clear. */}
+        {source.totalQuestions >= FEVER_STREAK ? <StreakMeter streak={streak} fever={fever} /> : null}
 
         {/* Success particles above the field, non-interactive. */}
         <ParticleField
@@ -504,43 +561,54 @@ export function TriviaGame({
 }
 
 const styles = StyleSheet.create({
-  field: { flex: 1, paddingHorizontal: 18, paddingTop: 10 },
+  field: { flex: 1, paddingHorizontal: 18, paddingTop: 10, overflow: 'hidden' },
+  oceanTint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 84, 157, 0.56)' },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 10,
   },
-  progress: { color: GAME_COLORS.textDim, fontSize: 15, fontWeight: '800', letterSpacing: 1 },
+  progress: { color: '#fff', fontFamily: 'Shark', fontSize: 18,
+    textShadowColor: '#003b70', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 2 },
   card: {
-    backgroundColor: GAME_COLORS.bgDark,
+    backgroundColor: '#fff9e8',
     borderRadius: 20,
     paddingVertical: 22,
     paddingHorizontal: 20,
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 3,
+    borderColor: '#ffcc3d',
+    shadowColor: '#003b70', shadowOpacity: 0.22, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 4,
   },
   difficulty: {
-    color: GAME_COLORS.blue,
+    color: '#0879ca',
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 2,
     marginBottom: 8,
   },
-  question: { color: GAME_COLORS.text, fontSize: 20, fontWeight: '800', lineHeight: 26 },
+  question: { color: '#063f73', fontSize: 20, fontWeight: '800', lineHeight: 26 },
+  factSource: { color: '#2b698d', fontSize: 11, fontWeight: '700', marginTop: 9 },
   tiles: { marginTop: 2 },
+  continueButton: {
+    alignSelf: 'center', marginTop: 13, paddingHorizontal: 24, paddingVertical: 11,
+    backgroundColor: '#ffcc3d', borderColor: '#9d6605', borderWidth: 2,
+    borderRadius: 16,
+  },
+  continueText: { color: '#173e67', fontSize: 15, fontWeight: '900', letterSpacing: 0.7 },
   lifeline: {
     alignSelf: 'center',
     marginTop: 14,
     paddingVertical: 10,
     paddingHorizontal: 24,
     borderRadius: 14,
-    backgroundColor: GAME_COLORS.bgPanel,
-    borderWidth: 1,
-    borderColor: GAME_COLORS.blue,
+    backgroundColor: '#fff9e8',
+    borderWidth: 2,
+    borderColor: '#ffcc3d',
   },
   lifelineOff: { opacity: 0.35, borderColor: 'rgba(255,255,255,0.12)' },
-  lifelineTxt: { color: GAME_COLORS.blue, fontSize: 15, fontWeight: '900', letterSpacing: 1 },
+  lifelineTxt: { color: '#07548d', fontSize: 15, fontWeight: '900', letterSpacing: 1 },
   particles: { ...StyleSheet.absoluteFillObject },
 });

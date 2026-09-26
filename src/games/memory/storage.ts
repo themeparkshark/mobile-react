@@ -5,7 +5,7 @@
  * subsystem must never crash the game (offline-first quality bar) — every call
  * swallows errors and returns a safe default.
  *
- * Best is keyed by difficulty so the 4x4 and 4x5 boards keep separate records.
+ * Best is keyed by difficulty so ride and queue boards keep separate records.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';

@@ -9,4 +9,13 @@ export interface PlayerStatsType {
   readonly seconds_until_next_energy: number;
   readonly energy_regenerated?: number;
   readonly experience?: number;
+  readonly ticket_guarantee_in?: number;
+  readonly focused_prep_set?: {
+    readonly slug: string;
+    readonly name: string;
+    readonly theme: string | null;
+    readonly available_now: boolean;
+    readonly collected_count?: number;
+    readonly total_items?: number;
+  } | null;
 }

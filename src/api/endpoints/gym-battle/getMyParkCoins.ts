@@ -1,6 +1,7 @@
 import client from '../../client';
 
 export interface ParkCoin {
+  asset_id: number;
   task_id: number;
   name: string;
   coin_url: string;

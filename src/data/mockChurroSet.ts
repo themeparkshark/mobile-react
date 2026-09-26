@@ -78,6 +78,7 @@ export const MOCK_CHURRO_SET_LIST: PrepItemSetListItem = {
   description: 'Get your energy up before you get to the park. Go out in the world and collect some snacks!',
   icon_url: null,
   theme: 'food',
+  is_focused: false,
   theme_config: {
     label: '🍿 Food & Snacks',
     color: '#FF9800',
@@ -94,6 +95,14 @@ export const MOCK_CHURRO_SET_LIST: PrepItemSetListItem = {
   collected_count: collectedCount,
   progress_percentage: progressPercentage,
   is_complete: false,
+  spare_count: 0,
+  exchange_cost: 4,
+  rewards_claimed: false,
+  starter_milestone: {
+    target: 8, collected: Math.min(collectedCount, 8),
+    is_unlocked: collectedCount >= 8, rewards_claimed: false,
+    rewards: { energy: 15, tickets: 2, experience: 30 },
+  },
   completion_rewards: {
     energy: 200,
     tickets: 50,
@@ -123,6 +132,7 @@ export const MOCK_CHURRO_SET_DETAIL = {
     description: 'Get your energy up before you get to the park. Go out in the world and collect some snacks!',
     icon_url: null,
     theme: 'food',
+    is_focused: false,
     theme_config: {
       label: '🍿 Food & Snacks',
       color: '#FF9800',

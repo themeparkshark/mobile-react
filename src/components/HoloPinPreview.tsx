@@ -134,7 +134,7 @@ export default function HoloPinPreview({
     { top: '80%', left: '65%', size: 4 },
     { top: '35%', left: '50%', size: 3 },
     { top: '65%', left: '25%', size: 3 },
-  ];
+  ] as const;
 
   return (
     <Modal
@@ -186,7 +186,7 @@ export default function HoloPinPreview({
                   holoStyle,
                 ]}
               >
-                {[
+                {([
                   { color: 'rgba(255,50,50,0.35)', top: '0%' },
                   { color: 'rgba(255,180,0,0.3)', top: '14%' },
                   { color: 'rgba(255,255,50,0.3)', top: '28%' },
@@ -194,7 +194,7 @@ export default function HoloPinPreview({
                   { color: 'rgba(50,200,255,0.3)', top: '56%' },
                   { color: 'rgba(130,50,255,0.3)', top: '70%' },
                   { color: 'rgba(255,50,200,0.3)', top: '84%' },
-                ].map((band, i) => (
+                ] as const).map((band, i) => (
                   <View
                     key={i}
                     style={{

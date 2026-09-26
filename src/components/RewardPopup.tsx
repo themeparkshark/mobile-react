@@ -35,9 +35,11 @@ export default function RewardPopup({
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const [rewardAnims] = useState(() => rewards.map(() => new Animated.Value(0)));
+  const [rendered, setRendered] = useState(visible);
 
   useEffect(() => {
     if (visible) {
+      setRendered(true);
       // Haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -80,6 +82,8 @@ export default function RewardPopup({
       }, duration);
 
       return () => clearTimeout(hideTimeout);
+    } else if (rendered) {
+      hidePopup();
     }
   }, [visible]);
 
@@ -99,11 +103,12 @@ export default function RewardPopup({
       // Reset animations for next show
       rewardAnims.forEach((anim) => anim.setValue(0));
       scaleAnim.setValue(0.8);
+      setRendered(false);
       onHide?.();
     });
   };
 
-  if (!visible && slideAnim._value === -150) {
+  if (!rendered) {
     return null;
   }
 

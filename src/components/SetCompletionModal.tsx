@@ -203,7 +203,7 @@ export default function SetCompletionModal({
   if (!set) return null;
 
   const themeConfig = SET_THEME_CONFIG[set.theme];
-  const rewards = set.completion_bonus;
+  const rewards = set.completion_rewards;
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
@@ -306,7 +306,7 @@ export default function SetCompletionModal({
                           contentFit="contain"
                         />
                       ) : (
-                        <Text style={{ fontSize: 50 }}>{themeConfig.icon}</Text>
+                        <Text style={{ fontSize: 50 }}>{themeConfig.label.split(' ')[0]}</Text>
                       )}
                     </View>
                   </Animated.View>
@@ -449,7 +449,7 @@ export default function SetCompletionModal({
                         </Text>
                       </View>
                     )}
-                    {rewards.ride_parts > 0 && (
+                    {rewards.title && (
                       <View
                         style={{
                           alignItems: 'center',
@@ -459,7 +459,7 @@ export default function SetCompletionModal({
                           borderRadius: 12,
                         }}
                       >
-                        <Text style={{ fontSize: 20 }}>🔧</Text>
+                        <Text style={{ fontSize: 20 }}>🏅</Text>
                         <Text
                           style={{
                             fontFamily: 'Knockout',
@@ -467,64 +467,11 @@ export default function SetCompletionModal({
                             color: '#4CAF50',
                           }}
                         >
-                          +{rewards.ride_parts}
+                          {rewards.title}
                         </Text>
                       </View>
                     )}
                   </View>
-
-                  {/* Special Item Reward */}
-                  {rewards.special_item && (
-                    <View
-                      style={{
-                        backgroundColor: 'rgba(255, 215, 0, 0.2)',
-                        borderRadius: 12,
-                        padding: 16,
-                        marginBottom: 20,
-                        borderWidth: 2,
-                        borderColor: '#FFD700',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 12,
-                          color: '#FFD700',
-                          textTransform: 'uppercase',
-                          marginBottom: 8,
-                        }}
-                      >
-                        🏆 Special Reward!
-                      </Text>
-                      {rewards.special_item.icon_url && (
-                        <Image
-                          source={{ uri: rewards.special_item.icon_url }}
-                          style={{ width: 60, height: 60, marginBottom: 8 }}
-                          contentFit="contain"
-                        />
-                      )}
-                      <Text
-                        style={{
-                          fontFamily: 'Shark',
-                          fontSize: 18,
-                          color: '#FFD700',
-                        }}
-                      >
-                        {rewards.special_item.name}
-                      </Text>
-                      <Text
-                        style={{
-                          fontFamily: 'Knockout',
-                          fontSize: 12,
-                          color: 'rgba(255, 255, 255, 0.7)',
-                          textAlign: 'center',
-                        }}
-                      >
-                        {rewards.special_item.description}
-                      </Text>
-                    </View>
-                  )}
 
                   {/* Claim/Done Button */}
                   <Button onPress={claimed ? onClose : handleClaim}>

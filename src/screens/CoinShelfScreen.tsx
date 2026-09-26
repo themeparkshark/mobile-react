@@ -3,6 +3,7 @@ import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  ImageBackground,
   Platform,
   RefreshControl,
   ScrollView,
@@ -11,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import * as Haptics from '../helpers/haptics';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faArrowLeft, faLock } from '@fortawesome/free-solid-svg-icons';
 import Wrapper from '../components/Wrapper';
@@ -21,128 +22,166 @@ import CoinLevelingModal from '../components/CoinLevelingModal';
 import CoinUpgradeDemo from '../components/CoinUpgradeDemo';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
-import {
-  RideCoinLevelType,
-  RIDE_COIN_LEVEL_CONFIG,
-} from '../models/ride-coin-level-type';
-import { RIDE_PART_RARITY_CONFIG } from '../models/ride-part-type';
-import getTasks from '../api/endpoints/parks/getTasks';
-import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
-import visitedParks from '../api/endpoints/me/visited-parks';
-import { getRideParts, RidePartsEntry } from '../api/endpoints/me/ride-parts';
-import { TaskType } from '../models/task-type';
+import { RideCoinLevelType } from '../models/ride-coin-level-type';
+import getRideCoins from '../api/endpoints/me/ride-coins';
+import levelUpRideCoin from '../api/endpoints/me/ride-coins/level-up';
+import featureRideCoin from '../api/endpoints/me/ride-coins/feature';
+import { getTripGoal, setTripGoal, type TripGoalData, type TripGoalRide } from '../api/endpoints/me/trip-goal';
 
-// Mock coins for initial state (replaced when API loads)
-const MOCK_COINS: RideCoinLevelType[] = [];
-
-// Helper to convert TaskType to RideCoinLevelType with real coin images
-const taskToCoinLevel = (task: TaskType, playerLevel: number): RideCoinLevelType => {
-  // Simulate leveling based on times_completed (until backend supports it)
-  const level = Math.min(Math.floor(task.times_completed / 3), 5);
-  const isMax = level >= 5;
-  
-  // Calculate required player level based on task experience (higher XP = harder ride)
-  const requiredLevel = Math.max(1, Math.floor(task.experience / 20));
-  const isUnlocked = playerLevel >= requiredLevel;
-  
-  return {
-    id: task.id,
-    ride_id: task.id,
-    ride_name: task.name,
-    coin_url: task.coin_url, // ← REAL COIN IMAGE!
-    current_level: level,
-    max_level: 5,
-    times_collected: task.times_completed,
-    energy_to_next_level: isMax ? 0 : (level + 1) * 10,
-    parts_to_next_level: isMax ? 0 : (level + 1) * 5,
-    required_parts: [],
-    player_level_required: requiredLevel,
-    is_unlocked: isUnlocked,
-    current_perks: level > 1 ? [
-      { id: 1, name: 'Tier Upgrade', description: `${['Silver', 'Gold', 'Prismatic', 'Legendary'][Math.min(level - 2, 3)]} coin appearance`, icon_url: '', type: 'cosmetic' as const, value: level },
-    ] : [],
-    next_level_perks: !isMax ? [
-      { id: 2, name: 'Next Tier', description: `${['Silver', 'Gold', 'Prismatic', 'Legendary'][Math.min(level - 1, 3)]} coin appearance`, icon_url: '', type: 'cosmetic' as const, value: level + 1 },
-    ] : [],
-    current_frame_url: '',
-    next_frame_url: '',
-  };
+const previewCoins: RideCoinLevelType[] = [
+  { id: 1, ride_id: 1, ride_name: 'Space Mountain', coin_url: '', current_level: 1,
+    max_level: 5, times_collected: 1, available_parts: 2, energy_to_next_level: 10,
+    parts_to_next_level: 2, required_parts: [], player_level_required: 1,
+    is_unlocked: true, current_perks: [{ id: 2001, name: 'Park Gym Power',
+      description: 'Place this coin in a park gym for 100 team points.', icon_url: '',
+      type: 'gym_points', value: 100 }], next_level_perks: [{ id: 2002,
+      name: 'Park Gym Power', description: 'Place this coin in a park gym for 200 team points.',
+      icon_url: '', type: 'gym_points', value: 200 }] },
+  { id: 2, ride_id: 2, ride_name: 'Pirates of the Caribbean', coin_url: '',
+    current_level: 2, max_level: 5, times_collected: 3, available_parts: 6,
+    energy_to_next_level: 25, parts_to_next_level: 6, required_parts: [],
+    player_level_required: 1, is_unlocked: true,
+    current_perks: [{ id: 2002, name: 'Park Gym Power',
+      description: 'Place this coin in a park gym for 200 team points.', icon_url: '',
+      type: 'gym_points', value: 200 }],
+    next_level_perks: [{ id: 2003, name: 'Park Gym Power',
+      description: 'Place this coin in a park gym for 300 team points.', icon_url: '',
+      type: 'gym_points', value: 300 }],
+    editions: [{ id: 1, name: 'Moonlit Voyage', color: '#9463C3',
+      project_title: 'The Missing Signal', source: 'Ride challenge', earned_at: '2026-09-24' }] },
+];
+const previewCatalog: TripGoalData = {
+  rides: [
+    { task_id: 1, asset_id: 1, park_id: 1, park_name: 'Magic Kingdom', ride_name: 'Space Mountain', coin_url: '', coin_owned: true, coin_level: 1 },
+    { task_id: 2, asset_id: 2, park_id: 1, park_name: 'Magic Kingdom', ride_name: 'Pirates of the Caribbean', coin_url: '', coin_owned: true, coin_level: 2 },
+    { task_id: 3, asset_id: 3, park_id: 1, park_name: 'Magic Kingdom', ride_name: 'Haunted Mansion', coin_url: '', coin_owned: false, coin_level: null },
+  ], goal: null, goal_unavailable: false, goal_plan: null,
+  wallet: { tickets: 2, energy: 18, ticket_cost: 1, tickets_needed: 0 },
 };
 
-export default function CoinShelfScreen() {
+export default function CoinShelfScreen({ route }: {
+  readonly route?: { readonly params?: { readonly focusCoin?: { readonly assetId: number } } };
+}) {
   const navigation = useNavigation();
-  const { player } = useContext(AuthContext);
-  const [coins, setCoins] = useState<RideCoinLevelType[]>(MOCK_COINS);
+  const isFocused = useIsFocused();
+  const preview = __DEV__ && process.env.EXPO_PUBLIC_COIN_SHELF_PREVIEW === '1';
+  const { player, refreshPlayer } = useContext(AuthContext);
+  const [coins, setCoins] = useState<RideCoinLevelType[]>(preview ? previewCoins : []);
   const [selectedCoin, setSelectedCoin] = useState<RideCoinLevelType | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'max'>('all');
-  const [ridePartsMap, setRidePartsMap] = useState<Record<number, number>>({}); // task_id -> amount
+  const [loadError, setLoadError] = useState(false);
+  const [catalog, setCatalog] = useState<TripGoalData | null>(preview ? previewCatalog : null);
+  const [catalogStale, setCatalogStale] = useState(false);
+  const [goalSaving, setGoalSaving] = useState(false);
   const modalScale = useRef(new Animated.Value(0)).current;
+  const openedWinCoinRef = useRef<number | null>(null);
 
-  // Load coins by fetching tasks from visited parks + ride parts
+  // The server owns coin identity, levels, costs and available parts.
   const loadCoins = useCallback(async () => {
-    if (!player?.id) return;
+    if (preview) return previewCoins;
+    if (!player?.id) return null;
     try {
-      // Fetch ride parts first (includes both tasks AND secret tasks)
-      const rideParts = await getRideParts();
-      const partsMap: Record<number, number> = {};
-      rideParts.forEach((entry) => {
-        // Use task_id or secret_task_id as the key
-        const id = entry.task_id ?? entry.secret_task_id;
-        if (id) {
-          partsMap[id] = entry.amount;
-        }
-      });
-      setRidePartsMap(partsMap);
-
-      // Fetch coins from visited parks (both regular tasks AND secret tasks)
-      const parks = await visitedParks(player.id);
-      const allCoins: RideCoinLevelType[] = [];
-      for (const park of parks) {
-        // Regular tasks
-        const tasks = await getTasks(park.id);
-        for (const task of tasks) {
-          if (task.coin_url) {
-            allCoins.push(taskToCoinLevel(task, player.level ?? 1));
-          }
-        }
-        // Secret tasks (same coin system!)
-        try {
-          const secretTasks = await getSecretTasks(park.id);
-          for (const task of secretTasks) {
-            if (task.coin_url) {
-              allCoins.push(taskToCoinLevel(task, player.level ?? 1));
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to fetch secret tasks for park:', park.id, e);
-        }
-      }
-      setCoins(allCoins);
+      const response = await getRideCoins();
+      setCoins(response.data);
+      setLoadError(false);
+      return response.data;
     } catch (err) {
       console.warn('Failed to load coins:', err);
+      setLoadError(true);
+      return null;
     }
-  }, [player?.id, player?.level]);
+  }, [player?.id, preview]);
+
+  const loadCatalog = useCallback(async () => {
+    if (preview) return;
+    if (!player?.id) return;
+    try {
+      setCatalog(await getTripGoal());
+      setCatalogStale(false);
+    } catch {
+      setCatalogStale(true);
+    }
+  }, [player?.id, preview]);
 
   // Refresh data every time screen is focused (real-time updates)
   useFocusEffect(
     useCallback(() => {
-      loadCoins();
-    }, [loadCoins])
+      if (preview) return;
+      void loadCoins();
+      void loadCatalog();
+    }, [loadCoins, loadCatalog, preview])
   );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadCoins();
+    await Promise.all([loadCoins(), loadCatalog()]);
     setRefreshing(false);
-  }, [loadCoins]);
+  }, [loadCoins, loadCatalog]);
+
+  // One collectible asset counts once, even if an event publishes multiple tasks for it.
+  const currentCatalog = Array.from(new Map((catalog?.rides ?? []).map(ride => [ride.asset_id, ride])).values());
+  const currentOwned = currentCatalog.filter(ride => ride.coin_owned).length;
+  const missingCoins = currentCatalog.filter(ride => !ride.coin_owned);
+  const nextCoin = catalog?.goal && !catalog.goal.coin_owned
+    ? missingCoins.find(ride => ride.asset_id === catalog.goal?.asset_id) ?? missingCoins[0]
+    : missingCoins.find(ride => ride.park_id === catalog?.goal?.park_id) ?? missingCoins[0];
+
+  const chooseNextCoin = async (ride: TripGoalRide) => {
+    if (preview) {
+      setCatalog(current => current ? { ...current, goal: ride } : current);
+      return;
+    }
+    if (goalSaving) return;
+    setGoalSaving(true);
+    try {
+      setCatalog(await setTripGoal(ride.task_id));
+      setCatalogStale(false);
+    } catch {
+      setCatalogStale(true);
+    } finally {
+      setGoalSaving(false);
+    }
+  };
 
   // Filter coins
+  const isUpgradeReady = (coin: RideCoinLevelType) => coin.is_unlocked &&
+    coin.current_level < coin.max_level &&
+    (coin.available_parts ?? 0) >= coin.parts_to_next_level &&
+    (preview ? 18 : (player?.energy ?? 0)) >= coin.energy_to_next_level;
   const filteredCoins = coins.filter(coin => {
-    if (filter === 'unlocked') return coin.is_unlocked && coin.current_level < coin.max_level;
+    if (filter === 'unlocked') return isUpgradeReady(coin);
     if (filter === 'max') return coin.current_level === coin.max_level;
     return true;
   });
+
+  const renderMissingCoinCard = (ride: TripGoalRide) => (
+    <TouchableOpacity key={`missing-${ride.asset_id}`} accessibilityRole="button"
+      accessibilityLabel={`Set ${ride.ride_name} at ${ride.park_name} as your next coin goal`}
+      disabled={goalSaving} onPress={() => void chooseNextCoin(ride)}
+      style={{ width: (Dimensions.get('window').width - 48) / 2, marginBottom: 16 }}>
+      <View style={{ borderRadius: 16, padding: 12,
+        alignItems: 'center', borderWidth: 3,
+        borderColor: catalog?.goal?.asset_id === ride.asset_id ? '#F3BA3F' : '#84C6E8',
+        backgroundColor: '#E7F8FF', minHeight: 178 }}>
+        <View style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 2,
+          borderStyle: 'dashed', borderColor: '#2288C5',
+          alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+          <Image source={require('../../assets/images/coingold.png')}
+            style={{ width: 47, height: 47, opacity: 0.5 }} contentFit="contain" />
+        </View>
+        <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: '#194A70', textAlign: 'center' }} numberOfLines={2}>
+          {ride.ride_name}
+        </Text>
+        <Text style={{ fontFamily: 'Knockout', fontSize: 11, color: '#4C7795', textAlign: 'center' }} numberOfLines={1}>
+          {ride.park_name}
+        </Text>
+        <Text style={{ fontFamily: 'Knockout', fontSize: 11, color: '#925A0A', marginTop: 8 }}>
+          {catalog?.goal?.asset_id === ride.asset_id ? 'YOUR NEXT GOAL' : 'SET AS GOAL'}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   // Handle coin selection
   const handleSelectCoin = (coin: RideCoinLevelType) => {
@@ -158,6 +197,19 @@ export default function CoinShelfScreen() {
     }).start();
 
   };
+
+  useEffect(() => {
+    if (!isFocused) {
+      openedWinCoinRef.current = null;
+      return;
+    }
+    const assetId = route?.params?.focusCoin?.assetId;
+    if (!assetId || openedWinCoinRef.current === assetId) return;
+    const earned = coins.find(coin => coin.id === assetId && coin.times_collected > 0);
+    if (!earned) return;
+    openedWinCoinRef.current = assetId;
+    handleSelectCoin(earned);
+  }, [coins, isFocused, route?.params?.focusCoin?.assetId]);
 
   // Close modal
   const handleCloseModal = () => {
@@ -196,6 +248,10 @@ export default function CoinShelfScreen() {
   const renderCoinCard = (coin: RideCoinLevelType) => {
     const isMax = coin.current_level === coin.max_level;
     const tierColor = TIER_COLORS_CARD[Math.min(coin.current_level - 1, 4)];
+    const latestEdition = coin.editions?.[0];
+    const ready = isUpgradeReady(coin);
+    const energyNeeded = Math.max(0, coin.energy_to_next_level - (preview ? 18 : (player?.energy ?? 0)));
+    const partsNeeded = Math.max(0, coin.parts_to_next_level - (coin.available_parts ?? 0));
 
     return (
       <TouchableOpacity
@@ -209,13 +265,13 @@ export default function CoinShelfScreen() {
       >
         <View
           style={{
-            backgroundColor: config.primary,
+            backgroundColor: '#F5FCFF',
             borderRadius: 16,
             padding: 12,
             alignItems: 'center',
-            borderWidth: 2,
-            borderColor: tierColor,
-            opacity: coin.is_unlocked ? 1 : 0.5,
+            borderWidth: 3,
+            borderColor: ready ? '#F3BA3F' : '#84C6E8',
+            minHeight: 178,
             ...(Platform.OS === 'ios' && coin.current_level >= 3 ? {
               shadowColor: tierColor,
               shadowOffset: { width: 0, height: 0 },
@@ -235,7 +291,7 @@ export default function CoinShelfScreen() {
               style={{
                 position: 'absolute',
                 top: 0, left: 0, right: 0, bottom: 0,
-                backgroundColor: 'rgba(0, 0, 0, 0.6)',
+              backgroundColor: 'rgba(10, 85, 143, 0.86)',
                 borderRadius: 14,
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -252,21 +308,31 @@ export default function CoinShelfScreen() {
             </View>
           )}
 
-          {/* Animated coin with tier effects */}
-          <View style={{ marginBottom: 4 }}>
+          {/* Tier effects stay still in the shelf so a full collection remains smooth. */}
+          <View style={{ marginBottom: 4, borderWidth: latestEdition ? 2 : 0,
+            borderColor: latestEdition?.color, borderRadius: 50, padding: latestEdition ? 3 : 0 }}>
             <CoinUpgradeDemo
               level={coin.current_level}
               coinUrl={coin.coin_url}
               size={56}
+              labelColor="#315D7B"
+              animate={false}
             />
           </View>
 
           {/* Max badge */}
+          {coin.is_featured && (
+            <View style={{ position: 'absolute', top: 8, left: 8,
+              backgroundColor: '#F4CD72', paddingHorizontal: 6, paddingVertical: 2,
+              borderRadius: 8 }}>
+              <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: '#182A39' }}>FEATURED</Text>
+            </View>
+          )}
           {isMax && (
             <View style={{
               position: 'absolute',
               top: 8, right: 8,
-              backgroundColor: '#fb923c',
+              backgroundColor: '#D48420',
               paddingHorizontal: 6, paddingVertical: 2,
               borderRadius: 8,
             }}>
@@ -283,13 +349,19 @@ export default function CoinShelfScreen() {
           <Text
             style={{
               fontFamily: 'Knockout', fontSize: 12,
-              color: 'white', textAlign: 'center',
+              color: '#194A70', textAlign: 'center',
               marginBottom: 4,
             }}
             numberOfLines={2}
           >
             {coin.ride_name}
           </Text>
+          {latestEdition && <Text numberOfLines={1} style={{
+            fontFamily: 'Knockout', fontSize: 10, color: '#7650A9',
+            textAlign: 'center', marginBottom: 5,
+          }}>
+            {latestEdition.name.toUpperCase()}{(coin.editions?.length ?? 0) > 1 ? ` · +${(coin.editions?.length ?? 1) - 1}` : ''}
+          </Text>}
 
           {/* Level dots */}
           <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 4 }}>
@@ -300,20 +372,29 @@ export default function CoinShelfScreen() {
                   width: 8, height: 8, borderRadius: 4,
                   backgroundColor: i < coin.current_level
                     ? TIER_COLORS_CARD[Math.min(i, 4)]
-                    : 'rgba(255, 255, 255, 0.15)',
+                    : '#AED5E8',
                   marginHorizontal: 2,
                 }}
               />
             ))}
           </View>
 
-          {/* Times collected */}
-          <Text style={{
-            fontFamily: 'Knockout', fontSize: 10,
-            color: 'rgba(255, 255, 255, 0.5)',
-          }}>
-            ×{coin.times_collected} collected
-          </Text>
+          {/* One base coin; event editions are collected separately. */}
+          <View style={{ marginTop: 3, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3,
+            backgroundColor: ready ? '#FFF0C1' : '#DDF1FB' }}>
+            <Text style={{ fontFamily: 'Knockout', fontSize: 11,
+              color: ready ? '#86530B' : '#376783', textAlign: 'center' }}>
+              {ready ? '★ UPGRADE READY' : coin.current_level >= coin.max_level
+                ? 'MAX POWER'
+                : partsNeeded > 0
+                  ? `${coin.available_parts ?? 0}/${coin.parts_to_next_level} RIDE PARTS`
+                  : `NEED ${energyNeeded} ENERGY`}
+            </Text>
+          </View>
+          {!!coin.editions?.length && <Text style={{ fontFamily: 'Knockout', fontSize: 10,
+            color: '#4C7795', marginTop: 3 }}>
+            {coin.editions.length} project edition{coin.editions.length === 1 ? '' : 's'}
+          </Text>}
         </View>
       </TouchableOpacity>
     );
@@ -346,12 +427,26 @@ export default function CoinShelfScreen() {
         <View style={{ width: 40 }} />
       </Topbar>
 
+      <ImageBackground source={require('../../assets/images/water_background.png')}
+        resizeMode="cover" style={{ flex: 1 }}>
+
       {/* ── Collection Progress Header ── */}
       <View style={{
         marginHorizontal: 16,
         marginTop: 8,
-        marginBottom: 4,
+        marginBottom: 9,
+        backgroundColor: '#DDF5FF',
+        borderColor: '#FFFFFF',
+        borderWidth: 3,
+        borderRadius: 18,
+        paddingHorizontal: 12,
+        paddingTop: 12,
       }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 9, gap: 9 }}>
+          <Image source={require('../../assets/images/coingold.png')}
+            style={{ width: 35, height: 35 }} contentFit="contain" />
+          <Text style={{ fontFamily: 'Shark', fontSize: 19, color: '#17476B' }}>YOUR RIDE COINS</Text>
+        </View>
         {/* Progress bar */}
         <View style={{
           flexDirection: 'row',
@@ -361,31 +456,31 @@ export default function CoinShelfScreen() {
         }}>
           <Text style={{
             fontFamily: 'Knockout', fontSize: 11,
-            color: 'rgba(255,255,255,0.5)',
+            color: '#285B7C',
             textTransform: 'uppercase',
             letterSpacing: 1,
           }}>
-            Park Coins
+            {catalogStale ? 'Last known park coins' : 'Current park coins'}
           </Text>
           <View style={{
             flex: 1, height: 6, borderRadius: 3,
-            backgroundColor: 'rgba(255,255,255,0.08)',
+            backgroundColor: '#B4D9E9',
             overflow: 'hidden',
           }}>
             <View style={{
               height: '100%',
-              width: coins.length > 0
-                ? `${(coins.filter(c => c.times_collected > 0).length / coins.length) * 100}%`
+              width: currentCatalog.length > 0
+                ? `${(currentOwned / currentCatalog.length) * 100}%`
                 : '0%',
               borderRadius: 3,
-              backgroundColor: config.tertiary,
+              backgroundColor: '#F0B634',
             }} />
           </View>
           <Text style={{
             fontFamily: 'Knockout', fontSize: 12,
-            color: config.tertiary,
+            color: '#85530B',
           }}>
-            {coins.filter(c => c.times_collected > 0).length}/{coins.length}
+            {catalog ? `${currentOwned}/${currentCatalog.length}` : '—'}
           </Text>
         </View>
 
@@ -399,17 +494,17 @@ export default function CoinShelfScreen() {
             flex: 1,
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: 'rgba(255,255,255,0.05)',
+            backgroundColor: '#FFFFFF',
             borderRadius: 10,
             paddingVertical: 8,
             paddingHorizontal: 10,
             gap: 6,
           }}>
-            <Text style={{ fontSize: 14 }}>🪙</Text>
-            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: config.tertiary }}>
-              {player?.coins ?? 0}
+            <Image source={require('../../assets/images/coingold.png')} style={{ width: 18, height: 18 }} contentFit="contain" />
+            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#9B620A' }}>
+              {preview ? 117 : (player?.coins ?? 0)}
             </Text>
-            <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+            <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: '#3D6E8F', textTransform: 'uppercase' }}>
               Coins
             </Text>
           </View>
@@ -417,17 +512,17 @@ export default function CoinShelfScreen() {
             flex: 1,
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: 'rgba(255,255,255,0.05)',
+            backgroundColor: '#FFFFFF',
             borderRadius: 10,
             paddingVertical: 8,
             paddingHorizontal: 10,
             gap: 6,
           }}>
-            <Text style={{ fontSize: 14 }}>🏰</Text>
-            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#fbbf24' }}>
-              {player?.park_coins_count ?? 0}
+            <Image source={require('../../assets/images/coingold.png')} style={{ width: 18, height: 18 }} contentFit="contain" />
+            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#9B620A' }}>
+              {preview ? 2 : (player?.park_coins_count ?? 0)}
             </Text>
-            <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+            <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: '#3D6E8F', textTransform: 'uppercase' }}>
               Park Coins
             </Text>
           </View>
@@ -435,22 +530,38 @@ export default function CoinShelfScreen() {
             flex: 1,
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: 'rgba(255,255,255,0.05)',
+            backgroundColor: '#FFFFFF',
             borderRadius: 10,
             paddingVertical: 8,
             paddingHorizontal: 10,
             gap: 6,
           }}>
-            <Text style={{ fontSize: 14 }}>✅</Text>
-            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#fb923c' }}>
-              {player?.completed_tasks_count ?? 0}
+            <Text style={{ fontSize: 14, color: '#1284C6' }}>★</Text>
+            <Text style={{ fontFamily: 'Shark', fontSize: 18, color: '#0877BB' }}>
+              {preview ? 7 : (player?.completed_tasks_count ?? 0)}
             </Text>
-            <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+            <Text style={{ fontFamily: 'Knockout', fontSize: 10, color: '#3D6E8F', textTransform: 'uppercase' }}>
               Tasks
             </Text>
           </View>
         </View>
       </View>
+
+      {nextCoin && <TouchableOpacity accessibilityRole="button" disabled={goalSaving}
+        onPress={() => void chooseNextCoin(nextCoin)}
+        style={{ marginHorizontal: 16, marginBottom: 10, backgroundColor: '#FFF1C5',
+          borderWidth: 3, borderColor: '#F4C453', borderRadius: 14,
+          paddingHorizontal: 12, paddingVertical: 10 }}>
+        <Text style={{ color: '#805007', fontFamily: 'Knockout', fontSize: 12 }}>
+          {catalog?.goal?.asset_id === nextCoin.asset_id ? 'YOUR NEXT COIN' : 'PICK YOUR NEXT COIN'}
+        </Text>
+        <Text style={{ color: '#17476B', fontFamily: 'Shark', fontSize: 17 }} numberOfLines={1}>
+          {nextCoin.ride_name} · {nextCoin.park_name}
+        </Text>
+        <Text style={{ color: '#376783', fontFamily: 'Knockout', fontSize: 12, marginTop: 2 }}>
+          {catalog?.goal?.asset_id === nextCoin.asset_id ? 'Chosen for your next park visit' : 'Tap to set this ride as your goal'}
+        </Text>
+      </TouchableOpacity>}
 
       {/* ── Filter Pills ── */}
       <View style={{
@@ -460,8 +571,8 @@ export default function CoinShelfScreen() {
         gap: 8,
       }}>
         {([
-          { key: 'all' as const, label: 'All', count: coins.length },
-          { key: 'unlocked' as const, label: 'Ready', count: coins.filter(c => c.is_unlocked && c.current_level < c.max_level).length },
+          { key: 'all' as const, label: 'All', count: coins.length + missingCoins.length },
+          { key: 'unlocked' as const, label: 'Ready', count: coins.filter(isUpgradeReady).length },
           { key: 'max' as const, label: 'Maxed', count: coins.filter(c => c.current_level === c.max_level).length },
         ]).map((f) => (
           <TouchableOpacity
@@ -473,28 +584,28 @@ export default function CoinShelfScreen() {
               paddingHorizontal: 14,
               paddingVertical: 7,
               borderRadius: 20,
-              backgroundColor: filter === f.key ? config.tertiary : 'rgba(255, 255, 255, 0.06)',
+              backgroundColor: filter === f.key ? '#F9C94C' : '#E4F6FE',
               borderWidth: 1.5,
-              borderColor: filter === f.key ? config.tertiary : 'rgba(255,255,255,0.1)',
+              borderColor: filter === f.key ? '#B67E15' : '#79BBD9',
               gap: 6,
             }}
           >
             <Text style={{
               fontFamily: 'Knockout', fontSize: 13,
-              color: filter === f.key ? config.primary : 'rgba(255,255,255,0.7)',
+              color: '#17476B',
               textTransform: 'uppercase',
             }}>
               {f.label}
             </Text>
             <View style={{
-              backgroundColor: filter === f.key ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)',
+              backgroundColor: filter === f.key ? '#FFF2C4' : '#C3E7F5',
               borderRadius: 8,
               paddingHorizontal: 5,
               paddingVertical: 1,
             }}>
               <Text style={{
                 fontFamily: 'Knockout', fontSize: 11,
-                color: filter === f.key ? config.primary : 'rgba(255,255,255,0.5)',
+                color: '#17476B',
               }}>
                 {f.count}
               </Text>
@@ -513,47 +624,70 @@ export default function CoinShelfScreen() {
           padding: 16,
         }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="white" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0877BB" />
         }
       >
-        {filteredCoins.length === 0 ? (
-          <View style={{
-            width: '100%',
-            alignItems: 'center',
-            paddingVertical: 40,
-          }}>
-            <Text style={{ fontSize: 40, marginBottom: 12 }}>
-              {filter === 'max' ? '🏆' : '🪙'}
-            </Text>
+        {filteredCoins.length === 0 && (filter !== 'all' || missingCoins.length === 0) ? (
+          <View style={{ width: '100%', alignItems: 'center', padding: 24,
+            backgroundColor: '#E4F6FE', borderColor: '#FFFFFF', borderWidth: 3,
+            borderRadius: 18, marginTop: 16 }}>
+            <Image source={require('../../assets/images/coingold.png')}
+              style={{ width: 64, height: 64, marginBottom: 12 }} contentFit="contain" />
             <Text style={{
               fontFamily: 'Knockout', fontSize: 16,
-              color: 'rgba(255,255,255,0.4)',
+              color: '#17476B',
               textAlign: 'center',
             }}>
               {filter === 'max'
                 ? 'No maxed coins yet — keep leveling!'
                 : filter === 'unlocked'
                   ? 'No coins ready to level up'
-                  : 'Visit parks to start collecting!'}
+                  : loadError ? 'Could not load your ride coins. Pull down to try again.' : 'Visit parks to start collecting!'}
             </Text>
           </View>
-        ) : filteredCoins.map(renderCoinCard)}
+        ) : <>{filteredCoins.map(renderCoinCard)}{filter === 'all' && missingCoins.map(renderMissingCoinCard)}</>}
       </ScrollView>
+      </ImageBackground>
 
       {/* Coin Leveling Modal */}
       <CoinLevelingModal
         visible={selectedCoin !== null}
         rideCoin={selectedCoin}
-        playerEnergy={player?.energy ?? 0}
-        playerParts={selectedCoin ? (ridePartsMap[selectedCoin.ride_id] ?? 0) : 0}
+        playerEnergy={preview ? 18 : (player?.energy ?? 0)}
+        playerParts={selectedCoin?.available_parts ?? 0}
         onClose={handleCloseModal}
+        onFeature={async (assetId) => {
+          if (preview) return false;
+          let saved = false;
+          try {
+            await featureRideCoin(assetId);
+            saved = true;
+          } catch (err) {
+            console.warn('Failed to feature ride coin:', err);
+          }
+          const latest = await loadCoins();
+          if (latest) {
+            saved = assetId === null
+              ? latest.every(coin => !coin.is_featured)
+              : latest.some(coin => coin.id === assetId && coin.is_featured);
+          }
+          if (saved) await refreshPlayer().catch(() => {});
+          return saved;
+        }}
         onLevelUp={async (id) => {
-          // TODO: API call to level up coin
-          // const res = await levelUpRideCoin(id);
-          // Simulate success for now
-          await new Promise(r => setTimeout(r, 1800));
-          await loadCoins();
-          return true;
+          if (preview) return false;
+          if (!selectedCoin) return false;
+          try {
+            await levelUpRideCoin(id, selectedCoin.current_level);
+            await loadCoins();
+            return true;
+          } catch {
+            // A dropped response can follow a committed upgrade. Reconcile with
+            // the server before offering another spend from the old level.
+            const latest = await loadCoins();
+            return !!latest?.some(coin =>
+              coin.id === id && coin.current_level > selectedCoin.current_level);
+          }
         }}
       />
     </Wrapper>

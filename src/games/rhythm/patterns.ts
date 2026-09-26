@@ -65,7 +65,12 @@ export function makeSeed(): number {
  * never drops out; the remaining offbeat slots are gated by difficulty density.
  * At least one target always lands per pattern.
  */
-export function buildRound(seed: number, difficulty: 1 | 2 | 3): RoundPlan {
+export function buildRound(
+  seed: number,
+  difficulty: 1 | 2 | 3,
+  patternCount?: number,
+  densityOverride?: number,
+): RoundPlan {
   const rng = mulberry32(seed);
   const spec = DIFFICULTY[difficulty];
   const targets: Target[] = [];
@@ -74,12 +79,12 @@ export function buildRound(seed: number, difficulty: 1 | 2 | 3): RoundPlan {
   const startMs = LEAD_IN_BEATS * BEAT_MS;
 
   let id = 0;
-  for (let p = 0; p < spec.patternCount; p++) {
+  for (let p = 0; p < (patternCount ?? spec.patternCount); p++) {
     const patternStart = startMs + p * SLOTS_PER_PATTERN * SLOT_MS;
     let placedInPattern = 0;
     for (let s = 0; s < SLOTS_PER_PATTERN; s++) {
       const isDownbeat = s === 0 || s === 4;
-      const place = isDownbeat || rng() < spec.density;
+      const place = isDownbeat || rng() < (densityOverride ?? spec.density);
       if (!place) continue;
       const hitTimeMs = patternStart + s * SLOT_MS;
       targets.push({ id: id++, hitTimeMs, spawnMs: hitTimeMs - APPROACH_MS });

@@ -1,5 +1,6 @@
 import { RedeemPrepItemResponseType } from '../../../../models/redeem-prep-item-response-type';
 import client from '../../../client';
+import deviceTimeZone from '../../../../helpers/deviceTimeZone';
 
 /**
  * Redeem/collect a prep item.
@@ -7,7 +8,6 @@ import client from '../../../client';
 export default async function redeemPrepItem(
   prepItemId: number,
   pivotId: number,
-  doubleRewards: boolean = false,
   latitude?: number,
   longitude?: number
 ): Promise<RedeemPrepItemResponseType> {
@@ -15,9 +15,9 @@ export default async function redeemPrepItem(
     `/prep-items/${prepItemId}/redeem`,
     {
       pivot_id: pivotId,
-      double_rewards: doubleRewards,
       lat: latitude,
       lng: longitude,
+      timezone: deviceTimeZone(),
     }
   );
 

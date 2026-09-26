@@ -68,7 +68,9 @@ export default function PinSwap({
 
       setModalVisible(true);
     } catch (error) {
-      Alert.alert(error.response.data.message, '', [
+      const message = (error as { response?: { data?: { message?: string } } })
+        ?.response?.data?.message ?? 'Could not hold this swap. Try again.';
+      Alert.alert(message, '', [
         {
           text: 'Ok',
           onPress: () => {

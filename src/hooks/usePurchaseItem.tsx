@@ -37,7 +37,9 @@ export default function usePurchaseItem() {
       return;
     }
 
-    if (player[item.currency.name.toLowerCase() as keyof PlayerType] < item.cost) {
+    const walletValue = player[item.currency.name.toLowerCase() as keyof PlayerType];
+    const balance = typeof walletValue === 'number' ? walletValue : 0;
+    if (balance < item.cost) {
       playSound(require('../../assets/sounds/purchase_item_cancel.mp3'));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       setModal({ type: 'poor', currencyName: item.currency.name });
@@ -51,7 +53,7 @@ export default function usePurchaseItem() {
             item.name,
             item.cost,
             item.currency.name,
-            player[item.currency.name.toLowerCase() as keyof PlayerType],
+            balance,
             item.currency.name,
           ]);
 

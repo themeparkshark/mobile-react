@@ -190,16 +190,18 @@ export default function Playercard({
               source={
                 inventory?.skin_item?.no_eye_url
                   ? { uri: inventory.skin_item.no_eye_url }
-                  : require('../../assets/images/screens/inventory/shark.png')
+                  : require('../../assets/images/screens/inventory/shark-colored-v2.png')
               }
               style={styles.image}
               contentFit="contain"
             />
-            <Image
-              source={require('../../assets/images/screens/inventory/blink.png')}
-              style={styles.image}
-              contentFit="contain"
-            />
+            {inventory?.skin_item?.no_eye_url && (
+              <Image
+                source={require('../../assets/images/screens/inventory/blink.png')}
+                style={styles.image}
+                contentFit="contain"
+              />
+            )}
             {/* Item layers — purely visual, no individual Pressables */}
             {inventory?.body_item && (
               <Image source={{ uri: inventory.body_item.paper_url }} style={styles.image} contentFit="contain" />

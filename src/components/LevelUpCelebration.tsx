@@ -33,7 +33,6 @@ export default function LevelUpCelebration({ visible, level, onClose, rewards }:
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const levelScaleAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
   const rewardsOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -75,15 +74,6 @@ export default function LevelUpCelebration({ visible, level, onClose, rewards }:
         ).start();
       }, 600);
 
-      // Confetti progress
-      Animated.loop(
-        Animated.timing(progressAnim, {
-          toValue: 1,
-          duration: 2500,
-          useNativeDriver: true,
-        })
-      ).start();
-
       // Fade in rewards
       setTimeout(() => {
         Animated.timing(rewardsOpacity, {
@@ -115,7 +105,8 @@ export default function LevelUpCelebration({ visible, level, onClose, rewards }:
       {/* Confetti */}
       <Lottie
         source={require('../../assets/animations/confetti.json')}
-        progress={progressAnim}
+        autoPlay
+        loop
         style={styles.confetti}
       />
 

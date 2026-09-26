@@ -7,8 +7,8 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Audio } from 'expo-av';
 import Constants from 'expo-constants';
+import { SoundEffectContext } from './SoundEffectProvider';
 
 interface FlyingCoin {
   id: number;
@@ -57,7 +57,7 @@ interface CurrencyFlyProviderProps {
 export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderProps) {
   const [flyingCoins, setFlyingCoins] = useState<FlyingCoin[]>([]);
   const coinIdRef = useRef(0);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const { playSound } = useContext(SoundEffectContext);
   
   // Target positions for different currency slots
   const targets = useRef<Record<string, { x: number; y: number }>>({
@@ -71,23 +71,9 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
   }, []);
 
   // Play coin landing sound
-  const playCoinSound = useCallback(async () => {
-    try {
-      // Unload previous sound if exists
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-      }
-      
-      const { sound } = await Audio.Sound.createAsync(COIN_SOUND, {
-        volume: 0.6,
-        rate: 1.1, // Slightly faster for snappier feel
-      });
-      soundRef.current = sound;
-      await sound.playAsync();
-    } catch (error) {
-      console.log('Coin sound error:', error);
-    }
-  }, []);
+  const playCoinSound = useCallback(() => {
+    playSound(COIN_SOUND, { volume: 0.6, rate: 1.1 });
+  }, [playSound]);
 
   const triggerFly = useCallback(({
     imageUrl,
@@ -104,7 +90,8 @@ export default function CurrencyFlyProvider({ children }: CurrencyFlyProviderPro
     startY: number;
     targetPosition?: string;
   }) => {
-    const target = targets.current[targetPosition] || targets.current['left'];
+    const target = targets.current[targetPosition];
+    if (!target) return;
     const numCoins = Math.min(Math.max(amount, 1), 10); // 1-10 coins max
     
     const newCoins: FlyingCoin[] = [];

@@ -23,6 +23,7 @@
 
 import React, {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -213,7 +214,9 @@ export const ParticleField = forwardRef<ParticleHandle, ParticleFieldProps>(
       Array.from({ length: MAX_PARTICLES }, makeParticle),
     );
     const pausedSv = useSharedValue(paused);
-    pausedSv.value = paused;
+    useEffect(() => {
+      pausedSv.value = paused;
+    }, [paused, pausedSv]);
 
     // Round-robin cursor for finding free slots quickly on the JS thread.
     const cursor = useRef(0);

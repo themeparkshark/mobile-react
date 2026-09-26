@@ -30,6 +30,7 @@ import React, {
 } from 'react';
 import {
   View,
+  Image,
   Pressable,
   StyleSheet,
   Dimensions,
@@ -71,8 +72,11 @@ import {
   GRID_COLS,
   GRID_ROWS,
   ROUND_SECONDS,
+  RIDE_ROUND_SECONDS,
   SCORING,
   STAR_THRESHOLDS,
+  RIDE_STAR_THRESHOLDS,
+  RIDE_PB_KEY,
   POP,
   DECOY_SHAKE_MS,
   PB_KEY,
@@ -94,15 +98,19 @@ export interface WhackASharkProps {
   difficulty?: Difficulty;
   /** Optional deterministic seed (else time-based). Enables replay. */
   seed?: number;
+  /** Short paid ride challenge; the default full round remains for LinePlay. */
+  format?: 'ride' | 'queue';
   /** GameShellV2 external contract — matches MiniGameSelector. */
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
+  onQuit?: (resume: () => void) => void;
 }
 
-function scoreToStars(score: number): number {
-  if (score >= STAR_THRESHOLDS.three) return 3;
-  if (score >= STAR_THRESHOLDS.two) return 2;
-  if (score >= STAR_THRESHOLDS.one) return 1;
+function scoreToStars(score: number, format: 'ride' | 'queue'): number {
+  const thresholds = format === 'ride' ? RIDE_STAR_THRESHOLDS : STAR_THRESHOLDS;
+  if (score >= thresholds.three) return 3;
+  if (score >= thresholds.two) return 2;
+  if (score >= thresholds.one) return 1;
   return 0;
 }
 
@@ -110,8 +118,10 @@ export function WhackAShark({
   visible,
   difficulty = 1,
   seed,
+  format = 'queue',
   onComplete,
   onClose,
+  onQuit,
 }: WhackASharkProps) {
   const shellRef = useRef<GameShellV2Handle>(null);
   const particlesRef = useRef<ParticleHandle>(null);
@@ -121,13 +131,21 @@ export function WhackAShark({
 
   // Score / combo (JS thread).
   const [score, setScore] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState(format === 'ride' ? RIDE_ROUND_SECONDS : ROUND_SECONDS);
   const scoreRef = useRef(0);
   const combo = useCombo();
   const [best, setBest] = useState(0);
   const [result, setResult] = useState<GameResult | null>(null);
+  const roundSeconds = format === 'ride' ? RIDE_ROUND_SECONDS : ROUND_SECONDS;
+  const personalBestKey = format === 'ride' ? RIDE_PB_KEY : PB_KEY;
   const runSeed = useRef<number>(seed ?? Date.now() >>> 0);
   const startedAt = useRef(0);
   const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const endDueAt = useRef(0);
+  const remainingMs = useRef(roundSeconds * 1000);
+  const pausedAt = useRef<number | null>(null);
+  const pausedTotalMs = useRef(0);
+  const finished = useRef(false);
 
   // Screen shake (decoy) + gold fever flash overlay.
   const shakeCtl = useShake();
@@ -136,7 +154,8 @@ export function WhackAShark({
   // Load personal best once.
   useEffect(() => {
     let alive = true;
-    AsyncStorage.getItem(PB_KEY)
+    setBest(0);
+    AsyncStorage.getItem(personalBestKey)
       .then((v) => {
         if (alive && v != null) setBest(parseInt(v, 10) || 0);
       })
@@ -144,7 +163,7 @@ export function WhackAShark({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [personalBestKey]);
 
   // --- Grid geometry (bottom 60% of the field, one-thumb reachable). -------
   const layout = useMemo(() => computeGrid(field.w, field.h), [field.w, field.h]);
@@ -224,6 +243,7 @@ export function WhackAShark({
 
   const engine = useWhackEngine({
     difficulty,
+    roundSeconds,
     fever: combo.fever,
     onWhack: onWhackTarget,
     onMiss: onMissTarget,
@@ -232,22 +252,39 @@ export function WhackAShark({
   // Poll the combo machine so fever expires and stale streaks decay.
   useEffect(() => {
     if (!visible) return;
-    const id = setInterval(() => combo.poll(), 250);
+    const id = setInterval(() => {
+      if (shellRef.current?.getPhase() === 'playing') combo.poll();
+    }, 250);
     return () => clearInterval(id);
   }, [visible, combo]);
 
+  useEffect(() => {
+    if (!visible) return;
+    const id = setInterval(() => {
+      if (shellRef.current?.getPhase() === 'playing' && !finished.current) {
+        setSecondsLeft(Math.ceil(Math.max(0, endDueAt.current - Date.now()) / 1000));
+      }
+    }, 200);
+    return () => clearInterval(id);
+  }, [visible]);
+
   // --- Finish ---------------------------------------------------------------
   const finish = useCallback(() => {
-    if (result) return;
+    if (finished.current) return;
+    finished.current = true;
+    if (endTimer.current) clearTimeout(endTimer.current);
+    endTimer.current = null;
+    remainingMs.current = 0;
+    setSecondsLeft(0);
     engine.stop();
     const finalScore = scoreRef.current;
     const isNewBest = finalScore > best;
-    const stars = scoreToStars(finalScore);
+    const stars = scoreToStars(finalScore, format);
     if (isNewBest) {
       setBest(finalScore);
-      AsyncStorage.setItem(PB_KEY, String(finalScore)).catch(() => undefined);
+      AsyncStorage.setItem(personalBestKey, String(finalScore)).catch(() => undefined);
     }
-    const duration = (Date.now() - startedAt.current) / 1000;
+    const duration = (Date.now() - startedAt.current - pausedTotalMs.current) / 1000;
     setResult({
       score: finalScore,
       stars,
@@ -259,10 +296,11 @@ export function WhackAShark({
         seed: runSeed.current,
         maxCombo: combo.maxStreak,
         difficulty,
+        format,
         isNewBest,
       },
     });
-  }, [result, best, combo.maxStreak, difficulty, engine]);
+  }, [result, best, combo.maxStreak, difficulty, engine, format, personalBestKey]);
 
   // --- Shell lifecycle ------------------------------------------------------
   const handleStart = useCallback(() => {
@@ -272,18 +310,35 @@ export function WhackAShark({
     setResult(null);
     runSeed.current = seed ?? Date.now() >>> 0;
     startedAt.current = Date.now();
+    finished.current = false;
+    pausedAt.current = null;
+    pausedTotalMs.current = 0;
+    remainingMs.current = roundSeconds * 1000;
+    setSecondsLeft(roundSeconds);
     engine.start(runSeed.current);
     if (endTimer.current) clearTimeout(endTimer.current);
-    endTimer.current = setTimeout(finish, ROUND_SECONDS * 1000);
-  }, [combo, engine, seed, finish]);
+    endDueAt.current = Date.now() + remainingMs.current;
+    endTimer.current = setTimeout(finish, remainingMs.current);
+  }, [combo, engine, seed, finish, roundSeconds]);
 
   const handlePause = useCallback(() => {
+    if (pausedAt.current != null || finished.current) return;
+    pausedAt.current = Date.now();
+    remainingMs.current = Math.max(0, endDueAt.current - pausedAt.current);
+    setSecondsLeft(Math.ceil(remainingMs.current / 1000));
+    if (endTimer.current) clearTimeout(endTimer.current);
+    endTimer.current = null;
     engine.pause();
   }, [engine]);
 
   const handleResume = useCallback(() => {
+    if (pausedAt.current == null || finished.current) return;
+    pausedTotalMs.current += Date.now() - pausedAt.current;
+    pausedAt.current = null;
+    endDueAt.current = Date.now() + remainingMs.current;
+    endTimer.current = setTimeout(finish, remainingMs.current);
     engine.resume();
-  }, [engine]);
+  }, [engine, finish]);
 
   useEffect(() => {
     return () => {
@@ -311,7 +366,7 @@ export function WhackAShark({
       ref={shellRef}
       visible={visible}
       title="Whack-a-Shark"
-      subtitle="Bop the sharks, dodge the anglerfish"
+      subtitle={format === 'ride' ? `Ride sprint · ${secondsLeft}s left` : `Bop sharks · ${secondsLeft}s left`}
       objective="Whack sharks! Avoid the anglerfish. Golden shark = x5 + fever!"
       score={score}
       multiplier={combo.multiplier}
@@ -323,8 +378,15 @@ export function WhackAShark({
       onResume={handleResume}
       onComplete={onComplete}
       onClose={onClose}
+      onQuit={onQuit}
     >
       <Animated.View style={[styles.fill, shakeCtl.style]} onLayout={onFieldLayout}>
+        <Image
+          source={require('../../../assets/images/screens/lineplay/whack-underwater-playfield-v1.png')}
+          resizeMode="cover"
+          style={StyleSheet.absoluteFillObject}
+          accessibilityIgnoresInvertColors
+        />
         <WhackField
           holes={engine.holes}
           layout={layout}

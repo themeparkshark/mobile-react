@@ -26,17 +26,17 @@ export default function CreateReply({
   const { activeComment, setActiveComment, setRecentlyAddedComment } =
     useContext(ForumContext);
   const [content, setContent] = useState<string>('');
-  const refInput = useRef(null);
+  const refInput = useRef<TextInput>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(new Animated.Value(0));
   const { labels } = useCrumbs();
   const [hasPressed, setHasPressed] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!activeComment || !refInput) {
+    if (!activeComment) {
       return;
     }
 
-    refInput.current.focus();
+    refInput.current?.focus();
   }, [activeComment, refInput]);
 
   useEffect(() => {
@@ -153,6 +153,10 @@ export default function CreateReply({
                     content,
                     activeComment?.id
                   );
+                  if (!response) {
+                    setHasPressed(false);
+                    return;
+                  }
                   setRecentlyAddedComment(response);
                   setContent('');
                   await onSubmit();

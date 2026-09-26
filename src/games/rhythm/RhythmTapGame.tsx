@@ -22,6 +22,7 @@ import React, {
   useState,
 } from 'react';
 import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
   useAnimatedStyle,
@@ -60,11 +61,16 @@ const PB_KEY = 'rhythmTap.personalBest';
 
 export interface RhythmTapGameProps {
   visible: boolean;
+  /** Stable seed for a saved LinePlay round; omitted for free play. */
+  seed?: number;
   /** 1-3, chosen by the LinePlay session context. Defaults to 2. */
   difficulty?: 1 | 2 | 3;
+  /** Short ride sprint or longer LinePlay round. */
+  format?: 'ride' | 'queue';
   /** Preserved external contract used by MiniGameSelector. */
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
+  onQuit?: (resume: () => void) => void;
 }
 
 interface RoundStats {
@@ -78,13 +84,18 @@ const EMPTY_STATS: RoundStats = { perfect: 0, great: 0, good: 0, miss: 0 };
 
 export function RhythmTapGame({
   visible,
+  seed: roundSeed,
   difficulty = 2,
+  format = 'queue',
   onComplete,
   onClose,
+  onQuit,
 }: RhythmTapGameProps) {
   // -- Round plan (seeded, deterministic → server-replayable). ----------------
-  const [seed, setSeed] = useState<number>(() => makeSeed());
-  const plan = useMemo(() => buildRound(seed, difficulty), [seed, difficulty]);
+  const [seed, setSeed] = useState<number>(() => roundSeed ?? makeSeed());
+  const plan = useMemo(() => buildRound(seed, difficulty,
+    format === 'ride' ? 5 : undefined, format === 'ride' ? 0 : undefined),
+  [seed, difficulty, format]);
   const maxScore = useMemo(() => maxScoreFor(plan), [plan]);
 
   const [score, setScore] = useState(0);
@@ -110,7 +121,7 @@ export function RhythmTapGame({
   // -- Reset on (re)open. -----------------------------------------------------
   useEffect(() => {
     if (!visible) return;
-    setSeed(makeSeed());
+    setSeed(roundSeed ?? makeSeed());
     setScore(0);
     scoreRef.current = 0;
     resolvedRef.current = 0;
@@ -124,7 +135,7 @@ export function RhythmTapGame({
       .catch(() => setPersonalBest(undefined));
     // Warm the SFX pool (no-op silent until audio assets land).
     playSfx('tick', 0);
-  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visible, roundSeed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Drive fever visuals off the combo state.
   useEffect(() => {
@@ -254,13 +265,7 @@ export function RhythmTapGame({
   }, [result, maxScore, combo.maxStreak, personalBest, seed, difficulty, plan.targets.length]);
 
   // -- Background + beat-bar animated styles. ---------------------------------
-  const bgStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      feverProgress.value,
-      [0, 1],
-      [RHYTHM_COLORS.bgTop, RHYTHM_COLORS.bgTopFever],
-    ),
-  }));
+  const feverTintStyle = useAnimatedStyle(() => ({ opacity: feverProgress.value * 0.28 }));
 
   const beatBarStyle = useAnimatedStyle(() => {
     const feverColor = interpolateColor(
@@ -288,7 +293,7 @@ export function RhythmTapGame({
     <GameShellV2
       visible={visible}
       title="Rhythm Tap"
-      subtitle={`${DIFFICULTY[difficulty].label} · ${plan.targets.length} beats`}
+      subtitle={`${DIFFICULTY[difficulty].label} · ${plan.targets.length} hits`}
       score={score}
       multiplier={combo.multiplier}
       fever={combo.fever}
@@ -300,10 +305,13 @@ export function RhythmTapGame({
       onResume={onResume}
       onComplete={onComplete}
       onClose={onClose}
+      onQuit={onQuit}
     >
-      <Animated.View style={[StyleSheet.absoluteFill, styles.bg, bgStyle, missShake.style]}>
-        {/* Fever bottom-glow layer (simple gradient shift via two stacked views). */}
-        <View style={[StyleSheet.absoluteFill, styles.bgBottom]} pointerEvents="none" />
+      <Animated.View style={[StyleSheet.absoluteFill, styles.bg, missShake.style]}>
+        <Image source={require('../../../assets/images/screens/lineplay/rhythm-underwater-stage-v1.png')}
+          style={StyleSheet.absoluteFillObject} contentFit="cover" pointerEvents="none" />
+        <View style={styles.oceanTint} pointerEvents="none" />
+        <Animated.View style={[styles.feverTint, feverTintStyle]} pointerEvents="none" />
 
         {/* Beat bar — the silent metronome's visible pulse. */}
         <View style={styles.beatBarWrap} pointerEvents="none">
@@ -323,6 +331,9 @@ export function RhythmTapGame({
             emitBurst={emitBurst}
           />
         ) : null}
+        <View style={styles.hintWrap} pointerEvents="none">
+          <Text style={styles.playHint}>TAP WHEN THE RINGS MEET</Text>
+        </View>
 
         {/* Hit-burst particles above the field, below the shell overlays. */}
         <ParticleField
@@ -338,12 +349,9 @@ export function RhythmTapGame({
 }
 
 const styles = StyleSheet.create({
-  bg: { overflow: 'hidden' },
-  bgBottom: {
-    top: '55%',
-    backgroundColor: RHYTHM_COLORS.bgBottom,
-    opacity: 0.85,
-  },
+  bg: { overflow: 'hidden', backgroundColor: '#063d7c' },
+  oceanTint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 39, 101, 0.32)' },
+  feverTint: { ...StyleSheet.absoluteFillObject, backgroundColor: '#812e76' },
   beatBarWrap: {
     position: 'absolute',
     top: SCREEN_H * 0.14,
@@ -358,11 +366,17 @@ const styles = StyleSheet.create({
   },
   beatLabel: {
     marginTop: 8,
-    color: GAME_COLORS.textFaint,
+    color: '#e6faff',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 2,
   },
+  hintWrap: { position: 'absolute', bottom: 45, alignSelf: 'center',
+    backgroundColor: 'rgba(0, 42, 92, 0.72)', borderColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 1, borderRadius: 11, paddingHorizontal: 12, paddingVertical: 7 },
+  playHint: {
+    color: '#fff', fontFamily: 'Shark', fontSize: 15,
+    textShadowColor: '#003b76', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 3 },
 });
 
 export default RhythmTapGame;

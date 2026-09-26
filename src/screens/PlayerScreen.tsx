@@ -1,12 +1,13 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { Alert, Dimensions, ScrollView, View } from 'react-native';
+import { Alert, Dimensions, ScrollView, Text, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import { vsprintf } from 'sprintf-js';
 import getPlayer from '../api/endpoints/players/get';
 import reportPlayer from '../api/endpoints/players/report';
 import getVisitedParks from '../api/endpoints/players/visited-parks';
 import Experience from '../components/Experience';
+import FeaturedRideCoinCard from '../components/FeaturedRideCoinCard';
 import Heading from '../components/Heading';
 import Loading from '../components/Loading';
 import PlayerButtons from '../components/PlayerButtons';
@@ -28,9 +29,11 @@ import usePurchaseItem from '../hooks/usePurchaseItem';
 import { ParkType } from '../models/park-type';
 import { PermissionEnums } from '../models/permission-enums';
 import { PlayerType } from '../models/player-type';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { ParamListBase } from '@react-navigation/native';
 
-export default function PlayerScreen({ route, navigation }) {
-  const { player } = route.params;
+export default function PlayerScreen({ route, navigation }: NativeStackScreenProps<ParamListBase, 'Player'>) {
+  const { player } = route.params as { player: number };
   const [loading, setLoading] = useState<boolean>(true);
   const [currentPlayer, setCurrentPlayer] = useState<PlayerType>();
   const [parks, setParks] = useState<ParkType[]>([]);
@@ -196,6 +199,16 @@ export default function PlayerScreen({ route, navigation }) {
                 paddingTop: 24,
               }}
             >
+              {!!currentPlayer.title && (
+                <View style={{ alignSelf: 'center', backgroundColor: '#182A39', borderRadius: 16,
+                  paddingHorizontal: 16, paddingVertical: 7, marginBottom: 14 }}>
+                  <Text style={{ color: '#F4CD72', fontFamily: 'Knockout', fontSize: 17,
+                    textAlign: 'center' }} numberOfLines={1}>{currentPlayer.title}</Text>
+                </View>
+              )}
+              {!!currentPlayer.featured_ride_coin && (
+                <FeaturedRideCoinCard coin={currentPlayer.featured_ride_coin} />
+              )}
               <Experience player={currentPlayer} />
               <PlayerButtons buttons={buttons} />
               {(currentPlayer.is_subscribed || currentPlayer.verified_at) && (

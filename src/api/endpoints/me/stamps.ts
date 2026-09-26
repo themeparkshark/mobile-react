@@ -34,6 +34,8 @@ export interface StampData {
 export interface StampsResponse {
   stamps: Record<string, StampData[]>;
   newly_earned: number[];
+  unlocked_titles: { stamp_id: number; title: string }[];
+  equipped_title: string | null;
   summary: {
     total: number;
     earned: number;
@@ -47,5 +49,10 @@ export async function getStamps(): Promise<StampsResponse> {
 
 export async function claimStampReward(stampId: number): Promise<{ success: boolean; rewards: StampRewards }> {
   const { data } = await client.post(`/me/stamps/${stampId}/claim`);
+  return data;
+}
+
+export async function equipStampTitle(stampId: number | null): Promise<{ stamp_id: number | null; title: string | null }> {
+  const { data } = await client.put('/me/stamp-title', { stamp_id: stampId });
   return data;
 }

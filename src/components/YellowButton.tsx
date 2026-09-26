@@ -40,7 +40,7 @@ export default function YellowButton({
           return;
         }
 
-        onPress();
+        onPress?.();
       }}
       onPressIn={zoomOut}
       onPressOut={zoomIn}

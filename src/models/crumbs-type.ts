@@ -8,6 +8,7 @@ interface CrumbsType {
     readonly pin_required: string;
   };
   readonly labels: {
+    readonly letsgo?: string;
     readonly add_a_comment: string;
     readonly archived_tasks: string;
     readonly checking_again: string;

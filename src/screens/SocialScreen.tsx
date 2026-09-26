@@ -371,7 +371,7 @@ function ThreadSheet({
   const [page, setPage] = useState(1);
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
-  const [activeSort, setActiveSort] = useState('latest');
+  const [activeSort, setActiveSort] = useState<'latest' | 'most_reactions'>('latest');
   const { player } = useContext(AuthContext);
   const { reactionTypes, setActiveComment, activeComment, setRecentlyAddedComment } = useContext(ForumContext);
   const { playSound } = useContext(SoundEffectContext);
@@ -440,6 +440,7 @@ function ThreadSheet({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const response = await createComment(thread.id, replyText.trim(), activeComment?.id);
+      if (!response) return;
       setRecentlyAddedComment(response);
       setReplyText('');
       setActiveComment(undefined);
@@ -810,7 +811,7 @@ const fabStyles = StyleSheet.create({
 });
 
 // ── Main Screen ───────────────────────────────────────────
-export default function SocialScreen({ navigation }) {
+export default function SocialScreen({ navigation }: { navigation: { navigate: (screen: string) => void } }) {
   const [threads, setThreads] = useState<ThreadType[]>([]);
   const [pinnedThreads, setPinnedThreads] = useState<ThreadType[]>([]);
   const [refreshing, setRefreshing] = useState(false);

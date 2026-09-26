@@ -1,0 +1,116 @@
+import { useEffect, useRef } from 'react';
+import { Image } from 'expo-image';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+
+interface Props {
+  readonly mode: 'loading' | 'empty' | 'error' | 'saved' | 'park_check';
+  readonly onRetry?: () => void;
+  readonly onOpenCollections?: () => void;
+}
+
+/** A shark-led status for the moments between live GPS finds. */
+export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: Props) {
+  const scale = useRef(new Animated.Value(0.92)).current;
+  const sharkFloat = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    scale.setValue(0.92);
+    Animated.spring(scale, { toValue: 1, friction: 7,
+      tension: 110, useNativeDriver: true }).start();
+  }, [mode, scale]);
+  useEffect(() => {
+    if (mode !== 'loading') {
+      sharkFloat.setValue(0);
+      return;
+    }
+    const float = Animated.loop(Animated.sequence([
+      Animated.timing(sharkFloat, { toValue: -5, duration: 750, useNativeDriver: true }),
+      Animated.timing(sharkFloat, { toValue: 0, duration: 750, useNativeDriver: true }),
+    ]));
+    float.start();
+    return () => float.stop();
+  }, [mode, sharkFloat]);
+
+  if (mode === 'saved') return <Animated.View style={[styles.savedCard, { transform: [{ scale }] }]}>
+    <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
+      style={styles.savedShark} contentFit="contain" />
+    <View style={styles.savedCopy}>
+      <Text style={styles.savedTitle}>SAVED MAP</Text>
+      <Text style={styles.savedDetail}>Reconnect to collect these finds.</Text>
+    </View>
+    {onRetry && <Pressable accessibilityRole="button"
+      accessibilityLabel="Refresh saved home map" onPress={onRetry}
+      style={styles.savedButton}>
+      <Text style={styles.savedButtonText}>RETRY</Text>
+    </Pressable>}
+  </Animated.View>;
+
+  const title = mode === 'park_check' ? 'CHECKING YOUR MAP'
+    : mode === 'loading' ? 'SCOUTING THE MAP'
+    : mode === 'error' ? 'MAP SIGNAL LOST' : 'THE HUNT IS QUIET';
+  const detail = mode === 'park_check' ? 'Home finds return when your location is confirmed outside a park.'
+    : mode === 'loading' ? 'Looking for nearby finds...'
+    : mode === 'error' ? 'Could not refresh nearby finds.'
+      : 'Check your collection while new finds appear.';
+
+  return <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
+    <Animated.View style={[styles.sharkFrame, { transform: [{ translateY: sharkFloat }] }]}>
+      <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
+        style={styles.shark} contentFit="contain" />
+    </Animated.View>
+    <View style={styles.copy}>
+      <Text style={styles.kicker}>{mode === 'park_check' ? 'LOCATION CHECK' : 'HOME EXPLORER'}</Text>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.detail}>{detail}</Text>
+      {mode === 'empty' && onOpenCollections && <Pressable accessibilityRole="button"
+        accessibilityLabel="Open home collections" onPress={onOpenCollections}
+        style={styles.button}>
+        <Text style={styles.buttonText}>COLLECTIONS  →</Text>
+      </Pressable>}
+      {mode === 'error' && onRetry && <Pressable accessibilityRole="button"
+        accessibilityLabel="Refresh nearby prep items" onPress={onRetry}
+        style={styles.button}>
+        <Text style={styles.buttonText}>TRY AGAIN  →</Text>
+      </Pressable>}
+    </View>
+    {mode === 'empty' && onRetry && <Pressable accessibilityRole="button"
+      accessibilityLabel="Refresh nearby prep items" onPress={onRetry}
+      style={styles.refreshButton}>
+      <Text style={styles.refreshText}>↻</Text>
+    </Pressable>}
+  </Animated.View>;
+}
+
+const styles = StyleSheet.create({
+  savedCard: { position: 'absolute', bottom: 207, alignSelf: 'center', zIndex: 12,
+    width: 268, minHeight: 66, flexDirection: 'row', alignItems: 'center',
+    borderRadius: 16, borderWidth: 3, borderColor: '#fff', backgroundColor: '#0879ca',
+    shadowColor: '#003c7a', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 4, elevation: 6, paddingHorizontal: 6 },
+  savedShark: { width: 48, height: 55, marginRight: 4 },
+  savedCopy: { flex: 1, minWidth: 0 },
+  savedTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 14 },
+  savedDetail: { color: '#e4f5ff', fontFamily: 'Knockout', fontSize: 12, lineHeight: 14 },
+  savedButton: { backgroundColor: '#ffca30', borderColor: '#fff', borderWidth: 2,
+    borderRadius: 9, paddingHorizontal: 7, paddingVertical: 6, marginLeft: 5 },
+  savedButtonText: { color: '#093d77', fontFamily: 'Shark', fontSize: 11 },
+  card: { position: 'absolute', bottom: 285, alignSelf: 'center', zIndex: 12,
+    width: 295, minHeight: 82, flexDirection: 'row', alignItems: 'center',
+    borderRadius: 18, borderWidth: 3, borderColor: '#fff', backgroundColor: '#0879ca',
+    shadowColor: '#003c7a', shadowOpacity: 0.32, shadowOffset: { width: 0, height: 5 },
+    shadowRadius: 5, elevation: 6, padding: 7 },
+  sharkFrame: { width: 58, height: 70, marginRight: 5 },
+  shark: { width: 58, height: 70 },
+  copy: { flex: 1, minWidth: 0 },
+  kicker: { color: '#ffe06c', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.4 },
+  title: { color: '#fff', fontFamily: 'Shark', fontSize: 15, marginTop: 1 },
+  detail: { color: '#e4f5ff', fontFamily: 'Knockout', fontSize: 12,
+    lineHeight: 15, marginTop: 2 },
+  button: { alignSelf: 'flex-start', backgroundColor: '#ffca30',
+    borderColor: '#fff', borderWidth: 2, borderRadius: 9,
+    paddingHorizontal: 7, paddingVertical: 3, marginTop: 4 },
+  buttonText: { color: '#093d77', fontFamily: 'Shark', fontSize: 11 },
+  refreshButton: { alignSelf: 'flex-end', justifyContent: 'center', alignItems: 'center',
+    width: 30, height: 30, marginLeft: 2, borderRadius: 15,
+    borderWidth: 2, borderColor: '#9ddcff', backgroundColor: '#07569e' },
+  refreshText: { color: '#fff', fontSize: 25, lineHeight: 28, marginTop: -2 },
+});

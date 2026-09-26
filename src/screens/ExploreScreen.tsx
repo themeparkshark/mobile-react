@@ -1,4 +1,4 @@
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
@@ -8,6 +8,7 @@ import Modal from 'react-native-modal';
 import { Marker } from 'react-native-maps';
 import { useAsyncEffect } from 'rooks';
 import { TaskType } from '../models/task-type';
+import currencyBalance from '../helpers/currency-balance';
 import * as RootNavigation from '../RootNavigation';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
 // Lazy load ARView to prevent camera module crash
@@ -27,8 +28,11 @@ import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
+import { isConfirmedOutsidePark } from '../context/parkLookupPolicy';
 import { ThemeContext } from '../context/ThemeProvider';
-import { useRideDetection } from '../hooks/useRideDetection';
+import useTripGoal from '../hooks/useTripGoal';
+import { resolveMapQueueContext } from '../services/lineplay/resolveRide';
+import type { RideContext } from '../services/lineplay/LinePlaySession';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { RedeemablesType } from '../models/redeemables-type';
@@ -36,6 +40,11 @@ import { PrepItemType } from '../models/prep-item-type';
 import Coin from './ExploreScreen/Coin';
 import Key from './ExploreScreen/Key';
 import HomeExplore from './ExploreScreen/HomeExplore';
+import { HOME_PREP_PICKUP_RADIUS_METERS } from './ExploreScreen/homePickupRange';
+import { rideFocusForPark, type ParkRideMapFocus } from './ExploreScreen/parkRideMapFocus';
+import ParkProjectWidget from './ExploreScreen/ParkProjectWidget';
+import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
+import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
 import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
@@ -57,9 +66,6 @@ dayjs.extend(require('dayjs/plugin/isBetween'));
 // Community Center range in meters (same as task buildings - config.mobile.redeem_radius)
 const COMMUNITY_CENTER_RANGE_METERS = 14;
 
-// Prep item range in meters (same as community center)
-const PREP_ITEM_RANGE_METERS = 28;
-
 // Calculate distance between two coordinates in meters (Haversine formula)
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000; // Earth's radius in meters
@@ -73,12 +79,19 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export default function ExploreScreen() {
+  const navigation = useNavigation<NavigationProp<ParamListBase>>();
+  const route = useRoute();
+  const focusRide = (route.params as { focusRide?: ParkRideMapFocus } | undefined)?.focusRide;
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
   const [activeRedeemable, setActiveRedeemable] = useState<
     CurrentRedeemableType | undefined
   >();
   const [failedTaskIds, setFailedTaskIds] = useState<Set<number>>(new Set());
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
+  const [focusedFromChecklist, setFocusedFromChecklist] = useState<TaskType | null>(null);
+  const [selectedQueueRide, setSelectedQueueRide] = useState<{
+    parkId: number; taskId: number; ride: RideContext;
+  } | null>(null);
   
   // Persist failed task IDs to storage (survives app restart, resets daily)
   const FAILED_TASKS_KEY = 'failed_task_ids';
@@ -123,6 +136,10 @@ export default function ExploreScreen() {
   const [activePrepItem, setActivePrepItem] = useState<PrepItemType | null>(null);
   const [activePrepItemPivotId, setActivePrepItemPivotId] = useState<number | null>(null);
   const [showPrepItemModal, setShowPrepItemModal] = useState(false);
+  const [homeCollectionVersion, setHomeCollectionVersion] = useState(0);
+  const [tripGoalVersion, setTripGoalVersion] = useState(0);
+  const [activeParkProject, setActiveParkProject] = useState<ParkProject | null>(null);
+  const [projectOpenRequestVersion, setProjectOpenRequestVersion] = useState(0);
   const [arMode, setArMode] = useState(false);
   
   // Community Center state
@@ -130,6 +147,8 @@ export default function ExploreScreen() {
   const [showCommunityCenterModal, setShowCommunityCenterModal] = useState(false);
   const [showTooFarModal, setShowTooFarModal] = useState(false);
   const [tooFarDistance, setTooFarDistance] = useState<string>('');
+  const [tooFarRequiredMeters, setTooFarRequiredMeters] = useState(COMMUNITY_CENTER_RANGE_METERS);
+  const [tooFarIsHomeItem, setTooFarIsHomeItem] = useState(false);
   
   // Gym Battle state
   const [gymData, setGymData] = useState<GymData | null>(null);
@@ -138,31 +157,81 @@ export default function ExploreScreen() {
   const [playerSwordCount, setPlayerSwordCount] = useState<number>(0);
   
   const { refreshPlayer, player } = useContext(AuthContext);
-  const { parkLoaded, location, park, permissionGranted } =
+  const { parkLoaded, parkLookupRecord, location, park, permissionGranted } =
     useContext(LocationContext);
+  const homeLocationConfirmed = isConfirmedOutsidePark(location, parkLookupRecord) && !park;
+
+  useEffect(() => {
+    if (homeLocationConfirmed) return;
+    setShowPrepItemModal(false);
+    setActivePrepItem(null);
+    setActivePrepItemPivotId(null);
+  }, [homeLocationConfirmed]);
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
-  const { startTutorial, hasCompleted, registerRef } = useTutorial();
+  const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
+  const { data: tripGoalData, stale: tripGoalStale } = useTripGoal(tripGoalVersion, !!player);
+  const tripGoal = tripGoalData?.goal;
+  const tripGoalTask = tripGoal?.park_id === park?.id
+    ? redeemables?.tasks?.find(task => task.id === tripGoal?.task_id) : undefined;
 
-  // Ride detection — always runs when user has location permission and is logged in.
-  // Does NOT depend on park context (backend park detection can fail/lag).
-  // Loads ALL rides and detects based on GPS proximity to ride coordinates.
-  useRideDetection(!!permissionGranted && !!player);
-  
+  useEffect(() => {
+    setActiveParkProject(null);
+    setFocusedFromChecklist(null);
+    setSelectedTask(null);
+  }, [park?.id, player?.id]);
+
+  useEffect(() => {
+    let active = true;
+    setSelectedQueueRide(null);
+    if (park && selectedTask) {
+      const parkId = park.id;
+      const taskId = selectedTask.id;
+      void resolveMapQueueContext(parkId, selectedTask.name).then(ride => {
+        if (active && ride) setSelectedQueueRide({ parkId, taskId, ride });
+      });
+    }
+    return () => { active = false; };
+  }, [park?.id, selectedTask?.id, selectedTask?.name]);
+
+  const queueRide = park && selectedTask && selectedQueueRide?.parkId === park.id &&
+    selectedQueueRide.taskId === selectedTask.id ? selectedQueueRide.ride : null;
+
+  useEffect(() => {
+    const focusedTask = rideFocusForPark(focusRide, park?.id);
+    if (!focusedTask) return;
+    setSelectedTask(focusedTask);
+    setFocusedFromChecklist(focusedTask);
+    navigation.setParams({ focusRide: undefined });
+  }, [focusRide, navigation, park?.id]);
+
   // Trigger onboarding tutorial on first visit
   useEffect(() => {
-    if (player && !hasCompleted('onboarding')) {
+    if (player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding')) {
       const timer = setTimeout(() => {
-        startTutorial('onboarding');
+        startTutorial('onboarding', { inPark: !!park });
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [player]);
+  }, [player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial]);
+
+  // A player who learned the home hunt should meet the park loop when they
+  // actually arrive. Park-first players already saw these steps in onboarding.
+  useEffect(() => {
+    if (!player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
+      !hasCompleted('onboarding') || hasCompleted('park_arrival')) return;
+    const timer = setTimeout(() => startTutorial('park_arrival'), 1500);
+    return () => clearTimeout(timer);
+  }, [player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial]);
   
   // Handler for when user taps a prep item in home mode — enforce proximity
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
+    if (!homeLocationConfirmed || !parkLoaded) return;
+    setTooFarRequiredMeters(HOME_PREP_PICKUP_RADIUS_METERS);
+    setTooFarIsHomeItem(true);
     // Check distance before allowing collection
-    if (prepItem.latitude && prepItem.longitude && location?.latitude && location?.longitude) {
+    if (prepItem.latitude != null && prepItem.longitude != null &&
+        location?.latitude != null && location?.longitude != null) {
       const distance = calculateDistance(
         location.latitude,
         location.longitude,
@@ -170,7 +239,7 @@ export default function ExploreScreen() {
         prepItem.longitude
       );
 
-      if (distance > PREP_ITEM_RANGE_METERS) {
+      if (distance > HOME_PREP_PICKUP_RADIUS_METERS) {
         const distanceText = distance > 1000
           ? `${(distance / 1000).toFixed(1)}km`
           : `${Math.round(distance)}m`;
@@ -178,7 +247,7 @@ export default function ExploreScreen() {
         setShowTooFarModal(true);
         return;
       }
-    } else if (!location?.latitude || !location?.longitude) {
+    } else {
       // No location available — show too far modal with unknown distance
       setTooFarDistance('unknown');
       setShowTooFarModal(true);
@@ -188,10 +257,12 @@ export default function ExploreScreen() {
     setActivePrepItem(prepItem);
     setActivePrepItemPivotId(pivotId);
     setShowPrepItemModal(true);
-  }, [location]);
+  }, [location, homeLocationConfirmed, parkLoaded]);
 
   // Handler for Community Center tap - check if in range
   const handleCommunityCenterPress = useCallback(() => {
+    setTooFarRequiredMeters(COMMUNITY_CENTER_RANGE_METERS);
+    setTooFarIsHomeItem(false);
     if (!communityCenter || !location?.latitude || !location?.longitude) {
       setTooFarDistance('unknown');
       setShowTooFarModal(true);
@@ -303,10 +374,12 @@ export default function ExploreScreen() {
   }, [park?.id, fetchGymData]);
 
   // Handle gym marker press
-  // Gym range in meters (same as community center)
+  // Gym range in meters; separate from the community center and home pickup radii.
   const GYM_RANGE_METERS = 25;
 
   const handleGymPress = useCallback(() => {
+    setTooFarRequiredMeters(GYM_RANGE_METERS);
+    setTooFarIsHomeItem(false);
     if (!playerTeam?.has_team) {
       RootNavigation.navigate('TeamSelection', { 
         onTeamSelected: () => {
@@ -393,7 +466,7 @@ export default function ExploreScreen() {
               <TopbarColumn>
                 <Currency
                   image={theme.currency.icon_url}
-                  count={player[theme.currency.name.toLowerCase()]}
+                  count={currencyBalance(player, theme.currency.name)}
                   name="Park Coins"
                   flyTarget="theme_currency"
                 />
@@ -403,7 +476,7 @@ export default function ExploreScreen() {
               <TopbarColumn key={currency.id}>
                 <Currency
                   image={currency.icon_url}
-                  count={player[currency.name.toLowerCase()]}
+                  count={currencyBalance(player, currency.name)}
                   name={currency.name === 'Coins' ? 'Shark Coins' : currency.name}
                   flyTarget={index === 0 ? 'coins' : 'keys'}
                 />
@@ -417,7 +490,7 @@ export default function ExploreScreen() {
                   {currencies[0] && (
                     <Currency
                       image={currencies[0].icon_url}
-                      count={player[currencies[0].name.toLowerCase()]}
+                      count={currencyBalance(player, currencies[0].name)}
                       name="Shark Coins"
                       flyTarget="coins"
                     />
@@ -439,7 +512,7 @@ export default function ExploreScreen() {
                 </TopbarColumn>
                 {/* Right: Tickets (keys hidden - replaced by swords) */}
                 <TopbarColumn>
-                  <TappableCurrency name="Tickets" count={player.tickets ?? 0}>
+                  <TappableCurrency name="Tickets" count={player.tickets ?? 0} flyTarget="tickets">
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <Image
                         source={require('../../assets/images/ticket-icon.png')}
@@ -459,10 +532,10 @@ export default function ExploreScreen() {
                 </TopbarColumn>
               </>
             )}
-            {/* Park mode: show tickets if player has any */}
-            {park && (player.tickets ?? 0) > 0 && (
+            {/* Keep the park-day balance visible even at zero, when Rescue Pass matters most. */}
+            {park && (
               <TopbarColumn>
-                <TappableCurrency name="Tickets" count={player.tickets ?? 0}>
+                <TappableCurrency name="Tickets" count={player.tickets ?? 0} flyTarget="tickets">
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Image
                       source={require('../../assets/images/ticket-icon.png')}
@@ -499,10 +572,13 @@ export default function ExploreScreen() {
           </TopbarColumn>
         )}
       </Topbar>
+      {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
+        onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion} />}
       {player && !permissionGranted && <PermissionsNotGranted />}
       {/* Home Mode: Show prep items map instead of "Not at Park" message */}
       {player && parkLoaded && !park && permissionGranted && (
-        <HomeExplore onPrepItemNearby={handlePrepItemNearby} />
+        <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
+          refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed} />
       )}
       {/* Guest: Sign-in prompt */}
       {!player && (
@@ -524,7 +600,7 @@ export default function ExploreScreen() {
       
       {/* Prep Item Redeem Modal (Home Mode) */}
       <PrepItemRedeemModal
-        visible={showPrepItemModal}
+        visible={showPrepItemModal && homeLocationConfirmed}
         prepItem={activePrepItem}
         pivotId={activePrepItemPivotId}
         onClose={() => {
@@ -533,8 +609,10 @@ export default function ExploreScreen() {
           setActivePrepItemPivotId(null);
         }}
         onCollected={() => {
-          // Modal will be closed by onClose
+          setHomeCollectionVersion((version) => version + 1);
         }}
+        onUnavailable={() => setHomeCollectionVersion((version) => version + 1)}
+        onViewSet={(slug) => RootNavigation.navigate('SetCollection', { slug })}
       />
       {park && redeemables && (
         <>
@@ -640,6 +718,9 @@ export default function ExploreScreen() {
                   };
                 });
                 setActiveRedeemable(undefined);
+                if (!isSecretTask && taskId === tripGoal?.task_id) {
+                  setTripGoalVersion(version => version + 1);
+                }
               }}
             />
           </View>
@@ -741,7 +822,64 @@ export default function ExploreScreen() {
           marginTop: -8,
         }}
       >
-        <Map onPress={() => setSelectedTask(null)}>
+        {tripGoal && player && <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={tripGoal.coin_owned
+            ? `Open ${tripGoal.ride_name} on my coin shelf`
+            : tripGoalTask ? `Show ${tripGoal.ride_name} on the map`
+              : `Open the ride guide for ${tripGoal.ride_name}`}
+          onPress={() => {
+            if (tripGoal.coin_owned) {
+              RootNavigation.navigate('CoinShelf', { focusCoin: { assetId: tripGoal.asset_id } });
+            } else if (tripGoalTask) {
+              setSelectedTask(tripGoalTask);
+            } else {
+              RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
+            }
+          }}
+          style={{ position: 'absolute', top: 12, left: 12, width: '43%', zIndex: 20,
+            backgroundColor: '#0879ca', borderColor: '#ffffff', borderWidth: 3,
+            borderRadius: 14, padding: 8 }}>
+          <Text style={{ color: '#ffdc61', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.6 }}>
+            {tripGoalStale ? 'LAST CONFIRMED GOAL' : tripGoalData?.goal_plan?.maxed ? 'MAX LEVEL REACHED'
+              : tripGoal.coin_owned ? 'MASTERY GOAL' : 'YOUR RIDE GOAL'}
+          </Text>
+          <Text style={{ color: 'white', fontFamily: 'Shark', fontSize: 14 }} numberOfLines={1}>{tripGoal.ride_name}</Text>
+          <Text style={{ color: '#dff4ff', fontFamily: 'Knockout', fontSize: 11, marginTop: 2 }} numberOfLines={2}>
+            {tripGoal.coin_owned && tripGoalData?.goal_plan && !tripGoalData.goal_plan.maxed
+              ? `Level ${tripGoalData.goal_plan.current_level}/${tripGoalData.goal_plan.max_level} · ${tripGoalData.goal_plan.parts_needed} Parts to upgrade`
+              : tripGoal.coin_owned ? 'Current max reached · Choose another ride' : tripGoal.park_id !== park.id
+              ? `View at ${tripGoal.park_name}` : tripGoalTask
+                ? `${tripGoalData?.wallet.tickets_needed ? `${tripGoalData.wallet.tickets_needed} more Tickets needed` : 'Tickets ready'} · Tap to spot it`
+                : 'Open Ride Guide for its coin'}
+          </Text>
+        </Pressable>}
+        {selectedTask && queueRide && <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
+            ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
+          onPress={() => navigation.navigate('LinePlay', { ride: queueRide })}
+          style={{ position: 'absolute', top: 12, right: 12, width: '43%', zIndex: 20,
+            backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
+            borderRadius: 14, padding: 8 }}>
+          <Text style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} numberOfLines={1}>
+            {queueRide.lineRewardsReady === false ? 'QUEUE GAMES  ›' : 'PLAY IN LINE  ›'}
+          </Text>
+          <Text style={{ color: '#fff', fontFamily: 'Knockout', fontSize: 11 }} numberOfLines={1}>
+            {selectedTask.name}
+          </Text>
+          <Text style={{ color: '#dff4ff', fontFamily: 'Knockout', fontSize: 10 }} numberOfLines={1}>
+            {queueRide.lineRewardsReady === false ? 'Games only · Parts not set up' : 'Parts need a verified wait'}
+          </Text>
+        </Pressable>}
+        <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }}
+          controlsTop={queueRide ? 116 : 72} focusCoordinate={selectedTask ? {
+          latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
+        } : null}>
+          {activeParkProject?.park_id === park.id && (
+            <ParkProjectMapBeacon project={activeParkProject}
+              onPress={() => setProjectOpenRequestVersion(version => version + 1)} />
+          )}
           {redeemables?.items
             .filter((item) => !item.is_hidden)
             .map((item) => (
@@ -754,12 +892,18 @@ export default function ExploreScreen() {
             ))}
           {redeemables?.tasks?.map((task) => (
             <TaskMarker
-              key={task.id}
+              key={`${task.id}-${tripGoal?.task_id === task.id && !tripGoal.coin_owned ? 'goal' : 'regular'}`}
               task={task}
               isSelected={selectedTask?.id === task.id}
+              isTripGoal={tripGoal?.task_id === task.id && !tripGoal.coin_owned}
               onPress={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
             />
           ))}
+          {focusedFromChecklist && selectedTask?.id === focusedFromChecklist.id &&
+            !redeemables?.tasks?.some(task => task.id === focusedFromChecklist.id) && (
+              <TaskMarker task={focusedFromChecklist} isSelected isTripGoal={false}
+                onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }} />
+            )}
           {redeemables?.coins
             ?.filter((coin) =>
               !coin.active_from || !coin.active_to || dayjs().isBetween(dayjs(coin.active_from), dayjs(coin.active_to))
@@ -890,11 +1034,13 @@ export default function ExploreScreen() {
             <Text style={tooFarStyles.icon}>📍</Text>
           </View>
           <View style={tooFarStyles.content}>
-            <Text style={tooFarStyles.title}>Too Far Away!</Text>
+            <Text style={tooFarStyles.title}>{tooFarDistance === 'unknown' ? 'Location Needed' : 'Almost There!'}</Text>
             <Text style={tooFarStyles.message}>
-              Walk closer to interact with this location.
+              {tooFarDistance === 'unknown' ? 'Finding your location. Try again when it is available.'
+                : tooFarIsHomeItem ? 'Stay on public paths. You can collect from nearby without entering private or restricted areas.'
+                  : 'Walk closer to interact with this location.'}
             </Text>
-            <View style={tooFarStyles.distanceBox}>
+            {tooFarDistance !== 'unknown' && <View style={tooFarStyles.distanceBox}>
               <View style={tooFarStyles.distanceRow}>
                 <Text style={tooFarStyles.distanceLabel}>You are</Text>
                 <Text style={tooFarStyles.distanceValue}>{tooFarDistance}</Text>
@@ -902,9 +1048,9 @@ export default function ExploreScreen() {
               <View style={tooFarStyles.distanceDivider} />
               <View style={tooFarStyles.distanceRow}>
                 <Text style={tooFarStyles.distanceLabel}>Need to be within</Text>
-                <Text style={tooFarStyles.distanceValueGreen}>28m</Text>
+                <Text style={tooFarStyles.distanceValueGreen}>{tooFarRequiredMeters}m</Text>
               </View>
-            </View>
+            </View>}
             <TouchableOpacity
               style={tooFarStyles.button}
               onPress={() => setShowTooFarModal(false)}

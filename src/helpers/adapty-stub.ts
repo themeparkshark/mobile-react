@@ -12,12 +12,12 @@ export interface AdaptyPaywallProduct {
 }
 
 export const adapty = {
-  activate: async () => {},
+  activate: async (_key: string, _options?: { customerUserId?: string }) => {},
   identify: async () => {},
   getProfile: async () => ({ accessLevels: {} }),
-  getPaywall: async () => ({ products: [] }),
-  getPaywallProducts: async (): Promise<AdaptyPaywallProduct[]> => [],
-  makePurchase: async () => ({ profile: { accessLevels: {} } }),
+  getPaywall: async (_id: string) => ({ products: [] }),
+  getPaywallProducts: async (_paywall: { products: unknown[] }): Promise<AdaptyPaywallProduct[]> => [],
+  makePurchase: async (_product: AdaptyPaywallProduct) => ({ profile: { accessLevels: {} } }),
   restorePurchases: async () => ({ profile: { accessLevels: {} } }),
   logShowPaywall: () => {},
 };

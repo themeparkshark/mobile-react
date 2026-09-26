@@ -20,6 +20,7 @@
 import React, {
   forwardRef,
   useCallback,
+  useContext,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -34,6 +35,7 @@ import {
   Pressable,
   Dimensions,
   Modal,
+  AppState,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -50,6 +52,7 @@ import { ScoreDisplay } from './ScoreDisplay';
 import { ParticleField, type ParticleHandle } from './Particles';
 import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
+import { LinePlayMovementContext } from './LinePlayMovementContext';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -106,6 +109,8 @@ interface GameShellV2Props {
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   /** Player closed / quit without a win. */
   onClose: () => void;
+  /** Optional deliberate-exit flow. Failed results still use onClose. */
+  onQuit?: (resume: () => void) => void;
   children: React.ReactNode;
 }
 
@@ -129,15 +134,18 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       onResume,
       onComplete,
       onClose,
+      onQuit,
       children,
     },
     ref,
   ) {
     const [phase, setPhase] = useState<ShellPhase>('countdown');
+    const linePlayMovement = useContext(LinePlayMovementContext);
     const [countText, setCountText] = useState('3');
     const [pauseReason, setPauseReason] = useState<string | undefined>();
     const confettiRef = useRef<ParticleHandle>(null);
     const startedRef = useRef(false);
+    const claimedRef = useRef(false);
     const countdownTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
     // Results animation values.
@@ -154,6 +162,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     useEffect(() => {
       if (!visible) return;
       startedRef.current = false;
+      claimedRef.current = false;
       setPhase('countdown');
       setCountText('3');
       resultsScale.value = 0.7;
@@ -221,20 +230,39 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // -- Pause / resume. -----------------------------------------------------
     const doPause = useCallback(
       (reason?: string) => {
-        setPhase((p) => (p === 'playing' ? 'paused' : p));
+        if (phase !== 'playing' && phase !== 'countdown') return;
+        if (phase === 'countdown') clearCountdown();
+        setPhase('paused');
         setPauseReason(reason);
-        onPause?.(reason);
+        if (phase === 'playing') onPause?.(reason);
         Haptic.tickSelection();
       },
-      [onPause],
+      [onPause, phase, clearCountdown],
     );
 
     const doResume = useCallback(() => {
-      setPhase((p) => (p === 'paused' ? 'playing' : p));
+      if (phase !== 'paused') return;
+      setPhase(startedRef.current ? 'playing' : 'countdown');
+      if (!startedRef.current) setCountText('3');
       setPauseReason(undefined);
-      onResume?.();
+      linePlayMovement?.onResume();
+      if (startedRef.current) onResume?.();
       Haptic.tickSelection();
-    }, [onResume]);
+    }, [onResume, phase, linePlayMovement]);
+
+    useEffect(() => {
+      if (visible && linePlayMovement?.moving && (phase === 'playing' || phase === 'countdown')) {
+        doPause(LINE_MOVING_TOAST);
+      }
+    }, [visible, linePlayMovement?.moving, phase, doPause]);
+
+    useEffect(() => {
+      if (!visible) return;
+      const subscription = AppState.addEventListener('change', state => {
+        if (state !== 'active') doPause('Paused while away');
+      });
+      return () => subscription.remove();
+    }, [visible, doPause]);
 
     useImperativeHandle(
       ref,
@@ -248,6 +276,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
     // -- Completion: stars → multiplier → external contract. ----------------
     const handleClaim = useCallback(() => {
+      if (claimedRef.current || !result) return;
+      claimedRef.current = true;
       const stars = result?.stars ?? 0;
       const mult = starMultipliers[stars] ?? DEFAULT_STAR_MULT[stars] ?? 0;
       if (stars > 0) {
@@ -256,6 +286,27 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         onClose();
       }
     }, [result, starMultipliers, onComplete, onClose]);
+
+    const resumeAfterQuitCancel = useCallback(() => {
+      setPhase(startedRef.current ? 'playing' : 'countdown');
+      if (!startedRef.current) setCountText('3');
+      setPauseReason(undefined);
+      if (startedRef.current) onResume?.();
+    }, [onResume]);
+
+    const requestQuit = useCallback(() => {
+      if (onQuit) onQuit(resumeAfterQuitCancel);
+      else onClose();
+    }, [onQuit, onClose, resumeAfterQuitCancel]);
+
+    const handleExit = useCallback(() => {
+      if (phase === 'playing') doPause();
+      else if (phase === 'results') handleClaim();
+      else {
+        if (phase === 'countdown') doPause();
+        requestQuit();
+      }
+    }, [phase, doPause, handleClaim, requestQuit]);
 
     const skipCountdown = useCallback(() => {
       if (phase === 'countdown') {
@@ -285,13 +336,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     if (!visible) return null;
 
     return (
-      <Modal visible={visible} animationType="fade" transparent statusBarTranslucent>
+      <Modal visible={visible} animationType="fade" transparent statusBarTranslucent onRequestClose={handleExit}>
         <View style={styles.root}>
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity
               style={styles.iconBtn}
-              onPress={() => (phase === 'playing' ? doPause() : onClose())}
+              onPress={handleExit}
               hitSlop={12}
             >
               <Text style={styles.iconTxt}>{phase === 'playing' ? 'II' : '✕'}</Text>
@@ -337,7 +388,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                 <TouchableOpacity style={[styles.sheetBtn, styles.primaryBtn]} onPress={doResume}>
                   <Text style={styles.primaryBtnTxt}>Resume</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.sheetBtn} onPress={onClose}>
+                <TouchableOpacity style={styles.sheetBtn} onPress={requestQuit}>
                   <Text style={styles.secondaryBtnTxt}>Quit</Text>
                 </TouchableOpacity>
               </View>
@@ -364,7 +415,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                   style={[styles.sheetBtn, styles.primaryBtn, styles.claimBtn]}
                   onPress={handleClaim}
                 >
-                  <Text style={styles.primaryBtnTxt}>{won ? 'Claim Reward' : 'Close'}</Text>
+                  <Text style={styles.primaryBtnTxt}>{won ? 'Continue' : 'Close'}</Text>
                 </TouchableOpacity>
               </Animated.View>
             </View>

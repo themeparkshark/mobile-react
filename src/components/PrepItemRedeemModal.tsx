@@ -2,25 +2,29 @@ import { useContext, useState, useEffect, useRef } from 'react';
 import {
   Animated,
   Dimensions,
+  Pressable,
   Text,
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
 import LottieView from 'lottie-react-native';
+import axios from 'axios';
 import { PrepItemType } from '../models/prep-item-type';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
 import redeemPrepItem from '../api/endpoints/me/prep-items/redeem';
 import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import config from '../config';
 import HapticPatterns from '../helpers/hapticPatterns';
+import prepItemImage from '../helpers/prepItemImages';
+import type { RedeemPrepItemResponseType } from '../models/redeem-prep-item-response-type';
 
 // Local asset icons for currency fly (must be hoisted to module level)
-const ENERGY_ICON = require('../../assets/images/energy.png');
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
 import {
   FloatingNumber,
@@ -43,6 +47,9 @@ interface Props {
   pivotId: number | null;
   onClose: () => void;
   onCollected: () => void;
+  onUnavailable?: () => void;
+  onViewSet?: (slug: string) => void;
+  redeemItem?: typeof redeemPrepItem;
 }
 
 /**
@@ -55,8 +62,13 @@ export default function PrepItemRedeemModal({
   pivotId,
   onClose,
   onCollected,
+  onUnavailable,
+  onViewSet,
+  redeemItem = redeemPrepItem,
 }: Props) {
   const [isCollecting, setIsCollecting] = useState(false);
+  const [collectError, setCollectError] = useState<string | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
   const [showRewards, setShowRewards] = useState(false);
   const [rewards, setRewards] = useState<{
     energy: number;
@@ -64,14 +76,19 @@ export default function PrepItemRedeemModal({
     coins: number;
     experience: number;
   } | null>(null);
-  const [_streakInfo, setStreakInfo] = useState<{
+  const [streakInfo, setStreakInfo] = useState<{
     current: number;
     multiplier: number;
   } | null>(null);
-  const { player, refreshPlayer } = useContext(AuthContext);
-  const { location } = useContext(LocationContext);
+  const [pickupOutcome, setPickupOutcome] = useState<Pick<
+    RedeemPrepItemResponseType['data'],
+    'is_new_variant' | 'replayed' | 'set_progress' | 'project_update'
+  > | null>(null);
+  const { refreshPlayer } = useContext(AuthContext);
+  const { location, latestLocationSampleRef, permissionGranted, requestLocation } = useContext(LocationContext);
   const { triggerFly } = useCurrencyFly();
   const { currencies } = useContext(CurrencyContext);
+  const { playSound } = useContext(SoundEffectContext);
 
   // Animation refs for collect celebration
   const itemScale = useRef(new Animated.Value(1)).current;
@@ -79,40 +96,66 @@ export default function PrepItemRedeemModal({
   const [showStarBurst, setShowStarBurst] = useState(false);
   const [showFloatingRewards, setShowFloatingRewards] = useState(false);
   const lottieRef = useRef<LottieView>(null);
+  const reportedCollectedPivotRef = useRef<number | null>(null);
 
   const handleCollect = async () => {
-    if (!prepItem || !pivotId) return;
+    if (!prepItem || !pivotId || isCollecting) return;
 
-    // Require location to collect — backend enforces 14m proximity
-    if (!location?.latitude || !location?.longitude) {
+    // Prefer the latest GPS sample over a map position filtered for visual drift.
+    // The server still verifies that the guest is within the home pickup radius.
+    const latestSample = latestLocationSampleRef.current;
+    const recentSample = latestSample && Date.now() - latestSample.timestamp <= 15000
+      ? latestSample : null;
+    const pickupLocation = recentSample ?? location;
+    if (pickupLocation?.latitude == null || pickupLocation?.longitude == null) {
       HapticPatterns.error();
-      onClose();
+      if (permissionGranted) {
+        requestLocation();
+        setCollectError('Finding your location. Stay near this find and tap Retry.');
+      } else {
+        setCollectError('Turn on Location access for Theme Park Shark to collect this find.');
+      }
       return;
     }
 
     setIsCollecting(true);
+    setCollectError(null);
+    setUnavailable(false);
     
-    // Trigger haptic based on rarity
     const celebrationLevel = RARITY_TO_CELEBRATION[prepItem.rarity] || 'common';
-    HapticPatterns.collect(celebrationLevel);
 
     try {
-      const response = await redeemPrepItem(
+      const response = await redeemItem(
         prepItem.id,
         pivotId,
-        player?.is_subscribed || false,
-        location?.latitude,
-        location?.longitude
+        pickupLocation.latitude,
+        pickupLocation.longitude
       );
 
       setRewards(response.data.rewards);
       setStreakInfo(response.data.streak);
+      setPickupOutcome({
+        is_new_variant: response.data.is_new_variant,
+        replayed: response.data.replayed,
+        set_progress: response.data.set_progress,
+        project_update: response.data.project_update,
+      });
+      if (!response.data.replayed) {
+        HapticPatterns.collect(celebrationLevel);
+        playSound(require('../../assets/sounds/reward.mp3'));
+      } else {
+        HapticPatterns.buttonTap();
+      }
+      if (reportedCollectedPivotRef.current !== pivotId) {
+        reportedCollectedPivotRef.current = pivotId;
+        onCollected();
+      }
       
       // Fly reward icons to correct header targets
       const screenCenterX = Dimensions.get('window').width / 2;
       const screenCenterY = Dimensions.get('window').height / 2;
       
-      if (response.data.rewards.coins > 0 && currencies[0]?.icon_url) {
+      if (!response.data.replayed && response.data.rewards.coins > 0 && currencies[0]?.icon_url) {
         triggerFly({
           imageUrl: currencies[0].icon_url,
           amount: Math.min(response.data.rewards.coins, 8),
@@ -121,35 +164,36 @@ export default function PrepItemRedeemModal({
           targetPosition: 'coins',
         });
       }
-      if (response.data.rewards.tickets > 0) {
+      if (!response.data.replayed && response.data.rewards.tickets > 0) {
         triggerFly({
           imageSource: TICKET_ICON,
           amount: Math.min(response.data.rewards.tickets, 6),
           startX: screenCenterX,
           startY: screenCenterY + 20,
-          targetPosition: 'park_coins',
-        });
-      }
-      if (response.data.rewards.energy > 0) {
-        triggerFly({
-          imageSource: ENERGY_ICON,
-          amount: Math.min(response.data.rewards.energy, 6),
-          startX: screenCenterX,
-          startY: screenCenterY - 20,
-          targetPosition: 'park_coins',
+          targetPosition: 'tickets',
         });
       }
       
       // Play celebration animations
-      playCollectAnimation(prepItem.rarity);
+      if (!response.data.replayed) playCollectAnimation(prepItem.rarity);
       
       setShowRewards(true);
 
-      await refreshPlayer();
+      // The pickup receipt is authoritative even if a later profile refresh fails.
+      refreshPlayer().catch(() => {});
     } catch (error) {
       console.error('Failed to collect prep item:', error);
       HapticPatterns.error();
-      onClose();
+      const serverError = axios.isAxiosError(error)
+        ? (error.response?.data as { error?: string } | undefined)?.error
+        : null;
+      if (axios.isAxiosError(error) && error.response?.status === 410) {
+        setUnavailable(true);
+        onUnavailable?.();
+      }
+      setCollectError(typeof serverError === 'string'
+        ? serverError
+        : 'Could not confirm this pickup. Tap Retry to check it safely.');
     } finally {
       setIsCollecting(false);
     }
@@ -207,15 +251,26 @@ export default function PrepItemRedeemModal({
     HapticPatterns.buttonTap();
     setShowRewards(false);
     setRewards(null);
+    setPickupOutcome(null);
+    setCollectError(null);
+    setUnavailable(false);
     setShowFloatingRewards(false);
-    onCollected();
     onClose();
+  };
+
+  const handleViewSet = () => {
+    if (!prepItem?.set_slug || !onViewSet) return;
+    const slug = prepItem.set_slug;
+    handleDone();
+    onViewSet(slug);
   };
 
   // Trigger haptic when modal opens
   useEffect(() => {
     if (visible && prepItem) {
       HapticPatterns.modalOpen();
+      setCollectError(null);
+      setUnavailable(false);
     }
   }, [visible, prepItem]);
 
@@ -306,16 +361,40 @@ export default function PrepItemRedeemModal({
     return CHURRO_IMAGES[lowerName] || CHURRO_IMAGES['default'];
   };
   
-  const itemImage = prepItem.name.toLowerCase().includes('churro') 
-    ? getLocalChurroImage(prepItem.name)
-    : (prepItem.icon_url ? { uri: prepItem.icon_url } : require('../../assets/images/prep-items/churros/base_churro.png'));
+  const itemImage = prepItemImage(prepItem.variant_slug)
+    || (prepItem.name.toLowerCase().includes('churro')
+      ? getLocalChurroImage(prepItem.name)
+      : (prepItem.icon_url ? { uri: prepItem.icon_url } : require('../../assets/images/screens/player/gift.png')));
+  const setProgress = pickupOutcome?.set_progress;
+  const starter = setProgress?.starter_milestone;
+  const rewardReady = !!(starter?.is_unlocked && !starter.rewards_claimed)
+    || !!(setProgress?.is_complete && !setProgress.rewards_claimed);
+  const spareReady = !pickupOutcome?.is_new_variant && !pickupOutcome?.replayed
+    && !setProgress?.is_complete && !!setProgress?.exchange_cost
+    && (setProgress?.spare_count ?? 0) >= setProgress.exchange_cost;
+  const progressLabel = pickupOutcome?.replayed
+    ? 'PICKUP CONFIRMED'
+    : pickupOutcome?.is_new_variant
+      ? 'NEW SET FIND!'
+      : 'SPARE ADDED!';
 
   return (
     <Modal
       animationIn="zoomIn"
       animationOut="zoomOut"
       isVisible={visible}
-      onBackdropPress={onClose}
+      onBackdropPress={() => {
+        if (!isCollecting) {
+          if (showRewards) handleDone();
+          else onClose();
+        }
+      }}
+      onBackButtonPress={() => {
+        if (!isCollecting) {
+          if (showRewards) handleDone();
+          else onClose();
+        }
+      }}
     >
       <View
         style={{
@@ -332,7 +411,9 @@ export default function PrepItemRedeemModal({
           }}
         >
           {/* Ribbon Header */}
-          <Ribbon text={showRewards ? 'Collected!' : 'Prep Item'} />
+          <Ribbon text={showRewards
+            ? pickupOutcome?.replayed ? 'Already collected' : 'Collected!'
+            : 'Prep Item'} />
 
           {/* Main Content Box - matches task modal structure exactly */}
           <View
@@ -386,7 +467,7 @@ export default function PrepItemRedeemModal({
                 />
 
                 {/* Lottie confetti for epic+ items */}
-                {prepItem.rarity >= 4 && (
+                {prepItem.rarity >= 4 && !pickupOutcome?.replayed && (
                   <LottieView
                     ref={lottieRef}
                     source={require('../../assets/animations/confetti.json')}
@@ -458,7 +539,7 @@ export default function PrepItemRedeemModal({
                           <Box
                             backgroundColor="#fff3d4"
                             image={require('../../assets/images/ticket-icon.png')}
-                            text={`${prepItem.ticket_reward} 🎟️ or 🪙`}
+                            text="CHANCE"
                             small
                             type="task"
                           />
@@ -482,12 +563,26 @@ export default function PrepItemRedeemModal({
                         </View>
                       )}
                     </View>
+                    {prepItem.ticket_reward > 0 && (
+                      <Text
+                        accessibilityRole="text"
+                        style={{
+                          fontFamily: 'Knockout',
+                          fontSize: 14,
+                          color: '#fff',
+                          textAlign: 'center',
+                          marginTop: 7,
+                        }}
+                      >
+                        TICKET CHANCE · COINS IF NO TICKET
+                      </Text>
+                    )}
                   </>
                 ) : (
                   // Post-collect view
                   <>
                     {/* Floating reward numbers */}
-                    {showFloatingRewards && rewards && (
+                    {showFloatingRewards && rewards && !pickupOutcome?.replayed && (
                       <View style={{ position: 'absolute', top: 20, alignSelf: 'center', zIndex: 100 }}>
                         {rewards.energy > 0 && (
                           <FloatingNumber
@@ -530,7 +625,9 @@ export default function PrepItemRedeemModal({
                         marginTop: 16,
                       }}
                     >
-                      {prepItem.rarity >= 4 ? '🔥 EPIC!' : prepItem.rarity >= 3 ? '✨ Nice!' : '🎉 Got it!'}
+                      {pickupOutcome?.replayed ? 'Already in your book'
+                        : prepItem.rarity >= 4 ? '🔥 EPIC!'
+                        : prepItem.rarity >= 3 ? '✨ Nice!' : '🎉 Got it!'}
                     </Text>
 
                     <Text
@@ -545,8 +642,28 @@ export default function PrepItemRedeemModal({
                       {prepItem.name}
                     </Text>
 
+                    {!!pickupOutcome?.project_update?.points_awarded && (
+                      <View style={{
+                        alignSelf: 'stretch', marginTop: 2, marginBottom: 4,
+                        borderRadius: 10, borderWidth: 2, borderColor: '#FFE078',
+                        backgroundColor: '#07518B', paddingHorizontal: 9, paddingVertical: 6,
+                      }} accessible accessibilityRole="text"
+                      accessibilityLabel={`${pickupOutcome.replayed ? 'Previously added' : 'Added'} ${pickupOutcome.project_update.points_awarded} to ${pickupOutcome.project_update.title}. Crew progress ${pickupOutcome.project_update.total_points} of ${pickupOutcome.project_update.goal_points}`}>
+                        <Text style={{ fontFamily: 'Shark', color: '#FFE078',
+                          fontSize: 15, textAlign: 'center' }} numberOfLines={1}>
+                          {pickupOutcome.replayed ? 'ALREADY HELPED THE CREW' : 'YOU HELPED THE CREW!'}
+                        </Text>
+                        <Text style={{ fontFamily: 'Knockout', color: '#fff',
+                          fontSize: 15, textAlign: 'center' }} numberOfLines={2}>
+                          {pickupOutcome.project_update.title} · {pickupOutcome.replayed
+                            ? `Previously added ${pickupOutcome.project_update.points_awarded}`
+                            : `+${pickupOutcome.project_update.points_awarded}`} · {pickupOutcome.project_update.total_points}/{pickupOutcome.project_update.goal_points}
+                        </Text>
+                      </View>
+                    )}
+
                     {/* Rewards Received — actual amounts from API */}
-                    <View
+                    {!pickupOutcome?.replayed && <View
                       style={{
                         marginLeft: -4,
                         marginRight: -4,
@@ -623,15 +740,85 @@ export default function PrepItemRedeemModal({
                           />
                         </View>
                       )}
-                    </View>
+                    </View>}
+                    {!pickupOutcome?.replayed && streakInfo && streakInfo.current > 0 && (
+                      <View style={{ alignSelf: 'center', marginTop: 10,
+                        borderRadius: 12, borderWidth: 2, borderColor: '#fff',
+                        backgroundColor: '#ffca30', paddingHorizontal: 13, paddingVertical: 6 }}
+                        accessible accessibilityRole="text"
+                        accessibilityLabel={`${streakInfo.current} day hunt streak${streakInfo.multiplier > 1 ? `, ${streakInfo.multiplier.toFixed(1)} times Energy and experience` : ''}`}>
+                        <Text style={{ fontFamily: 'Shark', fontSize: 15,
+                          color: '#073b73', textAlign: 'center' }}>
+                          DAY {streakInfo.current} HUNT STREAK
+                        </Text>
+                        {streakInfo.multiplier > 1 && <Text style={{ fontFamily: 'Knockout',
+                          fontSize: 14, color: '#073b73', textAlign: 'center' }}>
+                          {streakInfo.multiplier.toFixed(1)}× ENERGY + XP
+                        </Text>}
+                      </View>
+                    )}
+                    {setProgress && prepItem.set_slug && (
+                      <View style={{
+                        marginTop: 12, borderWidth: 2, borderColor: '#FFC842',
+                        borderRadius: 12, backgroundColor: '#063965', padding: 10,
+                      }}>
+                        <Text style={{ fontFamily: 'Shark', color: '#FFE078', fontSize: 19,
+                          textAlign: 'center', textTransform: 'uppercase' }}>
+                          {progressLabel}
+                        </Text>
+                        <Text style={{ fontFamily: 'Knockout', color: '#fff', fontSize: 17,
+                          textAlign: 'center', marginTop: 1 }}>
+                          {prepItem.set_name || 'Collection'} · {setProgress.collected}/{setProgress.total} found
+                        </Text>
+                        <View style={{ height: 9, borderRadius: 5, backgroundColor: '#27638E',
+                          borderColor: '#9CDFFF', borderWidth: 1, marginTop: 8, overflow: 'hidden' }}>
+                          <View style={{ width: `${Math.min(100, Math.max(0, setProgress.percentage))}%`,
+                            height: '100%', backgroundColor: '#FFC842' }} />
+                        </View>
+                        {rewardReady && (
+                          <Text style={{ fontFamily: 'Knockout', color: '#FFE078', fontSize: 15,
+                            textAlign: 'center', marginTop: 6 }}>
+                            {setProgress.is_complete && !setProgress.rewards_claimed
+                              ? 'FULL SET REWARD READY!' : 'TRIP PREP REWARD READY!'}
+                          </Text>
+                        )}
+                        {!pickupOutcome?.is_new_variant && !pickupOutcome?.replayed
+                          && setProgress.spare_count != null && !!setProgress.exchange_cost && (
+                          <Text style={{ fontFamily: 'Knockout', color: '#FFE078', fontSize: 15,
+                            textAlign: 'center', marginTop: 6 }}>
+                            {spareReady ? 'SPARE EXCHANGE READY!'
+                              : `${setProgress.spare_count}/${setProgress.exchange_cost} spares toward a missing find`}
+                          </Text>
+                        )}
+                        {onViewSet && (
+                          <Pressable accessibilityRole="button"
+                            accessibilityLabel={rewardReady ? 'Open set book to claim reward'
+                              : spareReady ? 'Open set book to exchange spares' : 'Open set book'}
+                            onPress={handleViewSet}
+                            style={{ alignSelf: 'center', marginTop: 8, paddingHorizontal: 12,
+                              paddingVertical: 5, borderRadius: 8, backgroundColor: '#FFC842',
+                              borderWidth: 2, borderColor: '#5A3307' }}>
+                            <Text style={{ fontFamily: 'Shark', color: '#163C5C', fontSize: 16 }}>
+                              {rewardReady ? 'CLAIM IN SET BOOK ›'
+                                : spareReady ? 'EXCHANGE IN SET BOOK ›' : 'VIEW SET BOOK ›'}
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    )}
                   </>
                 )}
               </View>
+            {collectError && (
+              <Text style={{ color: '#fff', fontFamily: 'Knockout', fontSize: 15, textAlign: 'center', marginTop: 10 }}>
+                {collectError}
+              </Text>
+            )}
             {/* Button outside inner content - matches task modal exactly */}
             <View style={{ marginTop: 8 }}>
               <YellowButton
-                text={showRewards ? 'Awesome!' : (isCollecting ? 'Collecting...' : 'Collect')}
-                onPress={showRewards ? handleDone : handleCollect}
+                text={showRewards ? pickupOutcome?.replayed ? 'Back to map' : 'Awesome!' : (isCollecting ? 'Collecting...' : unavailable ? 'Back to map' : collectError ? 'Retry' : 'Collect')}
+                onPress={showRewards || unavailable ? handleDone : handleCollect}
                 disabled={!showRewards && isCollecting}
               />
             </View>

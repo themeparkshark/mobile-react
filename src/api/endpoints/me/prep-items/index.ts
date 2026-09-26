@@ -1,6 +1,7 @@
 import { PrepItemsResponseType } from '../../../../models/prep-items-response-type';
 import client from '../../../client';
 import { getCached, setCache } from '../../../../utils/apiCache';
+import deviceTimeZone from '../../../../helpers/deviceTimeZone';
 
 const PREP_ITEMS_URL = '/me/prep-items';
 
@@ -11,13 +12,23 @@ const PREP_ITEMS_URL = '/me/prep-items';
  */
 export default async function getPrepItems(
   latitude: number,
-  longitude: number
+  longitude: number,
+  playerId: number
 ): Promise<PrepItemsResponseType> {
-  const params = { latitude, longitude };
-  const { data } = await client.get<PrepItemsResponseType>(PREP_ITEMS_URL, { params });
+  if (!Number.isInteger(playerId) || playerId < 1) {
+    throw new Error('A signed-in player is required to load home finds.');
+  }
+  // Home finds and player_stats are account-specific. Keep playerId out of the
+  // HTTP location query but include it in every local cache key.
+  const cacheParams = { latitude, longitude, playerId };
+  const params = { latitude, longitude, timezone: deviceTimeZone() };
+  const { data } = await client.get<PrepItemsResponseType>(PREP_ITEMS_URL, {
+    params,
+    timeout: 10_000,
+  });
 
   // Cache on success (non-blocking)
-  setCache(PREP_ITEMS_URL, params, data).catch(() => {});
+  setCache(PREP_ITEMS_URL, cacheParams, data).catch(() => {});
 
   return data;
 }
@@ -28,7 +39,9 @@ export default async function getPrepItems(
  */
 export async function getCachedPrepItems(
   latitude: number,
-  longitude: number
+  longitude: number,
+  playerId: number
 ): Promise<PrepItemsResponseType | null> {
-  return getCached<PrepItemsResponseType>(PREP_ITEMS_URL, { latitude, longitude });
+  if (!Number.isInteger(playerId) || playerId < 1) return null;
+  return getCached<PrepItemsResponseType>(PREP_ITEMS_URL, { latitude, longitude, playerId });
 }

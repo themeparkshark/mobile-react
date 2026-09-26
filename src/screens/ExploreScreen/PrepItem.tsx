@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 import { PrepItemType } from '../../models/prep-item-type';
 import config from '../../config';
 import dayjs from 'dayjs';
+import prepItemImage from '../../helpers/prepItemImages';
 
 /** Pulse cycle for in-range markers (toggles between two static visual states) */
 function usePulse(enabled: boolean, intervalMs = 800): boolean {
@@ -111,7 +112,10 @@ export default function PrepItem({ prepItem, onExpire, inRange = false }: Props)
   const bright = usePulse(inRange);
 
   // Get local image for churros
-  const localImage = useMemo(() => getChurroImage(prepItem.name), [prepItem.name]);
+  const localImage = useMemo(
+    () => prepItemImage(prepItem.variant_slug) || getChurroImage(prepItem.name),
+    [prepItem.variant_slug, prepItem.name]
+  );
 
   // Countdown timer
   useEffect(() => {
@@ -145,7 +149,7 @@ export default function PrepItem({ prepItem, onExpire, inRange = false }: Props)
     5: { color: '#FFD700', label: 'Legendary' },
   }[prepItem.rarity] || { color: '#4CAF50', label: 'Common' };
 
-  // Determine image source: local churro > remote icon_url > fallback
+  // Use the bundled collection art when available.
   const imageSource = localImage || (prepItem.icon_url ? { uri: prepItem.icon_url } : null);
 
   return (
@@ -260,6 +264,13 @@ export default function PrepItem({ prepItem, onExpire, inRange = false }: Props)
       )}
 
       {/* Rarity indicator */}
+      {prepItem.is_new_variant && (
+        <View style={{ position: 'absolute', top: 0, left: 0, zIndex: 12,
+          backgroundColor: '#ffca30', borderWidth: 2, borderColor: '#fff', borderRadius: 8,
+          paddingHorizontal: 4, paddingVertical: 1 }}>
+          <Text style={{ color: '#093d77', fontFamily: 'Knockout', fontSize: 10 }}>NEW</Text>
+        </View>
+      )}
       <View
         style={{
           position: 'absolute',

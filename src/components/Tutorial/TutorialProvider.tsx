@@ -19,10 +19,11 @@ const STORAGE_KEY = '@tps_tutorial_completed';
 
 /** All tutorial sequences — used to auto-complete for existing players */
 const ALL_SEQUENCES: TutorialSequence[] = [
-  'onboarding', 'park', 'store', 'gym', 'community_center', 'friends', 'pins',
+  'onboarding', 'park_arrival', 'park', 'store', 'gym', 'community_center', 'friends', 'pins',
 ];
 
 const defaultContext: TutorialContextType = {
+  isReady: false,
   isActive: false,
   currentStep: null,
   currentIndex: 0,
@@ -56,6 +57,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   const [spotlightTarget, setSpotlightTarget] = useState<SpotlightTarget | null>(null);
   const [loaded, setLoaded] = useState(false);
   const refs = useRef<Map<string, any>>(new Map());
+  const inParkOnboardingRef = useRef(false);
 
   // Load completed sequences from storage
   useEffect(() => {
@@ -63,7 +65,11 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
       if (data) {
         try {
           const parsed = JSON.parse(data) as string[];
-          setCompletedSequences(new Set(parsed as TutorialSequence[]));
+          const completed = new Set(parsed as TutorialSequence[]);
+          // Players who already saw the park guide should not get a second
+          // arrival tutorial after this sequence is added to older installs.
+          if (completed.has('park')) completed.add('park_arrival');
+          setCompletedSequences(completed);
         } catch {}
       }
       setLoaded(true);
@@ -121,14 +127,16 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   }, []);
 
   // Start a tutorial sequence
-  const startTutorial = useCallback((sequence: TutorialSequence) => {
+  const startTutorial = useCallback((sequence: TutorialSequence, options?: { inPark?: boolean }) => {
     // Don't start until AsyncStorage has loaded — avoids replaying on fresh load
     if (!loaded) return;
     if (completedSequences.has(sequence)) return;
     
-    const steps = getStepsForSequence(sequence);
+    if (isActive) return;
+    const steps = getStepsForSequence(sequence, options);
     if (steps.length === 0) return;
 
+    inParkOnboardingRef.current = sequence === 'onboarding' && !!options?.inPark;
     setCurrentSequence(sequence);
     setCurrentSteps(steps);
     setCurrentIndex(0);
@@ -142,7 +150,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
       firstStep.onShow?.();
     }, delay);
 
-  }, [completedSequences, resolveSpotlight]);
+  }, [loaded, isActive, completedSequences, resolveSpotlight]);
 
   // Advance to next step
   const nextStep = useCallback(() => {
@@ -156,7 +164,11 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
       const newCompleted = new Set(completedSequences);
       if (currentSequence) {
         newCompleted.add(currentSequence);
+        if (currentSequence === 'onboarding' && inParkOnboardingRef.current) {
+          newCompleted.add('park_arrival');
+        }
       }
+      inParkOnboardingRef.current = false;
       setCompletedSequences(newCompleted);
       persistCompleted(newCompleted);
       setIsActive(false);
@@ -184,7 +196,11 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     const newCompleted = new Set(completedSequences);
     if (currentSequence) {
       newCompleted.add(currentSequence);
+      if (currentSequence === 'onboarding' && inParkOnboardingRef.current) {
+        newCompleted.add('park_arrival');
+      }
     }
+    inParkOnboardingRef.current = false;
     setCompletedSequences(newCompleted);
     persistCompleted(newCompleted);
     setIsActive(false);
@@ -206,6 +222,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
 
   // Reset all tutorial progress
   const resetAll = useCallback(async () => {
+    inParkOnboardingRef.current = false;
     setCompletedSequences(new Set());
     await AsyncStorage.removeItem(STORAGE_KEY);
     setIsActive(false);
@@ -218,6 +235,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   const currentStep = isActive && currentSteps.length > 0 ? currentSteps[currentIndex] : null;
 
   const contextValue: TutorialContextType = {
+    isReady: loaded,
     isActive,
     currentStep,
     currentIndex,
@@ -239,6 +257,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
         <>
           <SpotlightOverlay
             target={spotlightTarget}
+            opacity={0.62}
             onPress={nextStep}
             onSpotlightPress={currentStep.interactive ? nextStep : undefined}
             spotlightTappable={currentStep.interactive}
@@ -255,6 +274,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
             totalSteps={currentSteps.length}
             onNext={nextStep}
             onSkip={skipTutorial}
+            bottomOffset={currentSequence === 'park_arrival' ? 120 : undefined}
           />
         </>
       )}

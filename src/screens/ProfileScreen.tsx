@@ -13,16 +13,15 @@ import {
   View,
 } from 'react-native';
 import HapticPatterns from '../helpers/hapticPatterns';
-import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import getFriends from '../api/endpoints/me/friends';
 import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
 import Button from '../components/Button';
 import Experience from '../components/Experience';
+import FeaturedRideCoinCard from '../components/FeaturedRideCoinCard';
 import FriendPlayer from '../components/FriendPlayer';
 import Heading from '../components/Heading';
-import Loading from '../components/Loading';
 import PlayerButtons from '../components/PlayerButtons';
 import Playercard from '../components/Playercard';
 import Stats from '../components/Stats';
@@ -48,16 +47,20 @@ import { PlayerType } from '../models/player-type';
 import { StoreType } from '../models/store-type';
 
 export default function ProfileScreen() {
+  const isProfilePreview = __DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1';
   const [parks, setParks] = useState<ParkType[]>([]);
   const [stores, setStores] = useState<StoreType[]>([]);
   const [buttons, setButtons] = useState<ButtonType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const { player } = useContext(AuthContext);
   const [friends, setFriends] = useState<PlayerType[]>([]);
+  const [friendsUnavailable, setFriendsUnavailable] = useState(false);
+  const [parksUnavailable, setParksUnavailable] = useState(false);
   const { refreshNotificationCount, notificationCount } =
     useContext(NotificationContext);
   const { warnings, labels } = useCrumbs();
   const [refreshing, setRefreshing] = useState(false);
+  const [extrasUnavailable, setExtrasUnavailable] = useState(false);
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   
   // Scroll refs
@@ -73,25 +76,39 @@ export default function ProfileScreen() {
   const editScale = useRef(new Animated.Value(1)).current;
   const editRotate = useRef(new Animated.Value(0)).current;
 
-  const requestFriends = () => {
-    getFriends(1, 3).then((response) => setFriends(response));
-  };
+  const requestFriends = useCallback(async () => {
+    if (isProfilePreview) return;
+    try {
+      setFriends(await getFriends(1, 3));
+      setFriendsUnavailable(false);
+    } catch {
+      setFriendsUnavailable(true);
+    }
+  }, [isProfilePreview]);
 
   const onRefresh = useCallback(async () => {
+    if (isProfilePreview) return;
     setRefreshing(true);
     try {
       if (player) {
-        const [newParks] = await Promise.all([
+        const [parkResult, storeResult, friendResult] = await Promise.allSettled([
           getParks(player.id),
-          requestFriends(),
-          refreshNotificationCount(),
+          getStores(),
+          getFriends(1, 3),
         ]);
-        setParks(newParks);
+        if (parkResult.status === 'fulfilled') setParks(parkResult.value);
+        if (storeResult.status === 'fulfilled') setStores(storeResult.value);
+        if (friendResult.status === 'fulfilled') setFriends(friendResult.value);
+        setFriendsUnavailable(friendResult.status === 'rejected');
+        setParksUnavailable(parkResult.status === 'rejected');
+        setExtrasUnavailable(parkResult.status === 'rejected' ||
+          storeResult.status === 'rejected' || friendResult.status === 'rejected');
+        await refreshNotificationCount();
       }
     } finally {
       setRefreshing(false);
     }
-  }, [player]);
+  }, [player, refreshNotificationCount, isProfilePreview]);
 
   useFocusEffect(
     useCallback(() => {
@@ -100,22 +117,39 @@ export default function ProfileScreen() {
         return;
       }
 
-      requestFriends();
-      refreshNotificationCount();
-    }, [])
+      void requestFriends();
+      if (!isProfilePreview) void refreshNotificationCount();
+    }, [player?.id, player?.username, requestFriends, refreshNotificationCount, isProfilePreview])
   );
 
-  useAsyncEffect(async () => {
+  useEffect(() => {
+    let active = true;
     if (!player) {
       setLoading(false);
       return;
     }
-    setParks(await getParks(player.id));
-    setStores(await getStores());
-    requestFriends();
-
-    setLoading(false);
-  }, [player]);
+    if (isProfilePreview) {
+      setExtrasUnavailable(true);
+      setFriendsUnavailable(true);
+      setParksUnavailable(true);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    void Promise.allSettled([getParks(player.id), getStores(), getFriends(1, 3)])
+      .then(([parkResult, storeResult, friendResult]) => {
+        if (!active) return;
+        if (parkResult.status === 'fulfilled') setParks(parkResult.value);
+        if (storeResult.status === 'fulfilled') setStores(storeResult.value);
+        if (friendResult.status === 'fulfilled') setFriends(friendResult.value);
+        setFriendsUnavailable(friendResult.status === 'rejected');
+        setParksUnavailable(parkResult.status === 'rejected');
+        setExtrasUnavailable(parkResult.status === 'rejected' ||
+          storeResult.status === 'rejected' || friendResult.status === 'rejected');
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [player?.id, isProfilePreview]);
 
   // Scroll to parks section if requested
   useEffect(() => {
@@ -135,7 +169,7 @@ export default function ProfileScreen() {
           onPress: () => {
             RootNavigation.navigate('PinCollections');
           },
-          text: labels.pin_packs,
+          text: labels.pin_packs || 'Pin Packs',
         },
         ...stores.map((store) => {
           return {
@@ -172,7 +206,7 @@ export default function ProfileScreen() {
         },
       ]);
     }
-  }, [stores]);
+  }, [stores, labels.pin_packs, player?.is_subscribed]);
 
   // Redirect guests to login — must be in useEffect, not during render
   useEffect(() => {
@@ -227,8 +261,7 @@ export default function ProfileScreen() {
           </Button>
         </TopbarColumn>
       </Topbar>
-      {loading && <Loading />}
-      {!loading && player && (
+      {player && (
         <ScrollView
           ref={scrollViewRef}
           style={{
@@ -247,7 +280,8 @@ export default function ProfileScreen() {
             <ImageBackground
               source={player?.inventory?.background_item?.paper_url ? {
                 uri: player.inventory.background_item.paper_url,
-              } : undefined}
+              } : require('../../assets/images/seaweed_background.png')}
+              resizeMode="cover"
               style={{
                 height: 315,
                 overflow: 'hidden',
@@ -386,7 +420,7 @@ export default function ProfileScreen() {
                         textAlign: 'center',
                       }}
                     >
-                      {labels.edit}
+                      {labels.edit || 'Edit'}
                     </Text>
                   </Animated.View>
                 </View>
@@ -397,18 +431,19 @@ export default function ProfileScreen() {
                 backgroundColor: '#f0f4f8',
               }}
             >
-              {/* Modern divider line */}
-              <View
-                style={{
-                  height: 1.5,
-                  backgroundColor: 'rgba(0,0,0,0.08)',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.06,
-                  shadowRadius: 3,
-                  elevation: 2,
-                }}
-              />
+              {!!player.title && (
+                <View style={{ alignSelf: 'center', backgroundColor: '#182A39', borderRadius: 16,
+                  paddingHorizontal: 16, paddingVertical: 7, marginTop: 12 }}>
+                  <Text style={{ color: '#F4CD72', fontFamily: 'Knockout', fontSize: 17,
+                    textAlign: 'center' }} numberOfLines={1}>{player.title}</Text>
+                </View>
+              )}
+              {!!player.featured_ride_coin && (
+                <View style={{ marginHorizontal: 16 }}>
+                  <FeaturedRideCoinCard coin={player.featured_ride_coin}
+                    onPress={() => RootNavigation.navigate('CoinShelf')} />
+                </View>
+              )}
               <View style={{ paddingTop: 20 }}>
               <View
                 style={{
@@ -416,19 +451,7 @@ export default function ProfileScreen() {
                   paddingRight: 16,
                 }}
               >
-                {/* Experience card */}
-                <View
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.95)',
-                    borderRadius: 18,
-                    padding: 20,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.08,
-                    shadowRadius: 8,
-                    elevation: 3,
-                  }}
-                >
+                <View style={{ paddingTop: 4, paddingBottom: 6 }}>
                   <Experience player={player} />
                 </View>
               </View>
@@ -438,7 +461,7 @@ export default function ProfileScreen() {
                   paddingRight: 16,
                 }}
               >
-                <PlayerButtons buttons={buttons} modern />
+                <PlayerButtons buttons={buttons} />
               {(player.is_subscribed || player.verified_at) && (
                 <View style={{ flexDirection: 'row', marginTop: 12, marginHorizontal: 8, gap: 8 }}>
                   {player.is_subscribed && (
@@ -453,30 +476,42 @@ export default function ProfileScreen() {
                   )}
                 </View>
               )}
-              {/* Ride Tracker Entry Point */}
+              {/* Compact illustrated entry to the ride journal. */}
               <Pressable
                 onPress={() => RootNavigation.navigate('RideTracker')}
+                accessibilityRole="button"
+                accessibilityLabel="Open Ride Tracker"
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  backgroundColor: '#00a5f5',
-                  borderRadius: 16,
-                  padding: 16,
-                  marginTop: 20,
+                  backgroundColor: '#DFF4FF',
+                  borderColor: '#58B6E8',
+                  borderWidth: 2,
+                  borderRadius: 15,
+                  paddingHorizontal: 12,
+                  paddingVertical: 9,
+                  marginTop: 16,
                   marginBottom: 8,
-                  gap: 12,
+                  gap: 10,
                 }}
               >
-                <Text style={{ fontSize: 32 }}>🦈</Text>
+                <Image source={require('../../assets/images/screens/inventory/shark-colored-v2.png')}
+                  style={{ width: 55, height: 55 }} contentFit="contain" />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', fontFamily: 'Shark' }}>Ride Tracker</Text>
-                  <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>Log rides, earn achievements, track stats</Text>
+                  <Text style={{ color: '#174D76', fontSize: 19, fontFamily: 'Shark' }}>Ride Tracker</Text>
+                  <Text style={{ color: '#366A8C', fontSize: 13 }}>Your rides and park memories</Text>
                 </View>
-                <Text style={{ color: '#fff', fontSize: 20 }}>→</Text>
+                <Text style={{ color: '#174D76', fontSize: 22, fontFamily: 'Shark' }}>›</Text>
               </Pressable>
-              <Heading text={labels.your_statistics} />
+              {extrasUnavailable && (
+                <Text style={{ color: '#526477', fontFamily: 'Knockout', fontSize: 14,
+                  textAlign: 'center', marginTop: 6 }}>
+                  Some details are unavailable. Pull down to retry.
+                </Text>
+              )}
+              <Heading text={labels.your_statistics || 'Your statistics'} />
               <Stats player={player} />
-              <Heading text={`${labels.your_friends} (${player.friends_count})`} />
+              <Heading text={`${labels.your_friends || 'Your friends'} (${player.friends_count})`} />
               {/* Friends card */}
               <View
                 style={{
@@ -490,7 +525,7 @@ export default function ProfileScreen() {
                   elevation: 3,
                 }}
               >
-                {friends && friends.length > 0 && (
+                {friends.length > 0 && (
                   <>
                     <View
                       style={{
@@ -528,12 +563,18 @@ export default function ProfileScreen() {
                         onPress={() => {
                           RootNavigation.navigate('Friends');
                         }}
-                        text={labels.view_all_friends}
+                        text={labels.view_all_friends || 'View all friends'}
                       />
                     </View>
                   </>
                 )}
-                {friends && friends.length === 0 && (
+                {friendsUnavailable && friends.length === 0 && (
+                  <Text style={{ fontFamily: 'Knockout', fontSize: 18, textAlign: 'center', paddingTop: 8,
+                    color: '#46617A' }}>
+                    Friends will appear when you reconnect.
+                  </Text>
+                )}
+                {!friendsUnavailable && friends.length === 0 && (
                   <>
                     <Text
                       style={{
@@ -543,7 +584,7 @@ export default function ProfileScreen() {
                         paddingTop: 8,
                       }}
                     >
-                      {warnings.no_friends}
+                      {warnings.no_friends || 'You have no friends yet.'}
                     </Text>
                     <View
                       style={{
@@ -558,7 +599,7 @@ export default function ProfileScreen() {
                         onPress={() => {
                           RootNavigation.navigate('Friends');
                         }}
-                        text={labels.find_friends}
+                        text={labels.find_friends || 'Find friends'}
                       />
                     </View>
                   </>
@@ -569,7 +610,7 @@ export default function ProfileScreen() {
                   parksYPosition.current = event.nativeEvent.layout.y + 250; // Offset for header
                 }}
               >
-                <Heading text={labels.your_parks} />
+                <Heading text={labels.your_parks || 'Your parks'} />
                 {/* Parks card */}
                 <View
                   style={{
@@ -583,7 +624,12 @@ export default function ProfileScreen() {
                     elevation: 3,
                   }}
                 >
-                  <VisitedParks parks={parks} player={player} />
+                  {parksUnavailable && parks.length === 0 ? (
+                    <Text style={{ fontFamily: 'Knockout', fontSize: 18, textAlign: 'center',
+                      color: '#46617A', paddingTop: 8, paddingBottom: 12 }}>
+                      Your parks will appear when you reconnect.
+                    </Text>
+                  ) : <VisitedParks parks={parks} player={player} />}
                 </View>
               </View>
               </View>

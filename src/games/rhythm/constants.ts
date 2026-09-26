@@ -119,14 +119,14 @@ export const RING_STROKE = 7;
 export const RING_START_SCALE = 3.4;
 
 export const RHYTHM_COLORS = {
-  target: GAME_COLORS.blue,
+  target: GAME_COLORS.gold,
   ring: '#ffffff',
   perfect: GAME_COLORS.gold,
   great: GAME_COLORS.blue,
   good: GAME_COLORS.success,
   miss: GAME_COLORS.danger,
-  beatBar: GAME_COLORS.blue,
-  beatBarFever: GAME_COLORS.gold,
+  beatBar: GAME_COLORS.gold,
+  beatBarFever: GAME_COLORS.coral,
   bgTop: GAME_COLORS.bgDeep,
   bgTopFever: '#1a1030',
   bgBottom: GAME_COLORS.bgDark,

@@ -22,7 +22,6 @@ import Animated, {
   interpolate,
   FadeIn,
   FadeOut,
-  SlideInDown,
   SlideOutDown,
 } from 'react-native-reanimated';
 import { SharkMood, SharkPosition } from './types';
@@ -44,6 +43,8 @@ interface TeacherSharkProps {
   totalSteps: number;
   onNext: () => void;
   onSkip?: () => void;
+  /** Keep Finn clear of persistent bottom navigation when a screen has it. */
+  bottomOffset?: number;
 }
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
@@ -60,6 +61,7 @@ export default function TeacherShark({
   totalSteps,
   onNext,
   onSkip,
+  bottomOffset = 20,
 }: TeacherSharkProps) {
   // === Polished Finn animation — perfect symmetric loops ===
   
@@ -144,17 +146,17 @@ export default function TeacherShark({
   const getSharkContainerStyle = () => {
     switch (position) {
       case 'bottom-left':
-        return { bottom: 20, left: 16 };
+        return { bottom: bottomOffset, left: 16 };
       case 'bottom-right':
-        return { bottom: 20, right: 16 };
+        return { bottom: bottomOffset, right: 16 };
       case 'bottom-center':
-        return { bottom: 20, left: 0, right: 0, alignItems: 'center' as const };
+        return { bottom: bottomOffset, left: 0, right: 0, alignItems: 'center' as const };
       case 'top-left':
         return { top: 100, left: 16 };
       case 'top-right':
         return { top: 100, right: 16 };
       default:
-        return { bottom: 20, left: 0, right: 0, alignItems: 'center' as const };
+        return { bottom: bottomOffset, left: 0, right: 0, alignItems: 'center' as const };
     }
   };
 
@@ -174,7 +176,7 @@ export default function TeacherShark({
   return (
     <Animated.View
       style={[styles.container, getSharkContainerStyle()]}
-      entering={SlideInDown.springify().damping(15).stiffness(100)}
+      entering={FadeIn.duration(280)}
       exiting={SlideOutDown.duration(300)}
     >
       {/* Speech Bubble */}

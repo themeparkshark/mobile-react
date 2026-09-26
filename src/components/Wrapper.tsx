@@ -10,13 +10,19 @@ import Button from './Button';
 
 export default function Wrapper({
   children,
+  previewMode = false,
+  onNavigate,
 }: {
   readonly children: ReactNode;
+  readonly previewMode?: boolean;
+  readonly onNavigate?: (screen: string) => void;
 }) {
   const { theme } = useContext(ThemeContext);
   
   // Default theme URLs if theme not loaded
-  const bottomBarUrl = theme?.bottom_bar_url || 'https://assets.themeparkshark.com/mobile/local/placeholder.png';
+  const bottomBarSource = theme?.bottom_bar_url
+    ? { uri: theme.bottom_bar_url }
+    : require('../../assets/images/original-bottom-bar.png');
   const { checkPermission, hasPermission } = usePermissions();
   const { notificationCount } = useContext(NotificationContext);
 
@@ -75,7 +81,7 @@ export default function Wrapper({
         }}
       >
         <ImageBackground
-          source={{ uri: bottomBarUrl }}
+          source={bottomBarSource}
           resizeMode="cover"
           style={{
             width: '100%',
@@ -103,17 +109,19 @@ export default function Wrapper({
                         notificationCount > 0 && item.text === 'Profile'
                       }
                       hasPermission={
-                        item.permission !== undefined
+                        previewMode ? true : item.permission !== undefined
                           ? hasPermission(item.permission)
                           : true
                       }
                       onPress={() => {
                         if (item.permission !== undefined) {
                           if (checkPermission(item.permission)) {
-                            RootNavigation.navigate(item.screen);
+                            if (onNavigate) onNavigate(item.screen);
+                            else RootNavigation.navigate(item.screen);
                           }
                         } else {
-                          RootNavigation.navigate(item.screen);
+                          if (onNavigate) onNavigate(item.screen);
+                          else RootNavigation.navigate(item.screen);
                         }
                       }}
                       onPressSound={item.sound}

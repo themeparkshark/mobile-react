@@ -73,7 +73,7 @@ export default function Comment({
           {!isDeleted && comment.player && (
             <Button
               onPress={() => {
-                RootNavigation.navigate('Player', {
+                if (comment.player) RootNavigation.navigate('Player', {
                   player: comment.player.id,
                 });
               }}

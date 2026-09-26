@@ -7,7 +7,7 @@ import { RidePartType } from './ride-part-type';
  * Each level unlocks:
  * - Cosmetic upgrades (coin appearance)
  * - Cosmetic tier upgrades (Silver, Gold, Prismatic, Legendary)
- * - Boss challenges at max level
+ * - A featured showcase coin at max level
  */
 export interface RideCoinLevelType {
   readonly id: number;
@@ -17,6 +17,16 @@ export interface RideCoinLevelType {
   readonly current_level: number;
   readonly max_level: number;
   readonly times_collected: number;
+  readonly editions?: ReadonlyArray<{
+    readonly id: number;
+    readonly name: string;
+    readonly color: string;
+    readonly project_title: string;
+    readonly source: 'Ride challenge' | 'LinePlay';
+    readonly earned_at: string;
+  }>;
+  readonly is_featured?: boolean;
+  readonly available_parts?: number;
   
   // Level requirements
   readonly energy_to_next_level: number;
@@ -44,53 +54,6 @@ export interface RideCoinPerkType {
   readonly name: string;
   readonly description: string;
   readonly icon_url: string;
-  readonly type: 'cosmetic' | 'bonus_parts' | 'energy_discount' | 'boss_access';
+  readonly type: 'cosmetic' | 'bonus_parts' | 'energy_discount' | 'boss_access' | 'gym_points';
   readonly value: number;
 }
-
-/**
- * Level thresholds and requirements
- */
-export const RIDE_COIN_LEVEL_CONFIG = {
-  1: {
-    energyCost: 0,
-    partsCost: 0,
-    perks: ['Basic appearance'],
-    frameStyle: 'bronze',
-  },
-  2: {
-    energyCost: 10,
-    partsCost: 5,
-    perks: ['Silver coin appearance'],
-    frameStyle: 'bronze_enhanced',
-  },
-  3: {
-    energyCost: 25,
-    partsCost: 15,
-    perks: ['Gold coin appearance'],
-    frameStyle: 'silver',
-  },
-  4: {
-    energyCost: 50,
-    partsCost: 30,
-    perks: ['Prismatic coin appearance'],
-    frameStyle: 'silver_enhanced',
-  },
-  5: {
-    energyCost: 100,
-    partsCost: 75,
-    perks: ['Legendary coin appearance'],
-    frameStyle: 'gold',
-  },
-} as const;
-
-/**
- * Player level requirements for ride coins
- */
-export const RIDE_COIN_XP_GATES = {
-  easy: 1,     // Level 1+ can collect
-  medium: 5,   // Level 5+ required
-  hard: 10,    // Level 10+ required
-  expert: 20,  // Level 20+ required
-  legendary: 50, // Level 50+ required (boss coins)
-} as const;

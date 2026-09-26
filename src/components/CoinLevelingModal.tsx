@@ -5,6 +5,7 @@ import {
   Dimensions,
   Easing,
   Platform,
+  ScrollView,
   Text,
   TouchableOpacity,
   View,
@@ -18,10 +19,8 @@ import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import CoinUpgradeDemo from './CoinUpgradeDemo';
 import { AuthContext } from '../context/AuthProvider';
-import {
-  RideCoinLevelType,
-  RIDE_COIN_LEVEL_CONFIG,
-} from '../models/ride-coin-level-type';
+import { SoundEffectContext } from '../context/SoundEffectProvider';
+import { RideCoinLevelType } from '../models/ride-coin-level-type';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -32,12 +31,18 @@ interface Props {
   playerParts: number;
   onClose: () => void;
   onLevelUp: (rideCoinId: number) => Promise<boolean>;
+  onFeature: (assetId: number | null) => Promise<boolean>;
+  onPlayInLine?: () => void;
 }
 
 type ModalState = 'preview' | 'confirm' | 'leveling' | 'success' | 'maxed';
 
 // ── Level tier names matching CoinUpgradeDemo ──
 const TIER_NAMES = ['Basic', 'Silver', 'Gold', 'Prismatic', 'Legendary'];
+const TIER_VISUAL_REWARDS = [
+  'Basic coin', 'Silver rim and animated shimmer', 'Gold glow and orbiting sparks',
+  'Prismatic light rays', 'Legendary plasma and sparks',
+];
 const TIER_COLORS = ['#a8a29e', '#cbd5e1', '#fbbf24', '#c4b5fd', '#fb923c'];
 const TIER_BG = [
   'rgba(120,113,108,0.15)',
@@ -54,10 +59,17 @@ export default function CoinLevelingModal({
   playerParts,
   onClose,
   onLevelUp,
+  onFeature,
+  onPlayInLine,
 }: Props) {
   const [state, setState] = useState<ModalState>('preview');
+  const [featured, setFeatured] = useState(false);
+  const [featureBusy, setFeatureBusy] = useState(false);
+  const [featureError, setFeatureError] = useState(false);
   const [holoVisible, setHoloVisible] = useState(false);
+  const [showEditions, setShowEditions] = useState(false);
   const { refreshPlayer } = useContext(AuthContext);
+  const { playSound } = useContext(SoundEffectContext);
 
   // ── Animations ──
   const fadeIn = useRef(new Animated.Value(0)).current;
@@ -67,8 +79,8 @@ export default function CoinLevelingModal({
   const successScale = useRef(new Animated.Value(0)).current;
   const successRotate = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
-  const glowPulse = useRef(new Animated.Value(0.3)).current;
   const confettiRef = useRef<Lottie>(null);
+  const pendingLinePlayRef = useRef(false);
 
   // Staggered resource bar animations
   const energyBarAnim = useRef(new Animated.Value(0)).current;
@@ -79,6 +91,9 @@ export default function CoinLevelingModal({
   // ── Reset on open ──
   useEffect(() => {
     if (visible && rideCoin) {
+      setFeatured(!!rideCoin.is_featured);
+      setShowEditions(false);
+      setFeatureError(false);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
       setState(isMax ? 'maxed' : 'preview');
       fadeIn.setValue(0);
@@ -105,15 +120,6 @@ export default function CoinLevelingModal({
         Animated.timing(partsBarAnim, { toValue: partsPct, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: false }),
       ]).start();
 
-      // Max level glow
-      if (isMax) {
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(glowPulse, { toValue: 0.8, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-            Animated.timing(glowPulse, { toValue: 0.3, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          ])
-        ).start();
-      }
     }
   }, [visible, rideCoin]);
 
@@ -126,6 +132,7 @@ export default function CoinLevelingModal({
   const nextTierColor = TIER_COLORS[Math.min(nextLevel - 1, 4)];
   const tierName = TIER_NAMES[Math.min(currentLevel - 1, 4)];
   const nextTierName = TIER_NAMES[Math.min(nextLevel - 1, 4)];
+  const nextVisualReward = TIER_VISUAL_REWARDS[Math.min(nextLevel - 1, 4)];
 
   const hasEnergy = playerEnergy >= rideCoin.energy_to_next_level;
   const hasParts = playerParts >= rideCoin.parts_to_next_level;
@@ -170,6 +177,7 @@ export default function CoinLevelingModal({
       const success = await onLevelUp(rideCoin.id);
 
       if (success) {
+        playSound(require('../../assets/sounds/reward.mp3'));
         if (Platform.OS === 'ios') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
@@ -187,7 +195,9 @@ export default function CoinLevelingModal({
           Animated.timing(successRotate, { toValue: 1, duration: 600, easing: Easing.out(Easing.ease), useNativeDriver: true }),
         ]).start();
 
-        await refreshPlayer();
+        // The server upgrade is already confirmed. A profile refresh failure must not
+        // turn the successful purchase back into an apparent failed attempt.
+        void refreshPlayer().catch(() => undefined);
       } else {
         throw new Error('Level up failed');
       }
@@ -229,14 +239,17 @@ export default function CoinLevelingModal({
     inputRange: [0, 1], outputRange: ['-15deg', '0deg'],
   });
 
-  // ── Level config for costs ──
-  const levelCfg = RIDE_COIN_LEVEL_CONFIG[nextLevel as keyof typeof RIDE_COIN_LEVEL_CONFIG];
-
   return (
     <Modal
       animationIn="fadeIn"
       animationOut="fadeOut"
       isVisible={visible}
+      onModalHide={() => {
+        if (pendingLinePlayRef.current) {
+          pendingLinePlayRef.current = false;
+          onPlayInLine?.();
+        }
+      }}
       onBackdropPress={state !== 'leveling' ? handleClose : undefined}
       backdropOpacity={0.85}
       statusBarTranslucent
@@ -260,7 +273,7 @@ export default function CoinLevelingModal({
         opacity: fadeIn,
         transform: [{ translateY: slideUp }],
         width: SCREEN_W - 48,
-        maxHeight: SCREEN_H * 0.55,
+        maxHeight: SCREEN_H * 0.82,
         alignItems: 'center',
       }}>
         {/* ── Ribbon Header ── */}
@@ -272,20 +285,32 @@ export default function CoinLevelingModal({
 
         {/* ── Main Card ── */}
         <View style={{
-          backgroundColor: '#1a1a2e',
+          backgroundColor: '#D9F5FF',
           marginTop: '-10%',
           width: '95%',
           zIndex: 10,
           borderRadius: 20,
           borderWidth: 2.5,
-          borderColor: state === 'success' ? nextTierColor : `${tierColor}60`,
+          borderColor: state === 'success' ? '#FFD363' : '#FFFFFF',
           shadowColor: state === 'success' ? nextTierColor : tierColor,
           shadowOffset: { width: 0, height: 4 },
           shadowOpacity: 0.3,
           shadowRadius: 16,
           overflow: 'hidden',
         }}>
-          <View>
+          <ScrollView
+            bounces={false}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 14 }}
+          >
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 185,
+              backgroundColor: '#168AD7', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }} />
+            <View style={{ position: 'absolute', top: 16, left: 20, width: 15, height: 15,
+              borderRadius: 8, borderWidth: 2, borderColor: '#FFFFFF88' }} />
+            <View style={{ position: 'absolute', top: 71, right: 25, width: 21, height: 21,
+              borderRadius: 11, borderWidth: 2, borderColor: '#FFFFFF88' }} />
+            <View style={{ position: 'absolute', top: 132, left: 40, width: 8, height: 8,
+              borderRadius: 4, backgroundColor: '#FFFFFF88' }} />
               <View style={{ paddingTop: 6, paddingHorizontal: 14, paddingBottom: 4, alignItems: 'center' }}>
 
                 {/* ── Coin Display with CoinUpgradeDemo ── */}
@@ -304,6 +329,7 @@ export default function CoinLevelingModal({
                       level={state === 'success' ? nextLevel : currentLevel}
                       coinUrl={rideCoin.coin_url}
                       size={120}
+                      labelColor="#FFFFFF"
                     />
                   </TouchableOpacity>
                 </Animated.View>
@@ -312,12 +338,13 @@ export default function CoinLevelingModal({
                 <Text style={{
                   fontFamily: 'Shark',
                   fontSize: 17,
-                  color: '#f0f0f0',
+                  color: '#17476B',
                   textTransform: 'uppercase',
                   textAlign: 'center',
                   marginBottom: 2,
                 }}>
-                  Level Up Your Coin
+                  {state === 'success' ? 'YOUR COIN POWERED UP'
+                    : state === 'maxed' ? 'COIN FULLY POWERED' : 'LEVEL UP YOUR COIN'}
                 </Text>
 
                 {/* ── Level Badge Row (compact) ── */}
@@ -330,29 +357,41 @@ export default function CoinLevelingModal({
                   <Text style={{
                     fontFamily: 'Knockout',
                     fontSize: 12,
-                    color: tierColor,
+                    color: '#17476B',
                     textTransform: 'uppercase',
                     letterSpacing: 0.5,
                   }}>
-                    Lv.{currentLevel} {tierName}
+                    Lv.{state === 'success' ? nextLevel : currentLevel} {state === 'success' ? nextTierName : tierName}
                   </Text>
 
                   {!isMaxLevel && state !== 'success' && (
                     <>
-                      <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>→</Text>
+                      <Text style={{ color: '#316D90', fontSize: 12 }}>→</Text>
                       <Text style={{
                         fontFamily: 'Knockout',
                         fontSize: 12,
-                        color: nextTierColor,
+                        color: '#A36609',
                         textTransform: 'uppercase',
                         letterSpacing: 0.5,
-                        opacity: 0.6,
+                        opacity: 1,
                       }}>
                         Lv.{nextLevel} {nextTierName}
                       </Text>
                     </>
                   )}
                 </View>
+
+                {!!rideCoin.editions?.length && (state === 'preview' || state === 'maxed') && (
+                  <TouchableOpacity accessibilityRole="button"
+                    accessibilityLabel={`View ${rideCoin.editions.length} ride coin editions`}
+                    onPress={() => setShowEditions(!showEditions)}
+                    style={{ paddingVertical: 5, marginBottom: 4 }}>
+                    <Text style={{ fontFamily: 'Knockout', fontSize: 12,
+                      color: rideCoin.editions[0].color, textAlign: 'center' }}>
+                      ✦ {showEditions ? 'Back to coin' : `${rideCoin.editions[0].name} · View ${rideCoin.editions.length}`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
                 {/* ── Level Progress Dots ── */}
                 <View style={{
@@ -366,9 +405,9 @@ export default function CoinLevelingModal({
                     return (
                       <View key={i} style={{
                         width: 14, height: 14, borderRadius: 7,
-                        backgroundColor: filled ? dotColor : 'rgba(255,255,255,0.1)',
+                        backgroundColor: filled ? dotColor : '#FFFFFF',
                         borderWidth: 2,
-                        borderColor: filled ? dotColor : 'rgba(255,255,255,0.2)',
+                        borderColor: filled ? '#FFFFFF' : '#83B9D2',
                         alignItems: 'center',
                         justifyContent: 'center',
                         ...(filled && Platform.OS === 'ios' ? {
@@ -386,15 +425,61 @@ export default function CoinLevelingModal({
                   })}
                 </View>
 
+                {showEditions && (state === 'preview' || state === 'maxed') && (
+                  <ScrollView style={{ maxHeight: 180, width: '100%', marginBottom: 10 }}
+                    contentContainerStyle={{ gap: 7 }}>
+                    {rideCoin.editions?.map(edition => <View key={edition.id} style={{
+                      borderLeftWidth: 3, borderLeftColor: edition.color,
+                      backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 8,
+                      paddingHorizontal: 10, paddingVertical: 6,
+                    }}>
+                      <Text style={{ color: edition.color, fontFamily: 'Knockout', fontSize: 14 }}>
+                        {edition.name}
+                      </Text>
+                      <Text style={{ color: '#D5DFE8', fontFamily: 'Knockout', fontSize: 11 }}>
+                        {edition.project_title} · {edition.source} · {new Date(edition.earned_at).toLocaleDateString()}
+                      </Text>
+                    </View>)}
+                  </ScrollView>
+                )}
+
+                {!showEditions && (state === 'preview' || state === 'maxed') && (
+                  <TouchableOpacity
+                    disabled={featureBusy}
+                    accessibilityRole="button"
+                    accessibilityLabel={featured ? 'Remove featured ride coin from profile' : 'Feature ride coin on profile'}
+                    onPress={async () => {
+                      if (featureBusy) return;
+                      setFeatureBusy(true);
+                      setFeatureError(false);
+                      const success = await onFeature(featured ? null : rideCoin.id);
+                      if (success) setFeatured(!featured);
+                      else setFeatureError(true);
+                      setFeatureBusy(false);
+                    }}
+                    style={{ borderWidth: 2, borderColor: '#D99D24', backgroundColor: '#FFF5D6', borderRadius: 9,
+                      paddingVertical: 7, paddingHorizontal: 13, marginBottom: 8 }}>
+                    <Text style={{ color: '#795015', fontFamily: 'Knockout', fontSize: 13,
+                      textAlign: 'center' }}>
+                      {featureBusy ? 'Saving…' : featured ? '★ Featured on Profile · Remove' : '☆ Feature on Profile'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {featureError && <Text style={{ color: '#FF9B9B', fontSize: 12, marginBottom: 6 }}>
+                  Could not save your featured coin. Try again.
+                </Text>}
+
                 {/* ══════════════════════════════════════ */}
                 {/* ── PREVIEW / CONFIRM STATE ── */}
                 {/* ══════════════════════════════════════ */}
-                {(state === 'preview' || state === 'confirm') && !isMaxLevel && (
+                {!showEditions && (state === 'preview' || state === 'confirm') && !isMaxLevel && (
                   <>
                     {/* ── Upgrade Cost Section ── */}
                     <View style={{
                       width: '100%',
-                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      backgroundColor: '#FFFFFF',
+                      borderWidth: 2,
+                      borderColor: '#79C7EB',
                       borderRadius: 12,
                       padding: 14,
                       marginBottom: 12,
@@ -403,7 +488,7 @@ export default function CoinLevelingModal({
                       <Text style={{
                         fontFamily: 'Knockout',
                         fontSize: 11,
-                        color: 'rgba(255,255,255,0.5)',
+                        color: '#14517E',
                         textTransform: 'uppercase',
                         letterSpacing: 1,
                         marginBottom: 10,
@@ -420,18 +505,18 @@ export default function CoinLevelingModal({
                       }}>
                         {/* Energy Cost */}
                         <View style={{ alignItems: 'center' }}>
-                          <Text style={{ fontSize: 24, marginBottom: 4 }}>⚡</Text>
+                          <Image source={require('../../assets/images/energy.png')} style={{ width: 29, height: 29, marginBottom: 4 }} contentFit="contain" />
                           <Text style={{
                             fontFamily: 'Shark',
                             fontSize: 22,
-                            color: 'white',
+                            color: '#173F65',
                           }}>
                             {rideCoin.energy_to_next_level}
                           </Text>
                           <Text style={{
                             fontFamily: 'Knockout',
                             fontSize: 10,
-                            color: 'rgba(255,255,255,0.5)',
+                            color: '#3B7197',
                             textTransform: 'uppercase',
                           }}>
                             Energy
@@ -441,24 +526,24 @@ export default function CoinLevelingModal({
                         {/* Divider */}
                         <View style={{
                           width: 1,
-                          backgroundColor: 'rgba(255,255,255,0.1)',
+                          backgroundColor: '#B9DDEC',
                           marginVertical: 4,
                         }} />
 
                         {/* Ride Parts Cost */}
                         <View style={{ alignItems: 'center' }}>
-                          <Text style={{ fontSize: 24, marginBottom: 4 }}>🔧</Text>
+                          <Image source={require('../../assets/images/ride-parts.png')} style={{ width: 29, height: 29, marginBottom: 4 }} contentFit="contain" />
                           <Text style={{
                             fontFamily: 'Shark',
                             fontSize: 22,
-                            color: 'white',
+                            color: '#173F65',
                           }}>
                             {rideCoin.parts_to_next_level}
                           </Text>
                           <Text style={{
                             fontFamily: 'Knockout',
                             fontSize: 10,
-                            color: 'rgba(255,255,255,0.5)',
+                            color: '#3B7197',
                             textTransform: 'uppercase',
                           }}>
                             Ride Parts
@@ -469,7 +554,7 @@ export default function CoinLevelingModal({
                       {/* Divider Line */}
                       <View style={{
                         height: 1,
-                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        backgroundColor: '#B9DDEC',
                         marginBottom: 10,
                       }} />
 
@@ -477,7 +562,7 @@ export default function CoinLevelingModal({
                       <Text style={{
                         fontFamily: 'Knockout',
                         fontSize: 11,
-                        color: 'rgba(255,255,255,0.5)',
+                        color: '#14517E',
                         textTransform: 'uppercase',
                         letterSpacing: 1,
                         marginBottom: 8,
@@ -493,34 +578,55 @@ export default function CoinLevelingModal({
                       }}>
                         {/* Energy Balance */}
                         <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-                          <Text style={{ fontSize: 16 }}>⚡</Text>
+                          <Image source={require('../../assets/images/energy.png')} style={{ width: 20, height: 20 }} contentFit="contain" />
                           <Text style={{
                             fontFamily: 'Shark',
                             fontSize: 18,
-                            color: hasEnergy ? '#66bb6a' : '#ef5350',
+                            color: hasEnergy ? '#168052' : '#B43D42',
                           }}>
                             {playerEnergy.toLocaleString()}
                           </Text>
                           {hasEnergy && (
-                            <Text style={{ fontSize: 12, color: '#66bb6a' }}>✓</Text>
+                            <Text style={{ fontSize: 12, color: '#168052' }}>✓</Text>
                           )}
                         </View>
 
                         {/* Ride Parts Balance */}
                         <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-                          <Text style={{ fontSize: 16 }}>🔧</Text>
+                          <Image source={require('../../assets/images/ride-parts.png')} style={{ width: 20, height: 20 }} contentFit="contain" />
                           <Text style={{
                             fontFamily: 'Shark',
                             fontSize: 18,
-                            color: hasParts ? '#66bb6a' : '#ef5350',
+                            color: hasParts ? '#168052' : '#B43D42',
                           }}>
                             {playerParts.toLocaleString()}
                           </Text>
                           {hasParts && (
-                            <Text style={{ fontSize: 12, color: '#66bb6a' }}>✓</Text>
+                            <Text style={{ fontSize: 12, color: '#168052' }}>✓</Text>
                           )}
                         </View>
                       </View>
+                    </View>
+
+                    <View style={{ width: '100%', backgroundColor: '#FFF4CE', borderWidth: 2,
+                      borderColor: '#F3C657', borderRadius: 12, padding: 11, marginBottom: 12 }}>
+                      <Text style={{ fontFamily: 'Shark', color: '#825414', fontSize: 15,
+                        textAlign: 'center', marginBottom: 6 }}>NEXT LEVEL UNLOCKS</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Image source={require('../../assets/images/coingold.png')}
+                          style={{ width: 31, height: 31 }} contentFit="contain" />
+                        <Text style={{ flex: 1, fontFamily: 'Knockout', fontSize: 14,
+                          color: '#19496B' }}>{nextVisualReward}</Text>
+                      </View>
+                      {rideCoin.next_level_perks.length > 0 && (
+                        <View style={{ marginTop: 7, borderTopWidth: 1, borderTopColor: '#EBC970',
+                          paddingTop: 7 }}>
+                        {rideCoin.next_level_perks.map(perk => (
+                          <Text key={perk.id} style={{ fontFamily: 'Knockout', fontSize: 14,
+                            color: '#19496B' }}>★ {perk.description}</Text>
+                        ))}
+                        </View>
+                      )}
                     </View>
 
                     {/* ── Level Up Button ── */}
@@ -534,14 +640,14 @@ export default function CoinLevelingModal({
                     {!canLevelUp && (
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 11,
-                        color: 'rgba(255,255,255,0.4)',
+                        color: '#315D7B',
                         textAlign: 'center', marginTop: 8,
                       }}>
                         {!hasEnergy && !hasParts
-                          ? 'Win mini-games to earn ⚡ and 🔧'
+                          ? 'Find home items for Energy; visit this ride for Parts.'
                           : !hasEnergy
-                            ? `Need ${rideCoin.energy_to_next_level - playerEnergy} more ⚡`
-                            : `Need ${rideCoin.parts_to_next_level - playerParts} more 🔧`}
+                            ? `Find home items for ${rideCoin.energy_to_next_level - playerEnergy} more Energy.`
+                            : `Need ${rideCoin.parts_to_next_level - playerParts} more Parts from this ride.`}
                       </Text>
                     )}
                   </>
@@ -591,9 +697,9 @@ export default function CoinLevelingModal({
                   }}>
                     {/* New tier announcement */}
                     <View style={{
-                      backgroundColor: `${nextTierColor}15`,
+                      backgroundColor: '#FFF5D6',
                       borderWidth: 2,
-                      borderColor: `${nextTierColor}50`,
+                      borderColor: '#F3C657',
                       borderRadius: 18,
                       paddingHorizontal: 20,
                       paddingVertical: 14,
@@ -603,7 +709,7 @@ export default function CoinLevelingModal({
                     }}>
                       <Text style={{
                         fontFamily: 'Shark', fontSize: 28,
-                        color: nextTierColor,
+                        color: '#9D6300',
                         textTransform: 'uppercase',
                         textShadowColor: 'rgba(0,0,0,0.5)',
                         textShadowOffset: { width: 2, height: 2 },
@@ -613,10 +719,14 @@ export default function CoinLevelingModal({
                       </Text>
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 14,
-                        color: 'rgba(255,255,255,0.7)',
+                        color: '#315D7B',
                         marginTop: 4,
                       }}>
                         Your coin evolved to Level {nextLevel}
+                      </Text>
+                      <Text style={{ fontFamily: 'Knockout', fontSize: 14,
+                        color: '#19496B', marginTop: 5, textAlign: 'center' }}>
+                        {nextVisualReward}
                       </Text>
 
                       {/* New perks unlocked */}
@@ -624,7 +734,7 @@ export default function CoinLevelingModal({
                         <View style={{ marginTop: 12, width: '100%' }}>
                           <Text style={{
                             fontFamily: 'Knockout', fontSize: 11,
-                            color: nextTierColor,
+                            color: '#825414',
                             textTransform: 'uppercase',
                             letterSpacing: 1,
                             marginBottom: 6,
@@ -634,7 +744,7 @@ export default function CoinLevelingModal({
                           {rideCoin.next_level_perks.map((perk) => (
                             <Text key={perk.id} style={{
                               fontFamily: 'Knockout', fontSize: 14,
-                              color: 'white', marginBottom: 2,
+                              color: '#19496B', marginBottom: 2,
                             }}>
                               ⭐ {perk.description}
                             </Text>
@@ -650,18 +760,10 @@ export default function CoinLevelingModal({
                 {/* ══════════════════════════════════════ */}
                 {/* ── MAX LEVEL STATE ── */}
                 {/* ══════════════════════════════════════ */}
-                {state === 'maxed' && (
+                {state === 'maxed' && !showEditions && (
                   <View style={{ alignItems: 'center', paddingVertical: 10 }}>
-                    {/* Glow behind */}
-                    <Animated.View style={{
-                      position: 'absolute', top: -20,
-                      width: 200, height: 200, borderRadius: 100,
-                      backgroundColor: '#fb923c',
-                      opacity: glowPulse,
-                    }} />
-
                     <View style={{
-                      backgroundColor: 'rgba(249,115,22,0.1)',
+                      backgroundColor: '#FFF5D6',
                       borderWidth: 2,
                       borderColor: 'rgba(249,115,22,0.4)',
                       borderRadius: 18,
@@ -673,14 +775,14 @@ export default function CoinLevelingModal({
                     }}>
                       <Text style={{
                         fontFamily: 'Shark', fontSize: 24,
-                        color: '#fbbf24',
+                        color: '#9D6300',
                         marginBottom: 4,
                       }}>
                         ★ LEGENDARY ★
                       </Text>
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 14,
-                        color: 'rgba(255,255,255,0.7)',
+                        color: '#315D7B',
                         textAlign: 'center',
                         marginBottom: 12,
                       }}>
@@ -696,7 +798,7 @@ export default function CoinLevelingModal({
                             }}>
                               <Text style={{ fontSize: 12, marginRight: 8 }}>🏆</Text>
                               <Text style={{
-                                fontFamily: 'Knockout', fontSize: 14, color: '#fbbf24',
+                                fontFamily: 'Knockout', fontSize: 14, color: '#19496B',
                               }}>
                                 {perk.description}
                               </Text>
@@ -708,18 +810,29 @@ export default function CoinLevelingModal({
 
                     <Text style={{
                       fontFamily: 'Knockout', fontSize: 12,
-                      color: 'rgba(255,255,255,0.4)',
+                      color: '#315D7B',
                       textAlign: 'center', marginBottom: 16,
                     }}>
-                      Collected {rideCoin.times_collected} times
+                      {rideCoin.editions?.length
+                        ? `${rideCoin.editions.length} project editions earned`
+                        : `${rideCoin.current_level}/${rideCoin.max_level} levels mastered`}
                     </Text>
 
                     <YellowButton text="Nice!" onPress={handleClose} />
                   </View>
                 )}
 
+                {onPlayInLine && !showEditions && (state === 'preview' || state === 'maxed') &&
+                  <TouchableOpacity accessibilityRole="button"
+                    accessibilityLabel={`Play LinePlay for ${rideCoin.ride_name}`}
+                    onPress={() => { pendingLinePlayRef.current = true; handleClose(); }}
+                    style={{ alignSelf: 'center', paddingVertical: 10, marginTop: 5 }}>
+                    <Text style={{ color: '#075b9b', fontFamily: 'Shark', fontSize: 15,
+                      textDecorationLine: 'underline' }}>Waiting here? Play in Line ›</Text>
+                  </TouchableOpacity>}
+
               </View>
-          </View>
+          </ScrollView>
         </View>
       </Animated.View>
 

@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -17,7 +18,7 @@ import updatePlayer from '../api/endpoints/me/update-player';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
-export default function WelcomeScreen({ navigation }) {
+export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any>) {
   const [username, setUsername] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const { player, refreshPlayer } = useContext(AuthContext);

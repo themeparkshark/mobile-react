@@ -16,7 +16,7 @@
  * 
  * NOTHING is auto-logged. Every detection requires user confirmation.
  */
-import { useEffect, useRef, useCallback } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { getRides, RideType } from '../api/endpoints/rides';
 import getWikiTimes from '../api/endpoints/parks/queue-times/getWikiTimes';
@@ -25,12 +25,12 @@ import rideDetectionService, {
   startDetection,
   stopDetection,
   getPendingDetections,
-  clearPendingDetections,
   DetectedRide,
 } from '../services/RideDetectionService';
 import { PARK_WIKI_IDS } from '../constants/parkWaitTimes';
 import { navigationRef, navigate } from '../RootNavigation';
 import { rideDetectionEmitter } from '../services/RideDetectionEmitter';
+import { LocationContext } from '../context/LocationProvider';
 
 /** Tracks whether we've already navigated to batch confirm to prevent double navigation (BUG 8 fix) */
 let batchConfirmNavigating = false;
@@ -63,7 +63,7 @@ async function checkAndShowPendingRides(): Promise<boolean> {
 
     // Check we're not already on the batch confirm screen
     const currentRoute = navigationRef.getCurrentRoute();
-    if (currentRoute?.name === 'RideBatchConfirm') return false;
+    if (currentRoute?.name === 'RideBatchConfirm' || currentRoute?.name === 'RideLog') return false;
 
     batchConfirmNavigating = true;
     navigate('RideBatchConfirm', { detections: meaningful } as any);
@@ -79,10 +79,21 @@ async function checkAndShowPendingRides(): Promise<boolean> {
 }
 
 export function useRideDetection(enabled: boolean) {
+  const { location, latestLocationSampleRef } = useContext(LocationContext);
   const ridesRef = useRef<RideType[]>([]);
   const waitTimeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const initialCheckDoneRef = useRef(false);
+
+  // The map's foreground watcher is already providing raw OS samples. Use its
+  // latest fresh fix for ride entry and exit, including after navigating away.
+  useEffect(() => {
+    if (!enabled || appStateRef.current !== 'active') return;
+    const sample = latestLocationSampleRef.current;
+    if (!sample || Date.now() - sample.timestamp > 30_000 ||
+        sample.timestamp > Date.now() + 5_000) return;
+    rideDetectionService.processForegroundLocation(sample.latitude, sample.longitude);
+  }, [enabled, location?.latitude, location?.longitude, latestLocationSampleRef]);
 
   // Handle foreground single-ride detection
   useEffect(() => {
@@ -140,9 +151,16 @@ export function useRideDetection(enabled: boolean) {
         setDetectionRides(rides);
 
         await startDetection();
+        if (cancelled) return;
+        const sample = latestLocationSampleRef.current;
+        if (sample && Date.now() - sample.timestamp <= 30_000 &&
+            sample.timestamp <= Date.now() + 5_000) {
+          rideDetectionService.processForegroundLocation(sample.latitude, sample.longitude);
+        }
 
         // Fetch wait times in parallel (ISSUE 11 fix)
         await fetchAndSetWaitTimes(rides);
+        if (cancelled) return;
 
         // Poll wait times every 5 minutes
         waitTimeIntervalRef.current = setInterval(() => {

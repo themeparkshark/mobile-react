@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 const STROKE_WIDTH = 2;
@@ -23,7 +24,7 @@ const strokeOffsets = [
   { x: STROKE_WIDTH, y: STROKE_WIDTH },
 ];
 
-export default function TopbarText({ children }) {
+export default function TopbarText({ children }: { readonly children: ReactNode }) {
   return (
     <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
       {/* Dark stroke layers */}

@@ -97,10 +97,10 @@ export default function TapMiniGameModal({
 
   const handleGameEnd = async () => {
     setGameState('submitting');
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
       const response = await checkinGym(parkId, taps);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setResult({
         points: response.points_earned,
         message: response.message,
@@ -108,9 +108,10 @@ export default function TapMiniGameModal({
       setGameState('finished');
       battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (error: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setResult({
         points: 0,
-        message: error.response?.data?.error || 'Something went wrong!',
+        message: error.response?.data?.error || error.message || 'Something went wrong!',
       });
       setGameState('finished');
     }

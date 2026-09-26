@@ -9,9 +9,15 @@ interface SharkAvatar3DProps {
   size?: number;
 }
 
+type ExpoRenderer = Renderer & {
+  setSize: (width: number, height: number) => void;
+  setClearColor: (color: number, alpha: number) => void;
+  render: (scene: THREE.Scene, camera: THREE.Camera) => void;
+};
+
 export default function SharkAvatar3D({ heading, size = 100 }: SharkAvatar3DProps) {
   const [isLoaded, setIsLoaded] = useState(false);
-  const rendererRef = useRef<Renderer | null>(null);
+  const rendererRef = useRef<ExpoRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const sharkRef = useRef<THREE.Object3D | null>(null);
@@ -20,7 +26,9 @@ export default function SharkAvatar3D({ heading, size = 100 }: SharkAvatar3DProp
 
   const onContextCreate = useCallback(async (gl: any) => {
     // Create renderer
-    const renderer = new Renderer({ gl });
+    // expo-three's Renderer extends WebGLRenderer at runtime, but its bundled
+    // declaration omits inherited methods.
+    const renderer = new Renderer({ gl }) as ExpoRenderer;
     renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
     renderer.setClearColor(0x000000, 0); // Transparent background
     rendererRef.current = renderer;

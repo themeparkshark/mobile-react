@@ -31,7 +31,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { View, StyleSheet, Dimensions, LayoutChangeEvent } from 'react-native';
+import { View, Text, Image, StyleSheet, Dimensions, LayoutChangeEvent } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   GameShellV2,
   ParticleField,
@@ -45,7 +46,7 @@ import {
 } from '../../gamekit';
 import { MemoryCard, type MemoryCardHandle } from './MemoryCard';
 import { FeverGlow } from './FeverGlow';
-import { DECKS, pickDeck, type Deck } from './decks';
+import { deckById, deckIdForRideName, type Deck } from './decks';
 import {
   buildBoard,
   boardShapeFor,
@@ -66,13 +67,16 @@ const FEVER_CHAIN = 4;
 
 export interface MemoryGameProps {
   visible: boolean;
-  /** 1-3. 1-2 = 4x4, 3 = 4x5. Chosen by session context. */
+  /** 0 = four-pair ride sprint; 1-3 are longer queue boards. */
   difficulty?: number;
   /** Optional deterministic seed (session/replay). Random when omitted. */
   seed?: number;
+  /** Pin a themed deck for a ride chapter. */
+  deckId?: string;
   /** Shell subtitle (e.g. the task/ride name). */
   taskName?: string;
   onClose: () => void;
+  onQuit?: (resume: () => void) => void;
   /** Preserved external contract: onComplete(multiplier, meta). */
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
 }
@@ -86,8 +90,10 @@ export default function MemoryGame({
   visible,
   difficulty = 1,
   seed,
+  deckId,
   taskName,
   onClose,
+  onQuit,
   onComplete,
 }: MemoryGameProps) {
   // -- Round setup (rebuilt whenever the game (re)opens). --------------------
@@ -97,7 +103,17 @@ export default function MemoryGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visible, seed],
   );
-  const deck: Deck = useMemo(() => pickDeck(roundSeed), [roundSeed]);
+  const deck: Deck = useMemo(() =>
+    deckById(deckId ?? deckIdForRideName(taskName)) ?? deckById('park')!,
+  [deckId, taskName]);
+  const displayRideName = taskName?.toLowerCase().includes('pirates of the caribbean')
+    ? 'Pirates'
+    : taskName;
+  const shellSubtitle = difficulty === 0
+    ? displayRideName && displayRideName.length > 18
+      ? displayRideName
+      : `${displayRideName ?? 'Ride sprint'} · 4 quick pairs`
+    : displayRideName;
   const board: Board = useMemo(
     () => buildBoard(difficulty, deck, roundSeed),
     [difficulty, deck, roundSeed],
@@ -107,6 +123,7 @@ export default function MemoryGame({
 
   // -- Live UI state. --------------------------------------------------------
   const [score, setScore] = useState(0);
+  const [matchedPairs, setMatchedPairs] = useState(0);
   const [personalBest, setPersonalBest] = useState(0);
   const [result, setResult] = useState<GameResult | null>(null);
   const [feverOn, setFeverOn] = useState(false);
@@ -117,6 +134,9 @@ export default function MemoryGame({
   const matchedRef = useRef<Set<number>>(new Set());
   const flipRef = useRef<FlipState>({ first: null, locked: false });
   const startedAtRef = useRef(0);
+  const pausedAtRef = useRef<number | null>(null);
+  const pausedTotalRef = useRef(0);
+  const playingRef = useRef(false);
   const endedRef = useRef(false);
   const scoreRef = useRef(0);
   const timeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
@@ -135,10 +155,14 @@ export default function MemoryGame({
     matchedRef.current = new Set();
     flipRef.current = { first: null, locked: false };
     endedRef.current = false;
+    pausedAtRef.current = null;
+    pausedTotalRef.current = 0;
+    playingRef.current = false;
     scoreRef.current = 0;
     lastMatchAtRef.current = 0;
     feverOnRef.current = false;
     setScore(0);
+    setMatchedPairs(0);
     setResult(null);
     setFeverOn(false);
     combo.reset();
@@ -165,8 +189,23 @@ export default function MemoryGame({
   // -- Start (countdown finished). -------------------------------------------
   const handleStart = useCallback(() => {
     startedAtRef.current = Date.now();
+    playingRef.current = true;
     // Flip every card face-down cleanly at start (in case of a re-open).
     cardRefs.current.forEach((c) => c?.setFaceUp(false));
+  }, []);
+
+  const handlePause = useCallback(() => {
+    if (!playingRef.current) return;
+    playingRef.current = false;
+    pausedAtRef.current = Date.now();
+  }, []);
+
+  const handleResume = useCallback(() => {
+    if (pausedAtRef.current != null) {
+      pausedTotalRef.current += Date.now() - pausedAtRef.current;
+      pausedAtRef.current = null;
+    }
+    playingRef.current = true;
   }, []);
 
   // -- End the round. --------------------------------------------------------
@@ -174,7 +213,9 @@ export default function MemoryGame({
     if (endedRef.current) return;
     endedRef.current = true;
 
-    const elapsed = (Date.now() - startedAtRef.current) / 1000;
+    const now = Date.now();
+    const activePause = pausedAtRef.current == null ? 0 : now - pausedAtRef.current;
+    const elapsed = (now - startedAtRef.current - pausedTotalRef.current - activePause) / 1000;
     const bonus = timeBonus(scoreCfg, elapsed);
     const finalScore = scoreRef.current + bonus;
     scoreRef.current = finalScore;
@@ -206,7 +247,7 @@ export default function MemoryGame({
   // -- Tap handling: the match flow. -----------------------------------------
   const onCardPress = useCallback(
     (slot: number) => {
-      if (endedRef.current) return;
+      if (endedRef.current || !playingRef.current) return;
       const state = flipRef.current;
       if (state.locked) return;
       if (matchedRef.current.has(slot)) return;
@@ -233,6 +274,7 @@ export default function MemoryGame({
         // ---- MATCH ----------------------------------------------------------
         matchedRef.current.add(a);
         matchedRef.current.add(b);
+        setMatchedPairs(matchedRef.current.size / 2);
 
         const cs = combo.hit();
         const chain = cs.streak;
@@ -307,6 +349,7 @@ export default function MemoryGame({
   useEffect(() => {
     if (!visible) return;
     const id = setInterval(() => {
+      if (!playingRef.current) return;
       combo.poll();
       const cold = Date.now() - lastMatchAtRef.current > COMBO_CONFIG.windowMs;
       if (cold && feverOnRef.current) {
@@ -329,7 +372,7 @@ export default function MemoryGame({
     <GameShellV2
       visible={visible}
       title="Memory Match+"
-      subtitle={taskName}
+      subtitle={shellSubtitle}
       score={score}
       multiplier={combo.multiplier}
       // Header fever styling tracks the SAME 4-chain threshold that lights the
@@ -340,10 +383,30 @@ export default function MemoryGame({
       objective={objective}
       result={result}
       onStart={handleStart}
+      onPause={handlePause}
+      onResume={handleResume}
       onComplete={onComplete}
       onClose={onClose}
+      onQuit={onQuit}
     >
       <View style={styles.field}>
+        <LinearGradient colors={['#07548f', '#0b80c4', '#96dcf4']}
+          style={StyleSheet.absoluteFill} />
+        <View pointerEvents="none" style={styles.bubbleOne} />
+        <View pointerEvents="none" style={styles.bubbleTwo} />
+        <View style={styles.banner}>
+          <View style={styles.bannerCopy}>
+            <Text style={styles.bannerKicker}>THEME PARK SHARK · MEMORY MATCH</Text>
+            <Text style={styles.bannerTitle} numberOfLines={1}>{deck.label}</Text>
+          </View>
+          <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
+            resizeMode="contain" style={styles.bannerShark}
+            accessibilityLabel="Theme Park Shark mascot" />
+        </View>
+        <Text style={styles.progress} accessibilityLiveRegion="polite">
+          {matchedPairs} / {shape.pairs} PAIRS MATCHED
+        </Text>
+        <Text style={styles.hint}>Flip two cards to find a match</Text>
         <View style={styles.boardWrap} onLayout={onBoardLayout}>
           {boardSize.w > 0 ? (
             <FeverGlow width={boardSize.w} height={boardSize.h} active={feverOn} />
@@ -359,9 +422,16 @@ export default function MemoryGame({
                   }}
                   size={cardSize}
                   faceSource={sym?.source}
+                  faceSheet={sym?.extraSheetSlot != null ? deck.extraFaceSheet : deck.faceSheet}
+                  sheetSlot={sym?.extraSheetSlot ?? sym?.sheetSlot}
+                  sheetColumns={sym?.extraSheetSlot != null ? 2 : 4}
+                  sheetRows={sym?.extraSheetSlot != null ? 1 : 2}
+                  frameSource={deck.faceFrame}
                   backSource={deck.back}
                   tint={sym?.tint ?? GAME_COLORS.blue}
                   glyph={sym?.glyph ?? '🦈'}
+                  slot={card.slot}
+                  symbolName={sym?.id.split('-').slice(1).join(' ') ?? 'shark'}
                   matched={matchedRef.current.has(card.slot)}
                   disabled={false}
                   onPress={() => onCardPress(card.slot)}
@@ -424,7 +494,28 @@ function centerOfSlot(
 }
 
 const styles = StyleSheet.create({
-  field: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  field: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  bubbleOne: { position: 'absolute', width: 210, height: 210, borderRadius: 105,
+    borderColor: 'rgba(255,255,255,0.18)', borderWidth: 9, top: '6%', right: -105 },
+  bubbleTwo: { position: 'absolute', width: 125, height: 125, borderRadius: 63,
+    borderColor: 'rgba(255,255,255,0.17)', borderWidth: 7, bottom: '8%', left: -70 },
+  banner: { width: '90%', maxWidth: 390, minHeight: 74, borderRadius: 16,
+    borderWidth: 3, borderColor: '#fff', backgroundColor: '#1265ae',
+    flexDirection: 'row', alignItems: 'center', overflow: 'hidden',
+    marginBottom: 20, paddingLeft: 14,
+    shadowColor: '#064375', shadowOpacity: 0.35, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 } },
+  bannerCopy: { flex: 1 },
+  bannerKicker: { color: '#bcecff', fontFamily: 'Knockout', fontSize: 12,
+    letterSpacing: 0.7 },
+  bannerTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 22,
+    marginTop: 3, textShadowColor: '#064375',
+    textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 1 },
+  bannerShark: { width: 87, height: 87, marginRight: -10 },
+  progress: { color: '#fff', fontFamily: 'Shark', fontSize: 19, letterSpacing: 0.6,
+    marginBottom: 4, textAlign: 'center' },
+  hint: { color: '#e6f8ff', fontFamily: 'Knockout', fontSize: 15, marginBottom: 16,
+    textAlign: 'center' },
   boardWrap: { alignItems: 'center', justifyContent: 'center', padding: 8 },
   grid: {
     flexDirection: 'row',
@@ -434,6 +525,3 @@ const styles = StyleSheet.create({
   },
   particles: { position: 'absolute', top: 0, left: 0 },
 });
-
-// Keep DECKS referenced for tree-shakers / future deck-count telemetry.
-void DECKS;

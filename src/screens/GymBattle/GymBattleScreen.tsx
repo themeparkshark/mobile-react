@@ -595,28 +595,6 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     }
   }, [gymData?.player?.seconds_until_defend]);
 
-  // Countdown timers - single interval, refetch when any cooldown expires
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setAttackCooldown(prev => {
-        const next = Math.max(0, prev - 1);
-        if (prev > 0 && next === 0) fetchGym(); // Refetch when timer expires
-        return next;
-      });
-      setCheckinCooldown(prev => {
-        const next = Math.max(0, prev - 1);
-        if (prev > 0 && next === 0) fetchGym();
-        return next;
-      });
-      setDefendCooldown(prev => {
-        const next = Math.max(0, prev - 1);
-        if (prev > 0 && next === 0) fetchGym();
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [fetchGym]);
-
   const playButtonSound = async () => {
     try {
       const { sound } = await Audio.Sound.createAsync(
@@ -666,6 +644,28 @@ export default function GymBattleScreen({ navigation, route }: Props) {
       setLoading(false);
     }
   }, [parkId]);
+
+  // Countdown timers - single interval, refetch when any cooldown expires
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setAttackCooldown(prev => {
+        const next = Math.max(0, prev - 1);
+        if (prev > 0 && next === 0) fetchGym();
+        return next;
+      });
+      setCheckinCooldown(prev => {
+        const next = Math.max(0, prev - 1);
+        if (prev > 0 && next === 0) fetchGym();
+        return next;
+      });
+      setDefendCooldown(prev => {
+        const next = Math.max(0, prev - 1);
+        if (prev > 0 && next === 0) fetchGym();
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [fetchGym]);
 
   useEffect(() => {
     fetchGym();
@@ -746,7 +746,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
       battleHUDEvents.emit();
     } catch (error) {
       console.error('Check-in failed:', error);
-      setPillarToast('Check-in failed');
+      setPillarToast(error instanceof Error ? error.message : 'Check-in failed');
       setTimeout(() => setPillarToast(null), 2000);
     }
   };
@@ -1337,6 +1337,18 @@ const styles = StyleSheet.create({
     textShadowColor: '#FBBF24',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 20,
+  },
+  goBackBtn: {
+    marginTop: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    backgroundColor: 'rgba(71, 85, 105, 0.9)',
+  },
+  goBackText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
   },
   noTeamOverlay: {
     ...StyleSheet.absoluteFillObject,

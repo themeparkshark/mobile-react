@@ -22,7 +22,7 @@ import YellowButton from '../components/YellowButton';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 
-export default function MembershipScreen({ route }) {
+export default function MembershipScreen({ route }: { route: { params?: { intro?: boolean } } }) {
   const { intro } = route.params ?? {};
   const { warnings, labels, urls } = useCrumbs();
   const [product, setProduct] = useState<AdaptyPaywallProduct>();
@@ -32,17 +32,22 @@ export default function MembershipScreen({ route }) {
 
   useAsyncEffect(async () => {
     if (!player) {
+      setLoading(false);
       return;
     }
 
-    await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH', {
-      customerUserId: player.id.toString(),
-    });
-    const paywall = await adapty.getPaywall('vip_membership');
-    const products = await adapty.getPaywallProducts(paywall);
-
-    setProduct(products[0]);
-    setLoading(false);
+    try {
+      await adapty.activate('public_live_CNR38UxN.UitJJkmc6YkTWeLTRpgH', {
+        customerUserId: player.id.toString(),
+      });
+      const paywall = await adapty.getPaywall('vip_membership');
+      const products = await adapty.getPaywallProducts(paywall);
+      setProduct(products[0]);
+    } catch {
+      setProduct(undefined);
+    } finally {
+      setLoading(false);
+    }
   }, [player]);
 
   useIntervalWhen(
@@ -99,6 +104,16 @@ export default function MembershipScreen({ route }) {
         <TopbarColumn stretch={false} />
       </Topbar>
       {loading && <Loading />}
+      {!loading && !product && (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <Text style={{ fontFamily: 'Knockout', fontSize: 22, textAlign: 'center' }}>
+            VIP membership is unavailable right now. Please try again later.
+          </Text>
+          {intro && (
+            <RedButton onPress={() => RootNavigation.navigate('Explore')} text={labels.skip_for_now} />
+          )}
+        </View>
+      )}
       {!loading && product && (
         <View
           style={{
@@ -222,8 +237,8 @@ export default function MembershipScreen({ route }) {
                       }}
                     >
                       {vsprintf(labels.purchase_membership_additional, [
-                        product.price?.currencyCode,
-                        product.price?.localizedString,
+                        product.currencyCode,
+                        product.localizedPrice,
                       ])}
                     </Text>
                   </View>
@@ -238,8 +253,8 @@ export default function MembershipScreen({ route }) {
                     }}
                   >
                     {vsprintf(labels.membership_terms, [
-                      product.price?.currencyCode,
-                      product.price?.localizedString,
+                      product.currencyCode,
+                      product.localizedPrice,
                     ])}
                   </Text>
                   <View

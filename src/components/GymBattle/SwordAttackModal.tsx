@@ -72,7 +72,7 @@ export default function SwordAttackModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Attack failed!');
+      setError(err.response?.data?.error || err.message || 'Attack failed!');
       setState('error');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }

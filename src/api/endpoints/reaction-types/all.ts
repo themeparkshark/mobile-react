@@ -1,9 +1,9 @@
 import { ApiResponseType } from '../../../models/api-response-type';
-import { ReactionType } from '../../../models/reaction-type';
+import { ReactionTypeType } from '../../../models/reaction-type-type';
 import client from '../../client';
 
-export default async function all(): Promise<ReactionType[]> {
-  const { data } = await client.get<ApiResponseType<ReactionType[]>>(
+export default async function all(): Promise<ReactionTypeType[]> {
+  const { data } = await client.get<ApiResponseType<ReactionTypeType[]>>(
     '/reaction-types'
   );
 

@@ -1,7 +1,10 @@
-import { ReactNode, useState } from 'react';
+import { ComponentProps, ComponentType, PropsWithChildren, ReactNode, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Tab, TabView } from 'react-native-elements';
 import config from '../config';
+
+// This installed TabView renders children, but its declaration omits the prop.
+const TabViewWithChildren = TabView as ComponentType<PropsWithChildren<ComponentProps<typeof TabView>>>;
 
 export default function Tabs({
   items,
@@ -46,11 +49,11 @@ export default function Tabs({
           borderTopColor: '#fff',
         }}
       >
-        <TabView value={index} onChange={setIndex} animationType="spring">
+        <TabViewWithChildren value={index} onChange={setIndex}>
           {views.map((view, index) => {
             return (
               <TabView.Item
-                onMoveShouldSetResponder={(e) => e.stopPropagation()}
+                onMoveShouldSetResponder={(e) => { e.stopPropagation(); return false; }}
                 key={index}
                 style={{
                   flex: 1,
@@ -66,7 +69,7 @@ export default function Tabs({
               </TabView.Item>
             );
           })}
-        </TabView>
+        </TabViewWithChildren>
       </View>
     </>
   );

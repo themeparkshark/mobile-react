@@ -1,9 +1,12 @@
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
+import * as Location from 'expo-location';
 import { useContext, useEffect, useState } from 'react';
 import {
   Alert,
+  AppState,
+  Linking,
   ScrollView,
   StyleSheet,
   Switch,
@@ -43,6 +46,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { useTutorial } from '../components/Tutorial';
+import { syncBackgroundRideDetection } from '../services/RideDetectionService';
 
 // --- Reusable row components ---
 
@@ -112,6 +116,8 @@ export default function SettingsScreen() {
   const { player, logout, refreshPlayer } = useContext(AuthContext);
   const [enabledMusic, setEnabledMusic] = useState<boolean>();
   const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
+  const [backgroundLocationEnabled, setBackgroundLocationEnabled] = useState(false);
+  const [backgroundLocationBusy, setBackgroundLocationBusy] = useState(false);
   const { urls, labels } = useCrumbs();
   const { reset, devMode, setDevMode } = useContext(LocationContext);
   const { resetAll: resetTutorials } = useTutorial();
@@ -120,6 +126,48 @@ export default function SettingsScreen() {
     setEnabledMusic(player?.enabled_music);
     setEnabledSoundEffects(player?.enabled_sound_effects);
   }, [player]);
+
+  useEffect(() => {
+    let mounted = true;
+    const refresh = () => {
+      Location.getBackgroundPermissionsAsync()
+        .then(permission => { if (mounted) setBackgroundLocationEnabled(permission.granted); })
+        .catch(() => { if (mounted) setBackgroundLocationEnabled(false); });
+    };
+    refresh();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') refresh();
+    });
+    return () => { mounted = false; subscription.remove(); };
+  }, []);
+
+  const enableBackgroundLocation = async () => {
+    if (backgroundLocationBusy) return;
+    setBackgroundLocationBusy(true);
+    try {
+      let permission = await Location.getBackgroundPermissionsAsync();
+      if (permission.granted) {
+        await syncBackgroundRideDetection();
+        Alert.alert('Background Park Play',
+          'Background ride detection is on. You can change location access in iPhone Settings.');
+        return;
+      }
+      if (!permission.granted && !permission.canAskAgain) {
+        Alert.alert('Background Park Play',
+          'Enable Always location in iPhone Settings to detect rides and keep LinePlay progress while your phone is locked.',
+          [{ text: 'Not now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } }]);
+        return;
+      }
+      if (!permission.granted) permission = await Location.requestBackgroundPermissionsAsync();
+      setBackgroundLocationEnabled(permission.granted);
+      if (permission.granted) await syncBackgroundRideDetection();
+    } catch {
+      Alert.alert('Location unavailable', 'Background park play could not be enabled. You can still play with the app open.');
+    } finally {
+      setBackgroundLocationBusy(false);
+    }
+  };
 
   if (!player) {
     return null;
@@ -212,7 +260,23 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* Developer */}
+        <SectionHeader title="Park Play" />
+        <View style={styles.card}>
+          <SettingsRow
+            icon={faLocationCrosshairs}
+            iconColor={config.secondary}
+            iconBg="rgba(0, 165, 245, 0.1)"
+            title="Background Ride Detection"
+            detail={backgroundLocationBusy ? 'Checking permission…'
+              : backgroundLocationEnabled ? 'On · rides and LinePlay while locked'
+                : 'Off · tap to enable for park visits'}
+            isLast
+            onPress={enableBackgroundLocation}
+          />
+        </View>
+
+        {/* Internal QA controls never appear in the guest-facing build. */}
+        {__DEV__ && <>
         <SectionHeader title="Developer" />
         <View style={styles.card}>
           <SettingsRow
@@ -237,23 +301,23 @@ export default function SettingsScreen() {
             detail="Play and test all mini-games"
             onPress={() => (navigation as any).navigate('MiniGameTester')}
           />
-          <SettingsRow
-            icon={faRotateRight}
-            iconColor="#64748b"
-            iconBg="rgba(100, 116, 139, 0.1)"
-            title="Reset Tutorials"
-            detail="Show onboarding tutorial again"
-            isLast
-            onPress={() => {
-              resetTutorials();
-              Alert.alert('Tutorials Reset', 'All tutorials will show again on next visit.');
-            }}
-          />
         </View>
+        </>}
 
         {/* Help */}
         <SectionHeader title="Help" />
         <View style={styles.card}>
+          <SettingsRow
+            icon={faRotateRight}
+            iconColor={config.secondary}
+            iconBg="rgba(0, 165, 245, 0.1)"
+            title="Replay Tutorials"
+            detail="See the park and collection tips again"
+            onPress={() => {
+              resetTutorials();
+              Alert.alert('Tutorials Ready', 'The tips will appear again on your next visit.');
+            }}
+          />
           <SettingsRow
             icon={faFileContract}
             iconColor={config.secondary}

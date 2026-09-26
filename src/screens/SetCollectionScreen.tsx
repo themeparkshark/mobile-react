@@ -15,7 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from '../helpers/haptics';
 import HapticPatterns from '../helpers/hapticPatterns';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import {
   faLock,
@@ -30,16 +30,28 @@ import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Button from '../components/Button';
+import Playercard from '../components/Playercard';
+import GiftPrepVariantPanel from './GiftPrepVariantPanel';
+import type { InventoryType } from '../models/inventory-type';
 import config from '../config';
 import { Modal } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
+import { LocationContext } from '../context/LocationProvider';
+import prepItemImage from '../helpers/prepItemImages';
+import * as RootNavigation from '../RootNavigation';
+import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
   getPrepItemSet,
   claimSetRewards,
+  claimStarterRewards,
+  equipSetTitle,
+  exchangeSetDuplicates,
+  focusPrepItemSet,
+  clearPrepItemSetFocus,
   PrepItemSetListItem,
   PrepItemSetItem,
+  PrepItemSetDetailResponse,
 } from '../api/endpoints/me/prep-item-sets';
-import mockChurroData, { MOCK_CHURRO_SET_LIST, MOCK_CHURRO_SET_DETAIL } from '../data/mockChurroSet';
 
 // Churro image mapping - require all images statically
 const CHURRO_IMAGES: Record<string, any> = {
@@ -191,9 +203,8 @@ function CollectionCard({
           {/* Item Image */}
           <View style={styles.itemImageContainer}>
             {(() => {
-              const localImage = item.variant_slug
-                ? getChurroImage(item.variant_slug)
-                : null;
+              const localImage = prepItemImage(item.variant_slug)
+                || (item.variant_slug ? getChurroImage(item.variant_slug) : null);
 
               if (localImage) {
                 return (
@@ -276,7 +287,7 @@ function CollectionCard({
           ]}
           numberOfLines={1}
         >
-          {isCollected ? item.name : '???'}
+          {isCollected ? `${item.found_in_world && item.rarity === 5 ? '✦ ' : ''}${item.name}` : '???'}
         </Text>
       </TouchableOpacity>
     </Animated.View>
@@ -304,7 +315,7 @@ function ProgressRing({
         height: size,
         borderRadius: size / 2,
         borderWidth: strokeWidth,
-        borderColor: 'rgba(0,0,0,0.06)',
+        borderColor: 'rgba(255,255,255,0.4)',
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
@@ -330,7 +341,7 @@ function ProgressRing({
         style={{
           fontFamily: 'Shark',
           fontSize: size * 0.28,
-          color: '#1a1a2e',
+          color: '#fff',
           textAlign: 'center',
         }}
       >
@@ -340,12 +351,22 @@ function ProgressRing({
   );
 }
 
-export default function SetCollectionScreen() {
+export default function SetCollectionScreen({ previewSets, previewDetails }: {
+  previewSets?: PrepItemSetListItem[];
+  previewDetails?: Record<string, PrepItemSetDetailResponse['data']>;
+} = {}) {
   const navigation = useNavigation();
   const route = useRoute();
+  const isFocused = useIsFocused();
   const { player, refreshPlayer } = useContext(AuthContext);
+  const { location } = useContext(LocationContext);
+  const locationRef = useRef(location);
+  locationRef.current = location;
 
   const [sets, setSets] = useState<PrepItemSetListItem[]>([]);
+  const currentSets = sets.filter(set => set.availability === 'current' || (set.availability == null && set.is_in_rotation !== false));
+  const upcomingSets = sets.filter(set => set.availability === 'upcoming');
+  const archivedSets = sets.filter(set => set.availability === 'archived' || (set.availability == null && set.is_in_rotation === false));
   const [selectedSetSlug, setSelectedSetSlug] = useState<string | null>(
     (route.params as any)?.slug || null
   );
@@ -355,38 +376,54 @@ export default function SetCollectionScreen() {
     items: PrepItemSetItem[];
     items_by_rarity: any;
     completion_rewards: any;
+    discovery?: { found_in_world: number; legendary_found_in_world: number; legendary_total: number };
+    recent_gifts?: PrepItemSetDetailResponse['data']['recent_gifts'];
   } | null>(null);
 
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
+  const [claimingStarter, setClaimingStarter] = useState(false);
+  const [selectedWearableId, setSelectedWearableId] = useState<number | null>(null);
+  const [equippingTitle, setEquippingTitle] = useState(false);
+  const [exchanging, setExchanging] = useState(false);
+  const [focusPending, setFocusPending] = useState(false);
+  const [setsError, setSetsError] = useState(false);
+  const [detailError, setDetailError] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<PrepItemSetItem | null>(
     null
   );
+  const [giftItem, setGiftItem] = useState<PrepItemSetItem | null>(null);
+  const [giftNotice, setGiftNotice] = useState<string | null>(null);
+  const [showMissingChoices, setShowMissingChoices] = useState(false);
+  const detailScrollRef = useRef<ScrollView>(null);
+  const tripPrepTopRef = useRef(0);
 
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  // A direct link opens the detail immediately; only taps from the list slide it in.
+  const slideAnim = useRef(new Animated.Value((route.params as any)?.slug ? 1 : 0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
   const headerFadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Load all sets (with mock data fallback)
+  // Show only server-backed collection progress.
   const loadSets = useCallback(async () => {
     try {
-      const data = await getPrepItemSets();
+      const data = previewSets ?? await getPrepItemSets(locationRef.current);
       setSets(data);
+      setSetsError(false);
     } catch (error) {
-      console.log('API unavailable, using mock data');
-      setSets([MOCK_CHURRO_SET_LIST]);
+      setSetsError(true);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [previewSets]);
 
-  // Load single set detail (with mock data fallback)
   const loadSetDetail = useCallback(
     async (slug: string) => {
       try {
-        const data = await getPrepItemSet(slug);
+        const data = previewDetails?.[slug] ?? await getPrepItemSet(slug, locationRef.current);
         setSelectedSetData(data);
+        setDetailError(false);
 
         Animated.parallel([
           Animated.timing(progressAnim, {
@@ -401,26 +438,10 @@ export default function SetCollectionScreen() {
           }),
         ]).start();
       } catch (error) {
-        console.log('API unavailable, using mock set detail');
-        if (slug === 'churro_collection') {
-          setSelectedSetData(MOCK_CHURRO_SET_DETAIL);
-
-          Animated.parallel([
-            Animated.timing(progressAnim, {
-              toValue: MOCK_CHURRO_SET_DETAIL.progress.percentage / 100,
-              duration: 800,
-              useNativeDriver: false,
-            }),
-            Animated.timing(headerFadeAnim, {
-              toValue: 1,
-              duration: 500,
-              useNativeDriver: true,
-            }),
-          ]).start();
-        }
+        setDetailError(true);
       }
     },
-    [progressAnim, headerFadeAnim]
+    [progressAnim, headerFadeAnim, previewDetails]
   );
 
   // Initial load
@@ -435,6 +456,17 @@ export default function SetCollectionScreen() {
     }
   }, [selectedSetSlug, loadSetDetail]);
 
+  // Conditions can change while the collector is browsing a set. Keep the
+  // live rain/night status current without polling an off-screen route.
+  useEffect(() => {
+    if (!isFocused || previewSets) return;
+    const interval = setInterval(() => {
+      void loadSets();
+      if (selectedSetSlug) void loadSetDetail(selectedSetSlug);
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [isFocused, previewSets, loadSets, loadSetDetail, selectedSetSlug]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     HapticPatterns.buttonTap();
@@ -445,11 +477,51 @@ export default function SetCollectionScreen() {
     setRefreshing(false);
   }, [loadSets, loadSetDetail, selectedSetSlug]);
 
+  const toggleFocus = useCallback(async () => {
+    if (!selectedSetSlug || !selectedSetData || focusPending) return;
+    const desired = !Boolean(selectedSetData.set.is_focused);
+    setFocusPending(true);
+    setActionError(null);
+    try {
+      if (previewSets) {
+        setSets(current => current.map(set => ({ ...set,
+          is_focused: desired && set.slug === selectedSetSlug })));
+        setSelectedSetData(current => current ? {
+          ...current, set: { ...current.set, is_focused: desired },
+        } : current);
+      } else {
+        if (desired) await focusPrepItemSet(selectedSetSlug);
+        else await clearPrepItemSetFocus();
+        await Promise.all([loadSets(), loadSetDetail(selectedSetSlug)]);
+      }
+      HapticPatterns.buttonTap();
+    } catch {
+      // A lost response can follow a saved preference. Read it back first.
+      if (!previewSets) {
+        try {
+          const latest = await getPrepItemSet(selectedSetSlug, locationRef.current);
+          setSelectedSetData(latest);
+          await loadSets();
+          if (Boolean(latest.set.is_focused) === desired) return;
+        } catch { /* Keep the current selection visible. */ }
+      }
+      setActionError('Could not change your home hunt. Try again.');
+    } finally {
+      setFocusPending(false);
+    }
+  }, [selectedSetSlug, selectedSetData, focusPending, previewSets, loadSets, loadSetDetail]);
+
   // Open set detail
   const openSet = useCallback(
     (slug: string) => {
       HapticPatterns.buttonTap();
       setSelectedSetSlug(slug);
+      setSelectedSetData(null);
+      setSelectedWearableId(null);
+      setShowMissingChoices(false);
+      setDetailError(false);
+      setActionError(null);
+      setGiftNotice(null);
       progressAnim.setValue(0);
       headerFadeAnim.setValue(0);
 
@@ -473,28 +545,143 @@ export default function SetCollectionScreen() {
     }).start(() => {
       setSelectedSetSlug(null);
       setSelectedSetData(null);
+      setShowMissingChoices(false);
     });
   }, [slideAnim]);
 
   // Claim completion rewards
   const handleClaimRewards = useCallback(async () => {
-    if (!selectedSetSlug || claiming) return;
+    if (!selectedSetSlug || claiming || previewSets) return;
 
     setClaiming(true);
     HapticPatterns.collect('legendary');
 
     try {
-      const result = await claimSetRewards(selectedSetSlug);
+      await claimSetRewards(selectedSetSlug);
+      setActionError(null);
       await refreshPlayer();
       await loadSetDetail(selectedSetSlug);
+      await loadSets();
       HapticPatterns.achievement();
-    } catch (error) {
-      console.error('Failed to claim rewards:', error);
-      HapticPatterns.error();
+    } catch {
+      try {
+        const latest = await getPrepItemSet(selectedSetSlug, locationRef.current);
+        setSelectedSetData(latest);
+        progressAnim.setValue(latest.progress.percentage / 100);
+        await loadSets();
+        if (latest.progress.rewards_claimed) {
+          await refreshPlayer().catch(() => undefined);
+          setActionError(null);
+          HapticPatterns.achievement();
+        } else {
+          setActionError('The full-set reward was not claimed. Try again.');
+          HapticPatterns.error();
+        }
+      } catch {
+        setActionError('Could not confirm this claim. Refresh the collection before trying again.');
+        HapticPatterns.error();
+      }
     } finally {
       setClaiming(false);
     }
-  }, [selectedSetSlug, claiming, refreshPlayer, loadSetDetail]);
+  }, [selectedSetSlug, claiming, refreshPlayer, loadSetDetail, loadSets, progressAnim]);
+
+  const handleClaimStarter = useCallback(async () => {
+    if (!selectedSetSlug || claimingStarter || previewSets) return;
+    const choices = selectedSetData?.progress?.starter_milestone?.wearable_choices ?? [];
+    if (choices.some((item: { owned: boolean }) => !item.owned) &&
+        !choices.some((item: { id: number; owned: boolean }) => item.id === selectedWearableId && !item.owned)) {
+      setActionError('Choose a shark item to earn with this set.');
+      return;
+    }
+    setClaimingStarter(true);
+    try {
+      await claimStarterRewards(selectedSetSlug, selectedWearableId ?? undefined);
+      setActionError(null);
+      await refreshPlayer();
+      await loadSetDetail(selectedSetSlug);
+      await loadSets();
+      HapticPatterns.achievement();
+    } catch {
+      try {
+        const latest = await getPrepItemSet(selectedSetSlug, locationRef.current);
+        setSelectedSetData(latest);
+        if (latest.progress.starter_milestone?.rewards_claimed) {
+          await refreshPlayer().catch(() => undefined);
+          await loadSets();
+          setActionError(null);
+          HapticPatterns.achievement();
+        } else {
+          setActionError('Could not claim your trip-prep reward. Please try again.');
+          HapticPatterns.error();
+        }
+      } catch {
+        setActionError('Could not confirm your claim. Refresh this collection before trying again.');
+        HapticPatterns.error();
+      }
+    } finally {
+      setClaimingStarter(false);
+    }
+  }, [selectedSetSlug, selectedSetData, selectedWearableId, claimingStarter, refreshPlayer, loadSetDetail, loadSets]);
+
+  const handleEquipTitle = useCallback(async (tier: 'starter' | 'complete' = 'complete') => {
+    const title = tier === 'starter'
+      ? selectedSetData?.progress?.starter_milestone?.rewards?.title
+      : selectedSetData?.completion_rewards?.title;
+    if (!selectedSetSlug || !title || equippingTitle || previewSets) return;
+    setEquippingTitle(true);
+    try {
+      await equipSetTitle(selectedSetSlug, player?.title !== title, tier);
+      await refreshPlayer();
+      setActionError(null);
+      HapticPatterns.achievement();
+    } catch {
+      setActionError('Could not update your profile title. Please try again.');
+      HapticPatterns.error();
+    } finally {
+      setEquippingTitle(false);
+    }
+  }, [selectedSetSlug, selectedSetData, equippingTitle, player?.title, refreshPlayer]);
+
+  const handleExchange = useCallback(async () => {
+    if (!selectedSetSlug || !selectedItem || exchanging || previewSets) return;
+    const targetId = selectedItem.id;
+    setExchanging(true);
+    try {
+      await exchangeSetDuplicates(selectedSetSlug, selectedItem.id);
+      setSelectedItem(null);
+      setActionError(null);
+      await loadSetDetail(selectedSetSlug);
+      await loadSets();
+      HapticPatterns.achievement();
+    } catch {
+      try {
+        const latest = await getPrepItemSet(selectedSetSlug, locationRef.current);
+        setSelectedSetData(latest);
+        progressAnim.setValue(latest.progress.percentage / 100);
+        await loadSets();
+        if (latest.items.some(item => item.id === targetId && item.is_collected)) {
+          setSelectedItem(null);
+          setActionError(null);
+          HapticPatterns.achievement();
+        } else {
+          setActionError('Exchange was not confirmed. Check the current spare count before trying again.');
+          HapticPatterns.error();
+        }
+      } catch {
+        setActionError('Could not confirm this exchange. Refresh the collection before trying again.');
+        HapticPatterns.error();
+      }
+    } finally {
+      setExchanging(false);
+    }
+  }, [selectedSetSlug, selectedItem, exchanging, loadSetDetail, loadSets, progressAnim]);
+
+  const handleGiftSent = useCallback((receipt: GiftReceipt) => {
+    setGiftNotice(`You shared a spare with ${receipt.recipient_name}. Their collection book has changed.`);
+    HapticPatterns.achievement();
+    if (selectedSetSlug) void Promise.allSettled([loadSetDetail(selectedSetSlug), loadSets()]);
+  }, [selectedSetSlug, loadSetDetail, loadSets]);
 
   // Render set card in list
   const renderSetCard = (set: PrepItemSetListItem) => {
@@ -552,7 +739,17 @@ export default function SetCollectionScreen() {
               />
             ) : (
               <Image
-                source={CHURRO_IMAGES[`churro_0${(set.id % 5) + 1}`] || CHURRO_IMAGES['churro_01']}
+                source={set.slug === 'churro_collection'
+                  ? CHURRO_IMAGES['churro_01']
+                  : set.slug === 'pretzel_collection'
+                    ? prepItemImage('pretzel_01')!
+                    : set.slug === 'night_lights'
+                      ? prepItemImage('flashlight_40')!
+                    : set.slug === 'rain_parade'
+                      ? prepItemImage('umbrella_40')!
+                    : set.slug === 'camera_crew'
+                      ? prepItemImage('camera_40')!
+                    : require('../../assets/images/screens/player/gift.png')}
                 style={styles.setIcon}
                 contentFit="contain"
               />
@@ -561,6 +758,7 @@ export default function SetCollectionScreen() {
 
           {/* Set Info */}
           <View style={styles.setInfo}>
+            <Text style={styles.setEyebrow}>{set.is_in_rotation === false ? 'SAVED COLLECTION · OFF MAP' : 'HOME COLLECTION'} · {set.total_items} FINDS</Text>
             <Text style={styles.setName}>{set.name}</Text>
             <Text style={styles.setDescription} numberOfLines={1}>
               {set.description}
@@ -583,6 +781,26 @@ export default function SetCollectionScreen() {
                 {set.collected_count}/{set.total_items}
               </Text>
             </View>
+            {set.starter_milestone && !set.starter_milestone.rewards_claimed && (
+              <Text style={[styles.rewardLabel, { color: set.starter_milestone.is_unlocked ? '#B26A00' : '#64748b', textAlign: 'left', marginTop: 4 }]}>
+                {set.starter_milestone.is_unlocked
+                  ? 'Trip prep reward ready'
+                  : `Trip prep ${set.starter_milestone.collected}/${set.starter_milestone.target} unique finds`}
+              </Text>
+            )}
+            {!!set.recent_gift_count && <Text style={[styles.rewardLabel,
+              { color: '#0875C9', textAlign: 'left', marginTop: 4 }]}>
+              {set.recent_gift_count} CREW {set.recent_gift_count === 1 ? 'GIFT' : 'GIFTS'} THIS WEEK
+            </Text>}
+            {set.is_focused && <Text style={[styles.rewardLabel, { color: '#0875c9', textAlign: 'left', marginTop: 4 }]}>YOUR ACTIVE HUNT</Text>}
+            {set.is_in_rotation === false && <Text style={styles.archivedLabel}>YOUR FINDS ARE SAVED</Text>}
+            {set.is_in_rotation !== false && set.theme === 'weather' && (
+              <Text style={[styles.rewardLabel, { color: set.time_gate?.is_spawning_now === true ? '#08739C' : '#536B82', textAlign: 'left', marginTop: 4 }]}>
+                {set.time_gate?.is_spawning_now === true ? 'RAIN HUNT ACTIVE'
+                  : set.time_gate?.is_spawning_now === false ? 'WAITING FOR RAIN'
+                  : 'RAIN STATUS UNAVAILABLE'}
+              </Text>
+            )}
           </View>
 
           {/* Completion Badge */}
@@ -593,7 +811,7 @@ export default function SetCollectionScreen() {
           )}
 
           {/* Time Gate Indicator */}
-          {set.time_gate && !set.time_gate.is_spawning_now && (
+          {set.time_gate && set.time_gate.is_spawning_now === false && (
             <View style={styles.timeGateBadge}>
               <FontAwesomeIcon
                 icon={faClock}
@@ -612,18 +830,39 @@ export default function SetCollectionScreen() {
     if (!selectedSetData) {
       return (
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
+          <Text style={styles.loadingText}>{detailError ? 'Could not load this collection. Pull to refresh.' : 'Loading...'}</Text>
+          {detailError && <TouchableOpacity onPress={() => selectedSetSlug && loadSetDetail(selectedSetSlug)}><Text style={styles.loadingText}>Retry</Text></TouchableOpacity>}
         </View>
       );
     }
 
-    const { set, progress, items, items_by_rarity, completion_rewards } =
+    const { set, progress, discovery, items, items_by_rarity, completion_rewards } =
       selectedSetData;
     const themeColor = set.theme_config?.color || '#FF9800';
     const progressFrac = progress.total > 0 ? progress.collected / progress.total : 0;
+    const missingItems = items.filter((item) => !item.is_collected);
+    const sparesNeeded = Math.max(0, progress.exchange_cost - progress.spare_count);
+    const wearableChoices = progress.starter_milestone?.wearable_choices ?? [];
+    const visibleWearableId = progress.starter_milestone?.rewards_claimed
+      ? progress.starter_milestone.awarded_item_id : selectedWearableId;
+    const selectedWearable = wearableChoices.find((item: { id: number }) => item.id === visibleWearableId);
+    const wearableSlot = ({ 1: 'head_item', 2: 'face_item', 3: 'neck_item',
+      4: 'body_item', 5: 'hand_item', 8: 'pin_item' } as Record<number, keyof InventoryType>)[selectedWearable?.item_type_id];
+    const canPreviewWearable = !!selectedWearable && !!wearableSlot &&
+      (selectedWearable.item_type_id === 8 ? !!selectedWearable.icon_url : !!selectedWearable.paper_url);
+    const previewInventory = canPreviewWearable && !!player?.inventory?.skin_item?.no_eye_url ? {
+      ...(player?.inventory ?? {}),
+      [wearableSlot]: {
+        id: selectedWearable.id,
+        name: selectedWearable.name,
+        icon_url: selectedWearable.icon_url,
+        paper_url: selectedWearable.paper_url,
+      },
+    } as InventoryType : null;
 
     return (
       <ScrollView
+        ref={detailScrollRef}
         style={styles.detailScroll}
         contentContainerStyle={styles.detailContent}
         showsVerticalScrollIndicator={false}
@@ -657,7 +896,7 @@ export default function SetCollectionScreen() {
             </View>
 
             {/* Time gate info */}
-            {set.time_gate && (
+            {set.is_in_rotation !== false && set.time_gate && (
               <View style={styles.timeGateInfo}>
                 <FontAwesomeIcon
                   icon={faClock}
@@ -667,13 +906,15 @@ export default function SetCollectionScreen() {
                 <Text style={styles.timeGateText}>
                   {set.time_gate.description}
                 </Text>
-                {set.time_gate.is_spawning_now ? (
+                {set.time_gate.is_spawning_now === true ? (
                   <View style={styles.activeIndicator}>
                     <View style={styles.activeDot} />
                     <Text style={styles.timeGateActive}>Active Now</Text>
                   </View>
+                ) : set.time_gate.is_spawning_now === null ? (
+                  <Text style={styles.timeGateInactive}>{set.theme === 'weather' ? 'Rain status unavailable' : 'Check map for live status'}</Text>
                 ) : (
-                  <Text style={styles.timeGateInactive}>Not Spawning</Text>
+                  <Text style={styles.timeGateInactive}>{set.theme === 'weather' ? 'Waiting for rain' : 'Not Spawning'}</Text>
                 )}
               </View>
             )}
@@ -700,11 +941,221 @@ export default function SetCollectionScreen() {
                 {progress.collected} / {progress.total}
               </Text>
             </View>
+            {set.is_in_rotation === false ? <View style={styles.archivePanel}>
+              <Text style={styles.archiveKicker}>✦  YOUR COLLECTOR ARCHIVE</Text>
+              <Text style={styles.archiveBody}>This book is off the map for now. Your finds, spare copies, and earned rewards are safe. You can still use saved spares and claim rewards you earned.</Text>
+            </View> : <View style={styles.focusRow}>
+              <View style={styles.focusCopy}>
+                <Text style={styles.focusKicker}>{set.is_focused ? 'YOUR ACTIVE HUNT' : 'CHOOSE YOUR HUNT'}</Text>
+                <Text style={styles.focusHint}>
+                  {set.time_gate?.is_spawning_now === false ? 'This hunt resumes when conditions return.'
+                    : set.time_gate?.is_spawning_now === null ? 'Waiting for live conditions.'
+                    : 'New home finds favor this book.'}
+                </Text>
+              </View>
+              <TouchableOpacity accessibilityRole="button"
+                accessibilityLabel={set.is_focused ? 'Hunt all collections equally' : `Focus ${set.name} on the home map`}
+                disabled={focusPending} onPress={() => void toggleFocus()}
+                activeOpacity={0.8} style={[styles.focusButton, focusPending && { opacity: 0.6 }]}>
+                <Text style={styles.focusButtonText}>{focusPending ? 'SAVING...' : set.is_focused ? 'HUNT ALL' : 'FOCUS SET'}</Text>
+              </TouchableOpacity>
+            </View>}
           </View>
         </Animated.View>
 
+        {actionError && <Text style={[styles.loadingText, { marginHorizontal: 16 }]}>{actionError}</Text>}
+        {giftNotice && <View style={{ marginHorizontal: 16, marginBottom: 10, padding: 12,
+          borderRadius: 14, borderWidth: 2, borderColor: '#FFD466', backgroundColor: '#0D6EA9' }}>
+          <Text style={{ color: '#FFFFFF', fontFamily: 'Knockout', fontSize: 15 }}>{giftNotice}</Text>
+        </View>}
+        {progress.starter_milestone && (
+          <View onLayout={event => { tripPrepTopRef.current = event.nativeEvent.layout.y; }}
+            style={[styles.rewardsSection, { backgroundColor: '#FFF5DE', borderRadius: 16, marginBottom: 14 }]}>
+            <Text style={styles.sectionTitle}>Trip Prep · {progress.starter_milestone.collected}/{progress.starter_milestone.target} unique finds</Text>
+            <Text style={styles.tripPrepExplanation}>
+              {set.is_in_rotation === false
+                ? progress.starter_milestone.is_unlocked
+                  ? `You earned this trip-prep milestone before the hunt rotated out. Claim ${progress.starter_milestone.rewards.tickets} Tickets, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP.`
+                  : `Your ${progress.starter_milestone.collected} unique finds toward this reward are saved. The set is off the map for now.`
+                : `Find eight different items to bring ${progress.starter_milestone.rewards.tickets} Tickets, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP toward your next park day${progress.starter_milestone.rewards.title ? `, and earn the ${progress.starter_milestone.rewards.title} profile title` : ''}. Keep collecting for the full set reward.`}
+            </Text>
+            {!!progress.starter_milestone.wearable_choices?.length && !progress.starter_milestone.rewards_claimed && (
+              <View style={{ marginBottom: 12 }}>
+                <Text style={{ color: '#174D79', fontFamily: 'Knockout', fontSize: 15,
+                  marginBottom: 9, letterSpacing: 0.4 }}>CHOOSE YOUR SHARK REWARD</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {progress.starter_milestone.wearable_choices.map((item: { id: number; name: string; icon_url: string | null; owned: boolean }) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      onPress={() => { if (!item.owned) {
+                        setSelectedWearableId(item.id);
+                        setActionError(null);
+                        detailScrollRef.current?.scrollTo({ y: Math.max(0, tripPrepTopRef.current + 14), animated: true });
+                      } }}
+                      disabled={item.owned}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selectedWearableId === item.id, disabled: item.owned }}
+                      style={{ flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center',
+                        flexDirection: wearableChoices.length === 1 ? 'row' : 'column', gap: 7,
+                        padding: 8, borderRadius: 13, borderWidth: 2,
+                        borderColor: selectedWearableId === item.id ? '#F8C94F' : '#9BC7DE',
+                        backgroundColor: item.owned ? '#E8E5DE' : selectedWearableId === item.id ? '#0B72BB' : '#F4FBFF' }}
+                    >
+                      {item.icon_url ? <Image source={{ uri: item.icon_url }} style={{ width: 65, height: 65 }} contentFit="contain" />
+                        : <Text style={{ fontSize: 28 }}>🦈</Text>}
+                      <View style={{ flex: wearableChoices.length === 1 ? 1 : undefined, alignItems: 'center' }}>
+                        <Text style={{ color: selectedWearableId === item.id && !item.owned ? '#FFFFFF' : '#174D79',
+                          fontFamily: 'Knockout', textAlign: 'center', fontSize: wearableChoices.length === 1 ? 15 : 12,
+                          lineHeight: wearableChoices.length === 1 ? 18 : 15 }} numberOfLines={2}>{item.name}</Text>
+                        {(item.owned || selectedWearableId === item.id) && <Text style={{ color: item.owned ? '#637B8A' : '#FFE187',
+                          fontFamily: 'Knockout', fontSize: 11, marginTop: 3 }}>{item.owned ? 'OWNED' : 'SELECTED'}</Text>}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {progress.starter_milestone.wearable_choices.every((item: { owned: boolean }) => item.owned) && (
+                  <Text style={[styles.rewardLabel, { textAlign: 'left', marginTop: 8 }]}>
+                    You already own these shark items. Claim Trip Prep for its Tickets, Energy, XP, and title.
+                  </Text>
+                )}
+              </View>
+            )}
+            {selectedWearable && (
+              <LinearGradient colors={['#117FC6', '#07477D']} style={{
+                marginBottom: 13, minHeight: 172, borderRadius: 18, borderWidth: 3,
+                borderColor: '#FFE187', overflow: 'hidden', flexDirection: 'row',
+                alignItems: 'center', paddingLeft: 14,
+              }}>
+                <View style={{ flex: 1, zIndex: 1 }}>
+                  <Text style={{ color: '#FFE187', fontFamily: 'Oswald-Bold', fontSize: 13, letterSpacing: 1.2 }}>
+                    {progress.starter_milestone.rewards_claimed ? 'NEW FOR YOUR SHARK' : 'TRY IT ON'}
+                  </Text>
+                  <Text style={{ color: '#FFFFFF', fontFamily: 'Shark', fontSize: 17, marginTop: 6, lineHeight: 21 }} numberOfLines={3}>{selectedWearable.name}</Text>
+                  <Text style={{ color: '#D8F3FF', fontSize: 12, marginTop: 8, lineHeight: 17 }}>
+                    {progress.starter_milestone.rewards_claimed ? 'Earned with Trip Prep · Open your wardrobe to wear it'
+                      : previewInventory ? 'Preview on your shark · Earn it with Trip Prep'
+                        : 'Earn this item with Trip Prep, then style your shark.'}
+                  </Text>
+                </View>
+                {previewInventory ? <Playercard inventory={previewInventory} showBackground={false}
+                  style={{ width: 172, height: 165, marginRight: -8 }} />
+                  : <View style={{ width: 172, height: 165, marginRight: -8 }}>
+                    <Image source={require('../../assets/images/screens/welcome/shark.png')}
+                      style={{ width: 160, height: 160 }} contentFit="contain" />
+                    {selectedWearable.icon_url && <View style={{ position: 'absolute', right: 11, bottom: 4,
+                      width: 60, height: 60, borderRadius: 30, borderWidth: 2,
+                      borderColor: '#FFE187', backgroundColor: '#E9F8FF',
+                      alignItems: 'center', justifyContent: 'center' }}>
+                      <Image source={{ uri: selectedWearable.icon_url }} style={{ width: 49, height: 49 }} contentFit="contain" />
+                    </View>}
+                  </View>}
+              </LinearGradient>
+            )}
+            {progress.starter_milestone.rewards_claimed ? (
+              <View>
+                <Text style={[styles.rewardLabel, { color: '#227A53', textAlign: 'left' }]}>Trip prep claimed{progress.starter_milestone.rewards.title ? ` · ${progress.starter_milestone.rewards.title} earned` : ''}</Text>
+                {!!progress.starter_milestone.awarded_item_id && (
+                  <Text style={[styles.rewardLabel, { textAlign: 'left', marginTop: 6 }]}>
+                    Shark item earned: {progress.starter_milestone.wearable_choices?.find((item: { id: number }) => item.id === progress.starter_milestone.awarded_item_id)?.name ?? 'Open your wardrobe to see it'}
+                  </Text>
+                )}
+                {!!progress.starter_milestone.awarded_item_id && <Button onPress={() => RootNavigation.navigate('Inventory', {
+                  itemTypeId: progress.starter_milestone.wearable_choices?.find((item: { id: number }) => item.id === progress.starter_milestone.awarded_item_id)?.item_type_id,
+                })}>
+                  <LinearGradient colors={['#FFBE57', '#F18B32']} style={styles.claimButton}>
+                    <Text style={styles.claimButtonText}>Style your shark</Text>
+                  </LinearGradient>
+                </Button>}
+                {!!progress.starter_milestone.rewards.title && <Button onPress={() => handleEquipTitle('starter')} hasPermission={!equippingTitle}>
+                  <LinearGradient colors={['#254A72', '#142C4B']} style={styles.claimButton}>
+                    <Text style={styles.claimButtonText}>
+                      {equippingTitle ? 'Saving...' : player?.title === progress.starter_milestone.rewards.title ? 'Remove title' : 'Wear title'}
+                    </Text>
+                  </LinearGradient>
+                </Button>}
+              </View>
+            ) : progress.starter_milestone.is_unlocked ? (
+              <Button onPress={handleClaimStarter} hasPermission={!claimingStarter}>
+                <LinearGradient colors={['#FFBE57', '#F18B32']} style={styles.claimButton}>
+                  <FontAwesomeIcon icon={faStar} size={18} color="white" />
+                  <Text style={styles.claimButtonText}>{claimingStarter ? 'Claiming...' : 'Claim Trip Prep'}</Text>
+                </LinearGradient>
+              </Button>
+            ) : null}
+          </View>
+        )}
+
+        {!!selectedSetData.recent_gifts?.length && <View style={{ marginHorizontal: 16,
+          marginBottom: 14, borderRadius: 16, borderWidth: 2, borderColor: '#FFCF5D',
+          backgroundColor: '#0A5D9A', padding: 14 }}>
+          <Text style={{ color: '#FFE08A', fontFamily: 'Shark', fontSize: 17 }}>GIFTS FROM YOUR CREW</Text>
+          <Text style={{ color: '#DDF3FF', fontSize: 12, marginTop: 3 }}>
+            A friend helped fill this book. Map discovery remains yours to earn.
+          </Text>
+          {selectedSetData.recent_gifts.slice(0, 3).map(gift => <View key={gift.id}
+            style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10,
+              padding: 8, borderRadius: 10, backgroundColor: '#DDF4FF' }}>
+            <Image source={prepItemImage(gift.variant_slug ?? '')
+              || getChurroImage(gift.variant_slug ?? '')
+              || (items.find(item => item.id === gift.prep_item_id)?.icon_url
+                ? { uri: items.find(item => item.id === gift.prep_item_id)!.icon_url! }
+                : null)
+              || require('../../assets/images/screens/player/gift.png')}
+              style={{ width: 36, height: 36, marginRight: 9 }} contentFit="contain" />
+            <Text style={{ flex: 1, color: '#19496E', fontFamily: 'Knockout', fontSize: 14 }}>
+              {gift.sender_name} shared {gift.item_name}
+            </Text>
+          </View>)}
+        </View>}
+
+        {progress.starter_milestone?.is_unlocked && !progress.is_complete && (
+          <View style={styles.chaseCard}>
+            <Text style={styles.chaseKicker}>THE NEXT COLLECTOR CHASE</Text>
+            <Text style={styles.chaseTitle}>{missingItems.length} VARIANTS TO THE FULL SET</Text>
+            <Text style={styles.chaseBody}>
+              {set.is_in_rotation === false
+                ? `This book is off the map. Use ${progress.exchange_cost} saved spare copies to fill a missing slot.`
+                : `Find new variants on the home map or use ${progress.exchange_cost} spare copies to fill a missing slot.`}
+              {sparesNeeded === 0
+                ? ' Your exchange is ready.'
+                : set.is_in_rotation === false
+                  ? ` You need ${sparesNeeded} more spare ${sparesNeeded === 1 ? 'copy' : 'copies'} if this hunt returns.`
+                  : ` ${sparesNeeded} more spare ${sparesNeeded === 1 ? 'copy' : 'copies'} until your next exchange.`}
+            </Text>
+            {discovery && <Text style={styles.chaseDiscovery}>
+              MAP DISCOVERIES {discovery.found_in_world}/{progress.total} · LEGENDARY {discovery.legendary_found_in_world}/{discovery.legendary_total}
+            </Text>}
+            <Text style={styles.chaseNote}>An exchange fills your book; finding it on the map remains a separate collector feat.</Text>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setShowMissingChoices(value => !value)}
+              style={styles.chaseButton}>
+              <Text style={styles.chaseButtonText}>{showMissingChoices ? 'HIDE MISSING VARIANTS  ↑'
+                : sparesNeeded === 0 ? 'CHOOSE A MISSING VARIANT  ↓' : 'VIEW MISSING VARIANTS  ↓'}</Text>
+            </TouchableOpacity>
+            {showMissingChoices && missingItems.map((item: PrepItemSetItem) => (
+              <TouchableOpacity key={item.id} accessibilityRole="button"
+                accessibilityLabel={`View missing ${item.name}, ${item.rarity_label}`}
+                onPress={() => setSelectedItem(item)} style={styles.missingRow}>
+                <Image source={prepItemImage(item.variant_slug) || getChurroImage(item.variant_slug)
+                  || require('../../assets/images/screens/player/gift.png')}
+                  style={styles.missingImage} contentFit="contain" />
+                <View style={styles.missingCopy}>
+                  <Text style={styles.missingName}>{item.name}</Text>
+                  <Text style={styles.missingRarity}>{item.rarity_label}</Text>
+                </View>
+                <Text style={styles.missingArrow}>→</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {/* Completion Rewards */}
         <View style={styles.rewardsSection}>
+          {(!progress.starter_milestone?.is_unlocked || progress.is_complete) && discovery && <Text style={styles.rewardLabel}>
+            Found on map {discovery.found_in_world}/{progress.total} · Legendary finds {discovery.legendary_found_in_world}/{discovery.legendary_total}
+          </Text>}
+          {!progress.starter_milestone?.is_unlocked && !progress.is_complete && <Text style={styles.rewardLabel}>
+            {progress.spare_count} spare copies · Exchange {progress.exchange_cost} for any missing item
+          </Text>}
           <View style={styles.rewardsSectionHeader}>
             <FontAwesomeIcon icon={faTrophy} size={16} color="#FFD700" />
             <Text style={styles.sectionTitle}>Completion Rewards</Text>
@@ -784,7 +1235,7 @@ export default function SetCollectionScreen() {
           </View>
 
           {/* Claim Button */}
-          {progress.is_complete && (
+          {progress.is_complete && !progress.rewards_claimed && (
             <Button
               onPress={handleClaimRewards}
               hasPermission={!claiming}
@@ -800,6 +1251,17 @@ export default function SetCollectionScreen() {
                 />
                 <Text style={styles.claimButtonText}>
                   {claiming ? 'Claiming...' : 'Claim Rewards!'}
+                </Text>
+              </LinearGradient>
+            </Button>
+          )}
+          {progress.rewards_claimed && completion_rewards.title && (
+              <Button onPress={() => handleEquipTitle('complete')} hasPermission={!equippingTitle}>
+              <LinearGradient colors={['#254A72', '#142C4B']} style={styles.claimButton}>
+                <FontAwesomeIcon icon={faTrophy} size={17} color="white" />
+                <Text style={styles.claimButtonText}>
+                  {equippingTitle ? 'Saving...' : player?.title === completion_rewards.title
+                    ? 'Remove Profile Title' : 'Wear Profile Title'}
                 </Text>
               </LinearGradient>
             </Button>
@@ -897,11 +1359,26 @@ export default function SetCollectionScreen() {
               />
             }
           >
+            <View style={styles.listHero}>
+              <View style={styles.listHeroCopy}>
+                <Text style={styles.listHeroEyebrow}>BUILD YOUR NEXT PARK DAY</Text>
+                <Text style={styles.listHeroTitle}>HUNT FROM{'\n'}HOME</Text>
+                <Text style={styles.listHeroSub}>Find sets, earn Tickets and Energy, and style your shark.</Text>
+              </View>
+              <Image source={require('../../assets/images/screens/pin-collections/shark.png')}
+                style={styles.listHeroShark} contentFit="contain" accessibilityLabel="Theme Park Shark mascot" />
+            </View>
+            <Text style={styles.listSectionTitle}>HUNTING NOW</Text>
             {loading ? (
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>
                   Loading collections...
                 </Text>
+              </View>
+            ) : setsError ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>Could not load collections.</Text>
+                <TouchableOpacity onPress={loadSets}><Text style={styles.emptyText}>Retry</Text></TouchableOpacity>
               </View>
             ) : sets.length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -916,28 +1393,54 @@ export default function SetCollectionScreen() {
               </View>
             ) : (
               <>
-                {sets.map(renderSetCard)}
-                {/* Coming Soon placeholders */}
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <View key={`coming-${i}`} style={styles.comingSoonCard}>
-                    <View style={styles.comingSoonInner}>
-                      <View style={styles.comingSoonIconContainer}>
-                        <FontAwesomeIcon icon={faLock} size={20} color="rgba(0,0,0,0.12)" />
-                      </View>
-                      <View style={styles.setInfo}>
-                        <Text style={styles.comingSoonTitle}>A New Collection Awaits</Text>
-                        <Text style={styles.comingSoonSubtitle}>Coming Soon</Text>
-                        {/* Placeholder progress bar */}
-                        <View style={[styles.progressContainer, { marginTop: 10 }]}>
-                          <View style={styles.progressBar}>
-                            <View style={[styles.progressFill, { width: '0%', backgroundColor: '#cbd5e1' }]} />
-                          </View>
-                          <Text style={styles.progressText}>? / ?</Text>
-                        </View>
-                      </View>
+                {currentSets.length ? currentSets.map(renderSetCard)
+                  : <Text style={styles.noCurrentHunts}>No collection is on the map right now. Your saved books are below.</Text>}
+                {upcomingSets.length > 0 && <>
+                  <Text style={styles.listSectionTitle}>COMING TO THE MAP</Text>
+                  {upcomingSets.map(set => <TouchableOpacity key={`upcoming-${set.id}`}
+                    style={styles.upcomingCard} disabled={set.collected_count === 0}
+                    accessibilityRole={set.collected_count > 0 ? 'button' : undefined}
+                    activeOpacity={0.85} onPress={() => openSet(set.slug)}>
+                    <View style={styles.upcomingIconWrap}>
+                      <Image source={set.icon_url ? { uri: set.icon_url }
+                        : set.slug === 'night_lights' ? prepItemImage('flashlight_40')!
+                        : set.slug === 'rain_parade' ? prepItemImage('umbrella_40')!
+                        : set.slug === 'camera_crew' ? prepItemImage('camera_40')!
+                        : set.slug === 'churro_collection' ? CHURRO_IMAGES['churro_01']
+                        : set.slug === 'pretzel_collection' ? prepItemImage('pretzel_01')!
+                        : require('../../assets/images/screens/player/gift.png')}
+                        style={styles.upcomingIcon} contentFit="contain" />
                     </View>
+                    <View style={styles.upcomingCopy}>
+                      <Text style={styles.upcomingEyebrow}>NEXT FEATURED HUNT</Text>
+                      <Text style={styles.upcomingTitle}>{set.name}</Text>
+                      <Text style={styles.upcomingDate}>{set.starts_at
+                        ? `OPENS ${new Date(set.starts_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric' }).toUpperCase()}`
+                        : 'OPENING SOON'}</Text>
+                      <Text style={styles.upcomingBody} numberOfLines={2}>{set.description}</Text>
+                      {set.collected_count > 0 && <Text style={styles.upcomingSaved}>
+                        {set.collected_count}/{set.total_items} SAVED · VIEW YOUR BOOK →
+                      </Text>}
+                    </View>
+                  </TouchableOpacity>)}
+                </>}
+                {archivedSets.length > 0 && <>
+                  <Text style={styles.listSectionTitle}>YOUR COLLECTOR ARCHIVE</Text>
+                  <Text style={styles.archiveListHint}>Books you started stay with your shark after a hunt rotates out.</Text>
+                  {archivedSets.map(renderSetCard)}
+                </>}
+                {currentSets.length > 0 && <TouchableOpacity accessibilityRole="button" activeOpacity={0.85}
+                  onPress={() => RootNavigation.navigate('Explore')}
+                  style={styles.mapHuntCard}>
+                  <Image source={require('../../assets/images/coingold.png')}
+                    style={styles.mapHuntCoin} contentFit="contain" />
+                  <View style={styles.mapHuntCopy}>
+                    <Text style={styles.mapHuntKicker}>YOUR NEXT MOVE</Text>
+                    <Text style={styles.mapHuntTitle}>FIND ITEMS ON THE MAP</Text>
+                    <Text style={styles.mapHuntBody}>Every pickup builds your park-day resources. New variants fill your active books.</Text>
+                    <Text style={styles.mapHuntAction}>OPEN HOME MAP  →</Text>
                   </View>
-                ))}
+                </TouchableOpacity>}
               </>
             )}
           </ScrollView>
@@ -970,15 +1473,34 @@ export default function SetCollectionScreen() {
         visible={!!selectedItem}
         transparent
         animationType="fade"
-        onRequestClose={() => setSelectedItem(null)}
+        onRequestClose={() => giftItem ? setGiftItem(null) : setSelectedItem(null)}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setSelectedItem(null)}
+          onPress={() => { setGiftItem(null); setSelectedItem(null); }}
         >
-          <View style={styles.modalContent}>
-            {selectedItem && (
+          <View style={[styles.modalContent, giftItem && {
+            width: '91%', maxWidth: 400, padding: 16,
+            backgroundColor: '#E9F7FF', borderWidth: 3, borderColor: '#FFFFFF',
+          }]}>
+            {giftItem ? <GiftPrepVariantPanel item={giftItem}
+              imageSource={prepItemImage(giftItem.variant_slug)
+                || getChurroImage(giftItem.variant_slug)
+                || (giftItem.icon_url ? { uri: giftItem.icon_url }
+                  : require('../../assets/images/screens/player/gift.png'))}
+              onBack={() => setGiftItem(null)}
+              onClose={() => { setGiftItem(null); setSelectedItem(null); }}
+              onSent={handleGiftSent}
+              previewEligibility={previewSets && process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW === '1'
+                ? { prep_item_id: giftItem.id, spare_copies: Math.max(0, giftItem.quantity_collected - 1),
+                  remaining_24h: 3, eligible_friends: [
+                    { id: 101, screen_name: 'WAVE RIDER' },
+                    { id: 102, screen_name: 'SHARK SCOUT' },
+                    { id: 103, screen_name: 'CHURRO FAN' },
+                  ] } : undefined}
+              onFindFriends={() => { setGiftItem(null); setSelectedItem(null);
+                RootNavigation.navigate('Friends'); }} /> : selectedItem && (
               <>
                 {/* Rarity glow ring */}
                 <View
@@ -1001,9 +1523,8 @@ export default function SetCollectionScreen() {
                   {/* Item Image */}
                   <View style={styles.modalImageContainer}>
                     {(() => {
-                      const localImage = selectedItem.variant_slug
-                        ? getChurroImage(selectedItem.variant_slug)
-                        : null;
+                      const localImage = prepItemImage(selectedItem.variant_slug)
+                        || (selectedItem.variant_slug ? getChurroImage(selectedItem.variant_slug) : null);
                       if (localImage) {
                         return (
                           <Image
@@ -1102,12 +1623,34 @@ export default function SetCollectionScreen() {
                   )}
                 </View>
 
+                {selectedItem.is_collected && selectedItem.found_in_world !== undefined && (
+                  <Text style={styles.modalHint}>
+                    {selectedItem.found_in_world
+                      ? selectedItem.rarity === 5
+                        ? 'Found on the map. This legendary find counts toward the Wild Legend stamp.'
+                        : 'Found on the map.'
+                      : 'Added to your collection; still waiting to be found on the map.'}
+                  </Text>
+                )}
+
                 {/* Description */}
                 {selectedItem.description && (
                   <Text style={styles.modalDescription}>
                     {selectedItem.description}
                   </Text>
                 )}
+
+                {selectedItem.quantity_collected > 1 && (!previewSets || process.env.EXPO_PUBLIC_CREW_GIFT_PREVIEW === '1') && <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`Share a spare ${selectedItem.name} with a friend`}
+                  onPress={() => setGiftItem(selectedItem)}
+                  style={{ alignSelf: 'stretch', marginTop: 7, borderRadius: 13,
+                    borderWidth: 2, borderColor: '#FFD56A', backgroundColor: '#0B72BB',
+                    paddingVertical: 11, paddingHorizontal: 12, alignItems: 'center' }}>
+                  <Text style={{ color: '#FFFFFF', fontFamily: 'Shark', fontSize: 15 }}>
+                    SHARE A SPARE WITH A FRIEND
+                  </Text>
+                </TouchableOpacity>}
 
                 {/* Hint if not collected */}
                 {!selectedItem.is_collected &&
@@ -1116,6 +1659,25 @@ export default function SetCollectionScreen() {
                       {(selectedItem as any).hint}
                     </Text>
                   )}
+
+                {!selectedItem.is_collected && selectedSetData && (
+                  <TouchableOpacity
+                    style={[
+                      styles.modalCloseButton,
+                      selectedSetData.progress.spare_count < selectedSetData.progress.exchange_cost && styles.modalDisabledButton,
+                    ]}
+                    disabled={exchanging || selectedSetData.progress.spare_count < selectedSetData.progress.exchange_cost}
+                    onPress={handleExchange}
+                  >
+                    <Text style={[styles.modalCloseText,
+                      selectedSetData.progress.spare_count < selectedSetData.progress.exchange_cost && styles.modalDisabledText]}>
+                      {exchanging ? 'Exchanging...' : selectedSetData.progress.spare_count < selectedSetData.progress.exchange_cost
+                        ? `Need ${selectedSetData.progress.exchange_cost - selectedSetData.progress.spare_count} more ${selectedSetData.progress.exchange_cost - selectedSetData.progress.spare_count === 1 ? 'spare copy' : 'spare copies'}`
+                        : `Exchange ${selectedSetData.progress.exchange_cost} spare copies`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {actionError && <Text style={styles.modalHint}>{actionError}</Text>}
 
                 {/* Close button */}
                 <TouchableOpacity
@@ -1136,7 +1698,7 @@ export default function SetCollectionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4f8',
+    backgroundColor: '#0a76c8',
   },
   // Set List
   setList: {
@@ -1146,34 +1708,76 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  listHero: { minHeight: 156, flexDirection: 'row', overflow: 'hidden',
+    borderRadius: 18, borderWidth: 3, borderColor: '#fff', backgroundColor: '#07569e',
+    paddingLeft: 17, paddingVertical: 14,
+    shadowColor: '#003c7a', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 5 },
+    shadowRadius: 5, elevation: 5 },
+  listHeroCopy: { flex: 1, zIndex: 1 },
+  listHeroEyebrow: { color: '#bfeaff', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
+  listHeroTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 29, lineHeight: 33, marginTop: 5,
+    textShadowColor: '#003c7a', textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1 },
+  listHeroSub: { color: '#e5f7ff', fontSize: 12, lineHeight: 16, marginTop: 6, maxWidth: 215 },
+  listHeroShark: { position: 'absolute', width: 132, height: 142, right: -14, bottom: -4 },
+  listSectionTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 20,
+    textShadowColor: '#003c7a', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
+  archiveListHint: { color: '#e6f7ff', fontFamily: 'Knockout', fontSize: 14,
+    marginTop: -5, marginBottom: 2 },
+  upcomingCard: { flexDirection: 'row', alignItems: 'center', borderWidth: 3,
+    borderColor: '#fff', borderRadius: 18, backgroundColor: '#073f7f', padding: 14,
+    shadowColor: '#00305f', shadowOpacity: 0.35, shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 5, elevation: 5 },
+  upcomingIconWrap: { width: 73, height: 73, borderRadius: 18, borderWidth: 2,
+    borderColor: '#ffcf4c', backgroundColor: '#0c66b5', alignItems: 'center',
+    justifyContent: 'center', marginRight: 13 },
+  upcomingIcon: { width: 54, height: 54 },
+  upcomingCopy: { flex: 1 },
+  upcomingEyebrow: { color: '#ffcf4c', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8 },
+  upcomingTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 19, marginTop: 2 },
+  upcomingDate: { color: '#ffcf4c', fontFamily: 'Knockout', fontSize: 14, marginTop: 2 },
+  upcomingBody: { color: '#d9f1ff', fontSize: 12, lineHeight: 16, marginTop: 4 },
+  upcomingSaved: { color: '#ffcf4c', fontFamily: 'Knockout', fontSize: 12, marginTop: 5 },
+  noCurrentHunts: { color: '#e6f7ff', fontFamily: 'Knockout', fontSize: 15,
+    paddingHorizontal: 10, paddingVertical: 9 },
+  mapHuntCard: { flexDirection: 'row', alignItems: 'center', marginTop: 5,
+    borderWidth: 3, borderColor: '#fff', borderRadius: 18, backgroundColor: '#ffca30',
+    padding: 14, shadowColor: '#003c7a', shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 4 }, shadowRadius: 4, elevation: 4 },
+  mapHuntCoin: { width: 64, height: 64, marginRight: 12 },
+  mapHuntCopy: { flex: 1 },
+  mapHuntKicker: { color: '#07569e', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
+  mapHuntTitle: { color: '#093d77', fontFamily: 'Shark', fontSize: 17, marginTop: 2 },
+  mapHuntBody: { color: '#244d70', fontSize: 12, lineHeight: 16, marginTop: 3 },
+  mapHuntAction: { color: '#005da4', fontFamily: 'Knockout', fontSize: 16, marginTop: 6 },
   setCard: {
     borderRadius: 18,
     overflow: 'hidden',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   setCardInner: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
     paddingLeft: 18,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: '#e1f6ff',
     borderRadius: 18,
-    borderWidth: 0,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    borderWidth: 3,
+    borderColor: '#fff',
+    shadowColor: '#003c7a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
   setIconContainer: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
-    borderWidth: 1,
+    borderWidth: 2,
+    backgroundColor: '#fff',
   },
   setIcon: {
     width: 36,
@@ -1182,16 +1786,20 @@ const styles = StyleSheet.create({
   setInfo: {
     flex: 1,
   },
+  setEyebrow: { color: '#0875c9', fontFamily: 'Knockout', fontSize: 11,
+    letterSpacing: 0.7, marginBottom: 2 },
+  archivedLabel: { color: '#07569e', fontFamily: 'Knockout', fontSize: 12,
+    marginTop: 5, letterSpacing: 0.4 },
   setName: {
     fontFamily: 'Shark',
     fontSize: 18,
-    color: '#1a1a2e',
+    color: '#093d77',
     textTransform: 'uppercase',
   },
   setDescription: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: '#64748b',
+    color: '#376888',
     marginTop: 2,
   },
   progressContainer: {
@@ -1202,7 +1810,7 @@ const styles = StyleSheet.create({
   progressBar: {
     flex: 1,
     height: 8,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: '#fff',
     borderRadius: 4,
     marginRight: 10,
     overflow: 'hidden',
@@ -1214,7 +1822,7 @@ const styles = StyleSheet.create({
   progressText: {
     fontFamily: 'Knockout',
     fontSize: 13,
-    color: '#64748b',
+    color: '#075d9f',
     minWidth: 40,
     textAlign: 'right',
   },
@@ -1286,7 +1894,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#f0f4f8',
+    backgroundColor: '#89d7fc',
   },
   detailScroll: {
     flex: 1,
@@ -1297,9 +1905,9 @@ const styles = StyleSheet.create({
   detailHeader: {
     padding: 20,
     paddingTop: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: '#07569e',
+    borderBottomWidth: 4,
+    borderBottomColor: '#fff',
   },
   headerContent: {
     flexDirection: 'row',
@@ -1312,13 +1920,13 @@ const styles = StyleSheet.create({
   detailTitle: {
     fontFamily: 'Shark',
     fontSize: 26,
-    color: '#1a1a2e',
+    color: '#fff',
     textTransform: 'uppercase',
   },
   detailDescription: {
     fontFamily: 'Knockout',
     fontSize: 13,
-    color: '#64748b',
+    color: '#e1f6ff',
     marginTop: 4,
   },
   timeGateInfo: {
@@ -1330,7 +1938,7 @@ const styles = StyleSheet.create({
   timeGateText: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: '#64748b',
+    color: '#e1f6ff',
   },
   activeIndicator: {
     flexDirection: 'row',
@@ -1346,12 +1954,12 @@ const styles = StyleSheet.create({
   timeGateActive: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: '#22c55e',
+    color: '#ffdf54',
   },
   timeGateInactive: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: '#94a3b8',
+    color: '#d2eaff',
   },
   detailProgress: {
     marginTop: 16,
@@ -1360,7 +1968,7 @@ const styles = StyleSheet.create({
   detailProgressBar: {
     width: '100%',
     height: 10,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: '#c2eaff',
     borderRadius: 5,
     overflow: 'hidden',
   },
@@ -1371,22 +1979,62 @@ const styles = StyleSheet.create({
   progressCount: {
     fontFamily: 'Knockout',
     fontSize: 14,
-    color: '#64748b',
+    color: '#fff',
     marginTop: 8,
   },
+  focusRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginTop: 14, padding: 10, borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#87d9ff', backgroundColor: '#0b67ad',
+  },
+  archivePanel: { marginTop: 14, padding: 12, borderRadius: 14,
+    borderWidth: 2, borderColor: '#ffdb65', backgroundColor: '#0b67ad' },
+  archiveKicker: { color: '#ffdb65', fontFamily: 'Shark', fontSize: 12 },
+  archiveBody: { color: '#e2f5ff', fontFamily: 'Knockout', fontSize: 13,
+    lineHeight: 17, marginTop: 5 },
+  focusCopy: { flex: 1, minWidth: 0 },
+  focusKicker: { fontFamily: 'Shark', fontSize: 12, color: '#fff' },
+  focusHint: { fontFamily: 'Knockout', fontSize: 11, color: '#d6f2ff', marginTop: 2 },
+  focusButton: {
+    minWidth: 92, minHeight: 38, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 9, borderRadius: 10, borderWidth: 2, borderColor: '#fff',
+    backgroundColor: '#ffca30',
+  },
+  focusButtonText: { fontFamily: 'Knockout', fontSize: 12, color: '#093d77', textAlign: 'center' },
 
   // Rewards Section
   rewardsSection: {
     padding: 16,
-    backgroundColor: 'white',
+    backgroundColor: '#fff9e6',
     margin: 16,
     borderRadius: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#003c7a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
     elevation: 3,
   },
+  chaseCard: { marginHorizontal: 16, marginBottom: 4, padding: 16, borderRadius: 18,
+    borderWidth: 3, borderColor: '#fff', backgroundColor: '#0875c9',
+    shadowColor: '#003c7a', shadowOpacity: 0.2, shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 4, elevation: 3 },
+  chaseKicker: { color: '#ffdf54', fontFamily: 'Knockout', fontSize: 13, letterSpacing: 0.8 },
+  chaseTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 20, marginTop: 5 },
+  chaseBody: { color: '#e4f5ff', fontSize: 13, lineHeight: 19, marginTop: 8 },
+  chaseDiscovery: { color: '#ffdf54', fontFamily: 'Knockout', fontSize: 14, marginTop: 12 },
+  chaseNote: { color: '#d6eeff', fontSize: 11, lineHeight: 16, marginTop: 6 },
+  chaseButton: { marginTop: 14, padding: 12, borderRadius: 12, borderWidth: 2,
+    borderColor: '#fff', backgroundColor: '#ffca30', alignItems: 'center' },
+  chaseButtonText: { color: '#093d77', fontFamily: 'Knockout', fontSize: 17 },
+  missingRow: { flexDirection: 'row', alignItems: 'center', minHeight: 56, marginTop: 8,
+    paddingHorizontal: 9, borderRadius: 11, backgroundColor: '#e7f8ff', borderWidth: 1, borderColor: '#fff' },
+  missingImage: { width: 43, height: 43, marginRight: 8 },
+  missingCopy: { flex: 1 },
+  missingName: { color: '#093d77', fontFamily: 'Knockout', fontSize: 15 },
+  missingRarity: { color: '#376888', fontSize: 11 },
+  missingArrow: { color: '#0875c9', fontSize: 21, fontWeight: '800' },
   rewardsSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1396,7 +2044,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: 'Shark',
     fontSize: 16,
-    color: '#1a1a2e',
+    color: '#093d77',
     textTransform: 'uppercase',
   },
   rewardsGrid: {
@@ -1432,6 +2080,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 2,
   },
+  tripPrepExplanation: { color: '#315674', fontSize: 13, lineHeight: 18,
+    marginTop: 7, marginBottom: 12 },
   claimButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1476,7 +2126,7 @@ const styles = StyleSheet.create({
   rarityCount: {
     fontFamily: 'Knockout',
     fontSize: 14,
-    color: '#94a3b8',
+    color: '#093d77',
   },
 
   // Collection Grid
@@ -1611,15 +2261,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalContent: {
-    backgroundColor: 'white',
+    backgroundColor: '#075A9F',
     borderRadius: 24,
-    padding: 28,
+    padding: 22,
     alignItems: 'center',
-    width: '82%',
-    maxWidth: 340,
-    shadowColor: '#000',
+    width: '85%',
+    maxWidth: 360,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: '#002E67',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.45,
     shadowRadius: 24,
     elevation: 24,
   },
@@ -1634,7 +2286,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#E7F7FF',
   },
   modalImageContainer: {
     width: 100,
@@ -1649,10 +2301,13 @@ const styles = StyleSheet.create({
   modalItemName: {
     fontFamily: 'Shark',
     fontSize: 24,
-    color: '#1a1a2e',
+    color: '#FFFFFF',
     textTransform: 'uppercase',
     textAlign: 'center',
     marginBottom: 10,
+    textShadowColor: '#003568',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 2,
   },
   modalRarityBadge: {
     flexDirection: 'row',
@@ -1677,38 +2332,43 @@ const styles = StyleSheet.create({
   modalStatus: {
     fontFamily: 'Knockout',
     fontSize: 16,
-    color: '#64748b',
+    color: '#E5F6FF',
   },
   modalDescription: {
     fontFamily: 'Knockout',
     fontSize: 14,
-    color: '#94a3b8',
+    color: '#E5F6FF',
     textAlign: 'center',
     marginBottom: 8,
   },
   modalHint: {
     fontFamily: 'Knockout',
     fontSize: 13,
-    color: '#f59e0b',
+    color: '#FFE186',
     textAlign: 'center',
     fontStyle: 'italic',
     marginBottom: 12,
   },
   modalCloseButton: {
-    backgroundColor: config.tertiary,
+    backgroundColor: '#FFCA36',
     paddingVertical: 12,
     paddingHorizontal: 36,
     borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
     marginTop: 12,
     shadowColor: config.tertiary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },
+  modalDisabledButton: { backgroundColor: '#dbeaf2', shadowOpacity: 0,
+    borderWidth: 2, borderColor: '#a8c9d8' },
+  modalDisabledText: { color: '#315d75' },
   modalCloseText: {
     fontFamily: 'Shark',
     fontSize: 16,
-    color: 'white',
+    color: '#133E70',
     textTransform: 'uppercase',
   },
 });

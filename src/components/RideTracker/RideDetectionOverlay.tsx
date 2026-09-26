@@ -12,9 +12,10 @@
  * Does NOT show when user is on the RideBatchConfirmScreen.
  */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { colors, shadows } from '../../design-system';
+import { shadows } from '../../design-system';
 import { DetectedRide } from '../../services/RideDetectionService';
 import { removePendingDetection } from '../../services/RideDetectionService';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
@@ -28,6 +29,19 @@ const RideDetectionOverlay: React.FC = () => {
   // Track whether buttons should be disabled during animation (BUG 13 fix)
   const [buttonsDisabled, setButtonsDisabled] = useState(false);
   const currentDetectionRef = useRef<DetectedRide | null>(null);
+
+  useEffect(() => {
+    if (__DEV__ && process.env.EXPO_PUBLIC_RIDE_DETECTION_PREVIEW === '1') {
+      const previewDetection: DetectedRide = {
+        id: 'det_preview_popup', rideId: 10, rideName: 'Space Mountain',
+        rideType: 'coaster', parkId: 2, enteredAt: Date.now() - 600000,
+        exitedAt: Date.now(), dwellTimeMs: 600000, confidence: 'high',
+        isReRide: false, detectedAt: Date.now(),
+      };
+      setQueue(prev => currentDetectionRef.current?.id === previewDetection.id ||
+        prev.some(d => d.id === previewDetection.id) ? prev : [previewDetection]);
+    }
+  }, []);
 
   // Keep ref in sync for dupe checking
   useEffect(() => {
@@ -99,11 +113,16 @@ const RideDetectionOverlay: React.FC = () => {
     const detection = currentDetection;
 
     animateOut(() => {
-      removePendingDetection(detection.id);
-
+      // Keep this detection until the journal API confirms the save.
+      // Other queued detections stay in persistent storage for later review;
+      // no second popup should cover the memory form.
+      setQueue([]);
       navigate('RideLog', {
         rideId: detection.rideId,
         rideName: detection.rideName,
+        rideType: detection.rideType,
+        parkId: detection.parkId,
+        detectionId: detection.id,
         autoDetected: true,
         rodeAt: new Date(detection.enteredAt).toISOString(),
       } as any);
@@ -115,7 +134,7 @@ const RideDetectionOverlay: React.FC = () => {
     const detection = currentDetection;
 
     animateOut(() => {
-      removePendingDetection(detection.id);
+      void removePendingDetection(detection.id).catch(() => undefined);
     });
   }, [currentDetection, buttonsDisabled, animateOut]);
 
@@ -133,8 +152,9 @@ const RideDetectionOverlay: React.FC = () => {
       pointerEvents="box-none"
     >
       <Animated.View style={[styles.popup, { transform: [{ translateY: slideAnim }] }]}>
-        <Text style={styles.emoji}>🎢</Text>
-        <Text style={styles.title}>Did you just ride...</Text>
+        <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
+          style={styles.shark} contentFit="contain" />
+        <Text style={styles.title}>DID YOU JUST RIDE...</Text>
         <Text style={styles.rideName}>{currentDetection.rideName}?</Text>
         <Text style={styles.detail}>
           ~{dwellMin} min near the ride {'\u2022'} {timeStr}
@@ -144,17 +164,20 @@ const RideDetectionOverlay: React.FC = () => {
         <Pressable
           onPress={handleConfirm}
           disabled={buttonsDisabled}
+          accessibilityRole="button"
+          accessibilityLabel={`Yes, I rode ${currentDetection.rideName}`}
           style={({ pressed }) => [
             styles.confirmBtn,
             (pressed || buttonsDisabled) && { opacity: 0.6 },
           ]}
         >
-          <Text style={styles.confirmBtnText}>🦈 Yes! Log it</Text>
+          <Text style={styles.confirmBtnText}>Yes, Add My Ride</Text>
         </Pressable>
 
         <Pressable
           onPress={handleDismiss}
           disabled={buttonsDisabled}
+          accessibilityRole="button"
           style={styles.dismissBtn}
           hitSlop={12}
         >
@@ -183,37 +206,38 @@ const styles = StyleSheet.create({
     elevation: 9999,
   },
   popup: {
-    backgroundColor: colors.bgMedium,
+    backgroundColor: '#F4FBFF',
     borderRadius: 20,
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
     ...shadows.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(0,165,245,0.3)',
+    borderWidth: 2,
+    borderColor: '#84CAEE',
   },
-  emoji: { fontSize: 48, marginBottom: 8 },
+  shark: { width: 112, height: 112, marginBottom: 2 },
   title: {
-    color: colors.textSecondary,
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#126BAB',
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
     marginBottom: 4,
   },
   rideName: {
-    color: colors.textPrimary,
-    fontSize: 24,
+    color: '#0B4B83',
+    fontSize: 27,
     fontWeight: '800',
-    fontFamily: 'Knockout',
+    fontFamily: 'Shark',
     marginBottom: 6,
     textAlign: 'center',
   },
   detail: {
-    color: colors.textMuted,
+    color: '#315C7C',
     fontSize: 13,
     marginBottom: 16,
     textAlign: 'center',
   },
   confirmBtn: {
-    backgroundColor: colors.secondary,
+    backgroundColor: '#F6C847',
     borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 40,
@@ -222,22 +246,22 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   confirmBtnText: {
-    color: '#fff',
+    color: '#174064',
     fontSize: 17,
     fontWeight: '800',
-    fontFamily: 'Knockout',
+    fontFamily: 'Shark',
   },
   dismissBtn: {
     marginTop: 12,
     padding: 8,
   },
   dismissBtnText: {
-    color: colors.textMuted,
+    color: '#315C7C',
     fontSize: 14,
     fontWeight: '600',
   },
   queueHint: {
-    color: colors.tertiary,
+    color: '#126BAB',
     fontSize: 12,
     fontWeight: '600',
     marginTop: 8,

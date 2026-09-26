@@ -1,11 +1,11 @@
-import { ReactElement } from 'react';
+import { ReactNode } from 'react';
 import { View } from 'react-native';
 
 export default function TopbarColumn({
   children,
   stretch = true,
 }: {
-  readonly children?: ReactElement;
+  readonly children?: ReactNode;
   readonly stretch?: boolean;
 }) {
   return (

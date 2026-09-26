@@ -4,4 +4,5 @@ export interface CurrencyType {
   readonly map_url: string;
   readonly name: string;
   readonly singular_name: string;
+  readonly color?: string;
 }

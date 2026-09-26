@@ -1,19 +1,25 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import {
   Animated,
   Dimensions,
   Easing,
+  ScrollView,
   Text,
+  TouchableOpacity,
   View,
   StyleSheet,
 } from 'react-native';
 import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Lottie from 'lottie-react-native';
 import * as Haptics from 'expo-haptics';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
+import { RideCoinLevelType } from '../models/ride-coin-level-type';
+import type { EarnedCoinEdition } from '../api/endpoints/me/task-attempts';
+import type { StampData } from '../api/endpoints/me/stamps';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -25,7 +31,15 @@ interface Props {
   xpEarned: number;
   ridePartsEarned: number;
   energyEarned: number;
-  parkCoinProgress?: boolean;
+  coinTimesCollected?: number | null;
+  earnedEdition?: EarnedCoinEdition | null;
+  earnedStamp?: Pick<StampData, 'id' | 'name' | 'rewards'> | null;
+  nextRideTicketEarned?: number;
+  coinProgress?: RideCoinLevelType | null;
+  playerEnergy?: number | null;
+  onViewCoin?: () => void;
+  onViewStampBook?: () => void;
+  onHidden?: () => void;
   onClose: () => void;
 }
 
@@ -214,9 +228,40 @@ export default function PostWinRewardsModal({
   xpEarned,
   ridePartsEarned,
   energyEarned,
-  parkCoinProgress = true,
+  coinTimesCollected,
+  earnedEdition,
+  earnedStamp,
+  nextRideTicketEarned = 0,
+  coinProgress,
+  playerEnergy,
+  onViewCoin,
+  onViewStampBook,
+  onHidden,
   onClose,
 }: Props) {
+  const insets = useSafeAreaInsets();
+  const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
+  const [coinArtFailed, setCoinArtFailed] = useState(false);
+  useEffect(() => { setCoinArtFailed(false); }, [taskCoinUrl, visible]);
+  const missingParts = coinProgress
+    ? Math.max(0, coinProgress.parts_to_next_level - (coinProgress.available_parts ?? 0)) : 0;
+  const missingEnergy = coinProgress && playerEnergy !== null && playerEnergy !== undefined
+    ? Math.max(0, coinProgress.energy_to_next_level - playerEnergy) : 0;
+  const nextGoal = coinProgress && playerEnergy !== null && playerEnergy !== undefined
+    ? coinProgress.current_level >= coinProgress.max_level
+      ? 'Max level reached. Show this coin on your profile.'
+      : missingParts === 0 && missingEnergy === 0
+        ? `Ready to upgrade to Level ${coinProgress.current_level + 1}.`
+        : `Level ${coinProgress.current_level + 1}: ${[
+          missingParts > 0 ? `${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} at this ride` : null,
+          missingEnergy > 0 ? `${missingEnergy} more Energy` : null,
+        ].filter(Boolean).join(' + ')}. ${missingParts > 0
+          ? 'Verified LinePlay time or another win here can earn Parts.'
+          : 'Home finds and park wins can earn Energy.'}`
+    : hasCoin ? 'Open your shelf to track this coin’s next level.' : null;
+  const upgradeReady = !!coinProgress && coinProgress.current_level < coinProgress.max_level &&
+    coinProgress.is_unlocked && missingParts === 0 && missingEnergy === 0 &&
+    playerEnergy !== null && playerEnergy !== undefined;
   const cardScale = useRef(new Animated.Value(0)).current;
   const heroAnim = useRef(new Animated.Value(0)).current;
   const coinSpin = useRef(new Animated.Value(0)).current;
@@ -393,10 +438,16 @@ export default function PostWinRewardsModal({
       animationIn="fadeIn"
       animationOut="fadeOut"
       isVisible={visible}
+      onModalHide={onHidden}
       onBackdropPress={onClose}
       backdropOpacity={0.92}
     >
-      <View style={styles.container}>
+      <ScrollView style={styles.scroll}
+        contentContainerStyle={[styles.container, {
+          paddingTop: Math.max(insets.top, 20) + 16,
+          paddingBottom: 16,
+        }]}
+        showsVerticalScrollIndicator={false}>
         {/* Sparkle particles floating behind everything */}
         {sparkles.map((s, i) => (
           <Sparkle key={i} delay={s.delay} x={s.x} color={s.color} />
@@ -459,7 +510,7 @@ export default function PostWinRewardsModal({
 
               {/* Rotating light rays */}
               <View style={styles.raysWrap}>
-                <LightRays color="#4cdcff" size={200} />
+                <LightRays color={earnedEdition?.color ?? '#4cdcff'} size={200} />
               </View>
 
               {/* Animated glow behind coin */}
@@ -467,6 +518,7 @@ export default function PostWinRewardsModal({
                 style={[
                   styles.heroGlow,
                   {
+                    backgroundColor: earnedEdition?.color ?? '#4cdcff',
                     opacity: coinGlow.interpolate({
                       inputRange: [0, 1],
                       outputRange: [0.15, 0.4],
@@ -507,30 +559,45 @@ export default function PostWinRewardsModal({
               >
                 {/* Ring glow border */}
                 <LinearGradient
-                  colors={['rgba(76,220,255,0.35)', 'rgba(76,220,255,0.05)', 'rgba(76,220,255,0.35)']}
+                  colors={earnedEdition
+                    ? [earnedEdition.color, 'rgba(255,255,255,0.06)', earnedEdition.color]
+                    : ['rgba(76,220,255,0.35)', 'rgba(76,220,255,0.05)', 'rgba(76,220,255,0.35)']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.coinRingGradient}
                 />
 
                 <View style={styles.heroCoinInner}>
-                  {taskCoinUrl ? (
+                  {taskCoinUrl && hasCoin && !coinArtFailed ? (
                     <Image
                       source={{ uri: taskCoinUrl }}
                       style={styles.heroCoin}
                       contentFit="contain"
+                      onError={() => setCoinArtFailed(true)}
                     />
+                  ) : hasCoin ? (
+                    <Image source={require('../../assets/images/coingold.png')}
+                      style={styles.heroCoin} contentFit="contain" />
                   ) : (
                     <View style={styles.heroCoinFallback}>
-                      <Text style={styles.heroCoinFallbackText}>?</Text>
+                      <Text style={styles.heroCoinFallbackText}>{hasCoin ? '?' : '✓'}</Text>
                     </View>
                   )}
                 </View>
               </Animated.View>
 
-              <Text style={styles.heroEyebrow}>COIN ADDED TO SHELF</Text>
-              <Text style={styles.heroTitle}>{rideName} Coin</Text>
-              <Text style={styles.heroBody}>Your park shelf just grew.</Text>
+              <Text style={styles.heroEyebrow}>{hasCoin
+                ? coinTimesCollected === 1 ? 'NEW RIDE COIN' : 'RIDE COIN RECOLLECTED'
+                : 'RIDE CHALLENGE COMPLETE'}</Text>
+              <Text style={styles.heroTitle}>{rideName}{hasCoin ? ' Coin' : ''}</Text>
+              <Text style={[styles.heroBody, earnedEdition && { color: earnedEdition.color }]}>{earnedEdition
+                ? `✦ ${earnedEdition.name} Project Edition earned · ${earnedEdition.project_title}`
+                : hasCoin
+                  ? coinTimesCollected === 1 ? 'Added to your coin shelf.' : `Collected ${coinTimesCollected} times.`
+                  : 'Your confirmed rewards are below.'}</Text>
+              {nextRideTicketEarned > 0 && (
+                <Text style={styles.nextRideTicket}>🎫 +{nextRideTicketEarned} Park Ticket · Next ride ready</Text>
+              )}
             </Animated.View>
 
             {/* ── Stat grid with glowing cards ── */}
@@ -594,7 +661,21 @@ export default function PostWinRewardsModal({
             </View>
 
             {/* ── Shelf progress pill ── */}
-            {parkCoinProgress && (
+            {earnedStamp ? (
+              <TouchableOpacity style={styles.stampUnlock} onPress={onViewStampBook}
+                disabled={!onViewStampBook} accessibilityRole="button"
+                accessibilityLabel={`${earnedStamp.name} stamp unlocked. Open Stamp Book to claim its rewards.`}>
+                <Image source={require('../../assets/images/stamps/first-ride-coin-v1.png')}
+                  style={styles.stampImage} contentFit="contain" />
+                <View style={styles.stampCopy}>
+                  <Text style={styles.stampEyebrow}>STAMP BOOK UNLOCK</Text>
+                  <Text style={styles.stampName}>{earnedStamp.name}</Text>
+                  <Text style={styles.stampReward}>
+                    {`Claim +${earnedStamp.rewards.energy} Energy and +${earnedStamp.rewards.xp} XP`}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : hasCoin && (
               <Animated.View
                 style={[
                   styles.progressPill,
@@ -618,38 +699,56 @@ export default function PostWinRewardsModal({
                   style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
                 />
                 <Text style={styles.progressEmoji}>🏆</Text>
-                <Text style={styles.progressPillText}>+1 Shelf Progress</Text>
+                <Text style={styles.progressPillText}>{coinTimesCollected === 1
+                  ? 'First Collection' : `${coinTimesCollected} Total Collections`}</Text>
               </Animated.View>
             )}
 
-            <Text style={styles.hint}>Ride Parts + Energy level up your coins.</Text>
+            {nextGoal && <Text style={styles.hint}>{nextGoal}</Text>}
 
-            {/* ── Button with delayed entrance ── */}
-            <Animated.View
-              style={{
-                transform: [
-                  {
-                    translateY: buttonAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [20, 0],
-                    }),
-                  },
-                ],
-                opacity: buttonAnim,
-              }}
-            >
-              <YellowButton text="Awesome!" onPress={onClose} />
-            </Animated.View>
           </View>
         </Animated.View>
-      </View>
+      </ScrollView>
+      {/* The earned coin's next action stays reachable on smaller phones while
+          the artwork and reward ledger can scroll above it. */}
+      <Animated.View style={[styles.footer, {
+        paddingBottom: Math.max(insets.bottom, 12) + 4,
+        transform: [{ translateY: buttonAnim.interpolate({
+          inputRange: [0, 1], outputRange: [20, 0],
+        }) }],
+        opacity: buttonAnim,
+      }]}>
+        <YellowButton text={hasCoin && onViewCoin
+          ? upgradeReady ? 'Upgrade Your Coin' : 'See Your Coin'
+          : 'Continue Park'}
+          onPress={hasCoin && onViewCoin ? onViewCoin : onClose} />
+        {hasCoin && onViewCoin && (
+          <TouchableOpacity onPress={onClose} accessibilityRole="button"
+            accessibilityLabel="Continue exploring the park" style={styles.continuePark}>
+            <Text style={styles.continueParkText}>Continue Park</Text>
+          </TouchableOpacity>
+        )}
+      </Animated.View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: { flex: 1 },
+  footer: {
+    width: (SW - 34) * 0.88,
+    alignSelf: 'center',
+    paddingTop: 8,
+  },
+  continuePark: { paddingVertical: 9, alignItems: 'center' },
+  continueParkText: {
+    color: '#D9EBF4',
+    textAlign: 'center',
+    fontFamily: 'Knockout',
+    fontSize: 14,
+  },
   container: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -671,8 +770,8 @@ const styles = StyleSheet.create({
     marginTop: '-10%',
     width: '88%',
     paddingHorizontal: 18,
-    paddingTop: 22,
-    paddingBottom: 18,
+    paddingTop: 16,
+    paddingBottom: 12,
     borderWidth: 1.5,
     borderColor: 'rgba(76,220,255,0.12)',
     overflow: 'hidden',
@@ -687,18 +786,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Knockout',
     fontSize: 15,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
     letterSpacing: 0.5,
   },
 
   /* ── Hero ── */
   heroCard: {
     borderRadius: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
     paddingHorizontal: 14,
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 9,
     borderWidth: 1,
     borderColor: 'rgba(76,220,255,0.14)',
     overflow: 'hidden',
@@ -720,22 +819,22 @@ const styles = StyleSheet.create({
     top: -20,
   },
   heroCoinRing: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   coinRingGradient: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 50,
+    borderRadius: 42,
     padding: 3,
   },
   heroCoinInner: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(76,220,255,0.06)',
@@ -743,8 +842,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(76,220,255,0.2)',
   },
   heroCoin: {
-    width: 72,
-    height: 72,
+    width: 64,
+    height: 64,
   },
   heroCoinFallback: {
     width: 70,
@@ -783,18 +882,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
   },
+  nextRideTicket: {
+    color: '#F4CD72',
+    fontFamily: 'Knockout',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
+  },
 
   /* ── Stats ── */
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: 8,
   },
   statCard: {
     width: '48%',
     borderRadius: 16,
-    paddingVertical: 14,
+    paddingVertical: 9,
     paddingHorizontal: 12,
     alignItems: 'center',
     borderWidth: 1,
@@ -810,18 +916,18 @@ const styles = StyleSheet.create({
     opacity: 0.08,
   },
   statIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 5,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
   statIcon: {
-    width: 30,
-    height: 30,
+    width: 28,
+    height: 28,
   },
   statAmount: {
     fontFamily: 'Shark',
@@ -849,7 +955,7 @@ const styles = StyleSheet.create({
 
   /* ── Progress pill ── */
   progressPill: {
-    marginTop: 14,
+    marginTop: 10,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
@@ -873,12 +979,34 @@ const styles = StyleSheet.create({
     textShadowRadius: 6,
   },
 
+  stampUnlock: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#f6c744',
+    backgroundColor: '#e7f7ff',
+  },
+  stampImage: { width: 62, height: 62 },
+  stampCopy: { flex: 1 },
+  stampEyebrow: { color: '#0871ad', fontFamily: 'Knockout', fontSize: 11,
+    letterSpacing: 0.7 },
+  stampName: { color: '#103b72', fontFamily: 'Shark', fontSize: 16 },
+  stampReward: { color: '#315e78', fontFamily: 'Knockout', fontSize: 12,
+    marginTop: 2 },
+
   hint: {
-    color: 'rgba(255,255,255,0.28)',
-    fontSize: 11,
+    color: '#C9E9F7',
+    fontFamily: 'Knockout',
+    fontSize: 14,
+    lineHeight: 19,
     textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 14,
-    fontStyle: 'italic',
+    marginTop: 6,
+    marginBottom: 6,
   },
 });

@@ -11,11 +11,13 @@ import config from '../config';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import Experience from './LeaderboardsScreen/Experience';
 import ParkCoins from './LeaderboardsScreen/ParkCoins';
+import RideStandings from './LeaderboardsScreen/RideStandings';
 
 const whooshSound = require('../../assets/sounds/whoosh.mp3');
 
 const TABS = [
   { key: 'coins', label: 'Park Coins', icon: require('../../assets/images/coingold.png') },
+  { key: 'rides', label: 'Rides', icon: require('../../assets/images/coingold.png') },
   { key: 'xp', label: 'Experience', icon: require('../../assets/images/screens/explore/xp.png') },
 ];
 
@@ -106,7 +108,7 @@ export default function LeaderboardScreen() {
 
           {/* Tab Content — remounts for fresh animations, cached data = no loading spinner */}
           <View style={{ flex: 1 }}>
-            {activeTab === 0 ? <ParkCoins /> : <Experience />}
+            {activeTab === 0 ? <ParkCoins /> : activeTab === 1 ? <RideStandings /> : <Experience />}
           </View>
         </ImageBackground>
       </View>

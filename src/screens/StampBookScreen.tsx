@@ -1,7 +1,7 @@
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faLock, faCheck } from '@fortawesome/free-solid-svg-icons';
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useContext } from 'react';
 import {
   Animated,
   Dimensions,
@@ -17,7 +17,8 @@ import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
-import { getStamps, claimStampReward, StampData as ApiStampData } from '../api/endpoints/me/stamps';
+import { claimStampReward, equipStampTitle, getStamps, StampData as ApiStampData, StampRewards } from '../api/endpoints/me/stamps';
+import { AuthContext } from '../context/AuthProvider';
 
 // ── Assets ──────────────────────────────────────────────
 const BOOK_BG = require('../../assets/images/stampbook-bg.png');
@@ -30,6 +31,9 @@ const STAMP_05 = require('../../assets/images/stamps/stamp-05.png');
 const STAMP_06 = require('../../assets/images/stamps/stamp-06.png');
 const STAMP_07 = require('../../assets/images/stamps/stamp-07.png');
 const STAMP_08 = require('../../assets/images/stamps/stamp-08.png');
+const STAMP_09 = require('../../assets/images/stamps/stamp-09.png');
+const FIRST_RIDE_COIN_STAMP = require('../../assets/images/stamps/first-ride-coin-v1.png');
+const RIDE_PASSPORT_STAMP = require('../../assets/images/stamps/ride-passport-complete-v1.png');
 
 const { width: SW } = Dimensions.get('window');
 const CARD_SIZE = (SW - 48) / 3; // 3 columns with gaps
@@ -38,7 +42,6 @@ const CARD_SIZE = (SW - 48) / 3; // 3 columns with gaps
 const GOLD = '#C5933A';
 const GOLD_LIGHT = '#DEB155';
 const INK = '#3E2712';
-const INK_FAINT = '#A89278';
 const STAMP_EARNED_COLOR = '#4CAF50';
 const STAMP_LOCKED_COLOR = '#C4B69C';
 
@@ -60,6 +63,9 @@ const IMAGE_KEY_MAP: Record<string, number> = {
   'stamp-06': STAMP_06,
   'stamp-07': STAMP_07,
   'stamp-08': STAMP_08,
+  'stamp-09': STAMP_09,
+  'first-ride-coin-v1': FIRST_RIDE_COIN_STAMP,
+  'ride-passport-complete-v1': RIDE_PASSPORT_STAMP,
 };
 
 // ── Stamp data ──────────────────────────────────────────
@@ -72,6 +78,8 @@ interface StampData {
   progress?: number;
   progressText?: string;
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+  rewardClaimed: boolean;
+  rewards: StampRewards;
 }
 
 function apiToLocal(s: ApiStampData): StampData {
@@ -79,46 +87,42 @@ function apiToLocal(s: ApiStampData): StampData {
     id: s.id,
     name: s.name,
     goal: s.goal,
-    image: s.image_key ? IMAGE_KEY_MAP[s.image_key] : undefined,
+    image: s.slug === 'first-ride-coin'
+      ? FIRST_RIDE_COIN_STAMP : s.image_key ? IMAGE_KEY_MAP[s.image_key] : undefined,
     earned: s.is_earned,
     progress: s.progress_percentage,
     progressText: s.progress_text,
     rarity: s.rarity,
+    rewardClaimed: s.reward_claimed,
+    rewards: s.rewards,
   };
 }
 
-// Placeholder stamp image — locked silhouette style
-const PLACEHOLDER_IMAGE = STAMP_01; // Reuse stamp-01 as placeholder silhouette
+function flattenStamps(groups: Record<string, ApiStampData[]>): StampData[] {
+  return Object.values(groups).flatMap((group) => group.map(apiToLocal));
+}
 
-const ALL_STAMPS: StampData[] = [
-  // Events (have real art)
-  { id: 1, name: 'Treasure Hunter', goal: 'Collect 25 prep items', image: STAMP_01, earned: false, progress: 0, progressText: '0/25', rarity: 'rare' },
-  { id: 2, name: 'Deep Dive', goal: 'Collect 50 prep items', image: STAMP_02, earned: false, progress: 0, progressText: '0/50', rarity: 'uncommon' },
-  { id: 3, name: 'Shark Scholar', goal: 'Earn 30,000 XP', image: STAMP_03, earned: false, progress: 0, progressText: '0/30k', rarity: 'uncommon' },
-  { id: 4, name: 'Captain', goal: 'Earn 10,000 coins', image: STAMP_04, earned: false, progress: 0, progressText: '0/10k', rarity: 'epic' },
-  { id: 5, name: 'Pirate King', goal: 'Complete a collection set', image: STAMP_05, earned: false, rarity: 'epic' },
-  { id: 6, name: 'Wave Rider', goal: 'Maintain a 7-day streak', image: STAMP_06, earned: false, progress: 0, progressText: '0/7', rarity: 'rare' },
-  { id: 7, name: 'Explorer', goal: 'Visit 5 different parks', image: STAMP_07, earned: false, progress: 0, progressText: '0/5', rarity: 'rare' },
-  { id: 8, name: 'Beach Day', goal: 'Add 10 friends', image: STAMP_08, earned: false, progress: 0, progressText: '0/10', rarity: 'uncommon' },
-  // Regions (placeholder art)
-  { id: 10, name: 'Magic Kingdom', goal: 'Check in at Magic Kingdom', image: STAMP_07, earned: false, rarity: 'common' },
-  { id: 11, name: 'EPCOT', goal: 'Check in at EPCOT', image: STAMP_03, earned: false, rarity: 'common' },
-  { id: 12, name: 'Hollywood Studios', goal: 'Check in at Hollywood Studios', image: STAMP_04, earned: false, rarity: 'common' },
-  { id: 13, name: 'Animal Kingdom', goal: 'Check in at Animal Kingdom', image: STAMP_02, earned: false, rarity: 'common' },
-  { id: 14, name: 'Universal Studios', goal: 'Check in at Universal Studios', image: STAMP_05, earned: false, rarity: 'uncommon' },
-  { id: 15, name: 'Islands of Adv.', goal: 'Check in at Islands of Adventure', image: STAMP_01, earned: false, rarity: 'uncommon' },
-  { id: 16, name: 'Epic Universe', goal: 'Check in at Epic Universe', image: STAMP_06, earned: false, rarity: 'rare' },
-  { id: 17, name: 'Volcano Bay', goal: 'Check in at Volcano Bay', image: STAMP_08, earned: false, rarity: 'uncommon' },
-  // Achievements (placeholder art)
-  { id: 20, name: 'First Steps', goal: 'Collect your first prep item', image: STAMP_01, earned: false, progress: 0, progressText: '0/1', rarity: 'common' },
-  { id: 21, name: 'Set Collector', goal: 'Complete any collection set', image: STAMP_05, earned: false, rarity: 'uncommon' },
-  { id: 22, name: 'Week Warrior', goal: 'Maintain a 7-day streak', image: STAMP_06, earned: false, progress: 0, progressText: '0/7', rarity: 'rare' },
-  { id: 23, name: 'Coin Master', goal: 'Earn 10,000 total coins', image: STAMP_04, earned: false, progress: 0, progressText: '0/10k', rarity: 'epic' },
-  { id: 24, name: 'Social Shark', goal: 'Add 10 friends', image: STAMP_08, earned: false, progress: 0, progressText: '0/10', rarity: 'uncommon' },
-  { id: 25, name: 'XP Machine', goal: 'Earn 30,000 total XP', image: STAMP_03, earned: false, progress: 0, progressText: '0/30k', rarity: 'rare' },
-  { id: 26, name: 'Park Hopper', goal: 'Visit 5 different parks', image: STAMP_07, earned: false, progress: 0, progressText: '0/5', rarity: 'rare' },
-  { id: 27, name: '???', goal: 'Discover this hidden stamp...', image: STAMP_02, earned: false, rarity: 'legendary' },
+const QUEUE_STAMP_PREVIEW: StampData[] = [
+  { id: -1, name: 'First Park Coin', goal: 'Collect your first park coin',
+    image: STAMP_01, earned: true, progress: 100, progressText: '1/1', rarity: 'common',
+    rewardClaimed: true, rewards: { energy: 10, tickets: 0, xp: 50, coins: 0, title: null } },
+  { id: -2, name: 'Queue Navigator', goal: 'Complete 10 verified minutes of LinePlay in one ride session',
+    image: STAMP_09, earned: true, progress: 100, progressText: '1/1', rarity: 'uncommon',
+    rewardClaimed: false, rewards: { energy: 20, tickets: 0, xp: 75, coins: 0, title: 'Queue Navigator' } },
+  { id: -3, name: 'Park Coin Artisan', goal: 'Upgrade a collected park coin',
+    image: STAMP_03, earned: false, progress: 0, progressText: '0/1', rarity: 'uncommon',
+    rewardClaimed: false, rewards: { energy: 25, tickets: 0, xp: 100, coins: 0, title: null } },
 ];
+
+function rewardText(rewards: StampRewards): string {
+  return [
+    rewards.energy > 0 && `+${rewards.energy} Energy`,
+    rewards.tickets > 0 && `+${rewards.tickets} Tickets`,
+    rewards.xp > 0 && `+${rewards.xp} XP`,
+    rewards.coins > 0 && `+${rewards.coins} Coins`,
+    rewards.title && `“${rewards.title}” title`,
+  ].filter(Boolean).join('  ·  ');
+}
 
 // ── Stamp Card ──────────────────────────────────────────
 function StampCard({ stamp, index, onPress }: { stamp: StampData; index: number; onPress: () => void }) {
@@ -190,31 +194,104 @@ function StampCard({ stamp, index, onPress }: { stamp: StampData; index: number;
 }
 
 // ── Main Screen ─────────────────────────────────────────
-let cachedApiStamps: StampData[] | null = null;
-
 export default function StampBookScreen() {
-  const [stamps, setStamps] = useState<StampData[]>(cachedApiStamps || ALL_STAMPS);
+  const previewMode = __DEV__ && process.env.EXPO_PUBLIC_STAMP_BOOK_PREVIEW === '1';
+  const { player, refreshPlayer } = useContext(AuthContext);
+  const [stamps, setStamps] = useState<StampData[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [selectedStamp, setSelectedStamp] = useState<StampData | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [claiming, setClaiming] = useState(false);
+  const [equipping, setEquipping] = useState(false);
+  const [claimMessage, setClaimMessage] = useState<string | null>(null);
+
+  const handleClaim = useCallback(async () => {
+    if (previewMode) return;
+    if (!selectedStamp || claiming || !selectedStamp.earned || selectedStamp.rewardClaimed) return;
+    const stampId = selectedStamp.id;
+    setClaiming(true);
+    setClaimMessage(null);
+    try {
+      await claimStampReward(stampId);
+      setSelectedStamp((current) => current?.id === stampId ? { ...current, rewardClaimed: true } : current);
+      setStamps((current) => current.map((stamp) => stamp.id === stampId
+        ? { ...stamp, rewardClaimed: true } : stamp));
+      setClaimMessage('Stamp rewards claimed.');
+      try {
+        await refreshPlayer();
+      } catch {
+        setClaimMessage('Rewards claimed. Your profile will refresh when you reconnect.');
+      }
+    } catch {
+      // A lost response can follow a successful claim. Read back before showing failure.
+      try {
+        const response = await getStamps();
+        const fresh = flattenStamps(response.stamps);
+        const confirmed = fresh.find((stamp) => stamp.id === stampId);
+        setStamps(fresh);
+        if (confirmed) setSelectedStamp(confirmed);
+        if (confirmed?.rewardClaimed) {
+          setClaimMessage('Rewards claimed.');
+          await refreshPlayer().catch(() => undefined);
+        } else {
+          setClaimMessage('Claim did not go through. Please try again.');
+        }
+      } catch {
+        setClaimMessage('Claim status is uncertain. Reopen your Stamp Book to check.');
+      }
+    } finally {
+      setClaiming(false);
+    }
+  }, [selectedStamp, claiming, refreshPlayer, previewMode]);
+
+  const handleEquipTitle = useCallback(async () => {
+    if (previewMode) return;
+    if (!selectedStamp?.rewardClaimed || !selectedStamp.rewards.title || equipping) return;
+    const desiredTitle = player?.title === selectedStamp.rewards.title
+      ? null : selectedStamp.rewards.title;
+    setEquipping(true);
+    setClaimMessage(null);
+    try {
+      await equipStampTitle(desiredTitle ? selectedStamp.id : null);
+      await refreshPlayer();
+      setClaimMessage(desiredTitle ? 'Title is now on your profile.' : 'Title removed from your profile.');
+    } catch {
+      try {
+        const freshPlayer = await refreshPlayer();
+        setClaimMessage((freshPlayer?.title ?? null) === desiredTitle
+          ? 'Profile title updated.' : 'Could not update your profile title. Please try again.');
+      } catch {
+        setClaimMessage('Title status is uncertain. Reopen your profile to check.');
+      }
+    } finally {
+      setEquipping(false);
+    }
+  }, [selectedStamp, equipping, player?.title, refreshPlayer, previewMode]);
 
   useFocusEffect(
     useCallback(() => {
+      let active = true;
+      if (previewMode) {
+        setStamps(QUEUE_STAMP_PREVIEW);
+        setStatus('ready');
+        return () => { active = false; };
+      }
+      setStatus('loading');
+      setStamps([]);
       (async () => {
         try {
           const resp = await getStamps();
-          const flat: StampData[] = [];
-          for (const arr of Object.values(resp.stamps)) {
-            for (const s of arr as ApiStampData[]) {
-              flat.push(apiToLocal(s));
-            }
+          const flat = flattenStamps(resp.stamps);
+          if (active) {
+            setStamps(flat);
+            setStatus('ready');
           }
-          cachedApiStamps = flat;
-          setStamps(flat);
         } catch {
-          // Fall back to mock
+          if (active) setStatus('error');
         }
       })();
-    }, [])
+      return () => { active = false; };
+    }, [reloadKey, previewMode])
   );
 
   return (
@@ -244,10 +321,29 @@ export default function StampBookScreen() {
             <Image source={STAMP_LOGO} style={styles.logo} contentFit="contain" />
           </View>
 
+          {status !== 'ready' && (
+            <View style={styles.stateWrap}>
+              <Text style={styles.stateText}>
+                {status === 'loading' ? 'Opening your Stamp Book…' : 'Your Stamp Book could not load.'}
+              </Text>
+              {status === 'error' && (
+                <Pressable onPress={() => setReloadKey((key) => key + 1)} style={styles.retryButton}>
+                  <Text style={styles.retryText}>Try again</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+          {status === 'ready' && stamps.length === 0 && (
+            <Text style={styles.stateText}>No stamps are available yet.</Text>
+          )}
+
           {/* Stamp grid */}
           <View style={styles.grid}>
             {stamps.map((stamp, i) => (
-              <StampCard key={stamp.id} stamp={stamp} index={i} onPress={() => setSelectedStamp(stamp)} />
+              <StampCard key={stamp.id} stamp={stamp} index={i} onPress={() => {
+                setClaimMessage(null);
+                setSelectedStamp(stamp);
+              }} />
             ))}
           </View>
 
@@ -288,6 +384,13 @@ export default function StampBookScreen() {
                 <Text style={modalStyles.goalText}>{selectedStamp.goal}</Text>
               </View>
 
+              {!!rewardText(selectedStamp.rewards) && (
+                <View style={modalStyles.goalBox}>
+                  <Text style={modalStyles.goalLabel}>REWARDS</Text>
+                  <Text style={modalStyles.goalText}>{rewardText(selectedStamp.rewards)}</Text>
+                </View>
+              )}
+
               {/* Progress */}
               {selectedStamp.progress !== undefined && (
                 <View style={modalStyles.progressSection}>
@@ -304,7 +407,9 @@ export default function StampBookScreen() {
               {selectedStamp.earned ? (
                 <View style={modalStyles.earnedBox}>
                   <FontAwesomeIcon icon={faCheck} size={14} color={STAMP_EARNED_COLOR} />
-                  <Text style={modalStyles.earnedText}>Earned!</Text>
+                  <Text style={modalStyles.earnedText}>
+                    {selectedStamp.rewardClaimed && rewardText(selectedStamp.rewards) ? 'Rewards claimed' : 'Earned!'}
+                  </Text>
                 </View>
               ) : (
                 <View style={modalStyles.lockedBox}>
@@ -312,6 +417,29 @@ export default function StampBookScreen() {
                   <Text style={modalStyles.lockedText}>Locked</Text>
                 </View>
               )}
+
+              {selectedStamp.earned && !selectedStamp.rewardClaimed && !!rewardText(selectedStamp.rewards) && (
+                <Pressable
+                  style={[modalStyles.claimButton, claiming && { opacity: 0.5 }]}
+                  disabled={claiming}
+                  onPress={handleClaim}
+                >
+                  <Text style={modalStyles.claimText}>{claiming ? 'Checking…' : 'Claim rewards'}</Text>
+                </Pressable>
+              )}
+              {selectedStamp.rewardClaimed && !!selectedStamp.rewards.title && (
+                <Pressable
+                  style={[modalStyles.claimButton, equipping && { opacity: 0.5 }]}
+                  disabled={equipping}
+                  onPress={handleEquipTitle}
+                >
+                  <Text style={modalStyles.claimText}>
+                    {equipping ? 'Saving…' : player?.title === selectedStamp.rewards.title
+                      ? 'Remove profile title' : 'Wear profile title'}
+                  </Text>
+                </Pressable>
+              )}
+              {!!claimMessage && <Text style={modalStyles.claimMessage}>{claimMessage}</Text>}
 
               {/* Close hint */}
               <Text style={modalStyles.closeHint}>Tap outside to close</Text>
@@ -360,6 +488,10 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: 'center',
   },
+  stateWrap: { alignItems: 'center', paddingVertical: 28 },
+  stateText: { color: '#fff', fontFamily: 'Knockout', fontSize: 16, textAlign: 'center' },
+  retryButton: { marginTop: 12, borderRadius: 10, backgroundColor: GOLD, paddingHorizontal: 20, paddingVertical: 10 },
+  retryText: { color: INK, fontFamily: 'Knockout', fontSize: 15 },
 });
 
 const cardStyles = StyleSheet.create({
@@ -595,4 +727,7 @@ const modalStyles = StyleSheet.create({
     color: 'rgba(255,255,255,0.25)',
     marginTop: 4,
   },
+  claimButton: { backgroundColor: GOLD, borderRadius: 10, paddingHorizontal: 24, paddingVertical: 12, marginBottom: 10 },
+  claimText: { color: INK, fontFamily: 'Knockout', fontSize: 16, textAlign: 'center' },
+  claimMessage: { color: '#fff', fontFamily: 'Knockout', fontSize: 13, textAlign: 'center', marginBottom: 10 },
 });

@@ -1,4 +1,5 @@
 import api from '../../client';
+import { arenaLocation } from './arenaLocation';
 
 // Re-export getMyParkCoins
 export { getMyParkCoins, type ParkCoin } from './getMyParkCoins';
@@ -70,6 +71,8 @@ export interface GymData {
     has_placed_today: boolean;
     can_checkin: boolean;
     seconds_until_checkin: number;
+    can_defend: boolean;
+    seconds_until_defend: number;
     today_contribution: number;
     swords: number;
     can_attack: boolean;
@@ -95,12 +98,12 @@ export async function getGym(parkId: number): Promise<GymData> {
   return response.data;
 }
 
-export async function placeCoin(parkId: number, coinLevel: number): Promise<{
+export async function placeCoin(parkId: number, assetId: number): Promise<{
   success: boolean;
   message: string;
   points_added: number;
 }> {
-  const response = await api.post(`/parks/${parkId}/gym/place`, { coin_level: coinLevel });
+  const response = await api.post(`/parks/${parkId}/gym/place`, { asset_id: assetId, ...await arenaLocation() });
   return response.data;
 }
 
@@ -109,7 +112,7 @@ export async function checkinGym(parkId: number, taps: number = 0): Promise<{
   message: string;
   points_earned: number;
 }> {
-  const response = await api.post(`/parks/${parkId}/gym/checkin`, { taps });
+  const response = await api.post(`/parks/${parkId}/gym/checkin`, { taps, ...await arenaLocation() });
   return response.data;
 }
 
@@ -118,7 +121,7 @@ export async function defendGym(parkId: number, taps: number): Promise<{
   message: string;
   points_earned: number;
 }> {
-  const response = await api.post(`/parks/${parkId}/gym/defend`, { taps });
+  const response = await api.post(`/parks/${parkId}/gym/defend`, { taps, ...await arenaLocation() });
   return response.data;
 }
 
@@ -129,7 +132,7 @@ export async function attackGym(parkId: number, targetTeam: 'mouse' | 'globe' | 
   target_team: string;
   swords_remaining: number;
 }> {
-  const response = await api.post(`/parks/${parkId}/gym/attack`, { target_team: targetTeam });
+  const response = await api.post(`/parks/${parkId}/gym/attack`, { target_team: targetTeam, ...await arenaLocation() });
   return response.data;
 }
 

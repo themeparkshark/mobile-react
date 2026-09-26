@@ -1,4 +1,5 @@
 import { ResizeMode, Video } from 'expo-av';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useContext, useEffect, useRef } from 'react';
@@ -127,7 +128,7 @@ const BUBBLES = [
   { delay: 3600, x: 270, size: 7, duration: 3700 },
 ];
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen({ navigation }: NativeStackScreenProps<any>) {
   const { labels } = useCrumbs();
   const { theme } = useContext(ThemeContext);
   const { playSound } = useContext(SoundEffectContext);

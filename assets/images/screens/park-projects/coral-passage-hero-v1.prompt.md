@@ -1,0 +1,3 @@
+Built-in imagegen, September 25, 2026. References: `echo-harbor-hero.png` and `lantern-tide-hero.png` for the existing shark character and underwater game style.
+
+Prompt: Landscape 3:2 Park Project hero for The Coral Passage. Preserve the exact lavender-gray and white shark with red-and-black cap, friendly rounded face, crisp black outline, and polished 2D cel shading. Place the shark on the right swimming through a living coral reef with alternating red and blue glowing gates. Keep the left side calm dark blue for live white UI copy. Add bubbles and distant whimsical park silhouettes. No text, logos, UI, coins, churros, extra sharks, or real attraction landmarks.

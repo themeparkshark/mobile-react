@@ -1,8 +1,8 @@
-import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Marker } from 'react-native-maps';
 import dayjs from 'dayjs';
+import { useFocusEffect } from '@react-navigation/native';
 import isBetween from 'dayjs/plugin/isBetween';
 import Map from '../../components/Map';
 import { AuthContext } from '../../context/AuthProvider';
@@ -15,6 +15,14 @@ import { getMyTeam, TeamInfo } from '../../api/endpoints/gym-battle';
 import PrepItemMarker from './PrepItem';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
+import TripGoalCard from './TripGoalCard';
+import { shouldThrottleHomeRequest } from './homeRefresh';
+import { nearestHomeHuntTarget } from './homeHuntTarget';
+import HomeHuntCard from './HomeHuntCard';
+import HomeMapStatusCard from './HomeMapStatusCard';
+import HomeFocusCard from './HomeFocusCard';
+import { HOME_PREP_PICKUP_RADIUS_METERS } from './homePickupRange';
+import * as RootNavigation from '../../RootNavigation';
 
 const TEAM_COLORS: Record<string, string> = {
   mouse: '#F59E0B',
@@ -27,13 +35,16 @@ const TEAM_EMOJIS: Record<string, string> = {
   shark: '🦈',
 };
 
-const PREP_ITEM_RANGE_METERS = 28;
-
 // ── Throttle thresholds ──────────────────────────────────────────────
 const LOAD_MIN_DISTANCE_M = 15; // meters moved before re-fetching prep items
 const LOAD_MIN_INTERVAL_MS = 10_000; // minimum 10s between API calls
 const NEARBY_MIN_DISTANCE_M = 5; // meters for pickup detection
 const NEARBY_MIN_INTERVAL_MS = 3_000; // 3s between nearby checks
+// Foreground-only check so sunset or verified rain can reveal a gated find
+// while the guest is stationary; the backend still controls spawn cadence.
+const LOAD_MAX_IDLE_MS = 2 * 60_000;
+const NEARBY_MAX_IDLE_MS = 15_000;
+const ERROR_RETRY_MS = 30_000;
 
 /** Haversine distance in meters */
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -54,7 +65,7 @@ const TEAM_NAMES: Record<string, string> = {
   shark: 'Shark',
 };
 
-function TeamBadge({ team }: { team: string }) {
+function TeamBadge({ team, topOffset = 60 }: { team: string; topOffset?: number }) {
   const scale = useRef(new Animated.Value(1)).current;
   const calloutOpacity = useRef(new Animated.Value(0)).current;
   const calloutTranslateY = useRef(new Animated.Value(6)).current;
@@ -89,7 +100,7 @@ function TeamBadge({ team }: { team: string }) {
   const name = TEAM_NAMES[team] || team.charAt(0).toUpperCase() + team.slice(1);
 
   return (
-    <View style={styles.teamBadge}>
+    <View style={[styles.teamBadge, { top: topOffset }]}>
       {/* Badge */}
       <Pressable onPress={handlePress}>
         <Animated.View style={[styles.teamBadgeInner, { backgroundColor: TEAM_COLORS[team] || '#3B82F6', transform: [{ scale }] }]}>
@@ -112,17 +123,25 @@ function TeamBadge({ team }: { team: string }) {
 
 interface Props {
   onPrepItemNearby: (prepItem: PrepItemType, pivotId: number) => void;
+  refreshVersion: number;
+  homeLocationConfirmed: boolean;
 }
 
 /**
  * Home exploration view - shows prep items on map when not at a park.
  * This is the at-home gameplay experience.
  */
-export default function HomeExplore({ onPrepItemNearby }: Props) {
+export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLocationConfirmed }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [playerStats, setPlayerStats] = useState<PlayerStatsType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
+  const [huntFocus, setHuntFocus] = useState<{
+    latitude: number; longitude: number; requestId: number;
+  } | null>(null);
+  const [selectedHuntPivotId, setSelectedHuntPivotId] = useState<number | null>(null);
+  const nextHuntFocusRequest = useRef(0);
   const { location } = useContext(LocationContext);
   const { player, refreshPlayer } = useContext(AuthContext);
 
@@ -131,6 +150,13 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
   const lastFetchTime = useRef<number>(0);
   const lastNearbyLocation = useRef<{ lat: number; lng: number } | null>(null);
   const lastNearbyTime = useRef<number>(0);
+  const firstLocationLoad = useRef(true);
+  const loadInFlight = useRef(false);
+  const forceReloadAfterFlight = useRef(false);
+  const loadPrepItemsRef = useRef<(force?: boolean) => Promise<void>>(async () => {});
+  const cacheReadOnce = useRef(false);
+  const firstScreenFocus = useRef(true);
+  const screenFocused = useRef(false);
 
   /** Check whether enough distance/time has elapsed to allow a fetch */
   const shouldThrottle = (
@@ -139,15 +165,11 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
     lastLoc: React.MutableRefObject<{ lat: number; lng: number } | null>,
     lastTime: React.MutableRefObject<number>,
     minDistM: number,
-    minIntervalMs: number
+    minIntervalMs: number,
+    maxIdleMs: number
   ): boolean => {
-    const now = Date.now();
-    if (now - lastTime.current < minIntervalMs) return true;
-    if (lastLoc.current) {
-      const dist = calculateDistance(lastLoc.current.lat, lastLoc.current.lng, lat, lng);
-      if (dist < minDistM) return true;
-    }
-    return false;
+    return shouldThrottleHomeRequest({ lat, lng }, lastLoc.current, lastTime.current,
+      Date.now(), minDistM, minIntervalMs, maxIdleMs);
   };
 
   /** Record that a fetch just happened */
@@ -164,19 +186,31 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
   // Load prep items with cache + throttle
   const loadPrepItems = useCallback(
     async (force = false) => {
-      if (!location?.latitude || !location?.longitude) return;
-
-      const lat = location.latitude;
-      const lng = location.longitude;
-
-      // Throttle unless forced (e.g. pull-to-refresh)
-      if (!force && shouldThrottle(lat, lng, lastFetchLocation, lastFetchTime, LOAD_MIN_DISTANCE_M, LOAD_MIN_INTERVAL_MS)) {
+      if (!homeLocationConfirmed || !player?.id || location?.latitude == null || location?.longitude == null) return;
+      if (loadInFlight.current) {
+        if (force) forceReloadAfterFlight.current = true;
         return;
       }
 
+      const lat = location.latitude;
+      const lng = location.longitude;
+      const playerId = player.id;
+
+      // Throttle unless forced (e.g. pull-to-refresh)
+      if (!force && (loadError
+        ? Date.now() - lastFetchTime.current < ERROR_RETRY_MS
+        : shouldThrottle(lat, lng, lastFetchLocation, lastFetchTime,
+            LOAD_MIN_DISTANCE_M, LOAD_MIN_INTERVAL_MS, LOAD_MAX_IDLE_MS))) {
+        return;
+      }
+
+      loadInFlight.current = true;
+      lastFetchTime.current = Date.now();
+
       // Show cached data instantly on first load
-      if (isLoading) {
-        const cached = await getCachedPrepItems(lat, lng);
+      if (!cacheReadOnce.current) {
+        cacheReadOnce.current = true;
+        const cached = await getCachedPrepItems(lat, lng, playerId);
         if (cached) {
           setPrepItems(cached.data);
           setPlayerStats(cached.player_stats);
@@ -185,32 +219,77 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
       }
 
       try {
-        const response = await getPrepItems(lat, lng);
+        const response = await getPrepItems(lat, lng, playerId);
         setPrepItems(response.data);
         setPlayerStats(response.player_stats);
+        setLoadError(false);
         recordFetch(lat, lng, lastFetchLocation, lastFetchTime);
 
         // Also refresh player data to sync currencies
-        refreshPlayer();
+        void refreshPlayer().catch(() => undefined);
       } catch (error) {
-        // Silently handle network errors - user can pull to refresh
-        if (__DEV__) console.log('Prep items load error:', error);
+        setLoadError(true);
+        if (__DEV__) console.log('Prep items load error:', error instanceof Error ? error.message : String(error));
       } finally {
+        loadInFlight.current = false;
         setIsLoading(false);
+        if (forceReloadAfterFlight.current) {
+          forceReloadAfterFlight.current = false;
+          setTimeout(() => void loadPrepItemsRef.current(true), 0);
+        }
       }
     },
-    [location?.latitude, location?.longitude, refreshPlayer]
+    [homeLocationConfirmed, location?.latitude, location?.longitude, player?.id, refreshPlayer, loadError]
   );
+  loadPrepItemsRef.current = loadPrepItems;
+  const handlePrepItemExpire = useCallback(() => {
+    void loadPrepItemsRef.current(true);
+  }, []);
 
-  // Initial load
+  // Location changes use the distance/time throttle. Only the first location
+  // and an explicit collection refresh bypass it.
   useEffect(() => {
-    loadPrepItems(true); // force on mount
-    getMyTeam().then(setTeamInfo).catch(() => {});
+    if (!homeLocationConfirmed || location?.latitude == null || location?.longitude == null) return;
+    void loadPrepItems(firstLocationLoad.current);
+    firstLocationLoad.current = false;
   }, [loadPrepItems]);
+
+  useEffect(() => {
+    getMyTeam().then(setTeamInfo).catch(() => {});
+  }, []);
+
+  // GPS can be stationary while a spawn batch expires. Refresh only while the
+  // screen is active, and recheck once when the app returns to foreground.
+  useEffect(() => {
+    const check = () => {
+      if (screenFocused.current && AppState.currentState === 'active') void loadPrepItemsRef.current();
+    };
+    const interval = setInterval(check, 60_000);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') check();
+    });
+    return () => { clearInterval(interval); subscription.remove(); };
+  }, []);
+
+  useEffect(() => {
+    if (refreshVersion > 0) void loadPrepItems(true);
+  }, [refreshVersion]);
+
+  // Returning from Collections may change the focused set. Refresh immediately
+  // even when GPS has not moved and the current spawn batch has not expired.
+  useFocusEffect(useCallback(() => {
+    screenFocused.current = true;
+    if (firstScreenFocus.current) {
+      firstScreenFocus.current = false;
+    } else {
+      void loadPrepItemsRef.current(true);
+    }
+    return () => { screenFocused.current = false; };
+  }, []));
 
   // Check for nearby prep items (with tighter throttle for pickup detection)
   useEffect(() => {
-    if (!location?.latitude || !location?.longitude || prepItems.length === 0) {
+    if (!homeLocationConfirmed || loadError || location?.latitude == null || location?.longitude == null || prepItems.length === 0) {
       return;
     }
 
@@ -218,7 +297,8 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
     const lng = location.longitude;
 
     // Throttle nearby checks (5m / 3s)
-    if (shouldThrottle(lat, lng, lastNearbyLocation, lastNearbyTime, NEARBY_MIN_DISTANCE_M, NEARBY_MIN_INTERVAL_MS)) {
+    if (shouldThrottle(lat, lng, lastNearbyLocation, lastNearbyTime,
+      NEARBY_MIN_DISTANCE_M, NEARBY_MIN_INTERVAL_MS, NEARBY_MAX_IDLE_MS)) {
       return;
     }
 
@@ -227,41 +307,44 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
         recordFetch(lat, lng, lastNearbyLocation, lastNearbyTime);
         const nearbyItem = await getCurrentPrepItem(lat, lng);
 
-        if (nearbyItem && nearbyItem.prep_item) {
-          onPrepItemNearby(nearbyItem.prep_item, nearbyItem.pivot_id);
+        if (active && nearbyItem?.pivot_id) {
+          onPrepItemNearby(nearbyItem, nearbyItem.pivot_id);
         }
       } catch (error) {
         // Silently handle - will retry on next location update
-        if (__DEV__) console.log('Nearby check error:', error);
+        if (__DEV__ && active) console.log('Nearby check error:', error instanceof Error ? error.message : String(error));
       }
     };
 
+    let active = true;
     checkNearby();
-  }, [location?.latitude, location?.longitude, prepItems, onPrepItemNearby]);
+    return () => { active = false; };
+  }, [homeLocationConfirmed, location?.latitude, location?.longitude, prepItems, onPrepItemNearby, loadError]);
 
   // Filter to only show active items
   const activePrepItems = prepItems.filter((item) => {
     if (!item.active_from || !item.active_to) return true;
     return dayjs().isBetween(dayjs(item.active_from), dayjs(item.active_to));
   });
+  const huntTarget = nearestHomeHuntTarget(activePrepItems, location, Date.now(), selectedHuntPivotId);
 
   return (
     <View style={styles.container}>
       {/* Map with prep items - player marker is handled by Map component */}
-      <Map>
+      <Map focusCoordinate={huntFocus}>
         {/* Prep item markers */}
-        {activePrepItems.map((prepItem) => {
+        {homeLocationConfirmed && activePrepItems.map((prepItem) => {
           const isInRange =
-            !!prepItem.latitude &&
-            !!prepItem.longitude &&
-            !!location?.latitude &&
-            !!location?.longitude &&
+            prepItem.latitude != null &&
+            prepItem.longitude != null &&
+            location?.latitude != null &&
+            location?.longitude != null &&
             calculateDistance(
               location.latitude,
               location.longitude,
               prepItem.latitude,
               prepItem.longitude
-            ) <= PREP_ITEM_RANGE_METERS;
+            ) <= HOME_PREP_PICKUP_RADIUS_METERS;
 
           return (
             <Marker
@@ -270,39 +353,66 @@ export default function HomeExplore({ onPrepItemNearby }: Props) {
                 latitude: prepItem.latitude!,
                 longitude: prepItem.longitude!,
               }}
-              tracksViewChanges={isInRange}
+              tracksViewChanges={isInRange && !loadError}
               anchor={{ x: 0.5, y: 0.5 }}
               onPress={() => {
-                if (prepItem.pivot_id) {
+                if (!loadError && prepItem.pivot_id) {
+                  setSelectedHuntPivotId(prepItem.pivot_id);
+                  if (!isInRange) return;
                   onPrepItemNearby(prepItem, prepItem.pivot_id);
                 }
               }}
             >
-              <PrepItemMarker prepItem={prepItem} onExpire={loadPrepItems} inRange={isInRange} />
+              <PrepItemMarker prepItem={prepItem} onExpire={handlePrepItemExpire} inRange={isInRange && !loadError} />
             </Marker>
           );
         })}
       </Map>
 
+      {homeLocationConfirmed && !isLoading && !loadError && huntTarget && (
+        <HomeHuntCard target={huntTarget}
+          findsUntilTicket={playerStats?.ticket_guarantee_in}
+          onPress={() => {
+            const item = huntTarget.item;
+            if (huntTarget.distanceMeters <= HOME_PREP_PICKUP_RADIUS_METERS && item.pivot_id) {
+              onPrepItemNearby(item, item.pivot_id);
+            } else if (item.latitude != null && item.longitude != null) {
+              setHuntFocus({ latitude: item.latitude, longitude: item.longitude,
+                requestId: ++nextHuntFocusRequest.current });
+            }
+          }} />
+      )}
+
       {/* Loading indicator */}
-      {isLoading && (
-        <View style={styles.loadingOverlay}>
-          <Text style={styles.loadingText}>Finding nearby items...</Text>
-        </View>
+      {!homeLocationConfirmed && <HomeMapStatusCard mode="park_check" />}
+      {homeLocationConfirmed && isLoading && (
+        <HomeMapStatusCard mode="loading" />
       )}
 
       {/* Empty state */}
-      {!isLoading && activePrepItems.length === 0 && (
-        <View style={styles.emptyOverlay}>
-          <Text style={styles.emptyText}>
-            No prep items yet — check back soon!
-          </Text>
-        </View>
+      {homeLocationConfirmed && !isLoading && activePrepItems.length === 0 && (
+        <HomeMapStatusCard mode={loadError ? 'error' : 'empty'}
+          onOpenCollections={() => RootNavigation.navigate('SetCollection',
+            playerStats?.focused_prep_set?.slug ? { slug: playerStats.focused_prep_set.slug } : undefined)}
+          onRetry={() => void loadPrepItems(true)} />
       )}
+
+      {homeLocationConfirmed && !isLoading && loadError && activePrepItems.length > 0 && (
+        <HomeMapStatusCard mode="saved" onRetry={() => void loadPrepItems(true)} />
+      )}
+
+      {homeLocationConfirmed && !isLoading && !loadError && playerStats?.focused_prep_set && (
+        <HomeFocusCard set={playerStats.focused_prep_set}
+          onPress={() => RootNavigation.navigate('SetCollection', {
+            slug: playerStats.focused_prep_set!.slug,
+          })} />
+      )}
+
+      <TripGoalCard refreshVersion={refreshVersion} />
 
       {/* Team badge — always visible */}
       {teamInfo?.has_team && teamInfo.team && (
-        <TeamBadge team={teamInfo.team} />
+        <TeamBadge team={teamInfo.team} topOffset={playerStats?.focused_prep_set ? 120 : 60} />
       )}
 
       {/* Quick Access Menu - hamburger on left */}
@@ -327,35 +437,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   // Player marker moved to Map component
-  loadingOverlay: {
-    position: 'absolute',
-    bottom: 100,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: 'white',
-    fontSize: 14,
-  },
-  emptyOverlay: {
-    position: 'absolute',
-    bottom: 100,
-    left: 20,
-    right: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: 'white',
-    fontSize: 14,
-    textAlign: 'center',
-  },
   teamBadge: {
     position: 'absolute',
     top: 60,

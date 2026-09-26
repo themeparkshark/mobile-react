@@ -26,7 +26,6 @@ import {
   HOLE_COUNT,
   MAX_ACTIVE,
   PACE,
-  ROUND_SECONDS,
   SPAWN_WEIGHTS,
   UP_TIME_MS,
   type Difficulty,
@@ -61,6 +60,7 @@ export interface WhackOutcome {
 
 export interface WhackEngineOptions {
   difficulty: Difficulty;
+  roundSeconds: number;
   /** Live fever flag from the combo machine — doubles the spawn rate. */
   fever: boolean;
   /** Fired when a target is successfully whacked. */
@@ -114,7 +114,7 @@ function pickKind(rng: () => number, w: { shark: number; decoy: number; golden: 
 }
 
 export function useWhackEngine(options: WhackEngineOptions): WhackEngine {
-  const { difficulty, fever, onWhack, onMiss } = options;
+  const { difficulty, roundSeconds, fever, onWhack, onMiss } = options;
 
   const [holes, setHoles] = useState<Array<Occupant | null>>(() =>
     new Array<Occupant | null>(HOLE_COUNT).fill(null),
@@ -125,6 +125,7 @@ export function useWhackEngine(options: WhackEngineOptions): WhackEngine {
 
   const running = useRef(false);
   const startedAt = useRef(0);
+  const pausedAt = useRef<number | null>(null);
   const nextId = useRef(1);
   const rng = useRef<() => number>(mulberry32(1));
   const spawnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -153,10 +154,10 @@ export function useWhackEngine(options: WhackEngineOptions): WhackEngine {
   // --- Pace: current spawn interval eased across the round, halved in fever.
   const currentIntervalMs = useCallback((): number => {
     const elapsed = (Date.now() - startedAt.current) / 1000;
-    const frac = smoothstep(elapsed / ROUND_SECONDS);
+    const frac = smoothstep(elapsed / roundSeconds);
     const base = PACE.intervalFromMs + (PACE.intervalToMs - PACE.intervalFromMs) * frac;
     return feverRef.current ? base * PACE.feverIntervalScale : base;
-  }, []);
+  }, [roundSeconds]);
 
   // --- One spawn attempt, then re-arm for the next. ------------------------
   const scheduleNext = useCallback(() => {
@@ -273,6 +274,7 @@ export function useWhackEngine(options: WhackEngineOptions): WhackEngine {
       clearAllTimers();
       rng.current = mulberry32(seed >>> 0);
       startedAt.current = Date.now();
+      pausedAt.current = null;
       nextId.current = 1;
       running.current = true;
       setHoles(new Array<Occupant | null>(HOLE_COUNT).fill(null));
@@ -282,18 +284,30 @@ export function useWhackEngine(options: WhackEngineOptions): WhackEngine {
   );
 
   const pause = useCallback(() => {
+    if (!running.current) return;
     running.current = false;
+    pausedAt.current = Date.now();
     clearAllTimers();
+    // Retire visible targets without counting a miss. They would otherwise
+    // remain on screen after their duck timers are cancelled.
+    const empty = new Array<Occupant | null>(HOLE_COUNT).fill(null);
+    holesRef.current = empty;
+    setHoles(empty);
   }, [clearAllTimers]);
 
   const resume = useCallback(() => {
     if (running.current) return;
+    if (pausedAt.current != null) {
+      startedAt.current += Date.now() - pausedAt.current;
+      pausedAt.current = null;
+    }
     running.current = true;
     scheduleNext();
   }, [scheduleNext]);
 
   const stop = useCallback(() => {
     running.current = false;
+    pausedAt.current = null;
     clearAllTimers();
   }, [clearAllTimers]);
 

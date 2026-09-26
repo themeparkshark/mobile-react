@@ -31,6 +31,9 @@ export interface TriviaCard {
   readonly difficulty: 'easy' | 'medium' | 'hard';
   /** Per-question countdown in seconds (task mode carries a server limit). */
   readonly timeLimitSeconds: number;
+  /** Optional offline fan-fact shown after the answer has been graded. */
+  readonly fact?: string;
+  readonly source?: string;
 }
 
 /**

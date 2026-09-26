@@ -100,8 +100,11 @@ export default function RedeemCoinCodeScreen() {
                 returnKeyType="next"
                 enablesReturnKeyAutomatically
                 onSubmitEditing={async ({ nativeEvent }) => {
-                  setRedeemedCoinCode(await redeemCoinCode(nativeEvent.text));
-                  await refreshPlayer();
+                  const redeemed = await redeemCoinCode(nativeEvent.text);
+                  if (redeemed) {
+                    setRedeemedCoinCode(redeemed);
+                    await refreshPlayer();
+                  }
                 }}
               />
             )}

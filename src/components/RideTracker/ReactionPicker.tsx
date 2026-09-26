@@ -2,6 +2,7 @@ import React, { useCallback, useRef } from 'react';
 import { Animated, Pressable, View, StyleSheet } from 'react-native';
 
 const REACTIONS = ['🤯', '😂', '😴', '🤢', '🔥'];
+const REACTION_LABELS = ['Mind blown', 'Laughing', 'Sleepy', 'Queasy', 'Loved it'];
 
 interface ReactionPickerProps {
   selected: string | null;
@@ -23,7 +24,9 @@ const ReactionPicker: React.FC<ReactionPickerProps> = React.memo(({ selected, on
   return (
     <View style={styles.container}>
       {REACTIONS.map((emoji, i) => (
-        <Pressable key={emoji} onPress={() => handlePress(emoji, i)} hitSlop={6}>
+        <Pressable key={emoji} onPress={() => handlePress(emoji, i)} hitSlop={6}
+          accessibilityRole="button" accessibilityLabel={REACTION_LABELS[i]}
+          accessibilityState={{ selected: selected === emoji }}>
           <Animated.View
             style={[
               styles.pill,

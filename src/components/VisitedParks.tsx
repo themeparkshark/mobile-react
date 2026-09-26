@@ -27,12 +27,17 @@ export default function VisitedParks({
             paddingBottom: 32,
           }}
         >
-          {warnings.no_visited_parks}
+          {warnings.no_visited_parks || "You haven't visited any parks yet."}
         </Text>
       )}
       {parks.length > 0 && (
         <View>
           {parks?.map((park) => {
+            const rideCoinProgress = typeof park.ride_coins_available === 'number' &&
+              park.ride_coins_available > 0 &&
+              typeof park.ride_coin_completion_rate === 'number';
+            const progress = rideCoinProgress
+              ? park.ride_coin_completion_rate! : park.completion_rate;
             return (
               <TouchableOpacity
                 key={park.id}
@@ -73,7 +78,7 @@ export default function VisitedParks({
                   >
                     {park.name}
                   </Text>
-                  <Progress progress={park.completion_rate} />
+                  <Progress progress={progress} />
                   <Text
                     style={{
                       paddingTop: 8,
@@ -82,9 +87,9 @@ export default function VisitedParks({
                       fontSize: 16,
                     }}
                   >
-                    {vsprintf(labels.park_completion_rate, [
-                      park.completion_rate,
-                    ])}
+                    {rideCoinProgress
+                      ? `${park.ride_coins_collected ?? 0}/${park.ride_coins_available} RIDE COINS`
+                      : vsprintf(labels.park_completion_rate || '%s%% complete', [park.completion_rate])}
                   </Text>
                 </View>
               </TouchableOpacity>

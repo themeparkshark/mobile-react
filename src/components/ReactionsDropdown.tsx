@@ -23,12 +23,12 @@ export default function ReactionsDropdown({
 }) {
   const [open, setOpen] = useState<boolean>(false);
   const { reactionTypes } = useContext(ForumContext);
-  const tooltip = useRef();
+  const tooltip = useRef<Tooltip | null>(null);
 
   return (
     <View style={{ position: 'relative' }}>
       <Tooltip
-        ref={(ref) => (tooltip.current = ref)}
+        ref={(ref) => { tooltip.current = ref; }}
         actionType="press"
         width={500}
         height="auto"
@@ -59,7 +59,7 @@ export default function ReactionsDropdown({
                         await deleteReaction(activeReaction.id);
 
                         onReactionChange();
-                        tooltip.current.toggleTooltip();
+                        tooltip.current?.toggleTooltip();
                         return;
                       }
 
@@ -68,7 +68,7 @@ export default function ReactionsDropdown({
                       }
 
                       onReactionChange();
-                      tooltip.current.toggleTooltip();
+                      tooltip.current?.toggleTooltip();
                     }}
                   >
                     <Image

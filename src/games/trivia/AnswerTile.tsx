@@ -121,7 +121,7 @@ function AnswerTileImpl({ label, index, state, disabled, onPress }: AnswerTilePr
     const bg = interpolateColor(
       colorPhase.value,
       [0, 1, 2, 3],
-      [GAME_COLORS.bgPanel, GAME_COLORS.gold, GAME_COLORS.danger, GAME_COLORS.success],
+      ['#edf9ff', GAME_COLORS.gold, GAME_COLORS.danger, GAME_COLORS.success],
     );
     return {
       backgroundColor: bg,
@@ -136,7 +136,7 @@ function AnswerTileImpl({ label, index, state, disabled, onPress }: AnswerTilePr
 
   // Gold/green/red tiles use dark text for contrast; neutral uses white.
   const textStyle = useAnimatedStyle(() => ({
-    color: colorPhase.value >= 0.5 && colorPhase.value < 1.5 ? GAME_COLORS.navy : GAME_COLORS.text,
+    color: colorPhase.value < 1.5 ? '#064a80' : GAME_COLORS.text,
   }));
 
   const nonInteractive = disabled || state === 'removed' || state !== 'idle';
@@ -166,8 +166,10 @@ const styles = StyleSheet.create({
   tile: {
     borderRadius: 16,
     marginVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 2,
+    borderColor: '#9bd7f3',
+    shadowColor: '#003b70', shadowOpacity: 0.18, shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 }, elevation: 3,
     overflow: 'hidden',
   },
   press: {

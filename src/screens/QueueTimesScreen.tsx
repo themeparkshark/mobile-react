@@ -8,10 +8,12 @@ import {
   StyleSheet,
   Text,
   View,
-  StatusBar,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import Topbar, { BackButton } from '../components/Topbar';
+import TopbarColumn from '../components/Topbar/TopbarColumn';
+import TopbarText from '../components/Topbar/TopbarText';
+import Wrapper from '../components/Wrapper';
 import getWikiTimes, { WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
 import {
   CLOSED_COLOR,
@@ -21,7 +23,9 @@ import {
   WAIT_COLOR_TIERS,
 } from '../constants/parkWaitTimes';
 import { LocationContext } from '../context/LocationProvider';
-import { resolveRideContext } from '../services/lineplay/resolveRide';
+import { resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { queuePlayPolicy } from '../services/lineplay/queuePlayPolicy';
+import { compareQueueWaits, postedStandbyWait } from '../services/lineplay/queueWaitPresentation';
 
 // --- Types ---
 type SortMode = 'wait-desc' | 'wait-asc' | 'name';
@@ -36,7 +40,7 @@ function getWaitColor(minutes: number) {
 }
 
 function getBadgeInfo(entry: WikiLiveEntry) {
-  const waitTime = entry.queue?.STANDBY?.waitTime;
+  const waitTime = postedStandbyWait(entry);
   if (entry.status === 'DOWN') {
     return { text: '!', color: DOWN_COLOR, statusText: 'Temporarily Down' };
   }
@@ -47,23 +51,23 @@ function getBadgeInfo(entry: WikiLiveEntry) {
     return { text: '-', color: CLOSED_COLOR, statusText: 'Closed' };
   }
   // OPERATING
-  const mins = waitTime ?? 0;
+  if (waitTime === null) {
+    return { text: '?', color: '#1687c9', statusText: 'Operating · wait not posted' };
+  }
+  const mins = waitTime;
   const tier = getWaitColor(mins);
   return { text: String(mins), color: tier.color, statusText: 'Operating' };
 }
 
 function formatReturnTime(iso: string | null | undefined): string | null {
   if (!iso) return null;
-  try {
-    const d = new Date(iso);
-    const h = d.getHours();
-    const m = d.getMinutes();
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const h12 = h % 12 || 12;
-    return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
-  } catch {
-    return null;
-  }
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 }
 
 function timeAgo(ts: number): string {
@@ -109,8 +113,9 @@ const RideCard = ({
   const ll = entry.queue?.RETURN_TIME;
   const hasLL = ll?.state === 'AVAILABLE';
   const returnTime = hasLL ? formatReturnTime(ll?.returnStart) : null;
-  // A Line Session only makes sense while the ride is operating.
-  const canStartSession = entry.status === 'OPERATING';
+  // A temporary stop can be the most boring part of a wait. Games stay available
+  // there, but this session must never claim proximity-based Parts.
+  const canStartSession = queuePlayPolicy(entry.status).canPlay;
 
   return (
     <View style={[styles.card, { borderLeftColor: badge.color, borderLeftWidth: 3, flexWrap: 'wrap' }]}>
@@ -121,6 +126,20 @@ const RideCard = ({
         <View style={styles.cardCenter}>
           <Text style={styles.rideName} numberOfLines={2}>{entry.name}</Text>
           <Text style={styles.statusText}>{badge.statusText}</Text>
+          {canStartSession && (
+            <Pressable
+              onPress={() => onStartSession(entry)}
+              accessibilityRole="button"
+              accessibilityLabel={entry.status === 'DOWN'
+                ? `Play queue games for ${entry.name}. Temporarily down; no Ride Parts this session.`
+                : `Start LinePlay for ${entry.name}`}
+              style={({ pressed }) => [styles.sessionBtn, pressed && styles.sessionBtnPressed]}
+              hitSlop={6}
+            >
+              <Text style={styles.sessionBtnText}>{entry.status === 'DOWN'
+                ? '▶  GAMES · NO PARTS' : '▶  PLAY IN LINE'}</Text>
+            </Pressable>
+          )}
         </View>
         {hasLL && (
           <View style={styles.llBadge}>
@@ -129,15 +148,6 @@ const RideCard = ({
           </View>
         )}
       </View>
-      {canStartSession && (
-        <Pressable
-          onPress={() => onStartSession(entry)}
-          style={({ pressed }) => [styles.sessionBtn, pressed && styles.sessionBtnPressed]}
-          hitSlop={6}
-        >
-          <Text style={styles.sessionBtnText}>▶  Start Line Session</Text>
-        </Pressable>
-      )}
     </View>
   );
 };
@@ -153,6 +163,9 @@ const ParkPill = ({
 }) => (
   <Pressable
     onPress={onPress}
+    accessibilityRole="button"
+    accessibilityState={{ selected }}
+    accessibilityLabel={`${park.name} wait times`}
     style={[styles.pill, selected && styles.pillSelected]}
   >
     <Text style={[styles.pillText, selected && styles.pillTextSelected]}>{park.name}</Text>
@@ -168,7 +181,8 @@ const SortButton = ({
   active: boolean;
   onPress: () => void;
 }) => (
-  <Pressable onPress={onPress} style={[styles.sortBtn, active && styles.sortBtnActive]}>
+  <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: active }}
+    style={[styles.sortBtn, active && styles.sortBtnActive]}>
     <Text style={[styles.sortBtnText, active && styles.sortBtnTextActive]}>{label}</Text>
   </Pressable>
 );
@@ -197,6 +211,7 @@ function distanceBetween(
 export default function QueueTimesScreen({ route }: { route: any }) {
   const navigation = useNavigation();
   const { location } = useContext(LocationContext);
+  const previewEntries: WikiLiveEntry[] | undefined = __DEV__ ? route.params?.previewEntries : undefined;
   const [attractions, setAttractions] = useState<WikiLiveEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -204,29 +219,51 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   const [sortMode, setSortMode] = useState<SortMode>('wait-desc');
   const [filterMode, setFilterMode] = useState<FilterMode>('open');
   const [lastUpdated, setLastUpdated] = useState<number>(0);
+  const [feedError, setFeedError] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fetchGeneration = useRef(0);
 
   const fetchData = useCallback(async (showLoading = false) => {
+    const generation = ++fetchGeneration.current;
     if (showLoading) setLoading(true);
+    setFeedError(false);
     try {
-      const data = await getWikiTimes(selectedPark);
+      const data = previewEntries ?? await getWikiTimes(selectedPark);
+      if (generation !== fetchGeneration.current) return;
       setAttractions(data);
       setLastUpdated(Date.now());
       setCountdown(60);
     } catch (e) {
-      console.warn('Failed to fetch wait times', e);
+      if (generation === fetchGeneration.current) {
+        setFeedError(true);
+        console.warn('Failed to fetch wait times', e);
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (generation === fetchGeneration.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [selectedPark]);
+  }, [selectedPark, previewEntries]);
 
   // Initial load + park change
   useEffect(() => {
     setAttractions([]);
-    fetchData(true);
-  }, [selectedPark]);
+    setLastUpdated(0);
+    void fetchData(true);
+    return () => { fetchGeneration.current += 1; };
+  }, [fetchData]);
+
+  const selectPark = (parkId: number) => {
+    if (parkId === selectedPark) return;
+    fetchGeneration.current += 1;
+    setAttractions([]);
+    setLastUpdated(0);
+    setFeedError(false);
+    setLoading(true);
+    setSelectedPark(parkId);
+  };
 
   // Auto-refresh every 60s
   useEffect(() => {
@@ -253,16 +290,15 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   // by name (queue-times entries are name-keyed) then navigates to LinePlay.
   const handleStartSession = useCallback(
     async (entry: WikiLiveEntry) => {
-      const postedWait = entry.queue?.STANDBY?.waitTime ?? null;
-      const ride = await resolveRideContext(selectedPark, entry.name, postedWait);
-      if (!ride) {
-        // No matching numeric ride — silently ignore (row action just no-ops).
-        console.warn('No ride match for Line Session:', entry.name);
-        return;
-      }
-      (navigation as any).navigate('LinePlay', { ride });
+      if (previewEntries) return;
+      const rideOperating = queuePlayPolicy(entry.status).canRequestParts;
+      const postedWait = rideOperating ? postedStandbyWait(entry) : null;
+      const ride = await resolveRideContextOrOffline(selectedPark, entry.name, postedWait,
+        rideOperating ? lastUpdated || null : null, entry.id);
+      (navigation as any).navigate('LinePlay', { ride: rideOperating
+        ? ride : { ...ride, lineRewardsReady: false } });
     },
-    [navigation, selectedPark],
+    [navigation, selectedPark, lastUpdated, previewEntries],
   );
 
   // Filter & sort
@@ -275,18 +311,14 @@ export default function QueueTimesScreen({ route }: { route: any }) {
 
     data.sort((a, b) => {
       if (sortMode === 'name') return a.name.localeCompare(b.name);
-      const aWait = a.queue?.STANDBY?.waitTime ?? (a.status === 'OPERATING' ? 0 : -1);
-      const bWait = b.queue?.STANDBY?.waitTime ?? (b.status === 'OPERATING' ? 0 : -1);
-      return sortMode === 'wait-desc' ? bWait - aWait : aWait - bWait;
+      return compareQueueWaits(a, b, sortMode);
     });
 
     return data;
   }, [attractions, filterMode, sortMode]);
 
-  const openCount = attractions.filter((e) => e.status === 'OPERATING' || e.status === 'DOWN').length;
+  const openCount = attractions.filter((e) => e.status === 'OPERATING').length;
   const totalCount = attractions.length;
-  const currentParkName = PARK_DISPLAY_ORDER.find((p) => p.id === selectedPark)?.name ?? 'Park';
-
   // Group parks for display, sorted by proximity to user's location
   const groupedParks = useMemo(() => {
     const groups: { group: string; parks: typeof PARK_DISPLAY_ORDER }[] = [];
@@ -315,22 +347,13 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   }, [location?.latitude, location?.longitude]);
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#38BDF8" />
-      
-      {/* Header with LinearGradient */}
-      <LinearGradient
-        colors={['#38BDF8', '#0EA5E9', '#09268f']}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Text style={styles.backButtonText}>←</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>WAIT TIMES</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-      </LinearGradient>
+    <Wrapper previewMode={Boolean(previewEntries)}>
+      <Topbar>
+        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
+        <TopbarColumn><TopbarText>WAIT TIMES</TopbarText></TopbarColumn>
+        <TopbarColumn stretch={false}><View style={{ width: 35 }} /></TopbarColumn>
+      </Topbar>
+      <View style={styles.container}>
 
       {/* Park Selector */}
       <View style={styles.parkSelectorContainer}>
@@ -348,7 +371,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
                     key={park.id}
                     park={park}
                     selected={park.id === selectedPark}
-                    onPress={() => setSelectedPark(park.id)}
+                    onPress={() => selectPark(park.id)}
                   />
                 ))}
               </View>
@@ -358,29 +381,37 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       </View>
 
       {/* Status bar */}
-      {!loading && (
+      {!loading && attractions.length > 0 && (
         <View style={styles.statusBar}>
           <Text style={styles.statusText2}>
             {openCount} of {totalCount} attractions open
           </Text>
           <View style={styles.statusRight}>
             <Text style={styles.updatedText}>
-              {lastUpdated ? timeAgo(lastUpdated) : ''} · {countdown}s
+              {previewEntries ? 'SAMPLE DATA' : `${lastUpdated ? `Checked ${timeAgo(lastUpdated)}` : ''} · refresh ${countdown}s`}
             </Text>
           </View>
         </View>
       )}
 
+      {!loading && feedError && attractions.length > 0 && (
+        <Pressable onPress={() => void fetchData(false)} accessibilityRole="button"
+          accessibilityLabel="Retry wait times refresh; showing the last loaded times"
+          style={styles.feedAlert}>
+          <Text style={styles.feedAlertText}>Wait feed unavailable · showing last loaded times. Tap to retry.</Text>
+        </Pressable>
+      )}
+
       {/* Sort & Filter */}
-      {!loading && (
+      {!loading && attractions.length > 0 && (
         <View style={styles.controlsRow}>
           <View style={styles.sortRow}>
-            <SortButton label="By Wait" active={sortMode === 'wait-desc'} onPress={() => setSortMode('wait-desc')} />
+            <SortButton label="Longest" active={sortMode === 'wait-desc'} onPress={() => setSortMode('wait-desc')} />
             <SortButton label="Shortest" active={sortMode === 'wait-asc'} onPress={() => setSortMode('wait-asc')} />
             <SortButton label="A-Z" active={sortMode === 'name'} onPress={() => setSortMode('name')} />
           </View>
           <View style={styles.sortRow}>
-            <SortButton label="Open Only" active={filterMode === 'open'} onPress={() => setFilterMode('open')} />
+            <SortButton label="Open + Down" active={filterMode === 'open'} onPress={() => setFilterMode('open')} />
             <SortButton label="All" active={filterMode === 'all'} onPress={() => setFilterMode('all')} />
           </View>
         </View>
@@ -393,7 +424,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
             <SkeletonCard key={i} />
           ))}
         </View>
-      ) : (
+      ) : attractions.length > 0 && processedData.length > 0 ? (
         <FlashList
           data={processedData}
           keyExtractor={(item) => item.id}
@@ -404,8 +435,29 @@ export default function QueueTimesScreen({ route }: { route: any }) {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />
           }
         />
+      ) : attractions.length > 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>NO OPEN ATTRACTIONS</Text>
+          <Text style={styles.emptyBody}>This park has no rides listed as operating or temporarily down right now.</Text>
+          <Pressable onPress={() => setFilterMode('all')} accessibilityRole="button"
+            accessibilityLabel="Show all attractions" style={styles.retryButton}>
+            <Text style={styles.retryText}>SHOW ALL</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>{feedError ? 'WAIT TIMES UNAVAILABLE' : 'NO TIMES POSTED'}</Text>
+          <Text style={styles.emptyBody}>{feedError
+            ? 'The last request did not load. Check back or choose another park.'
+            : 'No attraction times were returned for this park. Try another park or refresh.'}</Text>
+          <Pressable onPress={() => void fetchData(true)} accessibilityRole="button"
+            accessibilityLabel="Retry wait times" style={styles.retryButton}>
+            <Text style={styles.retryText}>TRY AGAIN</Text>
+          </Pressable>
+        </View>
       )}
-    </View>
+      </View>
+    </Wrapper>
   );
 }
 
@@ -413,48 +465,17 @@ export default function QueueTimesScreen({ route }: { route: any }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#e8f4fd',
-  },
-  header: {
-    paddingTop: 44,
-    paddingBottom: 12,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    height: 44,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    fontFamily: 'Shark',
-  },
-  headerSpacer: {
-    width: 32,
+    marginTop: -8,
+    backgroundColor: '#d9f3ff',
   },
   parkSelectorContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#e8f8ff',
+    borderBottomColor: '#86cbee',
+    borderBottomWidth: 2,
   },
   parkScrollContent: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   parkGroup: {
     marginRight: 24,
@@ -462,7 +483,7 @@ const styles = StyleSheet.create({
   groupLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#94a3b8',
+    color: '#146397',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
@@ -475,34 +496,63 @@ const styles = StyleSheet.create({
   pill: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 11,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderWidth: 2,
+    borderColor: '#abd9f1',
   },
   pillSelected: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0EA5E9',
+    backgroundColor: '#ffcf3e',
+    borderColor: '#bc7f0b',
   },
   pillText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#475569',
+    color: '#0a598f',
+    fontFamily: 'Knockout',
   },
   pillTextSelected: {
-    color: '#0EA5E9',
+    color: '#063e72',
   },
   statusBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 9,
+    backgroundColor: '#0d6faf',
   },
+  feedAlert: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#fff3ca',
+    borderColor: '#d69a18',
+    borderWidth: 2,
+    borderRadius: 10,
+  },
+  feedAlertText: { color: '#6b4a08', fontFamily: 'Knockout', fontSize: 14 },
+  emptyCard: {
+    margin: 16,
+    padding: 20,
+    backgroundColor: '#fff',
+    borderColor: '#ffca36',
+    borderWidth: 3,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  emptyTitle: { color: '#075691', fontFamily: 'Shark', fontSize: 21, textAlign: 'center' },
+  emptyBody: { color: '#326881', fontFamily: 'Knockout', fontSize: 15,
+    lineHeight: 21, textAlign: 'center', marginTop: 7 },
+  retryButton: { backgroundColor: '#ffca36', borderColor: '#bf8613', borderWidth: 2,
+    borderRadius: 10, paddingHorizontal: 22, paddingVertical: 9, marginTop: 14 },
+  retryText: { color: '#074c83', fontFamily: 'Shark', fontSize: 16 },
   statusText2: {
     fontSize: 14,
-    color: '#475569',
+    color: '#fff',
     fontWeight: '600',
+    fontFamily: 'Knockout',
   },
   statusRight: {
     flexDirection: 'row',
@@ -510,39 +560,41 @@ const styles = StyleSheet.create({
   },
   updatedText: {
     fontSize: 13,
-    color: '#94a3b8',
+    color: '#e4f5ff',
     fontWeight: '500',
+    fontFamily: 'Knockout',
   },
   controlsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    gap: 7,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 9,
   },
   sortRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 7,
   },
   sortBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 5,
+    paddingVertical: 7,
+    borderRadius: 10,
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderWidth: 2,
+    borderColor: '#abd9f1',
   },
   sortBtnActive: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#0EA5E9',
+    backgroundColor: '#ffcf3e',
+    borderColor: '#bc7f0b',
   },
   sortBtnText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#475569',
+    color: '#0a598f',
+    fontFamily: 'Knockout',
   },
   sortBtnTextActive: {
-    color: '#0EA5E9',
+    color: '#063e72',
   },
   skeletonContainer: {
     padding: 16,
@@ -554,10 +606,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: '#b6def3',
+    padding: 12,
+    marginBottom: 9,
+    shadowColor: '#075b93',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -566,7 +620,9 @@ const styles = StyleSheet.create({
   badge: {
     width: 56,
     height: 56,
-    borderRadius: 14,
+    borderRadius: 12,
+    borderColor: '#fff',
+    borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -585,12 +641,16 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   sessionBtn: {
-    marginTop: 12,
-    width: '100%',
-    backgroundColor: '#09268f',
-    borderRadius: 12,
-    paddingVertical: 10,
+    marginTop: 7,
+    alignSelf: 'flex-start',
+    backgroundColor: '#0b78bd',
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#ffcc3a',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     alignItems: 'center',
+    minHeight: 36,
   },
   sessionBtnPressed: {
     opacity: 0.85,
@@ -600,18 +660,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.3,
+    fontFamily: 'Knockout',
   },
   rideName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1a1a2e',
+    color: '#083d70',
     lineHeight: 20,
+    fontFamily: 'Shark',
   },
   statusText: {
     fontSize: 13,
-    color: '#94a3b8',
+    color: '#4b7892',
     marginTop: 4,
     fontWeight: '500',
+    fontFamily: 'Knockout',
   },
   llBadge: {
     alignItems: 'center',

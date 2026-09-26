@@ -5,7 +5,8 @@ import { RideCoinLevelType } from '../../../../models/ride-coin-level-type';
  * Level up a ride coin using Energy + Ride Parts
  */
 export default async function levelUpRideCoin(
-  rideCoinId: number
+  rideCoinId: number,
+  expectedLevel: number,
 ): Promise<{
   success: boolean;
   ride_coin: RideCoinLevelType;
@@ -13,8 +14,9 @@ export default async function levelUpRideCoin(
     energy: number;
     ride_parts: number;
   };
-  unlocked_perks: string[];
 }> {
-  const response = await api.post(`/api/v2/me/ride-coins/${rideCoinId}/level-up`);
+  const response = await api.post(`/me/ride-coins/${rideCoinId}/level-up`, {
+    expected_level: expectedLevel,
+  });
   return response.data;
 }

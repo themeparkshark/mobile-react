@@ -3,7 +3,7 @@ import { CurrencyType } from './currency-type';
 export interface ThemeType {
   readonly bottom_bar_url: string;
   readonly currency: CurrencyType;
-  readonly splash_screen_url;
+  readonly splash_screen_url: string | null;
   readonly top_bar_url: string;
   readonly tracks: {
     readonly id: number;

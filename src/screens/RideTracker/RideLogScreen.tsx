@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   FlatList,
   Pressable,
   ScrollView,
@@ -10,10 +9,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  ImageBackground,
 } from 'react-native';
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getRides, getRide, RideType } from '../../api/endpoints/rides';
 import { logRide, LogRidePayload } from '../../api/endpoints/player-rides';
@@ -21,10 +21,12 @@ import SharkRating from '../../components/RideTracker/SharkRating';
 import ReactionPicker from '../../components/RideTracker/ReactionPicker';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
 import RideLogSuccess from '../../components/RideTracker/RideLogSuccess';
-import { colors } from '../../design-system';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
-import config from '../../config';
-import { useToast } from '../../components/Toast';
+import Wrapper from '../../components/Wrapper';
+import Topbar from '../../components/Topbar';
+import TopbarColumn from '../../components/Topbar/TopbarColumn';
+import TopbarText from '../../components/Topbar/TopbarText';
+import { removePendingDetection } from '../../services/RideDetectionService';
 
 // ─── Park Selector ───
 interface ParkItemProps {
@@ -61,18 +63,20 @@ RideItem.displayName = 'RideItem';
 export default function RideLogScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { showToast } = useToast();
-
   // Auto-detected ride params (from RideDetectionOverlay)
   const autoDetectedRideId = route.params?.rideId as number | undefined;
   const autoDetectedRideName = route.params?.rideName as string | undefined;
+  const autoDetectedRideType = route.params?.rideType as string | undefined;
+  const autoDetectedParkId = route.params?.parkId as number | undefined;
   const autoDetected = route.params?.autoDetected as boolean | undefined;
   const autoRodeAt = route.params?.rodeAt as string | undefined;
+  const detectionId = route.params?.detectionId as string | undefined;
 
   const [step, setStep] = useState<'park' | 'ride' | 'details'>('park');
   const [selectedPark, setSelectedPark] = useState<number | null>(null);
   const [rides, setRides] = useState<RideType[]>([]);
   const [loadingRides, setLoadingRides] = useState(false);
+  const [ridesUnavailable, setRidesUnavailable] = useState(false);
   const [selectedRide, setSelectedRide] = useState<RideType | null>(null);
   const [rating, setRating] = useState(0);
   const [reaction, setReaction] = useState<string | null>(null);
@@ -81,8 +85,7 @@ export default function RideLogScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const stepFade = useRef(new Animated.Value(1)).current;
-  const stepSlide = useRef(new Animated.Value(0)).current;
+  const rideLoadSequence = useRef(0);
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [successData, setSuccessData] = useState<{
@@ -104,18 +107,24 @@ export default function RideLogScreen() {
     return groups;
   }, []);
 
-  const animateStepForward = useCallback(() => {
-    stepFade.setValue(0);
-    stepSlide.setValue(30);
-    Animated.parallel([
-      Animated.timing(stepFade, { toValue: 1, duration: 250, useNativeDriver: true }),
-      Animated.spring(stepSlide, { toValue: 0, tension: 80, friction: 10, useNativeDriver: true }),
-    ]).start();
-  }, [stepFade, stepSlide]);
-
-  // Auto-detect: if we got here from a ride detection, skip to details
+  // The confirmed detection already has the fields this journal form needs.
+  // Guests can rate their ride immediately even if the catalog API is slow.
   useEffect(() => {
     if (autoDetectedRideId && autoDetected) {
+      if (autoDetectedRideName && autoDetectedParkId) {
+        const type = ['coaster', 'dark_ride', 'flat_ride', 'water_ride', 'show',
+          'walk_through', 'transport', 'other'].includes(autoDetectedRideType ?? '')
+          ? autoDetectedRideType as RideType['type'] : 'other';
+        setSelectedRide({
+          id: autoDetectedRideId, name: autoDetectedRideName, type,
+          park_id: autoDetectedParkId, park_name: null,
+          slug: '', lat: null, lng: null, image_url: null, metadata: null,
+          radius: 50, ride_duration_minutes: null, min_dwell_minutes: null,
+        });
+        setSelectedPark(autoDetectedParkId);
+        setStep('details');
+        return;
+      }
       (async () => {
         try {
           const ride = await getRide(autoDetectedRideId);
@@ -128,30 +137,44 @@ export default function RideLogScreen() {
         }
       })();
     }
-  }, [autoDetectedRideId, autoDetected]);
+  }, [autoDetectedRideId, autoDetected, autoDetectedRideName, autoDetectedRideType, autoDetectedParkId]);
 
-  const handleParkSelect = useCallback(async (parkId: number) => {
-    setSelectedPark(parkId);
-    setStep('ride');
-    animateStepForward();
+  const loadParkRides = useCallback(async (parkId: number) => {
+    const sequence = ++rideLoadSequence.current;
     setLoadingRides(true);
+    setRidesUnavailable(false);
     setSearchQuery('');
     try {
-      const data = await getRides(parkId);
-      setRides(data);
+      const data = __DEV__ && process.env.EXPO_PUBLIC_RIDE_LOG_FIXTURE === '1'
+        ? [{
+            id: 10, name: 'Space Mountain', slug: 'space-mountain', park_id: parkId,
+            park_name: PARK_DISPLAY_ORDER.find(park => park.id === parkId)?.name ?? null,
+            type: 'coaster' as const, lat: null, lng: null, image_url: null,
+            metadata: null, radius: 50, ride_duration_minutes: null, min_dwell_minutes: null,
+          }]
+        : await getRides(parkId);
+      if (sequence === rideLoadSequence.current) setRides(data);
     } catch (e) {
-      Alert.alert('Error', 'Failed to load rides');
+      if (sequence === rideLoadSequence.current) {
+        setRides([]);
+        setRidesUnavailable(true);
+      }
     } finally {
-      setLoadingRides(false);
+      if (sequence === rideLoadSequence.current) setLoadingRides(false);
     }
   }, []);
+
+  const handleParkSelect = useCallback((parkId: number) => {
+    setSelectedPark(parkId);
+    setStep('ride');
+    loadParkRides(parkId);
+  }, [loadParkRides]);
 
   const handleRideSelect = useCallback((ride: RideType) => {
     setSelectedRide(ride);
     setStep('details');
-    animateStepForward();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [animateStepForward]);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!selectedRide) return;
@@ -160,6 +183,7 @@ export default function RideLogScreen() {
     try {
       const payload: LogRidePayload = {
         ride_id: selectedRide.id,
+        source_detection_id: detectionId,
         rating: rating || undefined,
         reaction: reaction || undefined,
         note: note.trim() || undefined,
@@ -168,6 +192,7 @@ export default function RideLogScreen() {
       };
 
       const result = await logRide(payload);
+      if (detectionId) void removePendingDetection(detectionId).catch(() => undefined);
 
       setSuccessData({
         ride: {
@@ -176,7 +201,7 @@ export default function RideLogScreen() {
           ride_type: selectedRide.type,
           park_id: selectedRide.park_id,
         },
-        xpEarned: result.xp_earned || 10,
+        xpEarned: result.xp_earned ?? 0,
         newAchievements: result.new_achievements || [],
         totalRideCount: (result as any).total_ride_count,
       });
@@ -186,7 +211,7 @@ export default function RideLogScreen() {
     } finally {
       setSubmitting(false);
     }
-  }, [selectedRide, rating, reaction, note, waitTime, navigation, showToast]);
+  }, [selectedRide, rating, reaction, note, waitTime, autoRodeAt, detectionId]);
 
   const handleBack = useCallback(() => {
     if (step === 'details') {
@@ -197,6 +222,7 @@ export default function RideLogScreen() {
       setNote('');
       setWaitTime('');
     } else if (step === 'ride') {
+      rideLoadSequence.current += 1;
       setStep('park');
       setSelectedPark(null);
       setRides([]);
@@ -229,31 +255,35 @@ export default function RideLogScreen() {
     );
   }
 
-  const stepTitle = step === 'park' ? 'Pick a Park' : step === 'ride' ? 'Pick a Ride' : 'Rate Your Ride';
+  const stepTitle = step === 'park' ? 'Choose a Park' : step === 'ride' ? 'Choose a Ride' : 'Your Ride Memory';
 
   return (
-    <View style={s.root}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#38BDF8', '#0EA5E9', '#0284C7']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={s.headerGradient}
-      >
-        <SafeAreaView edges={['top']}>
-          <View style={s.header}>
-            <Pressable onPress={handleBack} hitSlop={16} style={({ pressed }) => [s.navBtn, pressed && { opacity: 0.6 }]}>
-              <Text style={s.navBtnText}>‹</Text>
-            </Pressable>
-            <Text style={s.headerTitle}>{stepTitle}</Text>
-            <View style={{ width: 40 }} />
-          </View>
-        </SafeAreaView>
-      </LinearGradient>
+    <Wrapper>
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <Pressable onPress={handleBack} accessibilityRole="button" accessibilityLabel="Go back">
+            <Image source={require('../../../assets/images/screens/explore/back.png')}
+              style={{ width: 35, height: 35 }} contentFit="contain" />
+          </Pressable>
+        </TopbarColumn>
+        <TopbarColumn><TopbarText>Ride Journal</TopbarText></TopbarColumn>
+        <TopbarColumn stretch={false} />
+      </Topbar>
+      <ImageBackground source={require('../../../assets/images/seaweed_background.png')}
+        style={s.root} resizeMode="cover">
 
       {/* Step: Park Selection */}
       {step === 'park' && (
-        <ScrollView contentContainerStyle={s.parkList} style={{ backgroundColor: '#dbeefe' }}>
+        <ScrollView contentContainerStyle={s.parkList} showsVerticalScrollIndicator={false}>
+          <View style={s.stepIntro}>
+            <View style={s.stepCopy}>
+              <Text style={s.stepEyebrow}>RIDE JOURNAL · 1 OF 3</Text>
+              <Text style={s.stepTitle}>{stepTitle}</Text>
+              <Text style={s.stepDescription}>Keep the rides you loved in your shark's story.</Text>
+            </View>
+            <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
+              style={s.stepShark} contentFit="contain" />
+          </View>
           {Object.entries(parkGroups).map(([group, parks]) => (
             <View key={group} style={s.parkGroup}>
               <Text style={s.parkGroupLabel}>{group}</Text>
@@ -272,8 +302,12 @@ export default function RideLogScreen() {
 
       {/* Step: Ride Selection */}
       {step === 'ride' && (
-        <View style={{ flex: 1, backgroundColor: '#dbeefe' }}>
-          <View style={s.searchBox}>
+        <View style={{ flex: 1 }}>
+          <View style={s.compactIntro}>
+            <Text style={s.stepEyebrow}>RIDE JOURNAL · 2 OF 3</Text>
+            <Text style={s.stepTitle}>{stepTitle}</Text>
+          </View>
+          {!ridesUnavailable && <View style={s.searchBox}>
             <TextInput
               style={s.searchInput}
               placeholder="Search rides..."
@@ -282,9 +316,20 @@ export default function RideLogScreen() {
               onChangeText={setSearchQuery}
               autoCorrect={false}
             />
-          </View>
+          </View>}
           {loadingRides ? (
             <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 40 }} />
+          ) : ridesUnavailable ? (
+            <View style={s.unavailableCard}>
+              <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
+                style={s.unavailableShark} contentFit="contain" />
+              <Text style={s.unavailableTitle}>Ride list is taking a break</Text>
+              <Text style={s.unavailableBody}>Your journal is safe. Reconnect and try loading this park again.</Text>
+              <Pressable onPress={() => selectedPark && loadParkRides(selectedPark)}
+                accessibilityRole="button" style={s.retryButton}>
+                <Text style={s.retryText}>Try Again</Text>
+              </Pressable>
+            </View>
           ) : (
             <FlatList
               data={filteredRides}
@@ -309,7 +354,12 @@ export default function RideLogScreen() {
 
       {/* Step: Rate & Details */}
       {step === 'details' && selectedRide && (
-        <ScrollView contentContainerStyle={s.detailsContainer} style={{ backgroundColor: '#dbeefe' }}>
+        <ScrollView contentContainerStyle={s.detailsContainer} showsVerticalScrollIndicator={false}>
+          <View>
+            <Text style={s.stepEyebrow}>RIDE JOURNAL · 3 OF 3</Text>
+            <Text style={s.stepTitle}>{stepTitle}</Text>
+            <Text style={s.detailsHint}>A personal memory for your collection.</Text>
+          </View>
           <View style={s.selectedRideCard}>
             <RideTypeIcon type={selectedRide.type} size={24} />
             <Text style={s.selectedRideName}>{selectedRide.name}</Text>
@@ -359,34 +409,41 @@ export default function RideLogScreen() {
               {submitting ? (
                 <ActivityIndicator color="#1a1a2e" />
               ) : (
-                <Text style={s.submitBtnText}>🦈 Log This Ride!</Text>
+                <Text style={s.submitBtnText}>Save Ride Memory</Text>
               )}
             </LinearGradient>
           </Pressable>
         </ScrollView>
       )}
-    </View>
+      </ImageBackground>
+    </Wrapper>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#dbeefe' },
-
-  // Header
-  headerGradient: { },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
+  stepIntro: {
+    flexDirection: 'row', alignItems: 'center', marginBottom: 18,
+    backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 20,
+    borderWidth: 2, borderColor: '#84CAEE', paddingLeft: 18, overflow: 'hidden',
   },
-  navBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center', justifyContent: 'center',
+  stepCopy: { flex: 1, paddingVertical: 18 },
+  stepEyebrow: { color: '#126BAB', fontSize: 11, fontWeight: '900', letterSpacing: 1.1 },
+  stepTitle: { color: '#0B4B83', fontSize: 27, fontFamily: 'Shark', marginTop: 3 },
+  stepDescription: { color: '#315C7C', fontSize: 14, lineHeight: 19, marginTop: 6 },
+  stepShark: { width: 115, height: 115, marginRight: -8, alignSelf: 'flex-end' },
+  compactIntro: { paddingHorizontal: 18, paddingTop: 17, paddingBottom: 5 },
+  detailsHint: { color: '#315C7C', fontSize: 14, marginTop: 3, marginBottom: 18 },
+  unavailableCard: {
+    alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: 18, marginHorizontal: 18, marginTop: 20, padding: 20,
+    borderWidth: 2, borderColor: '#84CAEE',
   },
-  navBtnText: { color: '#fff', fontSize: 28, fontWeight: '300', marginTop: -2 },
-  headerTitle: {
-    color: '#fff', fontSize: 18, fontWeight: '900', fontFamily: 'Shark', letterSpacing: 0.5,
-    textShadowColor: 'rgba(0,0,0,0.15)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
-  },
+  unavailableShark: { width: 90, height: 90 },
+  unavailableTitle: { color: '#0B4B83', fontSize: 21, fontFamily: 'Shark', textAlign: 'center' },
+  unavailableBody: { color: '#315C7C', fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 7 },
+  retryButton: { backgroundColor: '#F6C847', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, marginTop: 18 },
+  retryText: { color: '#174064', fontFamily: 'Shark', fontSize: 17 },
 
   // Park selection
   parkList: { padding: 16, paddingBottom: 40 },
@@ -396,8 +453,8 @@ const s = StyleSheet.create({
     letterSpacing: 1.5, marginBottom: 8,
   },
   parkChip: {
-    backgroundColor: '#fff', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16,
-    marginBottom: 8, borderWidth: 2, borderColor: 'transparent',
+    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16,
+    marginBottom: 8, borderWidth: 2, borderColor: '#BADFF4',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
   parkChipSelected: { borderColor: '#0EA5E9', backgroundColor: '#e8f7ff' },
@@ -424,7 +481,7 @@ const s = StyleSheet.create({
   emptyText: { color: '#64748b', textAlign: 'center', marginTop: 40, fontSize: 15 },
 
   // Details
-  detailsContainer: { padding: 20, paddingBottom: 60 },
+  detailsContainer: { padding: 20, paddingBottom: 80 },
   selectedRideCard: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20,

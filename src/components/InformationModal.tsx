@@ -53,7 +53,7 @@ export default function InformationModal({ id }: { readonly id?: number }) {
   }, []);
 
   useAsyncEffect(async () => {
-    if (!modalVisible) return;
+    if (!modalVisible || id == null) return;
     const response = await getInformationModal(id);
     setContent(response.content);
     setLoading(false);

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
 import { Marker } from 'react-native-maps';
 import Countdown, { zeroPad } from 'react-countdown';
@@ -15,10 +15,12 @@ import { TaskType } from '../../models/task-type';
 export default function TaskMarker({
   task,
   isSelected,
+  isTripGoal = false,
   onPress,
 }: {
   readonly task: TaskType;
   readonly isSelected: boolean;
+  readonly isTripGoal?: boolean;
   readonly onPress: () => void;
 }) {
   const expiresAt = task.active_to ? new Date(task.active_to + 'Z') : null;
@@ -26,6 +28,12 @@ export default function TaskMarker({
 
   const ringColor = minsLeft !== null && minsLeft < 5 ? '#ef4444' : '#4ade80';
   const timerUrgent = minsLeft !== null && minsLeft < 5;
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+  useEffect(() => {
+    setTracksViewChanges(true);
+    const timer = setTimeout(() => setTracksViewChanges(false), 700);
+    return () => clearTimeout(timer);
+  }, [isSelected, isTripGoal]);
 
   return (
     <Marker
@@ -35,10 +43,11 @@ export default function TaskMarker({
       }}
       onPress={onPress}
       stopPropagation={true}
-      tracksViewChanges={false}
+      tracksViewChanges={tracksViewChanges}
       anchor={{ x: 0.5, y: 0.9 }}
     >
       <View style={styles.container}>
+        {isTripGoal && <View style={styles.goalBadge}><Text style={styles.goalText}>MY GOAL</Text></View>}
         {/* Timer badge */}
         {expiresAt && (
           <View style={[
@@ -111,6 +120,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 10,
   },
+  goalBadge: { position: 'absolute', top: 3, zIndex: 22, backgroundColor: '#fbbf24',
+    borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#1a1a2e' },
+  goalText: { color: '#1a1a2e', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   timerBadge: {
     position: 'absolute',
     top: 65,

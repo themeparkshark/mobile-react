@@ -12,12 +12,14 @@ export default function Button({
   onPress,
   onPressSound,
   showRedCircle,
+  accessibilityLabel,
 }: {
   children: ReactNode;
   hasPermission?: boolean;
   onPress: () => void;
   onPressSound?: any;
   showRedCircle?: boolean;
+  accessibilityLabel?: string;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const animated = new Animated.Value(1);
@@ -39,6 +41,8 @@ export default function Button({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       onPress={async () => {
         if (hasPressed) {
           return;

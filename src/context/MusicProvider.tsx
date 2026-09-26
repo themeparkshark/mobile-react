@@ -33,7 +33,7 @@ function pickRandom(lastIndex: number): number {
   return next;
 }
 
-export const MusicProvider: React.FC = ({ children }) => {
+export const MusicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { player } = useContext(AuthContext);
   const soundRef = useRef<Audio.Sound | null>(null);
   const isPlayingRef = useRef(false);

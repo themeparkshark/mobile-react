@@ -10,6 +10,8 @@ export interface RideType {
   lat: number | null;
   lng: number | null;
   image_url: string | null;
+  /** The server has a coin link and coordinates needed for queue rewards. */
+  line_rewards_ready?: boolean;
   metadata: {
     speed?: number;
     height?: number;
@@ -22,9 +24,9 @@ export interface RideType {
   min_dwell_minutes: number | null;
 }
 
-export async function getRides(parkId?: number): Promise<RideType[]> {
+export async function getRides(parkId?: number, timeoutMs?: number): Promise<RideType[]> {
   const params = parkId ? { park_id: parkId } : {};
-  const { data } = await client.get('/rides', { params });
+  const { data } = await client.get('/rides', { params, timeout: timeoutMs });
   return data.data;
 }
 

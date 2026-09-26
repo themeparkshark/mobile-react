@@ -7,79 +7,83 @@ import { TutorialStep, TutorialSequence } from './types';
  * ONBOARDING — First time entering the app after username/team/membership
  * This is the main tutorial that runs on first ExploreScreen visit
  */
-const onboardingSteps: TutorialStep[] = [
+const openingStep: TutorialStep = {
+  id: 'welcome', sequence: 'onboarding',
+  text: "Hey, new shark! I'm Finn. Let's start your collection.",
+  subtitle: 'Your adventure starts wherever you are.',
+  sharkPosition: 'bottom-center', sharkMood: 'waving',
+  showSkip: true, nextText: "Let's go!", delay: 500,
+};
+
+const homeOnboardingSteps: TutorialStep[] = [
+  openingStep,
   {
-    id: 'welcome',
-    sequence: 'onboarding',
-    text: "Hey there, new shark! I'm Finn, your guide to Theme Park Shark!",
-    subtitle: "Let me show you around — it'll be quick, I promise!",
-    sharkPosition: 'bottom-center',
-    sharkMood: 'waving',
-    showSkip: true,
-    nextText: "Let's go!",
-    delay: 500,
+    id: 'home_hunt', sequence: 'onboarding',
+    text: 'Find a trip prep item on your map. Walk near it and collect it for your set.',
+    subtitle: 'The yellow hunt card points to a nearby find. Pickups build Energy, XP, and sometimes Tickets.',
+    sharkPosition: 'bottom-center', sharkMood: 'pointing', showSkip: true,
   },
   {
-    id: 'map_intro',
-    sequence: 'onboarding',
-    text: "This is your map! When you're at a theme park, it comes alive with things to collect and do.",
-    subtitle: 'Right now you might be in Travel Mode — that means you\'re not at a park yet. No worries!',
-    sharkPosition: 'bottom-center',
-    sharkMood: 'pointing',
-    showSkip: true,
+    id: 'home_goal', sequence: 'onboarding',
+    text: 'Choose a ride coin to chase on your next park day.',
+    subtitle: 'Tap NEXT PARK GOAL. Your home finds help stock the Tickets and Energy you will need.',
+    sharkPosition: 'bottom-center', sharkMood: 'pointing', showSkip: true,
   },
   {
-    id: 'player_marker',
-    sequence: 'onboarding',
-    text: "See that shark on the map? That's YOU! Walk around the park and your shark moves with you.",
-    sharkPosition: 'bottom-center',
-    sharkMood: 'excited',
-    spotlightRef: 'player_marker',
-    showSkip: true,
+    id: 'home_collection', sequence: 'onboarding',
+    text: 'Keep the colors you love. Finish a set to unlock rewards and new shark style.',
+    subtitle: 'Trade four spare finds for any missing color. Open the Collection Book to see your rewards.',
+    sharkPosition: 'bottom-center', sharkMood: 'excited', showSkip: true,
   },
   {
-    id: 'tasks_intro',
-    sequence: 'onboarding',
-    text: 'Tasks pop up near rides and attractions. Walk close to one and complete it to earn Park Coins!',
-    subtitle: 'Some are trivia, some are challenges — each one is different!',
-    sharkPosition: 'bottom-center',
-    sharkMood: 'happy',
-    showSkip: true,
+    id: 'explore_done', sequence: 'onboarding',
+    text: 'Your first mission: find one item and choose one ride goal.',
+    subtitle: 'At the park, win that ride coin. In line, play for its Ride Parts. Then upgrade it with Energy.',
+    sharkPosition: 'bottom-center', sharkMood: 'celebrating', nextText: 'Start hunting!',
+  },
+];
+
+const parkOnboardingSteps: TutorialStep[] = [
+  openingStep,
+  {
+    id: 'park_ride', sequence: 'onboarding',
+    text: 'Pick a ride coin from your park guide and head toward the attraction.',
+    subtitle: 'Near the ride, use a Ticket or available Shark Rescue Pass and win its challenge to add the coin to your shelf.',
+    sharkPosition: 'bottom-center', sharkMood: 'pointing', showSkip: true,
   },
   {
-    id: 'coins_intro',
-    sequence: 'onboarding',
-    text: 'You\'ll also find coins, keys, and vaults scattered around. Collect coins, use keys to open vaults for awesome rewards!',
-    sharkPosition: 'bottom-center',
-    sharkMood: 'excited',
-    showSkip: true,
+    id: 'park_queue', sequence: 'onboarding',
+    text: 'Waiting in line? Open LinePlay for short games and a shared crew challenge.',
+    subtitle: 'Eligible time near a linked ride can earn its Ride Parts. Solo games are there when the crew is quiet.',
+    sharkPosition: 'bottom-center', sharkMood: 'excited', showSkip: true,
   },
   {
-    id: 'currencies',
-    sequence: 'onboarding',
-    text: 'Up top is your balance. Park Coins are earned at each park. Shark Coins work everywhere!',
-    subtitle: 'Spend them in the Store on cool items for your profile.',
-    sharkPosition: 'bottom-center',
-    sharkMood: 'pointing',
-    spotlightRef: 'topbar_currencies',
-    showSkip: true,
+    id: 'park_mastery', sequence: 'onboarding',
+    text: 'Your coin is just the beginning. Use its Ride Parts and Energy to level it up.',
+    subtitle: 'Every ride has its own coin to collect and master. Keep your favorite on your shelf.',
+    sharkPosition: 'bottom-center', sharkMood: 'happy', showSkip: true,
   },
   {
-    id: 'bottom_nav',
-    sequence: 'onboarding',
-    text: 'At the bottom of your screen are your main tabs. Explore the map, check standings, chat with other sharks, read park news, and see your profile!',
-    sharkPosition: 'bottom-center',
-    sharkMood: 'pointing',
-    showSkip: true,
+    id: 'explore_done', sequence: 'onboarding',
+    text: 'First mission: earn one ride coin. I’ll help you from there!',
+    subtitle: 'Your park guide points to a reachable ride. Have fun out there!',
+    sharkPosition: 'bottom-center', sharkMood: 'celebrating', nextText: 'Explore the park!',
+  },
+];
+
+/** One brief handoff for players who learned the game at home first. */
+const parkArrivalSteps: TutorialStep[] = [
+  {
+    id: 'park_arrival_coin', sequence: 'park_arrival',
+    text: 'Your home finds prepared this park day. Choose a missing ride coin and visit its attraction.',
+    subtitle: 'Use a Ticket for the challenge. If you run out, Finn may have a Shark Rescue Pass for your first coin.',
+    sharkPosition: 'bottom-center', sharkMood: 'pointing', showSkip: true,
   },
   {
-    id: 'explore_done',
-    sequence: 'onboarding',
-    text: "You're all set! Head to a theme park and start your adventure. Collect coins, complete tasks, and climb the leaderboard!",
-    subtitle: 'I\'ll pop up again when you discover something new. Happy exploring!',
-    sharkPosition: 'bottom-center',
-    sharkMood: 'celebrating',
-    nextText: "Let's explore!",
+    id: 'park_arrival_line', sequence: 'park_arrival',
+    text: 'In line, open LinePlay for a solo story or a one-phone crew game.',
+    subtitle: 'Eligible nearby time earns that ride’s Parts. Pair them with home Energy to upgrade your coin.',
+    sharkPosition: 'bottom-center', sharkMood: 'excited', nextText: 'Start exploring!',
   },
 ];
 
@@ -90,8 +94,8 @@ const parkSteps: TutorialStep[] = [
   {
     id: 'park_intro',
     sequence: 'park',
-    text: 'Welcome to your Park page! This shows all your progress at this park.',
-    subtitle: 'Complete tasks to earn ride coins. Fill up the shelves to earn trophies!',
+    text: 'This is your park collection. Every ride coin you win moves you closer to completing this park.',
+    subtitle: 'Open an uncollected ride to see its challenge, then return to level up the coin you earn.',
     sharkPosition: 'bottom-center',
     sharkMood: 'excited',
     nextText: 'Got it!',
@@ -176,7 +180,8 @@ const pinSteps: TutorialStep[] = [
  * All steps organized by sequence
  */
 export const TUTORIAL_SEQUENCES: Record<TutorialSequence, TutorialStep[]> = {
-  onboarding: onboardingSteps,
+  onboarding: homeOnboardingSteps,
+  park_arrival: parkArrivalSteps,
   park: parkSteps,
   store: storeSteps,
   gym: gymSteps,
@@ -188,6 +193,7 @@ export const TUTORIAL_SEQUENCES: Record<TutorialSequence, TutorialStep[]> = {
 /**
  * Get steps for a given sequence
  */
-export function getStepsForSequence(sequence: TutorialSequence): TutorialStep[] {
+export function getStepsForSequence(sequence: TutorialSequence, options?: { inPark?: boolean }): TutorialStep[] {
+  if (sequence === 'onboarding' && options?.inPark) return parkOnboardingSteps;
   return TUTORIAL_SEQUENCES[sequence] || [];
 }

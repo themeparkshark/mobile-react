@@ -5,7 +5,7 @@ import client from '../../client';
 export default async function getCurrencies(): Promise<CurrencyType[]> {
   console.log('🦈 Fetching currencies...');
   try {
-    const response = await client.get('/currencies');
+    const response = await client.get('/currencies', { timeout: 10000 });
     let data = response.data;
     
     // Parse if string

@@ -1,5 +1,5 @@
 import React, { useCallback, useRef } from 'react';
-import { Animated, Pressable, View, StyleSheet, Text } from 'react-native';
+import { Animated, Pressable, View, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
 interface SharkRatingProps {
@@ -58,7 +58,9 @@ const SharkRating: React.FC<SharkRatingProps> = React.memo(({ rating, onRate, si
   return (
     <View style={styles.container}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <Pressable key={i} onPress={() => handlePress(i - 1)} hitSlop={8}>
+        <Pressable key={i} onPress={() => handlePress(i - 1)} hitSlop={8}
+          accessibilityRole="button" accessibilityLabel={`Rate ${i} out of 5`}
+          accessibilityState={{ selected: i === rating, disabled: readonly }}>
           <View style={styles.sharkWrapper}>
             {/* Splash effect behind */}
             <Animated.View
@@ -73,11 +75,13 @@ const SharkRating: React.FC<SharkRatingProps> = React.memo(({ rating, onRate, si
                 },
               ]}
             />
-            <Animated.Text
+            <Animated.Image
+              source={require('../../../assets/images/screens/pin-collections/star.png')}
               style={[
                 styles.shark,
                 {
-                  fontSize: size,
+                  width: size,
+                  height: size,
                   transform: [
                     { scale: scales[i - 1] },
                     { translateY: translateYs[i - 1] },
@@ -85,9 +89,7 @@ const SharkRating: React.FC<SharkRatingProps> = React.memo(({ rating, onRate, si
                   opacity: i <= rating ? 1 : 0.25,
                 },
               ]}
-            >
-              🦈
-            </Animated.Text>
+            />
           </View>
         </Pressable>
       ))}
@@ -107,9 +109,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  shark: {
-    textAlign: 'center',
-  },
+  shark: { resizeMode: 'contain' },
   splash: {
     position: 'absolute',
     backgroundColor: 'rgba(0, 165, 245, 0.3)',

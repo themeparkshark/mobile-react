@@ -41,21 +41,20 @@ export type SfxAsset = number;
 /**
  * Present sounds only. Missing names fall back to silence.
  *
- * Intentionally empty until audio assets are produced (asset pipeline,
- * Component 4). Uncomment entries as files land — no code change needed
- * elsewhere.
+ * Reuse the app's verified bundled clips until dedicated GameKit cues land.
+ * Keep the metronome and tap sounds short so rapid play stays crisp.
  */
 export const SFX_MANIFEST: Partial<Record<SfxName, SfxAsset>> = {
-  // tap: require('./tap.mp3'),
-  // hit: require('./hit.mp3'),
-  // combo: require('./combo.mp3'),
-  // fail: require('./fail.mp3'),
-  // tick: require('./tick.mp3'),
-  // win: require('./win.mp3'),
-  // lose: require('./lose.mp3'),
-  // star: require('./star.mp3'),
-  // countdown: require('./countdown.mp3'),
-  // go: require('./go.mp3'),
-  // whoosh: require('./whoosh.mp3'),
-  // coin: require('./coin.mp3'),
+  tap: require('../../../../assets/sounds/tap.mp3'),
+  hit: require('../../../../assets/sounds/inventory_item_tap.mp3'),
+  combo: require('../../../../assets/sounds/reveal.mp3'),
+  fail: require('../../../../assets/sounds/nope.mp3'),
+  tick: require('../../../../assets/sounds/button_press.mp3'),
+  win: require('../../../../assets/sounds/reward.mp3'),
+  lose: require('../../../../assets/sounds/nope.mp3'),
+  star: require('../../../../assets/sounds/reveal.mp3'),
+  countdown: require('../../../../assets/sounds/pin_swap_select_pin.mp3'),
+  go: require('../../../../assets/sounds/whoosh.mp3'),
+  whoosh: require('../../../../assets/sounds/whoosh.mp3'),
+  coin: require('../../../../assets/sounds/inventory_item_tap.mp3'),
 };

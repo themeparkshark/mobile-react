@@ -16,6 +16,8 @@ export const HOLE_COUNT = GRID_COLS * GRID_ROWS; // 9
 
 /** Round length (seconds). Session picks within 60-120s; whack sits at 60. */
 export const ROUND_SECONDS = 60;
+/** A ride-coin claim should be playable while stopping briefly at a ride. */
+export const RIDE_ROUND_SECONDS = 25;
 
 /**
  * Pace curve. Spawn interval EASES from slow to fast across the round so the
@@ -88,6 +90,8 @@ export const DECOY_SHAKE_MS = 120;
 
 /** Star thresholds by score. Tuned so a decent 60s run earns 1-2 stars. */
 export const STAR_THRESHOLDS = { one: 800, two: 2200, three: 4200 } as const;
+export const RIDE_STAR_THRESHOLDS = { one: 500, two: 1400, three: 2700 } as const;
 
 /** AsyncStorage key for personal best. */
 export const PB_KEY = '@whack_a_shark/best';
+export const RIDE_PB_KEY = '@whack_a_shark/ride_best';

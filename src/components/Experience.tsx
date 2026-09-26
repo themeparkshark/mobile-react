@@ -22,7 +22,7 @@ export default function Experience({
           paddingBottom: 8,
         }}
       >
-        {vsprintf(labels.experience_level, [player.experience_level.level])}
+        {vsprintf(labels.experience_level || 'Level %s', [player.experience_level.level])}
       </Text>
       <View
         style={{
@@ -32,7 +32,9 @@ export default function Experience({
       >
         <Progress
           progress={
-            (player.experience / player.experience_level.experience) * 100
+            player.experience_level.experience > 0
+              ? (player.experience / player.experience_level.experience) * 100
+              : 0
           }
         />
       </View>
@@ -44,7 +46,7 @@ export default function Experience({
           fontSize: 20,
         }}
       >
-        {vsprintf(labels.experience, [
+        {vsprintf(labels.experience || '%s / %s XP', [
           player.experience,
           player.experience_level.experience,
         ])}

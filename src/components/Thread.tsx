@@ -80,7 +80,7 @@ export default function Thread({ thread }: { readonly thread: ThreadType }) {
                   fontSize: 12,
                 }}
               >
-                {thread.latest_comment.player.screen_name} replied{' '}
+                {thread.latest_comment.player?.screen_name ?? 'Someone'} replied{' '}
                 {dayjs(thread.latest_comment.created_at)
                   .startOf('second')
                   .fromNow()}

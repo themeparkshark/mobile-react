@@ -98,12 +98,11 @@ class SfxManager {
     this.loaded = true;
   }
 
-  /** Pick a free voice, or steal the first one if all are busy. */
+  /** Drop an excess cue rather than interrupting a playing voice. */
   private acquire(name: SfxName): Voice | null {
     const pool = this.pools.get(name);
     if (!pool || pool.length === 0) return null;
-    const free = pool.find((v) => !v.busy);
-    return free ?? pool[0];
+    return pool.find((v) => !v.busy) ?? null;
   }
 
   private beginDuck(): void {
@@ -133,12 +132,6 @@ class SfxManager {
     voice.busy = true;
     this.beginDuck();
     try {
-      await voice.sound.setStatusAsync({
-        shouldPlay: true,
-        positionMillis: 0,
-        volume,
-      });
-      // Free the voice when playback finishes.
       voice.sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded && status.didJustFinish) {
           voice.busy = false;
@@ -146,8 +139,14 @@ class SfxManager {
           this.endDuck();
         }
       });
+      await voice.sound.setStatusAsync({
+        shouldPlay: true,
+        positionMillis: 0,
+        volume,
+      });
     } catch {
       voice.busy = false;
+      voice.sound.setOnPlaybackStatusUpdate(null);
       this.endDuck();
     }
   }

@@ -3,14 +3,14 @@
 
 // Default export - mobileAds function
 const mobileAds = () => ({
-  setRequestConfiguration: async () => {},
+  setRequestConfiguration: async (_configuration: unknown) => {},
   initialize: async () => {},
 });
 
 export default mobileAds;
 
 export const InterstitialAd = {
-  createForAdRequest: () => ({
+  createForAdRequest: (_adUnitId: string) => ({
     load: () => {},
     show: () => Promise.resolve(),
     addAdEventListener: () => () => {},

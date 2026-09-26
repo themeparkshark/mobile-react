@@ -1,131 +1,97 @@
-import { faCircleCheck } from '@fortawesome/free-solid-svg-icons/faCircleCheck';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
 import { useContext } from 'react';
-import { ImageBackground, Pressable, View } from 'react-native';
-import updateInventory from '../api/endpoints/me/inventory/update-inventory';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
-import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 
-export default function Item({ item }: { readonly item: ItemType }) {
-  const { player, refreshPlayer } = useContext(AuthContext);
-  const { playSound } = useContext(SoundEffectContext);
+export default function Item({ item, onToggle, disabled = false, saving = false }: {
+  readonly item: ItemType;
+  readonly onToggle?: (item: ItemType) => void;
+  readonly disabled?: boolean;
+  readonly saving?: boolean;
+}) {
+  const { player } = useContext(AuthContext);
+  const { width } = useWindowDimensions();
+  const artSize = Math.max(60, Math.floor(width / 3) - 44);
+  const isEquipped = Object.values(player?.inventory ?? {}).some((inventoryItem) =>
+    inventoryItem && typeof inventoryItem === 'object' && 'id' in inventoryItem &&
+    inventoryItem.id === item.id);
+  const fixedEquippedItem = isEquipped &&
+    (player?.inventory?.skin_item?.id === item.id || player?.inventory?.background_item?.id === item.id);
 
   return (
-    <View
-      style={{
-        flex: 1,
-        padding: 8,
-      }}
-    >
+    <View style={styles.container}>
       <Pressable
-        style={{
-          backgroundColor: 'lightblue',
-          borderWidth: 3,
-          borderColor: 'white',
-          borderRadius: 12,
-          alignSelf: 'center',
-          shadowOffset: {
-            width: 0,
-            height: 3,
-          },
-          shadowOpacity: 0.4,
-          shadowRadius: 0,
-          position: 'relative',
-          width: '100%',
-        }}
-        onPress={async () => {
-          if (
-            player?.inventory &&
-            (player.inventory.skin_item.id === item.id ||
-              player.inventory.background_item.id === item.id)
-          ) {
-            return false;
-          }
-
-          playSound(require('../../assets/sounds/inventory_item_tap.mp3'));
-
-          await updateInventory(item);
-          await refreshPlayer();
-        }}
+        accessibilityRole="button"
+        accessibilityLabel={fixedEquippedItem ? `${item.name}, currently worn`
+          : isEquipped ? `Remove ${item.name} from your shark` : `Wear ${item.name} on your shark`}
+        accessibilityState={{ disabled: disabled || saving || fixedEquippedItem || !onToggle, selected: isEquipped }}
+        disabled={disabled || saving || fixedEquippedItem || !onToggle}
+        style={({ pressed }) => [styles.card, isEquipped && styles.cardEquipped,
+          pressed && styles.cardPressed]}
+        onPress={() => onToggle?.(item)}
       >
         {item.is_coin_code_item && (
-          <View
-            style={{
-              zIndex: 20,
-              position: 'absolute',
-              top: -12,
-              right: -12,
-            }}
-          >
+          <View style={styles.specialBadge}>
             <Image
               source={require('../../assets/images/modals/brown_closed.png')}
-              style={{
-                width: 25,
-                height: 25,
-              }}
+              style={styles.specialBadgeImage}
               contentFit="contain"
             />
           </View>
         )}
-        <View
-          style={{
-            position: 'absolute',
-            display: Object.values(player?.inventory)
-              .map(function (inventoryItem) {
-                return inventoryItem?.id;
-              })
-              .includes(item.id)
-              ? 'flex'
-              : 'none',
-            backgroundColor: 'rgba(0, 0, 0, .6)',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 10,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 10,
-          }}
-        >
-          <FontAwesomeIcon icon={faCircleCheck} size={56} color={'white'} />
-        </View>
-        <View
-          style={{
-            padding: 12,
-          }}
-        >
-          {item.item_type.id === 4 && (
-            <ImageBackground
-              source={require('../../assets/images/screens/inventory/shark.png')}
-              style={{
-                margin: -12,
-              }}
-            >
+        {isEquipped && <View style={styles.wornBadge}><Text style={styles.wornText}>WORN</Text></View>}
+        <View style={[styles.artArea, { height: artSize + 16 }]}>
+          {item.item_type.id === 4 ? (
+            <View style={{ width: artSize, height: artSize }}>
               <Image
-                source={item.paper_url}
-                style={{
-                  aspectRatio: 1,
-                }}
-                contentFit="cover"
+                source={player?.inventory?.skin_item?.no_eye_url
+                  ? { uri: player.inventory.skin_item.no_eye_url }
+                  : require('../../assets/images/screens/inventory/shark-colored-v2.png')}
+                style={StyleSheet.absoluteFill}
+                contentFit="contain"
               />
-            </ImageBackground>
-          )}
-          {item.item_type.id !== 4 && (
+              {player?.inventory?.skin_item?.no_eye_url && (
+                <Image source={require('../../assets/images/screens/inventory/blink.png')}
+                  style={StyleSheet.absoluteFill} contentFit="contain" />
+              )}
+              <Image source={item.paper_url} style={StyleSheet.absoluteFill} contentFit="contain" />
+            </View>
+          ) : (
             <Image
               source={item.icon_url}
-              style={{
-                aspectRatio: 1,
-              }}
+              style={{ width: artSize, height: artSize }}
               contentFit="contain"
             />
           )}
         </View>
+        {!!item.name && (
+          <Text numberOfLines={2} style={styles.name}>
+            {item.name}
+          </Text>
+        )}
+        {saving && <Text style={styles.status}>Saving…</Text>}
       </Pressable>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 8 },
+  card: { width: '100%', minHeight: 148, alignSelf: 'center', position: 'relative', borderRadius: 14,
+    borderWidth: 3, borderColor: '#fff', backgroundColor: '#f1fbff', overflow: 'hidden',
+    shadowColor: '#073967', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.23,
+    shadowRadius: 3, elevation: 3 },
+  cardEquipped: { borderColor: '#ffd44c', backgroundColor: '#eefaff' },
+  cardPressed: { transform: [{ scale: 0.97 }] },
+  specialBadge: { zIndex: 20, position: 'absolute', top: 4, left: 4 },
+  specialBadgeImage: { width: 25, height: 25 },
+  wornBadge: { zIndex: 12, position: 'absolute', top: 5, right: 5,
+    borderRadius: 7, backgroundColor: '#ffd44c', borderWidth: 1, borderColor: '#fff',
+    paddingHorizontal: 5, paddingVertical: 3 },
+  wornText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 11 },
+  artArea: { width: '100%', alignItems: 'center', justifyContent: 'center' },
+  name: { color: '#15395B', fontFamily: 'Knockout', fontSize: 15,
+    textAlign: 'center', paddingHorizontal: 4, paddingBottom: 7, minHeight: 43 },
+  status: { color: '#15395B', fontSize: 11, fontWeight: '700', textAlign: 'center', paddingBottom: 7 },
+});

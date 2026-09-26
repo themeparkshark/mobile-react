@@ -253,7 +253,7 @@ export default function BattleHUD({ parkId }: Props) {
                 {/* Current Standings */}
                 <View style={styles.standingsSection}>
                   <Text style={styles.sectionTitle}>STANDINGS</Text>
-                  {(['mouse', 'globe', 'shark'] as const)
+                  {(['mouse', 'globe', 'shark'] as const).slice()
                     .sort((a, b) => scores[b] - scores[a])
                     .map((team, index) => (
                       <View key={team} style={styles.standingRow}>

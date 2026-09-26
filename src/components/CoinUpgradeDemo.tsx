@@ -1,11 +1,13 @@
-import { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, View, Text, StyleSheet, Animated, Easing, Platform } from 'react-native';
 import { Image } from 'expo-image';
 
 interface Props {
   level: number;
   coinUrl?: string;
   size?: number;
+  labelColor?: string;
+  animate?: boolean;
 }
 
 const LEVEL_CONFIG = [
@@ -18,12 +20,27 @@ const LEVEL_CONFIG = [
 
 // Prismatic color cycle positions
 const PRISMATIC_COLORS = ['#a78bfa', '#ec4899', '#3b82f6', '#22c55e', '#fbbf24', '#a78bfa'];
+const EARNED_RIM_COLORS = ['#57534e', '#E5F2FA', '#FFD873', '#D4B8FF', '#FFC27A'];
 
-export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
+export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor, animate = true }: Props) {
   const cfg = LEVEL_CONFIG[Math.min(level - 1, 4)];
-  const center = size / 2;
   const effectArea = size * 1.5; // total effect zone
-  const effectOffset = (effectArea - size) / 2;
+  const [reducedMotion, setReducedMotion] = useState(true);
+
+  useEffect(() => {
+    if (!animate) return;
+    let mounted = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then(value => {
+      if (mounted) setReducedMotion(value);
+    }).catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', value => {
+      if (mounted) setReducedMotion(value);
+    });
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [animate]);
 
   // ── Shared animations ──
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -44,10 +61,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
     }))
   ).current;
 
-  // ── Lv4: Prismatic color cycle + light rays ──
-  const prismaticStep = useRef(0);
-  const prismaticColor = useRef('#a78bfa');
-  const prismaticTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── Lv4: Prismatic light rays ──
   const rayAnims = useRef(
     Array.from({ length: 8 }, () => ({
       opacity: new Animated.Value(0),
@@ -73,6 +87,14 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
   ).current;
 
   useEffect(() => {
+    if (!animate || reducedMotion) {
+      rayAnims.forEach(ray => ray.opacity.setValue(0));
+      crackleAnims.forEach(bolt => bolt.opacity.setValue(0));
+      shimmerAnim.setValue(0);
+      pulseAnim.setValue(1);
+      floatAnim.setValue(0);
+      return;
+    }
     const anims: Animated.CompositeAnimation[] = [];
 
     // ── ALL LEVELS: Shimmer sweep (Lv2+) ──
@@ -138,11 +160,6 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
 
     // ── Lv4: Prismatic cycle + rays ──
     if (level >= 4) {
-      // Color cycle via interval (avoids useNativeDriver:false crash)
-      prismaticTimer.current = setInterval(() => {
-        prismaticStep.current = (prismaticStep.current + 1) % PRISMATIC_COLORS.length;
-        prismaticColor.current = PRISMATIC_COLORS[prismaticStep.current];
-      }, 500);
       anims.push(Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.08, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -152,21 +169,20 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
 
       // Staggered light rays
       rayAnims.forEach((ray, i) => {
-        const loop = () => {
-          ray.opacity.setValue(0);
-          ray.scale.setValue(0.3);
-          Animated.sequence([
-            Animated.delay(i * 400 + Math.random() * 500),
-            Animated.parallel([
-              Animated.sequence([
-                Animated.timing(ray.opacity, { toValue: 0.6, duration: 200, useNativeDriver: true }),
-                Animated.timing(ray.opacity, { toValue: 0, duration: 600, useNativeDriver: true }),
-              ]),
-              Animated.timing(ray.scale, { toValue: 1.5, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+        ray.opacity.setValue(0);
+        ray.scale.setValue(0.3);
+        anims.push(Animated.loop(Animated.sequence([
+          Animated.delay(i * 180),
+          Animated.parallel([
+            Animated.sequence([
+              Animated.timing(ray.opacity, { toValue: 0.6, duration: 200, useNativeDriver: true }),
+              Animated.timing(ray.opacity, { toValue: 0, duration: 600, useNativeDriver: true }),
             ]),
-          ]).start(() => loop());
-        };
-        loop();
+            Animated.timing(ray.scale, { toValue: 1.5, duration: 800,
+              easing: Easing.out(Easing.ease), useNativeDriver: true }),
+          ]),
+          Animated.delay(1200),
+        ])));
       });
     }
 
@@ -180,29 +196,29 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
 
       // Electric crackle bolts
       crackleAnims.forEach((bolt, i) => {
-        const loop = () => {
-          const angle = Math.random() * Math.PI * 2;
-          const dist = size * 0.35 + Math.random() * size * 0.3;
-          bolt.opacity.setValue(0);
-          bolt.scale.setValue(0.2);
-          bolt.x.setValue(Math.cos(angle) * size * 0.3);
-          bolt.y.setValue(Math.sin(angle) * size * 0.3);
-          Animated.sequence([
-            Animated.delay(i * 150 + Math.random() * 400),
-            Animated.parallel([
-              Animated.sequence([
-                Animated.timing(bolt.opacity, { toValue: 1, duration: 50, useNativeDriver: true }),
-                Animated.timing(bolt.opacity, { toValue: 0.8, duration: 30, useNativeDriver: true }),
-                Animated.timing(bolt.opacity, { toValue: 1, duration: 30, useNativeDriver: true }),
-                Animated.timing(bolt.opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-              ]),
-              Animated.timing(bolt.x, { toValue: Math.cos(angle) * dist, duration: 310, useNativeDriver: true }),
-              Animated.timing(bolt.y, { toValue: Math.sin(angle) * dist, duration: 310, useNativeDriver: true }),
-              Animated.timing(bolt.scale, { toValue: 1, duration: 310, useNativeDriver: true }),
+        const angle = (i / crackleAnims.length) * Math.PI * 2;
+        const dist = size * (0.35 + (i % 4) * 0.08);
+        bolt.opacity.setValue(0);
+        bolt.scale.setValue(0.2);
+        bolt.x.setValue(Math.cos(angle) * size * 0.3);
+        bolt.y.setValue(Math.sin(angle) * size * 0.3);
+        anims.push(Animated.loop(Animated.sequence([
+          Animated.delay(i * 120),
+          Animated.parallel([
+            Animated.sequence([
+              Animated.timing(bolt.opacity, { toValue: 1, duration: 50, useNativeDriver: true }),
+              Animated.timing(bolt.opacity, { toValue: 0.8, duration: 30, useNativeDriver: true }),
+              Animated.timing(bolt.opacity, { toValue: 1, duration: 30, useNativeDriver: true }),
+              Animated.timing(bolt.opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
             ]),
-          ]).start(() => loop());
-        };
-        loop();
+            Animated.timing(bolt.x, { toValue: Math.cos(angle) * dist,
+              duration: 310, useNativeDriver: true }),
+            Animated.timing(bolt.y, { toValue: Math.sin(angle) * dist,
+              duration: 310, useNativeDriver: true }),
+            Animated.timing(bolt.scale, { toValue: 1, duration: 310, useNativeDriver: true }),
+          ]),
+          Animated.delay(1800),
+        ])));
       });
 
       // Constellation orbits (slower, wider, varied sizes)
@@ -227,9 +243,8 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
     anims.forEach(a => a.start());
     return () => {
       anims.forEach(a => a.stop());
-      if (prismaticTimer.current) clearInterval(prismaticTimer.current);
     };
-  }, [level]);
+  }, [animate, reducedMotion, level, size]);
 
   // ── Interpolations ──
   const shimmerX = shimmerAnim.interpolate({
@@ -241,8 +256,6 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
   const plasmaRotation = plasmaAnim.interpolate({
     inputRange: [0, 1], outputRange: ['0deg', '360deg'],
   });
-  // Prismatic border uses static cycling (no Animated color interpolation needed)
-
   // Ring size
   const ringSize = size + 8;
 
@@ -273,7 +286,6 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
 
       {/* ── Lv4+: Light rays ── */}
       {level >= 4 && rayAnims.map((ray, i) => {
-        const angle = (i / 8) * Math.PI * 2;
         return (
           <Animated.View
             key={'ray' + i}
@@ -415,8 +427,8 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
           width: size,
           height: size,
           borderRadius: size / 2,
-          borderWidth: level === 1 ? 2 : 0,
-          borderColor: level === 1 ? cfg.borderColor : 'transparent',
+          borderWidth: level === 1 ? 2 : 4,
+          borderColor: EARNED_RIM_COLORS[Math.min(level - 1, 4)],
           ...Platform.select({
             ios: {
               shadowColor: level >= 5 ? '#f97316' : level >= 4 ? '#a78bfa' : level >= 3 ? '#fbbf24' : '#000',
@@ -430,18 +442,15 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
           {coinUrl ? (
             <Image
               source={{ uri: coinUrl }}
-              style={{ width: size - 4, height: size - 4, borderRadius: (size - 4) / 2 }}
+              style={{ width: size - (level === 1 ? 4 : 8), height: size - (level === 1 ? 4 : 8), borderRadius: size / 2 }}
               contentFit="cover"
             />
           ) : (
-            <View style={[s.placeholderCoin, {
-              width: size - 4, height: size - 4, borderRadius: (size - 4) / 2,
-              backgroundColor: level >= 5 ? '#1a0a00' : level >= 4 ? '#1a1030' : level >= 3 ? '#1a1500' : '#334155',
-            }]}>
-              <Text style={[s.placeholderText, {
-                color: level >= 5 ? '#f97316' : level >= 4 ? '#a78bfa' : level >= 3 ? '#fbbf24' : level >= 2 ? '#94a3b8' : '#64748b',
-              }]}>🦈</Text>
-            </View>
+            <Image
+              source={require('../../assets/images/coingold.png')}
+              style={{ width: size - (level === 1 ? 4 : 8), height: size - (level === 1 ? 4 : 8), borderRadius: size / 2 }}
+              contentFit="contain"
+            />
           )}
 
           {/* Shimmer sweep (Lv2+) */}
@@ -539,8 +548,8 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70 }: Props) {
 
       {/* ── Label ── */}
       <View style={s.labelWrap}>
-        <Text style={[s.label, { color: cfg.labelColor }]}>{'Lv.' + level}</Text>
-        <Text style={[s.labelName, { color: cfg.labelColor }]}>{cfg.label}</Text>
+        <Text style={[s.label, { color: labelColor ?? cfg.labelColor }]}>{'Lv.' + level}</Text>
+        <Text style={[s.labelName, { color: labelColor ?? cfg.labelColor }]}>{cfg.label}</Text>
       </View>
     </View>
   );

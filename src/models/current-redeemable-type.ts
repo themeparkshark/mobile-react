@@ -8,6 +8,8 @@ import { VaultType } from './vault-type';
 
 export interface CurrentRedeemableType {
   readonly type: string;
+  readonly rescue_pass_available?: boolean;
+  readonly rescue_pass_used_today?: boolean;
   readonly model:
     | SecretTaskType
     | ItemType

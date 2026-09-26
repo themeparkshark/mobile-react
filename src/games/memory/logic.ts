@@ -22,8 +22,9 @@ export interface BoardShape {
   pairs: number;
 }
 
-/** 4x4 (8 pairs) for difficulty 1-2, 4x5 (10 pairs) for difficulty 3. */
+/** Ride sprint: 4 pairs. Queue modes: 8 or 10 pairs. */
 export function boardShapeFor(difficulty: number): BoardShape {
+  if (difficulty <= 0) return { cols: 4, rows: 2, pairs: 4 };
   if (difficulty >= 3) return { cols: 4, rows: 5, pairs: 10 };
   return { cols: 4, rows: 4, pairs: 8 };
 }

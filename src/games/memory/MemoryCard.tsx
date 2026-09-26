@@ -19,7 +19,7 @@
  * All animation is Reanimated on the UI thread. No JS-thread animation loop.
  */
 
-import React, { useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
+import React, { useEffect, useImperativeHandle, forwardRef, useCallback, useState } from 'react';
 import { StyleSheet, Image, View, Text, Pressable, type ImageSourcePropType } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -44,12 +44,19 @@ export interface MemoryCardHandle {
 interface MemoryCardProps {
   size: number;
   faceSource?: ImageSourcePropType;
+  faceSheet?: ImageSourcePropType;
+  sheetSlot?: number;
+  sheetColumns?: number;
+  sheetRows?: number;
+  frameSource?: ImageSourcePropType;
   backSource?: ImageSourcePropType;
   /** Procedural fallback face (used when faceSource is missing/undecodable). */
   tint: string;
   glyph: string;
   matched: boolean;
   disabled: boolean;
+  slot: number;
+  symbolName: string;
   onPress: () => void;
   /** Staggered entrance delay (ms). */
   entranceDelay: number;
@@ -57,11 +64,12 @@ interface MemoryCardProps {
 
 export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
   function MemoryCard(
-    { size, faceSource, backSource, tint, glyph, matched, disabled, onPress, entranceDelay },
+    { size, faceSource, faceSheet, sheetSlot, sheetColumns = 4, sheetRows = 2, frameSource, backSource, tint, glyph, matched, disabled, slot, symbolName, onPress, entranceDelay },
     ref,
   ) {
     // 0 = face down, 1 = face up.
     const flip = useSharedValue(0);
+    const [faceUp, setFaceUpState] = useState(false);
     // Mid-flip lift (scale toward camera) that springs back to rest.
     const lift = useSharedValue(1);
     // Mismatch shake.
@@ -86,6 +94,7 @@ export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
 
     const setFaceUp = useCallback(
       (up: boolean) => {
+        setFaceUpState(up);
         // Rotation: snappy ease.
         flip.value = withTiming(up ? 1 : 0, {
           duration: 260,
@@ -152,7 +161,14 @@ export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
     const faceStyle = { width: size, height: size * 1.28, borderRadius: radius };
 
     return (
-      <Pressable onPress={onPress} disabled={disabled} style={styles.pressable}>
+      <Pressable
+        onPress={onPress}
+        disabled={disabled || matched}
+        style={styles.pressable}
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={`Card ${slot + 1}, ${matched ? `matched ${symbolName}` : faceUp ? symbolName : 'face down'}`}
+      >
         <Animated.View style={[faceStyle, containerStyle]}>
           {/* Back face (shown when face down). */}
           <Animated.View style={[styles.face, faceStyle, backStyle]}>
@@ -167,8 +183,24 @@ export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
 
           {/* Front face (shown when face up). */}
           <Animated.View style={[styles.face, styles.frontAbs, faceStyle, frontStyle]}>
-            {faceSource ? (
+            {faceSheet && sheetSlot != null ? (
+              <View style={[faceStyle, { overflow: 'hidden' }]}>
+                <Image source={faceSheet} resizeMode="stretch" style={{
+                  position: 'absolute',
+                  width: size * sheetColumns,
+                  height: size * 1.28 * sheetRows,
+                  left: -(sheetSlot % sheetColumns) * size,
+                  top: -Math.floor(sheetSlot / sheetColumns) * size * 1.28,
+                }} />
+              </View>
+            ) : faceSource ? (
               <Image source={faceSource} style={[styles.img, faceStyle]} resizeMode="contain" />
+            ) : frameSource ? (
+              <View style={[styles.framedFront, faceStyle]}>
+                <Image source={frameSource} style={[styles.img, StyleSheet.absoluteFill]}
+                  resizeMode="stretch" />
+                <Text style={styles.framedGlyph}>{glyph}</Text>
+              </View>
             ) : (
               <View
                 style={[
@@ -218,6 +250,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 3,
   },
+  framedFront: { alignItems: 'center', justifyContent: 'center' },
+  framedGlyph: { fontSize: 38, textAlign: 'center',
+    textShadowColor: '#fff', textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2 },
   backGlyph: { fontSize: 34 },
   frontGlyph: { fontSize: 40 },
   matchedBadge: {

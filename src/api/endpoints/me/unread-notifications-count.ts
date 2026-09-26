@@ -13,7 +13,10 @@ export default async function unreadNotificationsCount(): Promise<{
 
     return data.data ?? { unread_notifications_count: 0 };
   } catch (error) {
-    console.error('Failed to fetch notification count:', error);
+    // This optional badge must not raise an in-app development warning when
+    // the API is temporarily unavailable. Keep the failure visible in Metro.
+    if (__DEV__) console.log('Notification count unavailable:',
+      error instanceof Error ? error.message : String(error));
     return { unread_notifications_count: 0 };
   }
 }

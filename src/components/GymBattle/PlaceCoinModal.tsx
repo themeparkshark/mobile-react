@@ -37,6 +37,7 @@ const LEVEL_NAMES = {
 };
 
 interface CoinOption {
+  asset_id: number;
   task_id: number;
   name: string;
   coin_url: string;
@@ -87,6 +88,7 @@ export default function PlaceCoinModal({
       // Convert to coin options format
       const coinOptions: CoinOption[] = parkCoins
         .map((coin: ParkCoin) => ({
+          asset_id: coin.asset_id,
           task_id: coin.task_id,
           name: coin.name,
           coin_url: coin.coin_url,
@@ -119,7 +121,7 @@ export default function PlaceCoinModal({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
-      const response = await placeCoin(parkId, selectedCoin.level || 1);
+      const response = await placeCoin(parkId, selectedCoin.asset_id);
       setResult({
         message: response.message,
         points: response.points_added,
@@ -128,7 +130,7 @@ export default function PlaceCoinModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       battleHUDEvents.emit(); // Refresh BattleHUD scores immediately
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to place coin!');
+      setError(err.response?.data?.error || err.message || 'Failed to place coin!');
       setState('error');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }

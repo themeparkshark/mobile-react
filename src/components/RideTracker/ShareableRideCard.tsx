@@ -1,31 +1,17 @@
 import React, { useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { colors, shadows, borderRadius } from '../../design-system';
 import { PlayerRideType } from '../../api/endpoints/player-rides';
+import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 
-// Park gradient themes
-const PARK_GRADIENTS: Record<number, [string, string, string]> = {
-  // WDW
-  2: ['#1a237e', '#283593', '#3949ab'],  // Magic Kingdom - Royal Blue
-  4: ['#0d47a1', '#1565c0', '#42a5f5'],  // EPCOT - Spaceship Blue
-  5: ['#b71c1c', '#c62828', '#e53935'],  // Hollywood Studios - Red
-  6: ['#1b5e20', '#2e7d32', '#43a047'],  // Animal Kingdom - Green
-  // DLR
-  8: ['#4a148c', '#6a1b9a', '#8e24aa'],  // Disneyland - Purple
-  13: ['#e65100', '#ef6c00', '#f57c00'], // California Adventure - Orange
-  // Universal
-  3: ['#311b92', '#4527a0', '#5e35b1'],  // Universal Studios FL - Deep Purple
-  7: ['#006064', '#00838f', '#0097a7'],  // Islands of Adventure - Teal
-  10: ['#004d40', '#00695c', '#00897b'], // Epic Universe - Epic Teal
-  9: ['#01579b', '#0277bd', '#0288d1'],  // Volcano Bay - Water Blue
-  1: ['#263238', '#37474f', '#455a64'],  // Universal Hollywood - Slate
+const REACTION_LABELS: Record<string, string> = {
+  '🤯': 'Mind blown', '😂': 'Laughing', '😴': 'Sleepy', '🤢': 'Queasy', '🔥': 'Loved it',
 };
-
-const DEFAULT_GRADIENT: [string, string, string] = ['#0a1628', '#142040', '#1a2a50'];
 
 interface ShareableRideCardProps {
   ride: PlayerRideType;
@@ -35,70 +21,72 @@ interface ShareableRideCardProps {
 
 // The card itself (captured by ViewShot)
 const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = React.memo(({ ride, rideCount }) => {
-  const gradient = PARK_GRADIENTS[ride.park_id] || DEFAULT_GRADIENT;
   const date = new Date(ride.rode_at);
-  const dateStr = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-
-  const sharks = ride.rating
-    ? Array.from({ length: 5 }, (_, i) => i < ride.rating! ? '🦈' : '').join('')
-    : '';
+  const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const parkName = PARK_DISPLAY_ORDER.find(park => park.id === ride.park_id)?.name ?? 'Theme Park';
+  const rating = Math.max(0, Math.min(5, Math.trunc(ride.rating ?? 0)));
 
   return (
     <View style={cardStyles.wrapper}>
-      <LinearGradient colors={gradient} style={cardStyles.card} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        {/* Top branding */}
+      <LinearGradient colors={['#20AAE8', '#0B83C9', '#07569D']} style={cardStyles.card}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <View style={cardStyles.bubbleOne} />
+        <View style={cardStyles.bubbleTwo} />
+        <View style={cardStyles.bubbleThree} />
         <View style={cardStyles.topBar}>
           <Text style={cardStyles.brandText}>THEME PARK SHARK</Text>
-          <Text style={cardStyles.brandShark}>🦈</Text>
+          <View style={cardStyles.memoryBadge}><Text style={cardStyles.memoryBadgeText}>RIDE MEMORY</Text></View>
         </View>
 
-        {/* Ride name */}
-        <Text style={cardStyles.rideName} numberOfLines={2}>{ride.ride_name}</Text>
-
-        {/* Rating */}
-        {sharks ? (
-          <View style={cardStyles.ratingRow}>
-            <Text style={cardStyles.sharks}>{sharks}</Text>
+        <View style={cardStyles.heroRow}>
+          <View style={cardStyles.heroCopy}>
+            <Text style={cardStyles.parkName} numberOfLines={1}>{parkName}</Text>
+            <Text style={cardStyles.rideName} numberOfLines={3}>{ride.ride_name}</Text>
+            {rating > 0 && (
+              <View style={cardStyles.ratingRow}>
+                {Array.from({ length: rating }, (_, index) => (
+                  <Image key={index} source={require('../../../assets/images/screens/pin-collections/star.png')}
+                    style={cardStyles.ratingStar} contentFit="contain" />
+                ))}
+                <Text style={cardStyles.ratingText}>{rating}/5</Text>
+              </View>
+            )}
           </View>
-        ) : null}
-
-        {/* Reaction */}
-        {ride.reaction && (
-          <Text style={cardStyles.reaction}>{ride.reaction}</Text>
-        )}
-
-        {/* Stats row */}
-        <View style={cardStyles.statsRow}>
-          <View style={cardStyles.stat}>
-            <Text style={cardStyles.statValue}>{dateStr}</Text>
-            <Text style={cardStyles.statLabel}>DATE</Text>
-          </View>
-          {rideCount && rideCount > 1 && (
-            <View style={cardStyles.stat}>
-              <Text style={cardStyles.statValue}>{rideCount}x</Text>
-              <Text style={cardStyles.statLabel}>TOTAL RIDES</Text>
-            </View>
-          )}
-          {ride.wait_time_minutes != null && (
-            <View style={cardStyles.stat}>
-              <Text style={cardStyles.statValue}>{ride.wait_time_minutes}m</Text>
-              <Text style={cardStyles.statLabel}>WAITED</Text>
-            </View>
-          )}
+          <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
+            style={cardStyles.heroShark} contentFit="contain" />
         </View>
 
-        {/* Note */}
-        {ride.note && (
-          <Text style={cardStyles.note} numberOfLines={2}>"{ride.note}"</Text>
-        )}
-
-        {/* Bottom watermark */}
+        <View style={cardStyles.detailsPanel}>
+          {ride.reaction && (
+            <View style={cardStyles.reactionRow}>
+              <Text style={cardStyles.reactionEmoji}>{ride.reaction}</Text>
+              <Text style={cardStyles.reactionLabel}>{REACTION_LABELS[ride.reaction] ?? 'My reaction'}</Text>
+            </View>
+          )}
+          <View style={cardStyles.statsRow}>
+            <View style={cardStyles.stat}>
+              <Text style={cardStyles.statLabel}>RIDE DATE</Text>
+              <Text style={cardStyles.statValue}>{dateStr}</Text>
+            </View>
+            {rideCount != null && rideCount > 1 && (
+              <View style={cardStyles.stat}>
+                <Text style={cardStyles.statLabel}>TIMES RIDDEN</Text>
+                <Text style={cardStyles.statValue}>{rideCount}</Text>
+              </View>
+            )}
+            {ride.wait_time_minutes != null && (
+              <View style={cardStyles.stat}>
+                <Text style={cardStyles.statLabel}>WAITED</Text>
+                <Text style={cardStyles.statValue}>{ride.wait_time_minutes} min</Text>
+              </View>
+            )}
+          </View>
+          {ride.note && <Text style={cardStyles.note} numberOfLines={2}>“{ride.note}”</Text>}
+        </View>
         <View style={cardStyles.watermark}>
-          <Text style={cardStyles.watermarkText}>Track your rides at themeparkshark.com</Text>
+          <Text style={cardStyles.watermarkText}>MY SHARK STORY</Text>
+          <Text style={cardStyles.watermarkUrl}>themeparkshark.com</Text>
         </View>
-
-        {/* Decorative shark watermark */}
-        <Text style={cardStyles.bgShark}>🦈</Text>
       </LinearGradient>
     </View>
   );
@@ -130,6 +118,14 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
 
   return (
     <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Share Ride Card"
+        onPress={handleShare}
+        style={({ pressed }) => [cardStyles.shareBtn, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
+      >
+        <Text style={cardStyles.shareBtnText}>Share Ride Card</Text>
+      </Pressable>
       <ViewShot
         ref={viewShotRef}
         options={{ format: 'png', quality: 1, result: 'tmpfile' }}
@@ -137,121 +133,92 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
       >
         <CardContent ride={ride} rideCount={rideCount} />
       </ViewShot>
-
-      <Pressable
-        onPress={handleShare}
-        style={({ pressed }) => [cardStyles.shareBtn, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
-      >
-        <Text style={cardStyles.shareBtnText}>📤 Share Ride Card</Text>
-      </Pressable>
     </View>
   );
 };
 
 const cardStyles = StyleSheet.create({
   wrapper: {
-    borderRadius: 20,
+    borderRadius: 22,
     overflow: 'hidden',
     ...shadows.xl,
   },
   shotContainer: {
-    borderRadius: 20,
+    borderRadius: 22,
     overflow: 'hidden',
   },
   card: {
-    padding: 24,
-    paddingBottom: 16,
-    minHeight: 320,
+    padding: 18,
+    paddingBottom: 14,
+    minHeight: 330,
     position: 'relative',
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#E1F6FF',
   },
+  bubbleOne: { position: 'absolute', top: 45, left: -15, width: 64, height: 64,
+    borderRadius: 32, borderWidth: 2, borderColor: 'rgba(255,255,255,0.18)' },
+  bubbleTwo: { position: 'absolute', top: 124, right: 8, width: 35, height: 35,
+    borderRadius: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.26)' },
+  bubbleThree: { position: 'absolute', top: 192, left: 44, width: 17, height: 17,
+    borderRadius: 9, borderWidth: 2, borderColor: 'rgba(255,255,255,0.2)' },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   brandText: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
+    color: '#FFFFFF',
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 3,
+    letterSpacing: 2,
     fontFamily: 'Knockout',
   },
-  brandShark: {
-    fontSize: 20,
-  },
+  memoryBadge: { backgroundColor: '#FFD655', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4,
+    borderWidth: 1, borderColor: '#E6A830' },
+  memoryBadgeText: { color: '#664009', fontSize: 9, fontFamily: 'Knockout', letterSpacing: 1 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', minHeight: 137, marginBottom: 11 },
+  heroCopy: { flex: 1, justifyContent: 'center', paddingRight: 2 },
+  heroShark: { width: 112, height: 137, marginRight: -9 },
+  parkName: { color: '#FFF0A6', fontSize: 13, fontWeight: '800', marginBottom: 5 },
   rideName: {
     color: '#ffffff',
-    fontSize: 32,
+    fontSize: 29,
     fontWeight: '900',
-    fontFamily: 'Knockout',
-    marginBottom: 12,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
-  },
-  ratingRow: {
+    fontFamily: 'Shark',
     marginBottom: 8,
+    textShadowColor: 'rgba(0,45,100,0.4)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
-  sharks: {
-    fontSize: 28,
-  },
-  reaction: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 20,
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  stat: {},
-  statValue: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  statLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginTop: 2,
-  },
-  note: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
-    fontStyle: 'italic',
-    marginTop: 8,
-  },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  ratingStar: { width: 22, height: 22 },
+  ratingText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', marginLeft: 5 },
+  detailsPanel: { backgroundColor: '#F3FBFF', borderRadius: 14, padding: 13,
+    borderWidth: 1, borderColor: '#B8E5F8' },
+  reactionRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
+  reactionEmoji: { fontSize: 20 },
+  reactionLabel: { color: '#0B4B83', fontSize: 14, fontWeight: '800' },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  stat: { flex: 1 },
+  statValue: { color: '#0B4B83', fontSize: 13, fontWeight: '800', marginTop: 3 },
+  statLabel: { color: '#39759C', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
+  note: { color: '#315C7C', fontSize: 12, fontStyle: 'italic', marginTop: 10 },
   watermark: {
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.15)',
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  watermarkText: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 11,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  bgShark: {
-    position: 'absolute',
-    right: -20,
-    bottom: 40,
-    fontSize: 120,
-    opacity: 0.06,
-    transform: [{ rotate: '-20deg' }],
-  },
+  watermarkText: { color: '#D6F3FF', fontSize: 9, fontFamily: 'Knockout', letterSpacing: 1.4 },
+  watermarkUrl: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
   shareBtn: {
     backgroundColor: colors.tertiary,
     borderRadius: borderRadius.lg,
-    paddingVertical: 14,
+    paddingVertical: 11,
     alignItems: 'center',
-    marginTop: 12,
+    marginBottom: 10,
     ...shadows.md,
   },
   shareBtnText: {
@@ -263,4 +230,3 @@ const cardStyles = StyleSheet.create({
 });
 
 export default ShareableRideCard;
-export { PARK_GRADIENTS };

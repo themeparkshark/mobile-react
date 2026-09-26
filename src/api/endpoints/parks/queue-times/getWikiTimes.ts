@@ -15,11 +15,11 @@ export interface WikiLiveResponse {
   liveData: WikiLiveEntry[];
 }
 
-export default async function getWikiTimes(parkId: number): Promise<WikiLiveEntry[]> {
+export default async function getWikiTimes(parkId: number, signal?: AbortSignal): Promise<WikiLiveEntry[]> {
   const wikiId = PARK_WIKI_IDS[parkId];
   if (!wikiId) return [];
 
-  const res = await fetch(`https://api.themeparks.wiki/v1/entity/${wikiId}/live`);
+  const res = await fetch(`https://api.themeparks.wiki/v1/entity/${wikiId}/live`, { signal });
   if (!res.ok) throw new Error(`Failed to fetch wait times: ${res.status}`);
 
   const data: WikiLiveResponse = await res.json();

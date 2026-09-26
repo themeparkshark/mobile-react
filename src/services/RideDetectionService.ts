@@ -100,8 +100,8 @@ function calculateConfidence(
 class RideDetectionService {
   private zoneStates: Map<number, ZoneState> = new Map();
   private rides: RideType[] = [];
-  private locationSubscription: Location.LocationSubscription | null = null;
   private running = false;
+  private lifecycleToken = 0;
   private currentWaitTimes: Map<number, number> = new Map();
 
   /**
@@ -188,65 +188,59 @@ class RideDetectionService {
 
   async startDetection(): Promise<boolean> {
     if (this.running) return true;
-
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') return false;
-
+    const lifecycleToken = ++this.lifecycleToken;
+    // LocationProvider already owns the foreground watcher used by the map.
+    // Ride detection consumes that stream instead of starting a second GPS watch.
     this.running = true;
 
-    // Foreground location watcher
-    this.locationSubscription = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.High,
-        timeInterval: 10_000,
-        distanceInterval: 5,
-      },
-      (location) => {
-        this.processLocation(location.coords.latitude, location.coords.longitude);
-      },
-    );
-
-    // Background location tracking
+    // Background tracking starts only after the guest explicitly grants Always
+    // access from park settings or an active LinePlay session.
     try {
-      const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
-      if (bgStatus === 'granted') {
-        // Stop existing task first to prevent duplicates (BUG 4 mitigation)
-        const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-        if (isRegistered) {
-          await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-        }
-
-        await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 15000,
-          distanceInterval: 10,
-          // Only deliver updates when app is NOT in foreground
-          // (foreground watcher handles active state)
-          pausesUpdatesAutomatically: true,
-          showsBackgroundLocationIndicator: true,
-          foregroundService: {
-            notificationTitle: 'Theme Park Shark',
-            notificationBody: 'Tracking your rides 🦈',
-            notificationColor: '#00A5F5',
-          },
-        });
-      }
+      await this.syncBackgroundTracking();
     } catch (e) {
       console.warn('Background location not available:', e);
     }
 
+    return lifecycleToken === this.lifecycleToken && this.running;
+  }
+
+  processForegroundLocation(lat: number, lng: number): void {
+    if (this.running) this.processLocation(lat, lng);
+  }
+
+  async syncBackgroundTracking(): Promise<boolean> {
+    if (!this.running) return false;
+    const permission = await Location.getBackgroundPermissionsAsync();
+    if (!this.running || !permission.granted) return false;
+    if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) return true;
+    if (!this.running) return false;
+    await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
+      accuracy: Location.Accuracy.High,
+      timeInterval: 15000,
+      distanceInterval: 10,
+      // The foreground watcher handles active-screen ride detection.
+      pausesUpdatesAutomatically: true,
+      showsBackgroundLocationIndicator: true,
+      foregroundService: {
+        notificationTitle: 'Theme Park Shark',
+        notificationBody: 'Tracking your rides 🦈',
+        notificationColor: '#00A5F5',
+      },
+    });
+    if (!this.running) {
+      await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
+      return false;
+    }
     return true;
   }
 
   async stopDetection() {
+    ++this.lifecycleToken;
     this.running = false;
-    this.locationSubscription?.remove();
-    this.locationSubscription = null;
 
     // Stop background location
     try {
-      const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
-      if (isRegistered) {
+      if (await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)) {
         await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
       }
     } catch (e) {
@@ -335,10 +329,12 @@ class RideDetectionService {
    * Enqueue an async write operation to prevent race conditions (BUG 2 fix).
    * All AsyncStorage writes go through this serial queue.
    */
-  private enqueueWrite(fn: () => Promise<void>): void {
-    this.writeQueue = this.writeQueue.then(fn).catch(e => {
+  private enqueueWrite(fn: () => Promise<void>): Promise<void> {
+    const operation = this.writeQueue.then(fn);
+    this.writeQueue = operation.catch(e => {
       console.error('Write queue error:', e);
     });
+    return operation;
   }
 
   private async queueDetection(state: ZoneState, dwellMs: number, exitTime: number, wasActive?: boolean) {
@@ -392,12 +388,11 @@ class RideDetectionService {
   }
 
   async getPendingDetections(): Promise<DetectedRide[]> {
-    try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const detections = JSON.parse(raw);
+    if (!Array.isArray(detections)) throw new Error('Pending ride detections are not a list');
+    return detections;
   }
 
   async clearPendingDetections(): Promise<void> {
@@ -406,13 +401,12 @@ class RideDetectionService {
 
   async removePendingDetection(id: string): Promise<void> {
     // Run through write queue to prevent races
-    return new Promise<void>((resolve) => {
-      this.enqueueWrite(async () => {
-        const detections = await this.getPendingDetections();
-        const filtered = detections.filter(d => d.id !== id);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-        resolve();
-      });
+    return this.enqueueWrite(async () => {
+      // A failed storage read must never turn the queue into an empty array.
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      const detections = raw ? JSON.parse(raw) as DetectedRide[] : [];
+      const filtered = detections.filter(d => d.id !== id);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
     });
   }
 
@@ -447,6 +441,7 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
 
 export function startDetection() { return rideDetectionService.startDetection(); }
 export function stopDetection() { return rideDetectionService.stopDetection(); }
+export function syncBackgroundRideDetection() { return rideDetectionService.syncBackgroundTracking(); }
 export function getPendingDetections() { return rideDetectionService.getPendingDetections(); }
 export function clearPendingDetections() { return rideDetectionService.clearPendingDetections(); }
 export function removePendingDetection(id: string) { return rideDetectionService.removePendingDetection(id); }

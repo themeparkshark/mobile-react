@@ -5,7 +5,7 @@ import client from '../../client';
 export default async function getCurrentTheme(): Promise<ThemeType | undefined> {
   console.log('🦈 Fetching theme...');
   try {
-    const response = await client.get('/current-theme');
+    const response = await client.get('/current-theme', { timeout: 10000 });
     let data = response.data;
     
     // Parse if string

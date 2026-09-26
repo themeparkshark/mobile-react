@@ -40,6 +40,7 @@ export interface RideAchievementType {
 
 export interface LogRidePayload {
   ride_id: number;
+  source_detection_id?: string;
   rating?: number;
   reaction?: string;
   wait_time_minutes?: number;

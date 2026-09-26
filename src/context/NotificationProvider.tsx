@@ -1,11 +1,11 @@
-import { createContext, FC, ReactNode, useContext, useState } from 'react';
+import { createContext, FC, ReactNode, useCallback, useContext, useState } from 'react';
 import { useIntervalWhen } from 'rooks';
 import unreadNotificationsCount from '../api/endpoints/me/unread-notifications-count';
 import { AuthContext } from './AuthProvider';
 
 export interface NotificationContextType {
   readonly notificationCount: number;
-  readonly refreshNotificationCount: () => void;
+  readonly refreshNotificationCount: () => Promise<void>;
 }
 
 export const NotificationContext = createContext<NotificationContextType>(
@@ -27,10 +27,14 @@ export const NotificationProvider: FC<{ children: ReactNode }> = ({
     true
   );
 
-  const refreshNotificationCount = async () => {
-    const response = await unreadNotificationsCount();
-    setNotificationCount(response?.unread_notifications_count ?? 0);
-  };
+  const refreshNotificationCount = useCallback(async () => {
+    try {
+      const response = await unreadNotificationsCount();
+      setNotificationCount(response?.unread_notifications_count ?? 0);
+    } catch {
+      // Keep the last confirmed badge count while the profile service is unavailable.
+    }
+  }, []);
 
   return (
     <NotificationContext.Provider

@@ -1,11 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, ScrollView, Pressable } from 'react-native';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Animated, ScrollView, Pressable, ImageBackground } from 'react-native';
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import ShareableRideCard from './ShareableRideCard';
 import ConfettiBurst from './ConfettiBurst';
 import { PlayerRideType } from '../../api/endpoints/player-rides';
 import { colors, shadows } from '../../design-system';
+import Wrapper from '../Wrapper';
+import Topbar from '../Topbar';
+import TopbarColumn from '../Topbar/TopbarColumn';
+import TopbarText from '../Topbar/TopbarText';
+import { SoundEffectContext, SoundEffectContextType } from '../../context/SoundEffectProvider';
 
 const MILESTONES = [10, 25, 50, 100, 200, 500, 1000];
 const MILESTONE_MESSAGES: Record<number, string> = {
@@ -31,6 +36,7 @@ interface RideLogSuccessProps {
 const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
   ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, onLogAnother,
 }) => {
+  const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(50)).current;
@@ -43,6 +49,7 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
 
   useEffect(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    playSound(require('../../../assets/sounds/success.mp3'), { volume: 0.65 });
     setShowConfetti(true);
 
     Animated.sequence([
@@ -66,21 +73,48 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
   }, []);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ConfettiBurst trigger={showConfetti} />
-
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <Wrapper>
+      <Topbar>
+        <TopbarColumn stretch={false}>
+          <Pressable onPress={onDone} accessibilityRole="button" accessibilityLabel="Return to Ride Tracker">
+            <Image source={require('../../../assets/images/screens/explore/back.png')}
+              style={{ width: 35, height: 35 }} contentFit="contain" />
+          </Pressable>
+        </TopbarColumn>
+        <TopbarColumn><TopbarText>Ride Journal</TopbarText></TopbarColumn>
+        <TopbarColumn stretch={false}>
+          {onLogAnother && (
+            <Pressable
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onLogAnother(); }}
+              accessibilityRole="button"
+              accessibilityLabel="Log another ride"
+              style={styles.addRideButton}
+            >
+              <Text style={styles.addRideText}>+ RIDE</Text>
+            </Pressable>
+          )}
+        </TopbarColumn>
+      </Topbar>
+      <ImageBackground source={require('../../../assets/images/seaweed_background.png')}
+        style={styles.container} resizeMode="cover">
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Success header */}
         <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-          <Text style={styles.checkEmoji}>🦈</Text>
+          <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
+            style={styles.heroShark} contentFit="contain" />
           <Text style={styles.successTitle}>Ride Logged!</Text>
-          <Text style={styles.xpText}>+{xpEarned} XP</Text>
+          {xpEarned > 0 ? (
+            <Text style={styles.xpText}>+{xpEarned} XP</Text>
+          ) : (
+            <Text style={styles.journalText}>Saved to your ride journal</Text>
+          )}
         </Animated.View>
 
         {/* Milestone celebration */}
         {isMilestone && (
           <Animated.View style={[styles.milestoneCard, { transform: [{ scale: milestoneScale }] }]}>
-            <Text style={styles.milestoneEmoji}>🎊</Text>
+            <Image source={require('../../../assets/images/screens/explore/stampbook.png')}
+              style={styles.milestoneIcon} contentFit="contain" />
             <Text style={styles.milestoneTitle}>Ride #{milestone}!</Text>
             <Text style={styles.milestoneMessage}>{MILESTONE_MESSAGES[milestone!]}</Text>
           </Animated.View>
@@ -91,7 +125,8 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
           <Animated.View style={[styles.achievementsContainer, { opacity: fadeAnim }]}>
             {newAchievements.map(a => (
               <View key={a.id} style={styles.achievementRow}>
-                <Text style={styles.achievementIcon}>{a.icon}</Text>
+                <Image source={require('../../../assets/images/screens/explore/stampbook.png')}
+                  style={styles.achievementIcon} contentFit="contain" />
                 <Text style={styles.achievementText}>{a.name} unlocked!</Text>
               </View>
             ))}
@@ -101,81 +136,55 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
         {/* Shareable Card */}
         {showCard && (
           <Animated.View style={[styles.cardContainer, { transform: [{ translateY: cardSlide }] }]}>
-            <Text style={styles.sharePrompt}>Share your experience! 📤</Text>
             <ShareableRideCard ride={ride} rideCount={rideCount} />
           </Animated.View>
         )}
 
-        {/* Action buttons */}
-        <View style={styles.actions}>
-          {onLogAnother && (
-            <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onLogAnother(); }}
-              style={({ pressed }) => [styles.logAnotherBtn, pressed && { opacity: 0.85 }]}
-            >
-              <Text style={styles.logAnotherBtnText}>🎢 Log Another</Text>
-            </Pressable>
-          )}
-          <Pressable
-            onPress={onDone}
-            style={({ pressed }) => [styles.doneBtn, pressed && { opacity: 0.8 }]}
-          >
-            <Text style={styles.doneBtnText}>Done</Text>
-          </Pressable>
-        </View>
       </ScrollView>
-    </SafeAreaView>
+      <ConfettiBurst trigger={showConfetti} />
+      </ImageBackground>
+    </Wrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgDark },
-  content: { padding: 20, paddingBottom: 60, alignItems: 'center' },
-  header: { alignItems: 'center', marginBottom: 24 },
-  checkEmoji: { fontSize: 80 },
+  container: { flex: 1, backgroundColor: '#DFF3FF' },
+  scrollView: { flex: 1 },
+  content: { padding: 20, paddingTop: 10, paddingBottom: 90, alignItems: 'center' },
+  header: { alignItems: 'center', marginBottom: 12 },
+  heroShark: { width: 116, height: 116 },
   successTitle: {
-    color: colors.textPrimary, fontSize: 36, fontWeight: '900', fontFamily: 'Shark',
-    marginTop: 12,
+    color: '#0B4B83', fontSize: 34, fontWeight: '900', fontFamily: 'Shark',
+    marginTop: 3,
   },
-  xpText: { color: colors.tertiary, fontSize: 22, fontWeight: '700', marginTop: 4 },
+  xpText: { color: '#7E5100', fontSize: 22, fontWeight: '700', marginTop: 4 },
+  journalText: { color: '#315C7C', fontSize: 17, marginTop: 5 },
   // Milestone
   milestoneCard: {
-    backgroundColor: 'rgba(254,201,14,0.1)', borderRadius: 16, padding: 20, marginBottom: 20,
+    backgroundColor: '#FFF5D3', borderRadius: 16, padding: 20, marginBottom: 20,
     width: '100%', alignItems: 'center',
-    borderWidth: 2, borderColor: 'rgba(254,201,14,0.3)',
+    borderWidth: 2, borderColor: '#E3AE3E',
     ...shadows.glow(colors.tertiary, 0.2),
   },
-  milestoneEmoji: { fontSize: 48 },
+  milestoneIcon: { width: 54, height: 54 },
   milestoneTitle: {
     color: colors.tertiary, fontSize: 28, fontWeight: '900', fontFamily: 'Shark', marginTop: 8,
   },
-  milestoneMessage: { color: colors.textSecondary, fontSize: 16, marginTop: 4, fontWeight: '600' },
+  milestoneMessage: { color: '#59421E', fontSize: 16, marginTop: 4, fontWeight: '600' },
   // Achievements
-  achievementsContainer: { marginBottom: 20, width: '100%' },
+  achievementsContainer: { marginBottom: 12, width: '100%' },
   achievementRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: 'rgba(254,201,14,0.15)', borderRadius: 12, padding: 14, marginBottom: 8,
-    borderWidth: 1, borderColor: 'rgba(254,201,14,0.3)',
+    backgroundColor: '#FFF5D3', borderRadius: 12, padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: '#E3AE3E',
   },
-  achievementIcon: { fontSize: 28 },
-  achievementText: { color: colors.tertiary, fontSize: 16, fontWeight: '700', flex: 1 },
+  achievementIcon: { width: 38, height: 38 },
+  achievementText: { color: '#745012', fontSize: 16, fontWeight: '700', flex: 1 },
   // Card
   cardContainer: { width: '100%', marginBottom: 20 },
-  sharePrompt: {
-    color: colors.textSecondary, fontSize: 15, textAlign: 'center', marginBottom: 12, fontWeight: '600',
-  },
-  // Actions
-  actions: { width: '100%', gap: 10 },
-  logAnotherBtn: {
-    backgroundColor: colors.secondary, borderRadius: 14, paddingVertical: 16,
-    alignItems: 'center', ...shadows.md,
-  },
-  logAnotherBtnText: { color: '#fff', fontSize: 18, fontWeight: '800', fontFamily: 'Shark' },
-  doneBtn: {
-    backgroundColor: colors.bgMedium, borderRadius: 12, paddingVertical: 14,
-    alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
-  },
-  doneBtnText: { color: colors.textPrimary, fontSize: 16, fontWeight: '600' },
+  addRideButton: { backgroundColor: '#FFCB35', borderRadius: 13,
+    paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: '#A9680C' },
+  addRideText: { color: '#603600', fontSize: 12, fontWeight: '900', fontFamily: 'Knockout' },
 });
 
 export default RideLogSuccess;

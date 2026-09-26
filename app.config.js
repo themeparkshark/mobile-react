@@ -25,11 +25,11 @@ export default {
     infoPlist: {
       UIBackgroundModes: ['location'],
       NSLocationWhenInUseUsageDescription:
-        "Theme Park Shark requires your mobile device's location permissions to be enabled in order to find tasks and other redeemables near you.",
+        'Theme Park Shark uses your location to show nearby home collectibles, park rides, and queue activities.',
       NSLocationAlwaysAndWhenInUseUsageDescription:
-        'Theme Park Shark tracks your rides automatically while you enjoy the park.',
+        'Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.',
       NSLocationAlwaysUsageDescription:
-        'Theme Park Shark tracks your rides automatically while you enjoy the park.',
+        'Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.',
     },
   },
   web: {
@@ -55,9 +55,9 @@ export default {
       'expo-location',
       {
         locationAlwaysAndWhenInUsePermission:
-          'Theme Park Shark tracks your rides automatically while you enjoy the park.',
+          'Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.',
         locationAlwaysPermission:
-          'Theme Park Shark tracks your rides automatically while you enjoy the park.',
+          'Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.',
         isAndroidBackgroundLocationEnabled: true,
         isAndroidForegroundServiceEnabled: true,
       },

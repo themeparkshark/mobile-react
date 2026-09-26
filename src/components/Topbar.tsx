@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { ReactElement, ReactNode, useContext, useRef, useState } from 'react';
+import { ReactNode, useContext, useRef, useState } from 'react';
 import { Animated, Dimensions, ImageBackground, Pressable, SafeAreaView, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { ThemeContext } from '../context/ThemeProvider';
@@ -87,7 +87,7 @@ export default function Topbar({
   children,
   purple = false,
 }: {
-  readonly children: ReactElement[];
+  readonly children?: ReactNode;
   readonly informationModalId?: number | null;
   readonly rightButton?: ReactNode | null;
   readonly leftButton?: ReactNode | null;
@@ -120,7 +120,9 @@ export default function Topbar({
         source={
           purple
             ? require('../../assets/images/screens/store/purple_topbar.png')
-            : { url: theme?.top_bar_url }
+            : theme?.top_bar_url
+              ? { uri: theme.top_bar_url }
+              : require('../../assets/images/original-top-bar.png')
         }
         resizeMode="cover"
         style={{
