@@ -32,7 +32,7 @@ import { RideChallengeContext } from '../gamekit/RideChallengeContext';
 import {
   TaskAttempt,
   TaskGameProof,
-  type EarnedCoinEdition, type RideControlReward,
+  type EarnedCoinEdition, type RideControlReward, type RushReward,
   getTaskAttempt,
   resolveTaskAttempt,
 } from '../api/endpoints/me/task-attempts';
@@ -118,6 +118,7 @@ export default function RedeemRedeemableModal({
   const [coinTimesCollected, setCoinTimesCollected] = useState<number | null>(null);
   const [earnedEdition, setEarnedEdition] = useState<EarnedCoinEdition | null>(null);
   const [rideControl, setRideControl] = useState<RideControlReward | null>(null);
+  const [rush, setRush] = useState<RushReward | null>(null);
   const [earnedFirstCoinStamp, setEarnedFirstCoinStamp] = useState<StampData | null>(null);
   const [nextRideTicketEarned, setNextRideTicketEarned] = useState(0);
   const [postWinCoin, setPostWinCoin] = useState<RideCoinLevelType | null>(null);
@@ -181,6 +182,7 @@ export default function RedeemRedeemableModal({
       setCoinTimesCollected(null);
       setEarnedEdition(null);
       setRideControl(null);
+      setRush(null);
       setEarnedFirstCoinStamp(null);
       setPostWinCoin(null);
       setPostWinEnergy(null);
@@ -230,6 +232,7 @@ export default function RedeemRedeemableModal({
       setCoinTimesCollected(attempt.rewards.coin_times_collected ?? null);
       setEarnedEdition(attempt.rewards.coin_edition ?? null);
       setRideControl(attempt.rewards.ride_control ?? null);
+      setRush(attempt.rewards.rush ?? null);
       setNextRideTicketEarned(attempt.rewards.next_ride_ticket_earned ?? 0);
       setEarnedFirstCoinStamp(null);
       if (attempt.rewards.coin_times_collected === 1) {
@@ -867,6 +870,7 @@ export default function RedeemRedeemableModal({
         coinTimesCollected={coinTimesCollected}
         earnedEdition={earnedEdition}
         rideControl={rideControl}
+        rush={rush}
         playerId={player?.id ?? null}
         earnedStamp={earnedFirstCoinStamp}
         nextRideTicketEarned={nextRideTicketEarned}

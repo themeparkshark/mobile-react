@@ -6,6 +6,7 @@ import { Marker } from '../../components/map/Marker';
 import Countdown, { zeroPad } from 'react-countdown';
 import { TaskType } from '../../models/task-type';
 import type { RideControlRide } from '../../api/endpoints/parks/rideControl';
+import type { LiveRide } from '../../api/endpoints/parks/live';
 import { TEAMS } from '../../constants/teams';
 import { MapQueryContext } from '../../components/Map';
 import { BEHIND, RideAmbience, WaterAmbience } from '../../components/map/RideAmbience';
@@ -89,8 +90,11 @@ export default function TaskMarker({
   isTripGoal = false,
   control,
   ambient = false,
+  live,
   onPress,
 }: {
+  /** Posted wait, status and Rush window from the live park feed. */
+  readonly live?: LiveRide;
   /** Play the ride's ambient Easter eggs (only for rides near the player). */
   readonly ambient?: boolean;
   /** Today's Ride Control state for this ride, if any team holds it. */
@@ -103,12 +107,21 @@ export default function TaskMarker({
   const expiresAt = task.active_to ? new Date(task.active_to + 'Z') : null;
   const minsLeft = expiresAt ? Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / 60000)) : null;
 
-  // A held ride wears its team's color; unheld rides keep the timer colors.
-  const ringColor = control ? TEAMS[control.controller].color
+  const look = useMemo(() => rideLook(task.name), [task.name]);
+  const rush = live?.rush && live.status === 'OPERATING' && new Date(live.rush.ends_at).getTime() > Date.now()
+    ? live.rush : null;
+  const down = live?.status === 'DOWN';
+  const closed = live?.status === 'CLOSED' || live?.status === 'REFURBISHMENT';
+
+  // Rush glows gold; a held ride wears its team's color; others keep the timer colors.
+  const ringColor = rush ? '#ffcf3b' : control ? TEAMS[control.controller].color
     : minsLeft !== null && minsLeft < 5 ? '#ef4444' : '#4ade80';
   const timerUrgent = minsLeft !== null && minsLeft < 5;
-  const look = useMemo(() => rideLook(task.name), [task.name]);
-  const kinds = useMemo(() => (ambient ? ambienceNow(look.ambience) : []), [ambient, look]);
+  const kinds = useMemo(() => {
+    const base = ambient ? ambienceNow(look.ambience) : [];
+    // A Rush always sparkles, near or far: it's worth walking to.
+    return rush ? [...base, 'rush' as const] : base;
+  }, [ambient, look, rush]);
   const waterKind = kinds.find(k => WATER_AMBIENCE.includes(k));
   const [behindKinds, frontKinds] = useMemo(() => {
     const pin = kinds.filter(k => !WATER_AMBIENCE.includes(k));
@@ -139,6 +152,11 @@ export default function TaskMarker({
     >
       <View style={styles.container}>
         {isTripGoal && <View style={styles.goalBadge}><Text style={styles.goalText}>MY GOAL</Text></View>}
+        {rush && (
+          <View style={[styles.rushBadge, isTripGoal && { top: 24 }]} accessibilityLabel={`Rush: ${rush.wait} minute wait`}>
+            <Text style={styles.rushText}>⚡ RUSH {rush.wait} MIN</Text>
+          </View>
+        )}
         {/* Timer badge */}
         {expiresAt && (
           <View style={[
@@ -165,6 +183,10 @@ export default function TaskMarker({
             <Text style={styles.tooltipTitle}>
               {task.name}
             </Text>
+            {live && (live.status === 'OPERATING' && live.wait !== null
+              ? <Text style={styles.tooltipWait}>{live.wait} min wait{live.typical ? ` · usually ${live.typical}` : ''}</Text>
+              : down ? <Text style={styles.tooltipWait}>Temporarily down</Text>
+                : closed ? <Text style={styles.tooltipWait}>Closed right now</Text> : null)}
           </View>
           <View style={styles.tooltipArrow} />
         </View>
@@ -200,10 +222,11 @@ export default function TaskMarker({
 
         {/* The ride's landmark: themed art, or the classic shark tower. */}
         <View style={styles.buildingContainer}>
-          <View style={styles.landmarkWrap}>
+          <View style={[styles.landmarkWrap, (down || closed) && styles.landmarkResting]}>
             <FloatingCoin />
             <Image source={LANDMARKS[look.landmark]} style={styles.landmarkImage} contentFit="contain" />
           </View>
+          {down && <View style={styles.downChip}><Text style={styles.downText}>🔧 DOWN</Text></View>}
         </View>
 
         <RideAmbience kinds={frontKinds} seed={task.id} origin={GROUND} zIndex={8} />
@@ -318,6 +341,15 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   landmarkWrap: { width: 96, height: 124, alignItems: 'center', justifyContent: 'flex-end' },
+  landmarkResting: { opacity: 0.55 },
+  downChip: { position: 'absolute', bottom: 2, alignSelf: 'center', backgroundColor: '#475569', borderRadius: 8,
+    paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5, borderColor: '#fff' },
+  downText: { fontFamily: 'Shark', fontSize: 11, color: '#fff' },
+  rushBadge: { position: 'absolute', top: 3, zIndex: 23, backgroundColor: '#ffcf3b', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3, borderWidth: 2, borderColor: '#fff',
+    shadowColor: '#ffb300', shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+  rushText: { fontFamily: 'Shark', fontSize: 12, color: '#6a3b00' },
+  tooltipWait: { fontFamily: 'Knockout', fontSize: 12, color: '#0768b9', textAlign: 'center', marginTop: 1 },
   landmarkImage: { width: 96, height: 96 },
   floatingCoin: { position: 'absolute', top: 0, width: 30, height: 30 },
 });

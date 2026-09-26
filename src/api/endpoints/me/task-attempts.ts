@@ -15,6 +15,13 @@ export interface TaskGameProof {
 }
 
 /** What this win did for the player's team at the ride (Ride Control). */
+export interface RushReward {
+  readonly wait: number;
+  readonly typical: number;
+  readonly bonus_parts: number;
+  readonly bonus_xp: number;
+}
+
 export type RideControlReward =
   | { needs_team: true; ride_name?: string | null }
   | {
@@ -60,6 +67,8 @@ export interface TaskAttempt {
     next_ride_ticket_earned?: number;
     coin_edition?: EarnedCoinEdition;
     ride_control?: RideControlReward;
+    /** Bonus paid because the ride was on a short-wait Rush when the attempt started. */
+    rush?: RushReward;
   } | null;
   expires_at: string;
 }

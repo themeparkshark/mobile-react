@@ -303,6 +303,12 @@ function Scene({ kind, seed }: { kind: AmbienceId; seed: number }) {
       return <>{n(7).map(i => <Droplet key={i} seed={seed} i={i} />)}</>;
     case 'fountain':
       return <>{n(5).map(i => <Droplet key={i} seed={seed} i={i} from={[0, -42]} power={0.55} />)}</>;
+    case 'rush':
+      // Gold sparkles swirling up around a ride that's on Rush.
+      return <>
+        {n(6).map(i => <Twinkle key={`t${i}`} seed={seed + 77} i={i} source={FX.sparkle} size={18} area={[-60, -120, 60, -6]} tint="#ffd23a" />)}
+        {n(4).map(i => <Riser key={`r${i}`} seed={seed + 91} i={i} source={FX.sparkle} size={12} from={[0, -10]} spread={90} height={120} grow={0.2} sway={10} dur={2600} />)}
+      </>;
     case 'aroma':
       return <>{n(3).map(i => <Riser key={i} seed={seed} i={i} source={FX.steam} size={15} from={[4, -70]} spread={30} height={50} grow={0.8} sway={9} dur={3400} />)}</>;
     case 'racecar':

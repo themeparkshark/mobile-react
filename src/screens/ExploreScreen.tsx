@@ -50,6 +50,8 @@ import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
 import { rideLook } from '../services/rideLandmark';
 import { getRideControl, type RideControlPark, type RideControlRide } from '../api/endpoints/parks/rideControl';
+import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
+import RushCallout, { type RushPick } from '../components/RushCallout';
 import DailyGiftModal from '../components/DailyGiftModal';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
@@ -308,6 +310,18 @@ export default function ExploreScreen() {
     const id = setInterval(refreshRideControl, 20000);
     return () => clearInterval(id);
   }, [park?.id, refreshRideControl]);
+  // Live park: posted waits, rides that are down, and short-wait Rushes.
+  const [livePark, setLivePark] = useState<LivePark | null>(null);
+  useEffect(() => {
+    if (!park?.id) { setLivePark(null); return; }
+    const load = () => getParkLive(park.id).then(setLivePark).catch(() => undefined);
+    load();
+    const id = setInterval(load, 60000);
+    return () => clearInterval(id);
+  }, [park?.id]);
+  const liveByTask = useMemo(() => new globalThis.Map<number, LiveRide>(
+    (livePark?.rides ?? []).map(r => [r.task_id, r])), [livePark]);
+
   // Easter-egg scenes only play for the closest themed rides, so the map
   // wakes up around you as you walk and stays light on the phone.
   const nearLat = location ? Math.round(location.latitude * 3000) / 3000 : null;
@@ -326,6 +340,17 @@ export default function ExploreScreen() {
   }, [redeemables?.tasks, nearLat, nearLng]);
   const rideControlByAsset = useMemo(() => new globalThis.Map<number, RideControlRide>(
     (rideControl?.rides ?? []).map(r => [r.asset_id, r])), [rideControl]);
+  // Rushes on rides in today's list, nearest first.
+  const rushes = useMemo<RushPick[]>(() => {
+    const tasks = redeemables?.tasks ?? [];
+    const k = nearLat !== null ? Math.cos((nearLat * Math.PI) / 180) : 1;
+    const dist = (t: { latitude: unknown; longitude: unknown }) => nearLat === null || nearLng === null ? 0
+      : Math.hypot(Number(t.latitude) - nearLat, (Number(t.longitude) - nearLng) * k);
+    return tasks.flatMap(task => {
+      const rush = liveByTask.get(task.id)?.rush;
+      return rush ? [{ task, rush }] : [];
+    }).sort((a, b) => dist(a.task) - dist(b.task));
+  }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
@@ -809,6 +834,7 @@ export default function ExploreScreen() {
           <View style={{ position: 'absolute', top: 12, left: 0, right: 0, zIndex: 25 }} pointerEvents="box-none">
             <RideControlBar control={rideControl} tasks={redeemables?.tasks ?? []}
               onFocusTask={(task) => setSelectedTask(task)} />
+            <RushCallout rushes={rushes} onFocus={(task) => setSelectedTask(task)} />
           </View>
         )}
         {tripGoal && player && <Pressable
@@ -826,7 +852,7 @@ export default function ExploreScreen() {
               RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
             }
           }}
-          style={{ position: 'absolute', top: player ? 64 : 12, left: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? (rushes.length ? 124 : 64) : 12, left: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#ffffff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.6 }}>
@@ -848,7 +874,7 @@ export default function ExploreScreen() {
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
           onPress={() => navigation.navigate('LinePlay', { ride: queueRide })}
-          style={{ position: 'absolute', top: player ? 64 : 12, right: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? (rushes.length ? 124 : 64) : 12, right: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} numberOfLines={1}>
@@ -862,7 +888,7 @@ export default function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }}
-          controlsTop={queueRide ? 168 : 124} focusCoordinate={selectedTask ? {
+          controlsTop={(queueRide ? 168 : 124) + (rushes.length ? 60 : 0)} focusCoordinate={selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : null}>
           {activeParkProject?.park_id === park.id && (
@@ -887,6 +913,7 @@ export default function ExploreScreen() {
               isTripGoal={tripGoal?.task_id === task.id && !tripGoal.coin_owned}
               control={rideControlByAsset.get(Number(task.asset_id))}
               ambient={ambientTaskIds.has(task.id)}
+              live={liveByTask.get(task.id)}
               onPress={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
             />
           ))}

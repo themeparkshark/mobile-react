@@ -18,7 +18,7 @@ import Ribbon from './Ribbon';
 import CoinCatchReveal from './CoinCatchReveal';
 import YellowButton from './YellowButton';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
-import type { EarnedCoinEdition, RideControlReward } from '../api/endpoints/me/task-attempts';
+import type { EarnedCoinEdition, RideControlReward, RushReward } from '../api/endpoints/me/task-attempts';
 import { TEAMS } from '../constants/teams';
 import * as RootNavigation from '../RootNavigation';
 import type { StampData } from '../api/endpoints/me/stamps';
@@ -37,6 +37,7 @@ interface Props {
   earnedEdition?: EarnedCoinEdition | null;
   /** Ride Control outcome of this win (team power, flip, captain), or a nudge to pick a team. */
   rideControl?: RideControlReward | null;
+  rush?: RushReward | null;
   playerId?: number | null;
   earnedStamp?: Pick<StampData, 'id' | 'name' | 'rewards'> | null;
   nextRideTicketEarned?: number;
@@ -269,6 +270,7 @@ export default function PostWinRewardsModal({
   coinTimesCollected,
   earnedEdition,
   rideControl,
+  rush,
   playerId,
   earnedStamp,
   nextRideTicketEarned = 0,
@@ -637,6 +639,15 @@ export default function PostWinRewardsModal({
               )}
             </Animated.View>
 
+            {rush && (
+              <View style={styles.rushBonus} accessibilityLabel={`Rush bonus: ${rush.bonus_parts} extra Ride Parts and ${rush.bonus_xp} extra XP`}>
+                <Text style={styles.rushBonusTitle}>⚡ RUSH BONUS</Text>
+                <Text style={styles.rushBonusBody}>
+                  Caught at {rush.wait} min (usually {rush.typical}) · +{rush.bonus_parts} Parts{rush.bonus_xp ? ` · +${rush.bonus_xp} XP` : ''}
+                </Text>
+              </View>
+            )}
+
             {rideControl && <RideControlBanner result={rideControl} playerId={playerId ?? null}
               onPickTeam={() => { onClose(); RootNavigation.navigate('TeamSelection', {}); }} />}
 
@@ -778,6 +789,10 @@ export default function PostWinRewardsModal({
 }
 
 const styles = StyleSheet.create({
+  rushBonus: { marginTop: 8, backgroundColor: '#ffcf3b', borderRadius: 14, borderWidth: 3, borderColor: '#fff',
+    paddingVertical: 6, paddingHorizontal: 10, alignItems: 'center' },
+  rushBonusTitle: { fontFamily: 'Shark', fontSize: 16, color: '#6a3b00' },
+  rushBonusBody: { fontFamily: 'Knockout', fontSize: 13, color: '#7a4a00', textAlign: 'center' },
   rcBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch', borderWidth: 3,
     borderRadius: 16, padding: 10, marginTop: 12, backgroundColor: 'rgba(255, 207, 59, 0.15)' },
   rcBadge: { width: 44, height: 44 },

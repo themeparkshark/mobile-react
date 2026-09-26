@@ -10,7 +10,7 @@ export type LandmarkId = 'shark' | 'snack' | 'plaza' | 'pirates' | 'space' | 'sn
 
 export type AmbienceId = 'ship' | 'snow' | 'stars' | 'ufo' | 'ghosts' | 'bats' | 'parrots' | 'hippo' | 'dino'
   | 'owls' | 'dragon' | 'splash' | 'steam' | 'racecar' | 'bubbles' | 'fin' | 'spotlights' | 'fireworks' | 'sparkles'
-  | 'aroma' | 'fountain';
+  | 'aroma' | 'fountain' | 'rush';
 
 export interface RideLook {
   readonly landmark: LandmarkId;
