@@ -10,6 +10,8 @@ export interface TaskGameProof {
   seed: number;
   correct_count?: number;
   total_answered?: number;
+  /** Whack-a-Shark ride goal progress (sharks whacked, golden counts 2). */
+  hits?: number;
 }
 
 export interface EarnedCoinEdition {

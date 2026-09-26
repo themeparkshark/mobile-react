@@ -73,6 +73,7 @@ import {
   GRID_ROWS,
   ROUND_SECONDS,
   RIDE_ROUND_SECONDS,
+  RIDE_GOAL_SHARKS,
   SCORING,
   STAR_THRESHOLDS,
   RIDE_STAR_THRESHOLDS,
@@ -136,6 +137,9 @@ export function WhackAShark({
   const combo = useCombo();
   const [best, setBest] = useState(0);
   const [result, setResult] = useState<GameResult | null>(null);
+  const [hits, setHits] = useState(0);
+  const hitsRef = useRef(0);
+  const finishRef = useRef<(() => void) | null>(null);
   const roundSeconds = format === 'ride' ? RIDE_ROUND_SECONDS : ROUND_SECONDS;
   const personalBestKey = format === 'ride' ? RIDE_PB_KEY : PB_KEY;
   const runSeed = useRef<number>(seed ?? Date.now() >>> 0);
@@ -200,6 +204,12 @@ export function WhackAShark({
       const next = combo.hit();
       const gained = Math.round(outcome.baseDelta * outcome.selfMultiplier * next.multiplier);
       applyScore(gained);
+      hitsRef.current += outcome.kind === 'golden' ? 2 : 1;
+      setHits(hitsRef.current);
+      if (format === 'ride' && hitsRef.current >= RIDE_GOAL_SHARKS) {
+        // Goal met: end on this hit so the win lands immediately.
+        setTimeout(() => finishRef.current?.(), 120);
+      }
 
       if (outcome.kind === 'golden') {
         // Fever is triggered by the combo machine at FEVER_STREAK; the golden
@@ -233,7 +243,7 @@ export function WhackAShark({
         });
       }
     },
-    [layout.cells, combo, applyScore, shakeCtl, flashCtl],
+    [layout.cells, combo, applyScore, shakeCtl, flashCtl, format],
   );
 
   const onMissTarget = useCallback(() => {
@@ -268,6 +278,18 @@ export function WhackAShark({
     return () => clearInterval(id);
   }, [visible]);
 
+  // Dev-only QA autoplayer (EXPO_PUBLIC_GAME_AUTOPLAY=1): whacks live sharks
+  // with human-ish reaction time so the ride win path can be verified.
+  useEffect(() => {
+    if (!__DEV__ || process.env.EXPO_PUBLIC_GAME_AUTOPLAY !== '1' || !visible) return;
+    const id = setInterval(() => {
+      if (shellRef.current?.getPhase() !== 'playing') return;
+      const index = engine.holes.findIndex(o => o && o.kind !== 'decoy');
+      if (index >= 0) engine.whack(index);
+    }, 450);
+    return () => clearInterval(id);
+  }, [visible, engine]);
+
   // --- Finish ---------------------------------------------------------------
   const finish = useCallback(() => {
     if (finished.current) return;
@@ -279,7 +301,12 @@ export function WhackAShark({
     engine.stop();
     const finalScore = scoreRef.current;
     const isNewBest = finalScore > best;
-    const stars = scoreToStars(finalScore, format);
+    const secondsLeftAtEnd = Math.max(0, (endDueAt.current - Date.now()) / 1000);
+    const goalMet = hitsRef.current >= RIDE_GOAL_SHARKS;
+    // Ride challenges are pass/fail on the goal; faster catches earn more stars.
+    const stars = format === 'ride'
+      ? goalMet ? (secondsLeftAtEnd >= 12 ? 3 : secondsLeftAtEnd >= 6 ? 2 : 1) : 0
+      : scoreToStars(finalScore, format);
     if (isNewBest) {
       setBest(finalScore);
       AsyncStorage.setItem(personalBestKey, String(finalScore)).catch(() => undefined);
@@ -289,11 +316,14 @@ export function WhackAShark({
       score: finalScore,
       stars,
       maxCombo: combo.maxStreak,
-      message: stars === 0 ? 'TIME!' : undefined,
+      message: format === 'ride'
+        ? goalMet ? 'CAUGHT IT!' : `SO CLOSE! ${hitsRef.current}/${RIDE_GOAL_SHARKS}`
+        : stars === 0 ? 'TIME!' : undefined,
       meta: {
         score: finalScore,
         duration,
         seed: runSeed.current,
+        hits: hitsRef.current,
         maxCombo: combo.maxStreak,
         difficulty,
         format,
@@ -301,6 +331,7 @@ export function WhackAShark({
       },
     });
   }, [result, best, combo.maxStreak, difficulty, engine, format, personalBestKey]);
+  finishRef.current = finish;
 
   // --- Shell lifecycle ------------------------------------------------------
   const handleStart = useCallback(() => {
@@ -308,6 +339,8 @@ export function WhackAShark({
     setScore(0);
     combo.reset();
     setResult(null);
+    hitsRef.current = 0;
+    setHits(0);
     runSeed.current = seed ?? Date.now() >>> 0;
     startedAt.current = Date.now();
     finished.current = false;
@@ -366,8 +399,10 @@ export function WhackAShark({
       ref={shellRef}
       visible={visible}
       title="Whack-a-Shark"
-      subtitle={format === 'ride' ? `Ride sprint · ${secondsLeft}s left` : `Bop sharks · ${secondsLeft}s left`}
-      objective="Whack sharks! Avoid the anglerfish. Golden shark = x5 + fever!"
+      subtitle={format === 'ride' ? `${secondsLeft}s left` : `Bop sharks · ${secondsLeft}s left`}
+      objective={format === 'ride' ? 'Whack sharks, skip the anglerfish. Golden sharks count double!'
+        : 'Whack sharks! Avoid the anglerfish. Golden shark = x5 + fever!'}
+      goal={format === 'ride' ? { current: hits, target: RIDE_GOAL_SHARKS, label: 'SHARKS' } : undefined}
       score={score}
       multiplier={combo.multiplier}
       fever={combo.fever}

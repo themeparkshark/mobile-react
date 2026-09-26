@@ -96,6 +96,11 @@ interface GameShellV2Props {
   personalBest?: number;
   /** Short objective line shown under the countdown. */
   objective?: string;
+  /**
+   * Ride-challenge goal ("10 SHARKS"). Shown as a big meter under the header
+   * and as the countdown headline; the game ends the round when it's met.
+   */
+  goal?: { current: number; target: number; label: string };
   /** Set when the round is over → shell transitions to results. */
   result?: GameResult | null;
   /** Stars → multiplier map. Defaults to {1:1, 2:1.5, 3:2}. */
@@ -127,6 +132,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       fever = false,
       personalBest,
       objective,
+      goal,
       result,
       starMultipliers = DEFAULT_STAR_MULT,
       onStart,
@@ -368,12 +374,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           </View>
 
+          {goal ? <GoalMeter {...goal} /> : null}
+
           {/* Play field */}
           <View style={styles.field}>{children}</View>
 
           {/* Countdown overlay */}
           {phase === 'countdown' ? (
             <Pressable style={styles.overlay} onPress={skipCountdown}>
+              {goal ? <Text style={styles.goalHeadline}>{`${goal.target} ${goal.label}`}</Text> : null}
               <Animated.Text style={[styles.count, countStyle]}>{countText}</Animated.Text>
               {objective ? <Text style={styles.objective}>{objective}</Text> : null}
               <Text style={styles.skipHint}>tap to skip</Text>
@@ -435,6 +444,28 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
   },
 );
 
+// -- Ride goal meter. ---------------------------------------------------------
+
+function GoalMeter({ current, target, label }: { current: number; target: number; label: string }) {
+  const fill = useSharedValue(0);
+  const bump = useSharedValue(1);
+  const shown = Math.min(current, target);
+  useEffect(() => {
+    fill.value = withSpring(target > 0 ? shown / target : 0, { damping: 14, stiffness: 160 });
+    if (shown > 0) bump.value = withSequence(withTiming(1.18, { duration: 80 }), withSpring(1, JUICE.popSpring));
+  }, [shown, target, fill, bump]);
+  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
+  const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
+  return (
+    <View style={styles.goalWrap} accessible accessibilityLabel={`${shown} of ${target} ${label}`}>
+      <View style={styles.goalTrack}>
+        <Animated.View style={[styles.goalFill, fillStyle]} />
+        <Animated.Text style={[styles.goalText, bumpStyle]}>{`${shown} / ${target} ${label}`}</Animated.Text>
+      </View>
+    </View>
+  );
+}
+
 // -- Animated star row. -------------------------------------------------------
 
 function StarRow({ stars }: { stars: number }) {
@@ -491,7 +522,7 @@ const styles = StyleSheet.create({
     paddingTop: 54,
     paddingBottom: 12,
     paddingHorizontal: 16,
-    backgroundColor: GAME_COLORS.bgDark,
+    backgroundColor: '#0768b9',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.06)',
   },
@@ -505,8 +536,8 @@ const styles = StyleSheet.create({
   },
   iconTxt: { color: GAME_COLORS.text, fontSize: 16, fontWeight: '900' },
   headerCenter: { flex: 1, paddingHorizontal: 10 },
-  title: { color: GAME_COLORS.text, fontSize: 18, fontWeight: '900' },
-  subtitle: { color: GAME_COLORS.textDim, fontSize: 12, fontWeight: '600' },
+  title: { color: '#fff', fontSize: 22, fontFamily: 'Shark' },
+  subtitle: { color: '#cdeaff', fontSize: 13, fontFamily: 'Knockout' },
   headerScore: { minWidth: 70, alignItems: 'flex-end' },
   field: { flex: 1 },
   overlay: {
@@ -523,6 +554,14 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 4 },
     textShadowRadius: 12,
   },
+  goalWrap: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#0768b9' },
+  goalTrack: { height: 38, borderRadius: 19, backgroundColor: 'rgba(3, 32, 71, 0.6)', borderWidth: 3,
+    borderColor: '#fff', overflow: 'hidden', justifyContent: 'center' },
+  goalFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#ffcf3b' },
+  goalText: { alignSelf: 'center', fontFamily: 'Shark', fontSize: 20, color: '#fff',
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  goalHeadline: { fontFamily: 'Shark', fontSize: 38, color: '#ffcf3b', textAlign: 'center', marginBottom: 6,
+    textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   objective: {
     color: GAME_COLORS.text,
     fontSize: 16,

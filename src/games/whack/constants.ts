@@ -18,6 +18,8 @@ export const HOLE_COUNT = GRID_COLS * GRID_ROWS; // 9
 export const ROUND_SECONDS = 60;
 /** A ride-coin claim should be playable while stopping briefly at a ride. */
 export const RIDE_ROUND_SECONDS = 25;
+/** Ride challenge goal: whack this many sharks before time runs out (golden counts 2). */
+export const RIDE_GOAL_SHARKS = 10;
 
 /**
  * Pace curve. Spawn interval EASES from slow to fast across the round so the

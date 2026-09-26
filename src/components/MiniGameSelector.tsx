@@ -123,6 +123,7 @@ export default function MiniGameSelector({
           elapsed_ms: Math.max(0, Date.now() - gameMountedAt.current),
           seed: Number.isInteger(attemptSeed) ? attemptSeed! :
             Number.isInteger(extra?.seed) ? extra.seed : 0,
+          ...(selectedGame === 'tap' && Number.isInteger(extra?.hits) ? { hits: extra.hits } : {}),
           ...(selectedGame === 'trivia' ? {
             correct_count: Number.isInteger(extra?.correctCount) ? extra.correctCount : 0,
             total_answered: Number.isInteger(extra?.totalAnswered) ? extra.totalAnswered : 0,
