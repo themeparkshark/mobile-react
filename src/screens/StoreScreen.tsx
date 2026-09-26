@@ -14,6 +14,7 @@ import { useAsyncEffect } from 'rooks';
 import getCatalog from '../api/endpoints/catalogs/get';
 import getItems from '../api/endpoints/catalogs/items';
 import getStore from '../api/endpoints/stores/get';
+import getStores from '../api/endpoints/stores/stores';
 import getStoreRotation, { StoreRotation } from '../api/endpoints/stores/rotation';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
@@ -235,7 +236,7 @@ function SingleBubble({
 }
 
 export default function StoreScreen({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
-  const { store } = route.params as { store: number };
+  const { store } = route.params as { store: number | 'shark-shop' };
   const [currentStore, setCurrentStore] = useState<StoreType>();
   const [catalog, setCatalog] = useState<CatalogType>();
   const [items, setItems] = useState<ItemType[]>([]);
@@ -268,8 +269,12 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   };
 
   useAsyncEffect(async () => {
-    setCurrentStore(await getStore(store));
-    setRotation(await getStoreRotation(store));
+    // 'shark-shop' opens the global Shark Shop without knowing its id.
+    const id = typeof store === 'number' ? store
+      : Number((await getStores()).find(s => s.name === 'Shark Shop')?.id) || undefined;
+    if (!id) { setLoading(false); return; }
+    setCurrentStore(await getStore(id));
+    setRotation(await getStoreRotation(id));
   }, []);
 
   useAsyncEffect(async () => {

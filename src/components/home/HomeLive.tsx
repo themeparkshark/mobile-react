@@ -10,6 +10,7 @@ import { BOSS_ART } from '../../games/boss/BossBrawl';
 import { WhackAShark } from '../../games/whack';
 import * as RootNavigation from '../../RootNavigation';
 import BossRaidFlow, { useParkRaid } from '../boss/BossRaidFlow';
+import PushSoftAsk from '../PushSoftAsk';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
 
@@ -143,6 +144,7 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
                 : '📣 Out of home cheers today · they reset tomorrow'}
             </Text>
           )}
+          <PushSoftAsk />
           <ScrollView style={{ maxHeight: 380 }}>
             {live.parks.length === 0 && (
               <Text style={styles.empty}>Quiet at the parks right now. Bosses surface at 11, 1:30, 4, 6:30 and 9 park time.</Text>

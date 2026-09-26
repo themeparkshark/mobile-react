@@ -43,6 +43,7 @@ export default {
   },
   plugins: [
     '@maplibre/maplibre-react-native',
+    'expo-notifications',
     [
       'expo-build-properties',
       {

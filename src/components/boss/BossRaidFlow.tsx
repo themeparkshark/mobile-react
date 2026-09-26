@@ -9,6 +9,7 @@ import { TEAMS, type TeamId } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
 import { LocationContext } from '../../context/LocationProvider';
 import { BOSS_ART, BossBrawl } from '../../games/boss/BossBrawl';
+import PushSoftAsk from '../PushSoftAsk';
 
 /** Poll the park's raid while at a park. */
 export function useParkRaid(parkId: number | null | undefined) {
@@ -211,6 +212,7 @@ export default function BossRaidFlow({ raid, open, onClose, onState }: {
               Your damage {raid.you.damage.toLocaleString()} · {raid.you.attacks_left} of 5 attacks left
             </Text>
             {note && <Text style={styles.note}>{note}</Text>}
+            {raid.you.attacks > 0 && <View style={{ marginTop: 8 }}><PushSoftAsk dark /></View>}
 
             <Pressable accessibilityRole="button" disabled={!!blocked || sending}
               onPress={() => { setNote(null); setFighting(true); }}

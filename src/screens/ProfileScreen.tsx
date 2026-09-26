@@ -173,7 +173,8 @@ export default function ProfileScreen() {
         },
         ...stores.map((store) => {
           return {
-            image: store.icon_url,
+            image: store.icon_url ?? (store.name === 'Shark Shop'
+              ? require('../../assets/images/screens/profile/shark_shop.png') : undefined),
             onPress: () => {
               if (!store.is_secret_store) {
                 RootNavigation.navigate('Store', {

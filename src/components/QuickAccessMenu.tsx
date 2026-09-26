@@ -1,3 +1,4 @@
+import { faStore } from '@fortawesome/free-solid-svg-icons/faStore';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -41,6 +42,14 @@ const MENU_ITEMS: MenuItem[] = [
     icon: faBook,
     color: '#4CAF50',
     screen: 'StampBook',
+  },
+  {
+    id: 'shop',
+    label: 'Shark Shop',
+    icon: faStore,
+    color: '#0b7fd1',
+    screen: 'Store',
+    params: { store: 'shark-shop' },
   },
   {
     id: 'sharkpark',

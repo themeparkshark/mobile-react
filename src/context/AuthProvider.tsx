@@ -2,6 +2,7 @@ import { AppleAuthenticationCredential } from 'expo-apple-authentication';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, FC, ReactNode, useEffect, useRef, useState } from 'react';
+import { listenForPushTaps, refreshPushRegistration } from '../services/push';
 import { useAsyncEffect } from 'rooks';
 import client from '../api/client';
 import login from '../api/endpoints/auth/login';
@@ -71,6 +72,10 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       }
     }
   }, [token]);
+
+  // Keep this device's push token current once signed in, and open tapped pushes.
+  useEffect(() => { if (player?.id) void refreshPushRegistration(); }, [player?.id]);
+  useEffect(() => listenForPushTaps(), []);
 
   useEffect(() => {
     // Dev builds only: sign straight in as a local test player so the real
