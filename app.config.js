@@ -63,5 +63,6 @@ export default {
       },
     ],
   ],
-  scheme: 'mobile-react',
+  // themeparkshark:// is the public scheme for Instagram Shark Drop links.
+  scheme: ['mobile-react', 'themeparkshark'],
 };

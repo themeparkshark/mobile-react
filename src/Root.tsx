@@ -88,6 +88,7 @@ import RideWishlistScreen from './screens/RideTracker/RideWishlistScreen';
 import RideOnboardingScreen from './screens/RideTracker/RideOnboardingScreen';
 import RideBatchConfirmScreen from './screens/RideTracker/RideBatchConfirmScreen';
 import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay';
+import SharkDropHandler from './components/SharkDropHandler';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
 
 const Stack = createNativeStackNavigator();
@@ -446,6 +447,7 @@ export default function App() {
 
       </Stack.Navigator>
       <RideDetectionOverlay />
+      <SharkDropHandler />
     </NavigationContainer>
     {__DEV__ && !isStandalonePreview && player && devMode && currentLocation && (
       <DevJoystick
