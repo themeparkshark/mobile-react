@@ -426,6 +426,10 @@ export default function SettingsScreen() {
 
         {/* Copyright */}
         <Text style={styles.copyright}>{labels.copyright}</Text>
+        <Text style={styles.disclaimer}>
+          Theme Park Shark is an independent fan app. It is not affiliated with, endorsed by, or sponsored by
+          any theme park or its owners. Park and attraction names are used only to identify real places.
+        </Text>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -434,6 +438,7 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  disclaimer: { fontSize: 11, color: '#94a3b8', textAlign: 'center', marginHorizontal: 28, marginTop: 6, marginBottom: 12, lineHeight: 15 },
   scroll: {
     flex: 1,
     marginTop: -8,

@@ -17,15 +17,14 @@ import useCrumbs from '../hooks/useCrumbs';
 
 // Theme-park-flavored names, all letters/numbers and never over 12 characters.
 const FIRST = ['Churro', 'Fin', 'Coaster', 'Splash', 'Chomp', 'Dole', 'Turkey', 'Castle', 'Rocket', 'Pirate',
-  'Popcorn', 'Mickey', 'Loop', 'Drop', 'Wave', 'Jaws', 'Tiki', 'Parade'];
+  'Popcorn', 'Loop', 'Drop', 'Wave', 'Jaws', 'Tiki', 'Parade'];
 const SECOND = ['Fan', 'Fin', 'Rider', 'Chomp', 'King', 'Boss', 'Shark', 'Queen', 'Hero', 'Pal', 'Buddy', 'Legend'];
-const BANNED_ROLL = /mickey/i; // keep rolls trademark-safe
 
 function rollName(): string {
   for (let i = 0; i < 20; i++) {
     const a = FIRST[Math.floor(Math.random() * FIRST.length)];
     const b = SECOND[Math.floor(Math.random() * SECOND.length)];
-    if (a === b || BANNED_ROLL.test(a)) continue;
+    if (a === b) continue;
     const base = `${a}${b}`;
     const digits = String(Math.floor(Math.random() * 90) + 10);
     const name = base.length + 2 <= 12 ? `${base}${digits}` : base.slice(0, 12);
