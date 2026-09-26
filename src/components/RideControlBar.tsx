@@ -107,7 +107,7 @@ export default function RideControlBar({ control, tasks, onFocusTask }: {
 }
 
 const styles = StyleSheet.create({
-  bar: { marginHorizontal: 12, marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8,
+  bar: { marginHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(5, 52, 110, 0.88)', borderRadius: 18, borderWidth: 3, borderColor: '#fff',
     paddingVertical: 6, paddingLeft: 12, paddingRight: 6 },
   kicker: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: '#ffcf3b' },

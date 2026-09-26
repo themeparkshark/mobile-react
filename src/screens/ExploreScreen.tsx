@@ -789,11 +789,6 @@ export default function ExploreScreen() {
         </>
       )}
       {/* AR Toggle removed - feature disabled */}
-      {/* Ride Control: today's team fight for this park (also invites team-less players). */}
-      {park && player && (
-        <RideControlBar control={rideControl} tasks={redeemables?.tasks ?? []}
-          onFocusTask={(task) => setSelectedTask(task)} />
-      )}
       {/* Park Mode View - Map or AR */}
       {park && arMode && redeemables && (
         <View style={{ flex: 1, marginTop: -8 }}>
@@ -809,6 +804,13 @@ export default function ExploreScreen() {
           marginTop: -8,
         }}
       >
+        {/* Ride Control floats over the map so the map runs right up to the header. */}
+        {player && (
+          <View style={{ position: 'absolute', top: 12, left: 0, right: 0, zIndex: 25 }} pointerEvents="box-none">
+            <RideControlBar control={rideControl} tasks={redeemables?.tasks ?? []}
+              onFocusTask={(task) => setSelectedTask(task)} />
+          </View>
+        )}
         {tripGoal && player && <Pressable
           accessibilityRole="button"
           accessibilityLabel={tripGoal.coin_owned
@@ -824,7 +826,7 @@ export default function ExploreScreen() {
               RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
             }
           }}
-          style={{ position: 'absolute', top: 12, left: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? 64 : 12, left: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#ffffff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.6 }}>
@@ -846,7 +848,7 @@ export default function ExploreScreen() {
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
           onPress={() => navigation.navigate('LinePlay', { ride: queueRide })}
-          style={{ position: 'absolute', top: 12, right: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? 64 : 12, right: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} numberOfLines={1}>
@@ -860,7 +862,7 @@ export default function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }}
-          controlsTop={queueRide ? 116 : 72} focusCoordinate={selectedTask ? {
+          controlsTop={queueRide ? 168 : 124} focusCoordinate={selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : null}>
           {activeParkProject?.park_id === park.id && (
