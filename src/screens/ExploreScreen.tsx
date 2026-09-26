@@ -2,7 +2,7 @@ import { useFocusEffect, useNavigation, useRoute, type NavigationProp, type Para
 import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import React, { useCallback, useContext, useMemo, useState, useEffect, Suspense } from 'react';
+import React, { useCallback, useContext, useMemo, useRef, useState, useEffect, Suspense } from 'react';
 import { Text, TouchableOpacity, View, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import Modal from 'react-native-modal';
 import { Marker } from '../components/map/Marker';
@@ -236,9 +236,14 @@ export default function ExploreScreen() {
     return () => clearTimeout(timer);
   }, [player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial]);
   
+  // One overlay at a time: a find that shows up during a tutorial waits for it.
+  const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
+  const collectedOnce = useRef(false);
+
   // Handler for when user taps a prep item in home mode — enforce proximity
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
     if (!homeLocationConfirmed || !parkLoaded) return;
+    if (isActive) { setPendingFind({ item: prepItem, pivotId }); return; }
     setTooFarRequiredMeters(HOME_PREP_PICKUP_RADIUS_METERS);
     setTooFarIsHomeItem(true);
     // Check distance before allowing collection
@@ -269,7 +274,18 @@ export default function ExploreScreen() {
     setActivePrepItem(prepItem);
     setActivePrepItemPivotId(pivotId);
     setShowPrepItemModal(true);
-  }, [location, homeLocationConfirmed, parkLoaded]);
+  }, [location, homeLocationConfirmed, parkLoaded, isActive]);
+
+  // When Finn is done talking, the waiting find opens (the first catch of the game).
+  useEffect(() => {
+    if (isActive || !pendingFind) return;
+    const find = pendingFind;
+    setPendingFind(null);
+    const timer = setTimeout(() => {
+      handlePrepItemNearby(find.item, find.pivotId);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [isActive, pendingFind, handlePrepItemNearby, hasCompleted]);
 
   // Handler for Community Center tap - check if in range
   const handleCommunityCenterPress = useCallback(() => {
@@ -620,15 +636,20 @@ export default function ExploreScreen() {
       
       {/* Prep Item Redeem Modal (Home Mode) */}
       <PrepItemRedeemModal
-        visible={showPrepItemModal && homeLocationConfirmed}
+        visible={showPrepItemModal && homeLocationConfirmed && !isActive}
         prepItem={activePrepItem}
         pivotId={activePrepItemPivotId}
         onClose={() => {
           setShowPrepItemModal(false);
           setActivePrepItem(null);
           setActivePrepItemPivotId(null);
+          // After the very first catch, Finn says why it matters (once).
+          if (collectedOnce.current && hasCompleted('onboarding') && !hasCompleted('home_first_find')) {
+            setTimeout(() => startTutorial('home_first_find'), 500);
+          }
         }}
         onCollected={() => {
+          collectedOnce.current = true;
           setHomeCollectionVersion((version) => version + 1);
         }}
         onUnavailable={() => setHomeCollectionVersion((version) => version + 1)}

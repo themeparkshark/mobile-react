@@ -8,6 +8,7 @@
 export type TutorialStepId =
   // Onboarding flow (first time in ExploreScreen)
   | 'welcome'
+  | 'home_first_find'
   | 'home_hunt'
   | 'home_goal'
   | 'home_collection'
@@ -25,7 +26,7 @@ export type TutorialStepId =
   | 'friends_intro'
   | 'pin_collections_intro';
 
-export type TutorialSequence = 'onboarding' | 'park_arrival' | 'park' | 'store' | 'gym' | 'community_center' | 'friends' | 'pins';
+export type TutorialSequence = 'onboarding' | 'home_first_find' | 'park_arrival' | 'park' | 'store' | 'gym' | 'community_center' | 'friends' | 'pins';
 
 export interface SpotlightTarget {
   /** Absolute x position on screen */

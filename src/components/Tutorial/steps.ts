@@ -15,31 +15,27 @@ const openingStep: TutorialStep = {
   showSkip: true, nextText: "Let's go!", delay: 500,
 };
 
+/**
+ * Home: teach by doing. Finn says hi, then the first find (always spawned
+ * within reach) opens right after, and one line after the first catch says
+ * why it matters. No wall of text before the player touches anything.
+ */
 const homeOnboardingSteps: TutorialStep[] = [
-  openingStep,
   {
-    id: 'home_hunt', sequence: 'onboarding',
-    text: 'Find a trip prep item on your map. Walk near it and collect it for your set.',
-    subtitle: 'The yellow hunt card points to a nearby find. Pickups build Energy, XP, and sometimes Tickets.',
-    sharkPosition: 'bottom-center', sharkMood: 'pointing', showSkip: true,
+    id: 'welcome', sequence: 'onboarding',
+    text: "Hey, new shark! I'm Finn. Treats pop up around you, even at home.",
+    subtitle: 'One just landed right next to you. Let’s grab it!',
+    sharkPosition: 'bottom-center', sharkMood: 'waving', nextText: 'Grab it!', delay: 400,
   },
+];
+
+/** Right after the first home find: why it matters, in one breath. */
+const homeFirstFindSteps: TutorialStep[] = [
   {
-    id: 'home_goal', sequence: 'onboarding',
-    text: 'Choose a ride coin to chase on your next park day.',
-    subtitle: 'Tap NEXT PARK GOAL. Your home finds help stock the Tickets and Energy you will need.',
-    sharkPosition: 'bottom-center', sharkMood: 'pointing', showSkip: true,
-  },
-  {
-    id: 'home_collection', sequence: 'onboarding',
-    text: 'Keep the colors you love. Finish a set to unlock rewards and new shark style.',
-    subtitle: 'Trade four spare finds for any missing color. Open the Collection Book to see your rewards.',
-    sharkPosition: 'bottom-center', sharkMood: 'excited', showSkip: true,
-  },
-  {
-    id: 'explore_done', sequence: 'onboarding',
-    text: 'Your first mission: find one item and choose one ride goal.',
-    subtitle: 'At the park, win that ride coin. In line, play for its Ride Parts. Then upgrade it with Energy.',
-    sharkPosition: 'bottom-center', sharkMood: 'celebrating', nextText: 'Start hunting!',
+    id: 'home_first_find', sequence: 'home_first_find',
+    text: 'Nice catch! Home finds power your park days.',
+    subtitle: 'Energy fuels boss fights. Tickets start ride challenges. Walk around to find more!',
+    sharkPosition: 'bottom-center', sharkMood: 'celebrating', nextText: 'Let’s hunt!',
   },
 ];
 
@@ -181,6 +177,7 @@ const pinSteps: TutorialStep[] = [
  */
 export const TUTORIAL_SEQUENCES: Record<TutorialSequence, TutorialStep[]> = {
   onboarding: homeOnboardingSteps,
+  home_first_find: homeFirstFindSteps,
   park_arrival: parkArrivalSteps,
   park: parkSteps,
   store: storeSteps,
