@@ -15,6 +15,7 @@ prepare_react_native_project!
 
 target 'ThemeParkShark' do
   use_expo_modules!
+  pod 'MapLibre', '6.17.1'
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
@@ -51,7 +52,14 @@ target 'ThemeParkShark' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
-    $MLRN.post_install(installer)
+    # MapLibre comes from its CocoaPods binary (below), not SPM: the SPM route links the
+    # xcframework into two targets and App Store archives fail on a duplicate signature.
+    installer.pods_project.targets.each do |t|
+      next unless t.name == 'maplibre-react-native'
+      t.build_configurations.each do |c|
+        c.build_settings['FRAMEWORK_SEARCH_PATHS'] = ['$(inherited)', '"${PODS_XCFRAMEWORKS_BUILD_DIR}/MapLibre"']
+      end
+    end
 
     # This is necessary for Xcode 14, because it signs resource bundles by default
     # when building for devices.

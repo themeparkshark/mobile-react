@@ -226,6 +226,7 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - MapLibre (6.17.1)
   - maplibre-react-native (10.4.2):
     - maplibre-react-native/DynamicLibrary (= 10.4.2)
     - React
@@ -2276,6 +2277,7 @@ DEPENDENCIES:
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - LinePlayActivity (from `../modules/lineplay-activity/ios`)
   - lottie-react-native (from `../node_modules/lottie-react-native`)
+  - MapLibre (= 6.17.1)
   - "maplibre-react-native (from `../node_modules/@maplibre/maplibre-react-native`)"
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCT-Folly/Fabric (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
@@ -2368,6 +2370,7 @@ SPEC REPOS:
     - libavif
     - libdav1d
     - lottie-ios
+    - MapLibre
     - nanopb
     - PromisesObjC
     - ReachabilitySwift
@@ -2675,6 +2678,7 @@ SPEC CHECKSUMS:
   LinePlayActivity: 466cd420d6309e6ad436bb790099134c24c89410
   lottie-ios: a881093fab623c467d3bce374367755c272bdd59
   lottie-react-native: 4ba06e2e4985c53dda6595a880f780e7ff551df1
+  MapLibre: 4602773419937bfa96189c53b90d1055b8ef4f29
   maplibre-react-native: 37d86b5b7b04dedaceebc577644e67acd7b5f437
   nanopb: 438bc412db1928dac798aa6fd75726007be04262
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
@@ -2759,6 +2763,6 @@ SPEC CHECKSUMS:
   Yoga: feb4910aba9742cfedc059e2b2902e22ffe9954a
   ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
-PODFILE CHECKSUM: 1debc853d87569e69091f862c6a03d885ac5cbf7
+PODFILE CHECKSUM: b82bdf44b47b57d47539705b1fd276e4e8ba35b4
 
 COCOAPODS: 1.16.2

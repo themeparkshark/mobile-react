@@ -240,9 +240,6 @@
 				DBB85C3B5B8CF1627708B0C5 /* PBXTargetDependency */,
 			);
 			name = ThemeParkShark;
-			packageProductDependencies = (
-				40C3CEE76D83C313FEE8C0ED /* MapLibre */,
-			);
 			productName = ThemeParkShark;
 			productReference = 13B07F961A680F5B00A75B9A /* ThemeParkShark.app */;
 			productType = "com.apple.product-type.application";
@@ -286,9 +283,6 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
-			packageReferences = (
-				AAD8AFA49859C6BF200A1002 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
-			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -379,10 +373,12 @@
 			);
 			inputPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-ThemeParkShark/Pods-ThemeParkShark-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/MapLibre/MapLibre.framework/MapLibre",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
 			);
 			name = "[CP] Embed Pods Frameworks";
 			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/MapLibre.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -774,25 +770,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		AAD8AFA49859C6BF200A1002 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
-			requirement = {
-				kind = exactVersion;
-				version = 6.17.1;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		40C3CEE76D83C313FEE8C0ED /* MapLibre */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = AAD8AFA49859C6BF200A1002 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
-			productName = MapLibre;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }
