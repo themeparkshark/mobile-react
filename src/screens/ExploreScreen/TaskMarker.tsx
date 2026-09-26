@@ -1,26 +1,94 @@
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { Marker } from '../../components/map/Marker';
 import Countdown, { zeroPad } from 'react-countdown';
 import { TaskType } from '../../models/task-type';
 import type { RideControlRide } from '../../api/endpoints/parks/rideControl';
 import { TEAMS } from '../../constants/teams';
+import { MapQueryContext } from '../../components/Map';
+import { BEHIND, RideAmbience, WaterAmbience } from '../../components/map/RideAmbience';
+import { ambienceNow, rideLook, WATER_AMBIENCE, type LandmarkId } from '../../services/rideLandmark';
+
+const LANDMARKS: Record<LandmarkId, number> = {
+  shark: require('../../../assets/images/map/landmarks/shark.png'),
+  snack: require('../../../assets/images/map/landmarks/snack.png'),
+  plaza: require('../../../assets/images/map/landmarks/plaza.png'),
+  pirates: require('../../../assets/images/map/landmarks/pirates.png'),
+  space: require('../../../assets/images/map/landmarks/space.png'),
+  snow: require('../../../assets/images/map/landmarks/snow.png'),
+  haunted: require('../../../assets/images/map/landmarks/haunted.png'),
+  tiki: require('../../../assets/images/map/landmarks/tiki.png'),
+  volcano: require('../../../assets/images/map/landmarks/volcano.png'),
+  wizard: require('../../../assets/images/map/landmarks/wizard.png'),
+  waterfall: require('../../../assets/images/map/landmarks/waterfall.png'),
+  race: require('../../../assets/images/map/landmarks/race.png'),
+  train: require('../../../assets/images/map/landmarks/train.png'),
+  circus: require('../../../assets/images/map/landmarks/circus.png'),
+  studio: require('../../../assets/images/map/landmarks/studio.png'),
+  ocean: require('../../../assets/images/map/landmarks/ocean.png'),
+  city: require('../../../assets/images/map/landmarks/city.png'),
+  lighthouse: require('../../../assets/images/map/landmarks/lighthouse.png'),
+};
+// Where the ride sits inside the 140x160 pin (its anchor is x 0.5, y 0.9).
+const GROUND = { x: 70, y: 146 };
+const RIDE_COIN = require('../../../assets/images/map/ride-coin.png');
+
+// Water spots found for rides, kept across re-mounts and re-renders.
+const waterSpots = new Map<string, { latitude: number; longitude: number } | null>();
+
+function useWaterSpot(enabled: boolean, latitude: number, longitude: number) {
+  const query = useContext(MapQueryContext);
+  const key = `${latitude.toFixed(5)},${longitude.toFixed(5)}`;
+  const [spot, setSpot] = useState(() => waterSpots.get(key) ?? null);
+  useEffect(() => {
+    if (!enabled || !query || waterSpots.has(key)) return;
+    let dead = false;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    // Tiles may still be streaming in; look again a few times before giving up.
+    const look = async () => {
+      const found = await query.findWater(latitude, longitude).catch(() => null);
+      if (dead) return;
+      if (found) { waterSpots.set(key, found); setSpot(found); }
+      else if (++tries < 4) timer = setTimeout(look, 2500 * tries);
+      else waterSpots.set(key, null);
+    };
+    timer = setTimeout(look, 1200);
+    return () => { dead = true; clearTimeout(timer); };
+  }, [enabled, query, key, latitude, longitude]);
+  return spot;
+}
+
+/** The ride's coin hovering over its landmark: slow spin and bob. */
+function FloatingCoin() {
+  const p = useSharedValue(0);
+  useEffect(() => {
+    p.value = withRepeat(withTiming(1, { duration: 3200, easing: Easing.linear }), -1, false);
+    return () => cancelAnimation(p);
+  }, [p]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateY: Math.sin(p.value * Math.PI * 2) * 4 }, { scaleX: Math.cos(p.value * Math.PI * 2) }],
+  }));
+  return <Animated.Image source={RIDE_COIN} style={[styles.floatingCoin, style]} />;
+}
 
 /**
- * TaskMarker — 100% STATIC children inside <Marker>.
- *
- * react-native-maps recalculates marker anchor whenever child layout shifts.
- * ANY Animated transform (even with useNativeDriver) causes teleporting.
- * All animations stripped — marker is rock-solid stationary.
+ * TaskMarker: a ride's landmark on the game map (themed from its name), its
+ * coin, team flag and timer, plus its Easter-egg scene when the player is near.
+ * The map pins the outer view by its anchor, so inner animations are safe.
  */
 export default function TaskMarker({
   task,
   isSelected,
   isTripGoal = false,
   control,
+  ambient = false,
   onPress,
 }: {
+  /** Play the ride's ambient Easter eggs (only for rides near the player). */
+  readonly ambient?: boolean;
   /** Today's Ride Control state for this ride, if any team holds it. */
   readonly control?: RideControlRide;
   readonly task: TaskType;
@@ -35,6 +103,16 @@ export default function TaskMarker({
   const ringColor = control ? TEAMS[control.controller].color
     : minsLeft !== null && minsLeft < 5 ? '#ef4444' : '#4ade80';
   const timerUrgent = minsLeft !== null && minsLeft < 5;
+  const look = useMemo(() => rideLook(task.name), [task.name]);
+  const kinds = useMemo(() => (ambient ? ambienceNow(look.ambience) : []), [ambient, look]);
+  const waterKind = kinds.find(k => WATER_AMBIENCE.includes(k));
+  const [behindKinds, frontKinds] = useMemo(() => {
+    const pin = kinds.filter(k => !WATER_AMBIENCE.includes(k));
+    return [pin.filter(k => BEHIND.includes(k)), pin.filter(k => !BEHIND.includes(k))];
+  }, [kinds]);
+  const latitude = Number(task.latitude);
+  const longitude = Number(task.longitude);
+  const waterSpot = useWaterSpot(!!waterKind, latitude, longitude);
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
   useEffect(() => {
     setTracksViewChanges(true);
@@ -42,12 +120,14 @@ export default function TaskMarker({
     return () => clearTimeout(timer);
   }, [isSelected, isTripGoal, control?.controller, control?.contested]);
 
-  return (
+  return (<>
+    {waterKind && waterSpot && (
+      <Marker coordinate={waterSpot} anchor={{ x: 0.5, y: 0.63 }}>
+        <WaterAmbience kind={waterKind} />
+      </Marker>
+    )}
     <Marker
-      coordinate={{
-        latitude: Number(task.latitude),
-        longitude: Number(task.longitude),
-      }}
+      coordinate={{ latitude, longitude }}
       onPress={onPress}
       stopPropagation={true}
       tracksViewChanges={tracksViewChanges}
@@ -112,17 +192,20 @@ export default function TaskMarker({
           </View>
         )}
 
-        {/* Task building — static, no scale transform */}
+        <RideAmbience kinds={behindKinds} seed={task.id} origin={GROUND} zIndex={1} />
+
+        {/* The ride's landmark: themed art, or the classic shark tower. */}
         <View style={styles.buildingContainer}>
-          <Image
-            source={require('../../../assets/images/screens/explore/task_animation.gif')}
-            style={styles.buildingImage}
-            contentFit="contain"
-          />
+          <View style={styles.landmarkWrap}>
+            <FloatingCoin />
+            <Image source={LANDMARKS[look.landmark]} style={styles.landmarkImage} contentFit="contain" />
+          </View>
         </View>
+
+        <RideAmbience kinds={frontKinds} seed={task.id} origin={GROUND} zIndex={8} />
       </View>
     </Marker>
-  );
+  </>);
 }
 
 const styles = StyleSheet.create({
@@ -230,8 +313,7 @@ const styles = StyleSheet.create({
   buildingContainer: {
     zIndex: 5,
   },
-  buildingImage: {
-    width: 120,
-    height: 120,
-  },
+  landmarkWrap: { width: 96, height: 124, alignItems: 'center', justifyContent: 'flex-end' },
+  landmarkImage: { width: 96, height: 96 },
+  floatingCoin: { position: 'absolute', top: 0, width: 30, height: 30 },
 });

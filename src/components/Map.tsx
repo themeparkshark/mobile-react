@@ -2,14 +2,22 @@ import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-ico
 import { faLocationArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
-import { ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { Camera, Images, MapView, type CameraRef } from '@maplibre/maplibre-react-native';
-import { Animated, Pressable, View, Easing, StyleSheet } from 'react-native';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, Images, MapView, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { Animated, Pressable, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { Marker } from './map/Marker';
 import { MAP_PATTERNS, TPS_MAP_STYLE } from './map/tpsMapStyle';
+import { nearestWaterPoint } from './map/water';
+
+type LatLng = { latitude: number; longitude: number };
+
+/** Lets map pins ask about the rendered map (e.g. where the nearest water is). */
+export const MapQueryContext = createContext<{
+  readonly findWater: (latitude: number, longitude: number) => Promise<LatLng | null>;
+} | null>(null);
 
 // Map always rotates with heading. Single button recenters on player.
 // While following, the shark is drawn at screen center and the cartoon map
@@ -128,6 +136,16 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     ).start();
   }, []);
   const cameraRef = useRef<CameraRef>(null);
+  const mapViewRef = useRef<MapViewRef>(null);
+  const window = useWindowDimensions();
+  const mapQuery = useMemo(() => ({
+    findWater: async (latitude: number, longitude: number) => {
+      // MapLibre's rect is [top, right, bottom, left] with top the larger y.
+      const found = await mapViewRef.current?.queryRenderedFeaturesInRect(
+        [window.height, window.width, 0, 0], undefined, ['water']);
+      return nearestWaterPoint(found?.features ?? [], latitude, longitude);
+    },
+  }), [window.height, window.width]);
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
   const followRef = useRef(true);
   followRef.current = focusedOnPlayer;
@@ -297,6 +315,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       </View>
 
       <MapView
+        ref={mapViewRef}
         style={StyleSheet.absoluteFill}
         mapStyle={TPS_MAP_STYLE}
         logoEnabled={false}
@@ -338,7 +357,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             {playerShark}
           </Marker>
         )}
-        {children}
+        <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
       </MapView>
       {location && focusedOnPlayer && (
         <View pointerEvents="none" style={styles.centerOverlay}>

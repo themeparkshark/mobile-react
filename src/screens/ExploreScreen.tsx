@@ -48,6 +48,7 @@ import ItemMarker from './ExploreScreen/ItemMarker';
 import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
+import { rideLook } from '../services/rideLandmark';
 import { getRideControl, type RideControlPark, type RideControlRide } from '../api/endpoints/parks/rideControl';
 import DailyGiftModal from '../components/DailyGiftModal';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
@@ -307,6 +308,22 @@ export default function ExploreScreen() {
     const id = setInterval(refreshRideControl, 20000);
     return () => clearInterval(id);
   }, [park?.id, refreshRideControl]);
+  // Easter-egg scenes only play for the closest themed rides, so the map
+  // wakes up around you as you walk and stays light on the phone.
+  const nearLat = location ? Math.round(location.latitude * 3000) / 3000 : null;
+  const nearLng = location ? Math.round(location.longitude * 3000) / 3000 : null;
+  const ambientTaskIds = useMemo(() => {
+    if (nearLat === null || nearLng === null) return new Set<number>();
+    const m = 111320;
+    const k = Math.cos((nearLat * Math.PI) / 180);
+    return new Set((redeemables?.tasks ?? [])
+      .filter(t => rideLook(t.name).ambience.length > 0)
+      .map(t => ({ id: t.id, d: Math.hypot((Number(t.latitude) - nearLat) * m, (Number(t.longitude) - nearLng) * m * k) }))
+      .filter(t => t.d < 450)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 12)
+      .map(t => t.id));
+  }, [redeemables?.tasks, nearLat, nearLng]);
   const rideControlByAsset = useMemo(() => new globalThis.Map<number, RideControlRide>(
     (rideControl?.rides ?? []).map(r => [r.asset_id, r])), [rideControl]);
 
@@ -867,6 +884,7 @@ export default function ExploreScreen() {
               isSelected={selectedTask?.id === task.id}
               isTripGoal={tripGoal?.task_id === task.id && !tripGoal.coin_owned}
               control={rideControlByAsset.get(Number(task.asset_id))}
+              ambient={ambientTaskIds.has(task.id)}
               onPress={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
             />
           ))}
