@@ -36,12 +36,9 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
     try {
       await updatePlayer({ username: trimmed });
       await refreshPlayer();
-      navigation.navigate('TeamSelection', {
-        isOnboarding: true,
-        onTeamSelected: () => {
-          navigation.navigate('Membership', { intro: true });
-        },
-      });
+      // Straight to play. Team choice waits until the player first taps a gym,
+      // where it matters (ExploreScreen.handleGymPress).
+      navigation.navigate('Explore');
     } catch (error: any) {
       // Crash-proof error handling
       const message = error?.response?.data?.errors?.username?.[0]

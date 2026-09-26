@@ -1,7 +1,6 @@
 import { createContext, FC, ReactNode, useContext, useState } from 'react';
 import { useTimeoutWhen } from 'rooks';
 import getDailyGift from '../api/endpoints/daily-gifts/create';
-import DailyGiftModal from '../components/DailyGiftModal';
 import { DailyGiftType } from '../models/daily-gift-type';
 import { AuthContext } from './AuthProvider';
 
@@ -35,9 +34,6 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
         setDailyGift,
       }}
     >
-      {dailyGift && dailyGift.redeemed_at === null && (
-        <DailyGiftModal dailyGift={dailyGift} />
-      )}
       {children}
     </DailyGiftContext.Provider>
   );

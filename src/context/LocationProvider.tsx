@@ -1,6 +1,6 @@
 import * as Location from 'expo-location';
 import { createContext, FC, ReactNode, MutableRefObject, useContext, useState, useRef, useEffect, useCallback } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Linking, Platform } from 'react-native';
 import { useAsyncEffect, useDebounce, useIntervalWhen } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
 import { LocationType } from '../models/location-type';
@@ -33,6 +33,10 @@ export interface LocationContextType {
   readonly parkLoaded: boolean;
   readonly parkLookupRecord: ParkLookupRecord | null;
   readonly permissionGranted: boolean;
+  /** True until we know the current permission status. */
+  readonly permissionChecked: boolean;
+  /** Asks for location (system prompt), or opens Settings once iOS won't ask again. */
+  readonly requestPermission: () => Promise<boolean>;
   readonly setAccuracyMode: (mode: 'navigation' | 'queue') => void;
   // Dev joystick support
   readonly devMode: boolean;
@@ -57,6 +61,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const { player, refreshPlayer } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
+  const [permissionChecked, setPermissionChecked] = useState<boolean>(false);
   const [accuracyMode, setAccuracyMode] = useState<'navigation' | 'queue'>('navigation');
   // Fast debounce — the AnimatedRegion glide in Map.tsx handles visual smoothing,
   // so we want location state to update as quickly as possible
@@ -392,10 +397,34 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     true
   );
 
+  // Only check at launch. The prompt itself waits for the map's primer, where
+  // the player sees why location matters; a cold prompt on the login screen
+  // gets denied and can never be shown again.
   useAsyncEffect(async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-
+    const { status } = await Location.getForegroundPermissionsAsync();
     setPermissionGranted(status === 'granted');
+    setPermissionChecked(true);
+  }, []);
+
+  const requestPermission = useCallback(async () => {
+    const current = await Location.getForegroundPermissionsAsync();
+    if (current.status === 'granted') { setPermissionGranted(true); return true; }
+    if (!current.canAskAgain) {
+      await Linking.openURL('app-settings:');
+      return false;
+    }
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    setPermissionGranted(status === 'granted');
+    return status === 'granted';
+  }, []);
+
+  // Coming back from Settings: pick up a permission granted there.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      void Location.getForegroundPermissionsAsync().then(({ status }) => setPermissionGranted(status === 'granted'));
+    });
+    return () => sub.remove();
   }, []);
 
   const reset = () => {
@@ -417,6 +446,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   return (
     <LocationContext.Provider
       value={{
+        permissionChecked,
+        requestPermission,
         location,
         latestLocationSampleRef,
         heading,

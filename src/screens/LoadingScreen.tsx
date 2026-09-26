@@ -114,7 +114,6 @@ import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import useCrumbs from '../hooks/useCrumbs';
-import { getMyTeam } from '../api/endpoints/gym-battle';
 
 export default function LoadingScreen() {
   const logoFloat = useRef(new Animated.Value(0)).current;
@@ -142,15 +141,7 @@ export default function LoadingScreen() {
   const safeNavigate = async () => {
     if (hasNavigated.current) return;
     hasNavigated.current = true;
-    try {
-      const teamInfo = await getMyTeam();
-      if (!teamInfo.has_team) {
-        RootNavigation.navigate('TeamSelection', { isOnboarding: true });
-        return;
-      }
-    } catch (e) {
-      // Proceed to Explore on error
-    }
+    // Team choice is deferred to the first gym tap; don't block the map.
     RootNavigation.navigate('Explore');
   };
 

@@ -48,6 +48,8 @@ import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
 import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
+import DailyGiftModal from '../components/DailyGiftModal';
+import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
 import TaskMarker from './ExploreScreen/TaskMarker';
@@ -157,7 +159,7 @@ export default function ExploreScreen() {
   const [playerSwordCount, setPlayerSwordCount] = useState<number>(0);
   
   const { refreshPlayer, player } = useContext(AuthContext);
-  const { parkLoaded, parkLookupRecord, location, park, permissionGranted } =
+  const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked } =
     useContext(LocationContext);
   const homeLocationConfirmed = isConfirmedOutsidePark(location, parkLookupRecord) && !park;
 
@@ -170,6 +172,7 @@ export default function ExploreScreen() {
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
+  const { dailyGift } = useContext(DailyGiftContext);
   const { data: tripGoalData, stale: tripGoalStale } = useTripGoal(tripGoalVersion, !!player);
   const tripGoal = tripGoalData?.goal;
   const tripGoalTask = tripGoal?.park_id === park?.id
@@ -574,7 +577,10 @@ export default function ExploreScreen() {
       </Topbar>
       {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion} />}
-      {player && !permissionGranted && <PermissionsNotGranted />}
+      {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
+      {/* One overlay at a time: the daily gift waits for the first-run tutorial. */}
+      {player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && !isActive && hasCompleted('onboarding') &&
+        <DailyGiftModal dailyGift={dailyGift} />}
       {/* Home Mode: Show prep items map instead of "Not at Park" message */}
       {player && parkLoaded && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
