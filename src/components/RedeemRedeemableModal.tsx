@@ -1,6 +1,6 @@
 import Lottie from 'lottie-react-native';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Pressable, View, Text, StyleSheet, TouchableOpacity, Easing, Vibration } from 'react-native';
+import { Animated, Dimensions, Pressable, View, Text, StyleSheet, TouchableOpacity, Easing } from 'react-native';
 import Modal from 'react-native-modal';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
@@ -27,7 +27,7 @@ import getRideCoins from '../api/endpoints/me/ride-coins';
 import { getStamps, type StampData } from '../api/endpoints/me/stamps';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import * as RootNavigation from '../RootNavigation';
-import SpinWheel from './SpinWheel';
+import TicketPunch from './TicketPunch';
 import {
   TaskAttempt,
   TaskGameProof,
@@ -55,7 +55,7 @@ function getTicketCost(redeemable: CurrentRedeemableType): number {
   return 1;
 }
 
-// Games for the wheel
+// Challenges the server can assign when a Ticket is spent
 const GAMES = [
   { id: 'tap' as const, name: 'WHACK-A-SHARK', color: '#3b82f6' },
   { id: 'timing' as const, name: 'RHYTHM TAP', color: '#8b5cf6' },
@@ -63,7 +63,7 @@ const GAMES = [
   { id: 'trivia' as const, name: 'QUICK TRIVIA', color: '#f59e0b' },
 ];
 
-type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'landed' | 'minigame' | 'postwin' | 'lost' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
+type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia';
 
 export default function RedeemRedeemableModal({
@@ -136,7 +136,6 @@ export default function RedeemRedeemableModal({
   const proofRef = useRef<TaskGameProof | null>(null);
   const startLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
-  // Wheel animation handled by SpinWheel component
 
   const isTaskType = redeemable?.type === 'task' || redeemable?.type === 'secret_task';
   const taskType = isTaskType ? redeemable.type as 'task' | 'secret_task' : null;
@@ -194,7 +193,6 @@ export default function RedeemRedeemableModal({
       outcomeRef.current = null;
       proofRef.current = null;
       startLocationRef.current = null;
-      // Wheel animation reset handled by SpinWheel
     }
   }, [open, isTaskType, taskType, taskId, player?.id]);
 
@@ -407,7 +405,7 @@ export default function RedeemRedeemableModal({
     }
   }, [refreshPlayer]);
 
-  // The server chooses the game when the Ticket is spent. The wheel is a reveal,
+  // The server chooses the game when the Ticket is spent. The punch is a reveal,
   // not an extra gate for a guest whose group or line is ready to move.
   const selectAssignedGame = useCallback(() => {
     const gameIndex = GAMES.findIndex((game) => game.id === attemptRef.current?.game);
@@ -419,31 +417,17 @@ export default function RedeemRedeemableModal({
     return true;
   }, []);
 
-  const handleSpin = useCallback(() => {
-    if (!selectAssignedGame()) return;
-    Vibration.vibrate(50);
-    setFlowState('spinning');
-  }, [selectAssignedGame]);
-
   const handlePlayNow = useCallback(() => {
     if (!selectAssignedGame()) return;
     setFlowState('minigame');
   }, [selectAssignedGame]);
 
+  // A spent Ticket goes straight into the punch reveal of the server-assigned
+  // game; 'wheel' only lingers if that game is unknown to this build.
   useEffect(() => {
-    if (!open || flowState !== 'spinning') return;
-    const timer = setTimeout(() => {
-      Vibration.vibrate([0, 80, 40, 80]);
-      setFlowState('landed');
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, [open, flowState]);
-
-  useEffect(() => {
-    if (!open || flowState !== 'landed') return;
-    const timer = setTimeout(() => setFlowState('minigame'), 1500);
-    return () => clearTimeout(timer);
-  }, [open, flowState]);
+    if (!open || flowState !== 'wheel') return;
+    if (selectAssignedGame()) setFlowState('spinning');
+  }, [open, flowState, selectAssignedGame]);
 
   const resolveAttempt = useCallback(async (outcome: 'win' | 'loss', proof?: TaskGameProof) => {
     if (claimingRef.current || !attemptRef.current) return;
@@ -558,6 +542,7 @@ export default function RedeemRedeemableModal({
         onBackButtonPress={safeClose}
         backdropOpacity={flowState === 'preview' ? 0.5 : 0.95}
         useNativeDriverForBackdrop
+        style={flowState === 'spinning' ? { margin: 0 } : undefined}
       >
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           {flowState === 'recovering' && (
@@ -717,38 +702,24 @@ export default function RedeemRedeemableModal({
             </>
           )}
 
-          {/* WHEEL STATE */}
-          {(flowState === 'wheel' || flowState === 'spinning' || flowState === 'landed') && (
-            <View style={styles.wheelContainer}>
-              <Text style={styles.wheelTitle}>YOUR GAME IS READY!</Text>
-              <Text style={styles.wheelSubtitle}>{proofRejected
-                ? 'Same challenge · no new Ticket'
-                : attemptRef.current?.rescue_pass ? 'Rescue Pass used · no Ticket spent'
-                  : 'Ticket already spent · no more charge'}</Text>
-
-              <SpinWheel
-                spinning={flowState === 'spinning' || flowState === 'landed'}
-                landed={flowState === 'landed'}
-                selectedIndex={selectedIndexRef.current}
-              />
-
-              {flowState === 'wheel' && (
-                <TouchableOpacity style={styles.spinBtn} onPress={handleSpin}>
-                  <Text style={styles.spinBtnText}>🎲 TAP TO SPIN!</Text>
-                </TouchableOpacity>
-              )}
-              {flowState === 'spinning' && <Text style={styles.spinningText}>✨ SPINNING... ✨</Text>}
-              {flowState === 'landed' && selectedGameData && (
-                <View style={styles.landedWrap}>
-                  <Text style={styles.landedText}>🎯 {selectedGameData.name}</Text>
-                  <Text style={styles.landedSub}>Get ready...</Text>
-                </View>
-              )}
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Play assigned ride challenge now"
-                style={styles.playNowBtn} onPress={handlePlayNow}>
-                <Text style={styles.playNowText}>PLAY NOW  →</Text>
+          {/* TICKET PUNCH: the spent Ticket tears and the assigned game pops up. */}
+          {flowState === 'spinning' && selectedGameData && (
+            <TicketPunch
+              gameName={selectedGameData.name}
+              gameColor={selectedGameData.color}
+              rideName={taskName}
+              note={proofRejected ? 'Same challenge · no new Ticket'
+                : attemptRef.current?.rescue_pass ? 'Shark Rescue Pass used' : undefined}
+              onDone={() => setFlowState('minigame')}
+            />
+          )}
+          {flowState === 'wheel' && (
+            <View style={styles.lostCard}>
+              <Text style={styles.lostTitle}>CHALLENGE READY</Text>
+              <Text style={styles.lostMsg}>Your Ticket is spent. Update the app to play this challenge.</Text>
+              <TouchableOpacity accessibilityRole="button" style={styles.lostBtn} onPress={handlePlayNow}>
+                <Text style={styles.lostBtnText}>Play now</Text>
               </TouchableOpacity>
-              {/* No cancel - ticket already spent, must play! */}
             </View>
           )}
 
@@ -920,30 +891,6 @@ const styles = StyleSheet.create({
   ticketCount: { color: 'rgba(255,255,255,0.8)', fontSize: 13, textAlign: 'center', marginTop: 6, fontWeight: '600' },
   minigameContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   
-  // Wheel styles
-  wheelContainer: { alignItems: 'center', padding: 16 },
-  wheelTitle: { color: '#fff', fontSize: 28, fontWeight: '900', marginBottom: 4, textShadowColor: 'rgba(251,191,36,0.5)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10 },
-  wheelSubtitle: { color: '#fbbf24', fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  spinBtn: { 
-    backgroundColor: '#22c55e', 
-    paddingHorizontal: 48, 
-    paddingVertical: 18, 
-    borderRadius: 16, 
-    marginTop: 16,
-    shadowColor: '#22c55e',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-  },
-  spinBtnText: { color: '#fff', fontSize: 22, fontWeight: '900' },
-  playNowBtn: { marginTop: 12, minHeight: 44, paddingHorizontal: 22,
-    justifyContent: 'center', alignItems: 'center', borderRadius: 12,
-    borderWidth: 2, borderColor: '#ffd443', backgroundColor: '#0b69b8' },
-  playNowText: { color: '#fff', fontFamily: 'Shark', fontSize: 16 },
-  spinningText: { color: '#fbbf24', fontSize: 22, fontWeight: '900', marginTop: 16 },
-  landedWrap: { alignItems: 'center', marginTop: 16 },
-  landedText: { color: '#4ade80', fontSize: 26, fontWeight: '900' },
-  landedSub: { color: 'rgba(255,255,255,0.6)', fontSize: 16, marginTop: 4 },
   cancelBtn: { marginTop: 12, padding: 10 },
   cancelText: { color: 'rgba(255,255,255,0.5)', fontSize: 15 },
 
