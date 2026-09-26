@@ -12,6 +12,12 @@ import type { PauseReason, WaitSource } from '../../../services/lineplay/LinePla
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import { partCountdown } from '../../../services/lineplay/partCountdown';
+import Svg, { Circle } from 'react-native-svg';
+
+const RING = 96;
+const RING_STROKE = 10;
+const RING_R = (RING - RING_STROKE) / 2;
+const RING_C = 2 * Math.PI * RING_R;
 
 export interface WaitCardProps {
   readonly rideName: string;
@@ -40,6 +46,8 @@ export interface WaitCardProps {
   readonly currentQuestBonusEnabled?: boolean;
   readonly currentQuestVerified?: boolean;
   readonly currentQuestProofPending?: boolean;
+  /** Opens the quick-game picker; omitted when no game is available. */
+  readonly onPlayBonus?: () => void;
 }
 
 function fmt(seconds: number): string {
@@ -75,6 +83,7 @@ export default function WaitCard({
   currentQuestBonusEnabled = false,
   currentQuestVerified = false,
   currentQuestProofPending = false,
+  onPlayBonus,
 }: WaitCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [partBurst, setPartBurst] = useState(0);
@@ -117,82 +126,84 @@ export default function WaitCard({
   const entranceAgeMinutes = entranceWaitObservedAt == null ? null :
     Math.max(0, Math.floor((Date.now() - entranceWaitObservedAt) / 60_000));
   const entranceFresh = entranceAgeMinutes != null && entranceAgeMinutes < 10;
+  const ringProgress = !rewardTrackingAvailable ? 0
+    : atCap ? 1 : Math.max(0, Math.min(1, countdown.progressSeconds / interval));
+  const earned = creditedParts ?? 0;
+  // One plain status line; the fine print lives behind the details toggle.
+  const headline = paused
+    ? pauseReason === 'manual' ? 'Paused' : 'Line moving · paused'
+    : !rewardTrackingAvailable
+      ? lineRewardsReady === false || rewardUnavailable ? 'Games only here' : 'Connecting…'
+      : atCap ? 'Max Parts reached'
+        : countdown.needsCheck || countdown.checking ? 'Checking you’re in line…'
+          : fmt(countdown.remainingSeconds);
+  const subline = paused
+    ? 'Time near the ride still counts.'
+    : !rewardTrackingAvailable
+      ? lineRewardsReady === false || rewardUnavailable
+        ? 'Ride Parts aren’t available at this ride right now.'
+        : 'Games work while rewards connect.'
+      : atCap
+        ? atDailyCap ? 'You’ve earned today’s Parts for this ride.' : 'Session limit reached. Great wait!'
+        : countdown.needsCheck || countdown.checking ? 'Stay near the ride to keep earning.'
+          : earned === 0 ? 'until your first Ride Part' : 'until your next Ride Part';
+
   return (
     <View style={styles.wrap}>
       <View style={styles.artWrap}>
         {imageUrl ? (
           <Image source={{ uri: imageUrl }} style={styles.art} resizeMode="cover" />
         ) : (
-          <Image source={require('../../../../assets/images/shark_background.png')}
+          <Image source={require('../../../../assets/images/water_background.png')}
             style={styles.art} resizeMode="cover" />
         )}
-        <LinearGradient
-          colors={['transparent', 'rgba(10,22,40,0.9)']}
-          style={StyleSheet.absoluteFill}
-        />
+        <LinearGradient colors={['rgba(7,104,185,0.35)', 'rgba(5,52,110,0.92)']} style={StyleSheet.absoluteFill} />
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.rideName} numberOfLines={1}>
-          {rideName}
-        </Text>
-
-        <View style={styles.statsRow}>
-          <Stat label="Start plan"
-            value={`${postedWaitMinutes}m`} />
-          <View style={styles.divider} />
-          <Stat label="Elapsed" value={fmt(elapsedSeconds)} accent />
-          <View style={styles.divider} />
-          <Stat label="Eligible" value={rewardTrackingAvailable ? fmt(verifiedEligibleSeconds) : '—'} />
+        <View style={styles.topRow}>
+          <Text style={styles.rideName} numberOfLines={1}>{rideName}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Resume queue games' : 'Pause queue games'}
+            onPress={onTogglePause} style={styles.pauseButton} hitSlop={8}>
+            <Text style={styles.pauseButtonText}>{paused ? '▶' : 'II'}</Text>
+          </Pressable>
         </View>
 
-        {rewardTrackingAvailable && (
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${atCap ? 100 : Math.round(countdown.progressSeconds / interval * 100)}%` }]} />
+        <View style={styles.meterRow}>
+          <View style={{ width: RING, height: RING }}
+            accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
+            <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
+              <Circle cx={RING / 2} cy={RING / 2} r={RING_R} stroke="rgba(255,255,255,0.22)"
+                strokeWidth={RING_STROKE} fill="none" />
+              <Circle cx={RING / 2} cy={RING / 2} r={RING_R} stroke="#ffcf3b" strokeWidth={RING_STROKE}
+                fill="none" strokeLinecap="round" strokeDasharray={`${RING_C} ${RING_C}`}
+                strokeDashoffset={RING_C * (1 - ringProgress)}
+                transform={`rotate(-90 ${RING / 2} ${RING / 2})`} />
+            </Svg>
+            <Animated.View style={[styles.gemWrap, { transform: [{ scale: burstScale }] }]}>
+              <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.gem} />
+              <Text style={styles.gemCount}>{earned}</Text>
+            </Animated.View>
           </View>
+          <View style={styles.meterCopy}>
+            <Text style={styles.meterHeadline} numberOfLines={1} adjustsFontSizeToFit>{headline}</Text>
+            <Text style={styles.meterSub}>{subline}</Text>
+            {partBurst > 0 && <Text style={styles.partBurstText}>+{partBurst} RIDE PART{partBurst === 1 ? '' : 'S'}!</Text>}
+          </View>
+        </View>
+
+        {onPlayBonus && (
+          <Pressable accessibilityRole="button" accessibilityLabel="Play a quick game for bonus rewards"
+            onPress={onPlayBonus} disabled={paused}
+            style={({ pressed }) => [styles.playButton, paused && styles.playButtonDisabled, pressed && styles.playButtonPressed]}>
+            <Text style={styles.playButtonText}>PLAY FOR BONUS</Text>
+          </Pressable>
         )}
 
-        <Text style={styles.progressHint}>
-          {paused ? `${pauseReason === 'manual' ? 'Games paused' : 'Line moving · games paused'}. Nearby time may still count.` :
-            rewardTrackingAvailable
-              ? creditedParts !== null
-                ? atCap
-                  ? `${earnedLabel} · ${atDailyCap ? 'park-day limit reached' : 'session limit reached'}`
-                  : countdown.needsCheck
-                    ? `${earnedLabel} · waiting for a fresh nearby check`
-                  : countdown.checking
-                    ? creditedParts === 0
-                      ? 'First Part · checking nearby time'
-                      : `${earnedLabel} · checking nearby time for next Part`
-                  : creditedParts === 0
-                    ? `First Part in ${nextPartLabel}`
-                    : `${earnedLabel} · next in ${nextPartLabel}`
-                : atSessionCap
-                  ? `${potentialParts} potential Parts · session limit reached`
-                  : countdown.needsCheck
-                    ? `${potentialParts} potential Parts · waiting for a fresh nearby check`
-                  : countdown.checking
-                    ? `${potentialParts} potential Part${potentialParts === 1 ? '' : 's'} · checking nearby time`
-                    : `${potentialParts} potential Part${potentialParts === 1 ? '' : 's'} · next in ${nextPartLabel}`
-              : lineRewardsReady === false
-                ? 'Ride rewards unavailable here · games still work'
-                : rewardUnavailable
-                  ? 'Ride rewards unavailable right now · games still work'
-                  : 'Connecting rewards · games work while we retry'}
-        </Text>
-        {partBurst > 0 && <Animated.View style={[styles.partBurst, { transform: [{ scale: burstScale }] }]}>
-          <Text style={styles.partBurstText}>✦ +{partBurst} PART{partBurst === 1 ? '' : 'S'} EARNED</Text>
-        </Animated.View>}
-        <View style={styles.actionRow}>
-          <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
-            onPress={() => setExpanded(value => !value)} style={styles.detailsButton}>
-            <Text style={styles.detailsButtonText}>{expanded ? 'HIDE DETAILS  ↑' : 'WAIT + REWARD DETAILS  ↓'}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Resume queue games' : 'Pause queue games'}
-            onPress={onTogglePause} style={styles.pauseButton}>
-            <Text style={styles.pauseButtonText}>{paused ? 'RESUME' : 'PAUSE'}</Text>
-          </Pressable>
-        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
+          onPress={() => setExpanded(value => !value)} style={styles.detailsButton} hitSlop={6}>
+          <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `In line ${fmt(elapsedSeconds)} · posted wait ${postedWaitMinutes}m · details`}</Text>
+        </Pressable>
         {expanded && <>
           <Text style={styles.waitSourceHint}>
             {waitSource === 'posted' ? 'Start plan based on the entrance wait when you started.' :
@@ -205,35 +216,29 @@ export default function WaitCard({
                 `Entrance board last seen ${entranceWaitMinutes}m · ${entranceAgeMinutes}m ago`}
               {entranceFresh && Math.abs(entranceWaitChangeMinutes) >= 5
                 ? ` · ${entranceWaitChangeMinutes > 0 ? 'up' : 'down'} ${Math.abs(entranceWaitChangeMinutes)}m` : ''}
-              {entranceFresh && entranceWaitChangeMinutes <= -5
-                ? ' · try a quick round next' : ''}
               . This is not your remaining time.
             </Text>
           )}
           {rewardTrackingAvailable && <Text style={styles.waitSourceHint}>
-            {creditedParts === null
-              ? 'Parts are potential until the server confirms eligible time. Session and daily limits apply.'
-              : 'Earned Parts are already in your wallet. Nearby time is verified by the server; session and park-day limits apply.'}
+            {`Verified time near the ride: ${fmt(verifiedEligibleSeconds)}. One Ride Part per ${Math.round(interval / 60)} minutes, up to ${sessionPartCap} per line.`}
           </Text>}
           {rewardTrackingAvailable && masteryBonusAvailable && (
-            <Text style={styles.ticketHint}>⭐ Coin mastery: your first verified Part here today earns +1 bonus Part.</Text>
+            <Text style={styles.ticketHint}>⭐ Coin mastery: your first Part here today earns +1 bonus Part.</Text>
           )}
           {rewardTrackingAvailable && currentQuestBonusEnabled && (
             <Text style={styles.ticketHint}>
-              {currentQuestVerified
-                ? '🦈 Current Quest verified. A bonus Part can settle after ten eligible minutes, subject to ride limits.'
-                : currentQuestProofPending
-                  ? '🦈 Current Quest played. Route verification is pending; no bonus is counted yet.'
-                  : '🦈 Complete Current Quest for a possible bonus Part after ten eligible minutes.'}
+              {currentQuestVerified ? '🦈 Current Quest verified: bonus Part on the way.'
+                : currentQuestProofPending ? '🦈 Current Quest played. Checking your route.'
+                  : '🦈 Finish Current Quest for a bonus Part.'}
             </Text>
           )}
           {rewardTrackingAvailable && ticketAvailable !== null && (
             <Text style={styles.ticketHint}>
               {ticketAvailable
                 ? verifiedEligibleSeconds >= ticketIntervalSeconds
-                  ? '🎫 Park Ticket ready when this verified session ends.'
-                  : `🎫 A Park Ticket unlocks after ${fmt(ticketIntervalSeconds - verifiedEligibleSeconds)} more eligible time.`
-                : '🎫 Ticket for this ride collected or park-day limit reached.'}
+                  ? '🎫 Park Ticket ready when this line ends.'
+                  : `🎫 Park Ticket in ${fmt(ticketIntervalSeconds - verifiedEligibleSeconds)} more.`
+                : '🎫 Today’s Ticket for this ride is collected.'}
             </Text>
           )}
         </>}
@@ -242,16 +247,26 @@ export default function WaitCard({
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={[styles.statValue, accent && styles.statValueAccent]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  meterRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 14 },
+  gemWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  gem: { width: 44, height: 44, resizeMode: 'contain' },
+  gemCount: {
+    position: 'absolute', bottom: 10, fontFamily: 'Shark', fontSize: 18, color: '#fff',
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
+  },
+  meterCopy: { flex: 1 },
+  meterHeadline: { fontFamily: 'Shark', fontSize: 32, color: '#ffcf3b',
+    textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
+  meterSub: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff', marginTop: 2 },
+  playButton: {
+    marginTop: 10, backgroundColor: '#ffcf3b', borderRadius: 16, paddingVertical: 10, alignItems: 'center',
+    borderBottomWidth: 5, borderBottomColor: '#d99a00',
+  },
+  playButtonPressed: { transform: [{ translateY: 3 }], borderBottomWidth: 2 },
+  playButtonDisabled: { opacity: 0.5 },
+  playButtonText: { fontFamily: 'Shark', fontSize: 21, color: '#075083' },
   wrap: {
     borderRadius: borderRadius.xxl,
     overflow: 'hidden',
@@ -261,7 +276,7 @@ const styles = StyleSheet.create({
     ...shadows.lg,
   },
   artWrap: {
-    height: 55,
+    ...StyleSheet.absoluteFillObject,
   },
   art: {
     ...StyleSheet.absoluteFillObject,
@@ -270,76 +285,22 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-    marginTop: -18,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   rideName: {
+    flex: 1,
     color: colors.textPrimary,
     fontFamily: 'Shark',
-    fontSize: 23,
+    fontSize: 24,
+    textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
   },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
-    backgroundColor: 'rgba(0,74,145,0.58)',
-    paddingVertical: 5,
-  },
-  stat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    color: colors.textPrimary,
-    fontFamily: 'Knockout',
-    fontSize: 21,
-  },
-  statValueAccent: {
-    color: colors.tertiary,
-  },
-  statLabel: {
-    color: '#d9f2ff',
-    fontFamily: 'Knockout',
-    fontSize: 12,
-    marginTop: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  divider: {
-    width: 1,
-    height: 28,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  progressTrack: {
-    height: 5,
-    borderRadius: borderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    marginTop: spacing.sm,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: borderRadius.full,
-    backgroundColor: '#ffca30',
-  },
-  progressHint: {
-    color: '#e1f5ff',
-    fontSize: 11,
-    marginTop: 5,
-  },
-  partBurst: { alignSelf: 'stretch', marginTop: 7, paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: 10, borderWidth: 2, borderColor: '#fff', backgroundColor: '#ffcb2e' },
-  partBurstText: { color: '#073e87', fontFamily: 'Knockout', fontSize: 15,
-    letterSpacing: 0.6, textAlign: 'center' },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
-  detailsButton: { flex: 1, minHeight: 44, justifyContent: 'center' },
-  detailsButtonText: { color: '#ffdc47', fontFamily: 'Knockout', fontSize: 13 },
-  pauseButton: { minWidth: 72, minHeight: 44, borderRadius: 9, borderWidth: 1,
-    borderColor: '#fff', backgroundColor: '#07599a', justifyContent: 'center', alignItems: 'center' },
-  pauseButtonText: { color: '#fff', fontFamily: 'Knockout', fontSize: 13, letterSpacing: 0.5 },
+  partBurstText: { color: '#7dffb0', fontFamily: 'Shark', fontSize: 18, marginTop: 4 },
+  detailsButton: { minHeight: 34, justifyContent: 'center', alignItems: 'center' },
+  detailsButtonText: { color: '#cdeaff', fontFamily: 'Knockout', fontSize: 14 },
+  pauseButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 2,
+    borderColor: '#fff', backgroundColor: 'rgba(5,52,110,0.7)', justifyContent: 'center', alignItems: 'center' },
+  pauseButtonText: { color: '#fff', fontFamily: 'Knockout', fontSize: 15 },
   waitSourceHint: { color: '#d4edff', fontSize: 11, marginTop: spacing.sm },
   entranceHint: { color: colors.textPrimary, fontSize: 11, marginTop: spacing.xs },
   ticketHint: {

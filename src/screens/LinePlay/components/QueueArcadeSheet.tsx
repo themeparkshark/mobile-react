@@ -5,9 +5,21 @@ import Modal from 'react-native-modal';
 export interface QueueArcadeChoice {
   readonly id: string;
   readonly title: string;
+  readonly gameId?: string;
   readonly index: number;
   readonly completed: boolean;
 }
+
+const ICONS: Record<string, number> = {
+  tap: require('../../../../assets/images/screens/lineplay/arcade/whack.png'),
+  timing: require('../../../../assets/images/screens/lineplay/arcade/rhythm.png'),
+  memory: require('../../../../assets/images/screens/lineplay/arcade/memory.png'),
+  trivia: require('../../../../assets/images/screens/lineplay/arcade/trivia.png'),
+  shark: require('../../../../assets/images/screens/lineplay/arcade/sharky.png'),
+  banana: require('../../../../assets/images/screens/lineplay/arcade/banana.png'),
+  current: require('../../../../assets/images/screens/lineplay/arcade/quest.png'),
+  showdown: require('../../../../assets/images/screens/lineplay/arcade/showdown.png'),
+};
 
 export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, onHidden }: {
   readonly visible: boolean;
@@ -39,6 +51,8 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
           {choices.map(choice => <Pressable key={choice.id} accessibilityRole="button"
             accessibilityLabel={`${choice.completed ? 'Replay' : 'Play'} ${choice.title}`}
             onPress={() => onChoose(choice.index)} style={styles.game}>
+            {!!choice.gameId && ICONS[choice.gameId] != null &&
+              <Image source={ICONS[choice.gameId]} style={styles.gameIcon} contentFit="contain" />}
             <Text style={styles.gameTitle} numberOfLines={2}>{choice.title}</Text>
             <Text style={styles.gameAction}>{choice.completed ? 'PLAY AGAIN' : 'PLAY NOW'}  →</Text>
           </Pressable>)}
@@ -50,6 +64,7 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
 }
 
 const styles = StyleSheet.create({
+  gameIcon: { width: 72, height: 72, alignSelf: 'center', marginBottom: 4 },
   modal: { margin: 0 },
   scrim: { flex: 1, justifyContent: 'center', alignItems: 'center',
     backgroundColor: 'rgba(3, 23, 60, 0.68)' },
@@ -76,8 +91,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 9, shadowColor: '#063a75',
     shadowOpacity: 0.13, shadowOffset: { width: 0, height: 2 }, shadowRadius: 2,
     elevation: 2 },
-  gameTitle: { color: '#083f7c', fontFamily: 'Shark', fontSize: 17 },
-  gameAction: { color: '#0879ca', fontFamily: 'Knockout', fontSize: 12 },
+  gameTitle: { color: '#083f7c', fontFamily: 'Shark', fontSize: 17, textAlign: 'center' },
+  gameAction: { color: '#0879ca', fontFamily: 'Knockout', fontSize: 12, textAlign: 'center', marginTop: 2 },
   note: { color: '#416b8f', fontFamily: 'Knockout', fontSize: 13,
     textAlign: 'center', paddingHorizontal: 15, paddingTop: 3, paddingBottom: 16 },
 });

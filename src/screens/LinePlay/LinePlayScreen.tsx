@@ -594,6 +594,7 @@ export default function LinePlayScreen() {
     .map(choice => ({
       id: choice.id,
       title: GAME_NAMES[choice.gameId] ?? 'Queue Game',
+      gameId: choice.gameId,
       index: choice.index,
       completed: choice.completed,
     }));
@@ -725,6 +726,7 @@ export default function LinePlayScreen() {
               pauseReason={snapshot.pauseReason}
               onTogglePause={() => snapshot.state === 'paused'
                 ? session.resume() : session.pause('manual')}
+              onPlayBonus={arcadeChoices.length ? () => setArcadeOpen(true) : undefined}
             />
           )}
         </View>
@@ -874,8 +876,6 @@ export default function LinePlayScreen() {
               )}
             />
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
-              onArcade={arcadeChoices.length ? () => setArcadeOpen(true) : undefined}
-              arcadePaused={snapshot.state !== 'active'}
               firstLabel={activityPages[0]?.kind === 'chapter_intro' ? 'Chapter' : 'First round'}
               progressText={storyStep ? `CLUE ${storyStep}/3`
                 : activityPages[visiblePageIndex]?.kind === 'chapter_intro' ? 'STORY' : 'FREE PLAY'}
