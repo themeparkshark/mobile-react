@@ -73,6 +73,13 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   }, [token]);
 
   useEffect(() => {
+    // Dev builds only: sign straight in as a local test player so the real
+    // screens can be exercised against a local backend without Apple sign-in.
+    const devToken = __DEV__ ? process.env.EXPO_PUBLIC_DEV_AUTH_TOKEN : undefined;
+    if (devToken) {
+      setToken(devToken);
+      return;
+    }
     SecureStore.getItemAsync('token').then((_token) => {
       if (_token) {
         setToken(_token);

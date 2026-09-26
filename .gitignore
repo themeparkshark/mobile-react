@@ -20,3 +20,4 @@ tsconfig.tsbuildinfo
 # Build artifacts (too large for git)
 build-*.ipa
 *.ipa
+.env*.local

@@ -44,9 +44,10 @@ export const LocationContext = createContext<LocationContextType>(
   {} as LocationContextType
 );
 
-// Default dev location: Universal Studios Hollywood
-const DEV_DEFAULT_LAT = 34.1381;
-const DEV_DEFAULT_LNG = -118.3534;
+// Default dev location: Universal Studios Hollywood. EXPO_PUBLIC_DEV_START_LAT/LNG
+// (dev builds only) drop the joystick at a specific ride for playtesting.
+const DEV_DEFAULT_LAT = Number(process.env.EXPO_PUBLIC_DEV_START_LAT) || 34.1381;
+const DEV_DEFAULT_LNG = Number(process.env.EXPO_PUBLIC_DEV_START_LNG) || -118.3534;
 
 export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
