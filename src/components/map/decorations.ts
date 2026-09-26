@@ -13,6 +13,10 @@ export interface DecoInput {
   readonly wood: readonly GeoJSON.Feature[];
   readonly green: readonly GeoJSON.Feature[];
   readonly water: readonly GeoJSON.Feature[];
+  /** Neighborhoods: yard trees are planted here, clear of houses and streets. */
+  readonly homes?: readonly GeoJSON.Feature[];
+  readonly buildings?: readonly GeoJSON.Feature[];
+  readonly roads?: readonly GeoJSON.Feature[];
 }
 
 export interface Bounds { readonly north: number; readonly south: number; readonly east: number; readonly west: number }
@@ -80,7 +84,36 @@ function inAreas(x: number, y: number, areas: readonly Area[]): boolean {
   return false;
 }
 
-type Layer = { spacing: number; salt: number; keep: number; areas: Area[]; pick: (r: number) => { icon: string; s: number } };
+type Layer = { spacing: number; salt: number; keep: number; areas: Area[]; pick: (r: number) => { icon: string; s: number };
+  clear?: (x: number, y: number) => boolean };
+
+type Segment = [number, number, number, number];
+
+function segments(features: readonly GeoJSON.Feature[]): Segment[] {
+  const out: Segment[] = [];
+  const add = (line: number[][]) => {
+    for (let i = 1; i < line.length; i++) out.push([line[i - 1][0], line[i - 1][1], line[i][0], line[i][1]]);
+  };
+  for (const f of features) {
+    const g = f.geometry;
+    if (g?.type === 'LineString') add(g.coordinates as number[][]);
+    else if (g?.type === 'MultiLineString') for (const l of g.coordinates) add(l as number[][]);
+  }
+  return out;
+}
+
+/** Distance from a point to the nearest segment, in the same (scaled) units. */
+function nearSegment(x: number, y: number, segs: readonly Segment[], kx: number, limit: number): boolean {
+  for (const [x1, y1, x2, y2] of segs) {
+    const ax = (x - x1) * kx; const ay = y - y1;
+    const bx = (x2 - x1) * kx; const by = y2 - y1;
+    const len = bx * bx + by * by;
+    const t = len ? Math.max(0, Math.min(1, (ax * bx + ay * by) / len)) : 0;
+    const dx = ax - t * bx; const dy = ay - t * by;
+    if (dx * dx + dy * dy < limit * limit) return true;
+  }
+  return false;
+}
 
 /** Tree spacing tightens as you zoom in so woods always read as a full canopy. */
 export function treeSpacing(zoom: number): number | null {
@@ -114,6 +147,16 @@ export function buildDecorations(input: DecoInput, b: Bounds, zoom: number): Geo
   if (zoom >= 17) {
     layers.push({ spacing: 7, salt: 3, keep: 0.16, areas: green, pick: () => ({ icon: 'deco-tuft', s: 1.3 }) });
   }
+  if (zoom >= 16.3 && input.homes?.length) {
+    // Yard trees: a leafy neighborhood, never on a roof or in the street.
+    const houses = toAreas(input.buildings ?? []);
+    const roads = segments(input.roads ?? []);
+    const kx = Math.cos((lat * Math.PI) / 180);
+    const clearance = 5 * mLat; // ~5 m from any road centerline edge
+    layers.push({ spacing: 11, salt: 5, keep: 0.42, areas: toAreas(input.homes),
+      pick: r => ({ icon: r < 0.85 ? ROUND[Math.floor((r / 0.85) * ROUND.length)] : PALM[Math.floor(((r - 0.85) / 0.15) * PALM.length)], s: 0.62 }),
+      clear: (x, y) => !inAreas(x, y, houses) && !nearSegment(x, y, roads, kx, clearance + 4 * mLat) });
+  }
   for (const layer of layers) {
     if (!layer.areas.length) continue;
     const dLat = layer.spacing * mLat;
@@ -127,6 +170,7 @@ export function buildDecorations(input: DecoInput, b: Bounds, zoom: number): Geo
         const x = (i + 0.15 + hash(i, j, layer.salt) * 0.7) * dLng;
         const y = (j + 0.15 + hash(j, i, layer.salt) * 0.7) * dLat;
         if (!inAreas(x, y, layer.areas)) continue;
+        if (layer.clear && !layer.clear(x, y)) continue;
         const { icon, s } = layer.pick(hash(i, j, layer.salt + 20));
         // Southern items draw last so trees overlap like a front-lit illustration.
         features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x, y] }, properties: { icon, s, k: -y } });

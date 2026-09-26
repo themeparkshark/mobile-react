@@ -14,11 +14,20 @@ export const TPS_MAP_STYLE = {
   version: 8,
   sources: { omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' } },
   layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#f1e5c6' } },
+    // The world is soft lawn (like a hand-drawn park map); paved and built-up
+    // areas lay cream on top of it, so neighborhoods read green and friendly.
+    { id: 'bg', type: 'background', paint: { 'background-color': '#c4e39a' } },
     { id: 'landuse', type: 'fill', source: 'omt', 'source-layer': 'landuse',
+      filter: ['!', ['in', ['get', 'class'], ['literal', ['residential', 'suburb', 'neighbourhood', 'quarter']]]],
       paint: { 'fill-color': ['match', ['get', 'class'],
-        'residential', '#ece0c1', 'theme_park', '#f4e9cd', 'zoo', '#e2eab9',
-        'pitch', '#a9d46c', 'playground', '#b7dc86', 'cemetery', '#b7d78c', '#eee2c4'] } },
+        'theme_park', '#f4e9cd', 'zoo', '#e2eab9',
+        'pitch', '#a9d46c', 'playground', '#b7dc86', 'cemetery', '#b7d78c',
+        'school', '#eadfc3', 'university', '#eadfc3', 'college', '#eadfc3', 'hospital', '#eadfc3',
+        '#ebe1c8'] } },
+    // Neighborhoods stay lawn with a hint of warmth, so houses sit on grass.
+    { id: 'residential', type: 'fill', source: 'omt', 'source-layer': 'landuse',
+      filter: ['==', ['get', 'class'], 'residential'],
+      paint: { 'fill-color': '#cbe5a2' } },
     { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': '#b4d97b' } },
     { id: 'grass', type: 'fill', source: 'omt', 'source-layer': 'landcover',
       filter: ['in', ['get', 'class'], ['literal', ['grass', 'farmland']]],

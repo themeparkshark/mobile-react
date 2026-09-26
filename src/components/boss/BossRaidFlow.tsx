@@ -45,6 +45,7 @@ const ERRORS: Record<Exclude<AttackResult, { ok: true }>['error'], string> = {
   no_attacks_left: "You've used all your attacks. Cheer them on!",
   bad_proof: "That brawl didn't count. Try again.",
   raid_over: 'The fight is over!',
+  no_remote_pass: 'You need a Park Ticket to join another raid from home today.',
   network: "Couldn't reach the park. Your Energy wasn't spent.",
 };
 
@@ -96,6 +97,7 @@ export default function BossRaidFlow({ raid, open, onClose, onState }: {
       hits: Number(meta.hits ?? 0),
       weak_hits: Number(meta.weak_hits ?? 0),
       duration_ms: Number(meta.duration_ms ?? 0),
+      remote: remote || undefined,
     });
     setSending(false);
     if (result.ok) {
@@ -111,13 +113,21 @@ export default function BossRaidFlow({ raid, open, onClose, onState }: {
   const sheetVisible = open && !!raid;
   const far = raid && location && raid.latitude !== null && raid.longitude !== null
     ? meters(location, { latitude: raid.latitude, longitude: raid.longitude }) : null;
-  const tooFar = raid && far !== null && far > raid.reach_meters;
+  // Away from the ride (or no GPS fix yet), the fight is joined from home.
+  const remote = !!raid && (far === null || far > raid.reach_meters);
   const energy = Number((player as { energy?: number } | null)?.energy ?? 0);
+  const tickets = Number((player as { tickets?: number } | null)?.tickets ?? 0);
   const active = raid?.status === 'active' && new Date(raid.ends_at).getTime() > now;
+  const needsPass = remote && raid && !raid.remote.joined;
+  const payWithTicket = needsPass && raid.remote.free_passes_left <= 0;
   const blocked = !raid || !active ? 'The fight is over.'
     : raid.you.attacks_left <= 0 ? "You've used all 5 attacks. Cheer them on!"
-      : tooFar ? `Walk to ${raid.ride_name} to fight · ${Math.round(far ?? 0)} m away`
-        : energy < raid.energy_cost ? `Need ${raid.energy_cost} Energy to attack` : null;
+      : energy < raid.energy_cost ? `Need ${raid.energy_cost} Energy to attack`
+        : payWithTicket && tickets < raid.remote.ticket_cost ? 'Out of free passes · need 1 Park Ticket' : null;
+  const fightLabel = !remote ? `FIGHT  ·  ${raid?.energy_cost ?? 10} ⚡`
+    : !needsPass ? `FIGHT FROM HOME  ·  ${raid?.energy_cost ?? 10} ⚡`
+      : payWithTicket ? `JOIN FROM HOME  ·  1 🎟 + ${raid?.energy_cost ?? 10} ⚡`
+        : `JOIN FROM HOME  ·  FREE PASS`;
   const teamTotal = raid ? Math.max(1, raid.teams.mouse + raid.teams.globe + raid.teams.shark) : 1;
 
   // iOS shows one modal at a time: with the sheet open, the win takes over the sheet.
@@ -156,6 +166,7 @@ export default function BossRaidFlow({ raid, open, onClose, onState }: {
             bossName={BOSS_NAMES[raid.boss]}
             hpLeft={raid.hp_left}
             hpMax={raid.hp_max}
+            damageRate={remote ? raid.remote.damage_rate : 1}
             onComplete={(_, meta) => { setFighting(false); void submit(meta); }}
             onClose={() => setFighting(false)}
           />
@@ -204,9 +215,13 @@ export default function BossRaidFlow({ raid, open, onClose, onState }: {
             <Pressable accessibilityRole="button" disabled={!!blocked || sending}
               onPress={() => { setNote(null); setFighting(true); }}
               style={[styles.fight, (!!blocked || sending) && styles.fightOff]}>
-              <Text style={styles.fightText}>{sending ? 'SENDING…' : blocked ?? `FIGHT  ·  ${raid.energy_cost} ⚡`}</Text>
+              <Text style={styles.fightText}>{sending ? 'SENDING…' : blocked ?? fightLabel}</Text>
             </Pressable>
-            <Text style={styles.fine}>Beat it together before time runs out: everyone who lands a hit gets the loot, the top hitter is MVP.</Text>
+            <Text style={styles.fine}>
+              {remote
+                ? `Fighting from home deals ${Math.round(raid.remote.damage_rate * 100)}% damage. ${raid.remote.joined ? "You're in!" : `${raid.remote.free_passes_left} free pass${raid.remote.free_passes_left === 1 ? '' : 'es'} left today.`} Everyone who lands a hit gets the loot.`
+                : 'Beat it together before time runs out: everyone who lands a hit gets the loot, the top hitter is MVP.'}
+            </Text>
           </View>}
       </Modal>}
 

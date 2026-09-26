@@ -38,12 +38,14 @@ function bossOffset(ms: number, w: number, h: number) {
   return { x: Math.sin(t * Math.PI) * w * 0.26, y: Math.sin(t * Math.PI * 2) * h * 0.12 + Math.sin(ms / 260) * 4 };
 }
 
-export function BossBrawl({ visible, boss, bossName, hpLeft, hpMax, onComplete, onClose, onQuit }: {
+export function BossBrawl({ visible, boss, bossName, hpLeft, hpMax, damageRate = 1, onComplete, onClose, onQuit }: {
   readonly visible: boolean;
   readonly boss: BossId;
   readonly bossName: string;
   readonly hpLeft: number;
   readonly hpMax: number;
+  /** Fighting from home deals a fraction of the damage (the server applies the same rate). */
+  readonly damageRate?: number;
   readonly onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   readonly onClose: () => void;
   readonly onQuit?: (resume: () => void) => void;
@@ -92,16 +94,17 @@ export function BossBrawl({ visible, boss, bossName, hpLeft, hpMax, onComplete, 
   const finish = useCallback(() => {
     halt();
     const s = stats.current;
-    const total = s.hits * 10 + s.weak * 20;
-    const stars = total <= 0 ? 0 : total >= 1300 ? 3 : total >= 1000 ? 2 : 1;
+    const full = s.hits * 10 + s.weak * 20;
+    const total = Math.floor(full * damageRate);
+    const stars = full <= 0 ? 0 : full >= 1300 ? 3 : full >= 1000 ? 2 : 1;
     setWeakOn(false);
     setResult({
       score: total,
       stars,
-      message: total >= 1300 ? 'MONSTER HIT!' : total > 0 ? 'DIRECT HIT!' : 'IT DODGED YOU!',
+      message: full >= 1300 ? 'MONSTER HIT!' : full > 0 ? 'DIRECT HIT!' : 'IT DODGED YOU!',
       meta: { hits: s.hits, weak_hits: s.weak, duration_ms: Math.round(Math.min(26000, Math.max(12000, s.playedMs))) },
     });
-  }, [halt]);
+  }, [halt, damageRate]);
 
   // Round timer + weak spot rhythm.
   useEffect(() => {
@@ -136,7 +139,7 @@ export function BossBrawl({ visible, boss, bossName, hpLeft, hpMax, onComplete, 
       && s.weak < Math.floor((s.hits + 1) / 3);
     s.hits += 1;
     if (crit) { s.weak += 1; setWeakOn(false); }
-    const dealt = crit ? 30 : 10;
+    const dealt = Math.floor((crit ? 30 : 10) * damageRate);
     setDamage(d => d + dealt);
     const id = ++popId.current;
     setPops(p => [...p.slice(-7), { id, x, y, text: crit ? `CRIT ${dealt}` : `${dealt}`, crit }]);
@@ -150,6 +153,22 @@ export function BossBrawl({ visible, boss, bossName, hpLeft, hpMax, onComplete, 
       particlesRef.current?.burst({ x, y, preset: 'burst', count: 6, colors: ['#ffffff', '#9fe3ff'], speed: 0.7 });
     }
   };
+
+  // Dev-only QA autoplayer (EXPO_PUBLIC_GAME_AUTOPLAY=1): taps the boss (and
+  // its weak spot when lit) a few times a second, like the Whack autoplayer.
+  const tapRef = useRef(onTap);
+  tapRef.current = onTap;
+  useEffect(() => {
+    if (!__DEV__ || process.env.EXPO_PUBLIC_GAME_AUTOPLAY !== '1' || !visible || result || !field.w) return;
+    const id = setInterval(() => {
+      const o = bossOffset(clock.value, field.w, field.h);
+      const spotNow = WEAK_SPOTS[stats.current.weakIndex];
+      const x = field.w / 2 + o.x + (weakOn ? spotNow[0] * BOSS_SIZE : 0);
+      const y = field.h / 2 + o.y + (weakOn ? spotNow[1] * BOSS_SIZE : 0);
+      tapRef.current(x, y);
+    }, 220);
+    return () => clearInterval(id);
+  }, [visible, result, field.w, field.h, weakOn, clock]);
 
   const bossStyle = useAnimatedStyle(() => {
     const o = bossOffset(clock.value, field.w, field.h);

@@ -31,6 +31,13 @@ export interface BossRaid {
   readonly you: { attacks: number; attacks_left: number; damage: number; reward: RaidReward | null };
   readonly energy_cost: number;
   readonly reach_meters: number;
+  readonly remote: {
+    readonly joined: boolean;
+    readonly free_passes_left: number;
+    readonly ticket_cost: number;
+    readonly damage_rate: number;
+    readonly fighters: number;
+  };
 }
 
 export interface RaidState {
@@ -45,10 +52,11 @@ export async function getParkRaid(parkId: number): Promise<RaidState> {
 
 export type AttackResult =
   | { ok: true; damage: number; state: RaidState }
-  | { ok: false; error: 'too_far' | 'no_energy' | 'no_attacks_left' | 'bad_proof' | 'raid_over' | 'network'; state?: RaidState };
+  | { ok: false; error: 'too_far' | 'no_energy' | 'no_attacks_left' | 'bad_proof' | 'raid_over' | 'no_remote_pass' | 'network'; state?: RaidState };
 
 export async function attackRaid(raidId: number, body: {
   client_request_id: string; latitude: number; longitude: number; hits: number; weak_hits: number; duration_ms: number;
+  remote?: boolean;
 }): Promise<AttackResult> {
   try {
     const { data } = await client.post<{ data: RaidState & { damage: number } }>(`/raids/${raidId}/attack`, body);

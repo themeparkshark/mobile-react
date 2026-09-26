@@ -164,13 +164,17 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         const key = `${decorationBand(zoom)}|${(north * 4000).toFixed(0)}|${(west * 4000).toFixed(0)}|${((north - south) * 400).toFixed(0)}`;
         if (key === decoKey.current) return;
         const rect: [number, number, number, number] = [window.height, window.width, 0, 0];
-        const [wood, green, water] = await Promise.all([
+        const [wood, green, water, homes, buildings, roads] = await Promise.all([
           map.queryRenderedFeaturesInRect(rect, undefined, ['wood']),
           map.queryRenderedFeaturesInRect(rect, undefined, ['grass', 'park']),
           map.queryRenderedFeaturesInRect(rect, undefined, ['water']),
+          map.queryRenderedFeaturesInRect(rect, undefined, ['residential']),
+          map.queryRenderedFeaturesInRect(rect, undefined, ['bldg']),
+          map.queryRenderedFeaturesInRect(rect, undefined, ['road', 'path']),
         ]);
         decoKey.current = key;
-        setDecorations(buildDecorations({ wood: wood.features, green: green.features, water: water.features },
+        setDecorations(buildDecorations({ wood: wood.features, green: green.features, water: water.features,
+          homes: homes.features, buildings: buildings.features, roads: roads.features },
           { north, south, east, west }, zoom));
       } catch { /* map not ready yet; the next camera change retries */ }
     }, 250);

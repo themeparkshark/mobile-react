@@ -11,7 +11,7 @@ import { PrepItemType } from '../../models/prep-item-type';
 import { PlayerStatsType } from '../../models/player-stats-type';
 import getPrepItems, { getCachedPrepItems } from '../../api/endpoints/me/prep-items';
 import getCurrentPrepItem from '../../api/endpoints/me/prep-items/current';
-import { getMyTeam, TeamInfo } from '../../api/endpoints/gym-battle';
+import HomeLive from '../../components/home/HomeLive';
 import PrepItemMarker from './PrepItem';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
@@ -24,16 +24,6 @@ import HomeFocusCard from './HomeFocusCard';
 import { HOME_PREP_PICKUP_RADIUS_METERS } from './homePickupRange';
 import * as RootNavigation from '../../RootNavigation';
 
-const TEAM_COLORS: Record<string, string> = {
-  mouse: '#F59E0B',
-  globe: '#22C55E',
-  shark: '#3B82F6',
-};
-const TEAM_EMOJIS: Record<string, string> = {
-  mouse: '🐭',
-  globe: '🌍',
-  shark: '🦈',
-};
 
 // ── Throttle thresholds ──────────────────────────────────────────────
 const LOAD_MIN_DISTANCE_M = 15; // meters moved before re-fetching prep items
@@ -59,67 +49,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 dayjs.extend(isBetween);
 
-const TEAM_NAMES: Record<string, string> = {
-  mouse: 'Mouse',
-  globe: 'Globe',
-  shark: 'Shark',
-};
 
-function TeamBadge({ team, topOffset = 60 }: { team: string; topOffset?: number }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const calloutOpacity = useRef(new Animated.Value(0)).current;
-  const calloutTranslateY = useRef(new Animated.Value(6)).current;
-  const [showCallout, setShowCallout] = useState(false);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handlePress = () => {
-    // Bounce
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.85, duration: 80, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, friction: 3, tension: 300, useNativeDriver: true }),
-    ]).start();
-
-    // Show callout
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    setShowCallout(true);
-    Animated.parallel([
-      Animated.timing(calloutOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
-      Animated.timing(calloutTranslateY, { toValue: 0, duration: 150, useNativeDriver: true }),
-    ]).start();
-
-    // Auto-hide after 2s
-    hideTimer.current = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(calloutOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(calloutTranslateY, { toValue: 6, duration: 200, useNativeDriver: true }),
-      ]).start(() => setShowCallout(false));
-    }, 2000);
-  };
-
-  const emoji = TEAM_EMOJIS[team] || '🦈';
-  const name = TEAM_NAMES[team] || team.charAt(0).toUpperCase() + team.slice(1);
-
-  return (
-    <View style={[styles.teamBadge, { top: topOffset }]}>
-      {/* Badge */}
-      <Pressable onPress={handlePress}>
-        <Animated.View style={[styles.teamBadgeInner, { backgroundColor: TEAM_COLORS[team] || '#3B82F6', transform: [{ scale }] }]}>
-          <Text style={styles.teamEmoji}>{emoji}</Text>
-          <Text style={styles.teamText}>TEAM</Text>
-        </Animated.View>
-      </Pressable>
-      {/* Callout tooltip — below badge */}
-      {showCallout && (
-        <Animated.View style={[styles.teamCallout, { opacity: calloutOpacity, transform: [{ translateY: calloutTranslateY }] }]}>
-          <View style={styles.teamCalloutArrow} />
-          <View style={styles.teamCalloutBubble}>
-            <Text style={styles.teamCalloutText}>You are Team {name}! {emoji}</Text>
-          </View>
-        </Animated.View>
-      )}
-    </View>
-  );
-}
 
 interface Props {
   onPrepItemNearby: (prepItem: PrepItemType, pivotId: number) => void;
@@ -136,7 +66,6 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
   const [playerStats, setPlayerStats] = useState<PlayerStatsType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [teamInfo, setTeamInfo] = useState<TeamInfo | null>(null);
   const [huntFocus, setHuntFocus] = useState<{
     latitude: number; longitude: number; requestId: number;
   } | null>(null);
@@ -253,10 +182,6 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     void loadPrepItems(firstLocationLoad.current);
     firstLocationLoad.current = false;
   }, [loadPrepItems]);
-
-  useEffect(() => {
-    getMyTeam().then(setTeamInfo).catch(() => {});
-  }, []);
 
   // GPS can be stationary while a spawn batch expires. Refresh only while the
   // screen is active, and recheck once when the app returns to foreground.
@@ -402,7 +327,7 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
       )}
 
       {homeLocationConfirmed && !isLoading && !loadError && playerStats?.focused_prep_set && (
-        <HomeFocusCard set={playerStats.focused_prep_set}
+        <HomeFocusCard set={playerStats.focused_prep_set} topOffset={70}
           onPress={() => RootNavigation.navigate('SetCollection', {
             slug: playerStats.focused_prep_set!.slug,
           })} />
@@ -410,10 +335,8 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
 
       <TripGoalCard refreshVersion={refreshVersion} />
 
-      {/* Team badge — always visible */}
-      {teamInfo?.has_team && teamInfo.team && (
-        <TeamBadge team={teamInfo.team} topOffset={playerStats?.focused_prep_set ? 120 : 60} />
-      )}
+      {/* The parks, live: bosses to join from home, close fights to cheer. */}
+      <HomeLive top={12} />
 
       {/* Quick Access Menu - hamburger on left */}
       <QuickAccessMenu position="left" />
@@ -437,69 +360,4 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   // Player marker moved to Map component
-  teamBadge: {
-    position: 'absolute',
-    top: 60,
-    left: 16,
-    zIndex: 20,
-    alignItems: 'flex-start',
-  },
-  teamCallout: {
-    marginTop: 6,
-    alignItems: 'flex-start',
-  },
-  teamCalloutBubble: {
-    backgroundColor: 'rgba(30, 34, 42, 0.92)',
-    borderRadius: 12,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 6,
-  },
-  teamCalloutText: {
-    fontFamily: 'Knockout',
-    fontSize: 13,
-    color: '#fff',
-  },
-  teamCalloutArrow: {
-    width: 0,
-    height: 0,
-    marginLeft: 16,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderBottomWidth: 6,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: 'rgba(30, 34, 42, 0.92)',
-  },
-  teamBadgeInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  teamEmoji: {
-    fontSize: 16,
-    marginRight: 4,
-  },
-  teamText: {
-    fontFamily: 'Shark',
-    fontSize: 14,
-    color: 'white',
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
 });
