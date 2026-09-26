@@ -75,7 +75,7 @@ function Snowflake({ seed, i }: P) {
       { rotate: `${p.value * 300}deg` },
     ],
   }));
-  return <Animated.Image source={FX.snowflake} style={[styles.abs, box(cfg.size), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.snowflake} style={[styles.abs, box(cfg.size), style]} />;
 }
 
 function Riser({ seed, i, source, size, from, spread, height, grow, sway, dur }: P & {
@@ -93,7 +93,7 @@ function Riser({ seed, i, source, size, from, spread, height, grow, sway, dur }:
       { scale: 1 + p.value * grow },
     ],
   }));
-  return <Animated.Image source={source} style={[styles.abs, box(size), style]} />;
+  return <Animated.Image resizeMode="contain" source={source} style={[styles.abs, box(size), style]} />;
 }
 
 function Twinkle({ seed, i, source, size, area, tint }: P & { source: number; size: number; area: [number, number, number, number]; tint?: string }) {
@@ -105,7 +105,7 @@ function Twinkle({ seed, i, source, size, area, tint }: P & { source: number; si
     const k = Math.sin(p.value * Math.PI);
     return { opacity: k, transform: [{ translateX: cfg.x }, { translateY: cfg.y }, { scale: k * cfg.s }, { rotate: `${p.value * 90}deg` }] };
   });
-  return <Animated.Image source={source} tintColor={tint} style={[styles.abs, box(size), style]} />;
+  return <Animated.Image resizeMode="contain" source={source} tintColor={tint} style={[styles.abs, box(size), style]} />;
 }
 
 /* ── Characters ────────────────────────────────────────────────────────── */
@@ -153,7 +153,7 @@ function Flyby({ seed, i, source, size, y, dur }: P & { source: number; size: nu
       ],
     };
   });
-  return <Animated.Image source={source} style={[styles.abs, box(size), style]} />;
+  return <Animated.Image resizeMode="contain" source={source} style={[styles.abs, box(size), style]} />;
 }
 
 /** A car lapping the base of the landmark, nose along the track. */
@@ -172,7 +172,7 @@ function RaceCar({ delay = 0 }: { delay?: number }) {
       opacity: Math.sin(a) < -0.3 ? 0.55 : 1,
     };
   });
-  return <Animated.Image source={FX.racecar} style={[styles.abs, box(26), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.racecar} style={[styles.abs, box(26), style]} />;
 }
 
 /** Big footprints stomping past, one after another, then fading together. */
@@ -193,7 +193,7 @@ function Footprint({ i }: { i: number }) {
       ],
     };
   });
-  return <Animated.Image source={FX.footprint} style={[styles.abs, box(24), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.footprint} style={[styles.abs, box(24), style]} />;
 }
 
 /** The dragon perched on the landmark, breathing fire every few seconds. */
@@ -206,7 +206,7 @@ function Dragon() {
   return (
     <>
       {[0, 1, 2, 3, 4].map(k => <Flame key={k} p={p} k={k} />)}
-      <Animated.Image source={FX.dragon} style={[styles.abs, box(54), head]} />
+      <Animated.Image resizeMode="contain" source={FX.dragon} style={[styles.abs, box(54), head]} />
     </>
   );
 }
@@ -220,7 +220,7 @@ function Flame({ p, k }: { p: SharedValue<number>; k: number }) {
       transform: [{ translateX: 16 + t * 46 }, { translateY: -110 + t * 10 + (k - 2) * 4 }, { scale: 0.5 + t * 0.9 }],
     };
   });
-  return <Animated.Image source={FX.steam} tintColor={k % 2 ? '#ffb020' : '#ff6a1a'} style={[styles.abs, box(26), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.steam} tintColor={k % 2 ? '#ffb020' : '#ff6a1a'} style={[styles.abs, box(26), style]} />;
 }
 
 /** Hollywood searchlights sweeping behind the landmark. */
@@ -270,7 +270,7 @@ function Droplet({ seed, i, from = [18, -6], power = 1 }: P & { from?: [number, 
     opacity: 1 - p.value,
     transform: [{ translateX: from[0] + cfg.vx * p.value }, { translateY: from[1] - cfg.vy * p.value + 120 * power * p.value * p.value }],
   }));
-  return <Animated.Image source={FX.bubble} tintColor="#bff3ff" style={[styles.abs, box(cfg.size), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.bubble} tintColor="#bff3ff" style={[styles.abs, box(cfg.size), style]} />;
 }
 
 /* ── Scene per ambience ────────────────────────────────────────────────── */
@@ -354,7 +354,7 @@ function Ship() {
     const a = p.value * Math.PI * 2;
     return {
       transform: [
-        { translateX: Math.sin(a) * 34 },
+        { translateX: Math.sin(a) * 24 },
         { translateY: -14 + Math.sin(a * 6) * 2 },
         // The sprite's bow points left, so mirror it while sailing right.
         { scaleX: Math.cos(a) >= 0 ? -1 : 1 },
@@ -362,7 +362,7 @@ function Ship() {
       ],
     };
   });
-  return <Animated.Image source={FX.ship} style={[styles.abs, box(44), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.ship} style={[styles.abs, box(44), style]} />;
 }
 
 function Hippo() {
@@ -372,7 +372,7 @@ function Hippo() {
     const v = p.value < 0.1 ? p.value / 0.1 : p.value < 0.55 ? 1 : p.value < 0.65 ? 1 - (p.value - 0.55) / 0.1 : 0;
     return { opacity: v, transform: [{ translateY: -10 + (1 - v) * 10 }, { rotate: `${Math.sin(p.value * Math.PI * 6) * 3 * v}deg` }] };
   });
-  return <Animated.Image source={FX.hippo} style={[styles.abs, box(34), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.hippo} style={[styles.abs, box(34), style]} />;
 }
 
 function Fin() {
@@ -381,7 +381,7 @@ function Fin() {
     const a = p.value * Math.PI * 2;
     return { transform: [{ translateX: Math.cos(a) * 30 }, { translateY: -10 + Math.sin(a) * 10 }, { scaleX: Math.sin(a) >= 0 ? 1 : -1 }] };
   });
-  return <Animated.Image source={FX.fin} style={[styles.abs, box(32), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.fin} style={[styles.abs, box(32), style]} />;
 }
 
 export const WaterAmbience = memo(function WaterAmbience({ kind }: { kind: AmbienceId }) {

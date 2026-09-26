@@ -30,17 +30,17 @@ function polygons(features: readonly GeoJSON.Feature[]): Poly[] {
 
 /**
  * Closest point within `maxMeters` of the ride that sits comfortably on water
- * (its neighbours ~5 m away are water too, so the ship isn't beached, yet narrow
- * jungle rivers still count).
+ * (water still `margin` meters away on every side, so a ship isn't beached while a
+ * hippo can still fit a narrow jungle river).
  */
-export function nearestWaterPoint(features: readonly GeoJSON.Feature[], lat: number, lng: number, maxMeters = 170) {
+export function nearestWaterPoint(features: readonly GeoJSON.Feature[], lat: number, lng: number, margin = 5, maxMeters = 170) {
   const polys = polygons(features);
   if (!polys.length) return null;
   const mLat = 1 / 111320;
   const mLng = 1 / (111320 * Math.cos((lat * Math.PI) / 180));
   const wet = (x: number, y: number) => polys.some(p => inPoly(x, y, p));
   const comfy = (x: number, y: number) => wet(x, y)
-    && wet(x + 5 * mLng, y) && wet(x - 5 * mLng, y) && wet(x, y + 5 * mLat) && wet(x, y - 5 * mLat);
+    && wet(x + margin * mLng, y) && wet(x - margin * mLng, y) && wet(x, y + margin * mLat) && wet(x, y - margin * mLat);
   for (let r = 12; r <= maxMeters; r += 8) {
     const steps = Math.max(8, Math.round((2 * Math.PI * r) / 10));
     for (let k = 0; k < steps; k++) {

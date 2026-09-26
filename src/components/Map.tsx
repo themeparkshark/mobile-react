@@ -2,21 +2,22 @@ import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-ico
 import { faLocationArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
-import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Images, MapView, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, Images, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { Animated, Pressable, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { Marker } from './map/Marker';
-import { MAP_PATTERNS, TPS_MAP_STYLE } from './map/tpsMapStyle';
+import { buildDecorations, DECO_ICONS, decorationBand } from './map/decorations';
+import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
 
 type LatLng = { latitude: number; longitude: number };
 
 /** Lets map pins ask about the rendered map (e.g. where the nearest water is). */
 export const MapQueryContext = createContext<{
-  readonly findWater: (latitude: number, longitude: number) => Promise<LatLng | null>;
+  readonly findWater: (latitude: number, longitude: number, margin?: number) => Promise<LatLng | null>;
 } | null>(null);
 
 // Map always rotates with heading. Single button recenters on player.
@@ -139,13 +140,43 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const mapViewRef = useRef<MapViewRef>(null);
   const window = useWindowDimensions();
   const mapQuery = useMemo(() => ({
-    findWater: async (latitude: number, longitude: number) => {
+    findWater: async (latitude: number, longitude: number, margin?: number) => {
       // MapLibre's rect is [top, right, bottom, left] with top the larger y.
       const found = await mapViewRef.current?.queryRenderedFeaturesInRect(
         [window.height, window.width, 0, 0], undefined, ['water']);
-      return nearestWaterPoint(found?.features ?? [], latitude, longitude);
+      return nearestWaterPoint(found?.features ?? [], latitude, longitude, margin);
     },
   }), [window.height, window.width]);
+
+  // Trees, bushes and ripples are planted as icons for what's on screen.
+  const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
+  const [decorations, setDecorations] = useState<GeoJSON.FeatureCollection>(EMPTY);
+  const decoKey = useRef('');
+  const decoTimer = useRef<ReturnType<typeof setTimeout>>();
+  const refreshDecorations = useCallback(() => {
+    clearTimeout(decoTimer.current);
+    decoTimer.current = setTimeout(async () => {
+      const map = mapViewRef.current;
+      if (!map) return;
+      try {
+        const [zoom, [[east, north], [west, south]]] = await Promise.all([map.getZoom(), map.getVisibleBounds()]);
+        // Skip rebuilding for tiny camera nudges (walking follow) at the same density.
+        const key = `${decorationBand(zoom)}|${(north * 4000).toFixed(0)}|${(west * 4000).toFixed(0)}|${((north - south) * 400).toFixed(0)}`;
+        if (key === decoKey.current) return;
+        const rect: [number, number, number, number] = [window.height, window.width, 0, 0];
+        const [wood, green, water] = await Promise.all([
+          map.queryRenderedFeaturesInRect(rect, undefined, ['wood']),
+          map.queryRenderedFeaturesInRect(rect, undefined, ['grass', 'park']),
+          map.queryRenderedFeaturesInRect(rect, undefined, ['water']),
+        ]);
+        decoKey.current = key;
+        setDecorations(buildDecorations({ wood: wood.features, green: green.features, water: water.features },
+          { north, south, east, west }, zoom));
+      } catch { /* map not ready yet; the next camera change retries */ }
+    }, 250);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [window.height, window.width]);
+  useEffect(() => () => clearTimeout(decoTimer.current), []);
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
   const followRef = useRef(true);
   followRef.current = focusedOnPlayer;
@@ -329,7 +360,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           if (!feature.properties?.isUserInteraction) return;
           onPress?.();
         }}
+        onDidFinishRenderingMapFully={refreshDecorations}
         onRegionDidChange={(feature) => {
+          refreshDecorations();
           // A real pan (not a pinch around the shark) drops follow mode.
           if (!feature.properties?.isUserInteraction || !followRef.current || !location) return;
           const [lng, lat] = feature.geometry.coordinates;
@@ -350,7 +383,22 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             heading: 0,
           }}
         />
-        <Images images={MAP_PATTERNS} />
+        <Images images={DECO_ICONS} />
+        <ShapeSource id="tps-decorations" shape={decorations}>
+          <SymbolLayer id="tps-decorations" belowLayerID="plaza" style={{
+            iconImage: ['get', 'icon'],
+            // Zoom must lead the expression; each stop scales by the item's own size.
+            iconSize: ['interpolate', ['exponential', 1.4], ['zoom'],
+              15, ['*', 0.32, ['get', 's']], 16, ['*', 0.46, ['get', 's']], 17, ['*', 0.68, ['get', 's']],
+              18, ['*', 0.95, ['get', 's']], 19, ['*', 1.3, ['get', 's']]],
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+            iconAnchor: 'bottom',
+            iconRotationAlignment: 'viewport',
+            iconPitchAlignment: 'viewport',
+            symbolSortKey: ['get', 'k'],
+          }} />
+        </ShapeSource>
         {/* Panned away: the shark stays pinned to its spot on the map. */}
         {location && !focusedOnPlayer && (
           <Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>

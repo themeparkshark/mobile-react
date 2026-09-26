@@ -1,0 +1,137 @@
+/**
+ * Plants illustrated trees, bushes, grass tufts and water ripples as crisp map
+ * icons instead of a stretched texture. Points come from a world-anchored grid
+ * with hashed jitter, so the same spot always grows the same tree no matter how
+ * often the view is rebuilt; only cells inside the matching rendered polygons
+ * (woods, lawns, water) get a decoration.
+ */
+type Ring = number[][];
+type Poly = Ring[];
+interface Area { readonly poly: Poly; readonly x0: number; readonly y0: number; readonly x1: number; readonly y1: number }
+
+export interface DecoInput {
+  readonly wood: readonly GeoJSON.Feature[];
+  readonly green: readonly GeoJSON.Feature[];
+  readonly water: readonly GeoJSON.Feature[];
+}
+
+export interface Bounds { readonly north: number; readonly south: number; readonly east: number; readonly west: number }
+
+const ROUND = ['tree-round-a', 'tree-round-b', 'tree-round-c', 'tree-round-d', 'tree-round-e'];
+const PALM = ['tree-palm-a', 'tree-palm-b', 'tree-palm-c'];
+
+export const DECO_ICONS = {
+  'tree-round-a': require('../../../assets/images/map/deco/tree-round-a.png'),
+  'tree-round-b': require('../../../assets/images/map/deco/tree-round-b.png'),
+  'tree-round-c': require('../../../assets/images/map/deco/tree-round-c.png'),
+  'tree-round-d': require('../../../assets/images/map/deco/tree-round-d.png'),
+  'tree-round-e': require('../../../assets/images/map/deco/tree-round-e.png'),
+  'tree-palm-a': require('../../../assets/images/map/deco/tree-palm-a.png'),
+  'tree-palm-b': require('../../../assets/images/map/deco/tree-palm-b.png'),
+  'tree-palm-c': require('../../../assets/images/map/deco/tree-palm-c.png'),
+  'tree-pine': require('../../../assets/images/map/deco/tree-pine.png'),
+  'deco-ripple': require('../../../assets/images/map/deco/ripple.png'),
+  'deco-tuft': require('../../../assets/images/map/deco/tuft.png'),
+};
+
+function hash(i: number, j: number, salt: number): number {
+  let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(salt, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+function toAreas(features: readonly GeoJSON.Feature[]): Area[] {
+  const out: Area[] = [];
+  const add = (poly: Poly) => {
+    let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
+    for (const [x, y] of poly[0] ?? []) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    if (x0 <= x1) out.push({ poly, x0, y0, x1, y1 });
+  };
+  for (const f of features) {
+    const g = f.geometry;
+    if (g?.type === 'Polygon') add(g.coordinates as Poly);
+    else if (g?.type === 'MultiPolygon') for (const p of g.coordinates) add(p as Poly);
+  }
+  return out;
+}
+
+function inRing(x: number, y: number, ring: Ring): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function inAreas(x: number, y: number, areas: readonly Area[]): boolean {
+  for (const a of areas) {
+    if (x < a.x0 || x > a.x1 || y < a.y0 || y > a.y1) continue;
+    if (!inRing(x, y, a.poly[0])) continue;
+    let hole = false;
+    for (let h = 1; h < a.poly.length && !hole; h++) hole = inRing(x, y, a.poly[h]);
+    if (!hole) return true;
+  }
+  return false;
+}
+
+type Layer = { spacing: number; salt: number; keep: number; areas: Area[]; pick: (r: number) => { icon: string; s: number } };
+
+/** Tree spacing tightens as you zoom in so woods always read as a full canopy. */
+export function treeSpacing(zoom: number): number | null {
+  if (zoom < 15.3) return null;
+  return zoom >= 18 ? 4.5 : zoom >= 17 ? 6 : zoom >= 16 ? 11 : 19;
+}
+
+export function decorationBand(zoom: number): string {
+  return `${treeSpacing(zoom) ?? 0}|${zoom >= 16.5 ? 1 : 0}|${zoom >= 17 ? 1 : 0}`;
+}
+
+export function buildDecorations(input: DecoInput, b: Bounds, zoom: number): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  const spacing = treeSpacing(zoom);
+  if (spacing === null) return { type: 'FeatureCollection', features };
+  const lat = (b.north + b.south) / 2;
+  const mLat = 1 / 111320;
+  const mLng = 1 / (111320 * Math.cos((lat * Math.PI) / 180));
+  const green = toAreas(input.green);
+  const layers: Layer[] = [
+    { spacing, salt: 1, keep: 1, areas: toAreas(input.wood), pick: r => ({
+      icon: r < 0.76 ? ROUND[Math.floor((r / 0.76) * ROUND.length)] : r < 0.93 ? PALM[Math.floor(((r - 0.76) / 0.17) * PALM.length)] : 'tree-pine',
+      s: 0.85 + ((r * 7919) % 1) * 0.3,
+    }) },
+  ];
+  if (zoom >= 16.5) {
+    // A few bushes dotted over lawns and parks, like a hand-drawn park map.
+    layers.push({ spacing: 12, salt: 2, keep: 0.12, areas: green, pick: r => ({ icon: ROUND[Math.floor(r * ROUND.length)], s: 0.5 }) });
+    layers.push({ spacing: 26, salt: 4, keep: 0.4, areas: toAreas(input.water), pick: () => ({ icon: 'deco-ripple', s: 1.6 }) });
+  }
+  if (zoom >= 17) {
+    layers.push({ spacing: 7, salt: 3, keep: 0.16, areas: green, pick: () => ({ icon: 'deco-tuft', s: 1.3 }) });
+  }
+  for (const layer of layers) {
+    if (!layer.areas.length) continue;
+    const dLat = layer.spacing * mLat;
+    const dLng = layer.spacing * mLng;
+    const i0 = Math.floor(b.west / dLng); const i1 = Math.ceil(b.east / dLng);
+    const j0 = Math.floor(b.south / dLat); const j1 = Math.ceil(b.north / dLat);
+    if ((i1 - i0) * (j1 - j0) > 12000) continue;
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        if (layer.keep < 1 && hash(i, j, layer.salt + 10) > layer.keep) continue;
+        const x = (i + 0.15 + hash(i, j, layer.salt) * 0.7) * dLng;
+        const y = (j + 0.15 + hash(j, i, layer.salt) * 0.7) * dLat;
+        if (!inAreas(x, y, layer.areas)) continue;
+        const { icon, s } = layer.pick(hash(i, j, layer.salt + 20));
+        // Southern items draw last so trees overlap like a front-lit illustration.
+        features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x, y] }, properties: { icon, s, k: -y } });
+      }
+    }
+  }
+  return { type: 'FeatureCollection', features };
+}

@@ -38,9 +38,13 @@ const RIDE_COIN = require('../../../assets/images/map/ride-coin.png');
 // Water spots found for rides, kept across re-mounts and re-renders.
 const waterSpots = new Map<string, { latitude: number; longitude: number } | null>();
 
-function useWaterSpot(enabled: boolean, latitude: number, longitude: number) {
+// Sailing ships need open water; a hippo or fin fits a narrow river.
+const WATER_MARGIN: Partial<Record<string, number>> = { ship: 16, fin: 8, hippo: 5 };
+
+function useWaterSpot(kind: string | undefined, latitude: number, longitude: number) {
+  const enabled = !!kind;
   const query = useContext(MapQueryContext);
-  const key = `${latitude.toFixed(5)},${longitude.toFixed(5)}`;
+  const key = `${kind}:${latitude.toFixed(5)},${longitude.toFixed(5)}`;
   const [spot, setSpot] = useState(() => waterSpots.get(key) ?? null);
   useEffect(() => {
     if (!enabled || !query || waterSpots.has(key)) return;
@@ -49,7 +53,7 @@ function useWaterSpot(enabled: boolean, latitude: number, longitude: number) {
     let timer: ReturnType<typeof setTimeout>;
     // Tiles may still be streaming in; look again a few times before giving up.
     const look = async () => {
-      const found = await query.findWater(latitude, longitude).catch(() => null);
+      const found = await query.findWater(latitude, longitude, WATER_MARGIN[kind ?? ''] ?? 5).catch(() => null);
       if (dead) return;
       if (found) { waterSpots.set(key, found); setSpot(found); }
       else if (++tries < 4) timer = setTimeout(look, 2500 * tries);
@@ -57,7 +61,7 @@ function useWaterSpot(enabled: boolean, latitude: number, longitude: number) {
     };
     timer = setTimeout(look, 1200);
     return () => { dead = true; clearTimeout(timer); };
-  }, [enabled, query, key, latitude, longitude]);
+  }, [enabled, kind, query, key, latitude, longitude]);
   return spot;
 }
 
@@ -112,7 +116,7 @@ export default function TaskMarker({
   }, [kinds]);
   const latitude = Number(task.latitude);
   const longitude = Number(task.longitude);
-  const waterSpot = useWaterSpot(!!waterKind, latitude, longitude);
+  const waterSpot = useWaterSpot(waterKind, latitude, longitude);
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
   useEffect(() => {
     setTracksViewChanges(true);
