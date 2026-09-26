@@ -33,8 +33,8 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     if (sharing || !shareRef.current) return;
     setSharing(true);
     try {
-      const uri = await captureRef(shareRef, { format: 'png', quality: 1, width: 1080, height: 1920 });
-      await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share your park day' });
+      const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, width: 1080, height: 1920 });
+      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your park day' });
     } catch {
       // Share sheet dismissed or capture unavailable; nothing to undo.
     } finally {
