@@ -252,16 +252,15 @@ export default function PostWinRewardsModal({
     ? Math.max(0, coinProgress.energy_to_next_level - playerEnergy) : 0;
   const nextGoal = coinProgress && playerEnergy !== null && playerEnergy !== undefined
     ? coinProgress.current_level >= coinProgress.max_level
-      ? 'Max level reached. Show this coin on your profile.'
+      ? 'Max level! Show this coin off on your profile.'
       : missingParts === 0 && missingEnergy === 0
-        ? `Ready to upgrade to Level ${coinProgress.current_level + 1}.`
-        : `Level ${coinProgress.current_level + 1}: ${[
-          missingParts > 0 ? `${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} at this ride` : null,
-          missingEnergy > 0 ? `${missingEnergy} more Energy` : null,
-        ].filter(Boolean).join(' + ')}. ${missingParts > 0
-          ? 'Verified LinePlay time or another win here can earn Parts.'
-          : 'Home finds and park wins can earn Energy.'}`
-    : hasCoin ? 'Open your shelf to track this coin’s next level.' : null;
+        ? `Ready to power up to Level ${coinProgress.current_level + 1}!`
+        : missingParts > 0 && missingEnergy > 0
+          ? `Level ${coinProgress.current_level + 1} needs ${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} and ${missingEnergy} Energy.`
+          : missingParts > 0
+            ? `${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} for Level ${coinProgress.current_level + 1}. Earn them waiting in line here.`
+            : `${missingEnergy} more Energy for Level ${coinProgress.current_level + 1}. Find it on your home map.`
+    : hasCoin ? 'Open your shelf to see this coin’s next level.' : null;
   const upgradeReady = !!coinProgress && coinProgress.current_level < coinProgress.max_level &&
     coinProgress.is_unlocked && missingParts === 0 && missingEnergy === 0 &&
     playerEnergy !== null && playerEnergy !== undefined;
@@ -460,7 +459,7 @@ export default function PostWinRewardsModal({
 
 
         <Animated.View style={[styles.card, { transform: [{ scale: cardScale }] }]}>
-          <Ribbon text="Challenge Complete!" />
+          <Ribbon text={hasCoin ? 'Coin Caught!' : 'Challenge Complete!'} />
 
           {/* Main content card with glass effect */}
           <View style={styles.content}>
