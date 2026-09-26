@@ -14,6 +14,13 @@ export interface ParkDayRecap {
   readonly ride_parts_earned: number;
   readonly coin_upgrades: number;
   readonly park_project_points: number;
+  /** The day's coins with art, for the share card (newer servers). */
+  readonly coins?: ReadonlyArray<{
+    readonly asset_id: number;
+    readonly ride_name: string;
+    readonly coin_url: string | null;
+    readonly new: boolean;
+  }>;
   readonly moments: ReadonlyArray<{
     readonly type: 'new_coin' | 'ride_win' | 'line_play' | 'upgrade' | 'project';
     readonly title: string;

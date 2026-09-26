@@ -1,5 +1,9 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
+import { useCallback, useContext, useRef, useState } from 'react';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { AuthContext } from '../context/AuthProvider';
+import ParkDayShareCard, { SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from '../components/ParkDayShareCard';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import * as RootNavigation from '../RootNavigation';
@@ -19,6 +23,24 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [retry, setRetry] = useState(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const shareRef = useRef<View>(null);
+  const { player } = useContext(AuthContext);
+
+  // Capture the off-screen Story card at 1080x1920 and hand it to the share
+  // sheet (Instagram Stories, Messages, save to Photos).
+  const shareDay = async () => {
+    if (sharing || !shareRef.current) return;
+    setSharing(true);
+    try {
+      const uri = await captureRef(shareRef, { format: 'png', quality: 1, width: 1080, height: 1920 });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share your park day' });
+    } catch {
+      // Share sheet dismissed or capture unavailable; nothing to undo.
+    } finally {
+      setSharing(false);
+    }
+  };
 
   useFocusEffect(useCallback(() => {
     let current = true;
@@ -91,9 +113,17 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
           hour: 'numeric', minute: '2-digit', timeZone: recap.timezone,
         })}</Text>
       </View>)}
+      {recap.distinct_rides_won > 0 && <Pressable style={styles.shareButton} accessibilityRole="button"
+        accessibilityLabel="Share your park day as an image" onPress={() => void shareDay()} disabled={sharing}>
+        <Text style={styles.shareText}>{sharing ? 'Making your card…' : 'SHARE MY DAY'}</Text>
+      </Pressable>}
       <Pressable style={styles.link} accessibilityRole="button" onPress={() => RootNavigation.navigate('CoinShelf')}>
         <Text style={styles.linkText}>See your Ride Coins →</Text>
       </Pressable>
+      {recap.distinct_rides_won > 0 && <View style={styles.offscreen} pointerEvents="none">
+        <ParkDayShareCard ref={shareRef} recap={recap} sharkName={player?.username}
+          avatarUrl={player?.avatar_url} />
+      </View>}
     </> : <Text style={styles.copy}>
       {atPark ? "Your first ride challenge will start this day's story. LinePlay and coin upgrades add more moments."
         : 'No confirmed game moments here today. Your earlier park story is still available.'}
@@ -110,6 +140,10 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
 }
 
 const styles = StyleSheet.create({
+  shareButton: { marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 16, paddingVertical: 12,
+    alignItems: 'center', borderBottomWidth: 4, borderBottomColor: '#d99a00' },
+  shareText: { fontFamily: 'Shark', fontSize: 20, color: '#075083' },
+  offscreen: { position: 'absolute', left: -2000, top: 0, width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT },
   card: { backgroundColor: '#bdeaff', borderWidth: 3, borderColor: '#fff', borderRadius: 20,
     padding: 13, marginBottom: 16, shadowColor: '#064b89', shadowOpacity: 0.22,
     shadowOffset: { width: 0, height: 4 }, shadowRadius: 4, elevation: 4 },

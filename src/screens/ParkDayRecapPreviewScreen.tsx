@@ -2,15 +2,17 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import ParkDayRecapCard from './ParkDayRecapCard';
+import ParkDayShareCard from '../components/ParkDayShareCard';
 import Wrapper from '../components/Wrapper';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
 
 const prior: ParkDayRecap = {
-  park_id: 1, park_name: 'Magic Kingdom', park_day: '2026-09-23',
+  park_id: 1, park_name: 'Universal Studios Hollywood', park_day: '2026-09-23',
   previous_active_day: null, timezone: 'America/New_York',
-  ride_wins: 3, distinct_rides_won: 3, new_coins: 2, line_play_sessions: 2,
+  ride_wins: 7, distinct_rides_won: 7, new_coins: 3, line_play_sessions: 2,
+  coins: [{"asset_id": 11, "ride_name": "DinoPlay", "coin_url": "https://assets.themeparkshark.com/mobile/production/assets/YcExEGuduIZNjtBCnEPVgnenzhSzvMSs7ZA2QOgC.png", "new": true}, {"asset_id": 13, "ride_name": "Forbidden Journey", "coin_url": "https://assets.themeparkshark.com/mobile/production/assets/6ZfzpRsqfroNih4XHDBmgoDwoPxxjlBvp4cU2vwc.png", "new": true}, {"asset_id": 19, "ride_name": "Mummy", "coin_url": "https://assets.themeparkshark.com/mobile/production/assets/d4jDw5cL1wtDEHFh3Ym5TeajiwG4WN94kSWP34jW.png", "new": true}, {"asset_id": 23, "ride_name": "Secret Life of Pets", "coin_url": "https://assets.themeparkshark.com/mobile/production/assets/yi8KkOCMksLVHRslaLxbUs7VzNMTyctVniTKK9TC.png", "new": false}, {"asset_id": 26, "ride_name": "Super Silly", "coin_url": "https://assets.themeparkshark.com/mobile/production/assets/UXqhHc939YhJNsHTYks7Ewrik7eq1pNMUt797lqI.png", "new": false}, {"asset_id": 28, "ride_name": "The Simpsons Ride", "coin_url": "https://assets.themeparkshark.com/mobile/production/assets/GoVjPLa6bSIVH1dtu3kYZwZpbSQocBpHnve0SCKC.png", "new": false}, {"asset_id": 32, "ride_name": "World Famous Studio Tour", "coin_url": "https://assets.themeparkshark.com/mobile/production/assets/ygI0Sc27wIMd3blodsXWO2PjNcAtaifOvwsxL6Zp.png", "new": false}],
   eligible_line_minutes: 36, ride_parts_earned: 4, coin_upgrades: 1,
   park_project_points: 5,
   moments: [
@@ -47,8 +49,10 @@ export default function ParkDayRecapPreviewScreen() {
     </Topbar>
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.context}>Magic Kingdom · Ride Coins</Text>
-      <ParkDayRecapCard parkId={1} atPark={atPark} refreshVersion={version}
-        loadRecap={loadRecap} initiallyExpanded />
+      {process.env.EXPO_PUBLIC_SHARE_CARD_PREVIEW === '1'
+        ? <ParkDayShareCard recap={prior} sharkName="FinFan22" />
+        : <ParkDayRecapCard parkId={1} atPark={atPark} refreshVersion={version}
+          loadRecap={loadRecap} initiallyExpanded />}
       <View style={styles.toolbar}>
         <Pressable onPress={() => { setAtPark(value => !value); setVersion(value => value + 1); }}>
           <Text style={styles.action}>{atPark ? 'At park' : 'At home'}</Text>
