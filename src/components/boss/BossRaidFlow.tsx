@@ -46,7 +46,7 @@ const ERRORS: Record<Exclude<AttackResult, { ok: true }>['error'], string> = {
   no_attacks_left: "You've used all your attacks. Cheer them on!",
   bad_proof: "That brawl didn't count. Try again.",
   raid_over: 'The fight is over!',
-  no_remote_pass: 'You need a Park Ticket to join another raid from home today.',
+  no_remote_pass: 'Joining from home costs 1 Park Ticket. Hunt at home to earn more!',
   network: "Couldn't reach the park. Your Energy wasn't spent.",
 };
 
@@ -120,15 +120,13 @@ export default function BossRaidFlow({ raid, open, onClose, onState }: {
   const tickets = Number((player as { tickets?: number } | null)?.tickets ?? 0);
   const active = raid?.status === 'active' && new Date(raid.ends_at).getTime() > now;
   const needsPass = remote && raid && !raid.remote.joined;
-  const payWithTicket = needsPass && raid.remote.free_passes_left <= 0;
   const blocked = !raid || !active ? 'The fight is over.'
     : raid.you.attacks_left <= 0 ? "You've used all 5 attacks. Cheer them on!"
       : energy < raid.energy_cost ? `Need ${raid.energy_cost} Energy to attack`
-        : payWithTicket && tickets < raid.remote.ticket_cost ? 'Out of free passes · need 1 Park Ticket' : null;
+        : needsPass && tickets < raid.remote.ticket_cost ? 'Joining from home needs 1 Park Ticket' : null;
   const fightLabel = !remote ? `FIGHT  ·  ${raid?.energy_cost ?? 10} ⚡`
     : !needsPass ? `FIGHT FROM HOME  ·  ${raid?.energy_cost ?? 10} ⚡`
-      : payWithTicket ? `JOIN FROM HOME  ·  1 🎟 + ${raid?.energy_cost ?? 10} ⚡`
-        : `JOIN FROM HOME  ·  FREE PASS`;
+      : `JOIN FROM HOME  ·  1 🎟 + ${raid?.energy_cost ?? 10} ⚡`;
   const teamTotal = raid ? Math.max(1, raid.teams.mouse + raid.teams.globe + raid.teams.shark) : 1;
 
   // iOS shows one modal at a time: with the sheet open, the win takes over the sheet.
@@ -221,7 +219,7 @@ export default function BossRaidFlow({ raid, open, onClose, onState }: {
             </Pressable>
             <Text style={styles.fine}>
               {remote
-                ? `Fighting from home deals ${Math.round(raid.remote.damage_rate * 100)}% damage. ${raid.remote.joined ? "You're in!" : `${raid.remote.free_passes_left} free pass${raid.remote.free_passes_left === 1 ? '' : 'es'} left today.`} Everyone who lands a hit gets the loot.`
+                ? `From home you deal ${Math.round(raid.remote.damage_rate * 100)}% damage and can't be MVP. ${raid.remote.joined ? "You're in! " : ''}Everyone who lands a hit gets the loot.`
                 : 'Beat it together before time runs out: everyone who lands a hit gets the loot, the top hitter is MVP.'}
             </Text>
           </View>}

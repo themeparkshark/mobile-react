@@ -33,7 +33,6 @@ export interface BossRaid {
   readonly reach_meters: number;
   readonly remote: {
     readonly joined: boolean;
-    readonly free_passes_left: number;
     readonly ticket_cost: number;
     readonly damage_rate: number;
     readonly fighters: number;

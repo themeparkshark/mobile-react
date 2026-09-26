@@ -70,10 +70,11 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
       const c = result.cheer;
       setToast(c.flipped
         ? `${TEAMS[c.team].name} took ${c.ride_name}! 🎉`
-        : `+${c.points} for ${TEAMS[c.team].name} at ${c.ride_name}!`);
+        : `🛡 ${c.ride_name} defended: +${c.points} for ${TEAMS[c.team].name}!`);
     } else if (!result.ok) {
-      setToast(result.error === 'no_cheers_left' ? "You're out of cheers today. Come back tomorrow!"
-        : result.error === 'bad_proof' ? 'Hit the goal in the game to send your cheer.'
+      setToast(result.error === 'no_cheers_left' ? "You're out of defends today. Come back tomorrow!"
+        : result.error === 'not_holding' ? 'That ride changed hands. Win it back at the park!'
+        : result.error === 'bad_proof' ? 'Hit the goal in the game to defend it.'
           : "Your cheer didn't go through. Try again.");
     }
     load();
@@ -145,14 +146,14 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
           ) : (
             <Text style={styles.cheerLine}>
               {live.cheers_left > 0
-                ? `📣 ${live.cheers_left} home cheer${live.cheers_left === 1 ? '' : 's'} left today · each adds ${live.cheer_points} power`
-                : '📣 Out of home cheers today · they reset tomorrow'}
+                ? `🛡 ${live.cheers_left} defend${live.cheers_left === 1 ? '' : 's'} left today · keep your team's rides from home`
+                : '🛡 Out of defends today · they reset tomorrow'}
             </Text>
           )}
           <PushSoftAsk />
           <ScrollView style={{ maxHeight: 380 }}>
             {yours && live.parks.every(p => p.cheers.length === 0) && live.parks.length > 0 && (
-              <Text style={styles.hint}>Catch ride coins at a park to cheer for those rides from home.</Text>
+              <Text style={styles.hint}>Rides your team holds (with coins you own) show up here to defend. Taking rides happens at the park!</Text>
             )}
             {live.parks.length === 0 && (
               <Text style={styles.empty}>Quiet at the parks right now. Bosses surface five times a day at every park.</Text>
@@ -192,12 +193,10 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cheerRide} numberOfLines={1}>{target.ride_name}</Text>
                       <Text style={styles.cheerMeta} numberOfLines={1}>
-                        {target.holding ? `You hold it · only ${target.gap} ahead` : target.gap === 0
-                          ? `Tied with ${TEAMS[target.controller].name.replace('Team ', '')}`
-                          : `${TEAMS[target.controller].name.replace('Team ', '')} leads by ${target.gap}`}
+                        {target.gap === 0 ? 'Tied: one cheer keeps it yours' : `Your team holds it · only ${target.gap} ahead`}
                       </Text>
                     </View>
-                    <Text style={[styles.cheerGo, live.cheers_left <= 0 && { opacity: 0.4 }]}>{target.holding ? 'DEFEND ›' : 'CHEER ›'}</Text>
+                    <Text style={[styles.cheerGo, live.cheers_left <= 0 && { opacity: 0.4 }]}>DEFEND ›</Text>
                   </Pressable>
                 ))}
               </View>

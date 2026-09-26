@@ -42,7 +42,7 @@ export async function getLiveParks(): Promise<LiveParks> {
 
 export type CheerResult =
   | { ok: true; duplicate?: boolean; cheer?: { ride_name: string; team: TeamId; points: number; controller: TeamId; flipped: boolean; underdog: boolean } }
-  | { ok: false; error: 'needs_team' | 'coin_not_owned' | 'bad_proof' | 'no_cheers_left' | 'not_found' | 'network' };
+  | { ok: false; error: 'needs_team' | 'coin_not_owned' | 'not_holding' | 'bad_proof' | 'no_cheers_left' | 'not_found' | 'network' };
 
 export async function cheerRide(parkId: number, body: { asset_id: number; client_request_id: string; hits: number; duration_ms: number }): Promise<CheerResult> {
   try {
