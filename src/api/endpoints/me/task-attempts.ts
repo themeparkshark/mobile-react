@@ -14,6 +14,21 @@ export interface TaskGameProof {
   hits?: number;
 }
 
+/** What this win did for the player's team at the ride (Ride Control). */
+export type RideControlReward =
+  | { needs_team: true; ride_name?: string | null }
+  | {
+      needs_team?: undefined;
+      ride_name: string;
+      team: 'mouse' | 'globe' | 'shark';
+      points: number;
+      underdog: boolean;
+      controller: 'mouse' | 'globe' | 'shark' | null;
+      previous_controller: 'mouse' | 'globe' | 'shark' | null;
+      flipped: boolean;
+      captain: number | null;
+    };
+
 export interface EarnedCoinEdition {
   id: number;
   name: string;
@@ -44,6 +59,7 @@ export interface TaskAttempt {
     coin_times_collected?: number | null;
     next_ride_ticket_earned?: number;
     coin_edition?: EarnedCoinEdition;
+    ride_control?: RideControlReward;
   } | null;
   expires_at: string;
 }

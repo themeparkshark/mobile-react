@@ -2,7 +2,7 @@ import { useFocusEffect, useNavigation, useRoute, type NavigationProp, type Para
 import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import React, { useCallback, useContext, useState, useEffect, Suspense } from 'react';
+import React, { useCallback, useContext, useMemo, useState, useEffect, Suspense } from 'react';
 import { Text, TouchableOpacity, View, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import Modal from 'react-native-modal';
 import { Marker } from 'react-native-maps';
@@ -48,6 +48,8 @@ import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
 import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
+import RideControlBar from '../components/RideControlBar';
+import { getRideControl, type RideControlPark, type RideControlRide } from '../api/endpoints/parks/rideControl';
 import DailyGiftModal from '../components/DailyGiftModal';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
@@ -58,7 +60,7 @@ import CommunityCenterMarker from '../components/CommunityCenterMarker';
 import CommunityCenterModal from '../components/CommunityCenterModal';
 import getCommunityCenter, { CommunityCenter } from '../api/endpoints/community-center/getCommunityCenter';
 // Gym Battle imports
-import { BattleHUD, GymMarker, SwordMarker } from '../components/GymBattle';
+import { GymMarker, SwordMarker } from '../components/GymBattle';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
@@ -291,6 +293,21 @@ export default function ExploreScreen() {
     // Navigate to full-screen Community Center experience
     RootNavigation.navigate('CommunityCenter', { parkId: park!.id, centerId: communityCenter.id });
   }, [communityCenter, location]);
+
+  // Ride Control: poll the park's team map while at a park, and after wins.
+  const [rideControl, setRideControl] = useState<RideControlPark | null>(null);
+  const refreshRideControl = useCallback(() => {
+    if (!park?.id) { setRideControl(null); return; }
+    getRideControl(park.id).then(setRideControl).catch(() => undefined);
+  }, [park?.id]);
+  useEffect(() => {
+    refreshRideControl();
+    if (!park?.id) return;
+    const id = setInterval(refreshRideControl, 20000);
+    return () => clearInterval(id);
+  }, [park?.id, refreshRideControl]);
+  const rideControlByAsset = useMemo(() => new globalThis.Map<number, RideControlRide>(
+    (rideControl?.rides ?? []).map(r => [r.asset_id, r])), [rideControl]);
 
   const getRedeemables = async () => {
     setActiveRedeemable(undefined);
@@ -809,9 +826,10 @@ export default function ExploreScreen() {
         </>
       )}
       {/* AR Toggle removed - feature disabled */}
-      {/* Gym Battle HUD - Always visible when in park with a team */}
-      {park && playerTeam?.has_team && gymData && (
-        <BattleHUD parkId={park.id} />
+      {/* Ride Control: today's team fight for this park (also invites team-less players). */}
+      {park && player && (
+        <RideControlBar control={rideControl} tasks={redeemables?.tasks ?? []}
+          onFocusTask={(task) => setSelectedTask(task)} />
       )}
       {/* Park Mode View - Map or AR */}
       {park && arMode && redeemables && (
@@ -902,6 +920,7 @@ export default function ExploreScreen() {
               task={task}
               isSelected={selectedTask?.id === task.id}
               isTripGoal={tripGoal?.task_id === task.id && !tripGoal.coin_owned}
+              control={rideControlByAsset.get(Number(task.asset_id))}
               onPress={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
             />
           ))}

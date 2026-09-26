@@ -4,6 +4,8 @@ import { Text, View, StyleSheet } from 'react-native';
 import { Marker } from 'react-native-maps';
 import Countdown, { zeroPad } from 'react-countdown';
 import { TaskType } from '../../models/task-type';
+import type { RideControlRide } from '../../api/endpoints/parks/rideControl';
+import { TEAMS } from '../../constants/teams';
 
 /**
  * TaskMarker — 100% STATIC children inside <Marker>.
@@ -16,8 +18,11 @@ export default function TaskMarker({
   task,
   isSelected,
   isTripGoal = false,
+  control,
   onPress,
 }: {
+  /** Today's Ride Control state for this ride, if any team holds it. */
+  readonly control?: RideControlRide;
   readonly task: TaskType;
   readonly isSelected: boolean;
   readonly isTripGoal?: boolean;
@@ -26,14 +31,16 @@ export default function TaskMarker({
   const expiresAt = task.active_to ? new Date(task.active_to + 'Z') : null;
   const minsLeft = expiresAt ? Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / 60000)) : null;
 
-  const ringColor = minsLeft !== null && minsLeft < 5 ? '#ef4444' : '#4ade80';
+  // A held ride wears its team's color; unheld rides keep the timer colors.
+  const ringColor = control ? TEAMS[control.controller].color
+    : minsLeft !== null && minsLeft < 5 ? '#ef4444' : '#4ade80';
   const timerUrgent = minsLeft !== null && minsLeft < 5;
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
   useEffect(() => {
     setTracksViewChanges(true);
     const timer = setTimeout(() => setTracksViewChanges(false), 700);
     return () => clearTimeout(timer);
-  }, [isSelected, isTripGoal]);
+  }, [isSelected, isTripGoal, control?.controller, control?.contested]);
 
   return (
     <Marker
@@ -98,6 +105,13 @@ export default function TaskMarker({
           ]}
         />
 
+        {control && (
+          <View style={styles.teamFlag} accessibilityLabel={`${TEAMS[control.controller].name} holds this ride`}>
+            <Image source={TEAMS[control.controller].badge} style={styles.teamBadge} contentFit="contain" />
+            {control.contested && <Text style={styles.contested}>⚔</Text>}
+          </View>
+        )}
+
         {/* Task building — static, no scale transform */}
         <View style={styles.buildingContainer}>
           <Image
@@ -112,6 +126,9 @@ export default function TaskMarker({
 }
 
 const styles = StyleSheet.create({
+  teamFlag: { position: 'absolute', top: 40, right: 22, zIndex: 21, alignItems: 'center' },
+  teamBadge: { width: 34, height: 34 },
+  contested: { position: 'absolute', bottom: -6, right: -8, fontSize: 16 },
   container: {
     width: 140,
     height: 160,

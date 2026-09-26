@@ -18,7 +18,9 @@ import Ribbon from './Ribbon';
 import CoinCatchReveal from './CoinCatchReveal';
 import YellowButton from './YellowButton';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
-import type { EarnedCoinEdition } from '../api/endpoints/me/task-attempts';
+import type { EarnedCoinEdition, RideControlReward } from '../api/endpoints/me/task-attempts';
+import { TEAMS } from '../constants/teams';
+import * as RootNavigation from '../RootNavigation';
 import type { StampData } from '../api/endpoints/me/stamps';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -33,6 +35,9 @@ interface Props {
   energyEarned: number;
   coinTimesCollected?: number | null;
   earnedEdition?: EarnedCoinEdition | null;
+  /** Ride Control outcome of this win (team power, flip, captain), or a nudge to pick a team. */
+  rideControl?: RideControlReward | null;
+  playerId?: number | null;
   earnedStamp?: Pick<StampData, 'id' | 'name' | 'rewards'> | null;
   nextRideTicketEarned?: number;
   coinProgress?: RideCoinLevelType | null;
@@ -41,6 +46,39 @@ interface Props {
   onViewStampBook?: () => void;
   onHidden?: () => void;
   onClose: () => void;
+}
+
+/* ─── Ride Control: what this win did for your team at the ride ─── */
+function RideControlBanner({ result, playerId, onPickTeam }: {
+  result: RideControlReward; playerId: number | null; onPickTeam: () => void;
+}) {
+  if (result.needs_team) {
+    return (
+      <TouchableOpacity accessibilityRole="button" onPress={onPickTeam} style={[styles.rcBanner, { borderColor: '#ffcf3b' }]}>
+        <Text style={styles.rcTitle}>CLAIM {(result.ride_name ?? 'THIS RIDE').toUpperCase()}!</Text>
+        <Text style={styles.rcBody}>Pick a team and your wins take rides for it. Tap to choose.</Text>
+      </TouchableOpacity>
+    );
+  }
+  const team = TEAMS[result.team];
+  const captain = result.captain !== null && result.captain === playerId;
+  const title = result.flipped
+    ? `${team.name.toUpperCase()} TOOK ${result.ride_name.toUpperCase()}!`
+    : result.controller === result.team ? `${team.name.toUpperCase()} HOLDS IT` : `+${result.points} FOR ${team.name.toUpperCase()}`;
+  const body = [
+    result.flipped || result.controller === result.team ? `+${result.points} power` : 'Keep going to take this ride',
+    result.underdog ? 'underdog 1.5x' : null,
+    captain ? 'you’re the Captain!' : null,
+  ].filter(Boolean).join(' · ');
+  return (
+    <View style={[styles.rcBanner, { borderColor: team.color, backgroundColor: `${team.color}33` }]}>
+      <Image source={team.badge} style={styles.rcBadge} contentFit="contain" />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rcTitle} numberOfLines={2}>{title}</Text>
+        <Text style={styles.rcBody}>{body}</Text>
+      </View>
+    </View>
+  );
 }
 
 /* ─── Animated radial light rays behind the hero coin ─── */
@@ -230,6 +268,8 @@ export default function PostWinRewardsModal({
   energyEarned,
   coinTimesCollected,
   earnedEdition,
+  rideControl,
+  playerId,
   earnedStamp,
   nextRideTicketEarned = 0,
   coinProgress,
@@ -597,6 +637,9 @@ export default function PostWinRewardsModal({
               )}
             </Animated.View>
 
+            {rideControl && <RideControlBanner result={rideControl} playerId={playerId ?? null}
+              onPickTeam={() => { onClose(); RootNavigation.navigate('TeamSelection', {}); }} />}
+
             {/* ── Stat grid with glowing cards ── */}
             <View style={styles.statsGrid}>
               {statRows.map((reward, index) => (
@@ -735,6 +778,11 @@ export default function PostWinRewardsModal({
 }
 
 const styles = StyleSheet.create({
+  rcBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch', borderWidth: 3,
+    borderRadius: 16, padding: 10, marginTop: 12, backgroundColor: 'rgba(255, 207, 59, 0.15)' },
+  rcBadge: { width: 44, height: 44 },
+  rcTitle: { fontFamily: 'Shark', fontSize: 18, color: '#fff' },
+  rcBody: { fontFamily: 'Knockout', fontSize: 14, color: '#e4f7ff', marginTop: 2 },
   scroll: { flex: 1 },
   footer: {
     width: (SW - 34) * 0.88,
@@ -894,20 +942,12 @@ const styles = StyleSheet.create({
   /* ── Stats ── */
   statsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 4,
   },
-  statCard: {
-    width: '48%',
-    borderRadius: 16,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    overflow: 'hidden',
-  },
+  statCard: { width: '23.5%', borderRadius: 14, paddingVertical: 8, alignItems: 'center', overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.06)' },
   statGlow: {
     position: 'absolute',
     top: 8,
@@ -916,35 +956,17 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     opacity: 0.08,
   },
-  statIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  statIcon: {
-    width: 28,
-    height: 28,
-  },
+  statIconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  statIcon: { width: 22, height: 22 },
   statAmount: {
     fontFamily: 'Shark',
-    fontSize: 22,
+    fontSize: 18,
     marginBottom: 2,
     textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 0,
   },
-  statLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontFamily: 'Knockout',
-    fontSize: 12,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
+  statLabel: { color: 'rgba(255,255,255,0.6)', fontFamily: 'Knockout', fontSize: 11 },
   statAccentLine: {
     position: 'absolute',
     bottom: 0,

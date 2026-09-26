@@ -26,6 +26,9 @@ export default function PostWinRewardsPreviewScreen() {
       <PostWinRewardsModal
         visible={showWin}
         rideName="Space Mountain"
+        rideControl={{ ride_name: 'Space Mountain', team: 'shark', points: 23, underdog: true, controller: 'shark',
+          previous_controller: 'globe', flipped: true, captain: 1 }}
+        playerId={1}
         coinsEarned={firstWinPreview ? 25 : 37}
         xpEarned={firstWinPreview ? 50 : 51}
         ridePartsEarned={firstWinPreview ? 1 : 2}

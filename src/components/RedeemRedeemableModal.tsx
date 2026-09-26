@@ -32,7 +32,7 @@ import { RideChallengeContext } from '../gamekit/RideChallengeContext';
 import {
   TaskAttempt,
   TaskGameProof,
-  type EarnedCoinEdition,
+  type EarnedCoinEdition, type RideControlReward,
   getTaskAttempt,
   resolveTaskAttempt,
 } from '../api/endpoints/me/task-attempts';
@@ -117,6 +117,7 @@ export default function RedeemRedeemableModal({
   const [energyEarned, setEnergyEarned] = useState(0);
   const [coinTimesCollected, setCoinTimesCollected] = useState<number | null>(null);
   const [earnedEdition, setEarnedEdition] = useState<EarnedCoinEdition | null>(null);
+  const [rideControl, setRideControl] = useState<RideControlReward | null>(null);
   const [earnedFirstCoinStamp, setEarnedFirstCoinStamp] = useState<StampData | null>(null);
   const [nextRideTicketEarned, setNextRideTicketEarned] = useState(0);
   const [postWinCoin, setPostWinCoin] = useState<RideCoinLevelType | null>(null);
@@ -179,6 +180,7 @@ export default function RedeemRedeemableModal({
       setEnergyEarned(0);
       setCoinTimesCollected(null);
       setEarnedEdition(null);
+      setRideControl(null);
       setEarnedFirstCoinStamp(null);
       setPostWinCoin(null);
       setPostWinEnergy(null);
@@ -227,6 +229,7 @@ export default function RedeemRedeemableModal({
       setEnergyEarned(attempt.rewards.energy_earned);
       setCoinTimesCollected(attempt.rewards.coin_times_collected ?? null);
       setEarnedEdition(attempt.rewards.coin_edition ?? null);
+      setRideControl(attempt.rewards.ride_control ?? null);
       setNextRideTicketEarned(attempt.rewards.next_ride_ticket_earned ?? 0);
       setEarnedFirstCoinStamp(null);
       if (attempt.rewards.coin_times_collected === 1) {
@@ -863,6 +866,8 @@ export default function RedeemRedeemableModal({
         energyEarned={energyEarned}
         coinTimesCollected={coinTimesCollected}
         earnedEdition={earnedEdition}
+        rideControl={rideControl}
+        playerId={player?.id ?? null}
         earnedStamp={earnedFirstCoinStamp}
         nextRideTicketEarned={nextRideTicketEarned}
         coinProgress={postWinCoin}
