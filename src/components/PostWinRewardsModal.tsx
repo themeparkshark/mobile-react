@@ -13,9 +13,9 @@ import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Lottie from 'lottie-react-native';
 import * as Haptics from 'expo-haptics';
 import Ribbon from './Ribbon';
+import CoinCatchReveal from './CoinCatchReveal';
 import YellowButton from './YellowButton';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import type { EarnedCoinEdition } from '../api/endpoints/me/task-attempts';
@@ -243,6 +243,9 @@ export default function PostWinRewardsModal({
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
   const [coinArtFailed, setCoinArtFailed] = useState(false);
   useEffect(() => { setCoinArtFailed(false); }, [taskCoinUrl, visible]);
+  // The coin catch plays first; the rewards summary animates in after it.
+  const [caught, setCaught] = useState(false);
+  useEffect(() => { if (!visible) setCaught(false); }, [visible]);
   const missingParts = coinProgress
     ? Math.max(0, coinProgress.parts_to_next_level - (coinProgress.available_parts ?? 0)) : 0;
   const missingEnergy = coinProgress && playerEnergy !== null && playerEnergy !== undefined
@@ -287,7 +290,7 @@ export default function PostWinRewardsModal({
   );
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !caught) return;
 
     // Reset
     cardScale.setValue(0);
@@ -396,7 +399,7 @@ export default function PostWinRewardsModal({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [visible]);
+  }, [visible, caught]);
 
   const statRows = [
     {
@@ -439,9 +442,11 @@ export default function PostWinRewardsModal({
       animationOut="fadeOut"
       isVisible={visible}
       onModalHide={onHidden}
-      onBackdropPress={onClose}
+      onBackdropPress={caught ? onClose : undefined}
       backdropOpacity={0.92}
     >
+      {/* The rewards summary mounts once the coin catch finishes. */}
+      {caught && <View style={{ flex: 1 }}>
       <ScrollView style={styles.scroll}
         contentContainerStyle={[styles.container, {
           paddingTop: Math.max(insets.top, 20) + 16,
@@ -453,13 +458,6 @@ export default function PostWinRewardsModal({
           <Sparkle key={i} delay={s.delay} x={s.x} color={s.color} />
         ))}
 
-        {/* Confetti */}
-        <Lottie
-          source={require('../../assets/animations/confetti.json')}
-          autoPlay
-          loop
-          style={styles.confetti}
-        />
 
         <Animated.View style={[styles.card, { transform: [{ scale: cardScale }] }]}>
           <Ribbon text="Challenge Complete!" />
@@ -729,6 +727,10 @@ export default function PostWinRewardsModal({
           </TouchableOpacity>
         )}
       </Animated.View>
+      </View>}
+      {!caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
+        isNewCoin={coinTimesCollected === 1}
+        onDone={() => setCaught(true)} />}
     </Modal>
   );
 }
