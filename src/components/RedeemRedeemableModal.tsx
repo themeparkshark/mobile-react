@@ -62,10 +62,11 @@ const GAMES = [
   { id: 'timing' as const, name: 'RHYTHM TAP', color: '#8b5cf6' },
   { id: 'memory' as const, name: 'MEMORY MATCH', color: '#ec4899' },
   { id: 'trivia' as const, name: 'QUICK TRIVIA', color: '#f59e0b' },
+  { id: 'photo' as const, name: 'SNAP THE RIDE', color: '#22c55e' },
 ];
 
 type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
-type GameType = 'tap' | 'timing' | 'memory' | 'trivia';
+type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'photo';
 
 export default function RedeemRedeemableModal({
   open,

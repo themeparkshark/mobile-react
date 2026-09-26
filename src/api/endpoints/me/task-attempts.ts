@@ -1,6 +1,6 @@
 import client from '../../client';
 
-export type TaskAttemptGame = 'tap' | 'timing' | 'memory' | 'trivia';
+export type TaskAttemptGame = 'tap' | 'timing' | 'memory' | 'trivia' | 'photo';
 export type TaskAttemptStatus = 'started' | 'won' | 'lost' | 'expired';
 
 export interface TaskGameProof {

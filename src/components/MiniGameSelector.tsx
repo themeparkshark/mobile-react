@@ -9,6 +9,7 @@ import SharkMiniGame from './SharkMiniGame';
 // components above stay importable so USE_QUEUE_KIT_GAMES=false is a
 // one-line rollback to the old games.
 import { WhackAShark } from '../games/whack';
+import { SnapTheRide } from '../games/snap/SnapTheRide';
 import { RhythmTapGame } from '../games/rhythm';
 import { MemoryGame } from '../games/memory';
 import { TriviaGame, createLinePlayTriviaSource } from '../games/trivia';
@@ -19,7 +20,7 @@ import { getLinePlayChapter } from '../services/lineplay/chapters';
 
 const USE_QUEUE_KIT_GAMES = true;
 
-type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana';
+type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana' | 'photo';
 
 interface Props {
   visible: boolean;
@@ -164,6 +165,13 @@ export default function MiniGameSelector({
         onQuit={handleQuit}
         onComplete={(mult, meta) => handleComplete(mult, meta)}
       />
+    );
+  }
+
+  if (selectedGame === 'photo') {
+    return (
+      <SnapTheRide visible={visible} seed={seed} taskName={taskName} onClose={onClose} onQuit={handleQuit}
+        onComplete={(mult, meta) => handleComplete(mult, meta)} />
     );
   }
 

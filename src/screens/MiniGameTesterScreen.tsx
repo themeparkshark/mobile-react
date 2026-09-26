@@ -20,7 +20,7 @@ import { CoinUpgradeDemoScreen } from '../components/CoinUpgradeDemo';
 import AnimatedShark from '../components/AnimatedShark';
 import Wrapper from '../components/Wrapper';
 
-type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'random';
+type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
 
 const GAMES: { type: GameType; label: string; emoji: string; desc: string }[] = [
   { type: 'random', label: 'Random', emoji: '[?]', desc: 'Randomly picks a mini-game' },
@@ -33,7 +33,7 @@ const GAMES: { type: GameType; label: string; emoji: string; desc: string }[] = 
 
 const RIDE_SPRINTS: { type: GameType; number: string; label: string; desc: string; cue: string }[] = [
   { type: 'tap', number: '01', label: 'Whack-a-Shark', desc: '25 seconds of quick reactions', cue: 'TAP' },
-  { type: 'timing', number: '02', label: 'Rhythm Tap', desc: 'Find the beat and time each hit', cue: 'BEAT' },
+  { type: 'photo', number: '02', label: 'Snap the Ride', desc: 'Frame the entrance and snap it', cue: 'SNAP' },
   { type: 'memory', number: '03', label: 'Memory Match', desc: 'Find four pairs as fast as you can', cue: 'MATCH' },
   { type: 'trivia', number: '04', label: 'Park Trivia', desc: 'Two fast park questions', cue: 'THINK' },
 ];

@@ -419,7 +419,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           {/* Results */}
           {phase === 'results' ? (
             <View style={styles.overlay} pointerEvents="box-none">
-              <Animated.View style={[styles.resultsCard, resultsStyle]}>
+              <Animated.View style={[{ width: '84%' }, resultsStyle]}>
+              {/* Background on a non-animated child: iOS froze the fill at the
+                  0.7 start scale when it sat on the scaling view. */}
+              <View style={[styles.resultsCard, { width: '100%' }]}>
                 <Text style={[styles.resultsMsg, won ? styles.msgWin : styles.msgFail]}>
                   {result?.message ?? defaultMessage}
                 </Text>
@@ -438,6 +441,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                 >
                   <Text style={styles.primaryBtnTxt}>{won ? 'Continue' : 'Close'}</Text>
                 </TouchableOpacity>
+              </View>
               </Animated.View>
             </View>
           ) : null}
