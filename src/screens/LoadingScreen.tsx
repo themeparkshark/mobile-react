@@ -149,59 +149,33 @@ export default function LoadingScreen() {
     RootNavigation.navigate('Welcome');
   }, Boolean(isReady && !hasUsername));
 
+  // Real progress: signed in (50), park check done (100). The bar moves with
+  // actual work, and a short floor keeps the art on screen long enough to land.
+  const mountedAt = useRef(Date.now());
+  const MIN_SHOW_MS = 1200;
   useAsyncEffect(async () => {
     if (!isReady || !hasUsername) {
       return;
     }
-
-    if (!permissionGranted) {
-      setProgress(100);
-      return;
-    }
-
-    await requestPark();
-  }, [isReady, permissionGranted, hasUsername]);
-
-  useAsyncEffect(async () => {
-    if (!isReady || !hasUsername) {
-      return;
-    }
-
     setProgress(50);
-  }, [isReady, hasUsername]);
-
-  useEffect(() => {
-    if (!hasUsername) {
-      return;
+    if (permissionGranted) {
+      try { await requestPark(); } catch { /* the map retries on its own */ }
     }
-    // Don't wait for parkLoaded - proceed after a short delay
-    // parkLoaded may never be true in Travel Mode (not at a park)
-    const timer = setTimeout(() => {
-      setProgress(90);
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [hasUsername]);
+    const wait = Math.max(0, MIN_SHOW_MS - (Date.now() - mountedAt.current));
+    setTimeout(() => setProgress(100), wait);
+  }, [isReady, permissionGranted, hasUsername]);
 
   useEffect(() => {
     setFact(sample(labels.splash_screen_facts));
   }, []);
 
-  useTimeoutWhen(
-    () => {
-      setProgress(100);
-    },
-    3000,
-    progress === 90
-  );
-
   useEffect(() => {
-    console.log('🦈 Loading screen state:', { progress, isReady, hasUsername, parkLoaded, permissionGranted });
+    if (__DEV__) console.log('🦈 Loading screen state:', { progress, isReady, hasUsername, parkLoaded, permissionGranted });
   }, [progress, isReady, hasUsername, parkLoaded, permissionGranted]);
 
   // Force navigate after 5 seconds regardless of state (safety net)
   useTimeoutWhen(
     () => {
-      console.log('🦈 Force navigating (5s timeout)...');
       safeNavigate();
     },
     5000,
@@ -211,10 +185,9 @@ export default function LoadingScreen() {
   // Normal navigate when progress hits 100
   useTimeoutWhen(
     () => {
-      console.log('🦈 Navigating (progress complete)...');
       safeNavigate();
     },
-    500,
+    250,
     progress === 100 && hasUsername
   );
 

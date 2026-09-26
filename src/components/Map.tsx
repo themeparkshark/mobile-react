@@ -137,6 +137,22 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     ).start();
   }, []);
   const cameraRef = useRef<CameraRef>(null);
+  // A water-and-sparkle cover hides the blank map while tiles stream in, then
+  // lifts away once the map has fully drawn (or after 4 s, whatever happens).
+  const cover = useRef(new Animated.Value(1)).current;
+  const [covered, setCovered] = useState(true);
+  const revealed = useRef(false);
+  const revealMap = () => {
+    if (revealed.current) return;
+    revealed.current = true;
+    Animated.timing(cover, { toValue: 0, duration: 450, easing: Easing.out(Easing.quad), useNativeDriver: true })
+      .start(() => setCovered(false));
+  };
+  useEffect(() => {
+    const t = setTimeout(revealMap, 4000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const mapViewRef = useRef<MapViewRef>(null);
   const window = useWindowDimensions();
   const mapQuery = useMemo(() => ({
@@ -364,7 +380,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           if (!feature.properties?.isUserInteraction) return;
           onPress?.();
         }}
-        onDidFinishRenderingMapFully={refreshDecorations}
+        onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap(); }}
         onRegionDidChange={(feature) => {
           refreshDecorations();
           // A real pan (not a pinch around the shark) drops follow mode.
@@ -411,6 +427,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         )}
         <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
       </MapView>
+      {covered && (
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, {
+          opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
+          {/* The player's shark (drawn above) swims on the water until the map lands under it. */}
+          <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+        </Animated.View>
+      )}
       {location && focusedOnPlayer && (
         <View pointerEvents="none" style={styles.centerOverlay}>
           <View style={styles.centerShark}>{playerShark}</View>
@@ -421,6 +444,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
 }
 
 const styles = StyleSheet.create({
+  cover: { zIndex: 5, backgroundColor: '#0768b9' },
   centerOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
