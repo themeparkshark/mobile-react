@@ -171,7 +171,7 @@ export default function MiniGameSelector({
     switch (selectedGame) {
       case 'tap':
         return (
-          <WhackAShark visible={visible} seed={seed} format={rewardMode === 'task-attempt' ? 'ride' : 'queue'} onClose={onClose} onQuit={handleQuit}
+          <WhackAShark visible={visible} seed={seed} taskName={taskName} format={rewardMode === 'task-attempt' ? 'ride' : 'queue'} onClose={onClose} onQuit={handleQuit}
             onComplete={(mult, meta) => handleComplete(mult, meta)} />
         );
       case 'timing':

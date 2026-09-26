@@ -27,3 +27,39 @@ export const DECOY_IMAGE = require('../../assets/games/whack/anglerfish-decoy.pn
 
 /** Golden shark — x5 points + triggers fever mode. */
 export const GOLDEN_IMAGE = require('../../assets/games/whack/golden-shark.png');
+
+/** Theme Park Shark costumes per ride theme: peek (wind-up), pop, dazed. */
+export const THEMED_SHARK_FRAMES = {
+  park: [
+    require('../../assets/games/whack/themes/park/peek.png'),
+    require('../../assets/games/whack/themes/park/pop.png'),
+    require('../../assets/games/whack/themes/park/dazed.png'),
+  ],
+  pirates: [
+    require('../../assets/games/whack/themes/pirates/peek.png'),
+    require('../../assets/games/whack/themes/pirates/pop.png'),
+    require('../../assets/games/whack/themes/pirates/dazed.png'),
+  ],
+  mansion: [
+    require('../../assets/games/whack/themes/mansion/peek.png'),
+    require('../../assets/games/whack/themes/mansion/pop.png'),
+    require('../../assets/games/whack/themes/mansion/dazed.png'),
+  ],
+  space: [
+    require('../../assets/games/whack/themes/space/peek.png'),
+    require('../../assets/games/whack/themes/space/pop.png'),
+    require('../../assets/games/whack/themes/space/dazed.png'),
+  ],
+  jungle: [
+    require('../../assets/games/whack/themes/jungle/peek.png'),
+    require('../../assets/games/whack/themes/jungle/pop.png'),
+    require('../../assets/games/whack/themes/jungle/dazed.png'),
+  ],
+  backlot: [
+    require('../../assets/games/whack/themes/backlot/peek.png'),
+    require('../../assets/games/whack/themes/backlot/pop.png'),
+    require('../../assets/games/whack/themes/backlot/dazed.png'),
+  ],
+} as const;
+
+export type WhackTheme = keyof typeof THEMED_SHARK_FRAMES;

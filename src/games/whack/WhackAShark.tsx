@@ -28,6 +28,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { deckIdForRideName } from '../../services/rideTheme';
 import {
   View,
   Image,
@@ -86,7 +87,8 @@ import {
 import { useWhackEngine, type Occupant, type WhackOutcome } from './useWhackEngine';
 import {
   HOLE_IMAGE,
-  SHARK_POP_FRAMES,
+  THEMED_SHARK_FRAMES,
+  type WhackTheme,
   DECOY_IMAGE,
   GOLDEN_IMAGE,
 } from './assets';
@@ -101,6 +103,8 @@ export interface WhackASharkProps {
   seed?: number;
   /** Short paid ride challenge; the default full round remains for LinePlay. */
   format?: 'ride' | 'queue';
+  /** Ride name; picks the shark's costume (pirate, ghost, astronaut...). */
+  taskName?: string;
   /** GameShellV2 external contract — matches MiniGameSelector. */
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
@@ -120,10 +124,17 @@ export function WhackAShark({
   difficulty = 1,
   seed,
   format = 'queue',
+  taskName,
   onComplete,
   onClose,
   onQuit,
 }: WhackASharkProps) {
+  const theme: WhackTheme = useMemo(() => {
+    const deck = deckIdForRideName(taskName);
+    return (deck in THEMED_SHARK_FRAMES ? deck : 'park') as WhackTheme;
+  }, [taskName]);
+  const goalLabel = { park: 'SHARKS', pirates: 'PIRATES', mansion: 'GHOSTS', space: 'ASTRONAUTS',
+    jungle: 'EXPLORERS', backlot: 'DIRECTORS' }[theme];
   const shellRef = useRef<GameShellV2Handle>(null);
   const particlesRef = useRef<ParticleHandle>(null);
 
@@ -400,9 +411,9 @@ export function WhackAShark({
       visible={visible}
       title="Whack-a-Shark"
       subtitle={format === 'ride' ? `${secondsLeft}s left` : `Bop sharks · ${secondsLeft}s left`}
-      objective={format === 'ride' ? 'Whack sharks, skip the anglerfish. Golden sharks count double!'
+      objective={format === 'ride' ? `Bonk the ${goalLabel.toLowerCase()}, skip the anglerfish. Golden sharks count double!`
         : 'Whack sharks! Avoid the anglerfish. Golden shark = x5 + fever!'}
-      goal={format === 'ride' ? { current: hits, target: RIDE_GOAL_SHARKS, label: 'SHARKS' } : undefined}
+      goal={format === 'ride' ? { current: hits, target: RIDE_GOAL_SHARKS, label: goalLabel } : undefined}
       score={score}
       multiplier={combo.multiplier}
       fever={combo.fever}
@@ -423,6 +434,7 @@ export function WhackAShark({
           accessibilityIgnoresInvertColors
         />
         <WhackField
+          theme={theme}
           holes={engine.holes}
           layout={layout}
           width={field.w}
@@ -509,16 +521,18 @@ interface WhackFieldProps {
   width: number;
   height: number;
   fever: boolean;
+  theme: WhackTheme;
   onWhack: (index: number) => void;
 }
 
-function WhackField({ holes, layout, width, height, onWhack }: WhackFieldProps) {
+function WhackField({ holes, layout, width, height, theme, onWhack }: WhackFieldProps) {
+  const frames = THEMED_SHARK_FRAMES[theme];
   const holeImg = useImage(HOLE_IMAGE);
   const decoyImg = useImage(DECOY_IMAGE);
   const goldenImg = useImage(GOLDEN_IMAGE);
-  const pop0 = useImage(SHARK_POP_FRAMES[0]);
-  const pop1 = useImage(SHARK_POP_FRAMES[1]);
-  const pop2 = useImage(SHARK_POP_FRAMES[2]);
+  const pop0 = useImage(frames[0]);
+  const pop1 = useImage(frames[1]);
+  const pop2 = useImage(frames[2]);
   const sharkFrames = useMemo(() => [pop0, pop1, pop2], [pop0, pop1, pop2]);
 
   return (
