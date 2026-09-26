@@ -27,3 +27,8 @@ build-*.ipa
 ios/Pods/
 ios/build/
 dist/
+
+# Local-only env (dev tokens) and raw art drafts
+.env*.local
+tools/assets/.raw/
+.env.*
