@@ -153,12 +153,12 @@ export default function TaskMarker({
       <View style={styles.container}>
         {isTripGoal && <View style={styles.goalBadge}><Text style={styles.goalText}>MY GOAL</Text></View>}
         {rush && (
-          <View style={[styles.rushBadge, isTripGoal && { top: 24 }]} accessibilityLabel={`Rush: ${rush.wait} minute wait`}>
-            <Text style={styles.rushText}>⚡ RUSH {rush.wait} MIN</Text>
+          <View style={styles.rushBadge} accessibilityLabel={`Rush: ${live?.wait ?? rush.wait} minute wait`}>
+            <Text style={styles.rushText}>⚡ RUSH {live?.wait ?? rush.wait} MIN</Text>
           </View>
         )}
         {/* Timer badge */}
-        {expiresAt && (
+        {expiresAt && !rush && (
           <View style={[
             styles.timerBadge,
             timerUrgent && styles.timerBadgeUrgent,
@@ -236,8 +236,8 @@ export default function TaskMarker({
 }
 
 const styles = StyleSheet.create({
-  teamFlag: { position: 'absolute', top: 40, right: 22, zIndex: 21, alignItems: 'center' },
-  teamBadge: { width: 34, height: 34 },
+  teamFlag: { position: 'absolute', top: 88, right: 30, zIndex: 21, alignItems: 'center' },
+  teamBadge: { width: 24, height: 24 },
   contested: { position: 'absolute', bottom: -6, right: -8, fontSize: 16 },
   container: {
     width: 140,
@@ -247,12 +247,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 10,
   },
-  goalBadge: { position: 'absolute', top: 3, zIndex: 22, backgroundColor: '#fbbf24',
+  goalBadge: { position: 'absolute', top: 16, zIndex: 22, backgroundColor: '#fbbf24',
     borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#1a1a2e' },
   goalText: { color: '#1a1a2e', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   timerBadge: {
     position: 'absolute',
-    top: 65,
+    top: 40,
     backgroundColor: '#FFF8E7',
     borderRadius: 8,
     paddingHorizontal: 8,
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
   },
   tooltipContainer: {
     position: 'absolute',
-    top: 25,
+    top: -22,
     left: -10,
     right: -10,
     alignItems: 'center',
@@ -317,10 +317,10 @@ const styles = StyleSheet.create({
   },
   glowRingOuter: {
     position: 'absolute',
-    bottom: 8,
-    width: 80,
-    height: 35,
-    borderRadius: 40,
+    bottom: 9,
+    width: 62,
+    height: 24,
+    borderRadius: 31,
     borderWidth: 3,
     opacity: 0.7,
     shadowOffset: { width: 0, height: 2 },
@@ -331,25 +331,26 @@ const styles = StyleSheet.create({
   glowRingInner: {
     position: 'absolute',
     bottom: 12,
-    width: 65,
-    height: 28,
-    borderRadius: 32,
+    width: 50,
+    height: 18,
+    borderRadius: 25,
     borderWidth: 2,
     opacity: 0.8,
   },
   buildingContainer: {
     zIndex: 5,
   },
-  landmarkWrap: { width: 96, height: 124, alignItems: 'center', justifyContent: 'flex-end' },
+  // Small enough that a park full of pins stays a calm map, not a sticker sheet.
+  landmarkWrap: { width: 64, height: 86, alignItems: 'center', justifyContent: 'flex-end' },
   landmarkResting: { opacity: 0.55 },
   downChip: { position: 'absolute', bottom: 2, alignSelf: 'center', backgroundColor: '#475569', borderRadius: 8,
     paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5, borderColor: '#fff' },
   downText: { fontFamily: 'Shark', fontSize: 11, color: '#fff' },
-  rushBadge: { position: 'absolute', top: 3, zIndex: 23, backgroundColor: '#ffcf3b', borderRadius: 10,
+  rushBadge: { position: 'absolute', top: 40, zIndex: 23, backgroundColor: '#ffcf3b', borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 3, borderWidth: 2, borderColor: '#fff',
     shadowColor: '#ffb300', shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
   rushText: { fontFamily: 'Shark', fontSize: 12, color: '#6a3b00' },
   tooltipWait: { fontFamily: 'Knockout', fontSize: 12, color: '#0768b9', textAlign: 'center', marginTop: 1 },
-  landmarkImage: { width: 96, height: 96 },
-  floatingCoin: { position: 'absolute', top: 0, width: 30, height: 30 },
+  landmarkImage: { width: 64, height: 64 },
+  floatingCoin: { position: 'absolute', top: 0, width: 20, height: 20 },
 });

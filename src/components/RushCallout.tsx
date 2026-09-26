@@ -4,7 +4,8 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import type { LiveRush } from '../api/endpoints/parks/live';
 import type { TaskType } from '../models/task-type';
 
-export type RushPick = { readonly task: TaskType; readonly rush: LiveRush };
+/** `wait` is the live posted wait (the Rush window was fixed when it opened). */
+export type RushPick = { readonly task: TaskType; readonly rush: LiveRush; readonly wait: number };
 
 function left(endsAt: string, now: number): string {
   const s = Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000));
@@ -35,15 +36,15 @@ export default function RushCallout({ rushes, onFocus }: {
   const bolt = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pulse.value * 0.18 }, { rotate: `${-8 + pulse.value * 16}deg` }] }));
 
   if (!live.length) return null;
-  const { task, rush } = live[0];
+  const { task, rush, wait } = live[0];
   return (
     <Pressable accessibilityRole="button" onPress={() => onFocus(task)} style={styles.pill}
-      accessibilityLabel={`Rush on ${task.name}: ${rush.wait} minute wait, usually ${rush.typical}. ${left(rush.ends_at, now)} left. Show on map.`}>
+      accessibilityLabel={`Rush on ${task.name}: ${wait} minute wait, usually ${rush.typical}. ${left(rush.ends_at, now)} left. Show on map.`}>
       <View style={styles.boltWrap}><Animated.Text style={[styles.bolt, bolt]}>⚡</Animated.Text></View>
       <View style={{ flex: 1 }}>
         <Text style={styles.title} numberOfLines={1}>RUSH · {task.name}</Text>
         <Text style={styles.sub} numberOfLines={1}>
-          {rush.wait} min wait (usually {rush.typical}) · 2x Parts · {left(rush.ends_at, now)} left
+          {wait} min wait (usually {rush.typical}) · 2x Parts · {left(rush.ends_at, now)} left
           {live.length > 1 ? `  +${live.length - 1} more` : ''}
         </Text>
       </View>

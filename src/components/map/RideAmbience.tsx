@@ -161,18 +161,18 @@ function RaceCar({ delay = 0 }: { delay?: number }) {
   const p = useLoop(3200, delay);
   const style = useAnimatedStyle(() => {
     const a = p.value * Math.PI * 2;
-    const dx = -Math.sin(a) * 78;
-    const dy = Math.cos(a) * 26;
+    const dx = -Math.sin(a) * 52;
+    const dy = Math.cos(a) * 18;
     return {
       transform: [
-        { translateX: Math.cos(a) * 78 },
-        { translateY: -8 + Math.sin(a) * 26 },
+        { translateX: Math.cos(a) * 52 },
+        { translateY: -6 + Math.sin(a) * 18 },
         { rotate: `${(Math.atan2(dy, dx) * 180) / Math.PI + 90}deg` },
       ],
       opacity: Math.sin(a) < -0.3 ? 0.55 : 1,
     };
   });
-  return <Animated.Image resizeMode="contain" source={FX.racecar} style={[styles.abs, box(26), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.racecar} style={[styles.abs, box(18), style]} />;
 }
 
 /** Big footprints stomping past, one after another, then fading together. */
@@ -186,14 +186,14 @@ function Footprint({ i }: { i: number }) {
     return {
       opacity: pop * fade * 0.85,
       transform: [
-        { translateX: -95 + i * 36 },
-        { translateY: 34 + (i % 2 ? -11 : 11) },
+        { translateX: -62 + i * 24 },
+        { translateY: 22 + (i % 2 ? -7 : 7) },
         { rotate: '90deg' },
         { scale: 1.35 - pop * 0.35 },
       ],
     };
   });
-  return <Animated.Image resizeMode="contain" source={FX.footprint} style={[styles.abs, box(24), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.footprint} style={[styles.abs, box(16), style]} />;
 }
 
 /** The dragon perched on the landmark, breathing fire every few seconds. */
@@ -201,12 +201,12 @@ function Dragon() {
   const p = useLoop(6000);
   const head = useAnimatedStyle(() => {
     const roar = p.value > 0.7 && p.value < 0.9 ? Math.sin(((p.value - 0.7) / 0.2) * Math.PI) : 0;
-    return { transform: [{ translateX: -12 }, { translateY: -118 - roar * 4 }, { rotate: `${-roar * 8}deg` }, { scale: 1 + roar * 0.08 }] };
+    return { transform: [{ translateX: -8 }, { translateY: -84 - roar * 3 }, { rotate: `${-roar * 8}deg` }, { scale: 1 + roar * 0.08 }] };
   });
   return (
     <>
       {[0, 1, 2, 3, 4].map(k => <Flame key={k} p={p} k={k} />)}
-      <Animated.Image resizeMode="contain" source={FX.dragon} style={[styles.abs, box(54), head]} />
+      <Animated.Image resizeMode="contain" source={FX.dragon} style={[styles.abs, box(34), head]} />
     </>
   );
 }
@@ -217,21 +217,21 @@ function Flame({ p, k }: { p: SharedValue<number>; k: number }) {
     const on = t > 0 && t < 1;
     return {
       opacity: on ? Math.sin(t * Math.PI) : 0,
-      transform: [{ translateX: 16 + t * 46 }, { translateY: -110 + t * 10 + (k - 2) * 4 }, { scale: 0.5 + t * 0.9 }],
+      transform: [{ translateX: 10 + t * 30 }, { translateY: -82 + t * 7 + (k - 2) * 3 }, { scale: 0.5 + t * 0.8 }],
     };
   });
-  return <Animated.Image resizeMode="contain" source={FX.steam} tintColor={k % 2 ? '#ffb020' : '#ff6a1a'} style={[styles.abs, box(26), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.steam} tintColor={k % 2 ? '#ffb020' : '#ff6a1a'} style={[styles.abs, box(18), style]} />;
 }
 
 /** Hollywood searchlights sweeping behind the landmark. */
 function Searchlight({ phase }: { phase: number }) {
   const p = useLoop(5200, phase * 2600);
   const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: (phase ? 22 : -22) - 11 }, { translateY: -170 }, { rotate: `${Math.sin(p.value * Math.PI * 2) * 28}deg` }],
+    transform: [{ translateX: (phase ? 14 : -14) - 7 }, { translateY: -110 }, { rotate: `${Math.sin(p.value * Math.PI * 2) * 24}deg` }],
   }));
   return (
     <Animated.View style={[styles.abs, styles.beam, style]}>
-      <LinearGradient colors={['rgba(255,247,205,0)', 'rgba(255,247,205,0.55)']} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={['rgba(255,247,205,0)', 'rgba(255,247,205,0.38)']} style={StyleSheet.absoluteFill} />
     </Animated.View>
   );
 }
@@ -240,7 +240,7 @@ const FIREWORK_COLORS = ['#ffcf3b', '#ff5fa2', '#5fd4ff', '#8dff6a', '#ffffff'];
 
 function FireworkBurst({ seed, i }: P) {
   const r = useMemo(() => rng(seed + i * 41), [seed, i]);
-  const cfg = useMemo(() => ({ x: (r() - 0.5) * 140, y: -120 - r() * 60, color: FIREWORK_COLORS[Math.floor(r() * FIREWORK_COLORS.length)], delay: i * 900 + r() * 500 }), [r, i]);
+  const cfg = useMemo(() => ({ x: (r() - 0.5) * 100, y: -90 - r() * 40, color: FIREWORK_COLORS[Math.floor(r() * FIREWORK_COLORS.length)], delay: i * 900 + r() * 500 }), [r, i]);
   const p = useLoop(2700, cfg.delay);
   return (
     <View style={[styles.abs, { transform: [{ translateX: cfg.x }, { translateY: cfg.y }] }]}>
@@ -254,7 +254,7 @@ function Spark({ p, angle, color }: { p: SharedValue<number>; angle: number; col
     const t = Math.min(1, p.value / 0.5);
     return {
       opacity: p.value < 0.5 ? 1 - t * t : 0,
-      transform: [{ translateX: Math.cos(angle) * t * 34 }, { translateY: Math.sin(angle) * t * 34 + t * t * 10 }, { scale: 1 - t * 0.5 }],
+      transform: [{ translateX: Math.cos(angle) * t * 24 }, { translateY: Math.sin(angle) * t * 24 + t * t * 8 }, { scale: 1 - t * 0.5 }],
     };
   });
   return <Animated.View style={[styles.abs, styles.spark, { backgroundColor: color }, style]} />;
@@ -280,39 +280,39 @@ const n = (count: number) => Array.from({ length: count }, (_, i) => i);
 function Scene({ kind, seed }: { kind: AmbienceId; seed: number }) {
   switch (kind) {
     case 'snow':
-      return <>{n(12).map(i => <Snowflake key={i} seed={seed} i={i} />)}</>;
+      return <>{n(7).map(i => <Snowflake key={i} seed={seed} i={i} />)}</>;
     case 'stars':
-      return <>{n(8).map(i => <Twinkle key={i} seed={seed} i={i} source={FX.sparkle} size={16} area={[-105, -150, 105, -20]} tint="#fff6c2" />)}</>;
+      return <>{n(4).map(i => <Twinkle key={i} seed={seed} i={i} source={FX.sparkle} size={12} area={[-70, -110, 70, -20]} tint="#fff6c2" />)}</>;
     case 'sparkles':
-      return <>{n(6).map(i => <Twinkle key={i} seed={seed} i={i} source={FX.sparkle} size={14} area={[-70, -130, 70, -10]} />)}</>;
+      return <>{n(3).map(i => <Twinkle key={i} seed={seed} i={i} source={FX.sparkle} size={11} area={[-45, -90, 45, -10]} />)}</>;
     case 'ufo':
-      return <Orbiter source={FX.ufo} size={34} rx={82} ry={20} cy={-120} dur={9000} bob={5} glow />;
+      return <Orbiter source={FX.ufo} size={24} rx={60} ry={14} cy={-90} dur={9000} bob={5} glow />;
     case 'owls':
-      return <Orbiter source={FX.owl} size={28} rx={92} ry={26} cy={-110} dur={7600} bob={7} />;
+      return <Orbiter source={FX.owl} size={20} rx={66} ry={18} cy={-84} dur={7600} bob={7} />;
     case 'ghosts':
-      return <>{n(3).map(i => <Riser key={i} seed={seed} i={i} source={FX.ghost} size={26} from={[0, -30]} spread={120} height={100} grow={0.1} sway={10} dur={5200} />)}</>;
+      return <>{n(2).map(i => <Riser key={i} seed={seed} i={i} source={FX.ghost} size={18} from={[0, -30]} spread={90} height={70} grow={0.1} sway={10} dur={5200} />)}</>;
     case 'bats':
-      return <>{n(3).map(i => <Flyby key={i} seed={seed} i={i} source={FX.bat} size={22} y={-120} dur={4200} />)}</>;
+      return <>{n(2).map(i => <Flyby key={i} seed={seed} i={i} source={FX.bat} size={16} y={-95} dur={5200} />)}</>;
     case 'parrots':
-      return <>{n(2).map(i => <Flyby key={i} seed={seed} i={i} source={FX.parrot} size={26} y={-110} dur={6400} />)}</>;
+      return <>{n(1).map(i => <Flyby key={i} seed={seed} i={i} source={FX.parrot} size={20} y={-90} dur={8000} />)}</>;
     case 'steam':
-      return <>{n(4).map(i => <Riser key={i} seed={seed} i={i} source={FX.steam} size={24} from={[-22, -88]} spread={14} height={70} grow={1.2} sway={6} dur={3000} />)}</>;
+      return <>{n(3).map(i => <Riser key={i} seed={seed} i={i} source={FX.steam} size={16} from={[-14, -62]} spread={10} height={50} grow={1} sway={6} dur={3000} />)}</>;
     case 'bubbles':
-      return <>{n(6).map(i => <Riser key={i} seed={seed} i={i} source={FX.bubble} size={12} from={[0, 10]} spread={120} height={110} grow={0.3} sway={8} dur={3600} />)}</>;
+      return <>{n(4).map(i => <Riser key={i} seed={seed} i={i} source={FX.bubble} size={9} from={[0, 6]} spread={80} height={110} grow={0.3} sway={8} dur={3600} />)}</>;
     case 'splash':
-      return <>{n(7).map(i => <Droplet key={i} seed={seed} i={i} />)}</>;
+      return <>{n(4).map(i => <Droplet key={i} seed={seed} i={i} from={[12, -4]} power={0.7} />)}</>;
     case 'fountain':
-      return <>{n(5).map(i => <Droplet key={i} seed={seed} i={i} from={[0, -42]} power={0.55} />)}</>;
+      return <>{n(3).map(i => <Droplet key={i} seed={seed} i={i} from={[0, -28]} power={0.45} />)}</>;
     case 'rush':
       // Gold sparkles swirling up around a ride that's on Rush.
       return <>
-        {n(6).map(i => <Twinkle key={`t${i}`} seed={seed + 77} i={i} source={FX.sparkle} size={18} area={[-60, -120, 60, -6]} tint="#ffd23a" />)}
-        {n(4).map(i => <Riser key={`r${i}`} seed={seed + 91} i={i} source={FX.sparkle} size={12} from={[0, -10]} spread={90} height={120} grow={0.2} sway={10} dur={2600} />)}
+        {n(4).map(i => <Twinkle key={`t${i}`} seed={seed + 77} i={i} source={FX.sparkle} size={14} area={[-45, -90, 45, -6]} tint="#ffd23a" />)}
+        {n(3).map(i => <Riser key={`r${i}`} seed={seed + 91} i={i} source={FX.sparkle} size={9} from={[0, -10]} spread={60} height={80} grow={0.2} sway={10} dur={2600} />)}
       </>;
     case 'aroma':
-      return <>{n(3).map(i => <Riser key={i} seed={seed} i={i} source={FX.steam} size={15} from={[4, -70]} spread={30} height={50} grow={0.8} sway={9} dur={3400} />)}</>;
+      return <>{n(2).map(i => <Riser key={i} seed={seed} i={i} source={FX.steam} size={11} from={[4, -50]} spread={20} height={36} grow={0.7} sway={7} dur={3600} />)}</>;
     case 'racecar':
-      return <><RaceCar /><RaceCar delay={1600} /></>;
+      return <RaceCar />;
     case 'dino':
       return <>{n(6).map(i => <Footprint key={i} i={i} />)}</>;
     case 'dragon':
@@ -320,7 +320,7 @@ function Scene({ kind, seed }: { kind: AmbienceId; seed: number }) {
     case 'spotlights':
       return <><Searchlight phase={0} /><Searchlight phase={1} /></>;
     case 'fireworks':
-      return <>{n(3).map(i => <FireworkBurst key={i} seed={seed} i={i} />)}</>;
+      return <>{n(2).map(i => <FireworkBurst key={i} seed={seed} i={i} />)}</>;
     default:
       return null;
   }
@@ -360,7 +360,7 @@ function Ship() {
     const a = p.value * Math.PI * 2;
     return {
       transform: [
-        { translateX: Math.sin(a) * 24 },
+        { translateX: Math.sin(a) * 18 },
         { translateY: -14 + Math.sin(a * 6) * 2 },
         // The sprite's bow points left, so mirror it while sailing right.
         { scaleX: Math.cos(a) >= 0 ? -1 : 1 },
@@ -368,7 +368,7 @@ function Ship() {
       ],
     };
   });
-  return <Animated.Image resizeMode="contain" source={FX.ship} style={[styles.abs, box(44), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.ship} style={[styles.abs, box(30), style]} />;
 }
 
 function Hippo() {
@@ -378,7 +378,7 @@ function Hippo() {
     const v = p.value < 0.1 ? p.value / 0.1 : p.value < 0.55 ? 1 : p.value < 0.65 ? 1 - (p.value - 0.55) / 0.1 : 0;
     return { opacity: v, transform: [{ translateY: -10 + (1 - v) * 10 }, { rotate: `${Math.sin(p.value * Math.PI * 6) * 3 * v}deg` }] };
   });
-  return <Animated.Image resizeMode="contain" source={FX.hippo} style={[styles.abs, box(34), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.hippo} style={[styles.abs, box(24), style]} />;
 }
 
 function Fin() {
@@ -387,7 +387,7 @@ function Fin() {
     const a = p.value * Math.PI * 2;
     return { transform: [{ translateX: Math.cos(a) * 30 }, { translateY: -10 + Math.sin(a) * 10 }, { scaleX: Math.sin(a) >= 0 ? 1 : -1 }] };
   });
-  return <Animated.Image resizeMode="contain" source={FX.fin} style={[styles.abs, box(32), style]} />;
+  return <Animated.Image resizeMode="contain" source={FX.fin} style={[styles.abs, box(22), style]} />;
 }
 
 export const WaterAmbience = memo(function WaterAmbience({ kind }: { kind: AmbienceId }) {
@@ -408,9 +408,9 @@ const styles = StyleSheet.create({
   origin: { position: 'absolute', left: C, top: C, width: 0, height: 0 },
   abs: { position: 'absolute', left: 0, top: 0 },
   glow: { position: 'absolute', backgroundColor: 'rgba(140,255,200,0.45)' },
-  beam: { width: 22, height: 170, borderTopLeftRadius: 11, borderTopRightRadius: 11, overflow: 'hidden', transformOrigin: 'bottom' },
+  beam: { width: 14, height: 110, borderTopLeftRadius: 7, borderTopRightRadius: 7, overflow: 'hidden', transformOrigin: 'bottom' },
   spark: { width: 5, height: 5, borderRadius: 3 },
-  ripple: { left: -22, top: -8, width: 44, height: 16, borderRadius: 22, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)' },
+  ripple: { left: -16, top: -6, width: 32, height: 12, borderRadius: 16, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)' },
   waterCanvas: { width: 110, height: 70 },
   waterOrigin: { position: 'absolute', left: 55, top: 44, width: 0, height: 0 },
 });

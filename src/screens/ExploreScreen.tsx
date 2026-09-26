@@ -333,9 +333,9 @@ export default function ExploreScreen() {
     return new Set((redeemables?.tasks ?? [])
       .filter(t => rideLook(t.name).ambience.length > 0)
       .map(t => ({ id: t.id, d: Math.hypot((Number(t.latitude) - nearLat) * m, (Number(t.longitude) - nearLng) * m * k) }))
-      .filter(t => t.d < 450)
+      .filter(t => t.d < 350)
       .sort((a, b) => a.d - b.d)
-      .slice(0, 12)
+      .slice(0, 6)
       .map(t => t.id));
   }, [redeemables?.tasks, nearLat, nearLng]);
   const rideControlByAsset = useMemo(() => new globalThis.Map<number, RideControlRide>(
@@ -347,8 +347,8 @@ export default function ExploreScreen() {
     const dist = (t: { latitude: unknown; longitude: unknown }) => nearLat === null || nearLng === null ? 0
       : Math.hypot(Number(t.latitude) - nearLat, (Number(t.longitude) - nearLng) * k);
     return tasks.flatMap(task => {
-      const rush = liveByTask.get(task.id)?.rush;
-      return rush ? [{ task, rush }] : [];
+      const live = liveByTask.get(task.id);
+      return live?.rush && live.status === 'OPERATING' ? [{ task, rush: live.rush, wait: live.wait ?? live.rush.wait }] : [];
     }).sort((a, b) => dist(a.task) - dist(b.task));
   }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
 
