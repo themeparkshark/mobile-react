@@ -123,6 +123,11 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
           <View style={styles.grabber} />
           <Text style={styles.title}>LIVE AT THE PARKS</Text>
           <Text style={styles.sub}>Rides each team holds today, every park</Text>
+          {!liveRaid && live.next_boss && (
+            <Text style={styles.nextBoss}>
+              Next boss {new Date(live.next_boss.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} at {live.next_boss.park_name}
+            </Text>
+          )}
           <View style={styles.standings}>
             {ORDER.map(team => (
               <View key={team} style={styles.standing}>
@@ -146,8 +151,11 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
           )}
           <PushSoftAsk />
           <ScrollView style={{ maxHeight: 380 }}>
+            {yours && live.parks.every(p => p.cheers.length === 0) && live.parks.length > 0 && (
+              <Text style={styles.hint}>Catch ride coins at a park to cheer for those rides from home.</Text>
+            )}
             {live.parks.length === 0 && (
-              <Text style={styles.empty}>Quiet at the parks right now. Bosses surface at 11, 1:30, 4, 6:30 and 9 park time.</Text>
+              <Text style={styles.empty}>Quiet at the parks right now. Bosses surface five times a day at every park.</Text>
             )}
             {live.parks.map(park => (
               <View key={park.park_id} style={styles.park}>
@@ -243,6 +251,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#d99a00', marginBottom: 10 },
   ctaText: { fontFamily: 'Shark', fontSize: 20, color: '#075083' },
   cheerLine: { fontFamily: 'Knockout', fontSize: 14, color: '#fff', textAlign: 'center', marginBottom: 8 },
+  nextBoss: { fontFamily: 'Shark', fontSize: 15, color: '#ffcf3b', textAlign: 'center', marginTop: 4 },
+  hint: { fontFamily: 'Knockout', fontSize: 13, color: '#cdeaff', textAlign: 'center', marginBottom: 8 },
   empty: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff', textAlign: 'center', marginVertical: 20 },
   park: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 10, marginBottom: 8, gap: 6 },
   parkHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },

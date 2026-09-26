@@ -327,7 +327,7 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
       )}
 
       {homeLocationConfirmed && !isLoading && !loadError && playerStats?.focused_prep_set && (
-        <HomeFocusCard set={playerStats.focused_prep_set} topOffset={70}
+        <HomeFocusCard set={playerStats.focused_prep_set} topOffset={76}
           onPress={() => RootNavigation.navigate('SetCollection', {
             slug: playerStats.focused_prep_set!.slug,
           })} />

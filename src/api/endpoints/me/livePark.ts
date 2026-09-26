@@ -25,6 +25,8 @@ export interface LiveParkSummary {
 }
 
 export interface LiveParks {
+  /** The next boss surfacing anywhere (shown in the player's own time zone). */
+  readonly next_boss: { readonly at: string; readonly park_name: string } | null;
   readonly your_team: TeamId | null;
   readonly totals: Record<TeamId, number>;
   readonly leading_team: TeamId | null;
