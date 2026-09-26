@@ -381,6 +381,7 @@ export default function MemoryGame({
       fever={feverOn}
       personalBest={personalBest}
       objective={objective}
+      goal={difficulty === 0 ? { current: matchedPairs, target: board.cards.length / 2, label: 'PAIRS' } : undefined}
       result={result}
       onStart={handleStart}
       onPause={handlePause}

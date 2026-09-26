@@ -28,6 +28,7 @@ import { getStamps, type StampData } from '../api/endpoints/me/stamps';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
+import { RideChallengeContext } from '../gamekit/RideChallengeContext';
 import {
   TaskAttempt,
   TaskGameProof,
@@ -826,6 +827,7 @@ export default function RedeemRedeemableModal({
           {/* MINIGAME STATE - rendered inside the same modal */}
           {selectedGame && flowState === 'minigame' && (
             <View style={styles.minigameContainer}>
+              <RideChallengeContext.Provider value={true}>
               <MiniGameSelector
                 visible={true}
                 taskId={(redeemable?.model as TaskType)?.id ?? 0}
@@ -837,6 +839,7 @@ export default function RedeemRedeemableModal({
                 onClose={handleGameLose}
                 onComplete={(_mult, _rewards, proof) => handleGameWin(proof)}
               />
+              </RideChallengeContext.Provider>
             </View>
           )}
         </View>

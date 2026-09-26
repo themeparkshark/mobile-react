@@ -53,6 +53,7 @@ import { ParticleField, type ParticleHandle } from './Particles';
 import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
 import { LinePlayMovementContext } from './LinePlayMovementContext';
+import { RideChallengeContext } from './RideChallengeContext';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -147,6 +148,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
   ) {
     const [phase, setPhase] = useState<ShellPhase>('countdown');
     const linePlayMovement = useContext(LinePlayMovementContext);
+    const rideChallenge = useContext(RideChallengeContext);
     const [countText, setCountText] = useState('3');
     const [pauseReason, setPauseReason] = useState<string | undefined>();
     const confettiRef = useRef<ParticleHandle>(null);
@@ -233,6 +235,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }
     }, [result, phase, clearCountdown, resultsOpacity, resultsScale]);
 
+    // Ride challenge win: a short stamp, then straight into the coin reveal.
+    useEffect(() => {
+      if (!rideChallenge || phase !== 'results' || !result || result.stars <= 0) return;
+      const t = setTimeout(() => handleClaimRef.current?.(), 1100);
+      return () => clearTimeout(t);
+    }, [rideChallenge, phase, result]);
+
     // -- Pause / resume. -----------------------------------------------------
     const doPause = useCallback(
       (reason?: string) => {
@@ -292,6 +301,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         onClose();
       }
     }, [result, starMultipliers, onComplete, onClose]);
+
+    const handleClaimRef = useRef(handleClaim);
+    handleClaimRef.current = handleClaim;
 
     const resumeAfterQuitCancel = useCallback(() => {
       setPhase(startedRef.current ? 'playing' : 'countdown');
@@ -573,12 +585,14 @@ const styles = StyleSheet.create({
   skipHint: { color: GAME_COLORS.textFaint, fontSize: 12, marginTop: 18, letterSpacing: 1 },
   sheet: {
     width: '80%',
-    backgroundColor: GAME_COLORS.bgPanel,
+    backgroundColor: '#0768b9',
+    borderWidth: 4,
+    borderColor: '#fff',
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
   },
-  sheetTitle: { color: GAME_COLORS.text, fontSize: 22, fontWeight: '900', marginBottom: 18 },
+  sheetTitle: { color: '#fff', fontSize: 26, fontFamily: 'Shark', marginBottom: 18, textAlign: 'center' },
   sheetBtn: {
     width: '100%',
     paddingVertical: 14,
@@ -586,22 +600,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10,
   },
-  primaryBtn: { backgroundColor: GAME_COLORS.gold },
-  primaryBtnTxt: { color: GAME_COLORS.navy, fontSize: 17, fontWeight: '900' },
-  secondaryBtnTxt: { color: GAME_COLORS.textDim, fontSize: 15, fontWeight: '700' },
+  primaryBtn: { backgroundColor: '#ffcf3b', borderBottomWidth: 4, borderBottomColor: '#d99a00' },
+  primaryBtnTxt: { color: '#075083', fontSize: 20, fontFamily: 'Shark' },
+  secondaryBtnTxt: { color: '#e4f7ff', fontSize: 17, fontFamily: 'Knockout' },
   resultsCard: {
     width: '84%',
-    backgroundColor: GAME_COLORS.bgPanel,
+    backgroundColor: '#0768b9',
     borderRadius: 24,
     paddingVertical: 28,
     paddingHorizontal: 20,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 4,
+    borderColor: '#fff',
   },
-  resultsMsg: { fontSize: 30, fontWeight: '900', marginBottom: 10 },
+  resultsMsg: { fontSize: 34, fontFamily: 'Shark', marginBottom: 10, textAlign: 'center',
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   msgWin: { color: GAME_COLORS.gold },
-  msgFail: { color: GAME_COLORS.textDim },
+  msgFail: { color: '#fff' },
   starRow: { flexDirection: 'row', marginBottom: 14 },
   star: { fontSize: 48, marginHorizontal: 4 },
   comboLine: { color: GAME_COLORS.blue, fontSize: 14, fontWeight: '800', marginTop: 6 },

@@ -96,6 +96,7 @@ export function RhythmTapGame({
   const plan = useMemo(() => buildRound(seed, difficulty,
     format === 'ride' ? 5 : undefined, format === 'ride' ? 0 : undefined),
   [seed, difficulty, format]);
+  const rideGoal = Math.ceil(plan.targets.length * 0.5);
   const maxScore = useMemo(() => maxScoreFor(plan), [plan]);
 
   const [score, setScore] = useState(0);
@@ -104,6 +105,7 @@ export function RhythmTapGame({
   const [personalBest, setPersonalBest] = useState<number | undefined>(undefined);
   const statsRef = useRef<RoundStats>({ ...EMPTY_STATS });
   const scoreRef = useRef(0);
+  const [goodHits, setGoodHits] = useState(0);
   const resolvedRef = useRef(0); // targets resolved (hit or miss)
 
   const combo = useCombo();
@@ -124,6 +126,7 @@ export function RhythmTapGame({
     setSeed(roundSeed ?? makeSeed());
     setScore(0);
     scoreRef.current = 0;
+    setGoodHits(0);
     resolvedRef.current = 0;
     statsRef.current = { ...EMPTY_STATS };
     setResult(null);
@@ -159,6 +162,7 @@ export function RhythmTapGame({
       }
 
       // Hit → advance combo, score with the CURRENT multiplier.
+      setGoodHits(n => n + 1);
       const state = combo.hit();
       const base = JUDGMENT_SCORE[judgment];
       const gained = base * state.multiplier;
@@ -232,6 +236,11 @@ export function RhythmTapGame({
     if (stars === 0 && s.perfect + s.great >= Math.ceil(plan.targets.length * 0.4)) {
       stars = 1;
     }
+    // Ride challenges are pass/fail on the visible hit goal.
+    if (format === 'ride') {
+      const landed = s.perfect + s.great + s.good;
+      stars = landed >= rideGoal ? Math.max(1, stars) : 0;
+    }
 
     const maxCombo = combo.maxStreak;
 
@@ -262,7 +271,7 @@ export function RhythmTapGame({
         totalTargets: plan.targets.length,
       },
     });
-  }, [result, maxScore, combo.maxStreak, personalBest, seed, difficulty, plan.targets.length]);
+  }, [result, maxScore, combo.maxStreak, personalBest, seed, difficulty, plan.targets.length, format, rideGoal]);
 
   // -- Background + beat-bar animated styles. ---------------------------------
   const feverTintStyle = useAnimatedStyle(() => ({ opacity: feverProgress.value * 0.28 }));
@@ -299,6 +308,7 @@ export function RhythmTapGame({
       fever={combo.fever}
       personalBest={personalBest}
       objective={`Tap when the ring meets the target · ${objective}`}
+      goal={format === 'ride' ? { current: goodHits, target: rideGoal, label: 'BEATS' } : undefined}
       result={result}
       onStart={onStart}
       onPause={onPause}
