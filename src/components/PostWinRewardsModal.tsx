@@ -1,8 +1,9 @@
-import { useEffect, useRef, useMemo, useState } from 'react';
+import { useContext, useEffect, useRef, useMemo, useState } from 'react';
 import {
   Animated,
   Dimensions,
   Easing,
+  Pressable,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -21,6 +22,7 @@ import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import type { EarnedCoinEdition, RideControlReward, RushReward } from '../api/endpoints/me/task-attempts';
 import { TEAMS } from '../constants/teams';
 import * as RootNavigation from '../RootNavigation';
+import { AuthContext } from '../context/AuthProvider';
 import type { StampData } from '../api/endpoints/me/stamps';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -281,6 +283,8 @@ export default function PostWinRewardsModal({
   onHidden,
   onClose,
 }: Props) {
+  const { player } = useContext(AuthContext);
+  const isVip = !!player?.is_subscribed;
   const insets = useSafeAreaInsets();
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
   const [coinArtFailed, setCoinArtFailed] = useState(false);
@@ -711,6 +715,19 @@ export default function PostWinRewardsModal({
               ))}
             </View>
 
+            {/* The moment VIP is worth the most: show what this exact win would have paid. */}
+            {!isVip && (xpEarned > 0 || coinsEarned > 0) && (
+              <Pressable style={styles.vipChip} accessibilityRole="button"
+                accessibilityLabel={`VIP would have doubled this win: plus ${xpEarned} XP and ${coinsEarned} Shark Coins. See VIP.`}
+                onPress={() => { onClose(); setTimeout(() => RootNavigation.navigate('Membership'), 350); }}>
+                <Text style={styles.vipChipCrown}>👑</Text>
+                <Text style={styles.vipChipText} numberOfLines={1}>
+                  VIP doubles this win: +{xpEarned} XP{coinsEarned > 0 ? ` · +${coinsEarned} coins` : ''}
+                </Text>
+                <Text style={styles.vipChipGo}>›</Text>
+              </Pressable>
+            )}
+
             {/* ── Shelf progress pill ── */}
             {earnedStamp ? (
               <TouchableOpacity style={styles.stampUnlock} onPress={onViewStampBook}
@@ -789,6 +806,12 @@ export default function PostWinRewardsModal({
 }
 
 const styles = StyleSheet.create({
+  vipChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'center',
+    backgroundColor: 'rgba(59, 26, 92, 0.85)', borderRadius: 14, borderWidth: 2, borderColor: '#ffcf3b',
+    paddingVertical: 6, paddingHorizontal: 12 },
+  vipChipCrown: { fontSize: 16 },
+  vipChipText: { fontFamily: 'Knockout', fontSize: 14, color: '#fff' },
+  vipChipGo: { fontFamily: 'Shark', fontSize: 16, color: '#ffcf3b' },
   rushBonus: { marginTop: 8, backgroundColor: '#ffcf3b', borderRadius: 14, borderWidth: 3, borderColor: '#fff',
     paddingVertical: 6, paddingHorizontal: 10, alignItems: 'center' },
   rushBonusTitle: { fontFamily: 'Shark', fontSize: 16, color: '#6a3b00' },

@@ -50,7 +50,7 @@ export default function PostWinRewardsPreviewScreen() {
           }
         }}
         onViewStampBook={() => {}}
-        onClose={() => {}}
+        onClose={() => setShowWin(false)}
       />
       <CoinLevelingModal visible={showCoin} rideCoin={previewCoin}
         playerEnergy={firstWinPreview ? 10 : 25} playerParts={firstWinPreview ? 1 : 2}
