@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Marker } from 'react-native-maps';
+import { Marker } from '../../components/map/Marker';
 import dayjs from 'dayjs';
 import { useFocusEffect } from '@react-navigation/native';
 import isBetween from 'dayjs/plugin/isBetween';

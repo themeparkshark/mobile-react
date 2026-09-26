@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
-import { Marker } from 'react-native-maps';
+import { Marker } from '../../components/map/Marker';
 import Countdown, { zeroPad } from 'react-countdown';
 import { TaskType } from '../../models/task-type';
 import type { RideControlRide } from '../../api/endpoints/parks/rideControl';

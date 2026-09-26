@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
-import { Marker } from 'react-native-maps';
+import { Marker } from '../map/Marker';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,

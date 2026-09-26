@@ -5,7 +5,7 @@ import { Image } from 'expo-image';
 import React, { useCallback, useContext, useMemo, useState, useEffect, Suspense } from 'react';
 import { Text, TouchableOpacity, View, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import Modal from 'react-native-modal';
-import { Marker } from 'react-native-maps';
+import { Marker } from '../components/map/Marker';
 import { useAsyncEffect } from 'rooks';
 import { TaskType } from '../models/task-type';
 import currencyBalance from '../helpers/currency-balance';
@@ -21,7 +21,6 @@ import PrepItemRedeemModal from '../components/PrepItemRedeemModal';
 // TaskListModal removed - tasks now spawn on map Pokemon-style
 import Topbar from '../components/Topbar';
 import Currency from '../components/Topbar/Currency';
-import TappableCurrency from '../components/Topbar/TappableCurrency';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import UsernameBanner from '../components/Topbar/UsernameBanner';
 import Wrapper from '../components/Wrapper';
@@ -81,6 +80,8 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
+const TICKET_ICON = require('../../assets/images/ticket-icon.png');
 
 export default function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
@@ -470,53 +471,38 @@ export default function ExploreScreen() {
         {/* Topbar currencies — only for signed-in users */}
         {player ? (
           <>
-            {/* Park mode: show park coins */}
-            {park && (
-              <TopbarColumn>
-                <Currency
-                  image={park?.coin_url}
-                  count={park?.park_coins_count}
-                  name="Park Coins"
-                  flyTarget="park_coins"
-                />
-              </TopbarColumn>
-            )}
-            {/* Park mode: theme currency and other currencies */}
+            {/* Park mode: Shark Coins, Keys, Tickets as matching pills. Retired
+                event currencies (and the unused legacy park coin) stay hidden. */}
             {park && theme?.currency && (
               <TopbarColumn>
-                <Currency
-                  image={theme.currency.icon_url}
-                  count={currencyBalance(player, theme.currency.name)}
-                  name="Park Coins"
-                  flyTarget="theme_currency"
-                />
+                <Currency image={theme.currency.icon_url} count={currencyBalance(player, theme.currency.name)}
+                  name={theme.currency.name} flyTarget="theme_currency" />
               </TopbarColumn>
             )}
-            {park && currencies.map((currency, index) => (
-              <TopbarColumn key={currency.id}>
-                <Currency
-                  image={currency.icon_url}
-                  count={currencyBalance(player, currency.name)}
-                  name={currency.name === 'Coins' ? 'Shark Coins' : currency.name}
-                  flyTarget={index === 0 ? 'coins' : 'keys'}
-                />
+            {park && currencies
+              .filter((currency) => currency.icon_url &&
+                (['Coins', 'Keys'].includes(currency.name) || currencyBalance(player, currency.name) > 0))
+              .map((currency) => (
+                <TopbarColumn key={currency.id}>
+                  <Currency image={currency.icon_url} count={currencyBalance(player, currency.name)}
+                    name={currency.name === 'Coins' ? 'Shark Coins' : currency.name}
+                    flyTarget={currency.name === 'Coins' ? 'coins' : currency.name === 'Keys' ? 'keys' : undefined} />
+                </TopbarColumn>
+              ))}
+            {park && (
+              <TopbarColumn>
+                <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
               </TopbarColumn>
-            ))}
-            {/* TRAVEL MODE: Coins | TRAVEL MODE | Keys */}
+            )}
+            {/* TRAVEL MODE: Coins | TRAVEL MODE | Tickets */}
             {!park && (
               <>
-                {/* Left: First currency (Shark Coins) */}
                 <TopbarColumn>
                   {currencies[0] && (
-                    <Currency
-                      image={currencies[0].icon_url}
-                      count={currencyBalance(player, currencies[0].name)}
-                      name="Shark Coins"
-                      flyTarget="coins"
-                    />
+                    <Currency image={currencies[0].icon_url} count={currencyBalance(player, currencies[0].name)}
+                      name="Shark Coins" flyTarget="coins" />
                   )}
                 </TopbarColumn>
-                {/* Center: TRAVEL MODE */}
                 <TopbarColumn>
                   <Text style={{
                     fontSize: 16,
@@ -530,51 +516,11 @@ export default function ExploreScreen() {
                     textAlign: 'center',
                   }}>Travel Mode</Text>
                 </TopbarColumn>
-                {/* Right: Tickets (keys hidden - replaced by swords) */}
                 <TopbarColumn>
-                  <TappableCurrency name="Tickets" count={player.tickets ?? 0} flyTarget="tickets">
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Image
-                        source={require('../../assets/images/ticket-icon.png')}
-                        style={{ width: 28, height: 28, marginRight: 4 }}
-                        contentFit="contain"
-                      />
-                      <Text style={{
-                        fontSize: 24,
-                        color: 'white',
-                        fontFamily: 'Shark',
-                        textShadowColor: 'rgba(0, 0, 0, .5)',
-                        textShadowOffset: { width: 2, height: 2 },
-                        textShadowRadius: 0,
-                      }}>{player.tickets ?? 0}</Text>
-                    </View>
-                  </TappableCurrency>
+                  <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
                 </TopbarColumn>
               </>
             )}
-            {/* Keep the park-day balance visible even at zero, when Rescue Pass matters most. */}
-            {park && (
-              <TopbarColumn>
-                <TappableCurrency name="Tickets" count={player.tickets ?? 0} flyTarget="tickets">
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Image
-                      source={require('../../assets/images/ticket-icon.png')}
-                      style={{ width: 28, height: 28, marginRight: 4 }}
-                      contentFit="contain"
-                    />
-                    <Text style={{
-                      fontSize: 24,
-                      color: 'white',
-                      fontFamily: 'Shark',
-                      textShadowColor: 'rgba(0, 0, 0, .5)',
-                      textShadowOffset: { width: 2, height: 2 },
-                      textShadowRadius: 0,
-                    }}>{player.tickets ?? 0}</Text>
-                  </View>
-                </TappableCurrency>
-              </TopbarColumn>
-            )}
-            {/* Swords moved to bottom bar with energy */}
           </>
         ) : (
           <TopbarColumn>

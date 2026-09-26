@@ -209,6 +209,13 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - maplibre-react-native (10.4.2):
+    - maplibre-react-native/DynamicLibrary (= 10.4.2)
+    - React
+    - React-Core
+  - maplibre-react-native/DynamicLibrary (10.4.2):
+    - React
+    - React-Core
   - nanopb (2.30910.0):
     - nanopb/decode (= 2.30910.0)
     - nanopb/encode (= 2.30910.0)
@@ -2246,6 +2253,7 @@ DEPENDENCIES:
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - LinePlayActivity (from `../modules/lineplay-activity/ios`)
   - lottie-react-native (from `../node_modules/lottie-react-native`)
+  - "maplibre-react-native (from `../node_modules/@maplibre/maplibre-react-native`)"
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCT-Folly/Fabric (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
@@ -2428,6 +2436,8 @@ EXTERNAL SOURCES:
     :path: "../modules/lineplay-activity/ios"
   lottie-react-native:
     :path: "../node_modules/lottie-react-native"
+  maplibre-react-native:
+    :path: "../node_modules/@maplibre/maplibre-react-native"
   RCT-Folly:
     :podspec: "../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec"
   RCTDeprecation:
@@ -2626,6 +2636,7 @@ SPEC CHECKSUMS:
   LinePlayActivity: 466cd420d6309e6ad436bb790099134c24c89410
   lottie-ios: a881093fab623c467d3bce374367755c272bdd59
   lottie-react-native: 4ba06e2e4985c53dda6595a880f780e7ff551df1
+  maplibre-react-native: 37d86b5b7b04dedaceebc577644e67acd7b5f437
   nanopb: 438bc412db1928dac798aa6fd75726007be04262
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   RCT-Folly: ea9d9256ba7f9322ef911169a9f696e5857b9e17
@@ -2708,6 +2719,6 @@ SPEC CHECKSUMS:
   Yoga: feb4910aba9742cfedc059e2b2902e22ffe9954a
   ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
-PODFILE CHECKSUM: 09d92a9dc574c2775e9c7676fafc01055976d75c
+PODFILE CHECKSUM: 1debc853d87569e69091f862c6a03d885ac5cbf7
 
 COCOAPODS: 1.16.2

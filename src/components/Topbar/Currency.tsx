@@ -5,11 +5,14 @@ import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 
 interface CurrencyProps {
-  image: string;
+  /** Remote icon URL or a bundled require(); falls back to the gold coin. */
+  image?: string | number | null;
   count: number;
   name?: string;
   flyTarget?: string;
 }
+
+const FALLBACK_ICON = require('../../../assets/images/coingold.png');
 
 export default function Currency({ image, count, name, flyTarget }: CurrencyProps) {
   const { registerTarget } = useCurrencyFly();
@@ -180,6 +183,9 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
         <View style={styles.currencyRow}>
           <Animated.View
             style={{
+              position: 'absolute',
+              left: -18,
+              top: -5,
               transform: [
                 { scale: Animated.multiply(pulseAnim, bounceAnim) },
                 { translateY: translateY },
@@ -187,12 +193,13 @@ export default function Currency({ image, count, name, flyTarget }: CurrencyProp
             }}
           >
             <Image
-              source={{ uri: image }}
+              source={typeof image === 'number' ? image : image ? { uri: image } : FALLBACK_ICON}
+              placeholder={FALLBACK_ICON}
               style={styles.icon}
               contentFit="contain"
             />
           </Animated.View>
-          <Text style={styles.countText}>
+          <Text style={styles.countText} numberOfLines={1} adjustsFontSizeToFit>
             {shortenNumber(displayCount)}
           </Text>
         </View>
@@ -229,18 +236,29 @@ const styles = StyleSheet.create({
   container: {
     position: 'relative',
   },
+  // Every balance wears the same pill: icon riding the left edge, number
+  // centered in a navy capsule, so the bar reads as one tidy set.
   currencyRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    height: 30,
+    minWidth: 72,
+    marginLeft: 14,
+    paddingLeft: 24,
+    paddingRight: 10,
+    borderRadius: 15,
+    backgroundColor: 'rgba(3, 36, 82, 0.5)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
   },
   icon: {
-    width: 35,
-    height: 35,
-    marginRight: 8,
+    width: 36,
+    height: 36,
   },
   countText: {
+    flex: 1,
     textAlign: 'center',
-    fontSize: 24,
+    fontSize: 19,
     color: 'white',
     fontFamily: 'Shark',
     textTransform: 'uppercase',

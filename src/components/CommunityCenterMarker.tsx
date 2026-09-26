@@ -1,5 +1,5 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
-import { Marker } from 'react-native-maps';
+import { Marker } from './map/Marker';
 
 const CommunityCenterIcon = require('../assets/community-center.png');
 

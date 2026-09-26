@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Circle, Marker } from 'react-native-maps';
+import { Circle } from '../../components/map/Circle';
+import { Marker } from '../../components/map/Marker';
 import type { ParkProject } from '../../api/endpoints/me/park-projects';
 
 interface Props {

@@ -3,13 +3,20 @@ import { faLocationArrow } from '@fortawesome/free-solid-svg-icons/faLocationArr
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
 import { ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Platform, Pressable, View, Easing, StyleSheet } from 'react-native';
-import MapView, { MarkerAnimated, AnimatedRegion } from 'react-native-maps';
+import { Camera, Images, MapView, type CameraRef } from '@maplibre/maplibre-react-native';
+import { Animated, Pressable, View, Easing, StyleSheet } from 'react-native';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
+import { Marker } from './map/Marker';
+import { MAP_PATTERNS, TPS_MAP_STYLE } from './map/tpsMapStyle';
 
 // Map always rotates with heading. Single button recenters on player.
+// While following, the shark is drawn at screen center and the cartoon map
+// eases under it (Pokemon GO style); panned away, it becomes a map marker.
+
+const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
+const FOLLOW_ZOOM = 17.6;
 
 export default function Map({ children, onPress, focusCoordinate, controlsTop = 72 }: {
   readonly children: ReactNode;
@@ -27,16 +34,25 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const glowPulseAnim = useRef(new Animated.Value(0.3)).current;
   const shadowAnim = useRef(new Animated.Value(1)).current;
 
-  // Smooth position interpolation — glide between GPS updates like Uber/Pokémon GO
-  const animatedCoordinate = useRef(new AnimatedRegion({
-    latitude: location?.latitude || 0,
-    longitude: location?.longitude || 0,
-    latitudeDelta: 0,
-    longitudeDelta: 0,
-  })).current;
-
-  const markerRef = useRef<any>(null);
   const prevLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const glideRef = useRef(0);
+  const locationRef = useRef(location);
+  locationRef.current = location;
+  const headingRef = useRef(heading);
+  headingRef.current = heading;
+  // Ease the camera to the latest position/heading. Every call carries the
+  // target center so a heading tick never freezes a position glide mid-way.
+  const pushCamera = (duration: number, zoomLevel?: number) => {
+    const loc = locationRef.current;
+    if (!followRef.current || !loc) return;
+    cameraRef.current?.setCamera({
+      centerCoordinate: [loc.longitude, loc.latitude],
+      ...(headingRef.current !== null ? { heading: headingRef.current } : {}),
+      ...(zoomLevel !== undefined ? { zoomLevel } : {}),
+      animationDuration: duration,
+      animationMode: duration > 0 ? 'easeTo' : 'moveTo',
+    });
+  };
 
   useEffect(() => {
     if (!location) return;
@@ -44,12 +60,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     // Skip animation on first location (just set it)
     if (!prevLocationRef.current) {
       prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
-      animatedCoordinate.setValue({
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0,
-        longitudeDelta: 0,
-      });
+      pushCamera(0);
       return;
     }
 
@@ -71,24 +82,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     const glideDuration = Math.min(1500, Math.max(500, distMeters * 80));
 
     prevLocationRef.current = { latitude: location.latitude, longitude: location.longitude };
-
-    // Smooth glide to new position
-    if (Platform.OS === 'ios') {
-      (animatedCoordinate as any).timing({
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0,
-        longitudeDelta: 0,
-        duration: glideDuration,
-        useNativeDriver: false,
-      }).start();
-    } else {
-      // Android: use animateMarkerToCoordinate for native performance
-      markerRef.current?.animateMarkerToCoordinate(
-        { latitude: location.latitude, longitude: location.longitude },
-        glideDuration
-      );
-    }
+    glideRef.current = glideDuration;
+    pushCamera(glideDuration);
   }, [location?.latitude, location?.longitude]);
 
   useEffect(() => {
@@ -132,13 +127,17 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       ])
     ).start();
   }, []);
-  const mapRef = useRef<MapView>(null);
+  const cameraRef = useRef<CameraRef>(null);
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
+  const followRef = useRef(true);
+  followRef.current = focusedOnPlayer;
   useEffect(() => {
     if (!focusCoordinate || !Number.isFinite(focusCoordinate.latitude) ||
       !Number.isFinite(focusCoordinate.longitude)) return;
     setFocusedOnPlayer(false);
-    mapRef.current?.animateCamera({ center: focusCoordinate, heading: 0, altitude: 250 }, { duration: 450 });
+    followRef.current = false;
+    cameraRef.current?.setCamera({ centerCoordinate: [focusCoordinate.longitude, focusCoordinate.latitude],
+      heading: 0, zoomLevel: 17.9, animationDuration: 450, animationMode: 'easeTo' });
   }, [focusCoordinate?.latitude, focusCoordinate?.longitude, focusCoordinate?.requestId]);
   // Animated value for user location heading indicator
   const userHeadingRotation = useRef(new Animated.Value(0)).current;
@@ -152,13 +151,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // Single recenter button
   const recenterOnPlayer = () => {
     setFocusedOnPlayer(true);
-    if (mapRef.current && location) {
-      mapRef.current.animateCamera({
-        center: location,
-        heading: heading !== null ? heading : 0,
-        altitude: 200,
-      }, { duration: 300 });
-    }
+    followRef.current = true;
+    pushCamera(300, FOLLOW_ZOOM);
   };
 
   // User heading indicator always points forward when centered (map rotates under it)
@@ -183,23 +177,15 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     }
   }, [heading, focusedOnPlayer]);
 
-  // Update map camera when location or heading changes
-  // NEVER override zoom (altitude) - respect user's pinch-to-zoom level
+  // Heading ticks rotate the map; throttled so the camera isn't flooded.
+  const lastHeadingPush = useRef(0);
   useEffect(() => {
-    if (!mapRef?.current || !focusedOnPlayer || !location) {
-      return;
-    }
-
-    const cam: any = { center: location };
-    if (heading !== null) cam.heading = heading;
-
-    mapRef.current.setCamera(cam);
-  }, [
-    focusedOnPlayer,
-    location?.latitude,
-    location?.longitude,
-    heading,
-  ]);
+    if (!focusedOnPlayer || heading === null) return;
+    const now = Date.now();
+    if (now - lastHeadingPush.current < 120) return;
+    lastHeadingPush.current = now;
+    pushCamera(Math.max(180, glideRef.current * 0.5));
+  }, [focusedOnPlayer, heading]);
 
   const userHeadingStyle = {
     transform: [{
@@ -209,6 +195,67 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       }),
     }],
   };
+
+  const playerShark = (
+      <View style={styles.sharkMarkerContainer}>
+        {/* Animated glow ring */}
+        <Animated.View style={[styles.outerGlowRing, { opacity: glowPulseAnim }]} />
+        {/* Inner blue ring (ground indicator) */}
+        <View style={styles.groundRing} />
+        {/* Animated shadow — shrinks when shark bobs up */}
+        <Animated.View style={[styles.shadowDisc, { transform: [{ scaleX: shadowAnim }, { scaleY: shadowAnim }] }]} />
+        {/* Directional indicator — only visible in heading mode */}
+        {heading !== null && focusedOnPlayer && <View style={styles.sharkDirectionCone} />}
+        {/* Player's avatar — bobs, tilts, breathes */}
+        <Animated.View style={{
+          width: 60, height: 60,
+          transform: [
+            { translateY: bobAnim },
+            { rotate: tiltAnim.interpolate({ inputRange: [-3, 3], outputRange: ['-3deg', '3deg'] }) },
+            { scale: scaleAnim },
+          ],
+        }}>
+          {player?.inventory?.skin_item?.no_eye_url ? (
+            <View style={{ width: 60, height: 60, position: 'relative' }}>
+              {/* Base skin (no eyes) */}
+              <Image
+                source={{ uri: player.inventory.skin_item.no_eye_url }}
+                style={{ width: 60, height: 60, position: 'absolute' }}
+                contentFit="contain"
+              />
+              {/* Animated eyes layer */}
+              <Image
+                source={require('../../assets/images/screens/inventory/blink.png')}
+                style={{ width: 60, height: 60, position: 'absolute' }}
+                contentFit="contain"
+              />
+              {/* Equipped items layered on top */}
+              {player.inventory.body_item?.paper_url && (
+                <Image source={{ uri: player.inventory.body_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
+              )}
+              {player.inventory.face_item?.paper_url && (
+                <Image source={{ uri: player.inventory.face_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
+              )}
+              {player.inventory.head_item?.paper_url && (
+                <Image source={{ uri: player.inventory.head_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
+              )}
+              {player.inventory.neck_item?.paper_url && (
+                <Image source={{ uri: player.inventory.neck_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
+              )}
+              {player.inventory.hand_item?.paper_url && (
+                <Image source={{ uri: player.inventory.hand_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
+              )}
+            </View>
+          ) : (
+            <Image
+              source={require('../../assets/images/screens/explore/shark_player.gif')}
+              style={styles.sharkImage}
+              contentFit="contain"
+            />
+          )}
+        </Animated.View>
+      </View>
+  );
 
   return (
     <View
@@ -250,121 +297,67 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
       </View>
 
       <MapView
-        ref={mapRef}
-        style={{
-          width: Dimensions.get('window').width,
-          height: '100%',
-        }}
-        initialCamera={{
-          center: location || { latitude: 34.1381, longitude: -118.3534 },
-          heading: 0,
-          pitch: 0,
-          altitude: 200,
-          zoom: 17,
-        }}
-        showsUserLocation={false}
-        showsIndoors={false}
-        showsCompass={false}
-        rotateEnabled={true}
+        style={StyleSheet.absoluteFill}
+        mapStyle={TPS_MAP_STYLE}
+        logoEnabled={false}
+        attributionEnabled
+        attributionPosition={{ bottom: 8, left: 8 }}
+        compassEnabled={false}
+        rotateEnabled
         pitchEnabled={false}
-        loadingEnabled={true}
-        userInterfaceStyle="light"
-        onPanDrag={() => {
+        regionWillChangeDebounceTime={0}
+        onRegionWillChange={(feature) => {
+          if (!feature.properties?.isUserInteraction) return;
           onPress?.();
         }}
-        onRegionChangeComplete={(region) => {
-          // After any gesture ends, check if map center drifted away from player
-          // Zoom keeps center near player — only a real pan moves it far
-          if (location && focusedOnPlayer) {
-            const latDiff = Math.abs(region.latitude - location.latitude);
-            const lngDiff = Math.abs(region.longitude - location.longitude);
-            // ~50 meters threshold — if center moved further than this, user panned away
-            if (latDiff > 0.0005 || lngDiff > 0.0005) {
-              setFocusedOnPlayer(false);
-            }
+        onRegionDidChange={(feature) => {
+          // A real pan (not a pinch around the shark) drops follow mode.
+          if (!feature.properties?.isUserInteraction || !followRef.current || !location) return;
+          const [lng, lat] = feature.geometry.coordinates;
+          if (Math.abs(lat - location.latitude) > 0.0005 || Math.abs(lng - location.longitude) > 0.0005) {
+            followRef.current = false;
+            setFocusedOnPlayer(false);
           }
         }}
         onPress={() => {
           onPress?.();
         }}
       >
-        {/* Animated shark player marker — smooth glide between GPS updates */}
-        {location && (
-          <MarkerAnimated
-            ref={markerRef}
-            coordinate={animatedCoordinate as any}
-            anchor={{ x: 0.5, y: 0.65 }}
-            flat={true}
-            tracksViewChanges={false}
-            zIndex={9999}
-          >
-            <View style={styles.sharkMarkerContainer}>
-              {/* Animated glow ring */}
-              <Animated.View style={[styles.outerGlowRing, { opacity: glowPulseAnim }]} />
-              {/* Inner blue ring (ground indicator) */}
-              <View style={styles.groundRing} />
-              {/* Animated shadow — shrinks when shark bobs up */}
-              <Animated.View style={[styles.shadowDisc, { transform: [{ scaleX: shadowAnim }, { scaleY: shadowAnim }] }]} />
-              {/* Directional indicator — only visible in heading mode */}
-              {heading !== null && focusedOnPlayer && <View style={styles.sharkDirectionCone} />}
-              {/* Player's avatar — bobs, tilts, breathes */}
-              <Animated.View style={{
-                width: 60, height: 60,
-                transform: [
-                  { translateY: bobAnim },
-                  { rotate: tiltAnim.interpolate({ inputRange: [-3, 3], outputRange: ['-3deg', '3deg'] }) },
-                  { scale: scaleAnim },
-                ],
-              }}>
-                {player?.inventory?.skin_item?.no_eye_url ? (
-                  <View style={{ width: 60, height: 60, position: 'relative' }}>
-                    {/* Base skin (no eyes) */}
-                    <Image
-                      source={{ uri: player.inventory.skin_item.no_eye_url }}
-                      style={{ width: 60, height: 60, position: 'absolute' }}
-                      contentFit="contain"
-                    />
-                    {/* Animated eyes layer */}
-                    <Image
-                      source={require('../../assets/images/screens/inventory/blink.png')}
-                      style={{ width: 60, height: 60, position: 'absolute' }}
-                      contentFit="contain"
-                    />
-                    {/* Equipped items layered on top */}
-                    {player.inventory.body_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.body_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-                    )}
-                    {player.inventory.face_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.face_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-                    )}
-                    {player.inventory.head_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.head_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-                    )}
-                    {player.inventory.neck_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.neck_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-                    )}
-                    {player.inventory.hand_item?.paper_url && (
-                      <Image source={{ uri: player.inventory.hand_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-                    )}
-                  </View>
-                ) : (
-                  <Image
-                    source={require('../../assets/images/screens/explore/shark_player.gif')}
-                    style={styles.sharkImage}
-                    contentFit="contain"
-                  />
-                )}
-              </Animated.View>
-            </View>
-          </MarkerAnimated>
+        <Camera
+          ref={cameraRef}
+          defaultSettings={{
+            centerCoordinate: [(location ?? FALLBACK_CENTER).longitude, (location ?? FALLBACK_CENTER).latitude],
+            zoomLevel: FOLLOW_ZOOM,
+            heading: 0,
+          }}
+        />
+        <Images images={MAP_PATTERNS} />
+        {/* Panned away: the shark stays pinned to its spot on the map. */}
+        {location && !focusedOnPlayer && (
+          <Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>
+            {playerShark}
+          </Marker>
         )}
         {children}
       </MapView>
+      {location && focusedOnPlayer && (
+        <View pointerEvents="none" style={styles.centerOverlay}>
+          <View style={styles.centerShark}>{playerShark}</View>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  centerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // The shark's ground point sits 65% down its 110px box; lift it so that
+  // point lands exactly on the map center the camera is following.
+  centerShark: { transform: [{ translateY: -16.5 }] },
   sharkMarkerContainer: {
     width: 100,
     height: 110,

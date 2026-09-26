@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { View } from 'react-native';
-import { Marker } from 'react-native-maps';
+import { Marker } from '../../components/map/Marker';
 
 /**
  * VaultMarker — 100% STATIC children inside <Marker>.
