@@ -51,7 +51,10 @@ import RideControlBar from '../components/RideControlBar';
 import { rideLook } from '../services/rideLandmark';
 import { getRideControl, type RideControlPark, type RideControlRide } from '../api/endpoints/parks/rideControl';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
-import RushCallout, { type RushPick } from '../components/RushCallout';
+import type { RushPick } from '../components/RushCallout';
+import LiveEventsPill from '../components/LiveEventsPill';
+import BossMarker from '../components/boss/BossMarker';
+import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
 import DailyGiftModal from '../components/DailyGiftModal';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
@@ -310,6 +313,11 @@ export default function ExploreScreen() {
     const id = setInterval(refreshRideControl, 20000);
     return () => clearInterval(id);
   }, [park?.id, refreshRideControl]);
+  // Boss raids: a co-op boss surfaces at a ride at set times each park day.
+  const { raid, setState: setRaidState } = useParkRaid(park?.id);
+  const [bossOpen, setBossOpen] = useState(false);
+  const raidActive = raid?.status === 'active';
+
   // Live park: posted waits, rides that are down, and short-wait Rushes.
   const [livePark, setLivePark] = useState<LivePark | null>(null);
   useEffect(() => {
@@ -582,6 +590,7 @@ export default function ExploreScreen() {
       </Topbar>
       {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion} />}
+      {player && park && <BossRaidFlow raid={raid} open={bossOpen} onClose={() => setBossOpen(false)} onState={setRaidState} />}
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
       {/* One overlay at a time: the daily gift waits for the first-run tutorial. */}
       {player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && !isActive && hasCompleted('onboarding') &&
@@ -834,7 +843,8 @@ export default function ExploreScreen() {
           <View style={{ position: 'absolute', top: 12, left: 0, right: 0, zIndex: 25 }} pointerEvents="box-none">
             <RideControlBar control={rideControl} tasks={redeemables?.tasks ?? []}
               onFocusTask={(task) => setSelectedTask(task)} />
-            <RushCallout rushes={rushes} onFocus={(task) => setSelectedTask(task)} />
+            <LiveEventsPill raid={raid} rushes={rushes} onBoss={() => setBossOpen(true)}
+              onRush={(task) => setSelectedTask(task)} />
           </View>
         )}
         {tripGoal && player && <Pressable
@@ -852,7 +862,7 @@ export default function ExploreScreen() {
               RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
             }
           }}
-          style={{ position: 'absolute', top: player ? (rushes.length ? 124 : 64) : 12, left: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? (rushes.length || raidActive ? 124 : 64) : 12, left: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#ffffff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.6 }}>
@@ -874,7 +884,7 @@ export default function ExploreScreen() {
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
           onPress={() => navigation.navigate('LinePlay', { ride: queueRide })}
-          style={{ position: 'absolute', top: player ? (rushes.length ? 124 : 64) : 12, right: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? (rushes.length || raidActive ? 124 : 64) : 12, right: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} numberOfLines={1}>
@@ -888,7 +898,7 @@ export default function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }}
-          controlsTop={(queueRide ? 168 : 124) + (rushes.length ? 60 : 0)} focusCoordinate={selectedTask ? {
+          controlsTop={(queueRide ? 168 : 124) + (rushes.length || raidActive ? 60 : 0)} focusCoordinate={selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : null}>
           {activeParkProject?.park_id === park.id && (
@@ -917,6 +927,7 @@ export default function ExploreScreen() {
               onPress={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
             />
           ))}
+          {raid && raidActive && <BossMarker raid={raid} onPress={() => setBossOpen(true)} />}
           {focusedFromChecklist && selectedTask?.id === focusedFromChecklist.id &&
             !redeemables?.tasks?.some(task => task.id === focusedFromChecklist.id) && (
               <TaskMarker task={focusedFromChecklist} isSelected isTripGoal={false}
