@@ -60,7 +60,7 @@
       "node": "20.18.0",
       "ios": {
         "resourceClass": "m-medium",
-        "image": "macos-sequoia-15.5-xcode-16.4"
+        "image": "latest"
       },
       "channel": "testflight"
     }

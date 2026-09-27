@@ -52,6 +52,18 @@ target 'ThemeParkShark' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
+    # Xcode 26 (required by the App Store since Apr 2026) rejects fmt's consteval format
+    # strings as used by React Native 0.76. Turn consteval off in fmt's header.
+    fmt_base = File.join(installer.sandbox.root.to_s, 'fmt', 'include', 'fmt', 'base.h')
+    if File.exist?(fmt_base)
+      src = File.read(fmt_base)
+      marker = '#if !defined(__cpp_lib_is_constant_evaluated)'
+      if src.include?(marker) && !src.include?('TPS: consteval off')
+        File.chmod(0644, fmt_base)
+        File.write(fmt_base, src.sub(marker, '#if 1  // TPS: consteval off for Xcode 26 + RN 0.76'))
+      end
+    end
+
     # MapLibre comes from its CocoaPods binary (below), not SPM: the SPM route links the
     # xcframework into two targets and App Store archives fail on a duplicate signature.
     installer.pods_project.targets.each do |t|
