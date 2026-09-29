@@ -171,7 +171,7 @@ export default function LinePlayScreen() {
   const lastExtraRounds = useRef(0);
   const [newRoundNotice, setNewRoundNotice] = useState<{ id: string; count: number } | null>(null);
   const queuedProjectGame = useRef<Extract<ActivityItem, { kind: 'minigame' }> | null>(null);
-  const startedRef = useRef(false);
+  const startedRef = useRef<{ session: typeof session; playerId: number; rideId: number } | null>(null);
   const prevPausedRef = useRef(false);
 
   const enableLockedScreenPlay = async () => {
@@ -302,8 +302,10 @@ export default function LinePlayScreen() {
     const previewPlayerId = __DEV__ && process.env.EXPO_PUBLIC_LINEPLAY_FLOW_PREVIEW === '1'
       ? 99999999 : undefined;
     const playerId = player?.id ?? previewPlayerId;
-    if (!ride || !playerId || startedRef.current) return;
-    startedRef.current = true;
+    if (!ride || !playerId) return;
+    if (startedRef.current?.session === session && startedRef.current.playerId === playerId &&
+        startedRef.current.rideId === ride.rideId) return;
+    startedRef.current = { session, playerId, rideId: ride.rideId };
     const freshSample = latestLocationSampleRef.current;
     void session.start(ride, isRecentQueueSample(freshSample) ? freshSample : undefined, playerId);
   }, [ride, session, player?.id]);
@@ -721,6 +723,7 @@ export default function LinePlayScreen() {
               elapsedSeconds={snapshot.elapsedSeconds}
               rewardTrackingAvailable={snapshot.serverSessionId != null}
               rewardUnavailable={snapshot.rewardUnavailable}
+              rewardConnectionIssue={snapshot.rewardConnectionIssue}
               lineRewardsReady={ride.lineRewardsReady}
               verifiedEligibleSeconds={snapshot.verifiedEligibleSeconds}
               verifiedPresenceAt={snapshot.verifiedPresenceAt}
@@ -735,6 +738,7 @@ export default function LinePlayScreen() {
               currentQuestVerified={snapshot.currentQuestVerified}
               currentQuestProofPending={snapshot.currentQuestProofPending}
               imageUrl={ride.imageUrl}
+              completed={snapshot.state === 'complete'}
               paused={snapshot.state === 'paused'}
               pauseReason={snapshot.pauseReason}
               onTogglePause={() => snapshot.state === 'paused'
@@ -824,8 +828,11 @@ export default function LinePlayScreen() {
                 activityPages.length - 1,
                 Math.round(event.nativeEvent.contentOffset.x / SCREEN_W),
               )))}
-              renderItem={({ item }) => (
-                <View style={styles.page}>
+              extraData={visiblePageIndex}
+              renderItem={({ item, index }) => (
+                <View style={styles.page}
+                  accessibilityElementsHidden={index !== visiblePageIndex}
+                  importantForAccessibility={index === visiblePageIndex ? 'auto' : 'no-hide-descendants'}>
                   {item.kind === 'signal' && snapshot.signal ? (
                     <SignalCard
                       signal={snapshot.signal}
@@ -1130,7 +1137,7 @@ export function SessionRecap({
           <Text style={styles.recapKicker}>LINEPLAY COMPLETE</Text>
           <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
           <Text style={styles.recapTime}>{mins}m {secs}s</Text>
-          <Text style={styles.recapSub}>time in line</Text>
+          <Text style={styles.recapSub}>session time</Text>
         </View>
         <Image source={QUEUE_RECAP_SHARK} style={styles.recapShark} contentFit="contain" accessibilityLabel="Shark celebrating with a ride coin and park ticket" />
       </LinearGradient>
@@ -1531,7 +1538,7 @@ const styles = StyleSheet.create({
   recapStatValue: { color: '#07528f', fontFamily: 'Knockout', fontSize: 18 },
   recapStatLabel: {
     color: '#3b6884',
-    fontSize: 11,
+    fontFamily: 'Knockout', fontSize: 11,
     marginTop: 2,
     textTransform: 'uppercase',
   },
@@ -1551,10 +1558,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#a3d8ef',
   },
-  recapPredictionText: { color: '#205570', fontSize: 13, lineHeight: 19 },
+  recapPredictionText: { color: '#205570', fontFamily: 'Knockout', fontSize: 13, lineHeight: 19 },
   recapPending: {
     color: '#925200',
-    fontSize: 12,
+    fontFamily: 'Knockout', fontSize: 12,
     marginTop: spacing.lg,
   },
   coinNextCard: {
@@ -1567,10 +1574,10 @@ const styles = StyleSheet.create({
   },
   coinNextLabel: { color: '#0874bb', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.7 },
   coinNextTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 18, marginTop: spacing.xs },
-  coinNextBody: { color: '#315d77', fontSize: 13, lineHeight: 19, marginTop: spacing.sm },
+  coinNextBody: { color: '#315d77', fontFamily: 'Knockout', fontSize: 13, lineHeight: 19, marginTop: spacing.sm },
   coinNextButton: { alignSelf: 'flex-start', marginTop: spacing.md, paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm, borderRadius: borderRadius.full, backgroundColor: colors.tertiary },
-  coinNextButtonText: { color: colors.primary, fontSize: 13, fontWeight: '800' },
+  coinNextButtonText: { color: colors.primary, fontFamily: 'Knockout', fontSize: 13 },
   waitFeedbackCard: { marginTop: spacing.xl, padding: spacing.lg, borderRadius: borderRadius.lg,
     backgroundColor: '#ffffff' },
   waitFeedbackTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 17 },
@@ -1579,9 +1586,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm, borderRadius: borderRadius.full, borderWidth: 1,
     borderColor: '#8bc8e9' },
   waitFeedbackSelected: { borderColor: '#e7ac00', backgroundColor: '#fff3ba' },
-  waitFeedbackOptionText: { color: '#073b74', fontSize: 13, fontWeight: '700' },
-  waitFeedbackNote: { color: '#4c758d', fontSize: 12, lineHeight: 18, marginTop: spacing.md },
-  waitFeedbackError: { color: colors.error, fontSize: 12, marginTop: spacing.sm },
+  waitFeedbackOptionText: { color: '#073b74', fontFamily: 'Knockout', fontSize: 13 },
+  waitFeedbackNote: { color: '#4c758d', fontFamily: 'Knockout', fontSize: 12, lineHeight: 18, marginTop: spacing.md },
+  waitFeedbackError: { color: colors.error, fontFamily: 'Knockout', fontSize: 12, marginTop: spacing.sm },
   recapBtn: {
     marginTop: spacing.xl,
     backgroundColor: colors.tertiary,
@@ -1589,5 +1596,5 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  recapBtnText: { color: colors.primary, fontSize: 16, fontWeight: '800' },
+  recapBtnText: { color: colors.primary, fontFamily: 'Knockout', fontSize: 16 },
 });

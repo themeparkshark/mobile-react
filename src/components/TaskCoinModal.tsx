@@ -21,6 +21,7 @@ export default function TaskCoinModal({
   readOnly = false,
   timesCompleted,
   onPlayInLine,
+  size = 60,
 }: {
   readonly isSecretTask?: boolean;
   readonly task: TaskType | SecretTaskType;
@@ -28,6 +29,7 @@ export default function TaskCoinModal({
   readonly trigger?: ReactNode;
   readonly readOnly?: boolean;
   readonly onPlayInLine?: () => void;
+  readonly size?: number;
 }) {
   const [visible, setVisible] = useState(false);
   const [rideCoin, setRideCoin] = useState<RideCoinLevelType | null>(null);
@@ -94,8 +96,8 @@ export default function TaskCoinModal({
         {trigger ?? <Image
           source={task.coin_url}
           style={{
-            width: 60,
-            height: 60,
+            width: size,
+            height: size,
             borderWidth: (readOnly ? viewedLevel : level) >= 4 ? 3 : 2,
             borderColor:
               (readOnly ? viewedLevel : level) >= 5 ? '#fb923c' :

@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { chunk } from 'lodash';
 import { useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { ImageBackground, Pressable, ScrollView, Text, View } from 'react-native';
+import { ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
 import getTasks from '../api/endpoints/parks/getTasks';
@@ -14,6 +14,7 @@ import getVisitedPark from '../api/endpoints/players/visited-parks/getPark';
 import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
 import ParkTrophyModal from '../components/ParkTrophyModal';
+import ParkShelfArtwork from '../components/ParkShelfArtwork';
 import TaskCoinModal from '../components/TaskCoinModal';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -36,11 +37,15 @@ import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 import { prefetchRideCatalog, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 
 export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBase, 'Park'>) {
+  const { width } = useWindowDimensions();
+  // Keep the familiar five-coin rows inside their shelves on smaller phones.
+  const shelfCoinSize = Math.max(40, Math.min(62, (width - 88) / 5));
   const { park, player } = route.params as { park: number; player: number };
   const [currentPark, setCurrentPark] = useState<ParkType>();
   const [archivedTasks, setArchivedTasks] = useState<TaskType[]>([]);
@@ -63,6 +68,9 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const [rideOnly, setRideOnly] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const checklistOffset = useRef(0);
+  const coinShelfOffset = useRef(0);
+  const secretShelfOffset = useRef(0);
+  const reducedMotion = useReducedGameMotion();
   useEffect(() => { setRideOnly(false); }, [park]);
   const { park: locationPark, location } = useContext(LocationContext);
   const { player: viewer } = useContext(AuthContext);
@@ -269,9 +277,15 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     onOpenRidePassport={currentPark.ride_passport_task_ids?.length
                       ? () => {
                         setRideOnly(true);
-                        scrollRef.current?.scrollTo({ y: checklistOffset.current, animated: true });
+                        scrollRef.current?.scrollTo({ y: checklistOffset.current, animated: !reducedMotion });
                       } : undefined}
                     onOpenStampBook={canChooseGoal ? () => RootNavigation.navigate('StampBook') : undefined}
+                    onBrowseCoins={tasks.length > 0 ? () => scrollRef.current?.scrollTo({
+                      y: Math.max(0, checklistOffset.current + coinShelfOffset.current - 12), animated: !reducedMotion,
+                    }) : undefined}
+                    onBrowseSecrets={secretTasks.length > 0 ? () => scrollRef.current?.scrollTo({
+                      y: Math.max(0, checklistOffset.current + secretShelfOffset.current - 12), animated: !reducedMotion,
+                    }) : undefined}
                     nextRideName={parkTripGoal?.ride_name}
                     nextRideOwned={parkTripGoal?.coin_owned}
                     ownedGoalHint={ownedGoalHint}
@@ -342,7 +356,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                           }) : undefined}
                         onPlayInLine={canChooseGoal && inThisPark ? openRideLinePlay : undefined}
                       />
-                      <Text style={{ fontFamily: 'Shark', color: '#fff',
+                      <Text onLayout={event => { coinShelfOffset.current = event.nativeEvent.layout.y; }}
+                        style={{ fontFamily: 'Shark', color: '#fff',
                         fontSize: 19, textAlign: 'center', marginTop: 18,
                         marginBottom: 8 }}>
                         COIN SHELF
@@ -351,16 +366,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                         (tasks: TaskType[], index: number) => (
                           <View key={index} style={{ paddingBottom: 16 }}>
                             <View style={{ position: 'relative', height: 105 }}>
-                              <Image
-                                source={require('../../assets/images/screens/park/shelf.png')}
-                                contentFit="contain"
-                                style={{
-                                  width: '100%',
-                                  height: 55,
-                                  bottom: 0,
-                                  position: 'absolute',
-                                }}
-                              />
+                              <ParkShelfArtwork variant="normal" height={55} />
                               <View
                                 style={{
                                   flexDirection: 'row',
@@ -382,6 +388,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                   >
                                     {hasCompletedTask(task.id) ? (
                                       <TaskCoinModal
+                                        size={Math.min(60, shelfCoinSize)}
                                         task={task}
                                         onPlayInLine={canChooseGoal && inThisPark &&
                                           currentPark.ride_passport_task_ids?.includes(task.id)
@@ -395,7 +402,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                         readOnly={!canChooseGoal}
                                       />
                                     ) : (
-                                      <UnfoundCoinModal task={task}
+                                      <UnfoundCoinModal task={task} size={shelfCoinSize}
                                         onPlayInLine={canChooseGoal && inThisPark &&
                                           currentPark.ride_passport_task_ids?.includes(task.id)
                                           ? () => openRideLinePlay(task) : undefined}
@@ -415,7 +422,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     </View>
                   )}
                   {secretTasks && secretTasks.length > 0 && (
-                    <View style={{
+                    <View onLayout={event => { secretShelfOffset.current = event.nativeEvent.layout.y; }} style={{
                       backgroundColor: '#075d9c',
                       borderWidth: 2, borderColor: '#fff',
                       borderRadius: 18,
@@ -444,16 +451,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                         (secretTasks: SecretTaskType[], index: number) => (
                           <View key={index} style={{ paddingBottom: 16 }}>
                             <View style={{ position: 'relative', height: 105 }}>
-                              <Image
-                                source={require('../../assets/images/screens/park/secretshelf.png')}
-                                contentFit="contain"
-                                style={{
-                                  width: '100%',
-                                  height: 55,
-                                  bottom: 0,
-                                  position: 'absolute',
-                                }}
-                              />
+                              <ParkShelfArtwork variant="secret" height={55} />
                               <View
                                 style={{
                                   flexDirection: 'row',
@@ -472,6 +470,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                   >
                                     {hasCompletedSecretTask(secretTask.id) ? (
                                       <TaskCoinModal
+                                        size={Math.min(60, shelfCoinSize)}
                                         task={secretTask}
                                         isSecretTask
                                         readOnly={!canChooseGoal}
@@ -480,7 +479,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                         )?.times_completed}
                                       />
                                     ) : (
-                                      <UnfoundCoinModal task={secretTask} isSecret />
+                                      <UnfoundCoinModal task={secretTask} isSecret size={shelfCoinSize} />
                                     )}
                                   </View>
                                 ))}
@@ -594,16 +593,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                           </ParkTrophyModal>
                         </View>
                       </View>
-                      <Image
-                        source={require('../../assets/images/screens/park/shelf.png')}
-                        contentFit="contain"
-                        style={{
-                          width: '100%',
-                          height: 50,
-                          bottom: 0,
-                          position: 'absolute',
-                        }}
-                      />
+                      <ParkShelfArtwork variant="normal" height={50} />
                     </View>
                   </View>
                   {canChooseGoal && <ParkDayRecapCard parkId={Number(park)}
@@ -638,16 +628,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                         (rowTasks: TaskType[], rowIndex: number) => (
                           <View key={rowIndex} style={{ paddingBottom: 16 }}>
                             <View style={{ position: 'relative', height: 105 }}>
-                              <Image
-                                source={require('../../assets/images/screens/park/archivedshelf.png')}
-                                contentFit="contain"
-                                style={{
-                                  width: '100%',
-                                  height: 55,
-                                  bottom: 0,
-                                  position: 'absolute',
-                                }}
-                              />
+                              <ParkShelfArtwork variant="archived" height={55} />
                               <View
                                 style={{
                                   flexDirection: 'row',
@@ -668,6 +649,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                       archivedTask.id
                                     ) ? (
                                       <TaskCoinModal
+                                        size={Math.min(60, shelfCoinSize)}
                                         task={archivedTask}
                                         readOnly={!canChooseGoal}
                                         timesCompleted={
@@ -679,7 +661,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                         }
                                       />
                                     ) : (
-                                      <UnfoundCoinModal task={archivedTask} isArchived />
+                                      <UnfoundCoinModal task={archivedTask} isArchived size={shelfCoinSize} />
                                     )}
                                   </View>
                                 ))}

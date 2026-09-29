@@ -5,6 +5,8 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import { Marker } from '../../components/map/Marker';
 import Countdown, { zeroPad } from 'react-countdown';
 import { TaskType } from '../../models/task-type';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { gameTimestamp } from './mapOpportunityTiming';
 import type { RideControlRide } from '../../api/endpoints/parks/rideControl';
 import type { LiveRide } from '../../api/endpoints/parks/live';
 import { TEAMS } from '../../constants/teams';
@@ -32,8 +34,8 @@ const LANDMARKS: Record<LandmarkId, number> = {
   city: require('../../../assets/images/map/landmarks/city.png'),
   lighthouse: require('../../../assets/images/map/landmarks/lighthouse.png'),
 };
-// Where the ride sits inside the 140x160 pin (its anchor is x 0.5, y 0.9).
-const GROUND = { x: 70, y: 146 };
+// Keep the tappable pin close to its artwork so adjacent rides do not steal taps.
+const GROUND = { x: 36, y: 86 };
 const RIDE_COIN = require('../../../assets/images/map/ride-coin.png');
 
 // Water spots found for rides, kept across re-mounts and re-renders.
@@ -67,12 +69,13 @@ function useWaterSpot(kind: string | undefined, latitude: number, longitude: num
 }
 
 /** The ride's coin hovering over its landmark: slow spin and bob. */
-function FloatingCoin() {
+function FloatingCoin({ reducedMotion }: { readonly reducedMotion: boolean }) {
   const p = useSharedValue(0);
   useEffect(() => {
-    p.value = withRepeat(withTiming(1, { duration: 3200, easing: Easing.linear }), -1, false);
+    p.value = 0;
+    if (!reducedMotion) p.value = withRepeat(withTiming(1, { duration: 3200, easing: Easing.linear }), -1, false);
     return () => cancelAnimation(p);
-  }, [p]);
+  }, [p, reducedMotion]);
   const style = useAnimatedStyle(() => ({
     transform: [{ translateY: Math.sin(p.value * Math.PI * 2) * 4 }, { scaleX: Math.cos(p.value * Math.PI * 2) }],
   }));
@@ -104,8 +107,9 @@ export default function TaskMarker({
   readonly isTripGoal?: boolean;
   readonly onPress: () => void;
 }) {
-  const expiresAt = task.active_to ? new Date(task.active_to + 'Z') : null;
-  const minsLeft = expiresAt ? Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / 60000)) : null;
+  const reducedMotion = useReducedGameMotion();
+  const expiresAt = gameTimestamp(task.active_to);
+  const minsLeft = expiresAt !== null ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000)) : null;
 
   const look = useMemo(() => rideLook(task.name), [task.name]);
   const rush = live?.rush && live.status === 'OPERATING' && new Date(live.rush.ends_at).getTime() > Date.now()
@@ -118,10 +122,10 @@ export default function TaskMarker({
     : minsLeft !== null && minsLeft < 5 ? '#ef4444' : '#4ade80';
   const timerUrgent = minsLeft !== null && minsLeft < 5;
   const kinds = useMemo(() => {
-    const base = ambient ? ambienceNow(look.ambience) : [];
+    const base = ambient && !reducedMotion ? ambienceNow(look.ambience) : [];
     // A Rush always sparkles, near or far: it's worth walking to.
-    return rush ? [...base, 'rush' as const] : base;
-  }, [ambient, look, rush]);
+    return rush && !reducedMotion ? [...base, 'rush' as const] : base;
+  }, [ambient, look, rush, reducedMotion]);
   const waterKind = kinds.find(k => WATER_AMBIENCE.includes(k));
   const [behindKinds, frontKinds] = useMemo(() => {
     const pin = kinds.filter(k => !WATER_AMBIENCE.includes(k));
@@ -146,6 +150,7 @@ export default function TaskMarker({
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={onPress}
+      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
       stopPropagation={true}
       tracksViewChanges={tracksViewChanges}
       anchor={{ x: 0.5, y: 0.9 }}
@@ -158,19 +163,19 @@ export default function TaskMarker({
           </View>
         )}
         {/* Timer badge */}
-        {expiresAt && !rush && (
+        {expiresAt !== null && expiresAt > Date.now() && !rush && (
           <View style={[
             styles.timerBadge,
             timerUrgent && styles.timerBadgeUrgent,
           ]}>
             <Countdown
-              date={expiresAt.getTime()}
-              renderer={({ minutes, seconds }) => (
+              date={expiresAt}
+              renderer={({ total, seconds }) => (
                 <Text style={[
                   styles.timerText,
                   timerUrgent && styles.timerTextUrgent,
                 ]}>
-                  {minutes}:{zeroPad(seconds)}
+                  {Math.floor(total / 60000)}:{zeroPad(seconds)}
                 </Text>
               )}
             />
@@ -178,7 +183,7 @@ export default function TaskMarker({
         )}
 
         {/* Task name tooltip - always rendered, toggle opacity to avoid layout shift */}
-        <View style={[styles.tooltipContainer, { opacity: isSelected ? 1 : 0 }]}>
+        <View pointerEvents="none" style={[styles.tooltipContainer, { opacity: isSelected ? 1 : 0 }]}>
           <View style={styles.tooltip}>
             <Text style={styles.tooltipTitle}>
               {task.name}
@@ -223,7 +228,7 @@ export default function TaskMarker({
         {/* The ride's landmark: themed art, or the classic shark tower. */}
         <View style={styles.buildingContainer}>
           <View style={[styles.landmarkWrap, (down || closed) && styles.landmarkResting]}>
-            <FloatingCoin />
+            <FloatingCoin reducedMotion={reducedMotion} />
             <Image source={LANDMARKS[look.landmark]} style={styles.landmarkImage} contentFit="contain" />
           </View>
           {down && <View style={styles.downChip}><Text style={styles.downText}>🔧 DOWN</Text></View>}
@@ -236,23 +241,23 @@ export default function TaskMarker({
 }
 
 const styles = StyleSheet.create({
-  teamFlag: { position: 'absolute', top: 88, right: 30, zIndex: 21, alignItems: 'center' },
+  teamFlag: { position: 'absolute', top: 24, right: 0, zIndex: 21, alignItems: 'center' },
   teamBadge: { width: 24, height: 24 },
   contested: { position: 'absolute', bottom: -6, right: -8, fontSize: 16 },
   container: {
-    width: 140,
-    height: 160,
+    width: 72,
+    height: 96,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingBottom: 10,
   },
-  goalBadge: { position: 'absolute', top: 16, zIndex: 22, backgroundColor: '#fbbf24',
+  goalBadge: { position: 'absolute', top: -48, zIndex: 22, backgroundColor: '#fbbf24',
     borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#1a1a2e' },
-  goalText: { color: '#1a1a2e', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  goalText: { color: '#1a1a2e', fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
   timerBadge: {
     position: 'absolute',
-    top: 40,
+    top: -24,
     backgroundColor: '#FFF8E7',
     borderRadius: 8,
     paddingHorizontal: 8,
@@ -282,9 +287,9 @@ const styles = StyleSheet.create({
   },
   tooltipContainer: {
     position: 'absolute',
-    top: -22,
-    left: -10,
-    right: -10,
+    top: -70,
+    left: -54,
+    right: -54,
     alignItems: 'center',
     zIndex: 15,
   },
@@ -346,7 +351,7 @@ const styles = StyleSheet.create({
   downChip: { position: 'absolute', bottom: 2, alignSelf: 'center', backgroundColor: '#475569', borderRadius: 8,
     paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5, borderColor: '#fff' },
   downText: { fontFamily: 'Shark', fontSize: 11, color: '#fff' },
-  rushBadge: { position: 'absolute', top: 40, zIndex: 23, backgroundColor: '#ffcf3b', borderRadius: 10,
+  rushBadge: { position: 'absolute', top: -24, zIndex: 23, backgroundColor: '#ffcf3b', borderRadius: 10,
     paddingHorizontal: 8, paddingVertical: 3, borderWidth: 2, borderColor: '#fff',
     shadowColor: '#ffb300', shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
   rushText: { fontFamily: 'Shark', fontSize: 12, color: '#6a3b00' },

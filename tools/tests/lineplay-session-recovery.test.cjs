@@ -671,3 +671,42 @@ test('a played queue chapter keeps its private story choice through offline comp
   assert.equal(calls.queued[0].key, 'complete_server-123');
   session.dispose();
 });
+
+test('a nearby check keeps games playable and clears after the same reward request connects', async () => {
+  let nearby = false;
+  const { Session, calls } = makeHarness(null, () => {
+    if (!nearby) throw { response: { status: 422, data: { code: 'NOT_NEAR_RIDE' } } };
+    return server;
+  });
+  const session = new Session();
+  const sample = { latitude: 1, longitude: 2, timestamp: Date.now() };
+  await session.start(ride, sample, 12);
+  assert.equal(session.snapshot().state, 'active');
+  assert.equal(session.snapshot().rewardConnectionIssue, 'nearby');
+  assert.equal(session.snapshot().rewardUnavailable, false);
+  assert.equal(session.snapshot().creditedParts, null);
+  const opening = session.snapshot().playlist[0].id;
+  nearby = true;
+  await session.connectServer(sample, true);
+  assert.equal(session.snapshot().serverSessionId, server.session_id);
+  assert.equal(session.snapshot().rewardConnectionIssue, null);
+  assert.equal(session.snapshot().playlist[0].id, opening);
+  assert.equal(calls.start, 2);
+  session.dispose();
+});
+
+test('queue connection failures distinguish sign-in from network outages without awarding Parts', async () => {
+  for (const [error, expected] of [
+    [{ response: { status: 401 } }, 'sign_in'],
+    [new Error('Network offline'), 'network'],
+  ]) {
+    const { Session } = makeHarness(null, () => { throw error; });
+    const session = new Session();
+    await session.start(ride, { latitude: 1, longitude: 2, timestamp: Date.now() }, 12);
+    assert.equal(session.snapshot().rewardConnectionIssue, expected);
+    assert.equal(session.snapshot().creditedParts, null);
+    assert.equal(session.snapshot().serverSessionId, null);
+    assert.equal(session.snapshot().state, 'active');
+    session.dispose();
+  }
+});

@@ -60,6 +60,8 @@ export interface LogRideResponse {
     icon: string;
   }>;
   xp_earned: number;
+  ride_count?: number;
+  total_ride_count?: number;
 }
 
 export async function logRide(payload: LogRidePayload): Promise<LogRideResponse> {

@@ -1,13 +1,16 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, {
-  Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import update from '../api/endpoints/daily-gifts/update';
+import getDailyGift from '../api/endpoints/daily-gifts/create';
+import { DailyGiftContext } from '../context/DailyGiftProvider';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
 import type { DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
@@ -42,8 +45,19 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
   const { width } = useWindowDimensions();
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
-  const taps = useRef(0);
-  const claimed = useRef(false);
+  const { setDailyGift } = useContext(DailyGiftContext);
+  const reducedMotion = useReducedGameMotion();
+  const claiming = useRef(false);
+  const acknowledgedGift = useRef<DailyGiftType | null>(null);
+  const mounted = useRef(true);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (revealTimer.current) clearTimeout(revealTimer.current);
+    };
+  }, []);
 
   const ladder = dailyGift.ladder?.length ? dailyGift.ladder : fallbackLadder(dailyGift);
   const day = Math.min(ladder.length, Math.max(1, dailyGift.day ?? 1));
@@ -62,47 +76,76 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
   }, [dailyGift.id, dailyGift.redeemed_at, player?.username]);
 
   useEffect(() => {
-    if (!visible) return;
-    bob.value = withRepeat(withSequence(
-      withTiming(-8, { duration: 900, easing: Easing.inOut(Easing.sin) }),
-      withTiming(0, { duration: 900, easing: Easing.inOut(Easing.sin) }),
-    ), -1);
-    glow.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
-  }, [visible, bob, glow]);
+    bob.value = 0;
+    glow.value = 0;
+    if (visible && phase === 'closed' && !reducedMotion) {
+      bob.value = withRepeat(withSequence(
+        withTiming(-8, { duration: 900, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 900, easing: Easing.inOut(Easing.sin) }),
+      ), -1);
+      glow.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.sin) }), -1, true);
+    }
+    return () => { cancelAnimation(bob); cancelAnimation(glow); };
+  }, [visible, phase, reducedMotion, bob, glow]);
+  useEffect(() => () => {
+    [shake, pop, prize, stamp].forEach(cancelAnimation);
+  }, [shake, pop, prize, stamp]);
 
+  const dismiss = () => {
+    setVisible(false);
+    if (acknowledgedGift.current) setDailyGift(acknowledgedGift.current);
+  };
   const open = async () => {
-    if (phase !== 'closed') return;
+    if (claiming.current || phase !== 'closed') return;
+    claiming.current = true;
     setPhase('opening');
-    const reduced = await AccessibilityInfo.isReduceMotionEnabled();
-    if (!reduced) {
+    const startedAt = Date.now();
+    if (!reducedMotion) {
       shake.value = withSequence(
         ...[10, -12, 14, -16, 18, -18, 0].map(v => withTiming(v, { duration: 60 })),
       );
-      [0, 180, 360].forEach((ms, i) => setTimeout(() => Haptics.impactAsync(
-        [Haptics.ImpactFeedbackStyle.Light, Haptics.ImpactFeedbackStyle.Medium, Haptics.ImpactFeedbackStyle.Heavy][i]), ms));
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     }
     playSfx('tick', 0.8);
-    setTimeout(() => {
-      setPhase('open');
-      pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 }));
-      prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
-      stamp.value = withDelay(650, withSpring(1, { damping: 8, stiffness: 220 }));
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      playSfx('win');
-      playSfx('coin', 0.9);
-    }, reduced ? 0 : 440);
-    if (!claimed.current) {
-      claimed.current = true;
-      try { await update(dailyGift.id); } catch { /* already claimed or offline: the server stays authoritative */ }
+    try {
+      const confirmed = await update(dailyGift.id);
+      if (!confirmed.redeemed_at) throw new Error('Chest was not confirmed');
+      acknowledgedGift.current = confirmed;
       void refreshPlayer?.();
+      if (!mounted.current) { setDailyGift(confirmed); return; }
+      revealTimer.current = setTimeout(() => {
+        if (!mounted.current) return;
+        setPhase('open');
+        if (reducedMotion) {
+          shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1;
+        } else {
+          pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 }));
+          prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
+          stamp.value = withDelay(650, withSpring(1, { damping: 8, stiffness: 220 }));
+        }
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+        playSfx('win'); playSfx('coin', 0.9);
+      }, reducedMotion ? 0 : Math.max(0, 440 - (Date.now() - startedAt)));
+    } catch {
+      // A previous successful claim can outlive this screen. Reconcile before retrying.
+      let current: DailyGiftType | null = null;
+      try { current = await getDailyGift(); } catch { /* Leave an ordinary retry available. */ }
+      if (!mounted.current) return;
+      claiming.current = false;
+      cancelAnimation(shake); shake.value = 0;
+      if (current?.id === dailyGift.id && current.redeemed_at) {
+        setDailyGift(current);
+        void refreshPlayer?.();
+        setVisible(false);
+        Alert.alert('Today’s chest is collected', 'Your rewards are already in your wallet. Come back tomorrow for the next chest.');
+      } else {
+        setPhase('closed');
+        Alert.alert('Could not open your chest', 'Your chest is still waiting. Check your connection and try again.');
+      }
     }
   };
 
-  // Tapping the shaking chest counts too; three taps feel like prying it open.
-  const onChestPress = () => {
-    taps.current += 1;
-    void open();
-  };
+  const onChestPress = () => { void open(); };
 
   const chestStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: phase === 'closed' ? bob.value : 0 }, { rotate: `${shake.value}deg` }, { scale: pop.value }],
@@ -115,8 +158,11 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
   const chestSize = Math.min(width * 0.52, 230);
 
   return (
-    <Modal isVisible={visible} animationIn="zoomIn" animationOut="zoomOut" backdropOpacity={0.7}
-      onBackdropPress={phase === 'open' ? () => setVisible(false) : undefined}>
+    <Modal isVisible={visible} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
+      animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
+      animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
+      backdropOpacity={0.7} onBackdropPress={phase === 'open' ? dismiss : undefined}
+      onBackButtonPress={phase === 'open' ? dismiss : undefined}>
       <View style={styles.wrap}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
@@ -130,6 +176,7 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
           </View>
 
           <Pressable onPress={onChestPress} disabled={phase !== 'closed'} accessibilityRole="button"
+            accessibilityState={{ disabled: phase !== 'closed', busy: phase === 'opening' }}
             accessibilityLabel={phase === 'open' ? `Opened: ${reward.amount} ${reward.label}` : 'Open today’s chest'}
             style={[styles.stage, { height: chestSize + 40 }]}>
             <Animated.View style={[styles.glow, { width: chestSize * 1.3, height: chestSize * 1.3, borderRadius: chestSize }, glowStyle]} />
@@ -145,11 +192,11 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
               {today.tickets > 0 && today.coins > 0 && <Text style={styles.prizeExtra}>+{today.coins} Shark Coins</Text>}
             </Animated.View>
           ) : (
-            <Text style={styles.hint}>{phase === 'opening' ? 'Here it comes…' : 'Tap the chest to open it!'}</Text>
+            <Text style={styles.hint}>{phase === 'opening' ? 'Opening your chest…' : 'Tap the chest to open it!'}</Text>
           )}
 
           {phase === 'open' && (
-            <Pressable onPress={() => setVisible(false)} accessibilityRole="button" style={styles.button}>
+            <Pressable onPress={dismiss} accessibilityRole="button" style={styles.button}>
               <Text style={styles.buttonText}>{day === 7 ? 'SEE YOU AT THE PARK!' : 'AWESOME!'}</Text>
             </Pressable>
           )}

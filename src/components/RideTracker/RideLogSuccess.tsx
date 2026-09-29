@@ -11,16 +11,17 @@ import Topbar from '../Topbar';
 import TopbarColumn from '../Topbar/TopbarColumn';
 import TopbarText from '../Topbar/TopbarText';
 import { SoundEffectContext, SoundEffectContextType } from '../../context/SoundEffectProvider';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 const MILESTONES = [10, 25, 50, 100, 200, 500, 1000];
 const MILESTONE_MESSAGES: Record<number, string> = {
-  10: '🎉 Double digits!',
-  25: '🔥 Quarter century rider!',
-  50: '🦈 Half-centurion!',
-  100: '🏆 Century Club!',
-  200: '⚡ 200 rides strong!',
-  500: '👑 Legendary 500!',
-  1000: '🌟 THOUSAND RIDE LEGEND!',
+  10: 'Double digits!',
+  25: 'Quarter century rider!',
+  50: 'Half-centurion!',
+  100: 'Century Club!',
+  200: '200 rides strong!',
+  500: 'Legendary 500!',
+  1000: 'THOUSAND RIDE LEGEND!',
 };
 
 interface RideLogSuccessProps {
@@ -43,22 +44,38 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
   const milestoneScale = useRef(new Animated.Value(0)).current;
   const [showCard, setShowCard] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const reducedMotion = useReducedGameMotion();
+  const celebrated = useRef(false);
 
   const milestone = totalRideCount ? MILESTONES.find(m => m === totalRideCount) : null;
   const isMilestone = !!milestone;
 
   useEffect(() => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    playSound(require('../../../assets/sounds/success.mp3'), { volume: 0.65 });
+    if (!celebrated.current) {
+      celebrated.current = true;
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      playSound(require('../../../assets/sounds/success.mp3'), { volume: 0.65 });
+    }
+  }, [playSound]);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      scaleAnim.setValue(1); fadeAnim.setValue(1);
+      cardSlide.setValue(0); milestoneScale.setValue(1);
+      setShowCard(true); setShowConfetti(false);
+      return;
+    }
     setShowConfetti(true);
 
-    Animated.sequence([
+    const entrance = Animated.sequence([
       Animated.parallel([
         Animated.spring(scaleAnim, { toValue: 1, tension: 60, friction: 5, useNativeDriver: true }),
         Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
       ]),
       Animated.delay(400),
-    ]).start(() => {
+    ]);
+    entrance.start(({ finished }) => {
+      if (!finished) return;
       setShowCard(true);
       Animated.spring(cardSlide, { toValue: 0, tension: 50, friction: 8, useNativeDriver: true }).start();
 
@@ -67,10 +84,14 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
           Animated.delay(200),
           Animated.spring(milestoneScale, { toValue: 1, tension: 40, friction: 4, useNativeDriver: true }),
         ]).start();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       }
     });
-  }, []);
+    return () => {
+      entrance.stop(); scaleAnim.stopAnimation(); fadeAnim.stopAnimation();
+      cardSlide.stopAnimation(); milestoneScale.stopAnimation();
+    };
+  }, [reducedMotion, isMilestone, scaleAnim, fadeAnim, cardSlide, milestoneScale]);
 
   return (
     <Wrapper>
@@ -158,7 +179,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   xpText: { color: '#7E5100', fontSize: 22, fontWeight: '700', marginTop: 4 },
-  journalText: { color: '#315C7C', fontSize: 17, marginTop: 5 },
+  journalText: { color: '#315C7C', fontSize: 17, fontFamily: 'Knockout', marginTop: 5 },
   // Milestone
   milestoneCard: {
     backgroundColor: '#FFF5D3', borderRadius: 16, padding: 20, marginBottom: 20,
@@ -170,7 +191,7 @@ const styles = StyleSheet.create({
   milestoneTitle: {
     color: colors.tertiary, fontSize: 28, fontWeight: '900', fontFamily: 'Shark', marginTop: 8,
   },
-  milestoneMessage: { color: '#59421E', fontSize: 16, marginTop: 4, fontWeight: '600' },
+  milestoneMessage: { color: '#59421E', fontSize: 16, fontFamily: 'Knockout', marginTop: 4 },
   // Achievements
   achievementsContainer: { marginBottom: 12, width: '100%' },
   achievementRow: {
@@ -179,7 +200,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#E3AE3E',
   },
   achievementIcon: { width: 38, height: 38 },
-  achievementText: { color: '#745012', fontSize: 16, fontWeight: '700', flex: 1 },
+  achievementText: { color: '#745012', fontSize: 16, fontFamily: 'Knockout', flex: 1 },
   // Card
   cardContainer: { width: '100%', marginBottom: 20 },
   addRideButton: { backgroundColor: '#FFCB35', borderRadius: 13,

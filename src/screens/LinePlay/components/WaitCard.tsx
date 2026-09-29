@@ -8,7 +8,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
-import type { PauseReason, WaitSource } from '../../../services/lineplay/LinePlaySession';
+import type { PauseReason, WaitSource, RewardConnectionIssue } from '../../../services/lineplay/LinePlaySession';
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import { partCountdown } from '../../../services/lineplay/partCountdown';
@@ -29,10 +29,12 @@ export interface WaitCardProps {
   readonly elapsedSeconds: number;
   readonly imageUrl?: string | null;
   readonly paused: boolean;
+  readonly completed?: boolean;
   readonly pauseReason: PauseReason | null;
   readonly onTogglePause: () => void;
   readonly rewardTrackingAvailable: boolean;
   readonly rewardUnavailable: boolean;
+  readonly rewardConnectionIssue?: RewardConnectionIssue | null;
   readonly lineRewardsReady?: boolean;
   readonly verifiedEligibleSeconds: number;
   readonly verifiedPresenceAt: number | null;
@@ -66,10 +68,12 @@ export default function WaitCard({
   elapsedSeconds,
   imageUrl,
   paused,
+  completed = false,
   pauseReason,
   onTogglePause,
   rewardTrackingAvailable,
   rewardUnavailable,
+  rewardConnectionIssue,
   lineRewardsReady,
   verifiedEligibleSeconds,
   verifiedPresenceAt,
@@ -130,19 +134,24 @@ export default function WaitCard({
     : atCap ? 1 : Math.max(0, Math.min(1, countdown.progressSeconds / interval));
   const earned = creditedParts ?? 0;
   // One plain status line; the fine print lives behind the details toggle.
-  const headline = paused
+  const headline = completed ? 'Session complete' : paused
     ? pauseReason === 'manual' ? 'Paused' : 'Line moving · paused'
     : !rewardTrackingAvailable
-      ? lineRewardsReady === false || rewardUnavailable ? 'Games only here' : 'Connecting…'
+      ? lineRewardsReady === false || rewardUnavailable ? 'Games only here'
+        : rewardConnectionIssue === 'sign_in' ? 'Sign-in needed'
+          : rewardConnectionIssue ? 'Games ready' : 'Checking location…'
       : atCap ? 'Max Parts reached'
         : countdown.needsCheck || countdown.checking ? 'Checking you’re in line…'
           : fmt(countdown.remainingSeconds);
-  const subline = paused
+  const subline = completed ? 'Your game recap is ready below.' : paused
     ? 'Time near the ride still counts.'
     : !rewardTrackingAvailable
       ? lineRewardsReady === false || rewardUnavailable
         ? 'Ride Parts aren’t available at this ride right now.'
-        : 'Games work while rewards connect.'
+        : rewardConnectionIssue === 'nearby' ? 'Ride Parts start near this ride.'
+          : rewardConnectionIssue === 'sign_in' ? 'Sign in again to earn Ride Parts.'
+            : rewardConnectionIssue === 'network' ? 'Games work while we retry rewards.'
+              : 'Play while we check your queue location.'
       : atCap
         ? atDailyCap ? 'You’ve earned today’s Parts for this ride.' : 'Session limit reached. Great wait!'
         : countdown.needsCheck || countdown.checking ? 'Stay near the ride to keep earning.'
@@ -162,11 +171,11 @@ export default function WaitCard({
 
       <View style={styles.content}>
         <View style={styles.topRow}>
-          <Text style={styles.rideName} numberOfLines={1}>{rideName}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Resume queue games' : 'Pause queue games'}
+          <Text style={styles.rideName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{rideName}</Text>
+          {!completed && <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Resume queue games' : 'Pause queue games'}
             onPress={onTogglePause} style={styles.pauseButton} hitSlop={8}>
             <Text style={styles.pauseButtonText}>{paused ? '▶' : 'II'}</Text>
-          </Pressable>
+          </Pressable>}
         </View>
 
         <View style={styles.meterRow}>
@@ -192,17 +201,17 @@ export default function WaitCard({
           </View>
         </View>
 
-        {onPlayBonus && (
-          <Pressable accessibilityRole="button" accessibilityLabel="Play a quick game for bonus rewards"
+        {!completed && onPlayBonus && (
+          <Pressable accessibilityRole="button" accessibilityLabel={rewardTrackingAvailable ? "Open queue games for bonus rewards" : "Open queue games"}
             onPress={onPlayBonus} disabled={paused}
             style={({ pressed }) => [styles.playButton, paused && styles.playButtonDisabled, pressed && styles.playButtonPressed]}>
-            <Text style={styles.playButtonText}>PLAY FOR BONUS</Text>
+            <Text style={styles.playButtonText}>{rewardTrackingAvailable ? 'PLAY FOR BONUS' : 'QUEUE ARCADE'}</Text>
           </Pressable>
         )}
 
         <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
           onPress={() => setExpanded(value => !value)} style={styles.detailsButton} hitSlop={6}>
-          <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `In line ${fmt(elapsedSeconds)} · posted wait ${postedWaitMinutes}m · details`}</Text>
+          <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m · details`}</Text>
         </Pressable>
         {expanded && <>
           <Text style={styles.waitSourceHint}>
@@ -292,7 +301,8 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.textPrimary,
     fontFamily: 'Shark',
-    fontSize: 24,
+    fontSize: 22,
+    lineHeight: 25,
     textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
   },
   partBurstText: { color: '#7dffb0', fontFamily: 'Shark', fontSize: 18, marginTop: 4 },
@@ -301,10 +311,11 @@ const styles = StyleSheet.create({
   pauseButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 2,
     borderColor: '#fff', backgroundColor: 'rgba(5,52,110,0.7)', justifyContent: 'center', alignItems: 'center' },
   pauseButtonText: { color: '#fff', fontFamily: 'Knockout', fontSize: 15 },
-  waitSourceHint: { color: '#d4edff', fontSize: 11, marginTop: spacing.sm },
-  entranceHint: { color: colors.textPrimary, fontSize: 11, marginTop: spacing.xs },
+  waitSourceHint: { color: '#d4edff', fontFamily: 'Knockout', fontSize: 11, marginTop: spacing.sm },
+  entranceHint: { color: colors.textPrimary, fontFamily: 'Knockout', fontSize: 11, marginTop: spacing.xs },
   ticketHint: {
     color: '#F4CD72',
+    fontFamily: 'Knockout',
     fontSize: 12,
     marginTop: spacing.sm,
   },

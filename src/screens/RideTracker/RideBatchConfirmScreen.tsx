@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { logRide } from '../../api/endpoints/player-rides';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import ReactionPicker from '../../components/RideTracker/ReactionPicker';
+import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import ConfettiBurst from '../../components/RideTracker/ConfettiBurst';
 import { DetectedRide, removePendingDetection } from '../../services/RideDetectionService';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
@@ -369,7 +370,7 @@ export default function RideBatchConfirmScreen() {
               {r && r.rating > 0 && (
                 <SharkRating rating={r.rating} readonly size={20} />
               )}
-              {r?.reaction && <Text style={{ fontSize: 20 }}>{r.reaction}</Text>}
+              {r?.reaction && <SharkReactionIcon reaction={r.reaction} size={28} />}
             </View>
           );
         })}

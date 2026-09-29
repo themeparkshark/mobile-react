@@ -9,6 +9,7 @@ import Wrapper from '../components/Wrapper';
 import ParkCollectionHeader from './ParkCollectionHeader';
 import UnfoundCoinModal from '../components/UnfoundCoinModal';
 import TaskCoinModal from '../components/TaskCoinModal';
+import ParkShelfArtwork from '../components/ParkShelfArtwork';
 import ParkRideDirectory from './ParkRideDirectory';
 import TaskMarker from './ExploreScreen/TaskMarker';
 import type { TaskType } from '../models/task-type';
@@ -51,6 +52,7 @@ export default function ParkChecklistPreviewScreen() {
   const [rideOnly, setRideOnly] = useState(cleanPassportPreview);
   const scrollRef = useRef<ScrollView>(null);
   const didScrollToPassport = useRef(false);
+  const didScrollToArt = useRef(false);
   const [mapRide, setMapRide] = useState<TaskType | null>(null);
   const fanView = previewMode === 3;
   const showSavedGoal = previewMode === 1 || previewMode === 2;
@@ -84,7 +86,13 @@ export default function ParkChecklistPreviewScreen() {
     </Topbar>
     <ImageBackground source={require('../../assets/images/screens/park/background-new.png')}
       style={{ flex: 1 }}>
-      <ScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, gap: 15 }}>
+      <ScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, gap: 15 }}
+        onContentSizeChange={() => {
+          if (__DEV__ && process.env.EXPO_PUBLIC_PARK_SHELF_ART_PREVIEW === '1' && !didScrollToArt.current) {
+            didScrollToArt.current = true;
+            scrollRef.current?.scrollToEnd({ animated: false });
+          }
+        }}>
         {!fanView && !cleanArrivalPreview && !cleanRescueGoalPreview && !cleanDownPreview && !cleanPassportPreview && !cleanCompletePreview && <Pressable accessibilityRole="button" onPress={() => setPreviewMode(value => (value + 1) % 4)}
           style={{ alignSelf: 'flex-start', backgroundColor: '#ffcb3e', padding: 9, borderRadius: 9 }}>
           <Text style={{ color: '#073e79', fontFamily: 'Knockout', fontSize: 14 }}>
@@ -140,8 +148,7 @@ export default function ParkChecklistPreviewScreen() {
             textAlign: 'center', marginTop: 18 }}>COIN SHELF</Text>
           {Array.from({ length: Math.ceil(previewTasks.length / 5) }, (_, index) => (
             <View key={index} style={{ height: 110, justifyContent: 'center' }}>
-              <Image source={require('../../assets/images/screens/park/shelf.png')}
-                contentFit="contain" style={{ position: 'absolute', bottom: 0, width: '100%', height: 55 }} />
+              <ParkShelfArtwork />
               <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
                 {previewTasks.slice(index * 5, index * 5 + 5).map(task =>
                   ownsGoal && task.id === goalTask.id

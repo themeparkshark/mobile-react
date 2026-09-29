@@ -27,6 +27,8 @@ import Topbar from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import { removePendingDetection } from '../../services/RideDetectionService';
+import ProfileStatIcon from '../../components/ProfileStatIcon';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 // ─── Park Selector ───
 interface ParkItemProps {
@@ -36,8 +38,12 @@ interface ParkItemProps {
 }
 
 const ParkItem: React.FC<ParkItemProps> = React.memo(({ park, selected, onPress }) => (
-  <Pressable onPress={onPress} style={[s.parkChip, selected && s.parkChipSelected]}>
-    <Text style={[s.parkChipText, selected && s.parkChipTextSelected]}>{park.name}</Text>
+  <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Choose ${park.name}`}
+    accessibilityState={{ selected }}
+    style={({ pressed }) => [s.parkChip, selected && s.parkChipSelected, pressed && s.choicePressed]}>
+    <View style={s.parkIcon}><ProfileStatIcon index={2} size={30} /></View>
+    <Text style={[s.parkChipText, selected && s.parkChipTextSelected]} numberOfLines={2}>{park.name}</Text>
+    <Text style={s.choiceChevron}>›</Text>
   </Pressable>
 ));
 ParkItem.displayName = 'ParkItem';
@@ -50,11 +56,14 @@ interface RideItemProps {
 }
 
 const RideItem: React.FC<RideItemProps> = React.memo(({ ride, selected, onPress }) => (
-  <Pressable onPress={onPress} style={[s.rideItem, selected && s.rideItemSelected]}>
-    <RideTypeIcon type={ride.type} size={18} />
-    <Text style={[s.rideItemText, selected && s.rideItemTextSelected]} numberOfLines={1}>
+  <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Choose ${ride.name}`}
+    accessibilityState={{ selected }}
+    style={({ pressed }) => [s.rideItem, selected && s.rideItemSelected, pressed && s.choicePressed]}>
+    <RideTypeIcon type={ride.type} size={28} />
+    <Text style={[s.rideItemText, selected && s.rideItemTextSelected]} numberOfLines={2}>
       {ride.name}
     </Text>
+    <Text style={s.choiceChevron}>›</Text>
   </Pressable>
 ));
 RideItem.displayName = 'RideItem';
@@ -86,6 +95,8 @@ export default function RideLogScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const rideLoadSequence = useRef(0);
+  const saving = useRef(false);
+  const reducedMotion = useReducedGameMotion();
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [successData, setSuccessData] = useState<{
@@ -177,7 +188,12 @@ export default function RideLogScreen() {
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!selectedRide) return;
+    if (!selectedRide || saving.current) return;
+    if (waitTime && !/^\d+$/.test(waitTime)) {
+      Alert.alert('Check your wait time', 'Enter a whole number of minutes, or leave it blank.');
+      return;
+    }
+    saving.current = true;
     setSubmitting(true);
 
     try {
@@ -203,12 +219,14 @@ export default function RideLogScreen() {
         },
         xpEarned: result.xp_earned ?? 0,
         newAchievements: result.new_achievements || [],
-        totalRideCount: (result as any).total_ride_count,
+        rideCount: result.ride_count,
+        totalRideCount: result.total_ride_count,
       });
       setShowSuccess(true);
     } catch (e: any) {
       Alert.alert('Error', e?.response?.data?.message || 'Failed to log ride');
     } finally {
+      saving.current = false;
       setSubmitting(false);
     }
   }, [selectedRide, rating, reaction, note, waitTime, autoRodeAt, detectionId]);
@@ -274,7 +292,7 @@ export default function RideLogScreen() {
 
       {/* Step: Park Selection */}
       {step === 'park' && (
-        <ScrollView contentContainerStyle={s.parkList} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={s.parkList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={s.stepIntro}>
             <View style={s.stepCopy}>
               <Text style={s.stepEyebrow}>RIDE JOURNAL · 1 OF 3</Text>
@@ -314,6 +332,7 @@ export default function RideLogScreen() {
               placeholderTextColor="#94a3b8"
               value={searchQuery}
               onChangeText={setSearchQuery}
+              accessibilityLabel="Search this park's rides"
               autoCorrect={false}
             />
           </View>}
@@ -342,6 +361,7 @@ export default function RideLogScreen() {
                 />
               )}
               contentContainerStyle={s.rideList}
+              keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
                 <Text style={s.emptyText}>
                   {searchQuery ? 'No rides match your search' : 'No rides found for this park'}
@@ -354,7 +374,7 @@ export default function RideLogScreen() {
 
       {/* Step: Rate & Details */}
       {step === 'details' && selectedRide && (
-        <ScrollView contentContainerStyle={s.detailsContainer} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={s.detailsContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View>
             <Text style={s.stepEyebrow}>RIDE JOURNAL · 3 OF 3</Text>
             <Text style={s.stepTitle}>{stepTitle}</Text>
@@ -382,23 +402,27 @@ export default function RideLogScreen() {
             value={waitTime}
             onChangeText={setWaitTime}
             maxLength={4}
+            accessibilityLabel="Wait time in minutes, optional"
           />
 
           <Text style={s.sectionLabel}>Notes (optional)</Text>
           <TextInput
             style={[s.input, s.noteInput]}
-            placeholder="Front row was insane! 🎢"
+            placeholder="What made this ride memorable?"
             placeholderTextColor="#94a3b8"
             value={note}
             onChangeText={setNote}
             multiline
-            maxLength={500}
+            maxLength={255}
+            accessibilityLabel="Your ride memory, optional"
           />
 
           <Pressable
             onPress={handleSubmit}
             disabled={submitting}
-            style={({ pressed }) => [s.submitBtn, pressed && { transform: [{ scale: 0.98 }] }, submitting && { opacity: 0.5 }]}
+            accessibilityRole="button" accessibilityLabel="Save ride memory"
+            accessibilityState={{ disabled: submitting, busy: submitting }}
+            style={({ pressed }) => [s.submitBtn, pressed && { transform: [{ scale: reducedMotion ? 1 : 0.98 }] }, submitting && { opacity: 0.5 }]}
           >
             <LinearGradient
               colors={['#fec90e', '#d4a70a']}
@@ -428,12 +452,12 @@ const s = StyleSheet.create({
     borderWidth: 2, borderColor: '#84CAEE', paddingLeft: 18, overflow: 'hidden',
   },
   stepCopy: { flex: 1, paddingVertical: 18 },
-  stepEyebrow: { color: '#126BAB', fontSize: 11, fontWeight: '900', letterSpacing: 1.1 },
+  stepEyebrow: { color: '#126BAB', fontSize: 11, fontFamily: 'Knockout', letterSpacing: 1.1 },
   stepTitle: { color: '#0B4B83', fontSize: 27, fontFamily: 'Shark', marginTop: 3 },
-  stepDescription: { color: '#315C7C', fontSize: 14, lineHeight: 19, marginTop: 6 },
+  stepDescription: { color: '#315C7C', fontSize: 14, fontFamily: 'Knockout', lineHeight: 19, marginTop: 6 },
   stepShark: { width: 115, height: 115, marginRight: -8, alignSelf: 'flex-end' },
   compactIntro: { paddingHorizontal: 18, paddingTop: 17, paddingBottom: 5 },
-  detailsHint: { color: '#315C7C', fontSize: 14, marginTop: 3, marginBottom: 18 },
+  detailsHint: { color: '#315C7C', fontSize: 14, fontFamily: 'Knockout', marginTop: 3, marginBottom: 18 },
   unavailableCard: {
     alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.94)',
     borderRadius: 18, marginHorizontal: 18, marginTop: 20, padding: 20,
@@ -453,30 +477,35 @@ const s = StyleSheet.create({
     letterSpacing: 1.5, marginBottom: 8,
   },
   parkChip: {
-    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14,
     marginBottom: 8, borderWidth: 2, borderColor: '#BADFF4',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
   parkChipSelected: { borderColor: '#0EA5E9', backgroundColor: '#e8f7ff' },
-  parkChipText: { color: '#1a1a2e', fontSize: 16, fontWeight: '600' },
+  parkChipText: { color: '#0B4B83', fontSize: 18, fontFamily: 'Shark', flex: 1 },
   parkChipTextSelected: { color: '#0284C7', fontWeight: '700' },
+  parkIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center',
+    borderRadius: 13, backgroundColor: '#E6F5FF' },
+  choiceChevron: { color: '#2A749E', fontSize: 24, fontFamily: 'Knockout' },
+  choicePressed: { backgroundColor: '#FFF7D8', borderColor: '#E8B844' },
 
   // Ride selection
   searchBox: { paddingHorizontal: 16, paddingVertical: 10 },
   searchInput: {
     backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13,
-    color: '#1a1a2e', fontSize: 15, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
+    color: '#174D76', fontSize: 15, fontFamily: 'Knockout', borderWidth: 1, borderColor: '#B9DFF3',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3,
   },
   rideList: { paddingHorizontal: 16, paddingBottom: 40 },
   rideItem: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#fff', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 14,
-    marginBottom: 6, borderWidth: 2, borderColor: 'transparent',
+    marginBottom: 8, borderWidth: 2, borderColor: '#CBE7F5',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 2,
   },
   rideItemSelected: { borderColor: '#fec90e', backgroundColor: '#fffbeb' },
-  rideItemText: { color: '#1a1a2e', fontSize: 15, flex: 1 },
+  rideItemText: { color: '#174D76', fontSize: 17, fontFamily: 'Shark', flex: 1 },
   rideItemTextSelected: { color: '#92400e', fontWeight: '600' },
   emptyText: { color: '#64748b', textAlign: 'center', marginTop: 40, fontSize: 15 },
 
@@ -488,9 +517,9 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4,
   },
-  selectedRideName: { color: '#1a1a2e', fontSize: 18, fontWeight: '700', flex: 1 },
+  selectedRideName: { color: '#174D76', fontSize: 20, fontFamily: 'Shark', flex: 1 },
   sectionLabel: {
-    color: '#475569', fontSize: 14, fontWeight: '700', marginBottom: 10, marginTop: 20,
+    color: '#315C7C', fontSize: 15, fontFamily: 'Knockout', marginBottom: 10, marginTop: 20,
   },
   ratingRow: { alignItems: 'center' },
   input: {

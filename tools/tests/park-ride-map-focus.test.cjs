@@ -18,6 +18,12 @@ test('checklist handoff focuses a mapped ride in the detected park', () => {
   assert.equal(rideFocusForPark({ parkId: 1, task }, 1), task);
 });
 
+test('checklist handoff accepts numeric coordinates returned by the API', () => {
+  const numeric = { ...task, latitude: 28.418, longitude: -81.578 };
+  assert.equal(rideFocusForPark({ parkId: 1, task: numeric }, 1), numeric);
+  assert.equal(rideFocusForPark({ parkId: 1, task: { ...numeric, latitude: null } }, 1), null);
+});
+
 test('checklist handoff does not focus a ride in another park or before detection', () => {
   assert.equal(rideFocusForPark({ parkId: 1, task }, 2), null);
   assert.equal(rideFocusForPark({ parkId: 1, task }, null), null);

@@ -1,13 +1,15 @@
-import React, { useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
+import { Alert, View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { colors, shadows, borderRadius } from '../../design-system';
-import { PlayerRideType } from '../../api/endpoints/player-rides';
+import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
+import SharkReactionIcon from './SharkReactionIcon';
 
 const REACTION_LABELS: Record<string, string> = {
   '🤯': 'Mind blown', '😂': 'Laughing', '😴': 'Sleepy', '🤢': 'Queasy', '🔥': 'Loved it',
@@ -40,8 +42,8 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = Reac
 
         <View style={cardStyles.heroRow}>
           <View style={cardStyles.heroCopy}>
-            <Text style={cardStyles.parkName} numberOfLines={1}>{parkName}</Text>
-            <Text style={cardStyles.rideName} numberOfLines={3}>{ride.ride_name}</Text>
+            <Text style={cardStyles.parkName} numberOfLines={2}>{parkName}</Text>
+            <Text style={cardStyles.rideName} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.8}>{ride.ride_name}</Text>
             {rating > 0 && (
               <View style={cardStyles.ratingRow}>
                 {Array.from({ length: rating }, (_, index) => (
@@ -59,7 +61,7 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = Reac
         <View style={cardStyles.detailsPanel}>
           {ride.reaction && (
             <View style={cardStyles.reactionRow}>
-              <Text style={cardStyles.reactionEmoji}>{ride.reaction}</Text>
+              <SharkReactionIcon reaction={ride.reaction} size={28} />
               <Text style={cardStyles.reactionLabel}>{REACTION_LABELS[ride.reaction] ?? 'My reaction'}</Text>
             </View>
           )}
@@ -68,10 +70,10 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = Reac
               <Text style={cardStyles.statLabel}>RIDE DATE</Text>
               <Text style={cardStyles.statValue}>{dateStr}</Text>
             </View>
-            {rideCount != null && rideCount > 1 && (
+            {rideCount != null && rideCount > 0 && (
               <View style={cardStyles.stat}>
                 <Text style={cardStyles.statLabel}>TIMES RIDDEN</Text>
-                <Text style={cardStyles.statValue}>{rideCount}</Text>
+                <Text style={cardStyles.statValue}>{rideCount.toLocaleString()}×</Text>
               </View>
             )}
             {ride.wait_time_minutes != null && (
@@ -95,43 +97,73 @@ CardContent.displayName = 'CardContent';
 
 const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, onShare }) => {
   const viewShotRef = useRef<ViewShot>(null);
+  const busy = useRef(false);
+  const [sharing, setSharing] = useState(false);
+  const [loadingCount, setLoadingCount] = useState(rideCount == null);
+  const [confirmedCount, setConfirmedCount] = useState(rideCount);
+  const reducedMotion = useReducedGameMotion();
+
+  useEffect(() => {
+    let current = true;
+    setConfirmedCount(rideCount);
+    setLoadingCount(rideCount == null);
+    if (rideCount == null) {
+      void getPlayerRides({ ride_id: ride.ride_id, per_page: 1 }).then(result => {
+        if (current) setConfirmedCount(result.meta.total);
+      }).catch(() => undefined).finally(() => { if (current) setLoadingCount(false); });
+    }
+    return () => { current = false; };
+  }, [ride.ride_id, rideCount]);
 
   const handleShare = useCallback(async () => {
+    if (busy.current || loadingCount) return;
+    busy.current = true;
+    setSharing(true);
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      const uri = await viewShotRef.current?.capture?.();
-      if (!uri) return;
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
 
       const isAvailable = await Sharing.isAvailableAsync();
-      if (isAvailable) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
-          dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark! 🦈`,
-        });
-        onShare?.();
+      if (!isAvailable) {
+        Alert.alert('Sharing unavailable', 'This device cannot open a share sheet right now.');
+        return;
       }
-    } catch (e) {
-      console.error('Share failed:', e);
+
+      const uri = await viewShotRef.current?.capture?.();
+      if (!uri) throw new Error('Card capture unavailable');
+
+      await Sharing.shareAsync(uri, {
+        mimeType: 'image/png',
+        dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark! 🦈`,
+      });
+      onShare?.();
+    } catch {
+      Alert.alert('Could not make your card', 'Your ride is saved. Try sharing it again.');
+    } finally {
+      busy.current = false;
+      setSharing(false);
     }
-  }, [ride, onShare]);
+  }, [ride, onShare, loadingCount]);
 
   return (
     <View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Share Ride Card"
+        accessibilityState={{ disabled: sharing || loadingCount, busy: sharing || loadingCount }}
+        disabled={sharing || loadingCount}
         onPress={handleShare}
-        style={({ pressed }) => [cardStyles.shareBtn, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
+        style={({ pressed }) => [cardStyles.shareBtn, pressed && { opacity: 0.85,
+          transform: [{ scale: reducedMotion ? 1 : 0.97 }] }]}
       >
-        <Text style={cardStyles.shareBtnText}>Share Ride Card</Text>
+        <Text style={cardStyles.shareBtnText}>{sharing ? 'Making your card…'
+          : loadingCount ? 'Loading your ride total…' : 'Share Ride Card'}</Text>
       </Pressable>
       <ViewShot
         ref={viewShotRef}
         options={{ format: 'png', quality: 1, result: 'tmpfile' }}
         style={cardStyles.shotContainer}
       >
-        <CardContent ride={ride} rideCount={rideCount} />
+        <CardContent ride={ride} rideCount={confirmedCount} />
       </ViewShot>
     </View>
   );
@@ -198,7 +230,6 @@ const cardStyles = StyleSheet.create({
   detailsPanel: { backgroundColor: '#F3FBFF', borderRadius: 14, padding: 13,
     borderWidth: 1, borderColor: '#B8E5F8' },
   reactionRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
-  reactionEmoji: { fontSize: 20 },
   reactionLabel: { color: '#0B4B83', fontSize: 14, fontWeight: '800' },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   stat: { flex: 1 },

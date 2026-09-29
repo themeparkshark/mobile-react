@@ -4,7 +4,7 @@ import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { AuthContext } from '../context/AuthProvider';
 import ParkDayShareCard, { SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from '../components/ParkDayShareCard';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import * as RootNavigation from '../RootNavigation';
 
@@ -24,20 +24,29 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   const [retry, setRetry] = useState(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [artworkReady, setArtworkReady] = useState(false);
+  const shareBusy = useRef(false);
   const shareRef = useRef<View>(null);
   const { player } = useContext(AuthContext);
 
   // Capture the off-screen Story card at 1080x1920 and hand it to the share
   // sheet (Instagram Stories, Messages, save to Photos).
   const shareDay = async () => {
-    if (sharing || !shareRef.current) return;
+    if (shareBusy.current || !shareRef.current || !artworkReady) return;
+    shareBusy.current = true;
     setSharing(true);
     try {
+      if (!await Sharing.isAvailableAsync()) {
+        Alert.alert('Sharing unavailable', 'This device cannot open a share sheet right now.');
+        return;
+      }
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, width: 1080, height: 1920 });
       await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your park day' });
     } catch {
-      // Share sheet dismissed or capture unavailable; nothing to undo.
+      Alert.alert('Could not make your park card', 'Your game moments are saved. Try sharing again.');
     } finally {
+      shareBusy.current = false;
       setSharing(false);
     }
   };
@@ -45,6 +54,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   useFocusEffect(useCallback(() => {
     let current = true;
     setRecap(null);
+    setArtworkReady(false);
     setError(false);
     void loadRecap(parkId, selectedDay ?? undefined).then(result => {
       if (current) setRecap(result);
@@ -114,15 +124,16 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         })}</Text>
       </View>)}
       {recap.distinct_rides_won > 0 && <Pressable style={styles.shareButton} accessibilityRole="button"
-        accessibilityLabel="Share your park day as an image" onPress={() => void shareDay()} disabled={sharing}>
-        <Text style={styles.shareText}>{sharing ? 'Making your card…' : 'SHARE MY DAY'}</Text>
+        accessibilityLabel="Share your park day as an image" onPress={() => void shareDay()} disabled={sharing || !artworkReady}
+        accessibilityState={{ disabled: sharing || !artworkReady, busy: sharing || !artworkReady }}>
+        <Text style={styles.shareText}>{sharing ? 'Making your card…' : !artworkReady ? 'Preparing artwork…' : 'SHARE MY DAY'}</Text>
       </Pressable>}
       <Pressable style={styles.link} accessibilityRole="button" onPress={() => RootNavigation.navigate('CoinShelf')}>
         <Text style={styles.linkText}>See your Ride Coins →</Text>
       </Pressable>
-      {recap.distinct_rides_won > 0 && <View style={styles.offscreen} pointerEvents="none">
+      {recap.distinct_rides_won > 0 && <View style={styles.offscreen} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <ParkDayShareCard ref={shareRef} recap={recap} sharkName={player?.username}
-          avatarUrl={player?.avatar_url} />
+          avatarUrl={player?.avatar_url} onReadyChange={setArtworkReady} />
       </View>}
     </> : <Text style={styles.copy}>
       {atPark ? "Your first ride challenge will start this day's story. LinePlay and coin upgrades add more moments."
@@ -135,7 +146,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     {selectedDay && <Pressable style={styles.link} accessibilityRole="button" onPress={() => showEarlier(null)}>
       <Text style={styles.linkText}>Back to today →</Text>
     </Pressable>}
-    <Text style={styles.note}>Rewards and queue time are verified. Your chosen story is a personal souvenir, not a record of every ride you rode.</Text>
+    <Text style={styles.note}>Your game wins and verified queue time form this story. Ride memories live in your ride journal.</Text>
   </View>;
 }
 
@@ -159,7 +170,7 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center' },
   statValue: { color: '#0b5598', fontFamily: 'Shark', fontSize: 23 },
   statLabel: { color: '#285c83', fontFamily: 'Knockout', fontSize: 11 },
-  copy: { color: '#153e67', fontSize: 14, lineHeight: 21, marginTop: 6 },
+  copy: { color: '#153e67', fontFamily: 'Knockout', fontSize: 15, lineHeight: 21, marginTop: 8 },
   action: { alignSelf: 'flex-start', backgroundColor: '#ffca30', borderWidth: 2,
     borderColor: '#fff', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 10 },
   actionText: { color: '#093d77', fontFamily: 'Knockout', fontSize: 18 },
@@ -169,12 +180,12 @@ const styles = StyleSheet.create({
     borderRadius: 13, alignItems: 'center', marginTop: 9 },
   storyShark: { width: 46, height: 58 },
   momentCopy: { flex: 1 },
-  momentTitle: { color: '#153e67', fontSize: 13 },
+  momentTitle: { color: '#153e67', fontFamily: 'Knockout', fontSize: 14 },
   storyKicker: { color: '#9b6600', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.6 },
   storyTitle: { color: '#075b9b', fontFamily: 'Shark', fontSize: 16, marginTop: 2 },
-  storyRoute: { color: '#376888', fontSize: 12, marginTop: 1, marginBottom: 4 },
-  momentTime: { color: '#427a9d', fontSize: 12 },
+  storyRoute: { color: '#376888', fontFamily: 'Knockout', fontSize: 13, marginTop: 1, marginBottom: 4 },
+  momentTime: { color: '#427a9d', fontFamily: 'Knockout', fontSize: 12 },
   link: { alignSelf: 'flex-start', paddingVertical: 8 },
   linkText: { color: '#005da4', fontFamily: 'Knockout', fontSize: 16 },
-  note: { color: '#376888', fontSize: 11, lineHeight: 16, marginTop: 5 },
+  note: { color: '#376888', fontFamily: 'Knockout', fontSize: 12, lineHeight: 16, marginTop: 8 },
 });

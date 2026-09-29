@@ -11,6 +11,8 @@ interface Props {
   readonly ridePassportCollected?: number;
   readonly ridePassportAvailable?: number;
   readonly onOpenRidePassport?: () => void;
+  readonly onBrowseCoins?: () => void;
+  readonly onBrowseSecrets?: () => void;
   readonly onOpenStampBook?: () => void;
   readonly nextRideName?: string | null;
   readonly nextRideOwned?: boolean;
@@ -29,7 +31,7 @@ interface Props {
 
 /** The park checklist's first-screen collection goal, using the app's shark art. */
 export default function ParkCollectionHeader({ parkName, isOwnPark = true, collected, available, completionRate,
-  ridePassportCollected, ridePassportAvailable, onOpenRidePassport, onOpenStampBook,
+  ridePassportCollected, ridePassportAvailable, onOpenRidePassport, onBrowseCoins, onBrowseSecrets, onOpenStampBook,
   nextRideName, nextRideOwned, ownedGoalHint, nearbyRideName, ticketsNeeded = 0,
   rescuePassAvailable = false, goalStale = false,
   goalReportedDown = false, alternateRideName, nearbyReportedOpen = false,
@@ -41,19 +43,21 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
     <LinearGradient colors={['#0789de', '#0569b4', '#063f82']} style={styles.hero}>
       <View style={styles.topline}>
         <Text style={styles.eyebrow}>THE PARK COLLECTION</Text>
-        <Text style={styles.parkName} numberOfLines={1}>{parkName.toUpperCase()}</Text>
+        <Text style={styles.parkName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{parkName.toUpperCase()}</Text>
       </View>
       <Image source={require('../../assets/images/screens/pin-collections/shark.png')}
         contentFit="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
-      <View style={styles.countRow}>
+      <Pressable style={styles.countRow} onPress={onBrowseCoins} disabled={!onBrowseCoins}
+        accessibilityRole={onBrowseCoins ? 'button' : undefined}
+        accessibilityLabel={`${collected} of ${available} collectible coins${onBrowseCoins ? '. View coin shelf.' : ''}`}>
         <Text style={styles.count}>{available > 0 ? `${collected}/${available}` : 'NEW'}</Text>
         <View style={styles.countCopy}>
         <Text style={styles.countLabel}>COLLECTIBLE COINS</Text>
           <Text style={styles.countHint}>{available > 0
-            ? `${Math.round(rate)}% of the current collection`
+            ? onBrowseCoins ? 'Tap to view the coin shelf  ›' : `${Math.round(rate)}% of the current collection`
             : 'Coin designs are coming to this park'}</Text>
         </View>
-      </View>
+      </Pressable>
       <View style={styles.track} accessibilityLabel={`${Math.round(rate)} percent of collectible coins found`}>
         <View style={[styles.fill, { width: `${rate}%` }]} />
       </View>
@@ -124,7 +128,11 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         <Text style={styles.statDot}>✦</Text>
         <Text style={styles.stat}><Text style={styles.statValue}>{taskMilestones}</Text> TASKS</Text>
         <Text style={styles.statDot}>✦</Text>
-        <Text style={styles.stat}><Text style={styles.statValue}>{secretMilestones}</Text> SECRETS</Text>
+        <Pressable onPress={onBrowseSecrets} disabled={!onBrowseSecrets}
+          accessibilityRole={onBrowseSecrets ? 'button' : undefined}
+          accessibilityLabel={`${secretMilestones} secrets found${onBrowseSecrets ? '. View secret coin shelf.' : ''}`} hitSlop={8}>
+          <Text style={styles.stat}><Text style={styles.statValue}>{secretMilestones}</Text> SECRETS{onBrowseSecrets ? '  ›' : ''}</Text>
+        </Pressable>
       </View>
     </View>
   </View>;
@@ -137,14 +145,14 @@ const styles = StyleSheet.create({
   hero: { minHeight: 190, padding: 16, overflow: 'hidden' },
   topline: { zIndex: 1, maxWidth: '67%' },
   eyebrow: { fontFamily: 'Knockout', color: '#c7edff', fontSize: 13, letterSpacing: 1.3 },
-  parkName: { fontFamily: 'Shark', color: '#fff', fontSize: 23, marginTop: 1,
+  parkName: { fontFamily: 'Shark', color: '#fff', fontSize: 21, marginTop: 3,
     textShadowColor: '#07376b', textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1 },
-  shark: { position: 'absolute', right: -8, top: -5, width: 155, height: 155 },
-  countRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 17, zIndex: 1 },
+  shark: { position: 'absolute', right: 4, top: 12, width: 120, height: 120 },
+  countRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 23, zIndex: 1 },
   count: { fontFamily: 'Shark', fontSize: 38, color: '#ffcf34',
     textShadowColor: '#07376b', textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1 },
-  countCopy: { justifyContent: 'center' },
-  countLabel: { fontFamily: 'Knockout', color: '#fff', fontSize: 18 },
+  countCopy: { flex: 1, justifyContent: 'center' },
+  countLabel: { fontFamily: 'Knockout', color: '#fff', fontSize: 16 },
   countHint: { fontFamily: 'Knockout', color: '#c7ebff', fontSize: 13 },
   track: { height: 12, backgroundColor: '#d4eefe', borderWidth: 2, borderColor: '#fff',
     borderRadius: 7, overflow: 'hidden', marginTop: 12, marginRight: 52 },

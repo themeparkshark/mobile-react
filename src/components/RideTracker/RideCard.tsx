@@ -4,7 +4,8 @@ import * as Haptics from 'expo-haptics';
 import { PlayerRideType } from '../../api/endpoints/player-rides';
 import SharkRating from './SharkRating';
 import RideTypeIcon from './RideTypeIcon';
-import { colors } from '../../design-system';
+import SharkReactionIcon from './SharkReactionIcon';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 interface RideCardProps {
   ride: PlayerRideType;
@@ -16,13 +17,17 @@ const RideCard: React.FC<RideCardProps> = React.memo(({ ride, onPress, onShare }
   const date = new Date(ride.rode_at);
   const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const reducedMotion = useReducedGameMotion();
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+    <Pressable onPress={onPress} accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={onPress ? `${ride.ride_name}. ${dateStr}. Open ride details.` : undefined}
+      style={({ pressed }) => [styles.card, pressed && { opacity: 0.9,
+        transform: [{ scale: reducedMotion ? 1 : 0.98 }] }]}>
       <View style={styles.header}>
         <View style={styles.typeRow}>
-          <RideTypeIcon type={ride.ride_type} size={18} />
-          <Text style={styles.rideName} numberOfLines={1}>{ride.ride_name}</Text>
+          <RideTypeIcon type={ride.ride_type} size={26} />
+          <Text style={styles.rideName} numberOfLines={2}>{ride.ride_name}</Text>
         </View>
         <View style={styles.headerRight}>
           {onShare && (
@@ -33,12 +38,13 @@ const RideCard: React.FC<RideCardProps> = React.memo(({ ride, onPress, onShare }
                 onShare(ride);
               }}
               hitSlop={8}
+              accessibilityRole="button" accessibilityLabel={`Share your ${ride.ride_name} memory`}
               style={styles.shareIcon}
             >
-              <Text style={{ fontSize: 16 }}>📤</Text>
+              <Text style={{ fontFamily: 'Knockout', color: '#174D76', fontSize: 13 }}>SHARE</Text>
             </Pressable>
           )}
-          {ride.reaction && <Text style={styles.reaction}>{ride.reaction}</Text>}
+          {ride.reaction && <SharkReactionIcon reaction={ride.reaction} size={32} />}
         </View>
       </View>
 
@@ -65,16 +71,12 @@ RideCard.displayName = 'RideCard';
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.bgMedium,
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  pressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
+    borderColor: '#C8E3F5',
   },
   header: {
     flexDirection: 'row',
@@ -94,21 +96,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   shareIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    minWidth: 44,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#E5F4FC',
     alignItems: 'center',
     justifyContent: 'center',
   },
   rideName: {
     fontSize: 16,
-    fontWeight: '700',
-    color: colors.textPrimary,
+    fontFamily: 'Shark',
+    color: '#174D76',
     flex: 1,
-  },
-  reaction: {
-    fontSize: 22,
   },
   body: {
     flexDirection: 'row',
@@ -120,16 +119,18 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 12,
-    color: colors.textSecondary,
+    fontFamily: 'Knockout',
+    color: '#46617A',
   },
   waitText: {
     fontSize: 11,
-    color: colors.tertiary,
+    fontFamily: 'Knockout',
+    color: '#745012',
     marginTop: 2,
   },
   note: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: '#46617A',
     fontStyle: 'italic',
     marginTop: 8,
   },

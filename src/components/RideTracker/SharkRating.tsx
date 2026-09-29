@@ -1,6 +1,7 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Animated, Pressable, View, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 interface SharkRatingProps {
   rating: number;
@@ -14,14 +15,31 @@ const SharkRating: React.FC<SharkRatingProps> = React.memo(({ rating, onRate, si
   const translateYs = useRef([1, 2, 3, 4, 5].map(() => new Animated.Value(0))).current;
   const splashOpacities = useRef([1, 2, 3, 4, 5].map(() => new Animated.Value(0))).current;
   const splashScales = useRef([1, 2, 3, 4, 5].map(() => new Animated.Value(0))).current;
+  const animations = useRef(new Set<Animated.CompositeAnimation>()).current;
+  const reducedMotion = useReducedGameMotion();
+  useEffect(() => {
+    if (reducedMotion) {
+      animations.forEach(animation => animation.stop()); animations.clear();
+      scales.forEach(value => value.setValue(1));
+      translateYs.forEach(value => value.setValue(0));
+      splashOpacities.forEach(value => value.setValue(0));
+    }
+    return () => { animations.forEach(animation => animation.stop()); animations.clear(); };
+  }, [reducedMotion, animations, scales, translateYs, splashOpacities]);
 
   const handlePress = useCallback((index: number) => {
     if (readonly) return;
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    onRate?.(index + 1);
+    if (reducedMotion) return;
+    const start = (animation: Animated.CompositeAnimation) => {
+      animations.add(animation);
+      animation.start(() => animations.delete(animation));
+    };
 
     // Jump animation for selected shark
-    Animated.sequence([
+    start(Animated.sequence([
       Animated.parallel([
         Animated.timing(translateYs[index], { toValue: -12, duration: 120, useNativeDriver: true }),
         Animated.timing(scales[index], { toValue: 1.4, duration: 120, useNativeDriver: true }),
@@ -30,30 +48,28 @@ const SharkRating: React.FC<SharkRatingProps> = React.memo(({ rating, onRate, si
         Animated.spring(translateYs[index], { toValue: 0, tension: 100, friction: 5, useNativeDriver: true }),
         Animated.spring(scales[index], { toValue: 1, tension: 100, friction: 5, useNativeDriver: true }),
       ]),
-    ]).start();
+    ]));
 
     // Splash effect
     splashOpacities[index].setValue(1);
     splashScales[index].setValue(0.3);
-    Animated.parallel([
+    start(Animated.parallel([
       Animated.timing(splashOpacities[index], { toValue: 0, duration: 400, useNativeDriver: true }),
       Animated.spring(splashScales[index], { toValue: 1.5, tension: 40, friction: 6, useNativeDriver: true }),
-    ]).start();
+    ]));
 
     // Cascade animation for sharks up to selected
     for (let i = 0; i <= index; i++) {
       if (i !== index) {
-        setTimeout(() => {
-          Animated.sequence([
+          start(Animated.sequence([
+            Animated.delay(i * 40),
             Animated.timing(translateYs[i], { toValue: -6, duration: 80, useNativeDriver: true }),
             Animated.spring(translateYs[i], { toValue: 0, tension: 120, friction: 6, useNativeDriver: true }),
-          ]).start();
-        }, i * 40);
+          ]));
       }
     }
 
-    onRate?.(index + 1);
-  }, [readonly, onRate, scales, translateYs, splashOpacities, splashScales]);
+  }, [readonly, onRate, scales, translateYs, splashOpacities, splashScales, reducedMotion, animations]);
 
   return (
     <View style={styles.container}>

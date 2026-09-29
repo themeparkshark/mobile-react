@@ -1,5 +1,5 @@
-import { Image } from 'expo-image';
-import { forwardRef } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
+import ShareCardArtwork from './ShareCardArtwork';
 import { StyleSheet, Text, View } from 'react-native';
 import type { ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 
@@ -14,28 +14,39 @@ const ParkDayShareCard = forwardRef<View, {
   readonly recap: ParkDayRecap;
   readonly sharkName?: string | null;
   readonly avatarUrl?: string | null;
-}>(function ParkDayShareCard({ recap, sharkName, avatarUrl }, ref) {
+  readonly onReadyChange?: (ready: boolean) => void;
+}>(function ParkDayShareCard({ recap, sharkName, avatarUrl, onReadyChange }, ref) {
   const coins = recap.coins ?? [];
   const shown = coins.slice(0, 12);
   const extra = coins.length - shown.length;
+  const [loadedArtwork, setLoadedArtwork] = useState<ReadonlySet<string>>(() => new Set());
+  const requiredArtwork = useMemo(() => [
+    'background', 'logo', `avatar:${avatarUrl ?? 'default'}`,
+    ...coins.slice(0, 12).map(coin => `coin:${coin.coin_url ?? 'default'}`),
+  ], [avatarUrl, coins]);
+  const markReady = useCallback((key: string) => setLoadedArtwork(previous =>
+    previous.has(key) ? previous : new Set([...previous, key])), []);
+  const ready = requiredArtwork.every(key => loadedArtwork.has(key));
+  useEffect(() => { onReadyChange?.(ready); }, [ready, onReadyChange]);
   const date = new Date(`${recap.park_day}T12:00:00`).toLocaleDateString('en-US',
     { weekday: 'long', month: 'long', day: 'numeric' });
   const coinSize = shown.length <= 4 ? 72 : shown.length <= 9 ? 58 : 50;
 
   return (
     <View ref={ref} collapsable={false} style={styles.card}>
-      <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <ShareCardArtwork artworkKey="background" onReady={markReady} source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, styles.tint]} />
 
-      <Image source={require('../../assets/images/screens/login/logo.png')} style={styles.logo} contentFit="contain" />
+      <ShareCardArtwork artworkKey="logo" onReady={markReady} source={require('../../assets/images/screens/login/logo.png')} style={styles.logo} contentFit="contain" />
 
       <View style={styles.who}>
         {avatarUrl
-          ? <Image source={{ uri: avatarUrl }} style={styles.avatar} contentFit="cover" />
-          : <Image source={require('../../assets/images/screens/welcome/shark.png')} style={styles.avatar} contentFit="contain" />}
+          ? <ShareCardArtwork key={avatarUrl} artworkKey={`avatar:${avatarUrl}`} onReady={markReady}
+            fallback={require('../../assets/images/screens/welcome/shark.png')} source={{ uri: avatarUrl }} style={styles.avatar} contentFit="cover" />
+          : <ShareCardArtwork artworkKey="avatar:default" onReady={markReady} source={require('../../assets/images/screens/welcome/shark.png')} style={styles.avatar} contentFit="contain" />}
         <View style={{ flex: 1 }}>
-          {!!sharkName && <Text style={styles.name} numberOfLines={1}>{sharkName}</Text>}
-          <Text style={styles.park} numberOfLines={1}>{recap.park_name}</Text>
+          {!!sharkName && <Text style={styles.name} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{sharkName}</Text>}
+          <Text style={styles.park} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{recap.park_name}</Text>
           <Text style={styles.date}>{date}</Text>
         </View>
       </View>
@@ -47,8 +58,9 @@ const ParkDayShareCard = forwardRef<View, {
           {shown.map(coin => (
             <View key={coin.asset_id} style={{ alignItems: 'center' }}>
               {coin.coin_url
-                ? <Image source={{ uri: coin.coin_url }} style={{ width: coinSize, height: coinSize }} contentFit="contain" />
-                : <Image source={require('../../assets/images/coingold.png')} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
+                ? <ShareCardArtwork key={coin.coin_url} artworkKey={`coin:${coin.coin_url}`} onReady={markReady}
+                    fallback={require('../../assets/images/coingold.png')} source={{ uri: coin.coin_url }} style={{ width: coinSize, height: coinSize }} contentFit="contain" />
+                : <ShareCardArtwork artworkKey="coin:default" onReady={markReady} source={require('../../assets/images/coingold.png')} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
               {coin.new && <Text style={styles.newTag}>NEW</Text>}
             </View>
           ))}
@@ -59,7 +71,7 @@ const ParkDayShareCard = forwardRef<View, {
       </View>
 
       <View style={styles.stats}>
-        <Stat value={recap.eligible_line_minutes} label="min in line" />
+        <Stat value={recap.eligible_line_minutes} label="verified min" />
         <Stat value={recap.ride_parts_earned} label="Ride Parts" />
         <Stat value={recap.coin_upgrades} label="upgrades" />
       </View>

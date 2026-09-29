@@ -1,5 +1,4 @@
-import { Image } from 'expo-image';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import config from '../config';
@@ -8,39 +7,47 @@ import {
   SoundEffectContext,
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
+import ProfileStatIcon from './ProfileStatIcon';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 function AnimatedStat({
   label,
   value,
-  icon,
-  emoji,
+  iconIndex,
   delay,
 }: {
   label: string;
   value: number;
-  icon?: any;
-  emoji?: string;
+  iconIndex: number;
   delay: number;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const animValue = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const iconBounce = useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedGameMotion();
 
   useEffect(() => {
+    if (reducedMotion) {
+      animValue.setValue(1);
+      scaleAnim.setValue(1);
+      iconBounce.setValue(0);
+      return;
+    }
     Animated.timing(animValue, {
       toValue: 1,
       duration: 500,
       delay,
       useNativeDriver: true,
     }).start();
-  }, []);
+    return () => { animValue.stopAnimation(); scaleAnim.stopAnimation(); iconBounce.stopAnimation(); };
+  }, [animValue, scaleAnim, iconBounce, delay, reducedMotion]);
 
   // Number counter effect
-  const [displayNum, setDisplayNum] = useState(0);
+  const [displayNum, setDisplayNum] = useState(value);
   useEffect(() => {
     const target = value;
-    if (target === 0) return;
+    if (target === 0 || reducedMotion) { setDisplayNum(target); return; }
     const duration = 800;
     const startTime = Date.now() + delay;
     const interval = setInterval(() => {
@@ -52,21 +59,23 @@ function AnimatedStat({
       if (progress >= 1) clearInterval(interval);
     }, 16);
     return () => clearInterval(interval);
-  }, [value]);
+  }, [value, delay, reducedMotion]);
 
-  const scale = animValue.interpolate({
+  const scale = useMemo(() => animValue.interpolate({
     inputRange: [0, 1],
     outputRange: [0.8, 1],
-  });
+  }), [animValue]);
+  const cardScale = useMemo(() => Animated.multiply(scale, scaleAnim), [scale, scaleAnim]);
 
   const handlePress = () => {
     playSound(require('../../assets/sounds/button_press.mp3'));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (reducedMotion) return;
 
-    // Squish the whole card
+    // Keep the card's surface stable while its contents respond to the tap.
     Animated.sequence([
       Animated.timing(scaleAnim, {
-        toValue: 0.88,
+        toValue: 0.94,
         duration: 70,
         useNativeDriver: true,
       }),
@@ -95,35 +104,30 @@ function AnimatedStat({
   };
 
   return (
-    <Pressable onPress={handlePress} style={{ flex: 1 }}>
-      <Animated.View
+    <Pressable onPress={handlePress} accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value.toLocaleString()}`} style={{ flex: 1 }}>
+      <View
         style={{
           flex: 1,
           backgroundColor: 'rgba(255,255,255,0.95)',
           borderRadius: 14,
+          borderWidth: 1,
+          borderColor: '#D5E8F5',
           padding: 12,
           alignItems: 'center',
           justifyContent: 'center',
           minHeight: 90,
-          shadowColor: '#000',
+          shadowColor: '#174D76',
           shadowOffset: { width: 0, height: 2 },
           shadowOpacity: 0.08,
           shadowRadius: 8,
           elevation: 3,
-          opacity: animValue,
-          transform: [{ scale: Animated.multiply(scale, scaleAnim) }],
         }}
       >
-        <Animated.View style={{ transform: [{ translateY: iconBounce }] }}>
-          {icon ? (
-            <Image
-              source={icon}
-              style={{ width: 28, height: 28, marginBottom: 6 }}
-              contentFit="contain"
-            />
-          ) : (
-            <Text style={{ fontSize: 24, marginBottom: 4 }}>{emoji}</Text>
-          )}
+        <Animated.View style={{ alignItems: 'center', opacity: animValue,
+          transform: [{ scale: cardScale }] }}>
+        <Animated.View style={{ marginBottom: 6, transform: [{ translateY: iconBounce }] }}>
+          <ProfileStatIcon index={iconIndex} />
         </Animated.View>
         <Text
           style={{
@@ -141,7 +145,7 @@ function AnimatedStat({
           style={{
             fontFamily: 'Knockout',
             fontSize: 11,
-            color: '#64748b',
+            color: '#46617A',
             textTransform: 'uppercase',
             textAlign: 'center',
             marginTop: 2,
@@ -149,7 +153,8 @@ function AnimatedStat({
         >
           {label}
         </Text>
-      </Animated.View>
+        </Animated.View>
+      </View>
     </Pressable>
   );
 }
@@ -159,32 +164,32 @@ export default function Stats({ player }: { readonly player: PlayerType }) {
     {
       label: 'Keys',
       value: player.keys,
-      emoji: '🔑',
+      iconIndex: 0,
     },
     {
       label: 'Park Coins',
       value: player.park_coins_count,
-      icon: require('../../assets/images/screens/community-center-coin.png'),
+      iconIndex: 1,
     },
     {
       label: 'Parks',
       value: player.visited_parks_count,
-      emoji: '🏰',
+      iconIndex: 2,
     },
     {
       label: 'Shark Coins',
       value: player.coins,
-      icon: require('../../assets/images/coingold.png'),
+      iconIndex: 3,
     },
     {
       label: 'Tasks Done',
       value: player.completed_tasks_count,
-      emoji: '✅',
+      iconIndex: 4,
     },
     {
       label: 'Total XP',
       value: player.total_experience,
-      icon: require('../../assets/images/screens/explore/xp.png'),
+      iconIndex: 5,
     },
   ];
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides';
 import { getWishlist, WishlistRide } from '../../api/endpoints/rides/wishlist';
@@ -18,6 +18,8 @@ import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
 import { colors } from '../../design-system';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { Modal } from 'react-native';
+import { Image } from 'expo-image';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 // ─── Short park names for filter chips ───
 const SHORT_PARK_NAMES: Record<number, string> = {
@@ -50,7 +52,8 @@ interface TabPillProps {
   onPress: () => void;
 }
 const TabPill: React.FC<TabPillProps> = React.memo(({ label, active, onPress }) => (
-  <Pressable onPress={onPress} style={[styles.tabPill, active && styles.tabPillActive]}>
+  <Pressable onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: active }}
+    style={[styles.tabPill, active && styles.tabPillActive]}>
     <Text style={[styles.tabPillText, active && styles.tabPillTextActive]}>{label}</Text>
   </Pressable>
 ));
@@ -63,7 +66,8 @@ interface FilterChipProps {
   onPress: () => void;
 }
 const FilterChip: React.FC<FilterChipProps> = React.memo(({ label, selected, onPress }) => (
-  <Pressable onPress={onPress} style={[styles.filterChip, selected && styles.filterChipSelected]}>
+  <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }}
+    style={[styles.filterChip, selected && styles.filterChipSelected]}>
     <Text style={[styles.filterChipText, selected && styles.filterChipTextSelected]}>{label}</Text>
   </Pressable>
 ));
@@ -86,6 +90,10 @@ export default function RideHistoryScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [shareRide, setShareRide] = useState<PlayerRideType | null>(null);
   const [wishlistIds, setWishlistIds] = useState<Set<number>>(new Set());
+  const [loadUnavailable, setLoadUnavailable] = useState(false);
+  const loadSequence = useRef(0);
+  const pageInFlight = useRef(false);
+  const reducedMotion = useReducedGameMotion();
 
   // Fetch wishlist ride IDs
   useEffect(() => {
@@ -95,19 +103,23 @@ export default function RideHistoryScreen() {
   }, []);
 
   const fetchRides = useCallback(async (pageNum: number, parkId: number | null, append = false) => {
+    const sequence = append ? loadSequence.current : ++loadSequence.current;
     try {
       const params: any = { page: pageNum, per_page: 20 };
       if (parkId && parkId !== FAVORITES_FILTER_ID) params.park_id = parkId;
       const result = await getPlayerRides(params);
+      if (sequence !== loadSequence.current) return;
 
       if (append) {
-        setAllRides(prev => [...prev, ...result.data]);
+        setAllRides(prev => Array.from(new Map([...prev, ...result.data].map(ride => [ride.id, ride])).values()));
       } else {
         setAllRides(result.data);
       }
       setHasMore(result.meta.current_page < result.meta.last_page);
-    } catch (e) {
-      console.error('Failed to fetch rides:', e);
+      setPage(pageNum);
+      setLoadUnavailable(false);
+    } catch {
+      if (sequence === loadSequence.current) setLoadUnavailable(true);
     }
   }, []);
 
@@ -123,27 +135,40 @@ export default function RideHistoryScreen() {
     setRides(filtered);
   }, [allRides, timeTab, wishlistIds, selectedPark]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     setLoading(true);
     setPage(1);
-    fetchRides(1, selectedPark).finally(() => setLoading(false));
-  }, [selectedPark, fetchRides]);
+    setAllRides([]);
+    setLoadUnavailable(false);
+    setRefreshing(false);
+    pageInFlight.current = false;
+    setLoadingMore(false);
+    const pending = fetchRides(1, selectedPark);
+    const sequence = loadSequence.current;
+    void pending.finally(() => { if (sequence === loadSequence.current) setLoading(false); });
+    return () => { loadSequence.current++; };
+  }, [selectedPark, fetchRides]));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setPage(1);
+    pageInFlight.current = false;
+    setLoadingMore(false);
     await fetchRides(1, selectedPark);
     setRefreshing(false);
   }, [selectedPark, fetchRides]);
 
-  const onEndReached = useCallback(async () => {
-    if (!hasMore || loadingMore || timeTab === 'today') return;
+  const onEndReached = useCallback(async (retry = false) => {
+    if (!hasMore || pageInFlight.current || loading || refreshing || (loadUnavailable && !retry)) return;
+    pageInFlight.current = true;
     setLoadingMore(true);
     const nextPage = page + 1;
-    setPage(nextPage);
+    const sequence = loadSequence.current;
     await fetchRides(nextPage, selectedPark, true);
-    setLoadingMore(false);
-  }, [hasMore, loadingMore, page, selectedPark, fetchRides, timeTab]);
+    if (sequence === loadSequence.current) {
+      pageInFlight.current = false;
+      setLoadingMore(false);
+    }
+  }, [hasMore, loading, refreshing, loadUnavailable, page, selectedPark, fetchRides]);
 
   const handleRidePress = useCallback((ride: PlayerRideType) => {
     navigation.navigate('RideDetail', { rideId: ride.ride_id, rideName: ride.ride_name });
@@ -160,7 +185,8 @@ export default function RideHistoryScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}
+          accessibilityRole="button" accessibilityLabel="Return to Ride Tracker">
           <Text style={styles.backChevron}>‹</Text>
         </Pressable>
         <Text style={styles.title}>RIDE HISTORY</Text>
@@ -192,19 +218,36 @@ export default function RideHistoryScreen() {
 
       {loading ? (
         <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 60 }} />
+      ) : loadUnavailable && rides.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
+            style={{ width: 110, height: 110 }} contentFit="contain" />
+          <Text style={styles.emptyTitle}>Your journal is taking a break</Text>
+          <Text style={styles.emptySubtitle}>Your saved memories are safe. Try loading them again.</Text>
+          <Pressable onPress={onRefresh} disabled={refreshing} style={styles.logBtn}
+            accessibilityRole="button" accessibilityState={{ disabled: refreshing, busy: refreshing }}>
+            <Text style={styles.logBtnText}>{refreshing ? 'Loading…' : 'Try Again'}</Text>
+          </Pressable>
+        </View>
       ) : rides.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>
-            {selectedPark === FAVORITES_FILTER_ID ? 'No favorite rides yet!' : timeTab === 'today' ? 'No rides today yet!' : 'No rides yet!'}
+            {selectedPark === FAVORITES_FILTER_ID ? hasMore ? 'Looking for your favorites' : 'No favorite memories here yet'
+              : timeTab === 'today' ? 'No rides today yet!' : 'No rides yet!'}
           </Text>
           <Text style={styles.emptySubtitle}>
-            {selectedPark === FAVORITES_FILTER_ID ? 'Star a ride to add it to favorites' : timeTab === 'today' ? 'Log a ride to see it here' : 'Head to a park and start tracking'}
+            {selectedPark === FAVORITES_FILTER_ID ? hasMore ? 'Check earlier memories for rides you have starred.' : 'Star a ride to add it to favorites'
+              : timeTab === 'today' ? 'Log a ride to see it here' : 'Add a favorite ride to start your journal'}
           </Text>
           <Pressable
-            onPress={() => navigation.navigate('RideLog')}
+            onPress={() => selectedPark === FAVORITES_FILTER_ID && hasMore
+              ? void onEndReached(true) : navigation.navigate('RideLog')}
             style={styles.logBtn}
+            disabled={loadingMore}
+            accessibilityRole="button"
           >
-            <Text style={styles.logBtnText}>Log a Ride</Text>
+            <Text style={styles.logBtnText}>{selectedPark === FAVORITES_FILTER_ID && hasMore
+              ? loadingMore ? 'Loading…' : 'Check Earlier Memories' : 'Log a Ride'}</Text>
           </Pressable>
         </View>
       ) : (
@@ -214,13 +257,16 @@ export default function RideHistoryScreen() {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
-          onEndReached={onEndReached}
+          onEndReached={() => void onEndReached()}
           onEndReachedThreshold={0.3}
-          ListFooterComponent={loadingMore ? <ActivityIndicator color="#0EA5E9" style={{ padding: 16 }} /> : null}
+          ListFooterComponent={loadingMore ? <ActivityIndicator color="#0EA5E9" style={{ padding: 16 }} />
+            : loadUnavailable ? <Pressable onPress={() => void onEndReached(true)} accessibilityRole="button"
+              style={styles.logBtn}><Text style={styles.logBtnText}>Retry Loading More</Text></Pressable> : null}
         />
       )}
       {/* Share Modal */}
-      <Modal visible={!!shareRide} animationType="slide" transparent>
+      <Modal visible={!!shareRide} animationType={reducedMotion ? 'fade' : 'slide'} transparent
+        onRequestClose={() => setShareRide(null)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShareRide(null)}>
           <Pressable style={styles.modalContent} onPress={() => {}}>
             {shareRide && (
@@ -268,7 +314,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  tabPillText: { color: '#475569', fontSize: 14, fontWeight: '700' },
+  tabPillText: { color: '#315C7C', fontSize: 14, fontFamily: 'Knockout' },
   tabPillTextActive: { color: '#FFFFFF' },
   header: {
     flexDirection: 'row',

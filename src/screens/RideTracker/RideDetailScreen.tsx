@@ -14,6 +14,7 @@ import { getCommunityStats, CommunityStats } from '../../api/endpoints/rides/com
 import { toggleWishlist, getWishlist } from '../../api/endpoints/rides/wishlist';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
+import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { Modal } from 'react-native';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 
@@ -75,9 +76,10 @@ const HistoryEntry: React.FC<{ entry: PlayerRideType; onShare?: (e: PlayerRideTy
         {entry.note ? <Text style={s.entryNote}>"{entry.note}"</Text> : null}
       </View>
       <View style={s.entryRight}>
-        {entry.reaction ? <Text style={s.entryReaction}>{entry.reaction}</Text> : null}
+        {entry.reaction ? <SharkReactionIcon reaction={entry.reaction} size={30} /> : null}
         {onShare && (
-          <Pressable onPress={() => onShare(entry)} hitSlop={8} style={s.entryShareBtn}>
+          <Pressable onPress={() => onShare(entry)} hitSlop={8} style={s.entryShareBtn}
+            accessibilityRole="button" accessibilityLabel={`Share your ${entry.ride_name} memory`}>
             <Text style={s.entryShareIcon}>Share</Text>
           </Pressable>
         )}
@@ -103,6 +105,7 @@ export default function RideDetailScreen() {
 
   const [ride, setRide] = useState<RideType | null>(null);
   const [history, setHistory] = useState<PlayerRideType[]>([]);
+  const [totalRides, setTotalRides] = useState(0);
   const [community, setCommunity] = useState<CommunityStats | null>(null);
   const [wishlisted, setWishlisted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -122,6 +125,7 @@ export default function RideDetailScreen() {
       ]);
       setRide(rideData);
       setHistory(historyData.data);
+      setTotalRides(historyData.meta.total);
       if (communityData) setCommunity(communityData);
       try {
         const wishlist = await getWishlist();
@@ -166,7 +170,6 @@ export default function RideDetailScreen() {
     }
   }, [rideId, showToast]);
 
-  const totalRides = history.length;
   const avgRating = history.filter(h => h.rating).length > 0
     ? history.filter(h => h.rating).reduce((sum, h) => sum + (h.rating || 0), 0) / history.filter(h => h.rating).length
     : 0;
@@ -279,7 +282,10 @@ export default function RideDetailScreen() {
                   <View style={s.topReactions}>
                     <Text style={s.topReactionsLabel}>Top reactions:</Text>
                     {community.top_reactions.slice(0, 3).map(r => (
-                      <Text key={r.reaction} style={s.topReactionItem}>{r.reaction} {r.count}</Text>
+                      <View key={r.reaction} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <SharkReactionIcon reaction={r.reaction} size={24} />
+                        <Text style={s.topReactionItem}>{r.count}</Text>
+                      </View>
                     ))}
                   </View>
                 )}

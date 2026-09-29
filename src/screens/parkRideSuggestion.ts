@@ -34,7 +34,7 @@ export function nearbyUncollectedRide(
     const longitude = Number(task.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
       Math.abs(latitude) > 90 || Math.abs(longitude) > 180 ||
-      !task.latitude?.trim() || !task.longitude?.trim()) continue;
+      !String(task.latitude ?? '').trim() || !String(task.longitude ?? '').trim()) continue;
     const candidate = { task, distanceMeters: distanceMeters(location, { latitude, longitude }) };
     if (candidate.distanceMeters > MAX_SUGGESTION_DISTANCE_METERS) continue;
     if (!nearest || candidate.distanceMeters < nearest.distanceMeters ||

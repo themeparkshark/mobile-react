@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useEffect, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { vsprintf } from 'sprintf-js';
 import * as RootNavigation from '../RootNavigation';
@@ -6,6 +7,17 @@ import useCrumbs from '../hooks/useCrumbs';
 import { ParkType } from '../models/park-type';
 import { PlayerType } from '../models/player-type';
 import Progress from './Progress';
+import ProfileStatIcon from './ProfileStatIcon';
+
+function ParkArtwork({ uri }: { readonly uri?: string | null }) {
+  const [unavailable, setUnavailable] = useState(!uri);
+  useEffect(() => setUnavailable(!uri), [uri]);
+  return <View accessible={false} style={{ width: 100, height: 100, borderRadius: 20,
+    overflow: 'hidden', backgroundColor: '#E8F5FC', alignItems: 'center', justifyContent: 'center' }}>
+    {unavailable ? <ProfileStatIcon index={2} size={90} /> : <Image source={uri}
+      onError={() => setUnavailable(true)} style={{ width: 100, height: 100 }} contentFit="cover" />}
+  </View>;
+}
 
 export default function VisitedParks({
   parks,
@@ -41,6 +53,10 @@ export default function VisitedParks({
             return (
               <TouchableOpacity
                 key={park.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${park.name}. ${rideCoinProgress
+                  ? `${park.ride_coins_collected ?? 0} of ${park.ride_coins_available} ride coins`
+                  : `${park.completion_rate} percent complete`}. Open collection.`}
                 onPress={() => {
                   RootNavigation.navigate('Park', {
                     park: park.id,
@@ -53,19 +69,11 @@ export default function VisitedParks({
                   paddingBottom: 16,
                 }}
               >
-                <Image
-                  source={park.image_url}
-                  style={{
-                    width: 100,
-                    height: 100,
-                    borderRadius: 20,
-                  }}
-                  contentFit="cover"
-                />
+                <ParkArtwork uri={park.image_url} />
                 <View
                   style={{
                     flex: 1,
-                    paddingLeft: 24,
+                    paddingLeft: 16,
                   }}
                 >
                   <Text
@@ -74,6 +82,7 @@ export default function VisitedParks({
                       fontFamily: 'Knockout',
                       textTransform: 'uppercase',
                       fontSize: 16,
+                      color: '#174D76',
                     }}
                   >
                     {park.name}
@@ -85,6 +94,7 @@ export default function VisitedParks({
                       fontFamily: 'Knockout',
                       textTransform: 'uppercase',
                       fontSize: 16,
+                      color: '#46617A',
                     }}
                   >
                     {rideCoinProgress
@@ -92,6 +102,8 @@ export default function VisitedParks({
                       : vsprintf(labels.park_completion_rate || '%s%% complete', [park.completion_rate])}
                   </Text>
                 </View>
+                <Text accessible={false} style={{ color: '#174D76', fontFamily: 'Shark',
+                  fontSize: 24, marginLeft: 8 }}>›</Text>
               </TouchableOpacity>
             );
           })}

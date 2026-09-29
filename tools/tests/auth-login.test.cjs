@@ -65,6 +65,10 @@ function provider({ login, me, failCache = false, apiCheck } = {}) {
       async clearCache() { events.push(['clearAccountCache']); },
     },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
+    '../services/push': {
+      refreshPushRegistration: async () => undefined,
+      listenForPushTaps: () => () => undefined,
+    },
   });
   return { auth: exports.AuthProvider({ children: null }).props.value, events, client };
 }

@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
+import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
 
 export interface QueueArcadeChoice {
   readonly id: string;
@@ -28,7 +29,11 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
   readonly onClose: () => void;
   readonly onHidden: () => void;
 }) {
+  const reducedMotion = useReducedGameMotion();
   return <Modal isVisible={visible} style={styles.modal} hasBackdrop={false}
+    animationIn={reducedMotion ? 'fadeIn' : 'slideInUp'}
+    animationOut={reducedMotion ? 'fadeOut' : 'slideOutDown'}
+    animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
     onBackButtonPress={onClose} onModalHide={onHidden}>
     <View style={styles.scrim}>
       <Pressable accessibilityRole="button" accessibilityLabel="Close queue arcade"
@@ -39,7 +44,7 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
             style={styles.arcadeIcon} contentFit="contain" />
           <View style={styles.headerCopy}>
             <Text style={styles.kicker}>LINEPLAY</Text>
-            <Text style={styles.title}>QUEUE ARCADE</Text>
+            <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>QUEUE ARCADE</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Close queue arcade"
             onPress={onClose} style={styles.close}>
@@ -50,7 +55,9 @@ export default function QueueArcadeSheet({ visible, choices, onChoose, onClose, 
         <ScrollView contentContainerStyle={styles.games}>
           {choices.map(choice => <Pressable key={choice.id} accessibilityRole="button"
             accessibilityLabel={`${choice.completed ? 'Replay' : 'Play'} ${choice.title}`}
-            onPress={() => onChoose(choice.index)} style={styles.game}>
+            onPress={() => onChoose(choice.index)}
+            style={({ pressed }) => [styles.game, pressed && { backgroundColor: '#FFF3C7',
+              borderColor: '#E4B238', transform: [{ scale: reducedMotion ? 1 : 0.98 }] }]}>
             {!!choice.gameId && ICONS[choice.gameId] != null &&
               <Image source={ICONS[choice.gameId]} style={styles.gameIcon} contentFit="contain" />}
             <Text style={styles.gameTitle} numberOfLines={2}>{choice.title}</Text>

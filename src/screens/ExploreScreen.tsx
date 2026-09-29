@@ -1,4 +1,4 @@
-import { useFocusEffect, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
@@ -6,7 +6,8 @@ import React, { useCallback, useContext, useMemo, useRef, useState, useEffect, S
 import { Text, TouchableOpacity, View, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import Modal from 'react-native-modal';
 import { Marker } from '../components/map/Marker';
-import { useAsyncEffect } from 'rooks';
+import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
+import { opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
 import { TaskType } from '../models/task-type';
 import currencyBalance from '../helpers/currency-balance';
 import * as RootNavigation from '../RootNavigation';
@@ -91,6 +92,7 @@ const TICKET_ICON = require('../../assets/images/ticket-icon.png');
 
 export default function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
+  const mapFocused = useIsFocused();
   const route = useRoute();
   const focusRide = (route.params as { focusRide?: ParkRideMapFocus } | undefined)?.focusRide;
   const [redeemables, setRedeemables] = useState<RedeemablesType | null>();
@@ -376,35 +378,50 @@ export default function ExploreScreen() {
     }).sort((a, b) => dist(a.task) - dist(b.task));
   }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
 
-  const getRedeemables = async () => {
-    setActiveRedeemable(undefined);
-    const data = await currentRedeemables();
-    console.log('🎯 Redeemables fetched:', {
-      tasks: data?.tasks?.length ?? 0,
-      coins: data?.coins?.length ?? 0,
-      keys: data?.keys?.length ?? 0,
+  const mapContext = `${player?.id ?? ''}:${park?.id ?? ''}`;
+  const latestMapContext = useRef(mapContext);
+  latestMapContext.current = mapContext;
+  const mapMounted = useRef(true);
+  const mapRequest = useRef<{ context: string; promise: Promise<void> } | null>(null);
+  useEffect(() => {
+    mapMounted.current = true;
+    return () => { mapMounted.current = false; };
+  }, []);
+  const refreshMapOpportunities = useCallback((): Promise<void> => {
+    if (!park?.id || !player?.id) return Promise.resolve();
+    if (mapRequest.current?.context === mapContext) return mapRequest.current.promise;
+    const promise = currentRedeemables().then(data => {
+      if (mapMounted.current && latestMapContext.current === mapContext) setRedeemables(data);
+    }).finally(() => {
+      if (mapRequest.current?.promise === promise) mapRequest.current = null;
     });
-    if (data?.tasks?.length > 0) {
-      console.log('🎯 First task:', data.tasks[0]);
-    }
-    setRedeemables(data);
-  };
+    mapRequest.current = { context: mapContext, promise };
+    return promise;
+  }, [mapContext, park?.id, player?.id]);
+  const getRedeemables = useCallback(async () => {
+    setActiveRedeemable(undefined);
+    await refreshMapOpportunities();
+  }, [refreshMapOpportunities]);
+  const timedOpportunities = useMemo(() => [
+    ...(redeemables?.tasks ?? []), ...(redeemables?.coins ?? []),
+    ...(redeemables?.keys ?? []), ...(redeemables?.redeemables ?? []),
+  ], [redeemables]);
+  const mapNow = useMapOpportunityClock(timedOpportunities, refreshMapOpportunities, !!park && !!player);
+  const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
+    .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);
 
-  useAsyncEffect(async () => {
-    if (!park) {
-      setRedeemables(null);
-      setActiveRedeemable(undefined);
-      setCommunityCenter(null);
-      return;
-    }
+  useEffect(() => {
+    setRedeemables(null);
+    setActiveRedeemable(undefined);
+    setCommunityCenter(null);
+    if (!park?.id) return;
+    let current = true;
+    void getCommunityCenter(park.id).then(center => {
+      if (current) setCommunityCenter(center);
+    }).catch(() => undefined);
+    return () => { current = false; };
+  }, [mapContext, park?.id]);
 
-    await getRedeemables();
-    
-    // Fetch community center for this park
-    const center = await getCommunityCenter(park.id);
-    setCommunityCenter(center);
-  }, [park?.id]);
-  
   // Refresh community center data
   const refreshCommunityCenter = useCallback(async () => {
     if (park?.id) {
@@ -515,21 +532,19 @@ export default function ExploreScreen() {
     }
   }, [fetchGymData]);
 
-  useAsyncEffect(async () => {
-    if (!park || !location?.latitude || !location?.longitude || !redeemables) {
-      return;
-    }
-
-    const redeemable = await checkForRedeemable();
-    
-    // Don't show redeemable if it's a task that was failed locally
-    if (redeemable?.type === 'task' && failedTaskIds.has(redeemable.model.id)) {
-      setActiveRedeemable(undefined);
-      return;
-    }
-    
-    setActiveRedeemable(redeemable);
-  }, [park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds]);
+  useEffect(() => {
+    if (!mapFocused || !park || !location?.latitude || !location?.longitude || !redeemables) return;
+    let current = true;
+    void checkForRedeemable().then(redeemable => {
+      if (!current) return;
+      if (redeemable?.type === 'task' && failedTaskIds.has(redeemable.model.id)) {
+        setActiveRedeemable(undefined);
+      } else {
+        setActiveRedeemable(redeemable);
+      }
+    });
+    return () => { current = false; };
+  }, [mapFocused, park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds]);
 
   return (
     <Wrapper>
@@ -609,7 +624,7 @@ export default function ExploreScreen() {
       {player && park && <BossRaidFlow raid={raid} open={bossOpen} onClose={() => setBossOpen(false)} onState={setRaidState} />}
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
       {/* One overlay at a time: the daily gift waits for the first-run tutorial. */}
-      {player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && !isActive && hasCompleted('onboarding') &&
+      {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && !isActive && hasCompleted('onboarding') &&
         <DailyGiftModal dailyGift={dailyGift} />}
       {/* Home Mode: Show prep items map instead of "Not at Park" message */}
       {player && parkLoaded && !park && permissionGranted && (
@@ -728,7 +743,7 @@ export default function ExploreScreen() {
             }}
           >
             <RedeemModal
-              redeemable={activeRedeemable}
+              redeemable={mapFocused ? activeRedeemable : undefined}
               park={park}
               onPress={async () => {
                 await getRedeemables();
@@ -743,7 +758,7 @@ export default function ExploreScreen() {
                   return {
                     ...prev,
                     tasks: prev.tasks.filter((t) => t.id !== taskId),
-                    secret_tasks: prev.secret_tasks.filter((t) => t.id !== taskId),
+                    secret_tasks: (prev.secret_tasks ?? []).filter((t) => t.id !== taskId),
                   };
                 });
                 setActiveRedeemable(undefined);
@@ -755,7 +770,7 @@ export default function ExploreScreen() {
                   return {
                     ...prev,
                     tasks: isSecretTask ? prev.tasks : prev.tasks.filter((t) => t.id !== taskId),
-                    secret_tasks: isSecretTask ? prev.secret_tasks.filter((t) => t.id !== taskId) : prev.secret_tasks,
+                    secret_tasks: isSecretTask ? (prev.secret_tasks ?? []).filter((t) => t.id !== taskId) : prev.secret_tasks,
                   };
                 });
                 setActiveRedeemable(undefined);
@@ -862,7 +877,7 @@ export default function ExploreScreen() {
         {/* Ride Control floats over the map so the map runs right up to the header. */}
         {player && (
           <View style={{ position: 'absolute', top: 12, left: 0, right: 0, zIndex: 25 }} pointerEvents="box-none">
-            <RideControlBar control={rideControl} tasks={redeemables?.tasks ?? []}
+            <RideControlBar control={rideControl} tasks={visibleTasks}
               onFocusTask={(task) => setSelectedTask(task)} />
             <LiveEventsPill raid={raid} rushes={rushes} onBoss={() => setBossOpen(true)}
               onRush={(task) => setSelectedTask(task)} />
@@ -936,7 +951,7 @@ export default function ExploreScreen() {
             .map((item) => (
               <PinMarker key={item.id} item={item} />
             ))}
-          {redeemables?.tasks?.map((task) => (
+          {visibleTasks.map((task) => (
             <TaskMarker
               key={`${task.id}-${tripGoal?.task_id === task.id && !tripGoal.coin_owned ? 'goal' : 'regular'}`}
               task={task}
@@ -950,13 +965,13 @@ export default function ExploreScreen() {
           ))}
           {raid && raidActive && <BossMarker raid={raid} onPress={() => setBossOpen(true)} />}
           {focusedFromChecklist && selectedTask?.id === focusedFromChecklist.id &&
-            !redeemables?.tasks?.some(task => task.id === focusedFromChecklist.id) && (
+            !visibleTasks.some(task => task.id === focusedFromChecklist.id) && (
               <TaskMarker task={focusedFromChecklist} isSelected isTripGoal={false}
                 onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }} />
             )}
           {redeemables?.coins
             ?.filter((coin) =>
-              !coin.active_from || !coin.active_to || dayjs().isBetween(dayjs(coin.active_from), dayjs(coin.active_to))
+              opportunityIsActive(coin, mapNow)
             )
             .map((coin) => {
               return (
@@ -972,7 +987,7 @@ export default function ExploreScreen() {
                   anchor={{ x: 0.5, y: 0.5 }}
                 >
                   <View pointerEvents="none">
-                    <Coin coin={coin} onExpire={() => getRedeemables()} />
+                    <Coin coin={coin} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />
                   </View>
                 </Marker>
               );
@@ -983,7 +998,7 @@ export default function ExploreScreen() {
           {/* Keys - rare spawns! */}
           {redeemables?.keys
             ?.filter((key) =>
-              !key.active_from || !key.active_to || dayjs().isBetween(dayjs(key.active_from), dayjs(key.active_to))
+              opportunityIsActive(key, mapNow)
             )
             .map((key) => {
               return (
@@ -999,17 +1014,14 @@ export default function ExploreScreen() {
                   anchor={{ x: 0.5, y: 0.5 }}
                 >
                   <View pointerEvents="none">
-                    <Key model={key} onExpire={() => getRedeemables()} />
+                    <Key model={key} onExpire={() => void refreshMapOpportunities().catch(() => undefined)} />
                   </View>
                 </Marker>
               );
             })}
           {redeemables?.redeemables
             .filter((redeemable) =>
-              dayjs().isBetween(
-                dayjs(redeemable.active_from),
-                dayjs(redeemable.active_to)
-              )
+              opportunityIsActive(redeemable, mapNow)
             )
             .map((redeemable) => {
               return (
@@ -1027,7 +1039,7 @@ export default function ExploreScreen() {
                   <View pointerEvents="none">
                     <Redeemable
                       redeemable={redeemable}
-                      onExpire={() => getRedeemables()}
+                      onExpire={() => void refreshMapOpportunities().catch(() => undefined)}
                     />
                   </View>
                 </Marker>

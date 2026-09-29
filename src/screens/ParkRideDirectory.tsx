@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import MysteryCoinArtwork from '../components/MysteryCoinArtwork';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import TaskCoinModal from '../components/TaskCoinModal';
@@ -85,10 +86,11 @@ export default function ParkRideDirectory({ rides, completed, isOwnPark = true, 
       const goal = task.id === goalTaskId;
       const nearby = !owned && !goal && task.id === nearbyRideId;
       const row = <View style={[styles.row, (goal || nearby) && styles.goalRow]}>
-        <View style={[styles.coin, owned && styles.ownedCoin]}>
+        <View style={[styles.coin, owned && styles.ownedCoin,
+          !owned && { backgroundColor: 'transparent', borderWidth: 0 }]}>
           {owned && task.coin_url ? <Image source={{ uri: task.coin_url }}
             contentFit="contain" style={styles.coinArt} />
-            : <Text style={styles.question}>?</Text>}
+            : <MysteryCoinArtwork size={42} />}
         </View>
         <View style={styles.copy}>
           <Text style={styles.rideName} numberOfLines={2}>{task.name}</Text>

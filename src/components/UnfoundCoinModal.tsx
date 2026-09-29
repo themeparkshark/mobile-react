@@ -14,6 +14,8 @@ import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
+import MysteryCoinArtwork from './MysteryCoinArtwork';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 interface Props {
   task: TaskType | SecretTaskType;
@@ -23,14 +25,16 @@ interface Props {
   onShowOnMap?: () => void;
   onPlayInLine?: () => void;
   trigger?: ReactNode;
+  size?: number;
 }
 
-export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger }: Props) {
+export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger, size = 62 }: Props) {
   const [visible, setVisible] = useState(false);
   const [afterClose, setAfterClose] = useState<'map' | 'line' | null>(null);
   const [goalBusy, setGoalBusy] = useState(false);
   const [goalError, setGoalError] = useState(false);
   const { playSound } = useContext(SoundEffectContext);
+  const reducedMotion = useReducedGameMotion();
   const isRestingSecret = isSecret && 'is_active' in task && task.is_active === false;
 
   const handleOpen = () => {
@@ -61,33 +65,8 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
       <Pressable onPress={handleOpen} accessibilityRole="button"
         accessibilityLabel={`${task.name} ride coin, ${isRestingSecret ? 'secret, resting this week' : isSecret ? 'secret' : isArchived ? 'archived' : 'undiscovered'}`}
         style={{ opacity: isRestingSecret ? 0.68 : 1 }}>
-        {trigger ?? <View
-          style={{
-            width: 62,
-            height: 62,
-            backgroundColor: isSecret ? '#594bab' : isArchived ? '#637e99' : '#0d86cf',
-            borderRadius: 31,
-            borderWidth: 3,
-            borderColor: isSecret
-              ? '#d6bfff'
-              : '#ffd34a',
-            alignItems: 'center',
-            justifyContent: 'center',
-            shadowColor: '#003b73', shadowOpacity: 0.35,
-            shadowOffset: { width: 0, height: 3 }, shadowRadius: 3,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 29,
-              color: '#fff',
-              fontFamily: 'Shark',
-              textShadowColor: '#003b73', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 1,
-            }}
-          >
-            ?
-          </Text>
-        </View>}
+        {trigger ?? <MysteryCoinArtwork size={size}
+          variant={isSecret ? 'secret' : isArchived ? 'archived' : 'normal'} />}
       </Pressable>
 
       <Modal
@@ -100,8 +79,10 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
         onBackdropPress={() => setVisible(false)}
         onSwipeComplete={() => setVisible(false)}
         swipeDirection="down"
-        animationIn="zoomIn"
-        animationOut="zoomOut"
+        animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
+        animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
+        animationInTiming={reducedMotion ? 120 : 220}
+        animationOutTiming={reducedMotion ? 120 : 180}
         backdropOpacity={0.85}
         hideModalContentWhileAnimating
       >
@@ -172,7 +153,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                   <Text style={{ color: '#075b9b', fontFamily: 'Shark', fontSize: 16, marginBottom: 5 }}>
                     Ride Challenge
                   </Text>
-                  <Text style={{ color: '#204c6e', fontSize: 13, lineHeight: 19 }}>
+                  <Text style={{ color: '#204c6e', fontFamily: 'Knockout', fontSize: 14, lineHeight: 19 }}>
                     {task.ticket_cost === 0
                       ? 'Free challenge. '
                       : typeof task.ticket_cost === 'number'
@@ -183,7 +164,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                   {'energy_reward' in task && 'ride_parts_reward' in task &&
                     typeof task.coins === 'number' && typeof task.experience === 'number' &&
                     typeof task.energy_reward === 'number' && typeof task.ride_parts_reward === 'number' && (
-                      <Text style={{ color: '#327395', fontSize: 12, lineHeight: 18, marginTop: 8 }}>
+                      <Text style={{ color: '#327395', fontFamily: 'Knockout', fontSize: 13, lineHeight: 18, marginTop: 8 }}>
                         Base win: +{task.coins} Shark Coins · +{task.experience} XP ·
                         {' '}+{task.energy_reward} Energy · +{task.ride_parts_reward} Ride Parts
                       </Text>
@@ -195,9 +176,10 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                 accessibilityRole="button"
                 accessibilityLabel={`Play LinePlay for ${task.name}`}
                 onPress={() => { setAfterClose('line'); setVisible(false); }}
-                style={{ paddingVertical: 8, marginBottom: 6 }}>
-                <Text style={{ color: '#fff', fontFamily: 'Shark', fontSize: 16,
-                  textDecorationLine: 'underline' }}>Waiting here? Play in Line ›</Text>
+                style={{ alignSelf: 'stretch', alignItems: 'center', backgroundColor: '#DFF4FF',
+                  borderWidth: 2, borderColor: '#BCEAFF', borderRadius: 12,
+                  paddingVertical: 12, paddingHorizontal: 10, marginBottom: 10 }}>
+                <Text style={{ color: '#075b9b', fontFamily: 'Shark', fontSize: 16 }}>Waiting here? Play in Line ›</Text>
               </Pressable>}
 
               {onChooseGoal && !isSecret && !isArchived && <Pressable

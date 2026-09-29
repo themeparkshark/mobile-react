@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
   },
   gamePlaceholderText: {
     color: '#244d70',
-    fontSize: 14,
+    fontFamily: 'Knockout', fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
   },
@@ -522,8 +522,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   factKicker: { color: '#0875c9', fontFamily: 'Knockout', fontSize: 14, letterSpacing: 0.8 },
-  factText: { color: '#244d70', fontSize: 14, lineHeight: 21, marginTop: spacing.xs },
-  factSource: { color: '#376888', fontSize: 11, marginTop: spacing.sm },
+  factText: { color: '#244d70', fontFamily: 'Knockout', fontSize: 14, lineHeight: 21, marginTop: spacing.xs },
+  factSource: { color: '#376888', fontFamily: 'Knockout', fontSize: 11, marginTop: spacing.sm },
   loreTitle: {
     color: '#093d77',
     fontFamily: 'Shark',
@@ -532,20 +532,20 @@ const styles = StyleSheet.create({
   },
   loreBody: {
     color: '#244d70',
-    fontSize: 15,
+    fontFamily: 'Knockout', fontSize: 15,
     lineHeight: 22,
     marginTop: spacing.md,
   },
   loreSource: {
     color: '#376888',
-    fontSize: 12,
+    fontFamily: 'Knockout', fontSize: 12,
     marginTop: spacing.md,
     fontStyle: 'italic',
   },
   clueChallenge: { marginTop: spacing.lg },
   cluePrompt: { color: '#093d77', fontFamily: 'Knockout', fontSize: 17, marginBottom: spacing.sm },
   clueChoice: { marginTop: spacing.sm },
-  clueFinish: { color: '#244d70', fontSize: 13, lineHeight: 19,
+  clueFinish: { color: '#244d70', fontFamily: 'Knockout', fontSize: 13, lineHeight: 19,
     marginTop: spacing.md, marginBottom: spacing.lg },
   clueBack: { alignItems: 'center', paddingVertical: spacing.md },
   clueBackText: { color: '#0875c9', fontFamily: 'Knockout', fontSize: 15 },
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
   },
   predictHint: {
     color: '#244d70',
-    fontSize: 12,
+    fontFamily: 'Knockout', fontSize: 12,
     marginTop: spacing.md,
   },
   primaryBtn: {
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Knockout',
     fontSize: 17,
   },
-  note: { color: '#376888', fontSize: 12, marginTop: spacing.md },
+  note: { color: '#376888', fontFamily: 'Knockout', fontSize: 12, marginTop: spacing.md },
   disabled: { opacity: 0.45 },
   pressed: {
     opacity: 0.85,

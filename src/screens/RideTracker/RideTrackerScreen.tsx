@@ -14,6 +14,7 @@ import Wrapper from '../../components/Wrapper';
 import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 // ─── Rider Levels (based on rides logged) ───
 const RIDER_LEVELS = [
@@ -45,21 +46,29 @@ function getLevelProgress(count: number) {
 function FadeIn({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
   const op = useRef(new Animated.Value(0)).current;
   const ty = useRef(new Animated.Value(16)).current;
+  const reducedMotion = useReducedGameMotion();
   useEffect(() => {
-    Animated.parallel([
+    if (reducedMotion) { op.setValue(1); ty.setValue(0); return; }
+    const animation = Animated.parallel([
       Animated.timing(op, { toValue: 1, duration: 350, delay, useNativeDriver: true }),
       Animated.timing(ty, { toValue: 0, duration: 350, delay, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-    ]).start();
-  }, []);
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [op, ty, delay, reducedMotion]);
   return <Animated.View style={{ opacity: op, transform: [{ translateY: ty }] }}>{children}</Animated.View>;
 }
 
 // ─── Progress Bar ───
 function ProgressBar({ progress, height = 10 }: { progress: number; height?: number }) {
   const w = useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedGameMotion();
   useEffect(() => {
-    Animated.timing(w, { toValue: progress, duration: 800, delay: 300, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
-  }, [progress]);
+    if (reducedMotion) { w.setValue(progress); return; }
+    const animation = Animated.timing(w, { toValue: progress, duration: 800, delay: 300, easing: Easing.out(Easing.cubic), useNativeDriver: false });
+    animation.start();
+    return () => animation.stop();
+  }, [progress, reducedMotion, w]);
   return (
     <View style={{ height, backgroundColor: 'rgba(9,38,143,0.12)', borderRadius: height / 2, overflow: 'hidden' }}>
       <Animated.View style={{
@@ -73,13 +82,16 @@ function ProgressBar({ progress, height = 10 }: { progress: number; height?: num
 // ─── Animated Counter ───
 function CountUp({ to, style, duration = 800 }: { to: number; style?: any; duration?: number }) {
   const a = useRef(new Animated.Value(0)).current;
-  const [v, setV] = useState(0);
+  const [v, setV] = useState(to);
+  const reducedMotion = useReducedGameMotion();
   useEffect(() => {
+    if (reducedMotion) { a.setValue(to); setV(to); return; }
     a.setValue(0);
-    Animated.timing(a, { toValue: to, duration, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
     const id = a.addListener(({ value }) => setV(Math.round(value)));
-    return () => a.removeListener(id);
-  }, [to]);
+    const animation = Animated.timing(a, { toValue: to, duration, easing: Easing.out(Easing.cubic), useNativeDriver: false });
+    animation.start();
+    return () => { animation.stop(); a.removeListener(id); };
+  }, [to, duration, reducedMotion, a]);
   return <Text style={style}>{v.toLocaleString()}</Text>;
 }
 
@@ -87,11 +99,13 @@ function CountUp({ to, style, duration = 800 }: { to: number; style?: any; durat
 function MenuRow({ icon, title, sub, onPress, delay = 0, badge }: {
   icon: number; title: string; sub: string; onPress: () => void; delay?: number; badge?: string;
 }) {
+  const reducedMotion = useReducedGameMotion();
   return (
     <FadeIn delay={delay}>
       <Pressable
+        accessibilityRole="button" accessibilityLabel={`${title}. ${sub}`}
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); }}
-        style={({ pressed }) => [s.menuRow, pressed && { backgroundColor: '#f0f4f8', transform: [{ scale: 0.99 }] }]}
+        style={({ pressed }) => [s.menuRow, pressed && { backgroundColor: '#f0f4f8', transform: [{ scale: reducedMotion ? 1 : 0.99 }] }]}
       >
         <Image source={icon} style={s.menuRowIcon} contentFit="contain" />
         <View style={{ flex: 1 }}>
@@ -115,6 +129,7 @@ function MenuRow({ icon, title, sub, onPress, delay = 0, badge }: {
 
 export default function RideTrackerScreen() {
   const nav = useNavigation<any>();
+  const reducedMotion = useReducedGameMotion();
   const preview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_TRACKER_PREVIEW === '1';
   const [stats, setStats] = useState<RideStatsType | null>(null);
   const [profile, setProfile] = useState<RideProfileStats | null>(null);
@@ -215,8 +230,9 @@ export default function RideTrackerScreen() {
           {/* ── Log a Ride ── */}
           <FadeIn delay={has ? 250 : 100}>
             <Pressable
+              accessibilityRole="button" accessibilityLabel="Log a ride in your journal"
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); nav.navigate('RideLog'); }}
-              style={({ pressed }) => [s.logBtn, pressed && { transform: [{ scale: 0.98 }], opacity: 0.9 }]}
+              style={({ pressed }) => [s.logBtn, pressed && { transform: [{ scale: reducedMotion ? 1 : 0.98 }], opacity: 0.9 }]}
             >
               <LinearGradient
                 colors={['#38BDF8', '#0EA5E9', '#0284C7']}

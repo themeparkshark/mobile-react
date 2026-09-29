@@ -11,6 +11,7 @@ import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { getWrapped, WrappedData } from '../../api/endpoints/player-rides/wrapped';
 import { colors } from '../../design-system';
+import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 
 const { width, height } = Dimensions.get('window');
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -252,7 +253,7 @@ export default function RideWrappedScreen() {
         <View style={styles.reactionsGrid}>
           {data.reactions.slice(0, 5).map(r => (
             <View key={r.reaction} style={styles.reactionItem}>
-              <Text style={styles.reactionEmoji}>{r.reaction}</Text>
+              <SharkReactionIcon reaction={r.reaction} size={48} />
               <Text style={styles.reactionCount}>{r.count}x</Text>
             </View>
           ))}

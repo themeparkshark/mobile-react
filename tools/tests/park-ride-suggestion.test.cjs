@@ -18,6 +18,12 @@ const ride = (id, latitude, longitude) => ({
 });
 const location = { latitude: 28.418, longitude: -81.581 };
 
+test('numeric coordinates from the API are accepted without crashing the collection', () => {
+  const numeric = { id: 8, name: 'Ride 8', latitude: 28.4181, longitude: -81.581 };
+  assert.equal(nearbyUncollectedRide([numeric], [], location).task.id, 8);
+  assert.equal(nearbyUncollectedRide([{ ...numeric, latitude: null }], [], location), null);
+});
+
 test('the live suggestion moves to the nearest uncollected ride area', () => {
   const rides = [ride(1, 28.420, -81.581), ride(2, 28.4181, -81.581)];
   assert.equal(nearbyUncollectedRide(rides, [], location).task.id, 2);

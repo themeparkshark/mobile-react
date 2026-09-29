@@ -143,6 +143,8 @@ export interface SessionRewards {
   readonly currentQuestBonusParts: number;
 }
 
+export type RewardConnectionIssue = 'nearby' | 'network' | 'sign_in';
+
 export interface SessionSnapshot {
   readonly state: LinePlayState;
   readonly ride: RideContext | null;
@@ -151,6 +153,7 @@ export interface SessionSnapshot {
   readonly serverSessionId: string | null;
   /** The server explicitly cannot offer ride rewards for this session. */
   readonly rewardUnavailable: boolean;
+  readonly rewardConnectionIssue?: RewardConnectionIssue | null;
   readonly backgroundTrackingAvailable: boolean | null;
   readonly verifiedEligibleSeconds: number;
   /** Local clock time of the last successful nearby server sample. Display only. */
@@ -434,6 +437,7 @@ export class LinePlaySession {
   private adaptiveEpisodeRecorded = false;
   private serverSessionId: string | null = null;
   private rewardUnavailable = false;
+  private rewardConnectionIssue: RewardConnectionIssue | null = null;
   private verifiedEligibleSeconds = 0;
   private creditedParts: number | null = null;
   private partsRemainingToday: number | null = null;
@@ -569,6 +573,7 @@ export class LinePlaySession {
       chapter: this.chapter,
       serverSessionId: this.serverSessionId,
       rewardUnavailable: this.rewardUnavailable,
+      rewardConnectionIssue: this.rewardConnectionIssue,
       backgroundTrackingAvailable: this.backgroundTrackingAvailable,
       verifiedEligibleSeconds: this.verifiedEligibleSeconds,
       verifiedPresenceAt: this.lastSuccessfulPresenceUpdateAt || null,
@@ -850,6 +855,7 @@ export class LinePlaySession {
     this.backgroundTrackingSessionId = null;
     this.backgroundTrackingAvailable = null;
     this.rewardUnavailable = false;
+    this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = 0;
     this.lastSuccessfulPresenceUpdateAt = 0;
     this.creditedParts = null;
@@ -983,6 +989,7 @@ export class LinePlaySession {
     if (!result.success || !result.session_id) return;
     this.serverSnapshotRevision += 1;
     this.serverSessionId = result.session_id;
+    this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = result.eligible_seconds;
     this.creditedParts = result.parts_credited ?? null;
     this.partsRemainingToday = result.parts_remaining_today ?? null;
@@ -1068,8 +1075,12 @@ export class LinePlaySession {
         const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
         if (response?.status === 404 || response?.data?.code === 'LINE_REWARDS_UNAVAILABLE') {
           this.rewardUnavailable = true;
-          this.emit();
+          this.rewardConnectionIssue = null;
+        } else {
+          this.rewardConnectionIssue = response?.data?.code === 'NOT_NEAR_RIDE' ? 'nearby'
+            : response?.status === 401 || response?.status === 403 ? 'sign_in' : 'network';
         }
+        this.emit();
         console.info('[LinePlaySession] reward session start unavailable', response?.status ?? 'network');
       }
     })();
@@ -1397,6 +1408,7 @@ export class LinePlaySession {
     this.adaptiveEpisodeRecorded = false;
     this.serverSessionId = null;
     this.rewardUnavailable = false;
+    this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = 0;
     this.lastSuccessfulPresenceUpdateAt = 0;
     this.creditedParts = null;

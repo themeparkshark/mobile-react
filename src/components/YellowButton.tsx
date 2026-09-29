@@ -1,4 +1,6 @@
 import { Animated, ImageBackground, Pressable, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 export default function YellowButton({
   disabled = false,
@@ -9,32 +11,41 @@ export default function YellowButton({
   readonly text: string;
   readonly onPress?: () => void;
 }) {
-  const animated = new Animated.Value(1);
+  const animated = useRef(new Animated.Value(1)).current;
+  const reducedMotion = useReducedGameMotion();
+  useEffect(() => {
+    if (disabled || reducedMotion) { animated.stopAnimation(); animated.setValue(1); }
+    return () => animated.stopAnimation();
+  }, [animated, disabled, reducedMotion]);
   const zoomOut = () => {
-    if (disabled) {
+    if (disabled || reducedMotion) {
       return;
     }
 
     Animated.timing(animated, {
-      toValue: 0.95,
-      duration: 25,
+      toValue: 0.97,
+      duration: 65,
       useNativeDriver: true,
     }).start();
   };
   const zoomIn = () => {
-    if (disabled) {
+    if (disabled || reducedMotion) {
       return;
     }
 
     Animated.timing(animated, {
       toValue: 1,
-      duration: 25,
+      duration: 95,
       useNativeDriver: true,
     }).start();
   };
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={text}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={() => {
         if (disabled) {
           return;
