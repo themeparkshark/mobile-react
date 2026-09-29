@@ -31,16 +31,19 @@ interface FeverGlowProps {
   height: number;
   active: boolean;
   color?: string;
+  reducedMotion?: boolean;
 }
 
 const INSET = 6;
 
-export function FeverGlow({ width, height, active, color = GAME_COLORS.gold }: FeverGlowProps) {
+export function FeverGlow({ width, height, active, color = GAME_COLORS.gold, reducedMotion = true }: FeverGlowProps) {
   const intensity = useSharedValue(0);
 
   useEffect(() => {
     cancelAnimation(intensity);
-    if (active) {
+    if (reducedMotion) {
+      intensity.value = active ? 0.7 : 0;
+    } else if (active) {
       intensity.value = withSequence(
         withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) }),
         withRepeat(
@@ -55,7 +58,8 @@ export function FeverGlow({ width, height, active, color = GAME_COLORS.gold }: F
     } else {
       intensity.value = withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) });
     }
-  }, [active, intensity]);
+    return () => cancelAnimation(intensity);
+  }, [active, intensity, reducedMotion]);
 
   const opacity = useDerivedValue(() => intensity.value);
   const strokeW = useDerivedValue(() => 4 + intensity.value * 8);

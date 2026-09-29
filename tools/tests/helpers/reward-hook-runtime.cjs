@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
 exports.runtime = function(file, imports = {}, initialProps = {}) {
-  const slots = [], animations = [], timers = new Map(), sounds = [], cancelled = [];
+  const slots = [], animations = [], timers = new Map(), sounds = [], cancelled = [], motions = [];
   let index = 0, dirty = true, effects = [], tree, timerId = 0, preferenceListener;
   let Component;
   const props = { ...initialProps };
@@ -20,6 +20,11 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
     useCallback(fn, deps) { const i = index++; if (!slots[i] || !same(slots[i].deps, deps)) slots[i] = { deps, value: fn }; return slots[i].value; },
     useMemo(fn, deps) { const i = index++; if (!slots[i] || !same(slots[i].deps, deps)) slots[i] = { deps, value: fn() }; return slots[i].value; },
     useContext(context) { return context.value; },
+    forwardRef(fn) { return props => fn(props, props.forwardedRef); },
+    useImperativeHandle(ref, create, deps) { react.useEffect(() => {
+      if (ref) ref.current = create();
+      return () => { if (ref) ref.current = null; };
+    }, deps); },
   };
   const animation = kind => { const entry = { kind, stopped: false, started: false, start(callback) { this.started = true; this.callback = callback; }, finish() { this.callback?.({ finished: true }); }, stop() { this.stopped = true; this.callback?.({ finished: false }); } };
     animations.push(entry); return entry; };
@@ -34,7 +39,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
     StyleSheet: { create: value => value, absoluteFill: {}, absoluteFillObject: {} },
     AccessibilityInfo: { isReduceMotionEnabled: () => Promise.resolve(false), addEventListener: (name, fn) => {
       preferenceListener = fn; return { remove() { preferenceListener = undefined; } }; } },
-    View: 'View', Text: 'Text', ScrollView: 'ScrollView', Pressable: 'Pressable', TouchableOpacity: 'TouchableOpacity',
+    View: 'View', Image: 'Image', Text: 'Text', ScrollView: 'ScrollView', Pressable: 'Pressable', TouchableOpacity: 'TouchableOpacity',
   };
   const jsx = (type, props) => ({ type, props }); const module = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
@@ -50,7 +55,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
       if (name === 'react-native-reanimated') return { default: { View: 'ReanimatedView' },
         useSharedValue: value => react.useRef({ value }).current, useAnimatedStyle: fn => fn(),
         Easing: native.Easing, cancelAnimation: value => cancelled.push(value), runOnJS: fn => fn,
-        withTiming: value => value, withSpring: value => value, withDelay: (ms, value) => value,
+        withTiming: value => { motions.push('timing'); return value; }, withSpring: value => { motions.push('spring'); return value; }, withDelay: (ms, value) => value,
+        interpolate: (value, inputs, outputs) => outputs[0] + value * (outputs[1] - outputs[0]),
         withRepeat: value => value, withSequence: (...values) => values.at(-1) };
       if (name === 'expo-haptics') return { notificationAsync: async () => {}, impactAsync: async () => {},
         NotificationFeedbackType: { Success: 1 }, ImpactFeedbackStyle: { Light: 1, Medium: 2, Heavy: 3 } };
@@ -62,7 +68,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
       return { default: name };
     },
   }, { filename: file });
-  Component = module.exports.default;
+  Component = module.exports.default ?? module.exports.MemoryCard;
   function render() { let count = 0; do {
     assert.ok(count++ < 20, 'hooks settle'); dirty = false; index = 0; effects = []; tree = Component(props); effects.forEach(fn => fn());
   } while (dirty); }
@@ -73,7 +79,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
     return find(node.props?.children, predicate);
   }
   render();
-  return { props, native, animations, timers, sounds, cancelled, render,
+  return { props, native, animations, timers, sounds, cancelled, motions, render,
     get tree() { return tree; }, find: predicate => find(tree, predicate),
     change(value) { Object.assign(props, value); render(); },
     async settle() { await new Promise(resolve => setImmediate(resolve)); render(); },

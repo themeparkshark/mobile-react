@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff', overflow: 'hidden', justifyContent: 'center' },
   goalFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#ffcf3b' },
   goalText: { alignSelf: 'center', fontFamily: 'Shark', fontSize: 20, color: '#fff',
-    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+    backgroundColor: '#073d73', borderRadius: 12, paddingHorizontal: 10, lineHeight: 26 },
   goalHeadline: { fontFamily: 'Shark', fontSize: 38, color: '#ffcf3b', textAlign: 'center', marginBottom: 6,
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   objective: {

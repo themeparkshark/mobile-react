@@ -19,7 +19,7 @@
  * All animation is Reanimated on the UI thread. No JS-thread animation loop.
  */
 
-import React, { useEffect, useImperativeHandle, forwardRef, useCallback, useState } from 'react';
+import React, { useEffect, useImperativeHandle, forwardRef, useCallback, useState, useRef } from 'react';
 import { StyleSheet, Image, View, Text, Pressable, type ImageSourcePropType } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -29,6 +29,7 @@ import Animated, {
   withSequence,
   interpolate,
   Easing,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import { GAME_COLORS, JUICE } from '../../gamekit';
 
@@ -60,16 +61,23 @@ interface MemoryCardProps {
   onPress: () => void;
   /** Staggered entrance delay (ms). */
   entranceDelay: number;
+  reducedMotion?: boolean;
 }
 
 export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
   function MemoryCard(
-    { size, faceSource, faceSheet, sheetSlot, sheetColumns = 4, sheetRows = 2, frameSource, backSource, tint, glyph, matched, disabled, slot, symbolName, onPress, entranceDelay },
+    { size, faceSource, faceSheet, sheetSlot, sheetColumns = 4, sheetRows = 2, frameSource, backSource, tint, glyph, matched, disabled, slot, symbolName, onPress, entranceDelay, reducedMotion = true },
     ref,
   ) {
     // 0 = face down, 1 = face up.
     const flip = useSharedValue(0);
     const [faceUp, setFaceUpState] = useState(false);
+    const faceUpRef = useRef(false);
+    const enteredRef = useRef(false);
+    const [failedSheet, setFailedSheet] = useState<ImageSourcePropType>();
+    const [failedFace, setFailedFace] = useState<ImageSourcePropType>();
+    const [failedBack, setFailedBack] = useState<ImageSourcePropType>();
+    const [failedFrame, setFailedFrame] = useState<ImageSourcePropType>();
     // Mid-flip lift (scale toward camera) that springs back to rest.
     const lift = useSharedValue(1);
     // Mismatch shake.
@@ -79,22 +87,39 @@ export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
     // Entrance.
     const enter = useSharedValue(0);
 
+    useEffect(() => {
+      if (reducedMotion) {
+        [flip, lift, shakeX, pop, enter].forEach(cancelAnimation);
+        flip.value = faceUpRef.current ? 1 : 0;
+        lift.value = 1;
+        shakeX.value = 0;
+        pop.value = 1;
+        enter.value = 1;
+      }
+      return () => [flip, lift, shakeX, pop, enter].forEach(cancelAnimation);
+    }, [reducedMotion, flip, lift, shakeX, pop, enter]);
+
     // Staggered entrance pop-in. A JS timeout defers the start so cards cascade
     // in row-major order; the animation itself runs on the UI thread.
     useEffect(() => {
+      if (reducedMotion) { enteredRef.current = true; enter.value = 1; return; }
+      if (enteredRef.current) { enter.value = 1; return; }
       enter.value = 0;
       const t = setTimeout(() => {
+        enteredRef.current = true;
         enter.value = withTiming(1, {
           duration: 320,
           easing: Easing.out(Easing.back(1.6)),
         });
       }, entranceDelay);
-      return () => clearTimeout(t);
-    }, [entranceDelay, enter]);
+      return () => { clearTimeout(t); cancelAnimation(enter); };
+    }, [entranceDelay, enter, reducedMotion]);
 
     const setFaceUp = useCallback(
       (up: boolean) => {
+        faceUpRef.current = up;
         setFaceUpState(up);
+        if (reducedMotion) { flip.value = up ? 1 : 0; lift.value = 1; return; }
         // Rotation: snappy ease.
         flip.value = withTiming(up ? 1 : 0, {
           duration: 260,
@@ -106,10 +131,11 @@ export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
           withSpring(1, JUICE.settleSpring),
         );
       },
-      [flip, lift],
+      [flip, lift, reducedMotion],
     );
 
     const shake = useCallback(() => {
+      if (reducedMotion) { shakeX.value = 0; return; }
       const amp = 9;
       shakeX.value = withSequence(
         withTiming(amp, { duration: 45, easing: Easing.linear }),
@@ -118,14 +144,15 @@ export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
         withTiming(-amp * 0.6, { duration: 45, easing: Easing.linear }),
         withTiming(0, { duration: 45, easing: Easing.linear }),
       );
-    }, [shakeX]);
+    }, [shakeX, reducedMotion]);
 
     const celebrate = useCallback(() => {
+      if (reducedMotion) { pop.value = 1; return; }
       pop.value = withSequence(
         withTiming(1.22, { duration: 140, easing: Easing.out(Easing.back(2)) }),
         withSpring(1, JUICE.popSpring),
       );
-    }, [pop]);
+    }, [pop, reducedMotion]);
 
     useImperativeHandle(ref, () => ({ setFaceUp, shake, celebrate }), [
       setFaceUp,
@@ -167,13 +194,15 @@ export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
         style={styles.pressable}
         accessible
         accessibilityRole="button"
+        accessibilityState={{ disabled: disabled || matched }}
         accessibilityLabel={`Card ${slot + 1}, ${matched ? `matched ${symbolName}` : faceUp ? symbolName : 'face down'}`}
       >
         <Animated.View style={[faceStyle, containerStyle]}>
           {/* Back face (shown when face down). */}
           <Animated.View style={[styles.face, faceStyle, backStyle]}>
-            {backSource ? (
-              <Image source={backSource} style={[styles.img, faceStyle]} resizeMode="contain" />
+            {backSource && failedBack !== backSource ? (
+              <Image source={backSource} style={[styles.img, faceStyle]} resizeMode="contain"
+                onError={() => setFailedBack(backSource)} />
             ) : (
               <View style={[styles.proceduralBack, faceStyle]}>
                 <Text style={styles.backGlyph}>🦈</Text>
@@ -183,9 +212,9 @@ export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
 
           {/* Front face (shown when face up). */}
           <Animated.View style={[styles.face, styles.frontAbs, faceStyle, frontStyle]}>
-            {faceSheet && sheetSlot != null ? (
+            {faceSheet && failedSheet !== faceSheet && sheetSlot != null ? (
               <View style={[faceStyle, { overflow: 'hidden' }]}>
-                <Image source={faceSheet} resizeMode="stretch" style={{
+                <Image source={faceSheet} resizeMode="stretch" onError={() => setFailedSheet(faceSheet)} style={{
                   position: 'absolute',
                   width: size * sheetColumns,
                   height: size * 1.28 * sheetRows,
@@ -193,11 +222,13 @@ export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
                   top: -Math.floor(sheetSlot / sheetColumns) * size * 1.28,
                 }} />
               </View>
-            ) : faceSource ? (
-              <Image source={faceSource} style={[styles.img, faceStyle]} resizeMode="contain" />
-            ) : frameSource ? (
+            ) : faceSource && failedFace !== faceSource ? (
+              <Image source={faceSource} style={[styles.img, faceStyle]} resizeMode="contain"
+                onError={() => setFailedFace(faceSource)} />
+            ) : frameSource && failedFrame !== frameSource ? (
               <View style={[styles.framedFront, faceStyle]}>
                 <Image source={frameSource} style={[styles.img, StyleSheet.absoluteFill]}
+                  onError={() => setFailedFrame(frameSource)}
                   resizeMode="stretch" />
                 <Text style={styles.framedGlyph}>{glyph}</Text>
               </View>

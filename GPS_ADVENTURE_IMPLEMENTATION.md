@@ -47,6 +47,13 @@ must reflect confirmed activity; exporting a card never means it was sent.
   Ticket/crown/collection flourishes use existing illustrated assets.
 - Upgrade taps coalesce, failures offer a themed retry, and a lost response is read
   back before another spend. Reduced-motion upgrades settle without charge/confetti.
+- Forbidden Journey Memory Match uses original Enchanted Keepsakes artwork: eight
+  illustrated faces plus two extra faces, authored from the existing blue/gold/coral
+  card reference with built-in imagegen. Other games and seeded random-deck order
+  stay unchanged. Card flips, entrances, matched pops and fever glow respect reduced
+  motion, cancel on close and keep face-up state when the preference changes.
+  Failed atlas/individual/frame art falls through to readable symbols. Ride sprints
+  show one progress readout; the goal label stays legible over its golden fill.
 - Daily chest celebrates only server-confirmed rewards, coalesces taps, reconciles
   already-collected gifts, retries failures and updates provider state on dismissal.
 - Shared reduced-motion handling and cleanup cover the refined button, journal,
@@ -85,6 +92,9 @@ with isolated Metro 8096. No production rewards or player records were changed.
   and the coin occupies its original second-row shelf slot. Tapping it opens detail.
 - Actual native upgrade to Level 2 Silver confirmed by server readback: 160 -> 150
   Energy, 4 -> 2 Parts, one upgrade event. The silver rim/success screen appeared.
+- New magical deck played in dev-only native practice: owl, quill, wand and book
+  pairs matched; all four pairs completed, 400-point result, Continue returned to
+  practice. Practice grants no server rewards. Artwork is readable at phone size.
 
 - Actual LOCAL park-day share export inspected at 1080x1920 with Forbidden Journey,
   its coin art, 1 new coin, 1 upgrade and 1 ride win. The real recap component ran in
@@ -111,7 +121,7 @@ Applied to the isolated backend and the original LOCAL backend serving the previ
 
 ## Validation and remaining work
 
-TypeScript and git diff checks pass. Full app checks: 191 tests. Focused backend
+TypeScript and git diff checks pass. Full app checks: 197 tests. Focused backend
 checks: seven tests, 53 assertions. PHP 8.5 emits an existing PDO deprecation. The
 legacy full migration suite needs Doctrine DBAL; unrelated test-discovery warnings
 remain and are not claimed clean.

@@ -18,7 +18,12 @@
 
 import type { ImageSourcePropType } from 'react-native';
 import { GAME_COLORS } from '../../gamekit';
-export { deckIdForRideName } from '../../services/rideTheme';
+import { deckIdForRideName as broadDeckForRideName } from '../../services/rideTheme';
+
+/** Authored Memory Match art; other games keep their existing broad ride themes. */
+export function deckIdForRideName(name?: string): string {
+  return /\bforbidden\s+journey\b/i.test(name ?? '') ? 'wizard' : broadDeckForRideName(name);
+}
 
 export interface DeckSymbol {
   /** Stable id used for matching (two cards match iff symbolId is equal). */
@@ -247,10 +252,32 @@ const BACKLOT: Deck = {
   ],
 };
 
+const WIZARD: Deck = {
+  id: 'wizard',
+  label: 'Enchanted Keepsakes',
+  back: CARD_BACK,
+  faceSheet: require('../../assets/games/memory/wizard-faces-v1.png'),
+  extraFaceSheet: require('../../assets/games/memory/wizard-extra-faces-v1.png'),
+  symbols: [
+    { id: 'wizard-wand', tint: '#c4b5fd', glyph: '✦', sheetSlot: 0 },
+    { id: 'wizard-book', tint: '#a78bfa', glyph: '📖', sheetSlot: 1 },
+    { id: 'wizard-owl', tint: '#e5e7eb', glyph: '🦉', sheetSlot: 2 },
+    { id: 'wizard-key', tint: '#fbbf24', glyph: '🔑', sheetSlot: 3 },
+    { id: 'wizard-lantern', tint: '#2dd4bf', glyph: '🏮', sheetSlot: 4 },
+    { id: 'wizard-potion', tint: '#fb7185', glyph: '🧪', sheetSlot: 5 },
+    { id: 'wizard-portal', tint: '#a78bfa', glyph: '✧', sheetSlot: 6 },
+    { id: 'wizard-quill', tint: '#2dd4bf', glyph: '🪶', sheetSlot: 7 },
+    { id: 'wizard-crystal', tint: '#c4b5fd', glyph: '🔮', extraSheetSlot: 0 },
+    { id: 'wizard-hat', tint: '#a78bfa', glyph: '🎩', extraSheetSlot: 1 },
+  ],
+};
+
+// Keep the existing random-deck order stable for seeded rounds and replays.
 export const DECKS: readonly Deck[] = [OCEAN, PARK, SPACE, PIRATES, MANSION, BACKLOT, JUNGLE, RAINBOW_RIDGE];
 
 export function deckById(id?: string): Deck | null {
   if (id === LAUNCH_CODE.id) return LAUNCH_CODE;
+  if (id === WIZARD.id) return WIZARD;
   return id ? DECKS.find((deck) => deck.id === id) ?? null : null;
 }
 

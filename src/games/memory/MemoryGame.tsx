@@ -57,6 +57,7 @@ import {
   type Board,
 } from './logic';
 import { loadPersonalBest, savePersonalBest } from './storage';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -96,6 +97,7 @@ export default function MemoryGame({
   onQuit,
   onComplete,
 }: MemoryGameProps) {
+  const reducedMotion = useReducedGameMotion();
   // -- Round setup (rebuilt whenever the game (re)opens). --------------------
   const roundSeed = useMemo(
     () => (seed != null ? seed >>> 0 : (Math.random() * 0xffffffff) >>> 0),
@@ -404,13 +406,13 @@ export default function MemoryGame({
             resizeMode="contain" style={styles.bannerShark}
             accessibilityLabel="Theme Park Shark mascot" />
         </View>
-        <Text style={styles.progress} accessibilityLiveRegion="polite">
+        {difficulty !== 0 && <Text style={styles.progress} accessibilityLiveRegion="polite">
           {matchedPairs} / {shape.pairs} PAIRS MATCHED
-        </Text>
+        </Text>}
         <Text style={styles.hint}>Flip two cards to find a match</Text>
         <View style={styles.boardWrap} onLayout={onBoardLayout}>
           {boardSize.w > 0 ? (
-            <FeverGlow width={boardSize.w} height={boardSize.h} active={feverOn} />
+            <FeverGlow width={boardSize.w} height={boardSize.h} active={feverOn} reducedMotion={reducedMotion} />
           ) : null}
           <View style={styles.grid}>
             {board.cards.map((card) => {
@@ -437,6 +439,7 @@ export default function MemoryGame({
                   disabled={false}
                   onPress={() => onCardPress(card.slot)}
                   entranceDelay={entranceDelayFor(card.slot, shape.cols)}
+                  reducedMotion={reducedMotion}
                 />
               );
             })}
@@ -444,7 +447,7 @@ export default function MemoryGame({
         </View>
 
         {/* Skia particle layer above the board, ignores touches. */}
-        {boardSize.w > 0 ? (
+        {boardSize.w > 0 && !reducedMotion ? (
           <ParticleField
             ref={particleRef}
             width={SCREEN_W}
