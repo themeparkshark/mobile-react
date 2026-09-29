@@ -1,6 +1,7 @@
-import dayjs from 'dayjs';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated } from 'react-native';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { opportunityIsActive } from '../screens/ExploreScreen/mapOpportunityTiming';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -31,54 +32,34 @@ export default function RedeemModal({
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  // Nearby opportunities can refresh or disappear as soon as a win is confirmed.
+  // The opened challenge owns its snapshot until the player closes its reward flow.
+  const [openedRedeemable, setOpenedRedeemable] = useState<CurrentRedeemableType | null>(null);
+  const reducedMotion = useReducedGameMotion();
+  const lastAnnounced = useRef<string | null>(null);
   const animated = useRef(new Animated.Value(0)).current;
 
-  const slideUp = () => {
-    Animated.timing(animated, {
-      toValue: -120,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const slideDown = () => {
-    Animated.timing(animated, {
-      toValue: 0,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-  };
-
+  const timed = redeemable?.type === 'coin' || redeemable?.type === 'key' || redeemable?.type === 'redeemable';
+  const available = !!redeemable && (!timed || opportunityIsActive(
+    redeemable.model as CoinType | KeyType | RedeemableType));
+  const identity = redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
   useEffect(() => {
-    const isActive =
-      (redeemable?.type === 'coin' &&
-        dayjs().isBetween(
-          dayjs((redeemable?.model as CoinType).active_from),
-          dayjs((redeemable?.model as CoinType).active_to)
-        )) ||
-      (redeemable?.type === 'key' &&
-        dayjs().isBetween(
-          dayjs((redeemable?.model as KeyType).active_from),
-          dayjs((redeemable?.model as KeyType).active_to)
-        )) ||
-      (redeemable?.type === 'redeemable' &&
-        dayjs().isBetween(
-          dayjs((redeemable?.model as RedeemableType).active_from),
-          dayjs((redeemable?.model as RedeemableType).active_to)
-        )) ||
-      !!redeemable?.type;
-
-    if (redeemable && isActive) {
-      playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
-      slideUp();
-    } else {
-      slideDown();
+    if (available && identity !== lastAnnounced.current) {
+      lastAnnounced.current = identity;
+      void playSound(require('../../assets/sounds/in_redeem_zone.mp3'));
+    } else if (!available) {
+      lastAnnounced.current = null;
     }
-  }, [redeemable?.model.id]);
+    animated.stopAnimation();
+    if (reducedMotion) animated.setValue(available ? -120 : 0);
+    else Animated.timing(animated, { toValue: available ? -120 : 0,
+      duration: 240, useNativeDriver: true }).start();
+    return () => animated.stopAnimation();
+  }, [available, identity, reducedMotion, animated, playSound]);
 
   return (
     <>
-      {redeemable && (
+      {redeemable && available && (
         <Animated.View
           style={{
             transform: [
@@ -90,6 +71,7 @@ export default function RedeemModal({
         >
           <YellowButton
             onPress={async () => {
+              setOpenedRedeemable(redeemable);
               setModalVisible(true);
             }}
             text={redeemable.type === 'task' ? 'Play Ride!'
@@ -97,40 +79,40 @@ export default function RedeemModal({
           />
         </Animated.View>
       )}
-      {redeemable && (
+      {openedRedeemable && (
         <>
-          {redeemable?.type === 'redeemable' && (
+          {openedRedeemable?.type === 'redeemable' && (
             <RedeemCurrentRedeemableModal
               open={modalVisible}
               close={() => setModalVisible(false)}
-              redeemable={redeemable.model as RedeemableType}
+              redeemable={openedRedeemable.model as RedeemableType}
               onPress={() => onPress()}
             />
           )}
-          {redeemable?.type === 'key' && (
+          {openedRedeemable?.type === 'key' && (
             <RedeemKeyModal
               open={modalVisible}
               close={() => setModalVisible(false)}
-              redeemable={redeemable}
+              redeemable={openedRedeemable}
               onPress={() => onPress()}
             />
           )}
-          {redeemable?.type === 'vault' && (
+          {openedRedeemable?.type === 'vault' && (
             <RedeemVaultModal
               open={modalVisible}
               close={() => setModalVisible(false)}
-              redeemable={redeemable}
+              redeemable={openedRedeemable}
               onPress={() => onPress()}
             />
           )}
-          {(redeemable?.type === 'coin' ||
-            redeemable?.type === 'task' ||
-            redeemable?.type === 'item' ||
-            redeemable?.type === 'pin' ||
-            redeemable?.type === 'secret_task') && (
+          {(openedRedeemable?.type === 'coin' ||
+            openedRedeemable?.type === 'task' ||
+            openedRedeemable?.type === 'item' ||
+            openedRedeemable?.type === 'pin' ||
+            openedRedeemable?.type === 'secret_task') && (
             <RedeemRedeemableModal
               open={modalVisible}
-              redeemable={redeemable}
+              redeemable={openedRedeemable}
               close={() => setModalVisible(false)}
               park={park}
               onPress={() => onPress()}
