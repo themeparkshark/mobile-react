@@ -176,8 +176,19 @@ export default function TaskCoinModal({
         }}
         onLevelUp={async (id) => {
           if (!rideCoin) return false;
-          await levelUpRideCoin(id, rideCoin.current_level);
-          return true;
+          try {
+            const result = await levelUpRideCoin(id, rideCoin.current_level);
+            return result.success && result.ride_coin.current_level > rideCoin.current_level;
+          } catch (error) {
+            // A response can be lost after the atomic upgrade commits. Read it
+            // back before offering a retry of the same expected level.
+            try {
+              const latest = await getRideCoins(5_000);
+              if (latest.data.some(coin => coin.id === id && coin.current_level > rideCoin.current_level))
+                return true;
+            } catch { /* Preserve the original failure for the retry surface. */ }
+            throw error;
+          }
         }}
         onFeature={async (assetId) => {
           let saved = false;

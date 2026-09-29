@@ -47,6 +47,9 @@ export default function CoinCatchReveal({
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const finished = useRef(false);
   const [burst, setBurst] = useState(false);
+  const [artFailed, setArtFailed] = useState(false);
+  const callbacks = useRef({ onDone, onBurst });
+  callbacks.current = { onDone, onBurst };
 
   const flip = useSharedValue(0); // 0 edge-on → 1 face-on
   const scale = useSharedValue(0.35);
@@ -60,11 +63,17 @@ export default function CoinCatchReveal({
   const coinOpacity = useSharedValue(1);
   const confetti = useSharedValue(0);
 
+  const stopVisuals = () => {
+    [flip, scale, wobble, lift, flash, rays, raysSpin, title, backdrop, coinOpacity, confetti]
+      .forEach(value => cancelAnimation(value));
+  };
+  const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
   const finish = () => {
     if (finished.current) return;
     finished.current = true;
-    timers.current.forEach(clearTimeout);
-    onDone();
+    clearTimers();
+    stopVisuals();
+    callbacks.current.onDone();
   };
 
   const at = (ms: number, fn: () => void) => {
@@ -72,18 +81,36 @@ export default function CoinCatchReveal({
   };
 
   useEffect(() => {
-    if (!ready) return undefined;
+    if (!ready || finished.current) return undefined;
     let cancelled = false;
-    AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
-      if (cancelled) return;
+    let preferenceChanged = false;
+    let feedbackPlayed = false;
+    let started = false;
+    const success = () => {
+      if (feedbackPlayed) return;
+      feedbackPlayed = true;
+      callbacks.current.onBurst?.();
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      playSfx('win');
+    };
+    const begin = (reduced: boolean) => {
+      if (cancelled || finished.current) return;
+      started = true;
       if (reduced) {
-        backdrop.value = withTiming(1, { duration: 180 });
+        clearTimers();
+        stopVisuals();
+        backdrop.value = 1;
         flip.value = 1;
         scale.value = 1;
-        title.value = withTiming(1, { duration: 200 });
+        wobble.value = 0;
+        lift.value = 0;
+        coinOpacity.value = 1;
+        flash.value = 0;
+        rays.value = 0;
+        confetti.value = 0;
+        title.value = 1;
         setBurst(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        playSfx('win');
+        success();
         at(1100, finish);
         return;
       }
@@ -117,7 +144,7 @@ export default function CoinCatchReveal({
         [T.wobble + 340, Haptics.ImpactFeedbackStyle.Medium],
         [T.wobble + 680, Haptics.ImpactFeedbackStyle.Heavy],
       ].forEach(([ms, style]) => at(ms as number, () => {
-        Haptics.impactAsync(style as Haptics.ImpactFeedbackStyle);
+        void Haptics.impactAsync(style as Haptics.ImpactFeedbackStyle).catch(() => undefined);
         playSfx('tick', 0.8);
       }));
 
@@ -132,9 +159,7 @@ export default function CoinCatchReveal({
       ));
       at(T.burst, () => {
         setBurst(true);
-        onBurst?.();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        playSfx('win');
+        success();
         playSfx('coin', 0.9);
       });
 
@@ -149,11 +174,19 @@ export default function CoinCatchReveal({
       );
       at(T.lift, () => playSfx('whoosh', 0.5));
       at(T.done + 400, finish); // safety net if the animation is interrupted
+    };
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', reduced => {
+      preferenceChanged = true;
+      if (reduced || !started) begin(reduced);
     });
+    void AccessibilityInfo.isReduceMotionEnabled().then(reduced => {
+      if (!preferenceChanged) begin(reduced);
+    }).catch(() => { if (!preferenceChanged) begin(true); });
     return () => {
       cancelled = true;
-      timers.current.forEach(clearTimeout);
-      cancelAnimation(raysSpin);
+      subscription.remove();
+      clearTimers();
+      stopVisuals();
     };
     // Plays once, as soon as the parent is ready.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,8 +237,8 @@ export default function CoinCatchReveal({
           ))}
         </Animated.View>
         <Animated.View style={[{ width: coinSize, height: coinSize }, coinStyle]}>
-          {coinUrl
-            ? <Image source={coinUrl} style={{ width: coinSize, height: coinSize }} contentFit="contain" />
+          {coinUrl && !artFailed
+            ? <Image source={coinUrl} style={{ width: coinSize, height: coinSize }} contentFit="contain" onError={() => setArtFailed(true)} />
             : <Image source={require('../../assets/images/coingold.png')} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
         </Animated.View>
       </View>

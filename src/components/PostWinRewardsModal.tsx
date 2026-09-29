@@ -24,8 +24,9 @@ import { TEAMS } from '../constants/teams';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import type { StampData } from '../api/endpoints/me/stamps';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
-const { width: SW, height: SH } = Dimensions.get('window');
+const { width: SW } = Dimensions.get('window');
 
 interface Props {
   visible: boolean;
@@ -85,18 +86,21 @@ function RideControlBanner({ result, playerId, onPickTeam }: {
 }
 
 /* ─── Animated radial light rays behind the hero coin ─── */
-function LightRays({ color, size }: { color: string; size: number }) {
+function LightRays({ color, size, reducedMotion }: { color: string; size: number; reducedMotion: boolean }) {
   const spin = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.loop(
+    if (reducedMotion) { spin.setValue(0); return; }
+    const animation = Animated.loop(
       Animated.timing(spin, {
         toValue: 1,
         duration: 12000,
         easing: Easing.linear,
         useNativeDriver: true,
       }),
-    ).start();
-  }, []);
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [reducedMotion, spin]);
 
   const rotate = spin.interpolate({
     inputRange: [0, 1],
@@ -135,23 +139,20 @@ function LightRays({ color, size }: { color: string; size: number }) {
 /* ─── Floating sparkle particle ─── */
 function Sparkle({ delay, x, color }: { delay: number; x: number; color: string }) {
   const anim = useRef(new Animated.Value(0)).current;
-  const size = 3 + Math.random() * 5;
-
+  const particle = useMemo(() => ({ size: 3 + Math.random() * 5,
+    lift: -80 - Math.random() * 100, drift: (Math.random() - 0.5) * 120,
+    duration: 1400 + Math.random() * 800 }), []);
+  const size = particle.size;
   useEffect(() => {
-    const run = () => {
-      anim.setValue(0);
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(anim, {
-          toValue: 1,
-          duration: 1400 + Math.random() * 800,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start(() => run());
-    };
-    run();
-  }, []);
+    anim.setValue(0);
+    const animation = Animated.loop(Animated.sequence([
+      Animated.delay(delay),
+      Animated.timing(anim, { toValue: 1, duration: particle.duration,
+        easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [anim, delay, particle]);
 
   return (
     <Animated.View
@@ -172,13 +173,13 @@ function Sparkle({ delay, x, color }: { delay: number; x: number; color: string 
           {
             translateY: anim.interpolate({
               inputRange: [0, 1],
-              outputRange: [0, -80 - Math.random() * 100],
+              outputRange: [0, particle.lift],
             }),
           },
           {
             translateX: anim.interpolate({
               inputRange: [0, 1],
-              outputRange: [0, (Math.random() - 0.5) * 120],
+              outputRange: [0, particle.drift],
             }),
           },
           {
@@ -193,72 +194,28 @@ function Sparkle({ delay, x, color }: { delay: number; x: number; color: string 
   );
 }
 
-/* ─── Animated counter that ticks up from 0 ─── */
-function TickUpNumber({
-  value,
-  delay,
-  style,
-}: {
-  value: number;
-  delay: number;
-  style: any;
+/* Count once; reduced motion shows the confirmed amount immediately. */
+function AnimatedTickText({ value, delay, style, reducedMotion }: {
+  value: number; delay: number; style: any; reducedMotion: boolean;
 }) {
-  const display = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (value <= 0) return;
-    display.setValue(0);
-    Animated.sequence([
-      Animated.delay(delay),
-      Animated.timing(display, {
-        toValue: value,
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [value]);
-
-  // We need to use a listener for non-native driven numeric interpolation
-  const textRef = useRef<any>(null);
-  useEffect(() => {
-    const id = display.addListener(({ value: v }) => {
-      if (textRef.current) {
-        textRef.current.setNativeProps({ text: `+${Math.round(v)}` });
-      }
-    });
-    return () => display.removeListener(id);
-  }, []);
-
-  // Fallback: use Animated.Text won't work with setNativeProps on RN Text,
-  // so we use a simple state approach instead
-  return <AnimatedTickText value={value} delay={delay} style={style} />;
-}
-
-function AnimatedTickText({ value, delay, style }: { value: number; delay: number; style: any }) {
   const anim = useRef(new Animated.Value(0)).current;
-  const [display, setDisplay] = React.useState(0);
-
+  const [display, setDisplay] = useState(reducedMotion ? value : 0);
   useEffect(() => {
-    if (value <= 0) return;
+    if (reducedMotion || value <= 0) { setDisplay(value); return; }
+    setDisplay(0);
     anim.setValue(0);
     const listener = anim.addListener(({ value: v }) => setDisplay(Math.round(v)));
-    Animated.sequence([
+    const animation = Animated.sequence([
       Animated.delay(delay),
-      Animated.timing(anim, {
-        toValue: value,
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }),
-    ]).start();
-    return () => anim.removeListener(listener);
-  }, [value]);
-
-  return <Text style={style}>+{display}</Text>;
+      Animated.timing(anim, { toValue: value, duration: 600,
+        easing: Easing.out(Easing.cubic), useNativeDriver: false }),
+    ]);
+    animation.start();
+    return () => { animation.stop(); anim.removeListener(listener); };
+  }, [value, delay, reducedMotion, anim]);
+  return <Text style={style}>+{display.toLocaleString()}</Text>;
 }
 
-import React from 'react';
 
 /* ─── Main component ─── */
 export default function PostWinRewardsModal({
@@ -285,6 +242,7 @@ export default function PostWinRewardsModal({
 }: Props) {
   const { player } = useContext(AuthContext);
   const isVip = !!player?.is_subscribed;
+  const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
   const [coinArtFailed, setCoinArtFailed] = useState(false);
@@ -337,114 +295,35 @@ export default function PostWinRewardsModal({
   useEffect(() => {
     if (!visible || !caught) return;
 
-    // Reset
-    cardScale.setValue(0);
-    heroAnim.setValue(0);
-    coinSpin.setValue(0);
+    const values = [cardScale, heroAnim, coinSpin, shelfPulse, buttonAnim, ...rowAnims];
+    if (reducedMotion) {
+      values.forEach(value => value.setValue(1));
+      coinGlow.setValue(0.5);
+      return;
+    }
+    values.forEach(value => value.setValue(0));
     coinGlow.setValue(0);
-    shelfPulse.setValue(0);
-    buttonAnim.setValue(0);
-    rowAnims.forEach((a) => a.setValue(0));
-
-    // Haptic sequence: heavy -> medium -> light (impact cascade)
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 120);
-    setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 220);
-
-    // Card entrance
-    Animated.spring(cardScale, {
-      toValue: 1,
-      tension: 55,
-      friction: 7,
-      useNativeDriver: true,
-    }).start();
-
-    // Hero coin entrance (delayed)
-    Animated.sequence([
-      Animated.delay(300),
-      Animated.spring(heroAnim, {
-        toValue: 1,
-        tension: 60,
-        friction: 6,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Coin 3D-ish spin on entrance
-    Animated.sequence([
-      Animated.delay(300),
-      Animated.timing(coinSpin, {
-        toValue: 1,
-        duration: 800,
-        easing: Easing.out(Easing.back(1.2)),
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Coin glow pulse (loops)
-    Animated.sequence([
-      Animated.delay(600),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(coinGlow, {
-            toValue: 1,
-            duration: 1200,
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: false,
-          }),
-          Animated.timing(coinGlow, {
-            toValue: 0.3,
-            duration: 1200,
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: false,
-          }),
-        ]),
-      ),
-    ]).start();
-
-    // Stat rows stagger (with haptic per row)
-    Animated.sequence([
-      Animated.delay(700),
-      Animated.stagger(
-        100,
-        rowAnims.map((anim, i) => {
-          // Haptic tick per stat
-          setTimeout(
-            () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light),
-            700 + i * 100,
-          );
-          return Animated.spring(anim, {
-            toValue: 1,
-            tension: 90,
-            friction: 7,
-            useNativeDriver: true,
-          });
-        }),
-      ),
-    ]).start();
-
-    // Shelf progress pill
-    Animated.sequence([
-      Animated.delay(1200),
-      Animated.spring(shelfPulse, {
-        toValue: 1,
-        tension: 70,
-        friction: 6,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Button entrance
-    Animated.sequence([
-      Animated.delay(1400),
-      Animated.spring(buttonAnim, {
-        toValue: 1,
-        tension: 65,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [visible, caught]);
+    const spring = (value: Animated.Value, delay: number, tension = 65) =>
+      Animated.sequence([Animated.delay(delay), Animated.spring(value, {
+        toValue: 1, tension, friction: 7, useNativeDriver: true,
+      })]);
+    const animations = [
+      spring(cardScale, 0, 55), spring(heroAnim, 200, 60),
+      Animated.sequence([Animated.delay(200), Animated.timing(coinSpin, {
+        toValue: 1, duration: 650, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true,
+      })]),
+      Animated.loop(Animated.sequence([
+        Animated.timing(coinGlow, { toValue: 1, duration: 1200,
+          easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+        Animated.timing(coinGlow, { toValue: 0.3, duration: 1200,
+          easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
+      ])),
+      ...rowAnims.map((value, i) => spring(value, 500 + i * 80, 90)),
+      spring(shelfPulse, 850, 70), spring(buttonAnim, 0),
+    ];
+    animations.forEach(animation => animation.start());
+    return () => animations.forEach(animation => animation.stop());
+  }, [visible, caught, reducedMotion, cardScale, heroAnim, coinSpin, coinGlow, shelfPulse, buttonAnim, rowAnims]);
 
   const statRows = [
     {
@@ -486,6 +365,9 @@ export default function PostWinRewardsModal({
       animationIn="fadeIn"
       animationOut="fadeOut"
       isVisible={visible}
+      animationInTiming={reducedMotion ? 120 : 250}
+      animationOutTiming={reducedMotion ? 120 : 200}
+      onBackButtonPress={caught ? onClose : undefined}
       onModalHide={onHidden}
       onBackdropPress={caught ? onClose : undefined}
       backdropOpacity={0.92}
@@ -499,7 +381,7 @@ export default function PostWinRewardsModal({
         }]}
         showsVerticalScrollIndicator={false}>
         {/* Sparkle particles floating behind everything */}
-        {sparkles.map((s, i) => (
+        {!reducedMotion && sparkles.map((s, i) => (
           <Sparkle key={i} delay={s.delay} x={s.x} color={s.color} />
         ))}
 
@@ -553,7 +435,7 @@ export default function PostWinRewardsModal({
 
               {/* Rotating light rays */}
               <View style={styles.raysWrap}>
-                <LightRays color={earnedEdition?.color ?? '#4cdcff'} size={200} />
+                <LightRays color={earnedEdition?.color ?? '#4cdcff'} size={200} reducedMotion={reducedMotion} />
               </View>
 
               {/* Animated glow behind coin */}
@@ -639,7 +521,11 @@ export default function PostWinRewardsModal({
                   ? coinTimesCollected === 1 ? 'Added to your coin shelf.' : `Collected ${coinTimesCollected} times.`
                   : 'Your confirmed rewards are below.'}</Text>
               {nextRideTicketEarned > 0 && (
-                <Text style={styles.nextRideTicket}>🎫 +{nextRideTicketEarned} Park Ticket · Next ride ready</Text>
+                <View style={styles.ticketReward}>
+                  <Image source={require('../../assets/images/ticket-icon.png')}
+                    style={styles.rewardFlourish} contentFit="contain" />
+                  <Text style={styles.nextRideTicket}>+{nextRideTicketEarned} Park Ticket · Next ride ready</Text>
+                </View>
               )}
             </Animated.View>
 
@@ -699,6 +585,7 @@ export default function PostWinRewardsModal({
                   {/* Tick-up number */}
                   <AnimatedTickText
                     value={reward.amount}
+                    reducedMotion={reducedMotion}
                     delay={700 + index * 100}
                     style={[styles.statAmount, { color: reward.accent }]}
                   />
@@ -720,7 +607,8 @@ export default function PostWinRewardsModal({
               <Pressable style={styles.vipChip} accessibilityRole="button"
                 accessibilityLabel={`VIP would have doubled this win: plus ${xpEarned} XP and ${coinsEarned} Shark Coins. See VIP.`}
                 onPress={() => { onClose(); setTimeout(() => RootNavigation.navigate('Membership'), 350); }}>
-                <Text style={styles.vipChipCrown}>👑</Text>
+                <Image source={require('../../assets/images/screens/leaderboard/crown-gold.png')}
+                  style={styles.rewardFlourish} contentFit="contain" />
                 <Text style={styles.vipChipText} numberOfLines={1}>
                   VIP doubles this win: +{xpEarned} XP{coinsEarned > 0 ? ` · +${coinsEarned} coins` : ''}
                 </Text>
@@ -766,7 +654,8 @@ export default function PostWinRewardsModal({
                   end={{ x: 1, y: 0 }}
                   style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
                 />
-                <Text style={styles.progressEmoji}>🏆</Text>
+                <Image source={require('../../assets/images/stamps/first-ride-coin-v1.png')}
+                  style={styles.rewardFlourish} contentFit="contain" />
                 <Text style={styles.progressPillText}>{coinTimesCollected === 1
                   ? 'First Collection' : `${coinTimesCollected} Total Collections`}</Text>
               </Animated.View>
@@ -798,7 +687,7 @@ export default function PostWinRewardsModal({
         )}
       </Animated.View>
       </View>}
-      {!caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
+      {visible && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
         isNewCoin={coinTimesCollected === 1}
         onDone={() => setCaught(true)} />}
     </Modal>
@@ -809,7 +698,8 @@ const styles = StyleSheet.create({
   vipChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'center',
     backgroundColor: 'rgba(59, 26, 92, 0.85)', borderRadius: 14, borderWidth: 2, borderColor: '#ffcf3b',
     paddingVertical: 6, paddingHorizontal: 12 },
-  vipChipCrown: { fontSize: 16 },
+  rewardFlourish: { width: 24, height: 24 },
+  ticketReward: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
   vipChipText: { fontFamily: 'Knockout', fontSize: 14, color: '#fff' },
   vipChipGo: { fontFamily: 'Shark', fontSize: 16, color: '#ffcf3b' },
   rushBonus: { marginTop: 8, backgroundColor: '#ffcf3b', borderRadius: 14, borderWidth: 3, borderColor: '#fff',
@@ -974,7 +864,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Knockout',
     fontSize: 13,
     textAlign: 'center',
-    marginTop: 8,
+    flexShrink: 1,
   },
 
   /* ── Stats ── */

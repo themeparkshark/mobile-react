@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react';
 import ShareCardArtwork from './ShareCardArtwork';
 import { StyleSheet, Text, View } from 'react-native';
+import { parkDayShareMetrics } from './parkDayShareMetrics';
 import type { ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 
 export const SHARE_CARD_WIDTH = 360;
@@ -17,6 +18,7 @@ const ParkDayShareCard = forwardRef<View, {
   readonly onReadyChange?: (ready: boolean) => void;
 }>(function ParkDayShareCard({ recap, sharkName, avatarUrl, onReadyChange }, ref) {
   const coins = recap.coins ?? [];
+  const metrics = parkDayShareMetrics(recap);
   const shown = coins.slice(0, 12);
   const extra = coins.length - shown.length;
   const [loadedArtwork, setLoadedArtwork] = useState<ReadonlySet<string>>(() => new Set());
@@ -61,6 +63,9 @@ const ParkDayShareCard = forwardRef<View, {
                 ? <ShareCardArtwork key={coin.coin_url} artworkKey={`coin:${coin.coin_url}`} onReady={markReady}
                     fallback={require('../../assets/images/coingold.png')} source={{ uri: coin.coin_url }} style={{ width: coinSize, height: coinSize }} contentFit="contain" />
                 : <ShareCardArtwork artworkKey="coin:default" onReady={markReady} source={require('../../assets/images/coingold.png')} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
+              {shown.length === 1 && <Text style={styles.coinName} numberOfLines={2}>
+                {coin.ride_name}
+              </Text>}
               {coin.new && <Text style={styles.newTag}>NEW</Text>}
             </View>
           ))}
@@ -70,11 +75,9 @@ const ParkDayShareCard = forwardRef<View, {
         </View>
       </View>
 
-      <View style={styles.stats}>
-        <Stat value={recap.eligible_line_minutes} label="verified min" />
-        <Stat value={recap.ride_parts_earned} label="Ride Parts" />
-        <Stat value={recap.coin_upgrades} label="upgrades" />
-      </View>
+      {metrics.length > 0 && <View style={styles.stats}>
+        {metrics.map(stat => <Stat key={stat.label} value={stat.value} label={stat.label} />)}
+      </View>}
 
       <View style={styles.footer}>
         <Text style={styles.cta}>Catch the coins I missed!</Text>
@@ -112,6 +115,7 @@ const styles = StyleSheet.create({
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 4 }, textShadowRadius: 0 },
   bigLabel: { fontFamily: 'Shark', fontSize: 20, color: '#fff', marginBottom: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+  coinName: { fontFamily: 'Shark', fontSize: 17, color: '#fff', textAlign: 'center', maxWidth: 270, marginTop: 4, marginBottom: 3 },
   newTag: { fontFamily: 'Knockout', fontSize: 11, color: '#7dffb0', marginTop: -2 },
   more: { backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
   moreText: { fontFamily: 'Shark', fontSize: 20, color: '#fff' },

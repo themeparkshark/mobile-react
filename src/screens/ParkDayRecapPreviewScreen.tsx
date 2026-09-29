@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { ParkDayRecap } from '../api/endpoints/me/park-day-recap';
+import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import ParkDayRecapCard from './ParkDayRecapCard';
 import ParkDayShareCard from '../components/ParkDayShareCard';
 import Wrapper from '../components/Wrapper';
@@ -34,12 +34,14 @@ const today: ParkDayRecap = {
 
 /** Development-only visual check of the real recap card and its day navigation. */
 export default function ParkDayRecapPreviewScreen() {
+  const live = __DEV__ && process.env.EXPO_PUBLIC_PARK_DAY_RECAP_LIVE === '1';
   const [atPark, setAtPark] = useState(true);
   const [busyToday, setBusyToday] = useState(true);
   const [version, setVersion] = useState(0);
   const loadRecap = useCallback(async (_parkId: number, date?: string) => {
+    if (live) return getParkDayRecap(_parkId, date);
     return date ? prior : busyToday ? { ...prior, park_day: '2026-09-24', previous_active_day: '2026-09-23' } : today;
-  }, [busyToday]);
+  }, [busyToday, live]);
 
   return <Wrapper previewMode onNavigate={() => {}}>
     <Topbar>
@@ -48,19 +50,19 @@ export default function ParkDayRecapPreviewScreen() {
       <TopbarColumn stretch={false} />
     </Topbar>
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.context}>Magic Kingdom · Ride Coins</Text>
+      <Text style={styles.context}>{live ? 'LOCAL PLAYER QA · confirmed park day' : 'Universal Studios Hollywood · sample park day'}</Text>
       {process.env.EXPO_PUBLIC_SHARE_CARD_PREVIEW === '1'
         ? <ParkDayShareCard recap={prior} sharkName="FinFan22" />
         : <ParkDayRecapCard parkId={1} atPark={atPark} refreshVersion={version}
-          loadRecap={loadRecap} initiallyExpanded />}
-      <View style={styles.toolbar}>
+          loadRecap={loadRecap} initiallyExpanded={!live} />}
+      {!live && <View style={styles.toolbar}>
         <Pressable onPress={() => { setAtPark(value => !value); setVersion(value => value + 1); }}>
           <Text style={styles.action}>{atPark ? 'At park' : 'At home'}</Text>
         </Pressable>
         <Pressable onPress={() => { setBusyToday(value => !value); setVersion(value => value + 1); }}>
           <Text style={styles.action}>{busyToday ? 'Busy day' : 'Empty day'}</Text>
         </Pressable>
-      </View>
+      </View>}
     </ScrollView>
   </Wrapper>;
 }

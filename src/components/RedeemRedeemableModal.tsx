@@ -97,6 +97,8 @@ export default function RedeemRedeemableModal({
 
   // Flow state
   const [flowState, setFlowState] = useState<FlowState>('preview');
+  // iOS must finish dismissing the game presentation before showing rewards.
+  const [challengeModalHidden, setChallengeModalHidden] = useState(true);
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [selectedGameData, setSelectedGameData] = useState<typeof GAMES[0] | null>(null);
   const selectedIndexRef = useRef<number | null>(null);
@@ -133,6 +135,7 @@ export default function RedeemRedeemableModal({
   const spendingRef = useRef(false);
   const protectedRetryRef = useRef(false);
   const claimingRef = useRef(false);
+  const afterRewardsHidden = useRef<(() => void) | null>(null);
   const attemptRef = useRef<TaskAttempt | null>(null);
   const savedAttemptIdRef = useRef<number | null>(null);
   const requestIdRef = useRef<string | null>(null);
@@ -171,6 +174,7 @@ export default function RedeemRedeemableModal({
   // Reset state when modal opens/closes
   useEffect(() => {
     if (open) {
+      setChallengeModalHidden(false);
       setFlowState(isTaskType ? 'recovering' : 'preview');
       setSelectedGame(null);
       setSelectedGameData(null);
@@ -519,18 +523,18 @@ export default function RedeemRedeemableModal({
     await clearAttemptCheckpoint().catch(error =>
       console.warn('Could not clear confirmed ride win:', error));
     onPress();
-    close();
-    RootNavigation.navigate('CoinShelf', {
+    afterRewardsHidden.current = () => RootNavigation.navigate('CoinShelf', {
       focusCoin: focusCoinAssetId ? { assetId: focusCoinAssetId } : undefined,
     });
+    close();
   }, [onPress, close, clearAttemptCheckpoint]);
 
   const handleViewStampBook = useCallback(async () => {
     await clearAttemptCheckpoint().catch(error =>
       console.warn('Could not clear confirmed ride win:', error));
     onPress();
+    afterRewardsHidden.current = () => RootNavigation.navigate('StampBook');
     close();
-    RootNavigation.navigate('StampBook');
   }, [onPress, close, clearAttemptCheckpoint]);
 
   if (!redeemable) return null;
@@ -545,6 +549,8 @@ export default function RedeemRedeemableModal({
         animationOut="zoomOut"
         swipeDirection={flowState === 'preview' ? 'down' : undefined}
         isVisible={showModal}
+        onModalWillShow={() => setChallengeModalHidden(false)}
+        onModalHide={() => setChallengeModalHidden(true)}
         onSwipeComplete={safeClose}
         onBackdropPress={safeClose}
         onBackButtonPress={safeClose}
@@ -854,7 +860,7 @@ export default function RedeemRedeemableModal({
 
       {/* Post-Win Rewards */}
       <PostWinRewardsModal
-        visible={open === true && flowState === 'postwin'}
+        visible={open === true && flowState === 'postwin' && challengeModalHidden}
         rideName={taskName}
         taskCoinUrl={
           redeemable?.type === 'task'
@@ -878,6 +884,11 @@ export default function RedeemRedeemableModal({
         playerEnergy={postWinEnergy}
         onViewCoin={handleViewCoin}
         onViewStampBook={handleViewStampBook}
+        onHidden={() => {
+          const next = afterRewardsHidden.current;
+          afterRewardsHidden.current = null;
+          next?.();
+        }}
         onClose={handlePostWinClose}
       />
     </>

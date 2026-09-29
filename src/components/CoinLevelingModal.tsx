@@ -21,6 +21,7 @@ import CoinUpgradeDemo from './CoinUpgradeDemo';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -66,6 +67,22 @@ export default function CoinLevelingModal({
   const [featured, setFeatured] = useState(false);
   const [featureBusy, setFeatureBusy] = useState(false);
   const [featureError, setFeatureError] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const upgradeBusy = useRef(false);
+  const mounted = useRef(true);
+  const reducedMotion = useReducedGameMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
+  const upgradeAnimations = useRef<Animated.CompositeAnimation[]>([]);
+  const upgradeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const stopUpgradeEffects = () => {
+    upgradeTimers.current.forEach(clearTimeout); upgradeTimers.current = [];
+    upgradeAnimations.current.forEach(animation => animation.stop()); upgradeAnimations.current = [];
+  };
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; stopUpgradeEffects(); };
+  }, []);
   const [holoVisible, setHoloVisible] = useState(false);
   const [showEditions, setShowEditions] = useState(false);
   const { refreshPlayer } = useContext(AuthContext);
@@ -85,8 +102,6 @@ export default function CoinLevelingModal({
   // Staggered resource bar animations
   const energyBarAnim = useRef(new Animated.Value(0)).current;
   const partsBarAnim = useRef(new Animated.Value(0)).current;
-  const energyCountAnim = useRef(new Animated.Value(0)).current;
-  const partsCountAnim = useRef(new Animated.Value(0)).current;
 
   // ── Reset on open ──
   useEffect(() => {
@@ -94,34 +109,44 @@ export default function CoinLevelingModal({
       setFeatured(!!rideCoin.is_featured);
       setShowEditions(false);
       setFeatureError(false);
+      setUpgradeError(null);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
       setState(isMax ? 'maxed' : 'preview');
-      fadeIn.setValue(0);
-      slideUp.setValue(50);
-      progressAnim.setValue(0);
-      successScale.setValue(0);
-
-      // Entry animation
-      Animated.parallel([
-        Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.spring(slideUp, { toValue: 0, friction: 7, useNativeDriver: true }),
-      ]).start();
-
-      // Staggered resource bars fill
-      energyBarAnim.setValue(0);
-      partsBarAnim.setValue(0);
-      const energyPct = rideCoin.energy_to_next_level > 0
-        ? Math.min(playerEnergy / rideCoin.energy_to_next_level, 1) : 1;
-      const partsPct = rideCoin.parts_to_next_level > 0
-        ? Math.min(playerParts / rideCoin.parts_to_next_level, 1) : 1;
-
-      Animated.stagger(200, [
-        Animated.timing(energyBarAnim, { toValue: energyPct, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: false }),
-        Animated.timing(partsBarAnim, { toValue: partsPct, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: false }),
-      ]).start();
-
     }
-  }, [visible, rideCoin]);
+  }, [visible, rideCoin?.id]);
+
+  useEffect(() => {
+    if (!visible || !rideCoin) return;
+    const energyPct = rideCoin.energy_to_next_level > 0
+      ? Math.min(playerEnergy / rideCoin.energy_to_next_level, 1) : 1;
+    const partsPct = rideCoin.parts_to_next_level > 0
+      ? Math.min(playerParts / rideCoin.parts_to_next_level, 1) : 1;
+    if (reducedMotion) {
+      fadeIn.setValue(1); slideUp.setValue(0);
+      energyBarAnim.setValue(energyPct); partsBarAnim.setValue(partsPct);
+      successScale.setValue(1); successRotate.setValue(1); coinScale.setValue(1);
+      return;
+    }
+    fadeIn.setValue(0); slideUp.setValue(50);
+    energyBarAnim.setValue(0); partsBarAnim.setValue(0);
+    const entrance = Animated.parallel([
+      Animated.timing(fadeIn, { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.spring(slideUp, { toValue: 0, friction: 8, useNativeDriver: true }),
+    ]);
+    const bars = Animated.stagger(100, [
+      Animated.timing(energyBarAnim, { toValue: energyPct, duration: 600, easing: Easing.out(Easing.ease), useNativeDriver: false }),
+      Animated.timing(partsBarAnim, { toValue: partsPct, duration: 600, easing: Easing.out(Easing.ease), useNativeDriver: false }),
+    ]);
+    entrance.start(); bars.start();
+    return () => { entrance.stop(); bars.stop(); };
+  }, [visible, rideCoin?.id, reducedMotion]);
+
+  useEffect(() => {
+    if (!reducedMotion) return;
+    stopUpgradeEffects();
+    shakeAnim.setValue(0); coinScale.setValue(1);
+    successScale.setValue(1); successRotate.setValue(1);
+  }, [reducedMotion]);
 
   if (!rideCoin) return null;
 
@@ -140,7 +165,9 @@ export default function CoinLevelingModal({
 
   // ── Level up sequence ──
   const handleLevelUp = async () => {
-    if (!canLevelUp) return;
+    if (!canLevelUp || upgradeBusy.current) return;
+    upgradeBusy.current = true;
+    setUpgradeError(null);
 
     setState('leveling');
     if (Platform.OS === 'ios') {
@@ -172,19 +199,23 @@ export default function CoinLevelingModal({
 
     // The charge always plays out in full so the pop lands at the peak, even
     // when the server answers instantly. Haptics climb with the charge.
-    const charged = new Promise<void>((resolve) => {
-      Animated.parallel([shake, chargeUp, scaleUp]).start(() => resolve());
+    const charge = Animated.parallel([shake, chargeUp, scaleUp]);
+    upgradeAnimations.current.push(charge);
+    const charged = reducedMotion ? Promise.resolve() : new Promise<void>((resolve) => {
+      charge.start(() => resolve());
     });
-    const chargeTicks = Platform.OS === 'ios' ? [
+    const chargeTicks = Platform.OS === 'ios' && !reducedMotion ? [
       [400, Haptics.ImpactFeedbackStyle.Light],
       [800, Haptics.ImpactFeedbackStyle.Medium],
       [1200, Haptics.ImpactFeedbackStyle.Heavy],
     ].map(([ms, style]) => setTimeout(() => Haptics.impactAsync(style as any), ms as number)) : [];
 
+    upgradeTimers.current = chargeTicks;
     // Phase 2: Flash + success
     try {
       const [success] = await Promise.all([onLevelUp(rideCoin.id), charged]);
-      chargeTicks.forEach(clearTimeout);
+      stopUpgradeEffects();
+      if (!mounted.current) return;
 
       if (success) {
         playSound(require('../../assets/sounds/reward.mp3'));
@@ -197,13 +228,18 @@ export default function CoinLevelingModal({
         coinScale.setValue(0.5);
 
         setState('success');
-        confettiRef.current?.play();
+        if (!reducedMotionRef.current) confettiRef.current?.play();
 
-        Animated.parallel([
+        const celebration = Animated.parallel([
           Animated.spring(coinScale, { toValue: 1, friction: 4, tension: 100, useNativeDriver: true }),
           Animated.spring(successScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
           Animated.timing(successRotate, { toValue: 1, duration: 600, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-        ]).start();
+        ]);
+        if (reducedMotionRef.current) {
+          coinScale.setValue(1); successScale.setValue(1); successRotate.setValue(1);
+        } else {
+          upgradeAnimations.current.push(celebration); celebration.start();
+        }
 
         // The server upgrade is already confirmed. A profile refresh failure must not
         // turn the successful purchase back into an apparent failed attempt.
@@ -211,8 +247,13 @@ export default function CoinLevelingModal({
       } else {
         throw new Error('Level up failed');
       }
-    } catch {
-      chargeTicks.forEach(clearTimeout);
+    } catch (error) {
+      stopUpgradeEffects();
+      if (!mounted.current) return;
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      setUpgradeError(status === 409
+        ? 'This coin changed. Close its detail and reopen it to refresh your level.'
+        : 'Your upgrade could not be confirmed. Check your connection and try again.');
       setState('preview');
       shakeAnim.setValue(0);
       coinScale.setValue(1);
@@ -220,13 +261,21 @@ export default function CoinLevelingModal({
       if (Platform.OS === 'ios') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
+    } finally {
+      upgradeBusy.current = false;
     }
   };
 
   const handleClose = () => {
-    Animated.timing(fadeIn, {
+    if (upgradeBusy.current) return;
+    stopUpgradeEffects();
+    if (reducedMotion) { onClose(); return; }
+    const closing = Animated.timing(fadeIn, {
       toValue: 0, duration: 200, useNativeDriver: true,
-    }).start(() => {
+    });
+    upgradeAnimations.current.push(closing);
+    closing.start(({ finished }) => {
+      if (!finished || !mounted.current) return;
       setState('preview');
       coinScale.setValue(1);
       progressAnim.setValue(0);
@@ -255,6 +304,9 @@ export default function CoinLevelingModal({
       animationIn="fadeIn"
       animationOut="fadeOut"
       isVisible={visible}
+      animationInTiming={reducedMotion ? 120 : 250}
+      animationOutTiming={reducedMotion ? 120 : 200}
+      onBackButtonPress={state !== 'leveling' ? handleClose : undefined}
       onModalHide={() => {
         if (pendingLinePlayRef.current) {
           pendingLinePlayRef.current = false;
@@ -267,7 +319,7 @@ export default function CoinLevelingModal({
       style={{ margin: 0, alignItems: 'center', justifyContent: 'center' }}
     >
       {/* Confetti overlay — only render during success to avoid artifact */}
-      {state === 'success' && (
+      {state === 'success' && !reducedMotion && (
         <Lottie
           ref={confettiRef}
           source={require('../../assets/animations/confetti.json')}
@@ -640,6 +692,17 @@ export default function CoinLevelingModal({
                       )}
                     </View>
 
+                    {upgradeError && <View accessibilityRole="alert" style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8,
+                      backgroundColor: '#FFF1C5', borderColor: '#F4C453', borderWidth: 2,
+                      borderRadius: 12, padding: 10,
+                    }}>
+                      <Image source={require('../../assets/images/ride-parts.png')}
+                        style={{ width: 28, height: 28 }} contentFit="contain" />
+                      <Text style={{ flex: 1, fontFamily: 'Knockout', fontSize: 13, color: '#17476B' }}>
+                        {upgradeError}
+                      </Text>
+                    </View>}
                     {/* ── Level Up Button ── */}
                     <YellowButton
                       text={canLevelUp ? 'Power Up!' : 'Not Enough Resources'}

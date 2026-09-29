@@ -123,9 +123,10 @@ export default function CoinShelfScreen({ route }: {
   const currentCatalog = Array.from(new Map((catalog?.rides ?? []).map(ride => [ride.asset_id, ride])).values());
   const currentOwned = currentCatalog.filter(ride => ride.coin_owned).length;
   const missingCoins = currentCatalog.filter(ride => !ride.coin_owned);
+  const earnedParkId = currentCatalog.find(ride => ride.asset_id === route?.params?.focusCoin?.assetId)?.park_id;
   const nextCoin = catalog?.goal && !catalog.goal.coin_owned
     ? missingCoins.find(ride => ride.asset_id === catalog.goal?.asset_id) ?? missingCoins[0]
-    : missingCoins.find(ride => ride.park_id === catalog?.goal?.park_id) ?? missingCoins[0];
+    : missingCoins.find(ride => ride.park_id === (earnedParkId ?? catalog?.goal?.park_id)) ?? missingCoins[0];
 
   const chooseNextCoin = async (ride: TripGoalRide) => {
     if (preview) {
@@ -460,7 +461,7 @@ export default function CoinShelfScreen({ route }: {
             textTransform: 'uppercase',
             letterSpacing: 1,
           }}>
-            {catalogStale ? 'Last known park coins' : 'Current park coins'}
+            {catalogStale ? 'Last known collection' : 'Across all parks'}
           </Text>
           <View style={{
             flex: 1, height: 6, borderRadius: 3,
@@ -555,8 +556,11 @@ export default function CoinShelfScreen({ route }: {
         <Text style={{ color: '#805007', fontFamily: 'Knockout', fontSize: 12 }}>
           {catalog?.goal?.asset_id === nextCoin.asset_id ? 'YOUR NEXT COIN' : 'PICK YOUR NEXT COIN'}
         </Text>
-        <Text style={{ color: '#17476B', fontFamily: 'Shark', fontSize: 17 }} numberOfLines={1}>
-          {nextCoin.ride_name} · {nextCoin.park_name}
+        <Text style={{ color: '#17476B', fontFamily: 'Shark', fontSize: 17, lineHeight: 20 }} numberOfLines={2}>
+          {nextCoin.ride_name}
+        </Text>
+        <Text style={{ color: '#376783', fontFamily: 'Knockout', fontSize: 12, marginTop: 2 }} numberOfLines={2}>
+          {nextCoin.park_name}
         </Text>
         <Text style={{ color: '#376783', fontFamily: 'Knockout', fontSize: 12, marginTop: 2 }}>
           {catalog?.goal?.asset_id === nextCoin.asset_id ? 'Chosen for your next park visit' : 'Tap to set this ride as your goal'}

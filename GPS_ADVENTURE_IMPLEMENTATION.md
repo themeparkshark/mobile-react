@@ -39,11 +39,22 @@ must reflect confirmed activity; exporting a card never means it was sent.
   reward connections distinguish nearby checks, sign-in and network problems, and
   local game time is not called verified queue time. Completed sessions settle into
   a finished header and recap; inactive carousel pages are hidden from accessibility.
+- Paid challenges keep their opened opportunity snapshot when map data changes.
+  Reward presentation waits for the game modal's native dismissal; coin/stamp
+  navigation waits for reward dismissal. A won marker cannot erase its celebration.
+  Reward effects stop on close/skip; reduced motion settles without ambient loops,
+  counters show confirmed amounts and primary actions remain immediately available.
+  Ticket/crown/collection flourishes use existing illustrated assets.
+- Upgrade taps coalesce, failures offer a themed retry, and a lost response is read
+  back before another spend. Reduced-motion upgrades settle without charge/confetti.
 - Daily chest celebrates only server-confirmed rewards, coalesces taps, reconciles
   already-collected gifts, retries failures and updates provider state on dismissal.
 - Shared reduced-motion handling and cleanup cover the refined button, journal,
   shelf, map coin/ambient and chest effects. Park-day export waits for required art;
-  slow/failed remote assets get a themed fallback before capture.
+  slow/failed remote assets get a themed fallback before capture. Story capture
+  uses platform/density-aware dimensions for actual 1080x1920 output, emphasizes
+  positive confirmed activity and names a lone earned coin. Queue Parts stay distinct
+  from ride-win Parts. A dev-only live recap QA mode uses the signed-in local player.
 
 ## Verified native player experience
 
@@ -67,6 +78,20 @@ with isolated Metro 8096. No production rewards or player records were changed.
   Ending via “I left the line” showed one completed activity and no unearned rewards.
   Finished header and recap fit the phone with the full ride name.
 
+- Actual LOCAL Forbidden Journey Memory Match completed through native UI. The
+  server confirmed the first coin, +10 Shark Coins, +25 XP, +4 Parts, +40 Energy
+  and team takeover. Native QA exposed competing modal transitions; after repair
+  the preserved win displayed its reward summary. Profile -> park still shows 1/26,
+  and the coin occupies its original second-row shelf slot. Tapping it opens detail.
+- Actual native upgrade to Level 2 Silver confirmed by server readback: 160 -> 150
+  Energy, 4 -> 2 Parts, one upgrade event. The silver rim/success screen appeared.
+
+- Actual LOCAL park-day share export inspected at 1080x1920 with Forbidden Journey,
+  its coin art, 1 new coin, 1 upgrade and 1 ride win. The real recap component ran in
+  its dev-only live QA surface using confirmed server data; the native share sheet
+  showed a JPEG thumbnail (425 KB), then was canceled. No message or post sent.
+  Deliverable: outputs/tps-polish/local-qa-park-day-share-export.jpg (outside repo).
+
 ## Backend corrections
 
 Applied to the isolated backend and the original LOCAL backend serving the preview:
@@ -78,22 +103,28 @@ Applied to the isolated backend and the original LOCAL backend serving the previ
   These were already used by the model/controller but had no migration. Applied only
   this migration to the guarded local tps_local database; stats/logging now work.
 
+- Resource spending now locks only player_ride_parts rows using matching IDs in a
+  subquery. Native upgrade failed because PostgreSQL rejects FOR UPDATE on nullable
+  outer joins; the original query was reproduced read-only and the repaired upgrade
+  verified through the real LOCAL player. Regression checks cover owner/asset
+  isolation, oldest-first spending, insufficient balance and PostgreSQL lock shape.
+
 ## Validation and remaining work
 
-TypeScript and git diff checks pass. Full app checks: 175 tests. Focused backend
-checks: five tests, 43 assertions. PHP 8.5 emits an existing PDO deprecation. The
+TypeScript and git diff checks pass. Full app checks: 191 tests. Focused backend
+checks: seven tests, 53 assertions. PHP 8.5 emits an existing PDO deprecation. The
 legacy full migration suite needs Doctrine DBAL; unrelated test-discovery warnings
 remain and are not claimed clean.
 
-Still needed: a physical park reward/first-coin arrival pass, actual park-day Story
-export with confirmed game coins, archived shelf on a park that has archived coins,
+Still needed: fresh-run reward and direct coin-detail transition QA, physical park GPS QA, archived shelf on a park that has archived coins,
 small-phone and native reduced-motion QA, longer gameplay/battery/network review.
 The local catalog currently classifies Space Mountain as “other”; artwork renders
 that truthful fallback. Catalog classification/source repair is a separate pending
 quality issue. No deployment, store upload, outbound message or social post occurred.
 
-The polished source is saved on codex/gps-adventure-polish at checkpoint 630d910.
-Backend checkpoint: abb33629. All 62 changed app files were integrated and byte-verified
-in the original LOCAL app checkout, preserving Claude's branch and its pre-existing
-untracked iOS workspace files. Main-checkout TypeScript and all 175 app tests pass.
+The polished source is saved on codex/gps-adventure-polish; the first source/art
+checkpoint is 630d910 and the paid-challenge snapshot fix is c8d6648. Further reward
+and upgrade fixes are being checkpointed and integrated into the original LOCAL
+checkout with baseline checks, preserving Claude's branch and its pre-existing
+untracked iOS workspace files. Backend initial checkpoint: abb33629.
 The goal remains active and is not complete.

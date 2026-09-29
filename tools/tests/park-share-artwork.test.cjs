@@ -40,6 +40,7 @@ function mount(file, props) {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'react-native') return { Text: 'Text', View: 'View', StyleSheet: { create: value => value } };
       if (name === 'expo-image') return { Image: 'Image' };
+      if (name === './parkDayShareMetrics') return { parkDayShareMetrics: () => [] };
       if (name === './ShareCardArtwork') return { default: 'Artwork' };
       if (name.includes('assets/')) return 1;
       throw new Error(name);

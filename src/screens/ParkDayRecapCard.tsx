@@ -4,8 +4,9 @@ import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { AuthContext } from '../context/AuthProvider';
 import ParkDayShareCard, { SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from '../components/ParkDayShareCard';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
+import { parkDayCaptureSize } from '../components/parkDayShareMetrics';
 import * as RootNavigation from '../RootNavigation';
 
 interface Props {
@@ -41,7 +42,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         return;
       }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, width: 1080, height: 1920 });
+      const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, ...parkDayCaptureSize(Platform.OS, PixelRatio.get()) });
       await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your park day' });
     } catch {
       Alert.alert('Could not make your park card', 'Your game moments are saved. Try sharing again.');
