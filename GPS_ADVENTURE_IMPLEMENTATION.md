@@ -92,6 +92,8 @@ The local catalog currently classifies Space Mountain as “other”; artwork re
 that truthful fallback. Catalog classification/source repair is a separate pending
 quality issue. No deployment, store upload, outbound message or social post occurred.
 
-The polished source is saved on codex/gps-adventure-polish. Verified files are being
-integrated into the original LOCAL app checkout while preserving Claude's branch and
-its pre-existing untracked iOS workspace files. The goal is not complete.
+The polished source is saved on codex/gps-adventure-polish at checkpoint 630d910.
+Backend checkpoint: abb33629. All 62 changed app files were integrated and byte-verified
+in the original LOCAL app checkout, preserving Claude's branch and its pre-existing
+untracked iOS workspace files. Main-checkout TypeScript and all 175 app tests pass.
+The goal remains active and is not complete.
