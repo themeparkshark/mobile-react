@@ -23,7 +23,6 @@ import React, {
   useContext,
   useEffect,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -36,6 +35,7 @@ import {
   Dimensions,
   Modal,
   AppState,
+  BackHandler,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -46,6 +46,7 @@ import Animated, {
   withDelay,
   runOnJS,
   Easing,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import { GAME_COLORS, COUNTDOWN, JUICE, LINE_MOVING_TOAST } from './theme';
 import { ScoreDisplay } from './ScoreDisplay';
@@ -54,6 +55,7 @@ import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
 import { LinePlayMovementContext } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -149,12 +151,16 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [phase, setPhase] = useState<ShellPhase>('countdown');
     const linePlayMovement = useContext(LinePlayMovementContext);
     const rideChallenge = useContext(RideChallengeContext);
+    const reducedMotion = useReducedGameMotion();
+    const reducedMotionRef = useRef(reducedMotion);
+    reducedMotionRef.current = reducedMotion;
     const [countText, setCountText] = useState('3');
     const [pauseReason, setPauseReason] = useState<string | undefined>();
     const confettiRef = useRef<ParticleHandle>(null);
     const startedRef = useRef(false);
     const claimedRef = useRef(false);
     const countdownTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+    const celebrationTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
     // Results animation values.
     const resultsScale = useSharedValue(0.7);
@@ -164,6 +170,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const clearCountdown = useCallback(() => {
       countdownTimers.current.forEach(clearTimeout);
       countdownTimers.current = [];
+    }, []);
+    const clearCelebration = useCallback(() => {
+      celebrationTimers.current.forEach(clearTimeout);
+      celebrationTimers.current = [];
     }, []);
 
     // -- Reset when (re)opened. ---------------------------------------------
@@ -175,8 +185,23 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       setCountText('3');
       resultsScale.value = 0.7;
       resultsOpacity.value = 0;
-      return clearCountdown;
-    }, [visible, clearCountdown, resultsScale, resultsOpacity]);
+      return () => {
+        clearCountdown();
+        clearCelebration();
+        [resultsScale, resultsOpacity, countScale].forEach(cancelAnimation);
+      };
+    }, [visible, clearCountdown, clearCelebration, resultsScale, resultsOpacity, countScale]);
+
+    useEffect(() => {
+      if (!reducedMotion) return;
+      [resultsScale, resultsOpacity, countScale].forEach(cancelAnimation);
+      countScale.value = 1;
+      if (phase === 'results') {
+        resultsScale.value = 1;
+        resultsOpacity.value = 1;
+      }
+      clearCelebration();
+    }, [reducedMotion, phase, clearCelebration, resultsScale, resultsOpacity, countScale]);
 
     // -- Run the 3-2-1-GO countdown. ----------------------------------------
     const beginPlay = useCallback(() => {
@@ -187,6 +212,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     }, [onStart]);
 
     const punchCount = useCallback(() => {
+      if (reducedMotionRef.current) { countScale.value = 1; return; }
       countScale.value = withSequence(
         withTiming(1.25, { duration: 100 }),
         withSpring(1, JUICE.popSpring),
@@ -215,25 +241,26 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
     // -- Transition to results when the game reports one. -------------------
     useEffect(() => {
-      if (!result) return;
+      if (!visible || !result) return;
       if (phase === 'results') return;
       clearCountdown();
       setPhase('results');
       Haptic[result.stars > 0 ? 'success' : 'failBuzz']();
       playSfx(result.stars > 0 ? 'win' : 'lose');
-      resultsOpacity.value = withTiming(1, { duration: 220 });
-      resultsScale.value = withSpring(1, JUICE.settleSpring);
-      if (result.stars > 0) {
+      clearCelebration();
+      resultsOpacity.value = reducedMotionRef.current ? 1 : withTiming(1, { duration: 220 });
+      resultsScale.value = reducedMotionRef.current ? 1 : withSpring(1, JUICE.settleSpring);
+      if (result.stars > 0 && !reducedMotionRef.current) {
         // Confetti bursts staggered from the top.
-        setTimeout(() => {
+        celebrationTimers.current.push(setTimeout(() => {
           confettiRef.current?.burst({ x: SCREEN_W * 0.5, y: SCREEN_H * 0.32, preset: 'confetti', count: 40 });
-        }, 180);
-        setTimeout(() => {
+        }, 180));
+        celebrationTimers.current.push(setTimeout(() => {
           confettiRef.current?.burst({ x: SCREEN_W * 0.3, y: SCREEN_H * 0.28, preset: 'confetti', count: 24 });
           confettiRef.current?.burst({ x: SCREEN_W * 0.7, y: SCREEN_H * 0.28, preset: 'confetti', count: 24 });
-        }, 420);
+        }, 420));
       }
-    }, [result, phase, clearCountdown, resultsOpacity, resultsScale]);
+    }, [visible, result, phase, clearCountdown, clearCelebration, resultsOpacity, resultsScale]);
 
     // Ride challenge win: a short stamp, then straight into the coin reveal.
     useEffect(() => {
@@ -333,6 +360,17 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }
     }, [phase, clearCountdown, beginPlay]);
 
+    // Paid games share the ride flow's native presentation. Opening another
+    // native Modal inside it races both dismissals against the coin reward.
+    useEffect(() => {
+      if (!visible || !rideChallenge) return;
+      const back = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleExit();
+        return true;
+      });
+      return () => back.remove();
+    }, [visible, rideChallenge, handleExit]);
+
     const resultsStyle = useAnimatedStyle(() => ({
       opacity: resultsOpacity.value,
       transform: [{ scale: resultsScale.value }],
@@ -353,8 +391,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
     if (!visible) return null;
 
-    return (
-      <Modal visible={visible} animationType="fade" transparent statusBarTranslucent onRequestClose={handleExit}>
+    const gameContent = (
         <View style={styles.root}>
           {/* Header */}
           <View style={styles.header}>
@@ -386,7 +423,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </View>
           </View>
 
-          {goal ? <GoalMeter {...goal} /> : null}
+          {goal ? <GoalMeter {...goal} reducedMotion={reducedMotion} /> : null}
 
           {/* Play field */}
           <View style={styles.field}>{children}</View>
@@ -426,7 +463,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                 <Text style={[styles.resultsMsg, won ? styles.msgWin : styles.msgFail]}>
                   {result?.message ?? defaultMessage}
                 </Text>
-                <StarRow stars={stars} />
+                <StarRow stars={stars} reducedMotion={reducedMotion} />
                 <ScoreDisplay
                   score={result?.score ?? score}
                   personalBest={personalBest}
@@ -447,14 +484,18 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           ) : null}
 
           {/* Confetti sits above everything, ignores touches. */}
-          <ParticleField
+          {!reducedMotion && <ParticleField
             ref={confettiRef}
             width={SCREEN_W}
             height={SCREEN_H}
             style={styles.confetti}
             pointerEvents="none"
-          />
+          />}
         </View>
+    );
+    return rideChallenge ? gameContent : (
+      <Modal visible={visible} animationType={reducedMotion ? 'none' : 'fade'} transparent statusBarTranslucent onRequestClose={handleExit}>
+        {gameContent}
       </Modal>
     );
   },
@@ -462,14 +503,22 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
 // -- Ride goal meter. ---------------------------------------------------------
 
-function GoalMeter({ current, target, label }: { current: number; target: number; label: string }) {
+function GoalMeter({ current, target, label, reducedMotion }: { current: number; target: number; label: string; reducedMotion: boolean }) {
   const fill = useSharedValue(0);
   const bump = useSharedValue(1);
   const shown = Math.min(current, target);
   useEffect(() => {
+    cancelAnimation(fill);
+    cancelAnimation(bump);
+    if (reducedMotion) {
+      fill.value = target > 0 ? shown / target : 0;
+      bump.value = 1;
+      return () => { cancelAnimation(fill); cancelAnimation(bump); };
+    }
     fill.value = withSpring(target > 0 ? shown / target : 0, { damping: 14, stiffness: 160 });
     if (shown > 0) bump.value = withSequence(withTiming(1.18, { duration: 80 }), withSpring(1, JUICE.popSpring));
-  }, [shown, target, fill, bump]);
+    return () => { cancelAnimation(fill); cancelAnimation(bump); };
+  }, [shown, target, fill, bump, reducedMotion]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
   return (
@@ -484,20 +533,23 @@ function GoalMeter({ current, target, label }: { current: number; target: number
 
 // -- Animated star row. -------------------------------------------------------
 
-function StarRow({ stars }: { stars: number }) {
+function StarRow({ stars, reducedMotion }: { stars: number; reducedMotion: boolean }) {
   return (
     <View style={styles.starRow}>
       {[1, 2, 3].map((n) => (
-        <Star key={n} index={n} filled={n <= stars} />
+        <Star key={n} index={n} filled={n <= stars} reducedMotion={reducedMotion} />
       ))}
     </View>
   );
 }
 
-function Star({ index, filled }: { index: number; filled: boolean }) {
+function Star({ index, filled, reducedMotion }: { index: number; filled: boolean; reducedMotion: boolean }) {
   const scale = useSharedValue(0);
   useEffect(() => {
-    if (filled) {
+    cancelAnimation(scale);
+    if (reducedMotion) {
+      scale.value = 1;
+    } else if (filled) {
       scale.value = withDelay(
         200 + index * 160,
         withSequence(
@@ -511,7 +563,8 @@ function Star({ index, filled }: { index: number; filled: boolean }) {
     } else {
       scale.value = withTiming(1, { duration: 200 });
     }
-  }, [filled, index, scale]);
+    return () => cancelAnimation(scale);
+  }, [filled, index, scale, reducedMotion]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <Animated.Text

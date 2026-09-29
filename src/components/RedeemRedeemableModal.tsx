@@ -556,7 +556,8 @@ export default function RedeemRedeemableModal({
         onBackButtonPress={safeClose}
         backdropOpacity={flowState === 'preview' ? 0.5 : 0.95}
         useNativeDriverForBackdrop
-        style={flowState === 'spinning' ? { margin: 0 } : undefined}
+        statusBarTranslucent={flowState === 'minigame'}
+        style={flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' ? { margin: 0 } : undefined}
       >
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           {flowState === 'recovering' && (

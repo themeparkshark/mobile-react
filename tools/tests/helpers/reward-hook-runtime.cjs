@@ -39,7 +39,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
     StyleSheet: { create: value => value, absoluteFill: {}, absoluteFillObject: {} },
     AccessibilityInfo: { isReduceMotionEnabled: () => Promise.resolve(false), addEventListener: (name, fn) => {
       preferenceListener = fn; return { remove() { preferenceListener = undefined; } }; } },
-    View: 'View', Image: 'Image', Text: 'Text', ScrollView: 'ScrollView', Pressable: 'Pressable', TouchableOpacity: 'TouchableOpacity',
+    AppState: { addEventListener: () => ({ remove() {} }) },
+    BackHandler: { addEventListener: () => ({ remove() {} }) },
+    View: 'View', Modal: 'Modal', Image: 'Image', Text: 'Text', ScrollView: 'ScrollView', Pressable: 'Pressable', TouchableOpacity: 'TouchableOpacity',
   };
   const jsx = (type, props) => ({ type, props }); const module = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
@@ -68,7 +70,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
       return { default: name };
     },
   }, { filename: file });
-  Component = module.exports.default ?? module.exports.MemoryCard;
+  Component = module.exports.default ?? module.exports.MemoryCard ?? module.exports.GameShellV2;
   function render() { let count = 0; do {
     assert.ok(count++ < 20, 'hooks settle'); dirty = false; index = 0; effects = []; tree = Component(props); effects.forEach(fn => fn());
   } while (dirty); }

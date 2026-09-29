@@ -42,8 +42,14 @@ must reflect confirmed activity; exporting a card never means it was sent.
 - Paid challenges keep their opened opportunity snapshot when map data changes.
   Reward presentation waits for the game modal's native dismissal; coin/stamp
   navigation waits for reward dismissal. A won marker cannot erase its celebration.
+  Fresh native QA exposed a second presentation issue: a GameKit native Modal was
+  nested inside the ride flow's native Modal. Paid games now render inside the ride
+  presentation; practice and queue games keep their own presentation. Native game
+  layout is preserved and Android back still pauses/uses the existing exit flow.
   Reward effects stop on close/skip; reduced motion settles without ambient loops,
   counters show confirmed amounts and primary actions remain immediately available.
+  GameKit countdowns, result stars, progress meters and confetti also respect reduced
+  motion and cancel when closing; changing the preference never restarts a countdown.
   Ticket/crown/collection flourishes use existing illustrated assets.
 - Upgrade taps coalesce, failures offer a themed retry, and a lost response is read
   back before another spend. Reduced-motion upgrades settle without charge/confetti.
@@ -95,6 +101,20 @@ with isolated Metro 8096. No production rewards or player records were changed.
 - New magical deck played in dev-only native practice: owl, quill, wand and book
   pairs matched; all four pairs completed, 400-point result, Continue returned to
   practice. Practice grants no server rewards. Artwork is readable at phone size.
+- Fresh LOCAL Secret Life of Pets trivia expired during simulator inspection.
+  The server returned its first-coin Ticket and the original retry flow restored it.
+  A native Snap the Ride retry used the existing camera-off fallback and won:
+  +10 Shark Coins, +25 XP, +2 Parts, +25 Energy. The old nested presentation still
+  dropped that fresh reward. After repair the preserved reward displayed and its
+  Upgrade Your Coin button opened the correct Secret Life of Pets detail.
+- Fresh LOCAL Snowball Memory Match completed all four pairs after the single-modal
+  repair. Coin Catch appeared automatically, followed by its confirmed reward:
+  +10 Shark Coins, +25 XP, +1 Part, +10 Energy, Team Mouse takeover, next Ticket.
+  See Your Coin opened Snowball's actual detail (Level 1, 1 Part, 185 Energy).
+  No reload or recovery was needed for this fresh win. Current local player owns
+  Forbidden Journey Level 2, Secret Life of Pets Level 1 and Snowball Level 1.
+  Upgrade hints show exact missing Parts without promising queue rewards at a
+  non-ride collectible.
 
 - Actual LOCAL park-day share export inspected at 1080x1920 with Forbidden Journey,
   its coin art, 1 new coin, 1 upgrade and 1 ride win. The real recap component ran in
@@ -121,12 +141,12 @@ Applied to the isolated backend and the original LOCAL backend serving the previ
 
 ## Validation and remaining work
 
-TypeScript and git diff checks pass. Full app checks: 197 tests. Focused backend
+TypeScript and git diff checks pass. Full app checks: 200 tests. Focused backend
 checks: seven tests, 53 assertions. PHP 8.5 emits an existing PDO deprecation. The
 legacy full migration suite needs Doctrine DBAL; unrelated test-discovery warnings
 remain and are not claimed clean.
 
-Still needed: fresh-run reward and direct coin-detail transition QA, physical park GPS QA, archived shelf on a park that has archived coins,
+Still needed: physical park GPS QA, archived shelf on a park that has archived coins,
 small-phone and native reduced-motion QA, longer gameplay/battery/network review.
 The local catalog currently classifies Space Mountain as “other”; artwork renders
 that truthful fallback. Catalog classification/source repair is a separate pending

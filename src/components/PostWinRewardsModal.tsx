@@ -262,7 +262,7 @@ export default function PostWinRewardsModal({
         : missingParts > 0 && missingEnergy > 0
           ? `Level ${coinProgress.current_level + 1} needs ${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} and ${missingEnergy} Energy.`
           : missingParts > 0
-            ? `${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} for Level ${coinProgress.current_level + 1}. Earn them waiting in line here.`
+            ? `${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} to reach Level ${coinProgress.current_level + 1}.`
             : `${missingEnergy} more Energy for Level ${coinProgress.current_level + 1}. Find it on your home map.`
     : hasCoin ? 'Open your shelf to see this coin’s next level.' : null;
   const upgradeReady = !!coinProgress && coinProgress.current_level < coinProgress.max_level &&

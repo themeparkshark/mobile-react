@@ -718,10 +718,10 @@ export default function CoinLevelingModal({
                         textAlign: 'center', marginTop: 8,
                       }}>
                         {!hasEnergy && !hasParts
-                          ? 'Find home items for Energy; visit this ride for Parts.'
+                          ? `Need ${rideCoin.energy_to_next_level - playerEnergy} Energy and ${rideCoin.parts_to_next_level - playerParts} Ride Part${rideCoin.parts_to_next_level - playerParts === 1 ? '' : 's'} to power up.`
                           : !hasEnergy
                             ? `Find home items for ${rideCoin.energy_to_next_level - playerEnergy} more Energy.`
-                            : `Need ${rideCoin.parts_to_next_level - playerParts} more Parts from this ride.`}
+                            : `Need ${rideCoin.parts_to_next_level - playerParts} more Ride Part${rideCoin.parts_to_next_level - playerParts === 1 ? '' : 's'} to power up.`}
                       </Text>
                     )}
                   </>
