@@ -420,7 +420,7 @@ export function BossBrawl(props: BossBrawlProps) {
     const kx = (L.bossX - px) * 0.05 * strength;
     anim.knockX.value = withSequence(withTiming(kx, { duration: 50 }), withSpring(0, { damping: 12, stiffness: 220 }));
     anim.knockY.value = withSequence(withTiming(-6 * strength, { duration: 50 }), withSpring(0, { damping: 12, stiffness: 220 }));
-    anim.flash.value = withSequence(withTiming(0.55 * Math.min(1, strength), { duration: 30 }), withTiming(0, { duration: 140 }));
+    anim.flash.value = withSequence(withTiming(0.3 * Math.min(1, strength), { duration: 30 }), withTiming(0, { duration: 120 }));
   };
   const sharkLunge = () => {
     anim.lunge.value = withSequence(withTiming(1, { duration: 60, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 140 }));
@@ -442,7 +442,7 @@ export function BossBrawl(props: BossBrawlProps) {
   const stack = (v: number, crit: boolean) => {
     stackTotal.current += v;
     const n = openingHits.current;
-    fxRef.current?.flyUp(`${Math.round(stackTotal.current / 10000)}`, L.bossX, L.bossY - L.bossSize * 0.5 - n * 2,
+    fxRef.current?.flyUp(`${Math.round(stackTotal.current / 10000)}`, L.bossX + L.bossSize * 0.36, L.bossY - L.bossSize * 0.18 - n * 2,
       { key: 'stack', size: crit ? 'xl' : 'lg', color: crit ? '#FFCF3B' : '#FFFFFF', rise: 6, ms: 700 });
   };
 
@@ -586,7 +586,7 @@ export function BossBrawl(props: BossBrawlProps) {
         bossHit(L.floatX, 1.4);
         fxRef.current?.ring(bx, by, { color: '#FFFFFF', to: 70, ms: 220 });
         if (stackTotal.current > 0) {
-          fxRef.current?.flyUp(`${Math.round(stackTotal.current / 10000)}`, bx, by - L.bossSize * 0.5, { key: 'stack', size: 'xl', color: '#FFCF3B', rise: 26, ms: 700 });
+          fxRef.current?.flyUp(`${Math.round(stackTotal.current / 10000)}`, bx + L.bossSize * 0.36, by - L.bossSize * 0.18, { key: 'stack', size: 'xl', color: '#FFCF3B', rise: 26, ms: 700 });
         }
         break;
       case E_BREAK: {
@@ -731,6 +731,7 @@ export function BossBrawl(props: BossBrawlProps) {
       due.forEach(onEvent);
     }
     view.value = buildView(b);
+    setDamage(round.current.bouts.reduce((sum, x) => sum + scoreBout(x), 0) + scoreBout(b));
   }, [boutT, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gesture = useMemo(() => Gesture.Manual()
@@ -889,7 +890,8 @@ export function BossBrawl(props: BossBrawlProps) {
   }), [boss, damage]);
 
   // ---- HUD values ---------------------------------------------------------------
-  const shownDamage = Math.floor(damage * damageRate);
+  // What the live endpoint will credit: capped by its 26 s x 7 hits/s encoding, then the remote rate.
+  const shownDamage = legacyDamage(toLegacyProof(damage, 26000), damageRate);
   const preview = Math.max(0, hpLeft - shownDamage);
   const hpPct = Math.max(0, Math.min(1, preview / Math.max(1, hpMax)));
   const ribbonStyle = useAnimatedStyle(() => {

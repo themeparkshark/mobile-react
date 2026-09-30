@@ -118,10 +118,11 @@ export interface ArenaLayout {
 }
 
 export function arenaLayout(W: number, H: number, bottomInset = 0): ArenaLayout {
-  const floatR = Math.min(70, W * 0.18);
-  const floatY = H - bottomInset - 24 - floatR;
+  const floatR = Math.min(56, W * 0.145);
+  const floatY = H - bottomInset - 20 - floatR * 0.62;
   const targetH = 96;
-  const targetY = floatY - floatR - 26 - targetH / 2;
+  // The shark stands ~1.9 R tall on the float: keep the target row clear above its head.
+  const targetY = floatY - floatR * 2.35 - targetH / 2;
   const bossSize = Math.min(W * 0.66, H * 0.36, 300);
   return {
     W, H,

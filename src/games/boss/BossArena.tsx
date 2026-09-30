@@ -182,12 +182,12 @@ function BossBody({ L, view, t, fx, anim, img, bossKind, reduced, scaleArt }: {
         sx *= 1 + 0.06 * a;
         sy *= 1 + 0.06 * a - 0.03 * a;
         dx = -dir * 10 * a;
-      } else if (now >= I - 60 && now < I + 160) {
-        // Strike toward the lane: the limb and impact land on the target.
-        const p = now < I ? (now - (I - 60)) / 60 : 1 - (now - I) / 160;
+      } else if (now >= I - 70 && now < I + 260) {
+        // Strike toward the lane: the limb and impact land on the target (hold, then recover).
+        const p = now < I ? (now - (I - 70)) / 70 : now < I + 90 ? 1 : 1 - (now - I - 90) / 170;
         const a = clamp01(p);
-        dx = (L.laneX[lane] - L.bossX) * 0.34 * a;
-        dy += L.bossSize * 0.16 * a;
+        dx = (L.laneX[lane] - L.bossX) * 0.42 * a;
+        dy += L.bossSize * 0.24 * a;
         rot = dir * 0.1 * a;
         sx *= 1 + 0.12 * a;
         sy *= 1 - 0.06 * a;
@@ -291,7 +291,7 @@ function GhostDecoy({ i, L, img, on, t }: { i: number; L: ArenaLayout; img: SkIm
 
 /** Foreground water lip the Kraken is half-submerged behind (cyan, white foam, navy line). */
 function WaterLip({ L, fx }: { L: ArenaLayout; fx: SharedValue<number> }) {
-  const y0 = L.bossY + L.bossSize * 0.22;
+  const y0 = L.bossY + L.bossSize * 0.34;
   const path = useDerivedValue(() => {
     const p = Skia.Path.Make();
     const ph = fx.value / 520;
@@ -439,7 +439,7 @@ function Target({ i, L, view, t, fx, squash, img, bossKind }: {
 }) {
   const x = L.laneX[i];
   const y = L.targetY;
-  const h = bossKind === 1 ? 34 : 84;
+  const h = bossKind === 1 ? 26 : 84;
   const w = img ? (img.width() / img.height()) * h : h;
   const tr = useDerivedValue(() => {
     const bob = bossKind === 0 ? Math.sin(fx.value / 540 + i * 1.7) * 3 : bossKind === 2 ? Math.sin(fx.value / 700 + i) * 0.04 : 0;
@@ -633,7 +633,7 @@ function FloatAndShark({ L, view, t, fx, anim, img }: {
     return now - v.padDownAt >= v.q * 4 ? 0.5 + 0.3 * Math.sin(fx.value / 60) : 0;
   });
   // Player shark: crouch as the ring closes, lunge on hits, bonk / dizzy / cheer poses.
-  const SH = R * 2.05;
+  const SH = R * 1.9;
   const sharkTr = useDerivedValue(() => {
     const info = ringInfo.value;
     const crouch = info.o > 0 && info.r < R * 1.5 ? 0.9 + 0.1 * clamp01((info.r - R) / (R * 0.5)) : 1;
