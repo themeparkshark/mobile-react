@@ -18,8 +18,8 @@ import {
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
 import { RedeemableType } from '../models/redeemable-type';
-import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
+import { BRAND, gameAlert } from '../ui';
 
 export default function RedeemCurrentRedeemableModel({
   open,
@@ -36,7 +36,7 @@ export default function RedeemCurrentRedeemableModel({
   const { triggerFly } = useCurrencyFly();
   const progress = useRef(new Animated.Value(0)).current;
   const rotate = useRef(new Animated.Value(0)).current;
-  const [doubleRedeemable, setDoubleRedeemable] = useState<boolean>(false);
+  const [collecting, setCollecting] = useState(false);
   const spin = rotate.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
@@ -86,7 +86,7 @@ export default function RedeemCurrentRedeemableModel({
       onSwipeComplete={() => close()}
       onModalWillHide={() => {
         playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
-        setDoubleRedeemable(false);
+        setCollecting(false);
       }}
       backdropOpacity={0.95}
       customBackdrop={
@@ -172,7 +172,7 @@ export default function RedeemCurrentRedeemableModel({
                 textTransform: 'uppercase',
                 fontSize: 42,
                 color: 'white',
-                textShadowColor: 'rgba(0, 0, 0, .5)',
+                textShadowColor: BRAND.navy,
                 textShadowOffset: {
                   width: 1,
                   height: 1,
@@ -182,9 +182,7 @@ export default function RedeemCurrentRedeemableModel({
                 paddingBottom: 32,
               }}
             >
-              {doubleRedeemable
-                ? `2 ${redeemable.theme.currency.name}`
-                : `1 ${redeemable.theme.currency.singular_name}`}
+              {`1 ${redeemable.theme.currency.singular_name}`}
             </Text>
             <Image
               source={{
@@ -202,15 +200,24 @@ export default function RedeemCurrentRedeemableModel({
             <YellowButton
               text="Collect"
               onPress={async () => {
-                await redeemRedeemables(redeemable, doubleRedeemable);
+                if (collecting) return;
+                setCollecting(true);
+                try {
+                  await redeemRedeemables(redeemable);
+                } catch {
+                  setCollecting(false);
+                  gameAlert('Could not collect this find', 'It is still here. Check your connection and try again.');
+                  return;
+                }
+                setCollecting(false);
 
-                // 🗡️ Fly currency to header!
+                // Fly the currency to the header.
                 if (redeemable.theme?.currency?.icon_url) {
                   const screenCenterX = Dimensions.get('window').width / 2;
                   const screenCenterY = Dimensions.get('window').height / 2;
                   triggerFly({
                     imageUrl: redeemable.theme.currency.icon_url,
-                    amount: doubleRedeemable ? 2 : 1,
+                    amount: 1,
                     startX: screenCenterX,
                     startY: screenCenterY,
                     targetPosition: 'theme_currency',
@@ -224,16 +231,6 @@ export default function RedeemCurrentRedeemableModel({
                 close();
               }}
             />
-            <View
-              style={{
-                width: '60%',
-                marginLeft: 'auto',
-                marginRight: 'auto',
-                marginTop: 16,
-              }}
-            >
-              <WatchAd onClose={() => setDoubleRedeemable(true)} />
-            </View>
           </View>
         </View>
       </View>

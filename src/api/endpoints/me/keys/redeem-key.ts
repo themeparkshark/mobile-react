@@ -2,15 +2,10 @@ import { ApiResponseType } from '../../../../models/api-response-type';
 import { KeyType } from '../../../../models/key-type';
 import client from '../../../client';
 
-export default async function redeemKey(
-  key: KeyType,
-  doubleXP: boolean
-): Promise<KeyType> {
+/** The server decides every reward; there is no client multiplier. */
+export default async function redeemKey(key: KeyType): Promise<KeyType> {
   const { data } = await client.post<ApiResponseType<KeyType>>(
-    `/keys/${key.id}/redeem`,
-    {
-      double_xp: doubleXP,
-    }
+    `/keys/${key.id}/redeem`
   );
 
   return data.data;
