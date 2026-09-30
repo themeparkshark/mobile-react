@@ -15,6 +15,7 @@ import type { RideContext } from './LinePlaySession';
 const norm = (s: string) => s.toLowerCase().trim();
 
 /** Legacy coin labels that clearly refer to one catalog ride in that park. */
+// ui-copy-allow(phrase): catalog lookup keys matched against ride names, never rendered.
 const TASK_RIDE_ALIASES: Readonly<Record<number, Readonly<Record<string, string>>>> = {
   1: {
     'world famous studio tour': 'studio tour',

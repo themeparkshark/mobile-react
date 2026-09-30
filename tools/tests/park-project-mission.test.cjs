@@ -35,7 +35,8 @@ test('the shared stage and vote change the actual playable queue round', () => {
   assert.equal(hidden.game.gameId, 'shark');
   assert.equal(first.game.gameId, 'memory');
   assert.equal(deep.game.gameId, 'memory');
-  assert.equal(star.game.gameId, 'timing');
+  // Rhythm Tap is out of queue rotation: a server mission naming it plays Whack-a-Shark.
+  assert.equal(star.game.gameId, 'tap');
   assert.notEqual(deep.game.id, star.game.id);
   assert.equal(deep.title, 'Deep Route');
   assert.equal(star.title, 'Star Route');

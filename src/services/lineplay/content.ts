@@ -186,18 +186,18 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     difficulty: 'medium',
   },
   {
-    id: 'gen-13', question: 'The shark crew finds ✦ ● ✦ ● ?. Which symbol comes next?',
-    choices: ['Star ✦', 'Circle ●', 'Wave ≋', 'Diamond ◆'], correctIndex: 0,
+    id: 'gen-13', question: 'The shark crew finds star, circle, star, circle, then a gap. Which symbol comes next?',
+    choices: ['Star', 'Circle', 'Wave', 'Diamond'], correctIndex: 0,
     difficulty: 'easy', fact: 'The two symbols alternate: star, circle, star, circle, star.',
   },
   {
-    id: 'gen-14', question: 'A compass points north → east → south → west → ?. Where next?',
+    id: 'gen-14', question: 'A compass points north, then east, then south, then west. Where next?',
     choices: ['North', 'East', 'South', 'West'], correctIndex: 0,
     difficulty: 'medium', fact: 'One more quarter-turn clockwise points north again.',
   },
   {
-    id: 'gen-15', question: 'A gate flashes ▲ ▲ ●, then ▲ ▲ ●. What starts the next beat?',
-    choices: ['Triangle ▲', 'Circle ●', 'Star ✦', 'Wave ≋'], correctIndex: 0,
+    id: 'gen-15', question: 'A gate flashes triangle, triangle, circle, then triangle, triangle, circle. What starts the next beat?',
+    choices: ['Triangle', 'Circle', 'Star', 'Wave'], correctIndex: 0,
     difficulty: 'easy', fact: 'The three-mark beat repeats from its first triangle.',
   },
   {
@@ -213,7 +213,7 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
   {
     id: 'gen-18', question: 'The shell clue comes before the fin; the fin comes before the star. Which is last?',
     choices: ['Star', 'Shell', 'Fin', 'They are tied'], correctIndex: 0,
-    difficulty: 'medium', fact: 'Shell → fin → star puts the star last.',
+    difficulty: 'medium', fact: 'Shell, then fin, then star puts the star last.',
   },
   {
     id: 'gen-19', question: 'Six lanterns glow. Two go dark and one relights. How many glow now?',
@@ -233,7 +233,7 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
   {
     id: 'gen-22', question: 'Your shark faces north and turns left twice. Which way now?',
     choices: ['South', 'East', 'North', 'West'], correctIndex: 0,
-    difficulty: 'medium', fact: 'North → west → south after two left turns.',
+    difficulty: 'medium', fact: 'Two left turns go north, then west, then south.',
   },
   {
     id: 'gen-23', question: 'One bell rings every 2 beats, another every 3. When do they next ring together?',
@@ -253,7 +253,7 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
   {
     id: 'gen-26', question: 'The crew must find the map, then the key, then the chest. What comes right before the chest?',
     choices: ['The key', 'The map', 'The chest', 'The compass'], correctIndex: 0,
-    difficulty: 'easy', fact: 'The sequence is map → key → chest.',
+    difficulty: 'easy', fact: 'The sequence is map, then key, then chest.',
   },
   {
     id: 'gen-27', question: 'Captain Shark has 5 tickets, uses 2, then finds 1. How many tickets remain?',

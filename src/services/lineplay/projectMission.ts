@@ -11,7 +11,6 @@ export interface ProjectMission {
 const GAME_NAMES: Partial<Record<MiniGameId, string>> = {
   shark: 'Sharky Swim',
   memory: 'Memory Match',
-  timing: 'Rhythm Tap',
   tap: 'Whack-a-Shark',
   banana: 'Banana Basket',
 };
@@ -19,9 +18,11 @@ const GAME_NAMES: Partial<Record<MiniGameId, string>> = {
 /** The server authors text and chooses a supported game; the client checks it. */
 export function resolveProjectMission(project: ParkProject): ProjectMission | null {
   const mission = project.play_mission;
-  if (!mission || !mission.title?.trim() || !mission.prompt?.trim() ||
-      !Object.prototype.hasOwnProperty.call(GAME_NAMES, mission.game_id)) return null;
-  const gameId = mission.game_id;
+  // Rhythm Tap is out of queue rotation; a server mission that still names it
+  // plays Whack-a-Shark instead of disappearing.
+  const gameId: MiniGameId | undefined = mission?.game_id === 'timing' ? 'tap' : mission?.game_id;
+  if (!mission || !mission.title?.trim() || !mission.prompt?.trim() || !gameId ||
+      !Object.prototype.hasOwnProperty.call(GAME_NAMES, gameId)) return null;
   const branch = project.play_chapter ?? 'opening';
   return {
     title: mission.title,

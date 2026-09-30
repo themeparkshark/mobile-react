@@ -4,6 +4,7 @@ import type { PredictionCard } from './content';
 import type { CurrentQuestProof } from '../../api/endpoints/me/inline-timer/currentQuest';
 import { isCrewRelayProgress, type CrewRelayProgress } from './crewRelay';
 import { isNavigationPanelProgress, type NavigationPanelProgress } from './navigationPanel';
+import { isQueueDifficulty, type QueueDifficulty } from './replay';
 
 const PREFIX = 'lineplay_checkpoint_v1_';
 const MAX_AGE_MS = 3 * 60 * 60 * 1000;
@@ -24,6 +25,13 @@ export interface LinePlayCheckpoint {
   loreChoices?: Record<string, number>;
   navigationPanels?: Record<string, NavigationPanelProgress>;
   crewGridMarks?: number[];
+  /** Launch count per activity id, so a replay after a restart still deals a new board. */
+  gamePlays?: Record<string, number>;
+  gameDifficulty?: Partial<Record<string, QueueDifficulty>>;
+  /** Best stars per game this wait (0-3). */
+  gameBestStars?: Partial<Record<string, number>>;
+  /** Why the wait ended: typed by the guest, the queue area, or ride detection. */
+  endReason?: 'manual' | 'left_queue' | 'boarded' | null;
   prediction: { card: PredictionCard; guess: 'beat' | 'miss' } | null;
   boardingConfirmed?: boolean;
   boardingAt?: number | null;
@@ -67,9 +75,24 @@ export function parseCheckpoint(raw: string | null, playerId: number, rideId: nu
         !value.crewGridMarks.every(index => Number.isInteger(index) && index >= 0 && index <= 8))) ||
       (value.navigationPanels !== undefined && (
         typeof value.navigationPanels !== 'object' || value.navigationPanels === null ||
-        Array.isArray(value.navigationPanels) || Object.keys(value.navigationPanels).length > 4 ||
+        Array.isArray(value.navigationPanels) || Object.keys(value.navigationPanels).length > 80 ||
         !Object.entries(value.navigationPanels).every(([id, progress]) =>
           id.length > 0 && id.length <= 100 && isNavigationPanelProgress(progress)))) ||
+      (value.gamePlays !== undefined && (
+        typeof value.gamePlays !== 'object' || value.gamePlays === null ||
+        Array.isArray(value.gamePlays) || Object.keys(value.gamePlays).length > 90 ||
+        !Object.entries(value.gamePlays).every(([id, plays]) =>
+          id.length > 0 && id.length <= 120 && Number.isInteger(plays) && plays >= 0 && plays <= 999))) ||
+      (value.gameDifficulty !== undefined && (
+        typeof value.gameDifficulty !== 'object' || value.gameDifficulty === null ||
+        Array.isArray(value.gameDifficulty) || Object.keys(value.gameDifficulty).length > 12 ||
+        !Object.values(value.gameDifficulty).every(isQueueDifficulty))) ||
+      (value.gameBestStars !== undefined && (
+        typeof value.gameBestStars !== 'object' || value.gameBestStars === null ||
+        Array.isArray(value.gameBestStars) || Object.keys(value.gameBestStars).length > 12 ||
+        !Object.values(value.gameBestStars).every(stars => Number.isInteger(stars) && (stars as number) >= 0 && (stars as number) <= 3))) ||
+      (value.endReason !== undefined && value.endReason !== null &&
+        !['manual', 'left_queue', 'boarded'].includes(value.endReason)) ||
       (value.boardingConfirmed !== undefined && typeof value.boardingConfirmed !== 'boolean') ||
       (value.boardingAt !== undefined && value.boardingAt !== null &&
         (!Number.isFinite(value.boardingAt) || value.boardingAt < value.startedAt || value.boardingAt > nowMs + 60_000)) ||

@@ -15,7 +15,7 @@ export interface LinePlayChapter {
   readonly progressNoun: string;
   readonly missionNames: readonly [string, string, string];
   readonly finale: { readonly idSuffix: string; readonly title: string; readonly preview: string;
-    readonly memoryDeckId: string; readonly gameId?: 'memory' | 'timing' | 'shark' };
+    readonly memoryDeckId: string; readonly gameId?: 'memory' | 'tap' | 'shark' };
   readonly relay: {
     readonly title: string;
     readonly setupStory: string;
@@ -52,8 +52,8 @@ function adaptiveClueQuestions(chapterId: string, story: AdaptiveStory): readonl
   return [
     {
       id: `${chapterId}-signal-pattern`,
-      question: `A message beside the ${story.artifact} reads ✦ ● ✦ ● ?. Which mark completes it?`,
-      choices: ['Star ✦', 'Circle ●', 'Wave ≋', 'Diamond ◆'], correctIndex: 0,
+      question: `A message beside the ${story.artifact} reads star, circle, star, circle, then a gap. Which mark completes it?`,
+      choices: ['Star', 'Circle', 'Wave', 'Diamond'], correctIndex: 0,
       difficulty: 'easy', fact: 'The star and circle alternate, so the next mark is a star.',
     },
     {
@@ -70,19 +70,19 @@ function adaptiveClueQuestions(chapterId: string, story: AdaptiveStory): readonl
     },
     {
       id: `${chapterId}-three-beat-lock`,
-      question: `The ${story.artifact} lock shows ◆ ● ● ◆ ● ● ?. Which mark starts its next beat?`,
-      choices: ['Circle ●', 'Diamond ◆', 'Star ✦', 'Wave ≋'], correctIndex: 1,
+      question: `The ${story.artifact} lock shows diamond, circle, circle, diamond, circle, circle. Which mark starts its next beat?`,
+      choices: ['Circle', 'Diamond', 'Star', 'Wave'], correctIndex: 1,
       difficulty: 'medium', fact: 'The three-mark beat repeats: diamond, circle, circle.',
     },
     {
       id: `${chapterId}-compass-turn`,
-      question: `Your shark traces the ${story.clue} on a compass: north → east → south → ?. Which way comes next?`,
+      question: `Your shark traces the ${story.clue} on a compass: north, then east, then south. Which way comes next?`,
       choices: ['North', 'South', 'West', 'East'], correctIndex: 2,
       difficulty: 'medium', fact: 'Each arrow turns one quarter clockwise, so west follows south.',
     },
     {
       id: `${chapterId}-symbol-order`,
-      question: `A note beside the ${story.artifact} says 1 = ✦, 2 = ●, 3 = ◆. What does the code 3-1-2 show?`,
+      question: `A note beside the ${story.artifact} says 1 is a star, 2 is a circle, 3 is a diamond. What does the code 3-1-2 show?`,
       choices: ['Star, circle, diamond', 'Circle, diamond, star',
         'Diamond, circle, star', 'Diamond, star, circle'], correctIndex: 3,
       difficulty: 'medium', fact: 'Read the key in order: 3 is diamond, 1 is star, and 2 is circle.',
@@ -146,14 +146,14 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
   for (const char of id) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
   const storyIndex = episode ?? hash % stories.length;
   const story = stories[storyIndex];
-  const finaleGameId = (['memory', 'timing', 'shark'] as const)[storyIndex % 3];
+  const finaleGameId = (['memory', 'tap', 'shark'] as const)[storyIndex % 3];
   const finaleTitle = finaleGameId === 'memory' ? `Rebuild the ${story.artifact}`
-    : finaleGameId === 'timing' ? `Follow the ${story.clue}`
+    : finaleGameId === 'tap' ? `Follow the ${story.clue}`
       : `Search for the ${story.artifact}`;
   const finalePreview = finaleGameId === 'memory'
     ? 'Match illustrated symbols in a quick memory round. Play solo or pass the phone when the line is safely stopped.'
-    : finaleGameId === 'timing'
-      ? 'Keep a steady beat to trace your crew’s clue. Play solo or pass the phone when the line is safely stopped.'
+    : finaleGameId === 'tap'
+      ? 'Tap the sharks that pop up with the clue and skip the decoys. Play solo or pass the phone when the line is safely stopped.'
       : `Guide your shark through a short swim to find the ${story.artifact}. Play solo or take turns when the line is safely stopped.`;
   const chapter: LinePlayChapter = {
     id, adaptive: true, parkLabel: 'YOUR QUEUE',
@@ -184,7 +184,7 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
       branchDone: 'Your crew finished its chosen route. It stays in your queue recap.',
       routeNames: [story.routeA, story.routeB],
       epilogues: {
-        alpha: { title: story.routeA, prompt: 'Keep a steady rhythm to guide your shark along the chosen route.' },
+        alpha: { title: story.routeA, prompt: 'Tap the sharks that surface along the chosen route and skip the decoys.' },
         omega: { title: story.routeB, prompt: 'Swim through a quick challenge to explore the route your crew chose.' },
       },
     },
@@ -270,7 +270,7 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
     branchDone: 'Your crew finished its chosen route. The flight plan stays in your queue recap.',
     routeNames: ['Alpha', 'Omega'],
     epilogues: {
-      alpha: { title: 'Hold the Alpha Signal', prompt: 'Keep a steady rhythm to guide your shark along the known flight path.' },
+      alpha: { title: 'Hold the Alpha Signal', prompt: 'Tap the signal sharks as they surface along the known flight path. Skip the decoys.' },
       omega: { title: 'Search the Omega Trail', prompt: 'Swim into the unknown and look for the signal your crew missed.' },
     },
   },
@@ -353,7 +353,7 @@ const DISNEYLAND_SPACE_MOUNTAIN: LinePlayChapter = {
     branchDone: 'Your crew finished its chosen path. It stays in the queue recap.',
     routeNames: ['Solar route', 'Nebula route'],
     epilogues: {
-      alpha: { title: 'Hold the Solar Signal', prompt: 'Keep a steady rhythm to guide your shark along the light.' },
+      alpha: { title: 'Hold the Solar Signal', prompt: 'Tap the sharks that pop up in the light. Skip the decoys.' },
       omega: { title: 'Swim the Nebula Trail', prompt: 'Guide your shark through a quick journey into the swirl.' },
     },
   },
@@ -441,7 +441,7 @@ const DISNEYLAND_JUNGLE_CRUISE: LinePlayChapter = {
     branchDone: 'Your crew finished its chosen route. The logbook ending stays in your recap.',
     routeNames: ['Falls route', 'Camp route'],
     epilogues: {
-      alpha: { title: 'Follow the Falls', prompt: 'Keep a steady rhythm as your shark follows the river.' },
+      alpha: { title: 'Follow the Falls', prompt: 'Tap the sharks that pop up along the river. Skip the decoys.' },
       omega: { title: 'Search the Shore', prompt: 'Swim through a quick challenge to find the shore clue.' },
     },
   },
@@ -512,7 +512,7 @@ const DISNEYLAND_PIRATES: LinePlayChapter = {
     branchDone: 'Your crew finished its chosen route. The course stays in your queue recap.',
     routeNames: ['Harbor', 'Open Sea'],
     epilogues: {
-      alpha: { title: 'Steady Through the Channel', prompt: 'Keep a steady rhythm while your shark guides the crew into the harbor.' },
+      alpha: { title: 'Steady Through the Channel', prompt: 'Tap the harbor sharks as they surface. Skip the decoys.' },
       omega: { title: 'Search the Open Sea', prompt: 'Swim into the unknown and find the passage your crew chose.' },
     },
   },
@@ -594,7 +594,7 @@ const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
     branchDone: 'Your crew’s entrance and guest-book ending stay in the queue recap.',
     routeNames: ['Lantern path', 'Moon path'],
     epilogues: {
-      alpha: { title: 'Follow the Lanterns', prompt: 'Keep a steady rhythm as your shark carries the guest book toward the lanterns.' },
+      alpha: { title: 'Follow the Lanterns', prompt: 'Tap the sharks that appear by the lanterns. Skip the decoys.' },
       omega: { title: 'Swim Through Moonlight', prompt: 'Guide your shark through a moonlit detour to the missing page.' },
     },
   },
@@ -677,7 +677,7 @@ const DISNEYLAND_HAUNTED_MANSION: LinePlayChapter = {
     branchDone: 'Your chosen portrait stays in the queue recap.',
     routeNames: ['Gallery portrait', 'Garden portrait'],
     epilogues: {
-      alpha: { title: 'Steady the Gallery', prompt: 'Keep the colors in rhythm while your shark completes the gallery portrait.' },
+      alpha: { title: 'Steady the Gallery', prompt: 'Tap the sharks that pop out of the gallery frames. Skip the decoys.' },
       omega: { title: 'Light the Garden', prompt: 'Guide your shark through the garden to reveal the lantern portrait.' },
     },
   },
@@ -759,7 +759,7 @@ const UNIVERSAL_STUDIO_TOUR: LinePlayChapter = {
     branchDone: 'Your crew’s cut stays in the queue recap.',
     routeNames: ['Spotlight cut', 'Splash cut'],
     epilogues: {
-      alpha: { title: 'Hold the Spotlight', prompt: 'Keep a steady rhythm as your shark times the final backlot shot.' },
+      alpha: { title: 'Hold the Spotlight', prompt: 'Tap the sharks that pop up on set for the final shot. Skip the decoys.' },
       omega: { title: 'Follow the Splash Cue', prompt: 'Swim through a quick scene to find the watery ending your crew chose.' },
     },
   },
@@ -768,9 +768,8 @@ const UNIVERSAL_STUDIO_TOUR: LinePlayChapter = {
     { id: 'ush-tour-2', question: 'Which part of Universal Studios Hollywood has the Studio Tour?', choices: ['Upper Lot', 'Lower Lot', 'CityWalk', 'Super Nintendo World'], correctIndex: 0, difficulty: 'easy', fact: 'Universal lists the Studio Tour in the Upper Lot.', source: 'Universal Studios Hollywood' },
     { id: 'ush-tour-3', question: 'How is the Studio Tour included for a regular park guest?', choices: ['With park admission', 'Only with a separate movie ticket', 'Only after sunset', 'Only with a hotel stay'], correctIndex: 0, difficulty: 'easy', fact: 'Universal says the Studio Tour is included with park admission.', source: 'Universal Studios Hollywood' },
     { id: 'ush-tour-4', question: 'What kind of place does the Studio Tour take guests behind the scenes of?', choices: ['A working movie and TV studio', 'A space center', 'A shipyard', 'An aquarium'], correctIndex: 0, difficulty: 'easy', fact: 'The tour explores Universal’s working studio and backlot.', source: 'Universal Studios Hollywood' },
-    { id: 'ush-tour-5', question: 'Which famous shark encounter does Universal mention on the tour?', choices: ['Jaws', 'The Meg', 'Sharknado', 'Deep Blue Sea'], correctIndex: 0, difficulty: 'medium', fact: 'Universal highlights the Jaws encounter among the tour’s sights.', source: 'Universal Studios Hollywood' },
     { id: 'ush-tour-6', question: 'Which tour experience puts King Kong near a T-Rex?', choices: ['King Kong 360', 'The WaterWorld show', 'Studio Tram Race', 'The Backlot Theater'], correctIndex: 0, difficulty: 'medium', fact: 'Universal describes the King Kong 360 encounter on the Studio Tour.', source: 'Universal Studios Hollywood' },
-    { id: 'ush-tour-7', question: 'Jupiter’s Claim is a set from which film featured on the tour?', choices: ['NOPE', 'Jaws', 'The Wizard of Oz', 'Back to the Future'], correctIndex: 0, difficulty: 'medium', fact: 'Universal says guests can see the Jupiter’s Claim set from Jordan Peele’s NOPE.', source: 'Universal Studios Hollywood' },
+    { id: 'ush-tour-7', question: 'Jupiter’s Claim is a set from which film featured on the tour?', choices: ['NOPE', 'A silent western', 'A pirate musical', 'A space opera'], correctIndex: 0, difficulty: 'medium', fact: 'Universal says guests can see the Jupiter’s Claim set from Jordan Peele’s NOPE.', source: 'Universal Studios Hollywood' },
     { id: 'ush-tour-8', question: 'Which craft does Universal say helps bring tour scenes to life?', choices: ['Set design and special effects', 'Live animal training only', 'Deep-sea diving', 'Astronaut training'], correctIndex: 0, difficulty: 'medium', fact: 'Universal describes working sets, soundstages, props, and special effects as part of the tour.', source: 'Universal Studios Hollywood' },
   ],
   fieldNotes: [
@@ -841,7 +840,7 @@ const DISNEYLAND_BIG_THUNDER: LinePlayChapter = {
     branchDone: 'Your chosen trail is complete and stays in the queue recap.',
     routeNames: ['Ridge trail', 'Canyon trail'],
     epilogues: {
-      alpha: { title: 'Follow the Lanterns', prompt: 'Keep the beat to guide your shark along the ridge trail.' },
+      alpha: { title: 'Follow the Lanterns', prompt: 'Tap the sharks that pop up along the ridge trail. Skip the decoys.' },
       omega: { title: 'Search the Old Mine', prompt: 'Swim through a quick challenge to recover the last mine mark.' },
     },
   },

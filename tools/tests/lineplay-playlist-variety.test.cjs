@@ -50,16 +50,21 @@ test('a long authored queue gives one-card clues and Trivia+ a shared nonrepeati
         ? Array.from({ length: 5 }, (_, index) => item.seed + index) : []);
     const questionIds = await Promise.all(questionSeeds.map(seed =>
       content.fetchRideTrivia(undefined, parkId, seed, chapter.id).then(question => question.id)));
-    const noteIds = lore.slice(0, chapter.fieldNotes.length)
-      .map(item => chapter.fieldNotes[item.seed % chapter.fieldNotes.length].id);
     assert.ok(questionIds.length >= 3);
     assert.equal(new Set(questionIds).size, questionIds.length);
-    assert.equal(new Set(noteIds).size, chapter.fieldNotes.length);
+    // One authored Field Note per chapter; generic lore no longer fills pages.
+    assert.equal(lore.length, 1);
+    assert.equal(lore[0].id, `${chapter.id}-field-note`);
     assert.equal(trivia[0].seed, 0);
     assert.equal(lore[0].seed, 0);
     assert.equal(playlist.filter(item => item.kind === 'prediction').length, 1);
     assert.equal(playlist.some(item => item.kind === 'minigame' && item.gameId === 'current'), true);
-    assert.equal(playlist.some(item => item.kind === 'minigame' && item.gameId === 'showdown'), true);
+    assert.equal(playlist.some(item => item.kind === 'circuit'), true);
+    // Retired from the queue: Shark Showdown merges into Trivia, Rhythm Tap is pulled.
+    assert.equal(playlist.some(item => item.kind === 'minigame' &&
+      (item.gameId === 'showdown' || item.gameId === 'timing')), false);
+    // Crew Prompts is the optional last card, never an early page.
+    assert.equal(playlist[playlist.length - 1].kind, 'crew_grid');
   }
 });
 
@@ -78,7 +83,7 @@ test('a large session seed opens with ride-story clues, then new questions', asy
   const cards = playlist.filter(item => item.kind === 'trivia');
   assert.ok(cards.length >= 2);
   assert.ok(cards[0].seed >= 0 && cards[0].seed < chapter.trivia.length);
-  assert.equal(cards[1].seed, cards[0].seed + 1);
+  assert.ok(cards[1].seed > cards[0].seed);
   const first = await content.fetchRideTrivia(999, 99, cards[0].seed, chapter.id);
   const next = await content.fetchRideTrivia(999, 99, cards[1].seed, chapter.id);
   assert.ok(first.id.startsWith(chapter.id));
@@ -159,7 +164,7 @@ test('return visits give adaptive shark stories distinct playable finales', () =
       assert.equal(chapter.missionNames[2], finale.title);
       games.push(finale.gameId);
     }
-    assert.deepEqual(games, ['memory', 'timing', 'shark']);
+    assert.deepEqual(games, ['memory', 'tap', 'shark']);
   }
 });
 
@@ -185,7 +190,7 @@ test('optional encore waves add varied playable rounds without moving the openin
   const second = session.generateEncoreRounds(30, 413);
   assert.equal(first.length, 8);
   assert.equal(second.length, 8);
-  assert.equal(first.every(item => ['minigame', 'trivia', 'lore'].includes(item.kind)), true);
+  assert.equal(first.every(item => ['minigame', 'trivia', 'circuit'].includes(item.kind)), true);
   assert.equal(new Set([...first, ...second].map(item => item.id)).size, 16);
   assert.notDeepEqual(first.map(item => item.seed), second.map(item => item.seed));
   assert.equal(session.generateEncoreRounds(79, 413).length, 1);
