@@ -101,19 +101,18 @@ export function sharkLoaderContent(props: SharkLoaderProps, slow: boolean) {
 
 /**
  * Geometry of SHARK_LOADER_ART (1189 x 1158). The body ends above row 1030;
- * rows 1100 to 1153 are the baked-in ground shadow, an ellipse spanning
+ * rows 1100 to 1153 are his baked-in ground shadow, an ellipse spanning
  * x 214 to 616. The art itself is never edited: the moving shark is cropped
- * above the shadow in layout, and a separate still shadow sits on the ground.
+ * above the shadow in layout, and the shadow band of the same image is shown
+ * on its own, still, underneath.
  */
 const ART_ASPECT = 1158 / 1189;
 const ART_BODY_BOTTOM = 1030 / 1158;
-const ART_SHADOW = { top: 1100 / 1158, height: 54 / 1158, left: 214 / 1189, width: 402 / 1189 } as const;
-/** The ground shadow, in the same navy as the scrim family, never black. */
-const GROUND_SHADOW = 'rgba(4,40,90,0.28)';
+const ART_SHADOW = { top: 1090 / 1158, height: 68 / 1158, left: 200 / 1189, width: 430 / 1189 } as const;
 
 /**
- * The shark, bobbing and swaying while it loads. Only the body moves; its
- * ground shadow stays put and shrinks a little as he rises. Reduced motion
+ * The shark, bobbing and swaying while it loads. Only the body moves; his
+ * own ground shadow stays put and shrinks a little as he rises. Reduced motion
  * holds him still.
  */
 function SwimmingShark({ size, still }: { size: number; still: boolean }) {
@@ -155,9 +154,11 @@ function SwimmingShark({ size, still }: { size: number; still: boolean }) {
       left: size * ART_SHADOW.left,
       width: size * ART_SHADOW.width,
       height: artHeight * ART_SHADOW.height,
-      borderRadius: size,
-      backgroundColor: GROUND_SHADOW,
-    }, shadowStyle]} />
+      overflow: 'hidden',
+    }, shadowStyle]}>
+      <Image source={SHARK_LOADER_ART} contentFit="contain"
+        style={{ position: 'absolute', top: -artHeight * ART_SHADOW.top, left: -size * ART_SHADOW.left, width: size, height: artHeight }} />
+    </Animated.View>
     <Animated.View style={[{ position: 'absolute', top, left: 0, width: size, height: artHeight * ART_BODY_BOTTOM, overflow: 'hidden' }, bodyStyle]}>
       <Image source={SHARK_LOADER_ART} contentFit="contain" style={{ width: size, height: artHeight }}
         accessibilityIgnoresInvertColors />

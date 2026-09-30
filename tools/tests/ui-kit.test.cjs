@@ -23,8 +23,9 @@ function hue(hex) {
 }
 
 test('brand tokens: navy scrim instead of black, and no purple or near-black surfaces', () => {
-  // A bluer, lighter navy than the first pass (0.55 over cream read slate and turned yellow buttons olive).
-  assert.match(tokens.BRAND.scrim, /^rgba\(8,56,128,0\.45\)$/);
+  // A lighter, bluer navy than the first pass (0.55 over cream read slate and turned yellow buttons olive);
+  // GameDialog pairs it with a soft light blur.
+  assert.match(tokens.BRAND.scrim, /^rgba\(8,56,128,0\.3\)$/);
   assert.equal(tokens.BRAND.cream, '#fff8e4');
   assert.equal(tokens.BRAND.navy, '#05346e');
   assert.equal(tokens.BRAND.gold, '#ffcf3b');
@@ -346,6 +347,7 @@ function dialogView(props, reduced = false) {
     './GameIcon': { default: 'GameIcon' },
     './GameText': { default: 'GameText' },
     '../components/Ribbon': { default: 'Ribbon' },
+    'expo-blur': { BlurView: 'BlurView' },
     './gameDialogModel': dialogModel,
     './tokens': tokens,
   }, { visible: true, title: 'Leave the line?', buttons: [{ text: 'Stay', style: 'cancel' }, { text: 'Leave' }], ...props },
@@ -355,6 +357,7 @@ function dialogView(props, reduced = false) {
 test('GameDialog: mounting open springs when motion is on, fades under reduced motion', () => {
   const open = dialogView({});
   assert.ok(open.motions.includes('spring'), 'a host-mounted dialog (visible on mount) gets the spring pop');
+  assert.equal(open.find(n => n.type === 'BlurView').props.tint, 'light', 'the backdrop is a light blur, never dark');
   const reduced = dialogView({}, true);
   assert.ok(!reduced.motions.includes('spring'), 'reduced motion never springs');
   assert.ok(reduced.motions.includes('timing'));

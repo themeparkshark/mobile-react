@@ -169,7 +169,8 @@ return <SharkLoader onRetry={load} />;   // loading; "Still loading" and retry a
 Art: Dustin's TPS shark (`assets/images/screens/pin-collections/shark.png`),
 bobbing while it loads; reduced motion holds him still. The art is never
 edited: the moving shark is cropped above his baked-in ground shadow in
-layout, and a separate still navy shadow shrinks slightly as he rises. `compact` for cards,
+layout, and the shadow band of the same image stays still on the ground,
+shrinking slightly as he rises. `compact` for cards,
 `tone="onBlue"` on blue panels. `components/Loading` is
 now SharkLoader with the same props, so existing `<Loading />` calls get the new
 look and can add `state` and `onRetry` without changing imports. Its slow

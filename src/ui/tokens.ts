@@ -34,7 +34,7 @@ export const BRAND = {
   green: '#3cb85c',
   greenLip: '#237a3b',
   /** Navy scrim behind dialogs and sheets. Never black. */
-  scrim: 'rgba(8,56,128,0.45)',
+  scrim: 'rgba(8,56,128,0.3)',
   /** Soft navy used for drop shadows. */
   shadow: '#05346e',
 } as const;

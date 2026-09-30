@@ -12,7 +12,8 @@
  * UnfoundCoinModal use: his ribbon.png title (the Ribbon component) over the
  * house blue card with a white border, white copy, an optional GameIcon, and
  * his yellow image buttons stacked with the main action on top (red for
- * destructive, a quiet text action for cancel). The scrim is navy, never black.
+ * destructive, a quiet text action for cancel). The scrim is a light blur
+ * with a navy tint, never black or grey.
  * Titles up to RIBBON_TITLE_MAX characters sit in the ribbon; a longer title
  * becomes a wrapping heading on the card (and warns in dev) so it never
  * shrinks to an unreadable size.
@@ -21,7 +22,8 @@
  * dialog that mounts already open still springs.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, Modal, Pressable, View } from 'react-native';
+import { Alert, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { BlurView } from 'expo-blur';
 import Animated, {
   Easing,
   runOnJS,
@@ -55,6 +57,8 @@ export const DIALOG_CARD = {
   borderWidth: 2.5,
   borderColor: '#ffffff',
 } as const;
+/** Backdrop blur under the navy scrim (iOS; Android shows the scrim alone). */
+const SCRIM_BLUR = 18;
 /** Message copy on the card, as in UnfoundCoinModal. */
 export const DIALOG_COPY = '#e2f6ff';
 
@@ -137,9 +141,11 @@ export function GameDialog({
   const actions = layoutActions(buttons);
   const request = { title, message, icon, buttons, dismissible };
   const titleLayout = dialogTitleLayout(title);
-  if (__DEV__ && visible && titleLayout.placement === 'card') {
-    console.warn(`GameDialog: "${title}" is longer than ${RIBBON_TITLE_MAX} characters, so it moves off the ribbon. Pass a short title and put the rest in the message.`);
-  }
+  useEffect(() => {
+    if (__DEV__ && visible && titleLayout.placement === 'card') {
+      console.warn(`GameDialog: "${title}" is longer than ${RIBBON_TITLE_MAX} characters, so it moves off the ribbon. Pass a short title and put the rest in the message.`);
+    }
+  }, [visible, title, titleLayout.placement]);
 
   useEffect(() => {
     if (visible) {
@@ -195,7 +201,10 @@ export function GameDialog({
     <Modal transparent visible animationType="none" statusBarTranslucent
       onRequestClose={() => { if (dismiss !== null) close(dismiss); }}>
       <View testID={testID} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: Z.dialog }}>
-        <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: BRAND.scrim }, scrimStyle]}>
+        <Animated.View style={[StyleSheet.absoluteFill, scrimStyle]}>
+          {/* A soft light blur makes the page recede without greying it; the navy tint stays light so yellow stays yellow. */}
+          <BlurView intensity={SCRIM_BLUR} tint="light" style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: BRAND.scrim }]} />
           <Pressable accessibilityLabel="Close" accessibilityRole="button" style={{ flex: 1 }}
             disabled={dismiss === null} onPress={() => { if (dismiss !== null) close(dismiss); }} />
         </Animated.View>
