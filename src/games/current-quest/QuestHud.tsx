@@ -25,6 +25,7 @@ export interface HudState {
   goldenTaken: boolean;
   /** shells[v] = [clear, par, golden] earned. */
   shells: boolean[][];
+  voyages: number;
   flow: number;
   riptide: boolean;
   hasTide: boolean;
@@ -77,7 +78,7 @@ export const QuestHud = React.memo(function QuestHud({ h, walkingChip }: { h: Hu
       </View>
 
       <View style={styles.rail} accessibilityLabel={`Voyage ${h.voyage + 1} of 3`}>
-        {[0, 1, 2].map((v) => (
+        {[0, 1, 2].slice(0, h.voyages).map((v) => (
           <React.Fragment key={`v${v}`}>
             {v === 1 ? <Image source={COMPASS} style={styles.compass} /> : null}
             <View style={[styles.voyage, v === h.voyage && styles.voyageNow]}>

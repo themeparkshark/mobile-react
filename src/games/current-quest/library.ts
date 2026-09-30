@@ -11,7 +11,7 @@ import {
   type Board, type Knobs, type MechanicSet, type Slot,
 } from './rules';
 
-export type RunContext = 'quick' | 'ride' | 'line' | 'ghost' | 'practice';
+export type RunContext = 'quick' | 'ride' | 'line' | 'ghost' | 'practice' | 'showdown';
 
 export interface RunProgressHint {
   /** Completed runs on this device (0 = first run ever: teach currents). */
@@ -55,6 +55,7 @@ export function poolOf(set: MechanicSet, slot: Slot, coinOnly = false): Board[] 
 export function knobsFor(context: RunContext): Knobs {
   if (context === 'ride') return RIDE_KNOBS;
   if (context === 'line') return LINE_BONUS_KNOBS;
+  if (context === 'showdown') return { ...PUZZLE_KNOBS, showdown: true };
   return PUZZLE_KNOBS;
 }
 
@@ -72,6 +73,7 @@ export function pickRun(seed: number, context: RunContext, progress: RunProgress
     return transformBoard(b, tf);
   };
   const teach = (id: string) => CQ_LIBRARY.find((b) => b.id === id) as Board;
+  if (context === 'showdown') return showdownBoards(seed);
   if (isScored(context)) {
     return [draw(poolOf('C', 'warmup', true)), draw(poolOf('CT', 'standard', true)), draw(poolOf('CT', 'treasure', true))];
   }
@@ -103,4 +105,11 @@ export function boardsFromRefs(refs: readonly { id: string; tf: number }[]): Boa
     out.push(transformBoard(b, r.tf & 7));
   }
   return out;
+}
+
+/** The two Same-Board Showdown voyages for a seed (Standard + Treasure, tide set). */
+export function showdownBoards(seed: number): Board[] {
+  const rand = mulberry32((seed >>> 0) ^ hashString('cq:showdown'));
+  const draw = (pool: Board[]) => transformBoard(pool[Math.floor(rand() * pool.length) % pool.length], Math.floor(rand() * 8) & 7);
+  return [draw(poolOf('CT', 'standard')), draw(poolOf('CT', 'treasure'))];
 }

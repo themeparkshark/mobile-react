@@ -33,7 +33,7 @@ import { packHex } from '../../gamekit/core/particles';
 import { useSessionRestore } from '../../gamekit/session/useSessionRestore';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import {
-  A_CONTINUE, A_RESTART, A_TIP, A_TREAD, A_UNDO,
+  A_CONTINUE, A_RESTART, A_SPLASH, A_TIP, A_TREAD, A_UNDO,
   applyAction, createRun, currentBoard, limitFor, movesToTurn, previewFor, starsFor, strokesLeft, tideAt, totalShells,
   treasureOf, shellsToNextStar, TIDE_LOW, simulateStroke, stepCell,
   type Board, type CqEvent, type CurrentQuestProofV2, type RunState, type VoyageResult,
@@ -49,6 +49,11 @@ import {
 import { BottomBar, ArrowPad, StallCard } from './Controls';
 import { QuestHud, type HudState } from './QuestHud';
 import { GhostRail } from './GhostRail';
+import { ShowdownRail, type RailRacer } from './ShowdownRail';
+import {
+  createBot, HOUSE_CREW, progressOf, compareRacers, splashTarget, stepBot, SHOWDOWN_WINDOW_MS,
+  type Bot, type RacerProgress,
+} from './showdown';
 import { boardLayout, cellCenter, CQ, type BoardLayout } from './theme';
 import { themeSubtitle } from './themeSubtitle';
 import {
@@ -61,6 +66,13 @@ import {
 } from './fxGovernor';
 
 const BACKDROP = require('../../assets/games/current-quest/backdrop.jpg');
+const CROWN = require('../../assets/games/current-quest/crown.png');
+const AVATAR_IMG: Record<string, number> = {
+  you: require('../../assets/games/current-quest/avatar_classic.png'),
+  blue: require('../../assets/games/current-quest/avatar_blue.png'),
+  green: require('../../assets/games/current-quest/avatar_green.png'),
+  orange: require('../../assets/games/current-quest/avatar_orange.png'),
+};
 
 export interface CurrentQuestGameProps {
   visible: boolean;
@@ -227,6 +239,14 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
   const misfires = useRef<number[]>([]);
   const lastCommitAt = useRef(0);
   const shellsRef = useRef<boolean[][]>(emptyShells());
+  // Showdown (14.1): house-crew racers, incoming splashes, the 3-minute window.
+  const showdown = context === 'showdown';
+  const bots = useRef<Bot[]>([]);
+  const [racers, setRacers] = useState<RailRacer[]>([]);
+  const [sdRemaining, setSdRemaining] = useState(SHOWDOWN_WINDOW_MS);
+  const incoming = useRef<{ from: string; readyAt: number }[]>([]);
+  const bumps = useRef<Record<number, number>>({});
+  const [podium, setPodium] = useState<RailRacer[] | null>(null);
   const finishing = useRef(false);
   const [bed, setBed] = useState<string | null>(null);
 
@@ -283,6 +303,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       hasGolden: b.golden >= 0,
       goldenTaken: v.golden,
       shells: shellsRef.current.map((s) => s.slice()),
+      voyages: run.boards.length,
       flow: Math.min(3, v.flow),
       riptide: v.flow >= 3,
       hasTide: b.P > 0,
@@ -428,6 +449,13 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       startedAt.current = Date.now() - (snap.elapsed ?? 0);
     }
     runRef.current = run;
+    if (context === 'showdown') {
+      bots.current = HOUSE_CREW.map((seat) => createBot(runSeed, seat, boards, 0));
+      incoming.current = [];
+      bumps.current = {};
+      setPodium(null);
+      setSdRemaining(SHOWDOWN_WINDOW_MS);
+    }
     setVoyageIdx(run.index);
     setTreasure(treasureOf(run.results));
     beginVoyage(run, true);
@@ -639,6 +667,130 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     return { dur, endAt, endMove, clearEv };
   }, [center, toField, burst, later, layout, reducedMotion, camera, clock, banner, syncHud, syncBoardVisuals, setBedFor]);
 
+  // ---- Showdown -------------------------------------------------------------------------------------------
+  const allProgress = (): { seat: number; p: RacerProgress }[] => {
+    const r = runRef.current;
+    const list: { seat: number; p: RacerProgress }[] = [];
+    if (r) list.push({ seat: 0, p: progressOf(r, times.current.flat()) });
+    for (const b of bots.current) list.push({ seat: b.seat.seat, p: progressOf(b.run, b.times) });
+    return list;
+  };
+  const refreshRail = () => {
+    const r = runRef.current;
+    if (!r) return;
+    const list = [
+      { seat: 0, name: 'You', avatar: 'you' as const, you: true, p: progressOf(r, times.current.flat()), shield: r.voyage.shield },
+      ...bots.current.map((b) => ({ seat: b.seat.seat, name: b.seat.name, avatar: b.seat.avatar, you: false, p: progressOf(b.run, b.times), shield: b.run.voyage.shield })),
+    ];
+    const sorted = [...list].sort((a, b) => compareRacers(a.p, b.p));
+    const rail = list.map((x) => ({
+      seat: x.seat, name: x.name, avatar: x.avatar, you: x.you, cleared: x.p.voyagesCleared, shells: x.p.shells, strokes: x.p.strokes,
+      finished: x.p.finished, shield: x.shield, bump: bumps.current[x.seat] ?? 0, place: sorted.indexOf(x) + 1,
+    }));
+    setRacers(rail);
+    return rail;
+  };
+  const sendPlayerSplash = () => {
+    const target = splashTarget(allProgress(), 0);
+    const b = bots.current.find((x) => x.seat.seat === target);
+    if (!b) return;
+    b.inbox += 1;
+    setToast({ text: `Par clear! Splash sent to ${b.seat.name}`, key: Date.now() });
+    sfxTide();
+  };
+  const finishShowdown = (run: RunState) => {
+    if (finishing.current && podium) return;
+    finishing.current = true;
+    const now = Date.now() - startedAt.current;
+    // Results land when everyone is done: the crew is deterministic, so play them out to the window.
+    for (const b of bots.current) for (let t = Math.min(now, SHOWDOWN_WINDOW_MS); t <= SHOWDOWN_WINDOW_MS && !b.run.complete; t += 250) stepBot(b, t);
+    const rail = refreshRail() ?? [];
+    const ordered = [...rail].sort((a, b) => a.place - b.place);
+    setPodium(ordered);
+    const me = rail.find((x) => x.you);
+    const place = me?.place ?? 4;
+    const done = run.complete;
+    const shells = totalShells(run.results);
+    const stars = !done ? 0 : place === 1 ? 3 : place === 2 ? 2 : 1;
+    const s = svRef.current;
+    if (done && place === 1) {
+      sfxFinalClear();
+      playHaptic('winRoll');
+      banner('1ST PLACE!', PRI_GOLDEN, 0, 1100);
+      burst('confetti', currentBoard(run).chest, { count: reducedMotion ? 8 : 30 }, -(layout?.cell ?? 60));
+    } else {
+      sfxChest();
+      Haptic.success();
+      banner(done ? `${['1ST', '2ND', '3RD', '4TH'][place - 1]} PLACE` : 'OUT OF TIME', PRI_GOLDEN, done ? 0 : 1, 1000);
+    }
+    const p = s.shark.value;
+    s.plan.value = { ...idlePlan(p.x, p.y, p.facing), kind: PLAN_CHEER, t0: -1 };
+    const tr = treasureOf(run.results);
+    const proof: CurrentQuestProofV2 = {
+      game: 'current', v: 2, context, profile: knobs.profile, rings: 0, seed: runSeed, treasure: tr, stars: starsFor(shells, done), shells,
+      elapsed_ms: now,
+      voyages: boardRefs(run.boards).map((ref, i) => ({ id: ref.id, tf: ref.tf, a: run.actions[i].slice(), t: times.current[i].slice(), ready: readyAt.current[i] })),
+    };
+    later(3200, () => {
+      setPodium(null);
+      setResult({
+        score: shells,
+        stars,
+        thresholds: { one: 2, two: 4, three: 6 },
+        message: done ? (place === 1 ? 'Showdown won!' : `${['1st', '2nd', '3rd', '4th'][place - 1]} place`) : 'Out of time',
+        stats: [
+          { label: 'Place', value: `${place} of ${rail.length}` },
+          { label: 'Shells', value: `${shells}/6` },
+          { label: 'Strokes', value: String(me?.strokes ?? 0) },
+        ],
+        meta: { proof, showdown: { place, racers: ordered.map((x) => ({ name: x.name, shells: x.shells, strokes: x.strokes, finished: x.finished })) }, seed: runSeed, context, v: 2 },
+      });
+    });
+  };
+  const finishShowdownRef = useRef(finishShowdown);
+  finishShowdownRef.current = finishShowdown;
+
+  useEffect(() => {
+    if (!showdown || !visible) return;
+    const id = setInterval(() => {
+      if (!playing.current || finishing.current) return;
+      const now = Date.now() - startedAt.current;
+      setSdRemaining(SHOWDOWN_WINDOW_MS - now);
+      let changed = false;
+      for (const b of bots.current) {
+        for (const e of stepBot(b, now)) {
+          changed = true;
+          if (e.type === 'clear' || e.type === 'finish') {
+            bumps.current[e.seat] = Date.now();
+            Haptic.tickSelection();
+            if (e.par) {
+              const target = splashTarget(allProgress(), e.seat);
+              if (target === 0) {
+                incoming.current.push({ from: b.seat.name, readyAt: Date.now() + 1500 });
+                banner(`SPLASH from ${b.seat.name}!`, PRI_RIPTIDE, 1, 1300);
+                playHaptic('incoming');
+                sfxTide();
+              } else {
+                const t = bots.current.find((x) => x.seat.seat === target);
+                if (t) t.inbox += 1;
+              }
+            }
+          }
+        }
+      }
+      if (changed) refreshRail();
+      const r = runRef.current;
+      const inc = incoming.current[0];
+      if (inc && r && Date.now() >= inc.readyAt && Date.now() >= busyUntil.current && svRef.current.armed.value < 0 && !r.voyage.stalled && !r.complete) {
+        incoming.current.shift();
+        applyNowRef.current(A_SPLASH);
+      }
+      if (now >= SHOWDOWN_WINDOW_MS && r && !r.complete) finishShowdownRef.current(r);
+    }, 250);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showdown, visible]);
+
   // ---- clears, stall, fail, finish -------------------------------------------------------------------
   const finishRun = useCallback((run: RunState, lastResult: VoyageResult) => {
     finishing.current = true;
@@ -716,6 +868,8 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       later(120, () => { sfxShells(r.shells); scheduleHaptics(gridSteps(r.shells, 0, 110, 'selection')); });
       const cur = runRef.current;
       if (cur) syncHud(cur);
+      if (showdown && r.shellPar) sendPlayerSplash();
+      if (showdown) { bumps.current[0] = Date.now(); refreshRail(); }
       // Split-delta chip vs the ghost (Trackmania).
       if (ghost && ghost.strokes[ev.index] != null) {
         const d = r.strokes - ghost.strokes[ev.index];
@@ -724,7 +878,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       }
     });
     if (ev.runComplete) {
-      later(startIn + 250, () => { const cur = runRef.current; if (cur) finishRun(cur, r); });
+      later(startIn + 250, () => { const cur = runRef.current; if (cur) (showdown ? finishShowdownRef.current(cur) : finishRun(cur, r)); });
       return;
     }
     const nextAt = startIn + (r.shells >= 3 ? 600 : r.shells === 2 ? 500 : 350);
@@ -883,6 +1037,25 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
         fx.current?.ring(fp.x, fp.y, { color: CQ.coral, from: 10, to: (layout?.cell ?? 60) * 0.7, ms: 300 });
         setToast({ text: '+2 strokes', key: Date.now() });
         dur = 250;
+      } else if (ev.type === 'splash') {
+        const p = s.shark.value;
+        const fp = toField(p.x, p.y);
+        if (ev.blocked) {
+          fx.current?.ring(fp.x, fp.y, { color: '#ffffff', from: 12, to: (layout?.cell ?? 60) * 0.9, ms: 300 });
+          fx.current?.burst('bubbles', fp.x, fp.y, { count: 12 });
+          setToast({ text: 'Shield popped the Splash!', key: Date.now() });
+          Haptic.hitMedium();
+        } else {
+          syncBoardVisuals(next);
+          sfxTide();
+          Haptic.warning();
+          if (!reducedMotion && requestShake(gov.current, Date.now())) camera.shake(0.22);
+          if (layout) for (let i = 0; i < 25; i++) if (currentBoard(next).tiles[i] === 's') burst('splash', i, { count: 6 });
+          if (ev.beached) sfxBeached();
+        }
+        s.plan.value = { ...idlePlan(p.x, p.y, p.facing), beached: next.voyage.beached ? 1 : 0, t0: -1 };
+        dur = 350;
+        refreshRail();
       } else if (ev.type === 'tip') {
         const b = currentBoard(next);
         const v = next.voyage;
@@ -905,6 +1078,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       }
     }
     busyUntil.current = Date.now() + Math.min(dur, 900);
+    if (showdown) later(Math.min(dur, 900), refreshRail);
     syncHud(next);
     refreshPreviews(next);
     // Persist the exact state for an instant resume after any interruption.
@@ -1195,7 +1369,8 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
         <RNImage source={BACKDROP} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <View style={styles.root} onLayout={onFieldLayout}>
           {hud ? <QuestHud h={hud} walkingChip={walking} /> : <View style={{ height: 58 }} />}
-          {ghost ? <GhostRail ghost={ghost} elapsedMs={elapsedNow} voyage={voyageIdx} cleared={run?.results.length ?? 0} /> : null}
+          {showdown && racers.length ? <ShowdownRail racers={racers} remainingMs={sdRemaining} total={2} /> : null}
+          {!showdown && ghost ? <GhostRail ghost={ghost} elapsedMs={elapsedNow} voyage={voyageIdx} cleared={run?.results.length ?? 0} /> : null}
           <View style={styles.boardArea}>
             {layout && board && stableImages.swim ? (
               <GestureDetector gesture={gesture}>
@@ -1276,6 +1451,19 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
             onToggleArrows={onToggleArrows}
           />
         </View>
+        {podium ? (
+          <Animated.View entering={FadeIn.duration(200)} style={styles.podium} pointerEvents="none">
+            {podium.map((r, i) => (
+              <Animated.View key={`pd${r.seat}`} entering={ZoomIn.delay(200 + (podium.length - i) * 220).springify().damping(10)} style={[styles.podRow, r.you && styles.podRowYou]}>
+                <Text style={styles.podPlace}>{['1st', '2nd', '3rd', '4th'][i]}</Text>
+                <RNImage source={AVATAR_IMG[r.avatar]} style={styles.podAvatar} />
+                {i === 0 ? <RNImage source={CROWN} style={styles.podCrown} /> : null}
+                <Text style={styles.podName}>{r.you ? 'You' : r.name}</Text>
+                <Text style={styles.podStat}>{r.finished ? `${r.shells} shells, ${r.strokes} strokes` : 'out of time'}</Text>
+              </Animated.View>
+            ))}
+          </Animated.View>
+        ) : null}
         {layout ? <FxStage ref={fx} width={field?.w ?? layout.cw} height={field?.h ?? layout.ch} timeScale={clock.fxScale} reducedMotion={reducedMotion} style={styles.fx} /> : null}
       </GestureHandlerRootView>
     </GameShellV2>
@@ -1320,7 +1508,7 @@ function dirBetween(a: number, b: number): number {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  boardArea: { alignItems: 'center', justifyContent: 'flex-start', paddingTop: 6, flex: 1 },
+  boardArea: { alignItems: 'center', justifyContent: 'center', paddingBottom: 10, flex: 1 },
   fx: { position: 'absolute', left: 0, top: 0 },
   arrowArea: { alignItems: 'center', paddingBottom: 4 },
   counter: {
@@ -1357,4 +1545,12 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: CQ.ink,
   },
   toastTxt: { fontFamily: 'Knockout', fontSize: 14, color: CQ.navy },
+  podium: { position: 'absolute', left: 24, right: 24, top: '22%', padding: 12, borderRadius: 20, backgroundColor: CQ.cream, borderWidth: 3, borderColor: CQ.ink, gap: 6 },
+  podRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 6, borderRadius: 12, backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: CQ.ink },
+  podRowYou: { backgroundColor: '#fff3c2', borderColor: CQ.goldDeep, borderWidth: 2.5 },
+  podPlace: { fontFamily: 'Shark', fontSize: 20, color: CQ.navy, width: 44 },
+  podAvatar: { width: 30, height: 32, resizeMode: 'contain' },
+  podCrown: { position: 'absolute', left: 52, top: -10, width: 28, height: 26, resizeMode: 'contain' },
+  podName: { fontFamily: 'Shark', fontSize: 17, color: CQ.navy, flex: 1 },
+  podStat: { fontFamily: 'Knockout', fontSize: 12, color: CQ.navy },
 });

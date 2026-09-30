@@ -519,3 +519,43 @@ test('subtitle comes from the land table, never the ride name', () => {
   assert.equal(T.themeSubtitle('Space Mountain'), 'Lagoon');
   assert.equal(T.themeSubtitle('Pirates of the Caribbean').includes('Caribbean'), false);
 });
+
+// ---------------------------------------------------------------------------
+// Showdown (14.1)
+
+const SD = loadTs('src/games/current-quest/showdown.ts');
+
+test('showdown: seeded boards, deterministic crew bots that finish inside the window, rank key', () => {
+  const boards = SD.showdownBoards(777);
+  assert.equal(boards.length, 2);
+  assert.deepEqual(plain(boards.map((b) => b.slot)), ['standard', 'treasure']);
+  assert.ok(boards.every((b) => b.P > 0));
+  for (const seat of SD.HOUSE_CREW) {
+    const a = SD.botActions(777, seat, boards);
+    const b = SD.botActions(777, seat, boards);
+    assert.deepEqual(plain(a), plain(b), 'deterministic');
+    assert.ok(a.times.every((t, i) => i === 0 || t > a.times[i - 1]));
+    // Replays through the same rules to a finished run.
+    let run = R.createRun(boards, SD.SHOWDOWN_KNOBS);
+    for (const act of a.actions) run = R.applyAction(run, act).run;
+    assert.equal(run.complete, true, `${seat.name} finishes`);
+    assert.ok(a.times[a.times.length - 1] < SD.SHOWDOWN_WINDOW_MS);
+  }
+  const fin = { voyagesCleared: 2, shells: 5, strokes: 14, undos: 0, tempo: 20000, finished: true, finishedAt: 1 };
+  assert.ok(SD.compareRacers(fin, { ...fin, shells: 4 }) < 0);
+  assert.ok(SD.compareRacers(fin, { ...fin, strokes: 15 }) < 0);
+  assert.ok(SD.compareRacers(fin, { ...fin, undos: 1 }) < 0);
+  assert.ok(SD.compareRacers({ ...fin, finished: false, voyagesCleared: 1 }, fin) > 0);
+  assert.ok(SD.compareRacers({ ...fin, finished: false, voyagesCleared: 1, shells: 3 }, { ...fin, finished: false, voyagesCleared: 0, shells: 0 }) < 0);
+  assert.ok(SD.scoreOf(fin) > SD.scoreOf({ ...fin, strokes: 16 }));
+  assert.equal(SD.splashTarget([{ seat: 0, p: fin }, { seat: 2, p: { ...fin, finished: false, shells: 3 } }, { seat: 3, p: { ...fin, finished: false, shells: 1 } }], 0), 2);
+});
+
+test('showdown: a Splash to a bot shifts its tide and the bot still finishes (replan through the solver)', () => {
+  const boards = SD.showdownBoards(4242);
+  const bot = SD.createBot(4242, SD.HOUSE_CREW[2], boards, 0);
+  bot.inbox = 2;
+  for (let t = 0; t <= SD.SHOWDOWN_WINDOW_MS && !bot.run.complete; t += 250) SD.stepBot(bot, t);
+  assert.equal(bot.run.complete, true);
+  assert.ok(bot.run.actions.flat().filter((a) => a === R.A_SPLASH).length >= 1);
+});
