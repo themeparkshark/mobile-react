@@ -41,7 +41,7 @@ export function readLockMs(questionChars: number, family: 'ride' | 'queue'): num
 }
 
 /** Speed points 0..max with a horizon H: after H a correct answer still scores its base. */
-export function speedPoints(t: number, g: number, h: number, max = POINTS.speedMax): number {
+export function speedPoints(t: number, g: number, h: number, max: number = POINTS.speedMax): number {
   'worklet';
   if (h <= g) return t <= g ? max : 0;
   return round5(max * clamp(1 - (t - g) / (h - g), 0, 1));

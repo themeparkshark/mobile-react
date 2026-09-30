@@ -57,7 +57,7 @@ export function isFiller(q: PoolQuestion): boolean {
   return FILLER_ID.test(q.id) && !q.source;
 }
 
-export function usablePool(pool: readonly PoolQuestion[], limit = TEXT_LIMITS.queue): PoolQuestion[] {
+export function usablePool(pool: readonly PoolQuestion[], limit: number = TEXT_LIMITS.queue): PoolQuestion[] {
   const seen = new Set<string>();
   const out: PoolQuestion[] = [];
   for (const q of pool) {

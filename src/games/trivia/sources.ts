@@ -146,6 +146,7 @@ export function createLinePlayTriviaSource(
 
   return {
     mode: 'lineplay',
+    context: { rideId: opts.rideId, parkId: opts.parkId, chapterId: opts.chapterId, seed: opts.seed },
     totalQuestions: count,
 
     async next(): Promise<TriviaCard | null> {

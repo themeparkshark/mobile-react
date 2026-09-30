@@ -12,7 +12,7 @@ import { WhackAShark } from '../games/whack';
 import { SnapTheRide } from '../games/snap/SnapTheRide';
 import { RhythmTapGame } from '../games/rhythm';
 import { MemoryGame } from '../games/memory';
-import { TriviaGame, createLinePlayTriviaSource } from '../games/trivia';
+import { TriviaDuel } from '../games/trivia-duel';
 import { SharkySwim } from '../games/sharky';
 import { BananaBasketGame } from '../games/banana-basket';
 import { TaskAttemptGame, TaskGameProof } from '../api/endpoints/me/task-attempts';
@@ -137,17 +137,12 @@ export default function MiniGameSelector({
   // One deterministic seed per game mount so runs are replayable in telemetry.
   const seed = useMemo(() => Number.isInteger(attemptSeed) ? attemptSeed! :
     Math.floor(Math.random() * 0x7fffffff), [visible, selectedGame, attemptSeed]);
-  // The retired task trivia API could spend a second Ticket and award a coin
-  // outside its attempt. Both the paid game and local tester use bundled
-  // questions; only the attempt result can grant park rewards.
+  // Trivia Duel builds its own deck from the park/ride chapter. The paid
+  // ride challenge ("Beat the Buzzer", 3 questions, 2 right to win) and the
+  // local tester use bundled questions; only the attempt result grants coins.
   const rideChapter = useMemo(() => parkId != null
     ? getLinePlayChapter(parkId, undefined, taskName) : null,
   [parkId, taskName]);
-  const triviaSource = useMemo(
-    () => createLinePlayTriviaSource({ parkId, chapterId: rideChapter?.id,
-      seed, questionCount: 2, timeLimitSeconds: 10 }),
-    [parkId, rideChapter?.id, seed],
-  );
 
   if (!visible || !selectedGame) return null;
 
@@ -155,12 +150,14 @@ export default function MiniGameSelector({
   // The attempt resolve call is the only path that awards its coin.
   if (selectedGame === 'trivia' && rewardMode === 'task-attempt') {
     return (
-      <TriviaGame
+      <TriviaDuel
         visible={visible}
+        mode="ride"
         seed={seed}
-        title={rideChapter?.trivia.length ? 'Ride Trivia' : 'Park Trivia'}
-        subtitle={`${taskName} · 2 questions`}
-        source={triviaSource}
+        title="Beat the Buzzer"
+        subtitle={`${taskName}, 2 of 3 to win`}
+        parkId={parkId}
+        chapterId={rideChapter?.id}
         onClose={onClose}
         onQuit={handleQuit}
         onComplete={(mult, meta) => handleComplete(mult, meta)}
@@ -195,11 +192,14 @@ export default function MiniGameSelector({
         );
       case 'trivia':
         return (
-          <TriviaGame
+          <TriviaDuel
             visible={visible}
+            mode={isPractice ? 'practice' : 'queue'}
             seed={seed}
-            title={taskName}
-            source={triviaSource}
+            title="Trivia Duel"
+            subtitle={taskName}
+            parkId={parkId}
+            chapterId={rideChapter?.id}
             onClose={onClose}
             onQuit={handleQuit}
             onComplete={(mult, meta) => handleComplete(mult, meta)}
