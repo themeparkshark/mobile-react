@@ -75,12 +75,56 @@ then drop the matching exclusions.
 `runtimeVersion` uses the fingerprint policy, so an update only reaches
 binaries whose native code matches. The app checks once per cold start,
 downloads in the background and applies on the next cold start. It never
-reloads mid-session.
+reloads mid-session. A foreground return after 6 hours also checks.
+
+Publish with `npm run update-testflight -- "<message>"` (or `update-prod`),
+never a bare `eas update`: it runs the API target gate, publishes iOS with
+source maps and uploads the map to Sentry (see Crash reporting).
+
+**Not yet proven on a device.** The simulator check (one expo-updates request
+per cold start) ran before an EAS channel existed, so every request got HTTP
+400. After the first TestFlight build, run this once and log the result here:
+
+1. Install the TestFlight build, cold start it, and leave it running.
+2. `npm run update-testflight -- "OTA check"` with a visible one-line change.
+3. Same session: nothing reloads. Kill the app.
+4. Cold start 2: the change is live. The Sentry `dist` on a test event is the
+   update id.
+5. Background the app, return after 6 hours: one check, no reload.
+
+Result: _not run yet_.
 
 ## Crash reporting
 
 `src/services/telemetry` sends Sentry envelopes to `EXPO_PUBLIC_SENTRY_DSN`
-(set it as an EAS secret per profile). Without a DSN it is a no-op.
+(set it as an EAS env var per store profile). Without a DSN it is a no-op.
+
+**JS only.** Native crashes (a Swift or Objective-C module, out-of-memory and
+watchdog kills) are not captured. Plan `@sentry/react-native` together with
+the Expo SDK 54 upgrade; `sentryEnvelope.ts` is the only thing it replaces.
+
+**Readable stacks.** Release frames are Hermes bytecode offsets, so each
+event needs the matching composed Hermes source map in Sentry:
+
+| JS that is running | release | dist | map uploaded by |
+| --- | --- | --- | --- |
+| Embedded in a store build | `com.themeparkshark.app@<version>+<build>` | `<build>` | `eas-build-on-success` (`tools/upload-sourcemaps.cjs build`) |
+| An OTA update | `com.themeparkshark.app@ota-<runtimeVersion>` | `<updateId>` | `npm run update-*` (`tools/publish-update.cjs`) |
+
+- `SOURCEMAP_FILE=ios/main.jsbundle.map` (eas.json, store profiles) makes the
+  Xcode bundle phase write the composed Hermes map.
+- Every bundle frame is sent as `app:///main.jsbundle`, and Hermes offsets are
+  sent as 1-based columns, so the map uploaded as `app:///main.jsbundle.map`
+  resolves them.
+- Needs EAS env vars `SENTRY_AUTH_TOKEN` (scope `project:releases`),
+  `SENTRY_ORG`, `SENTRY_PROJECT`. With a DSN but no token a store build fails
+  on purpose: its crashes would be unreadable.
+- Checked locally (screens/ws9/19-hermes-symbolication.txt): a real Hermes
+  stack from the release bundle resolves to the right source lines through
+  the exported map, and a Release Xcode build with `SOURCEMAP_FILE` writes
+  the composed map. **Not yet checked against real Sentry**: the upload uses
+  Sentry's release files API, and the first real event with a symbolicated
+  stack is still to be confirmed after the DSN and token exist.
 
 ## Art
 
@@ -115,3 +159,18 @@ Record a cold start with `xcrun simctl io <udid> recordVideo` and launch with
 zoom before any app's launch screen (Apple Settings shows about 1 s of it the
 same way), so judge the handoff from the first blue frame: launch art, the
 same art in JS, then the login loop.
+
+**Open:** in the September 30 capture a dark navy frame sits between the JS
+splash and the login loop. It comes from `LoginScreen.tsx` (WS8) painting
+`#09268f` behind the video. The launch item stays open until WS8 uses
+`#0768B9` with `splash-bg.png` under the video as its poster and a new frame
+sheet shows blue straight into the loop.
+
+## Purpose strings
+
+No Face ID string: the app never uses biometrics (`expo-secure-store` has
+`faceIDPermission: false`). The microphone string stays only because
+expo-camera links audio capture APIs, which App Store Connect's binary scan
+flags as ITMS-90683 when the key is missing; the app never asks for the
+microphone. If a TestFlight upload goes through without that warning after
+expo-camera is configured with `microphonePermission: false`, drop the key.
