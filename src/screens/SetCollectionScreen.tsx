@@ -39,6 +39,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import prepItemImage from '../helpers/prepItemImages';
 import * as RootNavigation from '../RootNavigation';
+import GameIcon from '../ui/GameIcon';
 import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
   getPrepItemSet,
@@ -283,11 +284,11 @@ function CollectionCard({
         <Text
           style={[
             styles.itemName,
-            { color: isCollected ? '#1a1a2e' : 'rgba(0,0,0,0.25)' },
+            { color: isCollected ? '#05346e' : 'rgba(5,52,110,0.3)' },
           ]}
           numberOfLines={1}
         >
-          {isCollected ? `${item.found_in_world && item.rarity === 5 ? '✦ ' : ''}${item.name}` : '???'}
+          {isCollected ? item.name : '???'}
         </Text>
       </TouchableOpacity>
     </Animated.View>
@@ -942,7 +943,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
               </Text>
             </View>
             {set.is_in_rotation === false ? <View style={styles.archivePanel}>
-              <Text style={styles.archiveKicker}>✦  YOUR COLLECTOR ARCHIVE</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <GameIcon name="sparkle" size={18} />
+                <Text style={styles.archiveKicker}>YOUR COLLECTOR ARCHIVE</Text>
+              </View>
               <Text style={styles.archiveBody}>This book is off the map for now. Your finds, spare copies, and earned rewards are safe. You can still use saved spares and claim rewards you earned.</Text>
             </View> : <View style={styles.focusRow}>
               <View style={styles.focusCopy}>
@@ -1002,7 +1006,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                         backgroundColor: item.owned ? '#E8E5DE' : selectedWearableId === item.id ? '#0B72BB' : '#F4FBFF' }}
                     >
                       {item.icon_url ? <Image source={{ uri: item.icon_url }} style={{ width: 65, height: 65 }} contentFit="contain" />
-                        : <Text style={{ fontSize: 28 }}>🦈</Text>}
+                        : <GameIcon name="shark" size={52} />}
                       <View style={{ flex: wearableChoices.length === 1 ? 1 : undefined, alignItems: 'center' }}>
                         <Text style={{ color: selectedWearableId === item.id && !item.owned ? '#FFFFFF' : '#174D79',
                           fontFamily: 'Knockout', textAlign: 'center', fontSize: wearableChoices.length === 1 ? 15 : 12,
@@ -1128,8 +1132,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             <Text style={styles.chaseNote}>An exchange fills your book; finding it on the map remains a separate collector feat.</Text>
             <TouchableOpacity accessibilityRole="button" onPress={() => setShowMissingChoices(value => !value)}
               style={styles.chaseButton}>
-              <Text style={styles.chaseButtonText}>{showMissingChoices ? 'HIDE MISSING VARIANTS  ↑'
-                : sparesNeeded === 0 ? 'CHOOSE A MISSING VARIANT  ↓' : 'VIEW MISSING VARIANTS  ↓'}</Text>
+              <Text style={styles.chaseButtonText}>{showMissingChoices ? 'HIDE MISSING VARIANTS'
+                : sparesNeeded === 0 ? 'CHOOSE A MISSING VARIANT' : 'VIEW MISSING VARIANTS'}</Text>
             </TouchableOpacity>
             {showMissingChoices && missingItems.map((item: PrepItemSetItem) => (
               <TouchableOpacity key={item.id} accessibilityRole="button"
@@ -1142,7 +1146,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                   <Text style={styles.missingName}>{item.name}</Text>
                   <Text style={styles.missingRarity}>{item.rarity_label}</Text>
                 </View>
-                <Text style={styles.missingArrow}>→</Text>
+                <GameIcon name="arrow" size={24} />
               </TouchableOpacity>
             ))}
           </View>
@@ -1419,7 +1423,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                         : 'OPENING SOON'}</Text>
                       <Text style={styles.upcomingBody} numberOfLines={2}>{set.description}</Text>
                       {set.collected_count > 0 && <Text style={styles.upcomingSaved}>
-                        {set.collected_count}/{set.total_items} SAVED · VIEW YOUR BOOK →
+                        {set.collected_count}/{set.total_items} SAVED · VIEW YOUR BOOK
                       </Text>}
                     </View>
                   </TouchableOpacity>)}
@@ -1438,7 +1442,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                     <Text style={styles.mapHuntKicker}>YOUR NEXT MOVE</Text>
                     <Text style={styles.mapHuntTitle}>FIND ITEMS ON THE MAP</Text>
                     <Text style={styles.mapHuntBody}>Every pickup builds your park-day resources. New variants fill your active books.</Text>
-                    <Text style={styles.mapHuntAction}>OPEN HOME MAP  →</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.mapHuntAction}>OPEN HOME MAP</Text>
+                      <GameIcon name="arrow" size={20} />
+                    </View>
                   </View>
                 </TouchableOpacity>}
               </>
@@ -2070,7 +2077,7 @@ const styles = StyleSheet.create({
   rewardValue: {
     fontFamily: 'Knockout',
     fontSize: 16,
-    color: '#1a1a2e',
+    color: '#05346e',
     marginTop: 2,
   },
   rewardLabel: {
@@ -2256,7 +2263,7 @@ const styles = StyleSheet.create({
   // Item Detail Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5,52,110,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },

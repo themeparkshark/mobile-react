@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
   },
   darkOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5,52,110,0.5)',
     zIndex: 1,
     pointerEvents: 'none',
   },
@@ -590,7 +590,7 @@ const cardStyles = StyleSheet.create({
 const modalStyles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(5,52,110,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 30,
