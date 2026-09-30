@@ -33,8 +33,9 @@ export function factSourceLine(source: string | undefined | null,
 }
 
 /** The small caps kicker over a ride chapter title. */
-export function chapterKicker(chapter: Pick<LinePlayChapter, 'parkLabel'>,
+export function chapterKicker(chapter: Pick<LinePlayChapter, 'parkLabel' | 'episodeLabel'>,
   overrides: LinePlayLabelOverrides = LINEPLAY_LABEL_OVERRIDES): string {
   const park = chapter.parkLabel?.trim();
-  return overrides.hideParkInKicker || !park ? 'SHARK FAN MISSION' : `SHARK FAN MISSION · ${park}`;
+  const lead = chapter.episodeLabel?.trim() || 'SHARK FAN MISSION';
+  return overrides.hideParkInKicker || !park ? lead : `${lead} · ${park}`;
 }

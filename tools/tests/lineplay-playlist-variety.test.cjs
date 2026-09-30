@@ -223,3 +223,46 @@ test('each rotated featured field note gives a crew choice that changes the fina
     }
   }
 });
+
+test('Magic Kingdom Space Mountain flies on for returning players: three flights, one arc', () => {
+  const navigation = require('./helpers/navigation-panel.cjs');
+  const first = chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain');
+  assert.equal(first.id, 'mk-space-mountain');
+  assert.equal(first.episodeCount, 3);
+  assert.equal(chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain', 0), first);
+  const flights = [0, 1, 2].map(episode => chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain', episode));
+  assert.deepEqual(flights.map(chapter => chapter.id),
+    ['mk-space-mountain', 'mk-space-mountain-episode-1', 'mk-space-mountain-episode-2']);
+  assert.deepEqual(flights.map(chapter => chapter.episodeLabel), ['FLIGHT 1 OF 3', 'FLIGHT 2 OF 3', 'FLIGHT 3 OF 3']);
+  // Wraps, and resumes by id from a checkpoint.
+  assert.equal(chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain', 4), flights[1]);
+  for (const flight of flights) assert.equal(chapters.getLinePlayChapterById(flight.id), flight);
+  assert.equal(chapters.getLinePlayChapterById('mk-space-mountain-episode-3'), null);
+  // Disneyland keeps its own single story.
+  assert.equal(chapters.getLinePlayChapter(8, 'space-mountain-8', 'Space Mountain', 2).id, 'dl-space-mountain');
+
+  const titles = new Set(flights.map(chapter => chapter.title));
+  assert.equal(titles.size, 3);
+  for (const flight of flights) {
+    assert.equal(flight.navigationPanel, true);
+    // Same sourced deck on every flight; new strange-signal notes up front.
+    assert.equal(flight.trivia, first.trivia);
+    assert.equal(flight.fieldNotes.slice(0, 3).every(note => note.challenge?.options.length === 3), true);
+    assert.equal(flight.finale.memoryDeckId, 'space');
+    assert.equal(flight.finale.idSuffix, 'star-chart');
+  }
+  const featured = new Set(flights.flatMap(flight => flight.fieldNotes.slice(0, 3).map(note => note.id)));
+  assert.equal(featured.size, 9);
+  assert.notEqual(flights[1].relay.alphaResult, first.relay.alphaResult);
+  assert.notEqual(flights[2].relay.epilogues.omega.title, flights[1].relay.epilogues.omega.title);
+
+  // Returning flights open the navigation repair on the bigger board.
+  for (let offset = 0; offset < 24; offset++) {
+    const repair = session.generatePlaylist(30, 30, flights[1], true, offset)
+      .find(item => item.id === `${flights[1].id}-trivia`);
+    assert.equal(navigation.createNavigationPanel(repair.seed, 0).size, 4);
+  }
+  const firstSizes = new Set(Array.from({ length: 24 }, (_, offset) => navigation.createNavigationPanel(
+    session.generatePlaylist(30, 30, first, true, offset).find(item => item.id === `${first.id}-trivia`).seed, 0).size));
+  assert.ok(firstSizes.has(3));
+});

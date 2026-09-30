@@ -51,6 +51,9 @@ test('label overrides keep today\'s copy by default and can relabel sources and 
   const pending = { sourceLabel: 'Park fact', hideParkInKicker: true };
   assert.equal(labels.factSourceLine('Disney Parks Blog', pending), 'Park fact');
   assert.equal(labels.chapterKicker({ parkLabel: 'MAGIC KINGDOM' }, pending), 'SHARK FAN MISSION');
+  // A returning player's episode leads the kicker; the park rule still applies.
+  assert.equal(labels.chapterKicker({ parkLabel: 'MAGIC KINGDOM', episodeLabel: 'FLIGHT 2 OF 3' }), 'FLIGHT 2 OF 3 · MAGIC KINGDOM');
+  assert.equal(labels.chapterKicker({ parkLabel: 'MAGIC KINGDOM', episodeLabel: 'FLIGHT 2 OF 3' }, pending), 'FLIGHT 2 OF 3');
 });
 
 test('each ride theme dresses the circuit with a bright flow colour and its own place', () => {

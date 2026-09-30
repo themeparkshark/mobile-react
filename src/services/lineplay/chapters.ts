@@ -7,6 +7,12 @@ export interface LinePlayChapter {
   readonly adaptive?: boolean;
   /** Featured opening mission uses an original playable signal circuit. */
   readonly navigationPanel?: boolean;
+  /** Stories this ride rotates through, one per wait (returning players get the next). */
+  readonly episodeCount?: number;
+  /** Small caps label for a returning player's episode, e.g. "FLIGHT 2 OF 3". */
+  readonly episodeLabel?: string;
+  /** A returning flight opens on the bigger 4x4 navigation board. */
+  readonly returningFlight?: boolean;
   readonly parkLabel: string;
   readonly title: string;
   readonly story: string;
@@ -156,7 +162,7 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
       ? 'Tap the sharks that pop up with the clue and skip the decoys. One thumb is all it takes.'
       : `Guide your shark through a short swim to find the ${story.artifact}. One thumb, about a minute.`;
   const chapter: LinePlayChapter = {
-    id, adaptive: true, parkLabel: 'YOUR QUEUE',
+    id, adaptive: true, episodeCount: stories.length, parkLabel: 'YOUR QUEUE',
     title: story.title,
     story: `While you wait for ${safeName}, your shark crew needs to recover a ${story.artifact}. Solve a clue, notice something from your place in line, then rebuild it together.`,
     completedTitle: `${story.artifact[0].toUpperCase()}${story.artifact.slice(1)} recovered!`,
@@ -243,6 +249,8 @@ export function adaptiveEpisodeCountForRide(rideName: string): number {
 const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
   id: 'mk-space-mountain',
   navigationPanel: true,
+  episodeCount: 3,
+  episodeLabel: 'FLIGHT 1 OF 3',
   parkLabel: 'MAGIC KINGDOM',
   title: 'The Lost Star Chart',
   story: 'Your shark navigator lost three signals on the way to the stars. Repair the navigation panel, find a clue in your surroundings, then rebuild the chart together.',
@@ -317,6 +325,155 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
     { id: 'mk-sm-note-6', title: 'Launch Debate', body: 'Would your shark rather navigate by a star, a comet, or a planet? Everyone gets one vote; explain your pick in one sentence.' },
   ],
 };
+
+/**
+ * Returning Magic Kingdom navigators fly on. Each wait at Space Mountain is
+ * one flight: flight 1 is the original chart above, then a strange signal
+ * answers, then a comet crosses the course. Every flight keeps the same three
+ * beats (repair the panel, decode the signal, fly the chart home) with its own
+ * signal notes, finale and crew endings, and returning flights open on the
+ * bigger board. All of it is original shark fiction; the trivia deck and the
+ * sourced notes are shared with flight 1 and unchanged.
+ */
+type SpaceFlight = Pick<LinePlayChapter, 'title' | 'story' | 'completedTitle' | 'completedStory' | 'missionNames'> & {
+  readonly finale: { readonly title: string; readonly preview: string };
+  readonly relay: Pick<LinePlayChapter['relay'], 'firstTurnTitle' | 'routeTitle' | 'routeOptions' | 'routeNames' |
+    'alphaResult' | 'omegaResult' | 'perfectResult' | 'epilogues'>;
+  readonly signalNotes: readonly [LoreCard, LoreCard, LoreCard];
+};
+
+const MK_SPACE_FLIGHTS: readonly SpaceFlight[] = [
+  {
+    title: 'The Strange Signal',
+    story: 'Last flight your chart came home, and something answered it. A strange signal is pulsing from deep space. Repair the relay, decode who is calling, then fly the chart to its source.',
+    completedTitle: 'Signal answered!',
+    completedStory: 'Your shark crew found the source of the strange signal. Keep playing while verified nearby time earns Ride Parts.',
+    missionNames: ['Repair the signal relay', 'Decode the strange signal', 'Fly to the source'],
+    finale: { title: 'Fly to the Source', preview: 'Match space symbols to lock your course onto the strange signal. Race solo or let your crew call out the pairs.' },
+    relay: {
+      firstTurnTitle: 'Decode the first pulse',
+      routeTitle: 'How will your crew answer?',
+      routeOptions: ['Beacon · flash a friendly reply', 'Silent · listen before you answer'],
+      routeNames: ['Beacon', 'Silent'],
+      perfectResult: 'Signal answered!',
+      alphaResult: 'Your shark flashes the beacon, and the signal flashes right back. Someone out there wants to meet your crew.',
+      omegaResult: 'Your shark goes quiet and listens. The signal repeats, and your crew hears a pattern nobody noticed before.',
+      epilogues: {
+        alpha: { title: 'Flash the Beacon', prompt: 'Tap the signal sharks as they surface to answer the call. Skip the decoys.' },
+        omega: { title: 'Listen in the Dark', prompt: 'Swim quietly through the dark and follow the signal to its source.' },
+      },
+    },
+    signalNotes: [
+      { id: 'mk-sm-f2-note-1', title: 'Three Blips and a Pause', body: 'The strange signal repeats: three blips, a pause, one blip. Find something near you that could be its reply.', challenge: {
+        prompt: 'What will your crew send back?',
+        options: [
+          { label: 'A rhythm', task: 'Tap the signal on your leg: three, pause, one. Ask your crew to answer with their own beat.' },
+          { label: 'A color', task: 'Pick a color you can see. Tell your crew what the signal would look like in that color.' },
+          { label: 'A word', task: 'Give the signal a one-word name your crew will remember.' },
+        ],
+        finish: 'Your reply is logged. The finale flies toward it.',
+      } },
+      { id: 'mk-sm-f2-note-2', title: 'Who Is Calling?', body: 'Your navigator thinks the strange signal is a message. Your crew gets one guess about who sent it.', challenge: {
+        prompt: 'Who is calling your shark crew?',
+        options: [
+          { label: 'A lost ship', task: 'In one sentence, tell your crew where the lost ship is trying to go.' },
+          { label: 'A new planet', task: 'Name the planet and one thing a shark could find there.' },
+          { label: 'An old friend', task: 'Tell your crew which shark from an earlier flight is calling back.' },
+        ],
+        finish: 'Keep the answer. Your crew finds out at the source.',
+      } },
+      { id: 'mk-sm-f2-note-3', title: 'Signal Strength', body: 'The signal gets stronger when your crew agrees. Everyone picks a number from one to five without saying it, then reveal together.', challenge: {
+        prompt: 'How will your crew boost the signal?',
+        options: [
+          { label: 'Match numbers', task: 'Reveal together. Every matching number adds a bar of signal.' },
+          { label: 'Count up', task: 'Take turns saying one number each, one to five, without talking over each other.' },
+          { label: 'Solo tune', task: 'Pick a number, look away, and see if you remember it a minute from now.' },
+        ],
+        finish: 'Signal locked. No photo or extra walking needed.',
+      } },
+    ],
+  },
+  {
+    title: 'The Comet Detour',
+    story: 'A comet just crossed your flight path and scrambled the course. Reroute the navigation panel, read the comet’s tail, then rebuild the chart before it passes.',
+    completedTitle: 'Course rerouted!',
+    completedStory: 'Your shark crew slipped past the comet with the chart in one piece. Keep playing while verified nearby time earns Ride Parts.',
+    missionNames: ['Reroute the navigation panel', 'Read the comet’s tail', 'Rebuild the chart'],
+    finale: { title: 'Rebuild the Chart', preview: 'Match space symbols before the comet’s tail passes. Race solo or let your crew call out the pairs.' },
+    relay: {
+      firstTurnTitle: 'Spot the comet',
+      routeTitle: 'Which way around the comet?',
+      routeOptions: ['Tail · ride the sparkle trail', 'Wide · swing out past it'],
+      routeNames: ['Tail', 'Wide'],
+      perfectResult: 'Comet cleared!',
+      alphaResult: 'Your shark rides the sparkle trail, and the comet dust lights up the missing stars on your chart.',
+      omegaResult: 'Your shark swings wide around the comet and spots a brand new star to add to the chart.',
+      epilogues: {
+        alpha: { title: 'Ride the Sparkle Trail', prompt: 'Tap the sharks that surface in the comet dust. Skip the decoys.' },
+        omega: { title: 'Swing Out Wide', prompt: 'Swim the long way around and look for the new star your crew spotted.' },
+      },
+    },
+    signalNotes: [
+      { id: 'mk-sm-f3-note-1', title: 'Comet Colors', body: 'The comet’s tail flashes three colors in a row. Pick three colors you can see from your place and put them in order.', challenge: {
+        prompt: 'How will your crew read the tail?',
+        options: [
+          { label: 'Name them', task: 'Say your three colors in order. Can a crewmate repeat them backward?' },
+          { label: 'Guess them', task: 'Ask a crewmate for their three colors, then guess which one they saw first.' },
+          { label: 'Hold them', task: 'Keep your three colors in mind and check them a minute from now.' },
+        ],
+        finish: 'The tail is read. Your finale follows those colors.',
+      } },
+      { id: 'mk-sm-f3-note-2', title: 'Comet Name', body: 'Every comet your crew spots gets a name. Build one from something you can notice without leaving your place.', challenge: {
+        prompt: 'What will you name the comet?',
+        options: [
+          { label: 'A shape', task: 'Pick a shape nearby and turn it into the comet’s first name.' },
+          { label: 'A sound', task: 'Listen for a sound and turn it into the comet’s last name.' },
+          { label: 'Crew vote', task: 'Everyone offers one name. The funniest one wins.' },
+        ],
+        finish: 'The comet is named and logged on your chart.',
+      } },
+      { id: 'mk-sm-f3-note-3', title: 'Brace for Dust', body: 'Comet dust shakes the ship. Your crew picks how the shark pilot holds the course.', challenge: {
+        prompt: 'How does your pilot hold on?',
+        options: [
+          { label: 'Steady', task: 'Tell your crew one thing that keeps you calm on a bumpy ride.' },
+          { label: 'Fast', task: 'Tell your crew the fastest ride you have ever been on.' },
+          { label: 'Together', task: 'Everyone says one word at the same time. Did anyone match?' },
+        ],
+        finish: 'The course holds. No photo or extra walking needed.',
+      } },
+    ],
+  },
+];
+
+export const MK_SPACE_FLIGHT_COUNT = MK_SPACE_FLIGHTS.length + 1;
+const mkSpaceFlights = new Map<number, LinePlayChapter>();
+
+/** Flight 1 is the original chart; flights 2 and 3 are returning-player episodes. */
+function magicKingdomSpaceFlight(episode: number): LinePlayChapter {
+  const index = ((Math.floor(episode) % MK_SPACE_FLIGHT_COUNT) + MK_SPACE_FLIGHT_COUNT) % MK_SPACE_FLIGHT_COUNT;
+  if (index === 0) return MAGIC_KINGDOM_SPACE_MOUNTAIN;
+  const cached = mkSpaceFlights.get(index);
+  if (cached) return cached;
+  const base = MAGIC_KINGDOM_SPACE_MOUNTAIN;
+  const flight = MK_SPACE_FLIGHTS[index - 1];
+  const chapter: LinePlayChapter = {
+    ...base,
+    id: `${base.id}-episode-${index}`,
+    episodeLabel: `FLIGHT ${index + 1} OF ${MK_SPACE_FLIGHT_COUNT}`,
+    returningFlight: true,
+    title: flight.title,
+    story: flight.story,
+    completedTitle: flight.completedTitle,
+    completedStory: flight.completedStory,
+    missionNames: flight.missionNames,
+    finale: { ...base.finale, title: flight.finale.title, preview: flight.finale.preview },
+    relay: { ...base.relay, ...flight.relay, title: `${flight.title} Crew Relay`,
+      branchKicker: 'YOUR CREW CHANGED THE FLIGHT', otherResult: 'Your crew chose a course!' },
+    fieldNotes: [...flight.signalNotes, ...base.fieldNotes.slice(3)],
+  };
+  mkSpaceFlights.set(index, chapter);
+  return chapter;
+}
 
 /**
  * Disneyland-specific facts are paraphrased from Disney's attraction page and
@@ -908,7 +1065,7 @@ export function getLinePlayChapter(parkId?: number, rideSlug?: string, rideName?
   }
   if (parkId === 2 &&
       (rideSlug === 'space-mountain-2' || rideName?.trim().toLowerCase() === 'space mountain')) {
-    return MAGIC_KINGDOM_SPACE_MOUNTAIN;
+    return episodeSeed == null ? MAGIC_KINGDOM_SPACE_MOUNTAIN : magicKingdomSpaceFlight(episodeSeed);
   }
   if (parkId === 8 &&
       (rideSlug === 'pirates-of-the-caribbean-8' || rideName?.trim().toLowerCase() === 'pirates of the caribbean')) {
@@ -931,6 +1088,8 @@ export function getLinePlayChapterById(id?: string): LinePlayChapter | null {
   if (id === DISNEYLAND_BIG_THUNDER.id) return DISNEYLAND_BIG_THUNDER;
   if (id === UNIVERSAL_STUDIO_TOUR.id) return UNIVERSAL_STUDIO_TOUR;
   if (id === MAGIC_KINGDOM_SPACE_MOUNTAIN.id) return MAGIC_KINGDOM_SPACE_MOUNTAIN;
+  const flight = id?.match(/^mk-space-mountain-episode-(\d+)$/);
+  if (flight && Number(flight[1]) > 0 && Number(flight[1]) < MK_SPACE_FLIGHT_COUNT) return magicKingdomSpaceFlight(Number(flight[1]));
   if (id === DISNEYLAND_PIRATES.id) return DISNEYLAND_PIRATES;
   if (id === MAGIC_KINGDOM_HAUNTED_MANSION.id) return MAGIC_KINGDOM_HAUNTED_MANSION;
   if (id === DISNEYLAND_HAUNTED_MANSION.id) return DISNEYLAND_HAUNTED_MANSION;

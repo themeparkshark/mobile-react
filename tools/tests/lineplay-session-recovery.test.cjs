@@ -60,7 +60,6 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     './content': { buildPredictionCard: () => ({ id: 'new-prediction' }) },
     './chapters': {
       getLinePlayChapter: (...args) => { calls.chapterArgs.push(args); return chapter; },
-      adaptiveEpisodeCountForRide: () => 3,
     },
     './episodeRotation': { selectAdaptiveEpisode: async (...args) => {
       calls.selectedEpisodes.push(args); return 1;
@@ -348,7 +347,7 @@ test('an episode checkpoint restores its original story seed', async () => {
 });
 
 test('a new adaptive chapter is recorded only after its first activity, once', async () => {
-  const chapter = { id: 'queue-2-test-ride-episode-1', adaptive: true,
+  const chapter = { id: 'queue-2-test-ride-episode-1', adaptive: true, episodeCount: 3,
     fieldNotes: [], finale: { idSuffix: 'finale', title: 'Finale', preview: 'Play' } };
   const { Session, calls } = makeHarness(null, server, chapter);
   const session = new Session();
@@ -358,6 +357,32 @@ test('a new adaptive chapter is recorded only after its first activity, once', a
   session.markActivityCompleted(`${chapter.id}-trivia`);
   session.markActivityCompleted(`${chapter.id}-finale`);
   assert.deepEqual(calls.recordedEpisodes, [[12, 2, 99, 1, 3]]);
+  session.dispose();
+});
+
+test('an authored chapter starts new players on flight 1 and records flight 1 without a suffix', async () => {
+  const chapter = { id: 'mk-space-mountain', episodeCount: 3, navigationPanel: true,
+    fieldNotes: [], finale: { idSuffix: 'star-chart', title: 'Finale', preview: 'Play' } };
+  const { Session, calls } = makeHarness(null, server, chapter);
+  const session = new Session();
+  await session.start(ride, undefined, 12);
+  assert.equal(calls.selectedEpisodes.length, 1);
+  // Authored stories never start mid-series: the no-history start is episode 0.
+  assert.equal(calls.selectedEpisodes[0][4], 0);
+  session.markActivityCompleted(`${chapter.id}-field-note`);
+  assert.deepEqual(calls.recordedEpisodes, [[12, 2, 99, 0, 3]]);
+  session.dispose();
+});
+
+test('a single-story chapter never touches episode history', async () => {
+  const chapter = { id: 'dl-space-mountain', fieldNotes: [],
+    finale: { idSuffix: 'launch-code', title: 'Finale', preview: 'Play' } };
+  const { Session, calls } = makeHarness(null, server, chapter);
+  const session = new Session();
+  await session.start(ride, undefined, 12);
+  session.markActivityCompleted(`${chapter.id}-field-note`);
+  assert.equal(calls.selectedEpisodes.length, 0);
+  assert.equal(calls.recordedEpisodes.length, 0);
   session.dispose();
 });
 

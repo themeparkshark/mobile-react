@@ -52,7 +52,7 @@ import {
   buildPredictionCard,
   PredictionCard,
 } from './content';
-import { adaptiveEpisodeCountForRide, getLinePlayChapter, type LinePlayChapter } from './chapters';
+import { getLinePlayChapter, type LinePlayChapter } from './chapters';
 import { recordAdaptiveEpisode, selectAdaptiveEpisode } from './episodeRotation';
 import { readCheckpoint, writeCheckpoint, removeCheckpoint, type LinePlayCheckpoint } from './checkpoint';
 import { createCrewRelay, isCrewRelayProgress, type CrewRelayProgress } from './crewRelay';
@@ -384,7 +384,9 @@ export function generatePlaylist(waitMinutes: number, postedWaitMinutes: number,
     ? rotation % Math.min(3, chapter.fieldNotes.length) : rotation;
   const items: ActivityItem[] = chapter ? [
     { kind: 'chapter_intro', id: `${chapter.id}-intro` },
-    { kind: 'trivia', id: `${chapter.id}-trivia`, seed: openingTriviaSeed },
+    // A returning flight's navigation repair opens on the bigger 4x4 board.
+    { kind: 'trivia', id: `${chapter.id}-trivia`,
+      seed: chapter.navigationPanel && chapter.returningFlight ? (openingTriviaSeed | 8) >>> 0 : openingTriviaSeed },
     { kind: 'lore', id: `${chapter.id}-field-note`, seed: featuredLoreSeed },
     { kind: 'minigame', id: `${chapter.id}-${chapter.finale.idSuffix}`,
       gameId: chapter.finale.gameId ?? 'memory', seed: rotation + 2,
@@ -801,13 +803,15 @@ export class LinePlaySession {
   }
 
   private recordPlayedAdaptiveEpisode(activityId: string): void {
-    if (this.adaptiveEpisodeRecorded || !this.chapter?.adaptive || !this.ride ||
+    const count = this.chapter?.episodeCount ?? 1;
+    if (this.adaptiveEpisodeRecorded || !this.chapter || count < 2 || !this.ride ||
         !this.checkpointPlayerId || !activityId.startsWith(`${this.chapter.id}-`)) return;
-    const episode = this.chapter.id.match(/-episode-(\d+)$/);
-    if (!episode) return;
+    const suffix = this.chapter.id.match(/-episode-(\d+)$/);
+    // An authored chapter's first episode has no suffix (flight 1 keeps its id).
+    const episode = suffix ? Number(suffix[1]) : this.chapter.adaptive ? null : 0;
+    if (episode == null) return;
     this.adaptiveEpisodeRecorded = true;
-    void recordAdaptiveEpisode(this.checkpointPlayerId, this.ride.parkId, this.ride.rideId,
-      Number(episode[1]), adaptiveEpisodeCountForRide(this.ride.rideName));
+    void recordAdaptiveEpisode(this.checkpointPlayerId, this.ride.parkId, this.ride.rideId, episode, count);
   }
 
   /** Keep proof through an outage; the completion request carries it again. */
@@ -1054,9 +1058,11 @@ export class LinePlaySession {
     this.adaptiveEpisodeRecorded = false;
     this.chapter = getLinePlayChapter(ride.parkId, ride.rideSlug, ride.rideName,
       saved ? savedEpisode ? Number(savedEpisode[1]) : undefined : this.playlistSeedOffset);
-    if (!saved && this.chapter?.adaptive && playerId) {
+    if (!saved && (this.chapter?.episodeCount ?? 1) > 1 && playerId) {
+      // Authored chapters start every new player on episode 1 (the original
+      // story); returning players move on. Adaptive stories start anywhere.
       const nextEpisode = await selectAdaptiveEpisode(playerId, ride.parkId, ride.rideId,
-        adaptiveEpisodeCountForRide(ride.rideName), playerId * 31 + ride.rideId * 17);
+        this.chapter!.episodeCount!, this.chapter!.adaptive ? playerId * 31 + ride.rideId * 17 : 0);
       if (this.disposed) return;
       this.chapter = getLinePlayChapter(ride.parkId, ride.rideSlug, ride.rideName, nextEpisode);
     }
