@@ -87,10 +87,14 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     });
   }, []);
 
-  // Auto-complete all tutorials for existing players (handles Expo Go reinstall / cache wipe)
+  // Auto-complete all tutorials for existing players (handles a reinstall or cache wipe).
+  // Checked once per install load: after "Replay Tutorials" the empty set is on purpose.
+  const existingPlayerChecked = useRef(false);
   useEffect(() => {
     if (!loaded || !player || firstPlayPreview) return;
-    if (completedSequences.size > 0) return; // Already has data — not a fresh wipe
+    if (existingPlayerChecked.current) return;
+    existingPlayerChecked.current = true;
+    if (completedSequences.size > 0) return; // Already has data, not a fresh wipe
 
     const isExistingPlayer =
       (player.completed_tasks_count ?? 0) > 0 ||
@@ -222,6 +226,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
 
   // Reset all tutorial progress
   const resetAll = useCallback(async () => {
+    existingPlayerChecked.current = true;
     firstPlayRef.current = false; firstPlayOrigin.current = null; setFirstPlayOpen(false);
     inParkOnboardingRef.current = false;
     setCompletedSequences(new Set());
