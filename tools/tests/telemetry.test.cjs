@@ -163,6 +163,8 @@ test('the API client records core-loop breadcrumbs and reports server failures',
       addBreadcrumb: (...args) => crumbs.push(args),
       captureMessage: (...args) => messages.push(args),
     },
+    '../services/connectivity': { reportReachable() {}, reportUnreachable() {} },
+    './getRetry': { nextGetRetryDelay: () => null },
   });
   client.recordCoreLoopResponse('post', '/me/task-attempts', 201);
   client.recordCoreLoopResponse('post', '/raids/3/attack', 503);

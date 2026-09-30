@@ -141,3 +141,29 @@ test('one branded offline banner is mounted at the root', () => {
   assert.doesNotMatch(banner, /—/);
   assert.doesNotMatch(banner, /#000|black/i);
 });
+
+test('client interceptor: a dropped GET is retried then succeeds; a dropped POST marks offline once', async () => {
+  const events = [];
+  let handlers = null;
+  let requests = 0;
+  const instance = {
+    defaults: { headers: { common: {} } },
+    interceptors: { response: { use: (ok, bad) => { handlers = { ok, bad }; } } },
+    request: async config => { requests += 1; events.push(['request', config.tpsRetryCount]); return { status: 200, config }; },
+  };
+  loadTs('src/api/client.ts', {
+    axios: { create: () => instance, isCancel: () => false },
+    'expo-device': {},
+    '../config': { apiUrl: 'http://api.test/api' },
+    '../services/telemetry/coreLoopEvents': { classifyCoreLoopRequest: () => null },
+    '../services/telemetry': { addBreadcrumb() {}, captureMessage() {} },
+    '../services/connectivity': { reportReachable: () => events.push(['reachable']), reportUnreachable: () => events.push(['unreachable']) },
+    './getRetry': loadTs('src/api/getRetry.ts'),
+  }, { setTimeout: (fn) => { fn(); return 0; } });
+  const retried = await handlers.bad({ code: 'ERR_NETWORK', config: { method: 'get', url: '/me' } });
+  assert.equal(retried.status, 200);
+  assert.equal(requests, 1);
+  await assert.rejects(handlers.bad({ code: 'ERR_NETWORK', config: { method: 'post', url: '/me/task-attempts' } }));
+  await assert.rejects(handlers.bad({ response: { status: 422 }, config: { method: 'post', url: '/x' } }));
+  assert.deepEqual(JSON.parse(JSON.stringify(events)), [['request', 1], ['unreachable'], ['reachable']]);
+});
