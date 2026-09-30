@@ -30,3 +30,23 @@ test('node_modules is never tracked, including a worktree symlink', () => {
   assert.equal(tracked.trim(), '');
   assert.match(read('.gitignore'), /^\/node_modules$/m);
 });
+
+test('the crash fallback is an on-brand card: cream, navy outline, gold lip button, brand fonts', () => {
+  const app = read('App.tsx');
+  const fallback = app.slice(app.indexOf('const ErrorFallback'), app.indexOf("import { ToastProvider }"));
+  assert.ok(fallback.length > 0, 'ErrorFallback block found');
+  assert.match(fallback, /#fff8e4/i, 'cream card');
+  assert.match(fallback, /#05346e/i, 'navy outline');
+  assert.match(fallback, /#ffcf3b/i, 'gold button');
+  assert.match(fallback, /#d99a00/i, 'gold button lip');
+  assert.match(fallback, /fontFamily: 'Shark'/);
+  assert.match(fallback, /fontFamily: 'Knockout'/);
+  // Card waits for fonts so the brand type never flashes as system text.
+  assert.match(fallback, /fontsSettled && <View style=\{errorStyles\.card\}>/);
+  // No dark or neon surfaces, no system-weight-only text, no em dashes.
+  assert.doesNotMatch(fallback, /fontWeight/);
+  assert.doesNotMatch(fallback, /#0{3,6}\b|#050a1e|black/i);
+  assert.doesNotMatch(fallback, /—/);
+  // The crash is still reported.
+  assert.match(app, /onError=\{reportBoundaryError\}/);
+});
