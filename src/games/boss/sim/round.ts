@@ -46,19 +46,18 @@ export function toLegacyProof(damage: number, simMs: number): LegacyProof {
   const duration = Math.max(LEGACY_MIN_MS, Math.min(LEGACY_MAX_MS, Math.trunc(simMs)));
   const maxHits = Math.floor((duration / 1000) * LEGACY_MAX_HPS);
   let units = Math.max(0, Math.floor(damage / 10));
-  // Largest representable: weak = floor(maxHits / 3), hits = maxHits.
+  // Largest representable: hits = maxHits, weak = floor(maxHits / 3).
   const maxUnits = maxHits + 2 * Math.floor(maxHits / 3);
   if (units > maxUnits) units = maxUnits;
-  let weak = Math.floor(units / 5);
-  let hits = 3 * weak + (units % 5);
-  while (hits > maxHits && weak > 0) {
-    // Trade 3 hits + 1 weak (5 units) for... keep units: move weight to weak where allowed.
-    weak -= 1;
-    hits = units - 2 * weak;
+  for (; units > 0; units--) {
+    // hits = units - 2 x weak; need hits <= maxHits and weak <= floor(hits / 3).
+    const weak = Math.max(Math.floor(units / 5), Math.ceil((units - maxHits) / 2));
+    const hits = units - 2 * weak;
+    if (weak >= 0 && hits >= 0 && hits <= maxHits && weak <= Math.floor(hits / 3)) {
+      return { hits, weak_hits: weak, duration_ms: duration };
+    }
   }
-  if (hits > maxHits) hits = maxHits;
-  if (weak > Math.floor(hits / 3)) weak = Math.floor(hits / 3);
-  return { hits, weak_hits: weak, duration_ms: duration };
+  return { hits: 0, weak_hits: 0, duration_ms: duration };
 }
 
 export function starsFor(points: number, convertedOpening: boolean): 0 | 1 | 2 | 3 {
