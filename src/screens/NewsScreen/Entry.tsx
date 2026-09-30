@@ -5,6 +5,7 @@ import { useContext, useRef } from 'react';
 import { Animated, Text, TouchableWithoutFeedback, View } from 'react-native';
 import * as RootNavigation from '../../RootNavigation';
 import config from '../../config';
+import { GameIcon } from '../../ui';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import dayjs from '../../helpers/dayjs';
 import { EntryType } from '../../models/entry-type';
@@ -141,13 +142,13 @@ export default function Entry({
                 alignItems: 'center',
               }}
             >
-              <Text style={{ fontSize: 40 }}>🦈</Text>
+              <GameIcon name="shark" size={72} />
             </LinearGradient>
           )}
 
           {/* Gradient fade at bottom of image */}
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.5)']}
+            colors={['transparent', 'rgba(5,52,110,0.45)']}
             style={{
               position: 'absolute',
               bottom: 0,
@@ -201,15 +202,7 @@ export default function Entry({
             >
               Read Article
             </Text>
-            <Text
-              style={{
-                color: config.secondary,
-                fontSize: 13,
-                marginLeft: 4,
-              }}
-            >
-              →
-            </Text>
+            <GameIcon name="arrow" size={18} style={{ marginLeft: 6 }} />
           </View>
         </View>
       </Animated.View>

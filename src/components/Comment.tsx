@@ -1,8 +1,6 @@
-import { faReply } from '@fortawesome/free-solid-svg-icons/faReply';
-import { faTrash } from '@fortawesome/free-solid-svg-icons/faTrash';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { Image } from 'expo-image';
 import { useContext, useEffect, useState } from 'react';
-import { Alert, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { useAsyncEffect } from 'rooks';
 import * as RootNavigation from '../RootNavigation';
 import deleteComment from '../api/endpoints/comments/delete';
@@ -16,6 +14,9 @@ import Avatar from './Avatar';
 import Button from './Button';
 import CreateReport from './CreateReport';
 import RichText from './RichText';
+import { confirmGame, gameAlert, GameIcon } from '../ui';
+
+const TRASH_ART = require('../../assets/images/screens/settings/trash.png');
 
 export default function Comment({
   comment,
@@ -120,7 +121,7 @@ export default function Comment({
                   onReplyPress(comment);
                 }}
               >
-                <FontAwesomeIcon icon={faReply} size={16} color="black" />
+                <GameIcon name="back" size={24} accessibilityLabel="Reply" />
               </TouchableOpacity>
             </View>
             {player && (
@@ -135,33 +136,22 @@ export default function Comment({
                     flexDirection: 'row',
                     justifyContent: 'flex-end',
                   }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete comment"
                   onPress={async () => {
-                    Alert.alert(
-                      'Are you sure you want to delete this comment?',
-                      '',
-                      [
-                        {
-                          text: 'Cancel',
-                          style: 'cancel',
-                        },
-                        {
-                          text: 'Ok',
-                          onPress: async () => {
-                            await deleteComment(comment.id);
-                            setIsDeleted(true);
-
-                            Alert.alert('Comment deleted.', '', [
-                              {
-                                text: 'Ok',
-                              },
-                            ]);
-                          },
-                        },
-                      ]
-                    );
+                    const confirmed = await confirmGame({
+                      title: 'Delete this comment?', confirmLabel: 'Delete', destructive: true,
+                    });
+                    if (!confirmed) return;
+                    try {
+                      await deleteComment(comment.id);
+                      setIsDeleted(true);
+                    } catch {
+                      gameAlert("Couldn't delete", 'Your comment is still there. Try again in a moment.');
+                    }
                   }}
                 >
-                  <FontAwesomeIcon icon={faTrash} size={16} color="black" />
+                  <Image source={TRASH_ART} style={{ width: 24, height: 24 }} contentFit="contain" />
                 </TouchableOpacity>
               </View>
             )}

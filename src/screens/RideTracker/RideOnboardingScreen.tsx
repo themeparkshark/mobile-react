@@ -17,6 +17,8 @@ import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../../design-system';
+import { GameIcon, type GameIconName } from '../../ui';
+import useUiReducedMotion from '../../ui/useUiReducedMotion';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -25,18 +27,18 @@ const ONBOARDING_KEY = 'ride_tracker_onboarded';
 // ─── Slide Data ───
 
 interface SlideData {
-  emojis: string[];
+  icons: GameIconName[];
   emojiSizes: number[];
   emojiOffsets: { x: number; y: number; rotate: string }[];
   title: string;
   subtitle: string;
   gradient: [string, string];
-  accentEmoji: string;
+  accentIcon: GameIconName;
 }
 
 const SLIDES: SlideData[] = [
   {
-    emojis: ['🎢', '🦈', '📖'],
+    icons: ['ride', 'shark', 'edit'],
     emojiSizes: [72, 96, 64],
     emojiOffsets: [
       { x: -70, y: -20, rotate: '-15deg' },
@@ -46,11 +48,11 @@ const SLIDES: SlideData[] = [
     title: 'Your Ride Journal',
     subtitle:
       'Track every ride you\'ve ever been on. Rate them, add photos, build your complete theme park history.',
-    gradient: ['#0D1B4A', '#1B3A8C'],
-    accentEmoji: '✨',
+    gradient: ['#0879ca', '#0768b9'],
+    accentIcon: 'sparkle',
   },
   {
-    emojis: ['📱', '✨', '🎢'],
+    icons: ['pin', 'sparkle', 'ride'],
     emojiSizes: [64, 48, 80],
     emojiOffsets: [
       { x: -60, y: 10, rotate: '-8deg' },
@@ -60,11 +62,11 @@ const SLIDES: SlideData[] = [
     title: 'Auto-Detect Rides',
     subtitle:
       'Just pocket your phone and ride. We\'ll detect what you rode using GPS and ask you to confirm. Magic.',
-    gradient: ['#1A0A3E', '#4A1A8A'],
-    accentEmoji: '🔮',
+    gradient: ['#1ba0ea', '#0879ca'],
+    accentIcon: 'star',
   },
   {
-    emojis: ['📤', '🏆', '👥'],
+    icons: ['camera', 'trophy', 'medal1'],
     emojiSizes: [60, 80, 64],
     emojiOffsets: [
       { x: -65, y: -10, rotate: '-10deg' },
@@ -74,11 +76,11 @@ const SLIDES: SlideData[] = [
     title: 'Share & Compete',
     subtitle:
       'Share beautiful ride cards, compare stats with friends, and earn achievement badges as you level up.',
-    gradient: ['#0A2E1A', '#0F6B3A'],
-    accentEmoji: '🎖️',
+    gradient: ['#0768b9', '#0a5ea8'],
+    accentIcon: 'medal2',
   },
   {
-    emojis: ['🦈', '🚀'],
+    icons: ['shark', 'crown'],
     emojiSizes: [100, 72],
     emojiOffsets: [
       { x: -30, y: -30, rotate: '-5deg' },
@@ -86,8 +88,8 @@ const SLIDES: SlideData[] = [
     ],
     title: "Let's Start!",
     subtitle: 'Your theme park adventure begins now. Ready to track your first ride?',
-    gradient: ['#1A0505', '#8B1A1A'],
-    accentEmoji: '🎉',
+    gradient: ['#0879ca', '#05468f'],
+    accentIcon: 'crown',
   },
 ];
 
@@ -141,10 +143,10 @@ const AnimatedSlide: React.FC<AnimatedSlideProps> = React.memo(
           >
             {/* Emoji Scene */}
             <View style={slideStyles.emojiScene}>
-              {item.emojis.map((emoji, i) => (
-                <EmojiFloat
+              {item.icons.map((icon, i) => (
+                <IconFloat
                   key={i}
-                  emoji={emoji}
+                  icon={icon}
                   size={item.emojiSizes[i]}
                   offset={item.emojiOffsets[i]}
                   delay={i * 150}
@@ -153,7 +155,7 @@ const AnimatedSlide: React.FC<AnimatedSlideProps> = React.memo(
             </View>
 
             {/* Sparkle accent */}
-            <Text style={slideStyles.accent}>{item.accentEmoji}</Text>
+            <GameIcon name={item.accentIcon} size={30} style={slideStyles.accent} />
 
             {/* Title */}
             <Text style={slideStyles.title}>{item.title}</Text>
@@ -168,21 +170,23 @@ const AnimatedSlide: React.FC<AnimatedSlideProps> = React.memo(
 );
 AnimatedSlide.displayName = 'AnimatedSlide';
 
-// ─── Floating Emoji with subtle bounce ───
+// ─── Floating art with a springy entrance and a subtle bob ───
 
-interface EmojiFloatProps {
-  emoji: string;
+interface IconFloatProps {
+  icon: GameIconName;
   size: number;
   offset: { x: number; y: number; rotate: string };
   delay: number;
 }
 
-const EmojiFloat: React.FC<EmojiFloatProps> = React.memo(
-  ({ emoji, size, offset, delay }) => {
+const IconFloat: React.FC<IconFloatProps> = React.memo(
+  ({ icon, size, offset, delay }) => {
+    const reduced = useUiReducedMotion();
     const floatAnim = useRef(new Animated.Value(0)).current;
-    const entryAnim = useRef(new Animated.Value(0)).current;
+    const entryAnim = useRef(new Animated.Value(reduced ? 1 : 0)).current;
 
     useEffect(() => {
+      if (reduced) { entryAnim.setValue(1); return; }
       // Entry animation
       Animated.spring(entryAnim, {
         toValue: 1,
@@ -215,9 +219,10 @@ const EmojiFloat: React.FC<EmojiFloatProps> = React.memo(
     });
 
     return (
-      <Animated.Text
+      <Animated.View
         style={{
-          fontSize: size,
+          width: size,
+          height: size,
           position: 'absolute',
           left: '50%',
           marginLeft: offset.x - size / 2,
@@ -230,12 +235,12 @@ const EmojiFloat: React.FC<EmojiFloatProps> = React.memo(
           ],
         }}
       >
-        {emoji}
-      </Animated.Text>
+        <GameIcon name={icon} size={size} />
+      </Animated.View>
     );
   },
 );
-EmojiFloat.displayName = 'EmojiFloat';
+IconFloat.displayName = 'IconFloat';
 
 const slideStyles = StyleSheet.create({
   outerContainer: {
@@ -262,21 +267,24 @@ const slideStyles = StyleSheet.create({
     marginBottom: 16,
   },
   accent: {
-    fontSize: 28,
     marginBottom: 12,
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 34,
-    fontWeight: '900',
-    fontFamily: 'Knockout',
+    fontSize: 32,
+    fontFamily: 'Shark',
+    textTransform: 'uppercase',
+    textShadowColor: '#05346e',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
     textAlign: 'center',
     marginBottom: 16,
     letterSpacing: 0.5,
   },
   subtitle: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 17,
+    color: 'rgba(255,255,255,0.92)',
+    fontFamily: 'Knockout',
+    fontSize: 18,
     textAlign: 'center',
     lineHeight: 26,
     paddingHorizontal: 8,
@@ -440,7 +448,7 @@ export default function RideOnboardingScreen() {
                 pressed && styles.ctaPressed,
               ]}
             >
-              <Text style={styles.primaryCtaText}>Log Your First Ride 🦈</Text>
+              <Text style={styles.primaryCtaText}>Log Your First Ride</Text>
             </Pressable>
 
             <Pressable
@@ -461,7 +469,10 @@ export default function RideOnboardingScreen() {
               pressed && styles.ctaPressed,
             ]}
           >
-            <Text style={styles.nextBtnText}>Next →</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.nextBtnText}>Next</Text>
+              <GameIcon name="arrow" size={24} />
+            </View>
           </Pressable>
         )}
       </SafeAreaView>
@@ -476,7 +487,7 @@ export { ONBOARDING_KEY };
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A1A',
+    backgroundColor: '#0768b9',
   },
   skipContainer: {
     position: 'absolute',
@@ -489,9 +500,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   skipText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 16,
-    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 17,
+    fontFamily: 'Shark',
   },
   bottomContainer: {
     position: 'absolute',
@@ -505,11 +516,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   primaryCta: {
-    backgroundColor: '#00A5F5',
-    borderRadius: 16,
-    paddingVertical: 18,
+    backgroundColor: '#ffcf3b',
+    borderRadius: 18,
+    paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#00A5F5',
+    borderBottomWidth: 5,
+    borderBottomColor: '#d99a00',
+    shadowColor: '#05346e',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 12,
@@ -520,10 +533,10 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   primaryCtaText: {
-    color: '#FFFFFF',
-    fontSize: 19,
-    fontWeight: '800',
-    fontFamily: 'Knockout',
+    color: '#05346e',
+    fontSize: 22,
+    fontFamily: 'Shark',
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   secondaryCta: {
@@ -531,22 +544,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   secondaryCtaText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 16,
-    fontWeight: '600',
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 17,
+    fontFamily: 'Shark',
   },
   nextBtn: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 16,
-    paddingVertical: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 18,
+    paddingVertical: 14,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.85)',
   },
   nextBtnText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    fontFamily: 'Knockout',
+    fontSize: 22,
+    fontFamily: 'Shark',
+    textTransform: 'uppercase',
   },
 });

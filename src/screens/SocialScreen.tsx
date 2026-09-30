@@ -1,5 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
+import { isTeam, TEAMS } from '../constants/teams';
+import { BRAND, GameIcon } from '../ui';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
@@ -51,26 +53,12 @@ import AttachmentModal from '../components/AttachmentModal';
 import Tag from '../components/Tag';
 import ThreadActions from '../components/ThreadActions';
 import CreateReport from '../components/CreateReport';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faComment } from '@fortawesome/free-solid-svg-icons/faComment';
-import { faFire } from '@fortawesome/free-solid-svg-icons/faFire';
-import { faBolt } from '@fortawesome/free-solid-svg-icons/faBolt';
-import { faHeart } from '@fortawesome/free-solid-svg-icons/faHeart';
-import { faThumbtack } from '@fortawesome/free-solid-svg-icons/faThumbtack';
-import { faEllipsis } from '@fortawesome/free-solid-svg-icons/faEllipsis';
-import { faPaperPlane } from '@fortawesome/free-solid-svg-icons/faPaperPlane';
-import { faChevronDown } from '@fortawesome/free-solid-svg-icons/faChevronDown';
-import { faReply } from '@fortawesome/free-solid-svg-icons/faReply';
-import { faPlus } from '@fortawesome/free-solid-svg-icons/faPlus';
 import dayjs from '../helpers/dayjs';
 import { truncate } from 'lodash';
 import RichText from '../components/RichText';
 import shortenNumber from '../helpers/shorten-number';
 import * as RootNavigation from '../RootNavigation';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
-import { faUsers } from '@fortawesome/free-solid-svg-icons/faUsers';
-import { faGlobe } from '@fortawesome/free-solid-svg-icons/faGlobe';
-import { faLock } from '@fortawesome/free-solid-svg-icons/faLock';
 
 const sheetOpenSound = require('../../assets/sounds/modal_open.mp3');
 const sheetCloseSound = require('../../assets/sounds/modal_close.mp3');
@@ -79,33 +67,28 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.72;
 
 // ── Filter Pills ──────────────────────────────────────────
-import { faUserGroup } from '@fortawesome/free-solid-svg-icons/faUserGroup';
 
 const FILTERS = [
-  { label: 'Hot', value: 'hottest', icon: faFire, color: '#ff6b35' },
-  { label: 'New', value: 'latest', icon: faBolt, color: '#00a5f5' },
-  { label: 'Friends', value: 'friends', icon: faUserGroup, color: '#8b5cf6' },
+  { label: 'Hot', value: 'hottest', icon: 'streak' as const, color: '#ff6b35' },
+  { label: 'New', value: 'latest', icon: 'sparkle' as const, color: '#0879ca' },
+  { label: 'Friends', value: 'friends', icon: 'shark' as const, color: '#05346e' },
 ];
 
-// Team data
-const TEAMS = {
-  mouse: { name: 'Team Mouse', emoji: '🐭', color: '#3B82F6' },
-  globe: { name: 'Team Globe', emoji: '🌍', color: '#EF4444' },
-  shark: { name: 'Team Shark', emoji: '🦈', color: '#F59E0B' },
-} as const;
+// Team names, colours and badge art come from the one team source (constants/teams.ts).
+const teamInfoFor = (team: unknown) => (isTeam(team) ? TEAMS[team] : null);
 
 // ── Feed Mode Toggle (Public / Team) ──────────────────────
 function FeedModeToggle({
   mode,
   onToggle,
   teamName,
-  teamEmoji,
+  teamBadge,
   teamColor,
 }: {
   mode: 'public' | 'team';
   onToggle: (m: 'public' | 'team') => void;
   teamName?: string;
-  teamEmoji?: string;
+  teamBadge?: number;
   teamColor?: string;
 }) {
   return (
@@ -114,17 +97,17 @@ function FeedModeToggle({
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onToggle('public'); }}
         style={[toggleStyles.tab, mode === 'public' && toggleStyles.activeTab]}
       >
-        <FontAwesomeIcon icon={faGlobe} size={13} color={mode === 'public' ? '#0d1b2a' : '#a0aec0'} />
+        <GameIcon name="map" size={18} />
         <Text style={[toggleStyles.tabText, mode === 'public' && toggleStyles.activeText]}>Public</Text>
       </Pressable>
       <Pressable
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onToggle('team'); }}
         style={[toggleStyles.tab, mode === 'team' && { ...toggleStyles.activeTab, backgroundColor: (teamColor || '#F59E0B') + '18' }]}
       >
-        {teamEmoji ? (
-          <Text style={{ fontSize: 13 }}>{teamEmoji}</Text>
+        {teamBadge ? (
+          <Image source={teamBadge} style={{ width: 18, height: 18 }} contentFit="contain" />
         ) : (
-          <FontAwesomeIcon icon={faUsers} size={13} color={mode === 'team' ? (teamColor || '#F59E0B') : '#a0aec0'} />
+          <GameIcon name="shark" size={18} />
         )}
         <Text style={[toggleStyles.tabText, mode === 'team' && { ...toggleStyles.activeText, color: teamColor || '#F59E0B' }]}>
           {teamName || 'Team'}
@@ -184,7 +167,7 @@ function FilterPills({ active, onSelect }: { active: string; onSelect: (v: strin
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSelect(f.value); }}
             style={[pillStyles.pill, isActive && { backgroundColor: f.color }]}
           >
-            <FontAwesomeIcon icon={f.icon} size={12} color={isActive ? 'white' : '#8895a7'} />
+            <GameIcon name={f.icon} size={18} />
             <Text style={[pillStyles.pillText, isActive && { color: 'white' }]}>{f.label}</Text>
           </Pressable>
         );
@@ -227,7 +210,7 @@ function ThreadCard({ thread, index, onPress, onDelete }: { thread: ThreadType; 
   const hasImage = thread.attachments?.length > 0;
   const isPinned = !!thread.pinned_at;
   const isTeam = !!thread.team;
-  const threadTeamInfo = thread.team ? TEAMS[thread.team as keyof typeof TEAMS] : null;
+  const threadTeamInfo = teamInfoFor(thread.team);
 
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: pressScale }] }}>
@@ -235,13 +218,13 @@ function ThreadCard({ thread, index, onPress, onDelete }: { thread: ThreadType; 
         <View style={{ flexDirection: 'row', gap: 6, marginBottom: (isPinned || isTeam) ? 8 : 0 }}>
           {isPinned && (
             <View style={cardStyles.pinnedBanner}>
-              <FontAwesomeIcon icon={faThumbtack} size={10} color={config.primary} />
+              <GameIcon name="pin" size={14} />
               <Text style={cardStyles.pinnedText}>Pinned</Text>
             </View>
           )}
           {isTeam && threadTeamInfo && (
             <View style={[cardStyles.pinnedBanner, { backgroundColor: threadTeamInfo.color + '15' }]}>
-              <Text style={{ fontSize: 10 }}>{threadTeamInfo.emoji}</Text>
+              <Image source={threadTeamInfo.badge} style={{ width: 14, height: 14 }} contentFit="contain" />
               <Text style={[cardStyles.pinnedText, { color: threadTeamInfo.color }]}>{threadTeamInfo.name}</Text>
             </View>
           )}
@@ -257,7 +240,7 @@ function ThreadCard({ thread, index, onPress, onDelete }: { thread: ThreadType; 
             <ThreadActions
               trigger={
                 <View style={{ padding: 4 }}>
-                  <FontAwesomeIcon icon={faEllipsis} size={16} color="#8895a7" />
+                  <GameIcon name="settings" size={22} accessibilityLabel="Post options" />
                 </View>
               }
               thread={thread}
@@ -292,7 +275,7 @@ function ThreadCard({ thread, index, onPress, onDelete }: { thread: ThreadType; 
             <View style={{ flex: 1 }}><Reactions count={thread.reactions_count} reactions={thread.reactions} /></View>
           )}
           <View style={cardStyles.commentBadge}>
-            <FontAwesomeIcon icon={faComment} size={13} color={config.secondary} />
+            <GameIcon name="edit" size={18} />
             <Text style={cardStyles.commentCount}>{shortenNumber(thread.comments_count)}</Text>
           </View>
         </View>
@@ -348,9 +331,11 @@ function EmptyState() {
   }, []);
   return (
     <View style={{ alignItems: 'center', paddingVertical: 60, paddingHorizontal: 32 }}>
-      <Animated.Text style={{ fontSize: 48, transform: [{ translateY: bounceAnim }] }}>🦈</Animated.Text>
-      <Text style={{ fontFamily: 'Knockout', fontSize: 22, color: '#0d1b2a', marginTop: 16, textAlign: 'center' }}>No threads yet!</Text>
-      <Text style={{ fontSize: 14, color: '#8895a7', marginTop: 8, textAlign: 'center', lineHeight: 20 }}>Be the first to start a conversation — tap the pencil icon above!</Text>
+      <Animated.View style={{ transform: [{ translateY: bounceAnim }] }}>
+        <GameIcon name="shark" size={72} />
+      </Animated.View>
+      <Text style={{ fontFamily: 'Shark', fontSize: 22, color: BRAND.navy, marginTop: 16, textAlign: 'center', textTransform: 'uppercase' }}>No threads yet</Text>
+      <Text style={{ fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft, marginTop: 8, textAlign: 'center', lineHeight: 21 }}>Be the first to start a conversation. Tap + below.</Text>
     </View>
   );
 }
@@ -464,11 +449,6 @@ function ThreadSheet({
     setThread(await getThread(thread.id));
   };
 
-  const SORT_OPTIONS = [
-    { label: 'New', value: 'latest', icon: faBolt, color: '#00a5f5' },
-    { label: 'Reactions', value: 'most_reactions', icon: faHeart, color: '#ef4444' },
-  ];
-
   return (
     <Modal
       isVisible={visible}
@@ -496,7 +476,7 @@ function ThreadSheet({
           <View style={sheetStyles.handle} />
           <View style={{ flex: 1, alignItems: 'flex-end' }}>
             <TouchableOpacity onPress={handleClose} style={sheetStyles.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <FontAwesomeIcon icon={faChevronDown} size={14} color="#8895a7" />
+              <GameIcon name="close" size={26} accessibilityLabel="Close" />
             </TouchableOpacity>
           </View>
         </View>
@@ -538,7 +518,7 @@ function ThreadSheet({
                   <ThreadActions
                     trigger={
                       <View style={sheetStyles.moreBtn}>
-                        <FontAwesomeIcon icon={faEllipsis} size={18} color="#8895a7" />
+                        <GameIcon name="settings" size={24} accessibilityLabel="Post options" />
                       </View>
                     }
                     thread={thread}
@@ -588,7 +568,7 @@ function ThreadSheet({
                   </ReactionsDropdown>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
                     <View style={sheetStyles.commentCountChip}>
-                      <FontAwesomeIcon icon={faComment} size={14} color={config.secondary} />
+                      <GameIcon name="edit" size={18} />
                       <Text style={sheetStyles.commentCountNum}>{thread.comments_count}</Text>
                     </View>
                     {player && <CreateReport model={{ id: thread.id, type: 'thread' }} />}
@@ -606,7 +586,7 @@ function ThreadSheet({
               {/* Comments */}
               {comments.length === 0 ? (
                 <View style={{ alignItems: 'center', paddingVertical: 24 }}>
-                  <Text style={{ fontSize: 28 }}>💬</Text>
+                  <GameIcon name="edit" size={36} />
                   <Text style={{ fontFamily: 'Shark', fontSize: 12, color: '#8895a7', marginTop: 6, textTransform: 'uppercase' }}>No comments yet</Text>
                   <Text style={{ fontSize: 12, color: '#a0aec0', marginTop: 2 }}>Be the first to reply!</Text>
                 </View>
@@ -641,12 +621,12 @@ function ThreadSheet({
               <View style={sheetStyles.replyBar}>
                 {activeComment && (
                   <View style={sheetStyles.replyingTo}>
-                    <FontAwesomeIcon icon={faReply} size={10} color={config.secondary} />
+                    <GameIcon name="back" size={16} />
                     <Text style={sheetStyles.replyingToText} numberOfLines={1}>
                       Replying to {activeComment.player?.screen_name}
                     </Text>
                     <TouchableOpacity onPress={() => setActiveComment(undefined)}>
-                      <Text style={sheetStyles.replyingToCancel}>✕</Text>
+                      <GameIcon name="close" size={18} accessibilityLabel="Cancel reply" />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -669,7 +649,7 @@ function ThreadSheet({
                       (!replyText.trim() || sending) && { opacity: 0.4 },
                     ]}
                   >
-                    <FontAwesomeIcon icon={faPaperPlane} size={16} color="white" />
+                    <GameIcon name="arrow" size={30} accessibilityLabel="Send" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -780,7 +760,7 @@ function ComposeButton() {
           }}
           style={fabStyles.button}
         >
-          <FontAwesomeIcon icon={faPlus} size={22} color="white" />
+          <Text style={fabStyles.plus} accessibilityLabel="New post">+</Text>
         </Pressable>
       </Animated.View>
       <CreateThreadModal visible={showModal} onClose={() => setShowModal(false)} />
@@ -807,6 +787,18 @@ const fabStyles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 8,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+  },
+  plus: {
+    fontFamily: 'Shark',
+    fontSize: 44,
+    lineHeight: 48,
+    color: '#ffffff',
+    marginTop: 6,
+    textShadowColor: '#05346e',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 0,
   },
 });
 
@@ -826,7 +818,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
 
   // Get player's team
   const playerTeam = (player as any)?.team?.team as string | undefined;
-  const teamInfo = playerTeam ? TEAMS[playerTeam as keyof typeof TEAMS] : null;
+  const teamInfo = teamInfoFor(playerTeam);
 
   const fetchPinnedThreads = async () => {
     setPinnedThreads(await getThreads(1, { pinned: true }));
@@ -947,7 +939,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
                     mode={feedMode}
                     onToggle={setFeedMode}
                     teamName={teamInfo?.name}
-                    teamEmoji={teamInfo?.emoji}
+                    teamBadge={teamInfo?.badge}
                     teamColor={teamInfo?.color}
                   />
                 )}

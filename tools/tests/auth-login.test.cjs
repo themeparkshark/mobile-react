@@ -174,6 +174,8 @@ function button({ apple, login, crumbs = { labels: {}, warnings: {} } }) {
     'expo-apple-authentication': { AppleAuthenticationButton: 'apple', AppleAuthenticationButtonType: { SIGN_IN: 0 }, AppleAuthenticationButtonStyle: { BLACK: 0 }, AppleAuthenticationScope: { EMAIL: 0 }, signInAsync: apple },
     '../context/AuthProvider': { AuthContext: {} },
     '../hooks/useCrumbs': () => crumbs,
+    '../ui': { gameAlert: (title, message) => alerts.push([title, message]), SharkLoader: 'loader' },
+    './signInErrors': load('src/components/signInErrors.ts', {}),
   }).default;
   const tree = Component({});
   return { press: tree.props.children.props.children[0].props.onPress, states, alerts };
@@ -204,4 +206,11 @@ test('Apple cancellation is silent and missing crumb/error data still gets fallb
   const unavailable = button({ apple: async () => { throw null; }, crumbs: {} });
   await unavailable.press();
   assert.deepEqual(unavailable.alerts, [["Couldn't sign in", 'Please try again.']]);
+});
+test('the Apple authorization code reaches the login request so deletion can revoke the grant', async () => {
+  const seen = [];
+  const { auth } = provider({ login: async (...args) => { seen.push(args); return { token: 'test-session' }; } });
+  await auth.login({ ...credential, authorizationCode: 'apple-code' });
+  await auth.login(credential);
+  assert.deepEqual(seen.map(args => args[2]), ['apple-code', undefined]);
 });

@@ -7,8 +7,6 @@ import {
   TextInput,
   View,
   StyleSheet,
-  ActivityIndicator,
-  Alert,
   ImageBackground,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -29,6 +27,7 @@ import TopbarText from '../../components/Topbar/TopbarText';
 import { removePendingDetection } from '../../services/RideDetectionService';
 import ProfileStatIcon from '../../components/ProfileStatIcon';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { GameIcon, gameAlert, SharkLoader } from '../../ui';
 
 // ─── Park Selector ───
 interface ParkItemProps {
@@ -43,7 +42,7 @@ const ParkItem: React.FC<ParkItemProps> = React.memo(({ park, selected, onPress 
     style={({ pressed }) => [s.parkChip, selected && s.parkChipSelected, pressed && s.choicePressed]}>
     <View style={s.parkIcon}><ProfileStatIcon index={2} size={30} /></View>
     <Text style={[s.parkChipText, selected && s.parkChipTextSelected]} numberOfLines={2}>{park.name}</Text>
-    <Text style={s.choiceChevron}>›</Text>
+    <GameIcon name="arrow" size={24} />
   </Pressable>
 ));
 ParkItem.displayName = 'ParkItem';
@@ -63,7 +62,7 @@ const RideItem: React.FC<RideItemProps> = React.memo(({ ride, selected, onPress 
     <Text style={[s.rideItemText, selected && s.rideItemTextSelected]} numberOfLines={2}>
       {ride.name}
     </Text>
-    <Text style={s.choiceChevron}>›</Text>
+    <GameIcon name="arrow" size={24} />
   </Pressable>
 ));
 RideItem.displayName = 'RideItem';
@@ -190,7 +189,7 @@ export default function RideLogScreen() {
   const handleSubmit = useCallback(async () => {
     if (!selectedRide || saving.current) return;
     if (waitTime && !/^\d+$/.test(waitTime)) {
-      Alert.alert('Check your wait time', 'Enter a whole number of minutes, or leave it blank.');
+      gameAlert('Check your wait time', 'Enter a whole number of minutes, or leave it blank.');
       return;
     }
     saving.current = true;
@@ -224,7 +223,7 @@ export default function RideLogScreen() {
       });
       setShowSuccess(true);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message || 'Failed to log ride');
+      gameAlert("Couldn't save your ride", e?.response?.data?.message || 'Check your connection and try again.');
     } finally {
       saving.current = false;
       setSubmitting(false);
@@ -337,7 +336,7 @@ export default function RideLogScreen() {
             />
           </View>}
           {loadingRides ? (
-            <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 40 }} />
+            <SharkLoader compact style={{ marginTop: 24 }} />
           ) : ridesUnavailable ? (
             <View style={s.unavailableCard}>
               <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
@@ -430,11 +429,7 @@ export default function RideLogScreen() {
               end={{ x: 1, y: 0 }}
               style={s.submitBtnGradient}
             >
-              {submitting ? (
-                <ActivityIndicator color="#1a1a2e" />
-              ) : (
-                <Text style={s.submitBtnText}>Save Ride Memory</Text>
-              )}
+              <Text style={[s.submitBtnText, submitting && { opacity: 0.6 }]}>{submitting ? 'Saving' : 'Save Ride Memory'}</Text>
             </LinearGradient>
           </Pressable>
         </ScrollView>
@@ -465,7 +460,7 @@ const s = StyleSheet.create({
   },
   unavailableShark: { width: 90, height: 90 },
   unavailableTitle: { color: '#0B4B83', fontSize: 21, fontFamily: 'Shark', textAlign: 'center' },
-  unavailableBody: { color: '#315C7C', fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 7 },
+  unavailableBody: { color: '#315C7C', fontSize: 14, fontFamily: 'Knockout', lineHeight: 20, textAlign: 'center', marginTop: 7 },
   retryButton: { backgroundColor: '#F6C847', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28, marginTop: 18 },
   retryText: { color: '#174064', fontFamily: 'Shark', fontSize: 17 },
 
@@ -473,7 +468,7 @@ const s = StyleSheet.create({
   parkList: { padding: 16, paddingBottom: 40 },
   parkGroup: { marginBottom: 20 },
   parkGroupLabel: {
-    fontSize: 13, fontWeight: '900', fontFamily: 'Knockout', color: '#1a1a2e',
+    fontSize: 13, fontFamily: 'Knockout', color: '#1a1a2e',
     letterSpacing: 1.5, marginBottom: 8,
   },
   parkChip: {
@@ -484,7 +479,7 @@ const s = StyleSheet.create({
   },
   parkChipSelected: { borderColor: '#0EA5E9', backgroundColor: '#e8f7ff' },
   parkChipText: { color: '#0B4B83', fontSize: 18, fontFamily: 'Shark', flex: 1 },
-  parkChipTextSelected: { color: '#0284C7', fontWeight: '700' },
+  parkChipTextSelected: { color: '#0284C7', fontFamily: 'Shark' },
   parkIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center',
     borderRadius: 13, backgroundColor: '#E6F5FF' },
   choiceChevron: { color: '#2A749E', fontSize: 24, fontFamily: 'Knockout' },
@@ -506,15 +501,15 @@ const s = StyleSheet.create({
   },
   rideItemSelected: { borderColor: '#fec90e', backgroundColor: '#fffbeb' },
   rideItemText: { color: '#174D76', fontSize: 17, fontFamily: 'Shark', flex: 1 },
-  rideItemTextSelected: { color: '#92400e', fontWeight: '600' },
-  emptyText: { color: '#64748b', textAlign: 'center', marginTop: 40, fontSize: 15 },
+  rideItemTextSelected: { color: '#92400e', fontFamily: 'Shark' },
+  emptyText: { color: '#64748b', textAlign: 'center', marginTop: 40, fontSize: 15, fontFamily: 'Knockout' },
 
   // Details
   detailsContainer: { padding: 20, paddingBottom: 80 },
   selectedRideCard: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20,
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)',
+    borderWidth: 1, borderColor: 'rgba(5,52,110,0.05)',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4,
   },
   selectedRideName: { color: '#174D76', fontSize: 20, fontFamily: 'Shark', flex: 1 },
@@ -524,7 +519,7 @@ const s = StyleSheet.create({
   ratingRow: { alignItems: 'center' },
   input: {
     backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 13,
-    color: '#1a1a2e', fontSize: 15, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
+    color: '#1a1a2e', fontSize: 15, fontFamily: 'Knockout', borderWidth: 1, borderColor: 'rgba(5,52,110,0.06)',
   },
   noteInput: { minHeight: 80, textAlignVertical: 'top' },
   submitBtn: {
@@ -534,5 +529,5 @@ const s = StyleSheet.create({
   submitBtnGradient: {
     paddingVertical: 16, alignItems: 'center', justifyContent: 'center',
   },
-  submitBtnText: { color: '#1a1a2e', fontSize: 18, fontWeight: '900', fontFamily: 'Shark' },
+  submitBtnText: { color: '#1a1a2e', fontSize: 18, fontFamily: 'Shark' },
 });

@@ -1,9 +1,8 @@
 /**
- * SpotlightOverlay — Dark overlay with a transparent cutout
- * 
- * Uses react-native-svg to create a full-screen dark mask with
- * a "hole" cut out where the spotlight target is. This draws
- * attention to the highlighted UI element.
+ * SpotlightOverlay: a navy scrim with a transparent cutout.
+ *
+ * Uses react-native-svg only for the mask (a "hole" where the spotlight
+ * target is), never for drawn art. The scrim is brand navy, never black.
  */
 import React from 'react';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
@@ -23,6 +22,12 @@ import Svg, { Defs, Mask, Rect, Circle } from 'react-native-svg';
 import { SpotlightTarget } from './types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+/** Brand navy scrim (tokens BRAND.navy family), never black. */
+export function scrimColor(opacity: number): string {
+  const alpha = Math.max(0, Math.min(1, opacity));
+  return `rgba(4,40,90,${alpha})`;
+}
 
 interface SpotlightOverlayProps {
   /** Target area to spotlight (null = full dim overlay, no cutout) */
@@ -51,7 +56,7 @@ export default function SpotlightOverlay({
   if (!target) {
     return (
       <Animated.View
-        style={[styles.overlay, { backgroundColor: `rgba(0,0,0,${opacity})` }]}
+        style={[styles.overlay, { backgroundColor: scrimColor(opacity) }]}
         entering={reducedMotion ? undefined : FadeIn.duration(180)}
         exiting={reducedMotion ? undefined : FadeOut.duration(160)}
         pointerEvents="box-only"
@@ -103,13 +108,13 @@ export default function SpotlightOverlay({
             )}
           </Mask>
         </Defs>
-        {/* Dark overlay with hole */}
+        {/* Navy scrim with the hole */}
         <Rect
           x={0}
           y={0}
           width={SCREEN_WIDTH}
           height={SCREEN_HEIGHT}
-          fill={`rgba(0,0,0,${opacity})`}
+          fill={scrimColor(opacity)}
           mask="url(#spotlight-mask)"
         />
       </Svg>
@@ -164,25 +169,29 @@ function PulsingRing({ target, padding }: { target: SpotlightTarget; padding: nu
 
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: interpolate(pulseValue.value, [0, 1], [0.6, 0]),
-    transform: [{ scale: interpolate(pulseValue.value, [0, 1], [1, 1.15]) }],
+    transform: [{ scale: interpolate(pulseValue.value, [0, 1], [1, target.shape === 'circle' ? 1.15 : 1.05]) }],
   }));
 
-  const cx = target.x + target.width / 2;
-  const cy = target.y + target.height / 2;
+  // Circles get a round ring; cards get a ring that hugs the card.
+  const circle = target.shape === 'circle';
   const size = Math.max(target.width, target.height) + padding * 4;
+  const ringW = circle ? size : target.width + padding * 3;
+  const ringH = circle ? size : target.height + padding * 3;
+  const left = target.x + target.width / 2 - ringW / 2;
+  const top = target.y + target.height / 2 - ringH / 2;
 
   return (
     <Animated.View
       style={[
         {
           position: 'absolute',
-          left: cx - size / 2,
-          top: cy - size / 2,
-          width: size,
-          height: size,
-          borderRadius: target.shape === 'circle' ? size / 2 : 16,
-          borderWidth: 3,
-          borderColor: '#00a5f5',
+          left,
+          top,
+          width: ringW,
+          height: ringH,
+          borderRadius: circle ? size / 2 : 20,
+          borderWidth: 4,
+          borderColor: '#ffcf3b',
         },
         pulseStyle,
       ]}

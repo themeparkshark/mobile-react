@@ -5,14 +5,13 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getRideAchievements, RideAchievementType } from '../../api/endpoints/player-rides';
 import { colors } from '../../design-system';
-import { GameIcon } from '../../ui';
+import { GameIcon, SharkLoader } from '../../ui';
 import { achievementIconName } from './achievementIcon';
 
 // ─── Achievement Card ───
@@ -45,13 +44,17 @@ export default function RideAchievementsScreen() {
   const navigation = useNavigation<any>();
   const [achievements, setAchievements] = useState<RideAchievementType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
+    setFailed(false);
     getRideAchievements()
       .then(setAchievements)
-      .catch(console.error)
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
-  }, []);
+  };
+  useEffect(load, []);
 
   const unlocked = achievements.filter(a => a.unlocked);
   const locked = achievements.filter(a => !a.unlocked);
@@ -60,14 +63,14 @@ export default function RideAchievementsScreen() {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <Text style={styles.backChevron}>‹</Text>
+          <GameIcon name="back" size={36} accessibilityLabel="Back" />
         </Pressable>
         <Text style={styles.title}>ACHIEVEMENTS</Text>
         <View style={{ width: 40 }} />
       </LinearGradient>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 60 }} />
+      {loading || failed ? (
+        <SharkLoader state={failed ? 'error' : 'loading'} title={failed ? "Achievements didn't load" : undefined} onRetry={load} />
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
           {/* Progress */}
@@ -82,7 +85,7 @@ export default function RideAchievementsScreen() {
           {/* Unlocked */}
           {unlocked.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>🏆 UNLOCKED</Text>
+              <View style={styles.sectionRow}><GameIcon name="trophy" size={22} /><Text style={styles.sectionTitle}>UNLOCKED</Text></View>
               {unlocked.map(a => <AchievementCard key={a.id} achievement={a} />)}
             </>
           )}
@@ -90,7 +93,7 @@ export default function RideAchievementsScreen() {
           {/* Locked */}
           {locked.length > 0 && (
             <>
-              <Text style={styles.sectionTitle}>🔒 LOCKED</Text>
+              <View style={styles.sectionRow}><GameIcon name="lock" size={22} /><Text style={styles.sectionTitle}>LOCKED</Text></View>
               {locked.map(a => <AchievementCard key={a.id} achievement={a} />)}
             </>
           )}
@@ -114,20 +117,17 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   backChevron: { 
     color: '#FFFFFF', 
-    fontSize: 24, 
-    fontWeight: '600',
+    fontSize: 24, fontFamily: 'Knockout',
     marginLeft: -2,
   },
   title: { 
     color: '#FFFFFF', 
     fontSize: 20, 
-    fontWeight: '700', 
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
@@ -147,10 +147,9 @@ const styles = StyleSheet.create({
   progressNum: { 
     color: '#09268f', 
     fontSize: 36, 
-    fontWeight: '800', 
     fontFamily: 'Shark' 
   },
-  progressLabel: { color: '#475569', fontSize: 14, marginTop: 4 },
+  progressLabel: { color: '#475569', fontSize: 14, fontFamily: 'Knockout', marginTop: 4 },
   progressBar: { 
     width: '100%', 
     height: 8, 
@@ -164,13 +163,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fec90e', 
     borderRadius: 4 
   },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16, marginBottom: 12 },
   sectionTitle: { 
-    color: '#1a1a2e', 
+    color: '#05346e', 
     fontSize: 16, 
-    fontWeight: '700', 
-    marginBottom: 12, 
-    marginTop: 16, 
-    fontFamily: 'Knockout',
+    fontFamily: 'Shark',
     letterSpacing: 2,
   },
   card: {
@@ -193,15 +190,12 @@ const styles = StyleSheet.create({
   cardContent: { flex: 1 },
   cardName: { 
     color: '#1a1a2e', 
-    fontSize: 15, 
-    fontWeight: '700' 
-  },
-  cardDesc: { color: '#475569', fontSize: 13, marginTop: 2 },
+    fontSize: 15, fontFamily: 'Shark' },
+  cardDesc: { color: '#475569', fontSize: 13, fontFamily: 'Knockout', marginTop: 2 },
   textLocked: { color: '#94a3b8' },
   unlockedDate: { 
     color: '#fec90e', 
-    fontSize: 11, 
-    marginTop: 4, 
-    fontWeight: '600' 
+    fontSize: 11, fontFamily: 'Knockout',
+    marginTop: 4,
   },
 });

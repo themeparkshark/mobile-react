@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, RefreshControl, Alert,
+  View, Text, ScrollView, Pressable, StyleSheet, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -9,6 +9,8 @@ import * as Haptics from 'expo-haptics';
 import { getRideCollections, RideCollection } from '../../api/endpoints/rides/collections';
 import RideTypeIcon from '../../components/RideTracker/RideTypeIcon';
 import { colors, shadows, borderRadius } from '../../design-system';
+import { GameIcon, gameAlert, SharkLoader } from '../../ui';
+import { serverIcon } from '../../components/RideTracker/rideIcons';
 
 // ─── Collection Card ───
 interface CollectionCardProps {
@@ -27,14 +29,14 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({ collection, 
       style={({ pressed }) => [styles.collCard, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}
     >
       <View style={styles.collHeader}>
-        <Text style={styles.collIcon}>{collection.icon}</Text>
+        <GameIcon name={serverIcon(collection.icon, 'trophy')} size={40} />
         <View style={{ flex: 1 }}>
           <Text style={styles.collName}>{collection.name}</Text>
           {collection.description && (
             <Text style={styles.collDesc} numberOfLines={2}>{collection.description}</Text>
           )}
         </View>
-        {collection.is_complete && <Text style={styles.completeBadge}>✅</Text>}
+        {collection.is_complete && <GameIcon name="check" size={30} accessibilityLabel="Complete" />}
       </View>
 
       {/* Progress bar */}
@@ -56,7 +58,7 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({ collection, 
             <Text style={[styles.itemName, item.completed && styles.itemNameDone]} numberOfLines={1}>
               {item.name}
             </Text>
-            {item.completed && <Text style={styles.itemCheck}>✓</Text>}
+            {item.completed && <GameIcon name="check" size={14} />}
           </View>
         ))}
         {collection.items.length > 6 && (
@@ -66,8 +68,8 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({ collection, 
 
       {/* Rewards */}
       <View style={styles.rewardsRow}>
-        <Text style={styles.rewardText}>🏅 {collection.xp_reward} XP</Text>
-        <Text style={styles.rewardText}>🪙 {collection.coin_reward} coins</Text>
+        <View style={styles.rewardItem}><GameIcon name="xp" size={20} /><Text style={styles.rewardText}>{collection.xp_reward} XP</Text></View>
+        <View style={styles.rewardItem}><GameIcon name="coin" size={20} /><Text style={styles.rewardText}>{collection.coin_reward} coins</Text></View>
       </View>
     </Pressable>
   );
@@ -79,19 +81,24 @@ export default function RideCollectionsScreen() {
   const [collections, setCollections] = useState<RideCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
       const data = await getRideCollections();
       setCollections(data);
-    } catch (e) {
-      console.error('Failed to load collections:', e);
+      setFailed(false);
+    } catch {
+      setFailed(true);
     }
   }, []);
 
-  useEffect(() => {
+  const firstLoad = useCallback(() => {
+    setLoading(true);
     fetchData().finally(() => setLoading(false));
   }, [fetchData]);
+
+  useEffect(firstLoad, [firstLoad]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -103,14 +110,14 @@ export default function RideCollectionsScreen() {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <Text style={styles.backChevron}>‹</Text>
+          <GameIcon name="back" size={36} accessibilityLabel="Back" />
         </Pressable>
         <Text style={styles.title}>COLLECTIONS</Text>
         <View style={{ width: 40 }} />
       </LinearGradient>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 60 }} />
+      {loading || (failed && !collections.length) ? (
+        <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Collections didn't load"} onRetry={firstLoad} />
       ) : (
         <ScrollView
           contentContainerStyle={styles.content}
@@ -118,16 +125,17 @@ export default function RideCollectionsScreen() {
         >
           {collections.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>🏆</Text>
+              <GameIcon name="trophy" size={72} />
               <Text style={styles.emptyTitle}>No collections yet!</Text>
               <Text style={styles.emptySubtitle}>Collections will appear here as they're added</Text>
             </View>
           ) : (
             collections.map(c => (
               <CollectionCard key={c.id} collection={c} onPress={() => {
-                Alert.alert(
+                gameAlert(
                   c.name,
                   `${c.description || 'Complete this collection to earn rewards!'}\n\nProgress: ${c.completed_items}/${c.total_items} rides`,
+                  undefined, { icon: serverIcon(c.icon, 'trophy') },
                 );
               }} />
             ))
@@ -152,20 +160,17 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   backChevron: { 
     color: '#FFFFFF', 
-    fontSize: 24, 
-    fontWeight: '600',
+    fontSize: 24, fontFamily: 'Knockout',
     marginLeft: -2,
   },
   title: { 
     color: '#FFFFFF', 
     fontSize: 20, 
-    fontWeight: '700', 
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
@@ -183,15 +188,14 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   collHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  collIcon: { fontSize: 36 },
+  collIcon: { fontSize: 36, fontFamily: 'Knockout' },
   collName: { 
     color: '#1a1a2e', 
     fontSize: 18, 
-    fontWeight: '700', 
     fontFamily: 'Knockout' 
   },
-  collDesc: { color: '#475569', fontSize: 13, marginTop: 2 },
-  completeBadge: { fontSize: 24 },
+  collDesc: { color: '#475569', fontSize: 13, fontFamily: 'Knockout', marginTop: 2 },
+  completeBadge: { fontSize: 24, fontFamily: 'Knockout' },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   progressBar: { 
     flex: 1, 
@@ -205,7 +209,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0EA5E9', 
     borderRadius: 3 
   },
-  progressText: { color: '#475569', fontSize: 13, fontWeight: '700', width: 40 },
+  progressText: { color: '#475569', fontSize: 13, fontFamily: 'Knockout', width: 40 },
   itemsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
   itemChip: {
     flexDirection: 'row', 
@@ -221,20 +225,20 @@ const styles = StyleSheet.create({
     borderWidth: 1, 
     borderColor: 'rgba(34,197,94,0.3)' 
   },
-  itemName: { color: '#475569', fontSize: 11, maxWidth: 100 },
+  itemName: { color: '#475569', fontSize: 11, fontFamily: 'Knockout', maxWidth: 100 },
   itemNameDone: { color: '#22c55e' },
-  itemCheck: { color: '#22c55e', fontSize: 12, fontWeight: '700' },
-  moreText: { color: '#94a3b8', fontSize: 11, alignSelf: 'center' },
+  itemCheck: { color: '#22c55e', fontSize: 12, fontFamily: 'Knockout' },
+  moreText: { color: '#94a3b8', fontSize: 11, fontFamily: 'Knockout', alignSelf: 'center' },
   rewardsRow: { flexDirection: 'row', gap: 16, marginTop: 4 },
-  rewardText: { color: '#94a3b8', fontSize: 12 },
+  rewardItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  rewardText: { color: '#94a3b8', fontSize: 12, fontFamily: 'Knockout' },
   emptyContainer: { alignItems: 'center', paddingVertical: 60 },
-  emptyEmoji: { fontSize: 60 },
+  emptyEmoji: { fontSize: 60, fontFamily: 'Knockout' },
   emptyTitle: { 
     color: '#1a1a2e', 
     fontSize: 22, 
-    fontWeight: '700', 
     marginTop: 16, 
     fontFamily: 'Shark' 
   },
-  emptySubtitle: { color: '#475569', fontSize: 15, marginTop: 8 },
+  emptySubtitle: { color: '#475569', fontSize: 15, fontFamily: 'Knockout', marginTop: 8 },
 });

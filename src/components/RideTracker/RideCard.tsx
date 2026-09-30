@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   note: {
-    fontSize: 13,
+    fontSize: 13, fontFamily: 'Knockout',
     color: '#46617A',
     fontStyle: 'italic',
     marginTop: 8,

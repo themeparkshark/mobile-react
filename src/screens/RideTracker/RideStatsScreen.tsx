@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getRideStats, RideStatsType } from '../../api/endpoints/player-rides';
 import SharkRating from '../../components/RideTracker/SharkRating';
 import { colors } from '../../design-system';
+import { GameIcon, SharkLoader, type GameIconName } from '../../ui';
 
 // ─── Animated Counter ───
 interface AnimatedCounterProps {
@@ -39,11 +39,11 @@ AnimatedCounter.displayName = 'AnimatedCounter';
 interface StatCardProps {
   label: string;
   value: number;
-  icon: string;
+  icon: GameIconName;
 }
 const StatCard: React.FC<StatCardProps> = React.memo(({ label, value, icon }) => (
   <View style={styles.statCard}>
-    <Text style={styles.statIcon}>{icon}</Text>
+    <GameIcon name={icon} size={36} />
     <AnimatedCounter value={value} />
     <Text style={styles.statLabel}>{label}</Text>
   </View>
@@ -55,25 +55,19 @@ export default function RideStatsScreen() {
   const [stats, setStats] = useState<RideStatsType | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     getRideStats()
       .then(setStats)
-      .catch(console.error)
+      .catch(() => setStats(null))
       .finally(() => setLoading(false));
-  }, []);
+  };
+  useEffect(load, []);
 
-  if (loading) {
+  if (loading || !stats) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 60 }} />
-      </SafeAreaView>
-    );
-  }
-
-  if (!stats) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.errorText}>Failed to load stats</Text>
+        <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Ride stats didn't load"} onRetry={load} />
       </SafeAreaView>
     );
   }
@@ -82,7 +76,7 @@ export default function RideStatsScreen() {
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}>
-          <Text style={styles.backChevron}>‹</Text>
+          <GameIcon name="back" size={36} accessibilityLabel="Back" />
         </Pressable>
         <Text style={styles.title}>RIDE STATS</Text>
         <View style={{ width: 40 }} />
@@ -91,9 +85,9 @@ export default function RideStatsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Big Stats */}
         <View style={styles.statGrid}>
-          <StatCard label="Total Rides" value={stats.total_rides} icon="🦈" />
-          <StatCard label="Unique Rides" value={stats.unique_rides} icon="⭐" />
-          <StatCard label="Day Streak" value={stats.current_streak} icon="🔥" />
+          <StatCard label="Total Rides" value={stats.total_rides} icon="shark" />
+          <StatCard label="Unique Rides" value={stats.unique_rides} icon="star" />
+          <StatCard label="Day Streak" value={stats.current_streak} icon="streak" />
         </View>
 
         {/* Per Park */}
@@ -123,7 +117,7 @@ export default function RideStatsScreen() {
                   <Text style={styles.rankName}>{r.name}</Text>
                   <SharkRating rating={Math.round(r.avg_rating)} size={14} readonly />
                 </View>
-                <Text style={styles.rankScore}>{r.avg_rating}</Text>
+                <Text style={styles.rankScore}>{Number(r.avg_rating).toFixed(1)}</Text>
               </View>
             ))}
           </>
@@ -149,7 +143,7 @@ export default function RideStatsScreen() {
             onPress={() => navigation.navigate('RideWrapped')}
             style={({ pressed }) => [styles.wrappedCTA, pressed && { opacity: 0.85 }]}
           >
-            <Text style={styles.wrappedIcon}>🎁</Text>
+            <GameIcon name="gift" size={40} />
             <View style={{ flex: 1 }}>
               <Text style={styles.wrappedTitle}>
                 View Your Ride Wrapped
@@ -158,13 +152,13 @@ export default function RideStatsScreen() {
                 See your monthly ride summary
               </Text>
             </View>
-            <Text style={styles.wrappedArrow}>→</Text>
+            <GameIcon name="arrow" size={28} />
           </Pressable>
         )}
 
         {stats.total_rides === 0 && (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>📊</Text>
+            <GameIcon name="ride" size={72} />
             <Text style={styles.emptyText}>Start logging rides to see your stats!</Text>
           </View>
         )}
@@ -187,20 +181,17 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   backChevron: { 
     color: '#FFFFFF', 
-    fontSize: 24, 
-    fontWeight: '600',
+    fontSize: 24, fontFamily: 'Knockout',
     marginLeft: -2,
   },
   title: { 
     color: '#FFFFFF', 
     fontSize: 20, 
-    fontWeight: '700', 
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
@@ -218,18 +209,16 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
-  statIcon: { fontSize: 28, marginBottom: 4 },
+  statIcon: { fontSize: 28, fontFamily: 'Knockout', marginBottom: 4 },
   statNumber: { 
     fontSize: 32, 
-    fontWeight: '800', 
     color: '#09268f', 
     fontFamily: 'Shark' 
   },
-  statLabel: { fontSize: 12, color: '#475569', marginTop: 4, textAlign: 'center' },
+  statLabel: { fontSize: 12, fontFamily: 'Knockout', color: '#475569', marginTop: 4, textAlign: 'center' },
   sectionTitle: { 
     color: '#1a1a2e', 
     fontSize: 16, 
-    fontWeight: '700', 
     marginBottom: 12, 
     marginTop: 20, 
     textTransform: 'uppercase', 
@@ -237,7 +226,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Knockout' 
   },
   parkRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 },
-  parkName: { color: '#1a1a2e', fontSize: 13, width: 100, fontWeight: '600' },
+  parkName: { color: '#1a1a2e', fontSize: 13, fontFamily: 'Knockout', width: 100 },
   parkBar: { 
     flex: 1, 
     height: 8, 
@@ -250,7 +239,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#09268f', 
     borderRadius: 4 
   },
-  parkCount: { color: '#475569', fontSize: 13, fontWeight: '700', width: 32, textAlign: 'right' },
+  parkCount: { color: '#475569', fontSize: 13, fontFamily: 'Knockout', width: 32, textAlign: 'right' },
   rankRow: {
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -265,9 +254,9 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  rankNum: { color: '#fec90e', fontSize: 16, fontWeight: '800', width: 32 },
-  rankName: { color: '#1a1a2e', fontSize: 14, fontWeight: '600' },
-  rankScore: { color: '#09268f', fontSize: 16, fontWeight: '700' },
+  rankNum: { color: '#fec90e', fontSize: 16, fontFamily: 'Shark', width: 32 },
+  rankName: { color: '#1a1a2e', fontSize: 14, fontFamily: 'Knockout' },
+  rankScore: { color: '#09268f', fontSize: 16, fontFamily: 'Shark' },
   wrappedCTA: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -285,21 +274,20 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  wrappedIcon: { fontSize: 28 },
+  wrappedIcon: { fontSize: 28, fontFamily: 'Knockout' },
   wrappedTitle: { 
     color: '#fec90e', 
     fontSize: 16, 
-    fontWeight: '700', 
     fontFamily: 'Shark' 
   },
   wrappedSubtitle: { 
     color: '#475569', 
-    fontSize: 13, 
+    fontSize: 13, fontFamily: 'Knockout', 
     marginTop: 2 
   },
-  wrappedArrow: { color: '#94a3b8', fontSize: 16 },
+  wrappedArrow: { color: '#94a3b8', fontSize: 16, fontFamily: 'Knockout' },
   emptyContainer: { alignItems: 'center', paddingVertical: 60 },
-  emptyEmoji: { fontSize: 48 },
-  emptyText: { color: '#475569', fontSize: 15, marginTop: 12 },
-  errorText: { color: '#ef4444', textAlign: 'center', marginTop: 60, fontSize: 16 },
+  emptyEmoji: { fontSize: 48, fontFamily: 'Knockout' },
+  emptyText: { color: '#475569', fontSize: 15, fontFamily: 'Knockout', marginTop: 12 },
+  errorText: { color: '#ef4444', textAlign: 'center', marginTop: 60, fontSize: 16, fontFamily: 'Knockout' },
 });

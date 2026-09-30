@@ -9,6 +9,8 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TutorialContextType, TutorialSequence, TutorialStep, SpotlightTarget } from './types';
 import { getStepsForSequence } from './steps';
+import { teacherBottomOffset } from './tutorialLayout';
+import { Dimensions } from 'react-native';
 import SpotlightOverlay from './SpotlightOverlay';
 import TeacherShark from './TeacherShark';
 import MemoryGame from '../../games/memory/MemoryGame';
@@ -85,10 +87,14 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     });
   }, []);
 
-  // Auto-complete all tutorials for existing players (handles Expo Go reinstall / cache wipe)
+  // Auto-complete all tutorials for existing players (handles a reinstall or cache wipe).
+  // Checked once per install load: after "Replay Tutorials" the empty set is on purpose.
+  const existingPlayerChecked = useRef(false);
   useEffect(() => {
     if (!loaded || !player || firstPlayPreview) return;
-    if (completedSequences.size > 0) return; // Already has data — not a fresh wipe
+    if (existingPlayerChecked.current) return;
+    existingPlayerChecked.current = true;
+    if (completedSequences.size > 0) return; // Already has data, not a fresh wipe
 
     const isExistingPlayer =
       (player.completed_tasks_count ?? 0) > 0 ||
@@ -220,6 +226,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
 
   // Reset all tutorial progress
   const resetAll = useCallback(async () => {
+    existingPlayerChecked.current = true;
     firstPlayRef.current = false; firstPlayOrigin.current = null; setFirstPlayOpen(false);
     inParkOnboardingRef.current = false;
     setCompletedSequences(new Set());
@@ -284,7 +291,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
         <>
           <SpotlightOverlay
             target={spotlightTarget}
-            opacity={0.62}
+            opacity={0.55}
             onPress={currentStep.activity ? undefined : nextStep}
             onSpotlightPress={currentStep.interactive ? nextStep : undefined}
             spotlightTappable={currentStep.interactive}
@@ -302,7 +309,8 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
             totalSteps={currentSteps.length}
             onNext={currentStep.activity ? startFirstPlay : nextStep}
             onSkip={skipTutorial}
-            bottomOffset={currentSequence === 'park_arrival' || inParkOnboardingRef.current ? 120 : undefined}
+            bottomOffset={teacherBottomOffset(currentStep, spotlightTarget, Dimensions.get('window').height,
+              currentSequence === 'park_arrival' || inParkOnboardingRef.current ? 120 : 20)}
           />
         </>
       )}

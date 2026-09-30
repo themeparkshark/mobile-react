@@ -15,6 +15,7 @@ import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { GameIcon } from '../../ui';
 
 // ─── Rider Levels (based on rides logged) ───
 const RIDER_LEVELS = [
@@ -117,7 +118,7 @@ function MenuRow({ icon, title, sub, onPress, delay = 0, badge }: {
             <Text style={s.menuRowBadgeText}>{badge}</Text>
           </View>
         )}
-        <Text style={s.menuRowChevron}>›</Text>
+        <GameIcon name="arrow" size={22} />
       </Pressable>
     </FadeIn>
   );
@@ -193,7 +194,7 @@ export default function RideTrackerScreen() {
             <View style={s.heroCopy}>
               <Text style={s.heroEyebrow}>YOUR RIDE JOURNAL</Text>
               {has ? <CountUp to={stats.total_rides} style={s.heroNum} />
-                : <Text style={s.heroNum}>{loadUnavailable ? '—' : '0'}</Text>}
+                : <Text style={s.heroNum}>{loadUnavailable ? '-' : '0'}</Text>}
               <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'JOURNAL OFFLINE' : 'RIDES LOGGED'}</Text>
             </View>
             <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
@@ -246,7 +247,7 @@ export default function RideTrackerScreen() {
                   <Text style={s.logBtnTitle}>Log a Ride</Text>
                   <Text style={s.logBtnSub}>Track your theme park adventures</Text>
                 </View>
-                <Text style={s.logBtnArrow}>→</Text>
+                <GameIcon name="arrow" size={30} />
               </LinearGradient>
             </Pressable>
           </FadeIn>
@@ -264,8 +265,8 @@ export default function RideTrackerScreen() {
                   <Text style={s.statLabel}>Unique</Text>
                 </View>
                 <View style={s.statPill}>
-                  <Text style={s.statVal}>{stats.current_streak > 0 ? `${stats.current_streak}d` : '0'}</Text>
-                  <Text style={s.statLabel}>Streak</Text>
+                  <Text style={s.statVal}>{stats.current_streak}</Text>
+                  <Text style={s.statLabel}>Day streak</Text>
                 </View>
               </View>
             </FadeIn>
@@ -280,7 +281,8 @@ export default function RideTrackerScreen() {
               onPress={() => nav.navigate('RideHistory')} delay={420}
             />
             <MenuRow
-              icon={require('../../../assets/images/toolbar/leaderboard.png')}
+              // His star, not the podium: the podium is the STANDINGS tab right below.
+              icon={require('../../../assets/images/screens/pin-collections/star.png')}
               title="Stats & Insights" sub="Patterns, favorites, milestones"
               onPress={() => nav.navigate('RideStats')} delay={450}
             />
@@ -331,7 +333,10 @@ export default function RideTrackerScreen() {
               <View style={s.sectionRow}>
                 <Text style={s.sectionTitle}>RECENT RIDES</Text>
                 <Pressable onPress={() => nav.navigate('RideHistory')} style={({ pressed }) => [pressed && { opacity: 0.6 }]}>
-                  <Text style={s.seeAll}>See All →</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={s.seeAll}>See All</Text>
+                    <GameIcon name="arrow" size={18} />
+                  </View>
                 </Pressable>
               </View>
               {recent.map(ride => (
@@ -375,11 +380,11 @@ const s = StyleSheet.create({
   heroEyebrow: { color: '#C7EFFF', fontSize: 13, fontFamily: 'Knockout', letterSpacing: 1.4 },
   heroShark: { width: 150, height: 134, marginRight: -9, alignSelf: 'flex-end' },
   heroNum: {
-    color: '#fff', fontSize: 53, fontWeight: '900', fontFamily: 'Shark',
-    textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4,
+    color: '#fff', fontSize: 53, fontFamily: 'Shark',
+    textShadowColor: 'rgba(5,52,110,0.2)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4,
   },
   heroLabel: {
-    color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '800',
+    color: 'rgba(255,255,255,0.85)', fontSize: 13,
     fontFamily: 'Knockout', letterSpacing: 3, marginTop: -2,
   },
 
@@ -393,8 +398,8 @@ const s = StyleSheet.create({
   rankPill: {
     backgroundColor: '#09268f', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 3,
   },
-  rankPillText: { color: '#fff', fontSize: 11, fontWeight: '900', fontFamily: 'Knockout', letterSpacing: 1 },
-  rankNext: { fontSize: 12, color: '#64748b' },
+  rankPillText: { color: '#fff', fontSize: 11, fontFamily: 'Knockout', letterSpacing: 1 },
+  rankNext: { fontSize: 12, fontFamily: 'Knockout', color: '#64748b' },
 
   // Content
   content: { paddingHorizontal: 16 },
@@ -408,9 +413,9 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 18, gap: 14,
   },
   logBtnIcon: { width: 45, height: 45 },
-  logBtnTitle: { color: '#fff', fontSize: 20, fontWeight: '900', fontFamily: 'Shark' },
-  logBtnSub: { color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 1 },
-  logBtnArrow: { color: '#fff', fontSize: 24, fontWeight: '600' },
+  logBtnTitle: { color: '#fff', fontSize: 20, fontFamily: 'Shark' },
+  logBtnSub: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontFamily: 'Knockout', marginTop: 1 },
+  logBtnArrow: { color: '#fff', fontSize: 24, fontFamily: 'Knockout' },
 
   // Stats
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
@@ -418,27 +423,27 @@ const s = StyleSheet.create({
     flex: 1, backgroundColor: '#fff', borderRadius: 14, paddingVertical: 14, alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
-  statVal: { fontSize: 24, fontWeight: '900', fontFamily: 'Shark', color: '#1a1a2e' },
-  statLabel: { fontSize: 12, fontWeight: '700', fontFamily: 'Knockout', color: '#64748b', marginTop: 2 },
+  statVal: { fontSize: 24, fontFamily: 'Shark', color: '#1a1a2e' },
+  statLabel: { fontSize: 12, fontFamily: 'Knockout', color: '#64748b', marginTop: 2 },
 
   // Top Ride
   topRide: {
     flexDirection: 'row', alignItems: 'center', borderRadius: 18, padding: 16, gap: 12, marginBottom: 20,
     shadowColor: '#c8961e', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
   },
-  topRideStar: { fontSize: 32 },
-  topRideLabel: { fontSize: 12, fontWeight: '800', fontFamily: 'Knockout', color: 'rgba(0,0,0,0.5)', letterSpacing: 0.5 },
-  topRideName: { fontSize: 16, fontWeight: '800', color: '#1a1a2e', marginTop: 1 },
+  topRideStar: { fontSize: 32, fontFamily: 'Knockout' },
+  topRideLabel: { fontSize: 12, fontFamily: 'Knockout', color: 'rgba(5,52,110,0.5)', letterSpacing: 0.5 },
+  topRideName: { fontSize: 16, fontFamily: 'Shark', color: '#1a1a2e', marginTop: 1 },
   topRideScoreBubble: {
-    backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: 'rgba(5,52,110,0.12)', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: 1.5, borderColor: 'rgba(5,52,110,0.08)',
   },
-  topRideScore: { fontSize: 20, fontWeight: '900', fontFamily: 'Shark', color: '#1a1a2e' },
+  topRideScore: { fontSize: 20, fontFamily: 'Shark', color: '#1a1a2e' },
 
   // Sections
-  sectionTitle: { fontSize: 14, fontWeight: '900', fontFamily: 'Knockout', color: '#1a1a2e', letterSpacing: 1.5, marginBottom: 12 },
+  sectionTitle: { fontSize: 14, fontFamily: 'Knockout', color: '#1a1a2e', letterSpacing: 1.5, marginBottom: 12 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  seeAll: { fontSize: 14, fontWeight: '700', color: '#0EA5E9' },
+  seeAll: { fontSize: 14, fontFamily: 'Knockout', color: '#0EA5E9' },
 
   // Menu
   menuList: { gap: 8, marginBottom: 20 },
@@ -448,11 +453,11 @@ const s = StyleSheet.create({
   },
   menuRowIcon: { width: 48, height: 48 },
   menuRowTitle: { fontSize: 17, fontFamily: 'Knockout', color: '#103F75' },
-  menuRowSub: { fontSize: 13, color: '#51718D', marginTop: 1 },
-  menuRowChevron: { fontSize: 22, color: '#cbd5e1', fontWeight: '300' },
+  menuRowSub: { fontSize: 13, fontFamily: 'Knockout', color: '#51718D', marginTop: 1 },
+  menuRowChevron: { fontSize: 22, fontFamily: 'Knockout', color: '#cbd5e1' },
   menuRowBadge: { borderRadius: 10, minWidth: 22, height: 22, paddingHorizontal: 7,
     backgroundColor: '#0877CA', alignItems: 'center', justifyContent: 'center' },
-  menuRowBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  menuRowBadgeText: { color: '#fff', fontSize: 11, fontFamily: 'Knockout' },
 
   // Cards
   card: {
@@ -461,13 +466,13 @@ const s = StyleSheet.create({
   },
   mostRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   mostMedal: { fontSize: 16, fontFamily: 'Shark', color: '#8A5B08', width: 30, textAlign: 'center' },
-  mostName: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1a1a2e' },
+  mostName: { flex: 1, fontSize: 15, fontFamily: 'Knockout', color: '#1a1a2e' },
   mostChip: { backgroundColor: '#e8f4fd', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
-  mostChipText: { fontSize: 13, fontWeight: '700', color: '#09268f' },
-  divider: { height: 1, backgroundColor: 'rgba(0,0,0,0.04)' },
+  mostChipText: { fontSize: 13, fontFamily: 'Knockout', color: '#09268f' },
+  divider: { height: 1, backgroundColor: 'rgba(5,52,110,0.04)' },
 
   // Empty
-  emptyTitle: { fontSize: 22, fontWeight: '900', fontFamily: 'Shark', color: '#1a1a2e', marginBottom: 8 },
-  emptySub: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 20, paddingHorizontal: 16 },
+  emptyTitle: { fontSize: 22, fontFamily: 'Shark', color: '#1a1a2e', marginBottom: 8 },
+  emptySub: { fontSize: 14, fontFamily: 'Knockout', color: '#64748b', textAlign: 'center', lineHeight: 20, paddingHorizontal: 16 },
   emptyShark: { width: 100, height: 88, marginBottom: 8 },
 });

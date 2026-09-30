@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import RenderHtml from 'react-native-render-html';
 import config from '../config';
+import { GameIcon } from '../ui';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import dayjs from '../helpers/dayjs';
 
@@ -121,13 +122,13 @@ export default function ArticleScreen({ route, navigation }: any) {
                 alignItems: 'center',
               }}
             >
-              <Text style={{ fontSize: 60 }}>🦈</Text>
+              <GameIcon name="shark" size={110} />
             </LinearGradient>
           )}
 
           {/* Gradient overlay on image */}
           <LinearGradient
-            colors={['rgba(0,0,0,0.3)', 'transparent', 'rgba(0,0,0,0.4)']}
+            colors={['rgba(5,52,110,0.25)', 'transparent', 'rgba(5,52,110,0.35)']}
             style={{
               position: 'absolute',
               top: 0,
@@ -151,7 +152,7 @@ export default function ArticleScreen({ route, navigation }: any) {
               width: 36,
               height: 36,
               borderRadius: 18,
-              backgroundColor: 'rgba(0,0,0,0.4)',
+              backgroundColor: 'rgba(255,255,255,0.85)',
               justifyContent: 'center',
               alignItems: 'center',
             }}
@@ -170,12 +171,12 @@ export default function ArticleScreen({ route, navigation }: any) {
               width: 36,
               height: 36,
               borderRadius: 18,
-              backgroundColor: 'rgba(0,0,0,0.4)',
+              backgroundColor: 'rgba(255,255,255,0.85)',
               justifyContent: 'center',
               alignItems: 'center',
             }}
           >
-            <Text style={{ color: 'white', fontSize: 18 }}>↗</Text>
+            <GameIcon name="arrow" size={30} accessibilityLabel="Open in browser" />
           </TouchableOpacity>
         </View>
 

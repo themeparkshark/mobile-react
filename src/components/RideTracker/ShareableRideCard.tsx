@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
-import { Alert, View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import ViewShot from 'react-native-view-shot';
@@ -9,11 +9,8 @@ import { colors, shadows, borderRadius } from '../../design-system';
 import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
-import SharkReactionIcon from './SharkReactionIcon';
-
-const REACTION_LABELS: Record<string, string> = {
-  '🤯': 'Mind blown', '😂': 'Laughing', '😴': 'Sleepy', '🤢': 'Queasy', '🔥': 'Loved it',
-};
+import SharkReactionIcon, { reactionLabel } from './SharkReactionIcon';
+import { gameAlert } from '../../ui';
 
 interface ShareableRideCardProps {
   ride: PlayerRideType;
@@ -62,7 +59,7 @@ const CardContent: React.FC<{ ride: PlayerRideType; rideCount?: number }> = Reac
           {ride.reaction && (
             <View style={cardStyles.reactionRow}>
               <SharkReactionIcon reaction={ride.reaction} size={28} />
-              <Text style={cardStyles.reactionLabel}>{REACTION_LABELS[ride.reaction] ?? 'My reaction'}</Text>
+              <Text style={cardStyles.reactionLabel}>{reactionLabel(ride.reaction) ?? 'My reaction'}</Text>
             </View>
           )}
           <View style={cardStyles.statsRow}>
@@ -124,7 +121,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
 
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert('Sharing unavailable', 'This device cannot open a share sheet right now.');
+        gameAlert('Sharing unavailable', 'This device cannot open a share sheet right now.');
         return;
       }
 
@@ -133,11 +130,11 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
 
       await Sharing.shareAsync(uri, {
         mimeType: 'image/png',
-        dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark! 🦈`,
+        dialogTitle: `My ${ride.ride_name} experience on Theme Park Shark!`,
       });
       onShare?.();
     } catch {
-      Alert.alert('Could not make your card', 'Your ride is saved. Try sharing it again.');
+      gameAlert('Could not make your card', 'Your ride is saved. Try sharing it again.');
     } finally {
       busy.current = false;
       setSharing(false);
@@ -203,7 +200,6 @@ const cardStyles = StyleSheet.create({
   brandText: {
     color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: '800',
     letterSpacing: 2,
     fontFamily: 'Knockout',
   },
@@ -213,11 +209,10 @@ const cardStyles = StyleSheet.create({
   heroRow: { flexDirection: 'row', alignItems: 'center', minHeight: 137, marginBottom: 11 },
   heroCopy: { flex: 1, justifyContent: 'center', paddingRight: 2 },
   heroShark: { width: 112, height: 137, marginRight: -9 },
-  parkName: { color: '#FFF0A6', fontSize: 13, fontWeight: '800', marginBottom: 5 },
+  parkName: { color: '#FFF0A6', fontSize: 13, fontFamily: 'Knockout', marginBottom: 5 },
   rideName: {
     color: '#ffffff',
     fontSize: 29,
-    fontWeight: '900',
     fontFamily: 'Shark',
     marginBottom: 8,
     textShadowColor: 'rgba(0,45,100,0.4)',
@@ -226,16 +221,16 @@ const cardStyles = StyleSheet.create({
   },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   ratingStar: { width: 22, height: 22 },
-  ratingText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', marginLeft: 5 },
+  ratingText: { color: '#FFFFFF', fontSize: 12, fontFamily: 'Knockout', marginLeft: 5 },
   detailsPanel: { backgroundColor: '#F3FBFF', borderRadius: 14, padding: 13,
     borderWidth: 1, borderColor: '#B8E5F8' },
   reactionRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
-  reactionLabel: { color: '#0B4B83', fontSize: 14, fontWeight: '800' },
+  reactionLabel: { color: '#0B4B83', fontSize: 14, fontFamily: 'Knockout' },
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   stat: { flex: 1 },
-  statValue: { color: '#0B4B83', fontSize: 13, fontWeight: '800', marginTop: 3 },
-  statLabel: { color: '#39759C', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 },
-  note: { color: '#315C7C', fontSize: 12, fontStyle: 'italic', marginTop: 10 },
+  statValue: { color: '#0B4B83', fontSize: 13, fontFamily: 'Knockout', marginTop: 3 },
+  statLabel: { color: '#39759C', fontSize: 9, fontFamily: 'Knockout', letterSpacing: 0.5 },
+  note: { color: '#315C7C', fontSize: 12, fontFamily: 'Knockout', fontStyle: 'italic', marginTop: 10 },
   watermark: {
     marginTop: 10,
     flexDirection: 'row',
@@ -243,7 +238,7 @@ const cardStyles = StyleSheet.create({
     alignItems: 'center',
   },
   watermarkText: { color: '#D6F3FF', fontSize: 9, fontFamily: 'Knockout', letterSpacing: 1.4 },
-  watermarkUrl: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
+  watermarkUrl: { color: '#FFFFFF', fontSize: 10, fontFamily: 'Knockout' },
   shareBtn: {
     backgroundColor: colors.tertiary,
     borderRadius: borderRadius.lg,
@@ -255,7 +250,6 @@ const cardStyles = StyleSheet.create({
   shareBtnText: {
     color: '#000',
     fontSize: 16,
-    fontWeight: '800',
     fontFamily: 'Knockout',
   },
 });

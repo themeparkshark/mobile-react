@@ -15,6 +15,7 @@ import view from '../api/endpoints/social-posts/view';
 import { SocialPostType } from '../models/social-post-type';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
+import { GameIcon } from '../ui';
 import {
   SoundEffectContext,
   SoundEffectContextType,
@@ -160,7 +161,7 @@ export default function SocialPost({
                     gap: 4,
                   }}
                 >
-                  <Text style={{ fontSize: 14, color: 'white' }}>✓</Text>
+                  <GameIcon name="check" size={16} />
                   <Text
                     style={{
                       fontFamily: 'Knockout',
@@ -221,20 +222,7 @@ export default function SocialPost({
                   justifyContent: 'center',
                 }}
               >
-                <View
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 24,
-                    backgroundColor: 'rgba(0,0,0,0.6)',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderWidth: 2,
-                    borderColor: 'rgba(255,255,255,0.8)',
-                  }}
-                >
-                  <Text style={{ fontSize: 20, color: 'white', marginLeft: 3 }}>▶</Text>
-                </View>
+                <GameIcon name="play" size={52} accessibilityLabel="Play video" />
               </View>
             )}
 

@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput,
+  Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput,
   TouchableWithoutFeedback, View,
 } from 'react-native';
 import Animated, {
@@ -14,10 +14,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import updatePlayer from '../api/endpoints/me/update-player';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
+import { BRAND, GameButton, GameIcon, textPreset } from '../ui';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 // Theme-park-flavored names, all letters/numbers and never over 12 characters.
 const FIRST = ['Churro', 'Fin', 'Coaster', 'Splash', 'Chomp', 'Dole', 'Turkey', 'Castle', 'Rocket', 'Pirate',
-  'Popcorn', 'Loop', 'Drop', 'Wave', 'Jaws', 'Tiki', 'Parade'];
+  'Popcorn', 'Loop', 'Drop', 'Wave', 'Tiki', 'Parade'];
 const SECOND = ['Fan', 'Fin', 'Rider', 'Chomp', 'King', 'Boss', 'Shark', 'Queen', 'Hero', 'Pal', 'Buddy', 'Legend'];
 
 function rollName(): string {
@@ -50,6 +52,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   const { refreshPlayer } = useContext(AuthContext);
   const { labels } = useCrumbs();
   const inputRef = useRef<TextInput>(null);
+  const reduced = useUiReducedMotion();
 
   // Shark swims in, then bobs; the starburst turns slowly behind it.
   const bob = useSharedValue(0);
@@ -160,19 +163,24 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
                     />
                   </Pressable>
                   <Pressable onPress={roll} style={styles.dice} accessibilityRole="button" accessibilityLabel="Roll a random name">
-                    <Animated.Text style={[styles.diceText, diceStyle]}>🎲</Animated.Text>
+                    <Animated.View style={diceStyle}><GameIcon name="dice" size={36} /></Animated.View>
                   </Pressable>
                 </View>
-                <Text style={[styles.hint, hintOk && styles.hintOk, !!serverError && styles.hintBad]}>
-                  {hintOk ? '✓ ' : ''}{hint}
-                </Text>
-                <Pressable onPress={() => void submit()} disabled={submitting} accessibilityRole="button"
-                  style={({ pressed }) => [styles.go, !status.ok && styles.goOff, pressed && status.ok && styles.goPressed]}>
-                  {submitting
-                    ? <ActivityIndicator color="#09268f" />
-                    : <Text style={styles.goText}>{labels?.letsgo || "Let's Go!"}</Text>}
-                </Pressable>
+                <View style={styles.hintRow}>
+                  {hintOk && <GameIcon name="check" size={18} />}
+                  <Text style={[styles.hint, hintOk && styles.hintOk, !!serverError && styles.hintBad]}>{hint}</Text>
+                </View>
+                {/* His yellow button. An invalid name still takes the press so the card can shake and say why. */}
+                <View style={[styles.go, !status.ok && styles.goOff]}>
+                  <GameButton label={labels?.letsgo || "Let's Go!"} loading={submitting} haptics={false}
+                    onPress={() => void submit()} accessibilityHint="Saves your shark name" />
+                </View>
               </Animated.View>
+            )}
+            {!done && (
+              <Animated.Text entering={reduced ? undefined : FadeInUp.delay(900).duration(400)} style={styles.disclaimer}>
+                Theme Park Shark is an independent fan app, not affiliated with or endorsed by any theme park.
+              </Animated.Text>
             )}
           </KeyboardAvoidingView>
         </SafeAreaView>
@@ -187,7 +195,7 @@ const styles = StyleSheet.create({
   column: { flex: 1, alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 22, paddingBottom: 16 },
   logo: { width: 250, height: 110, marginTop: 8 },
   hook: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 4, lineHeight: 22,
-    textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3 },
+    textShadowColor: 'rgba(5,52,110,0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3 },
   stage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', minHeight: 170 },
   burst: { position: 'absolute', width: 420, height: 420, opacity: 0.1 },
   shark: { width: 260, height: 260 },
@@ -199,13 +207,12 @@ const styles = StyleSheet.create({
   input: { fontFamily: 'Shark', fontSize: 26, color: '#09268f', textAlign: 'center', paddingVertical: 10 },
   dice: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center',
     borderBottomWidth: 4, borderBottomColor: '#d99a00' },
-  diceText: { fontSize: 28 },
-  hint: { fontFamily: 'Knockout', fontSize: 15, color: '#5b7a9c', textAlign: 'center', marginTop: 8 },
+  hintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
+  hint: { fontFamily: 'Knockout', fontSize: 15, color: '#5b7a9c', textAlign: 'center' },
   hintOk: { color: '#16a34a' },
   hintBad: { color: '#dc2626' },
-  go: { marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 18, paddingVertical: 14, alignItems: 'center',
-    borderBottomWidth: 5, borderBottomColor: '#d99a00' },
-  goOff: { backgroundColor: '#e5edf5', borderBottomColor: '#c9d6e3' },
-  goPressed: { transform: [{ translateY: 3 }], borderBottomWidth: 2 },
-  goText: { fontFamily: 'Shark', fontSize: 24, color: '#09268f', textTransform: 'uppercase' },
+  go: { marginTop: 10, alignItems: 'center' },
+  goOff: { opacity: 0.55 },
+  disclaimer: { ...textPreset('caption', 'onBlue'), color: BRAND.white, opacity: 0.9, textAlign: 'center', marginTop: 10,
+    marginHorizontal: 12, textShadowColor: 'rgba(5,52,110,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
 });

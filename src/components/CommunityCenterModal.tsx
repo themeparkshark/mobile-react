@@ -1,19 +1,19 @@
 import { useContext, useState } from 'react';
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
 import { AuthContext } from '../context/AuthProvider';
-import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import api from '../api/client';
 import config from '../config';
 import * as Haptics from '../helpers/haptics';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
+import { GameButton, GameIcon, GameRichText, SharkLoader } from '../ui';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { formatCooldown, ticketsEarnedFrom } from '../screens/CommunityCenter/communityCenterRewards';
 
 interface CenterData {
   id: number;
@@ -48,7 +48,7 @@ export default function CommunityCenterModal({
   } | null>(null);
   
   const { player, refreshPlayer } = useContext(AuthContext);
-  const { triggerFly } = useCurrencyFly();
+  const reduced = useUiReducedMotion();
 
   const handleGive = async () => {
     if (!center) return;
@@ -59,14 +59,11 @@ export default function CommunityCenterModal({
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      // Fly tickets animation (would need ticket icon URL)
-      // triggerFly({ ... })
-      
       setResult({
         type: 'give',
         success: true,
         message: response.data.message,
-        ticketsEarned: 2,
+        ticketsEarned: ticketsEarnedFrom(response.data, 'give'),
       });
       
       refreshPlayer?.();
@@ -96,7 +93,7 @@ export default function CommunityCenterModal({
         type: 'claim',
         success: true,
         message: response.data.message,
-        ticketsEarned: 1,
+        ticketsEarned: ticketsEarnedFrom(response.data, 'claim'),
         giverName: response.data.giver_name,
       });
       
@@ -127,8 +124,8 @@ export default function CommunityCenterModal({
     <Modal
       isVisible={visible}
       onBackdropPress={handleClose}
-      animationIn="zoomIn"
-      animationOut="zoomOut"
+      animationIn={reduced ? 'fadeIn' : 'zoomIn'}
+      animationOut={reduced ? 'fadeOut' : 'zoomOut'}
     >
       <View style={styles.container}>
         <Ribbon text="Community Center" />
@@ -137,40 +134,37 @@ export default function CommunityCenterModal({
           {/* Result View */}
           {result ? (
             <View style={styles.resultContainer}>
-              <Text style={styles.resultEmoji}>
-                {result.success ? (result.type === 'give' ? '🎁' : '🎉') : '😔'}
-              </Text>
+              <GameIcon name={result.success ? (result.type === 'give' ? 'gift' : 'chestOpen') : 'info'} size={72}
+                style={{ marginBottom: 10 }} />
               <Text style={[
                 styles.resultTitle,
                 !result.success && styles.resultTitleError,
               ]}>
                 {result.success ? 'Success!' : 'Oops!'}
               </Text>
-              <Text style={styles.resultMessage}>{result.message}</Text>
+              <GameRichText preset="body" tone="onBlue" style={styles.resultMessage}>{result.message}</GameRichText>
               
-              {result.success && result.ticketsEarned && (
-                <View style={styles.rewardBadge}>
-                  <Text style={styles.rewardText}>
-                    +{result.ticketsEarned} 🎟️
-                  </Text>
+              {result.success && !!result.ticketsEarned && (
+                <View style={[styles.rewardBadge, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                  <Text style={styles.rewardText}>+{result.ticketsEarned}</Text>
+                  <GameIcon name="ticket" size={30} />
                 </View>
               )}
               
-              <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
-                <Text style={styles.doneButtonText}>Awesome!</Text>
-              </TouchableOpacity>
+              <GameButton label="Awesome!" onPress={handleClose} size="compact" />
             </View>
           ) : (
             <>
               {/* Header */}
-              <Text style={styles.title}>🏠 {center.name}</Text>
+              <Text style={styles.title}>{center.name}</Text>
               
               {/* Gift Count */}
-              <View style={styles.giftCount}>
+              <View style={[styles.giftCount, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}>
+                <GameIcon name="gift" size={26} style={center.available_gifts > 0 ? undefined : { opacity: 0.45 }} />
                 <Text style={styles.giftCountText}>
                   {center.available_gifts > 0
-                    ? `🎁 ${center.available_gifts} gift${center.available_gifts > 1 ? 's' : ''} waiting!`
-                    : '📭 No gifts right now'}
+                    ? `${center.available_gifts} gift${center.available_gifts > 1 ? 's' : ''} waiting!`
+                    : 'No gifts right now'}
                 </Text>
               </View>
               
@@ -179,10 +173,9 @@ export default function CommunityCenterModal({
                 {/* Give Section */}
                 <View style={styles.actionSection}>
                   <Text style={styles.actionTitle}>Leave a Gift</Text>
-                  <Text style={styles.actionDesc}>
-                    Cost: 350 coins{'\n'}
-                    Reward: 2 tickets 🎟️
-                  </Text>
+                  <GameRichText preset="bodySmall" tone="onBlue" style={styles.actionDesc}>
+                    {'Costs 350 [icon:coin]\nGet 2 [icon:ticket]'}
+                  </GameRichText>
                   
                   {center.can_give ? (
                     hasEnoughCoins ? (
@@ -197,9 +190,10 @@ export default function CommunityCenterModal({
                       </Text>
                     )
                   ) : (
-                    <Text style={styles.cooldownText}>
-                      ⏱️ Wait {center.give_cooldown_remaining}m
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <GameIcon name="timer" size={20} />
+                      <Text style={styles.cooldownText}>Wait {formatCooldown(center.give_cooldown_remaining)}</Text>
+                    </View>
                   )}
                 </View>
                 
@@ -209,9 +203,9 @@ export default function CommunityCenterModal({
                 {/* Claim Section */}
                 <View style={styles.actionSection}>
                   <Text style={styles.actionTitle}>Claim a Gift</Text>
-                  <Text style={styles.actionDesc}>
-                    Reward: 1 ticket 🎟️
-                  </Text>
+                  <GameRichText preset="bodySmall" tone="onBlue" style={styles.actionDesc}>
+                    {'Get 1 [icon:ticket]'}
+                  </GameRichText>
                   
                   {center.available_gifts > 0 ? (
                     center.can_claim ? (
@@ -221,9 +215,10 @@ export default function CommunityCenterModal({
                         disabled={loading}
                       />
                     ) : (
-                      <Text style={styles.cooldownText}>
-                        ⏱️ Wait {center.claim_cooldown_remaining}m
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <GameIcon name="timer" size={20} />
+                        <Text style={styles.cooldownText}>Wait {formatCooldown(center.claim_cooldown_remaining)}</Text>
+                      </View>
                     )
                   ) : (
                     <Text style={styles.disabledText}>No gifts to claim</Text>
@@ -232,11 +227,7 @@ export default function CommunityCenterModal({
               </View>
               
               {loading && (
-                <ActivityIndicator
-                  size="large"
-                  color={config.primary}
-                  style={styles.loader}
-                />
+                <SharkLoader compact style={styles.loader} />
               )}
             </>
           )}
@@ -251,13 +242,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   content: {
-    backgroundColor: '#1a3a5c',
-    borderRadius: 16,
+    backgroundColor: '#0a77bf',
+    borderRadius: 20,
     marginTop: -20,
     width: '90%',
     padding: 20,
     borderWidth: 3,
-    borderColor: '#3b82f6',
+    borderColor: '#ffffff',
   },
   title: {
     fontFamily: 'Shark',
@@ -288,7 +279,7 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontFamily: 'Shark',
     fontSize: 18,
-    color: '#4ade80',
+    color: '#ffe07a',
   },
   actionDesc: {
     fontFamily: 'Knockout',
@@ -310,7 +301,7 @@ const styles = StyleSheet.create({
   disabledText: {
     fontFamily: 'Knockout',
     fontSize: 14,
-    color: 'rgba(255,255,255,0.4)',
+    color: 'rgba(255,255,255,0.75)',
     marginTop: 8,
   },
   loader: {
@@ -327,7 +318,7 @@ const styles = StyleSheet.create({
   resultTitle: {
     fontFamily: 'Shark',
     fontSize: 28,
-    color: '#4ade80',
+    color: '#ffe07a',
     marginBottom: 8,
   },
   resultTitleError: {
@@ -350,10 +341,10 @@ const styles = StyleSheet.create({
   rewardText: {
     fontFamily: 'Shark',
     fontSize: 24,
-    color: '#1a1a1a',
+    color: '#05346e',
   },
   doneButton: {
-    backgroundColor: '#4ade80',
+    backgroundColor: '#ffcf3b',
     borderRadius: 12,
     paddingHorizontal: 32,
     paddingVertical: 14,

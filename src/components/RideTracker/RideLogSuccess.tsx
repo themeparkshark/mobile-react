@@ -175,10 +175,10 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 12 },
   heroShark: { width: 116, height: 116 },
   successTitle: {
-    color: '#0B4B83', fontSize: 34, fontWeight: '900', fontFamily: 'Shark',
+    color: '#0B4B83', fontSize: 34, fontFamily: 'Shark',
     marginTop: 3,
   },
-  xpText: { color: '#7E5100', fontSize: 22, fontWeight: '700', marginTop: 4 },
+  xpText: { color: '#7E5100', fontSize: 22, fontFamily: 'Shark', marginTop: 4 },
   journalText: { color: '#315C7C', fontSize: 17, fontFamily: 'Knockout', marginTop: 5 },
   // Milestone
   milestoneCard: {
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   },
   milestoneIcon: { width: 54, height: 54 },
   milestoneTitle: {
-    color: colors.tertiary, fontSize: 28, fontWeight: '900', fontFamily: 'Shark', marginTop: 8,
+    color: colors.tertiary, fontSize: 28, fontFamily: 'Shark', marginTop: 8,
   },
   milestoneMessage: { color: '#59421E', fontSize: 16, fontFamily: 'Knockout', marginTop: 4 },
   // Achievements
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   cardContainer: { width: '100%', marginBottom: 20 },
   addRideButton: { backgroundColor: '#FFCB35', borderRadius: 13,
     paddingHorizontal: 8, paddingVertical: 5, borderWidth: 1, borderColor: '#A9680C' },
-  addRideText: { color: '#603600', fontSize: 12, fontWeight: '900', fontFamily: 'Knockout' },
+  addRideText: { color: '#603600', fontSize: 12, fontFamily: 'Knockout' },
 });
 
 export default RideLogSuccess;

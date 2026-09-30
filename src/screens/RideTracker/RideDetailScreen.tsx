@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
-  View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator,
-  RefreshControl, Alert, Dimensions, Animated,
+  View, Text, FlatList, Pressable, StyleSheet,
+  RefreshControl, Dimensions, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -17,6 +17,7 @@ import ShareableRideCard from '../../components/RideTracker/ShareableRideCard';
 import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
 import { Modal } from 'react-native';
 import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
+import { GameIcon, gameAlert, SharkLoader } from '../../ui';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -166,7 +167,7 @@ export default function RideDetailScreen() {
       setWishlisted(result.wishlisted);
       showToast(result.wishlisted ? 'Added to Favorites' : 'Removed from Favorites');
     } catch (e) {
-      Alert.alert('Error', 'Failed to update wishlist');
+      gameAlert("Couldn't update your wishlist", 'Check your connection and try again.');
     }
   }, [rideId, showToast]);
 
@@ -182,12 +183,12 @@ export default function RideDetailScreen() {
         <LinearGradient colors={[B.skyMid, B.skyDark, B.navy]} style={s.heroGradient}>
           <View style={s.headerRow}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={s.backBtn}>
-              <Text style={s.backChevron}>{'<'}</Text>
+              <GameIcon name="back" size={34} accessibilityLabel="Back" />
             </Pressable>
             <View style={{ width: 40 }} />
           </View>
         </LinearGradient>
-        <ActivityIndicator size="large" color={B.skyDark} style={{ marginTop: 60 }} />
+        <SharkLoader />
       </SafeAreaView>
     );
   }
@@ -196,10 +197,11 @@ export default function RideDetailScreen() {
     <>
       <View style={s.headerRow}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={s.backBtn}>
-          <Text style={s.backChevron}>{'<'}</Text>
+          <GameIcon name="back" size={34} accessibilityLabel="Back" />
         </Pressable>
         <Pressable onPress={handleWishlistToggle} hitSlop={12} style={s.starBtn}>
-          <Text style={s.starIcon}>{wishlisted ? '★' : '☆'}</Text>
+          <GameIcon name="star" size={30} style={wishlisted ? undefined : { opacity: 0.4 }}
+            accessibilityLabel={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'} />
         </Pressable>
       </View>
       <View style={s.heroBody}>
@@ -375,20 +377,20 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center', alignItems: 'center',
   },
-  backChevron: { color: '#fff', fontSize: 22, fontWeight: '600' },
+  backChevron: { color: '#fff', fontSize: 22, fontFamily: 'Knockout' },
   starBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center', alignItems: 'center',
   },
-  starIcon: { color: B.gold, fontSize: 24, fontWeight: '700' },
+  starIcon: { color: B.gold, fontSize: 24, fontFamily: 'Shark' },
   heroBody: { paddingHorizontal: 20, paddingTop: 8 },
   heroTitle: {
-    color: '#fff', fontSize: 32, fontWeight: '900', fontFamily: 'Shark',
+    color: '#fff', fontSize: 32, fontFamily: 'Shark',
     marginBottom: 2,
   },
   heroPark: {
-    color: 'rgba(255,255,255,0.7)', fontSize: 15, fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)', fontSize: 15, fontFamily: 'Knockout',
     marginBottom: 10,
   },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
@@ -398,7 +400,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  metaPillText: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '700' },
+  metaPillText: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontFamily: 'Knockout' },
 
   // ─── Content ───
   listContent: { paddingBottom: 60 },
@@ -414,8 +416,8 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
   },
-  statVal: { color: B.navy, fontSize: 26, fontWeight: '900', fontFamily: 'Shark' },
-  statLabel: { color: B.textMid, fontSize: 11, marginTop: 2, fontWeight: '600' },
+  statVal: { color: B.navy, fontSize: 26, fontFamily: 'Shark' },
+  statLabel: { color: B.textMid, fontSize: 11, fontFamily: 'Knockout', marginTop: 2 },
 
   // ─── Card ───
   card: {
@@ -425,21 +427,21 @@ const s = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
   sectionTitle: {
-    color: B.textDark, fontSize: 13, fontWeight: '800',
+    color: B.textDark, fontSize: 13,
     letterSpacing: 1.5, fontFamily: 'Knockout',
     marginBottom: 10, marginHorizontal: 16,
   },
-  communitySubtitle: { color: B.textLight, fontSize: 12, marginBottom: 12 },
+  communitySubtitle: { color: B.textLight, fontSize: 12, fontFamily: 'Knockout', marginBottom: 12 },
 
   // ─── Rating bars ───
   ratingBarRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  ratingBarLabel: { color: B.textMid, fontSize: 13, fontWeight: '700', width: 16, textAlign: 'center' },
+  ratingBarLabel: { color: B.textMid, fontSize: 13, fontFamily: 'Knockout', width: 16, textAlign: 'center' },
   ratingBarTrack: { flex: 1, height: 8, backgroundColor: B.pageBg, borderRadius: 4, overflow: 'hidden' },
   ratingBarFill: { height: '100%', borderRadius: 4 },
-  ratingBarCount: { color: B.textLight, fontSize: 12, width: 28, textAlign: 'right' },
+  ratingBarCount: { color: B.textLight, fontSize: 12, fontFamily: 'Knockout', width: 28, textAlign: 'right' },
   topReactions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
-  topReactionsLabel: { color: B.textLight, fontSize: 12 },
-  topReactionItem: { fontSize: 15 },
+  topReactionsLabel: { color: B.textLight, fontSize: 12, fontFamily: 'Knockout' },
+  topReactionItem: { fontSize: 15, fontFamily: 'Knockout' },
 
   // ─── Log CTA ───
   logBtn: {
@@ -448,7 +450,7 @@ const s = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
   logBtnGrad: { borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
-  logBtnText: { color: B.textDark, fontSize: 16, fontWeight: '800' },
+  logBtnText: { color: B.textDark, fontSize: 16, fontFamily: 'Shark' },
 
   // ─── History entries ───
   entry: {
@@ -460,23 +462,23 @@ const s = StyleSheet.create({
   },
   entryLeft: { flex: 1, marginRight: 8 },
   entryRight: { alignItems: 'flex-end', justifyContent: 'center', gap: 8 },
-  entryDate: { color: B.textDark, fontSize: 14, fontWeight: '700' },
-  entryTime: { color: B.textMid, fontSize: 12, marginTop: 2 },
-  entryReaction: { fontSize: 22 },
-  entryNote: { color: B.textMid, fontSize: 12, fontStyle: 'italic', marginTop: 4 },
+  entryDate: { color: B.textDark, fontSize: 14, fontFamily: 'Knockout' },
+  entryTime: { color: B.textMid, fontSize: 12, fontFamily: 'Knockout', marginTop: 2 },
+  entryReaction: { fontSize: 22, fontFamily: 'Knockout' },
+  entryNote: { color: B.textMid, fontSize: 12, fontFamily: 'Knockout', fontStyle: 'italic', marginTop: 4 },
   entryShareBtn: {
     backgroundColor: B.pageBg, borderRadius: 10,
     paddingHorizontal: 10, paddingVertical: 4,
   },
-  entryShareIcon: { color: B.skyDark, fontSize: 11, fontWeight: '700' },
+  entryShareIcon: { color: B.skyDark, fontSize: 11, fontFamily: 'Knockout' },
 
   // ─── Empty ───
   emptyWrap: { alignItems: 'center', paddingVertical: 40 },
-  emptyTitle: { color: B.textMid, fontSize: 16, fontWeight: '700' },
-  emptySub: { color: B.textLight, fontSize: 13, marginTop: 4 },
+  emptyTitle: { color: B.textMid, fontSize: 16, fontFamily: 'Shark' },
+  emptySub: { color: B.textLight, fontSize: 13, fontFamily: 'Knockout', marginTop: 4 },
 
   // ─── Share modal ───
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(5,52,110,0.6)', justifyContent: 'center', padding: 20 },
   modalContent: { maxHeight: '80%' },
   modalClose: {
     backgroundColor: B.white, borderRadius: 12, paddingVertical: 14,
@@ -484,7 +486,7 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1, shadowRadius: 4, elevation: 3,
   },
-  modalCloseText: { color: B.textDark, fontSize: 16, fontWeight: '600' },
+  modalCloseText: { color: B.textDark, fontSize: 16, fontFamily: 'Knockout' },
 
   // ─── Toast ───
   toast: {
@@ -501,5 +503,5 @@ const s = StyleSheet.create({
     shadowRadius: 8,
     elevation: 6,
   },
-  toastText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  toastText: { color: '#fff', fontSize: 14, fontFamily: 'Knockout' },
 });

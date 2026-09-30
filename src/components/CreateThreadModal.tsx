@@ -2,7 +2,6 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -22,11 +21,8 @@ import useCrumbs from '../hooks/useCrumbs';
 import usePermissions from '../hooks/usePermissions';
 import { PermissionEnums } from '../models/permission-enums';
 import { AuthContext } from '../context/AuthProvider';
-import { ForumContext } from '../context/ForumProvider';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faChevronDown } from '@fortawesome/free-solid-svg-icons/faChevronDown';
-import { faGlobe } from '@fortawesome/free-solid-svg-icons/faGlobe';
-import { faLock } from '@fortawesome/free-solid-svg-icons/faLock';
+import { isTeam, TEAMS } from '../constants/teams';
+import { gameAlert, GameIcon } from '../ui';
 import Button from './Button';
 import config from '../config';
 import Svg, { Circle } from 'react-native-svg';
@@ -34,13 +30,6 @@ import Svg, { Circle } from 'react-native-svg';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.78;
 
-const TEAMS = {
-  mouse: { name: 'Team Mouse', emoji: '🐭', color: '#3B82F6' },
-  globe: { name: 'Team Globe', emoji: '🌍', color: '#EF4444' },
-  shark: { name: 'Team Shark', emoji: '🦈', color: '#F59E0B' },
-} as const;
-
-// Reaction picker uses the app's custom reaction images from ForumContext
 
 // ── Character Count Ring ──────────────────────────────────
 function CharCountRing({ count, max }: { count: number; max: number }) {
@@ -76,47 +65,6 @@ function CharCountRing({ count, max }: { count: number; max: number }) {
   );
 }
 
-// Map reaction names to unicode emoji equivalents
-const REACTION_EMOJI_MAP: Record<string, string> = {
-  'Happy': '😊',
-  'Laugh': '😂',
-  'Love': '❤️',
-  'Mad': '😡',
-  'Sad': '😢',
-  'Wow': '😮',
-};
-
-// ── Reaction Picker (uses app's custom reaction images) ───
-function ReactionPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
-  const { reactionTypes } = useContext(ForumContext);
-
-  return (
-    <View style={emojiStyles.container}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={emojiStyles.emojiRow}>
-        {reactionTypes.map((rt) => (
-          <Pressable
-            key={rt.id}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onSelect(REACTION_EMOJI_MAP[rt.name] || '🦈');
-            }}
-            style={emojiStyles.emojiBtn}
-          >
-            <Image source={{ uri: rt.image_url }} style={{ width: 32, height: 32 }} contentFit="contain" />
-            <Text style={emojiStyles.emojiLabel}>{rt.name}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-const emojiStyles = StyleSheet.create({
-  container: { backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#f0f4f8', paddingBottom: 8, paddingTop: 8 },
-  emojiRow: { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
-  emojiBtn: { width: 56, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc', gap: 2 },
-  emojiLabel: { fontFamily: 'Shark', fontSize: 8, color: '#8895a7', textTransform: 'uppercase' },
-});
 
 export default function CreateThreadModal({
   visible,
@@ -141,10 +89,12 @@ export default function CreateThreadModal({
   const inputRef = useRef<TextInput>(null);
 
   const playerTeam = (player as any)?.team?.team as string | undefined;
-  const teamInfo = playerTeam ? TEAMS[playerTeam as keyof typeof TEAMS] : null;
-
-  const insertEmoji = (emoji: string) => {
-    setContent(prev => prev + emoji);
+  const teamInfo = isTeam(playerTeam) ? TEAMS[playerTeam] : null;
+  const confirmDiscard = () => {
+    gameAlert('Discard this post?', 'Your draft will not be saved.', [
+      { text: 'Keep writing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => closeModal() },
+    ]);
   };
 
   useEffect(() => {
@@ -177,10 +127,7 @@ export default function CreateThreadModal({
         isVisible={modalVisible}
         onBackdropPress={() => {
           if (content.length) {
-            Alert.alert('Are you sure you want to leave? This draft will not be saved.', '', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Ok', onPress: () => closeModal() },
-            ]);
+            confirmDiscard();
           } else {
             closeModal();
           }
@@ -214,15 +161,12 @@ export default function CreateThreadModal({
             <View style={{ flex: 1 }}>
               <TouchableOpacity onPress={() => {
                 if (content.length) {
-                  Alert.alert('Are you sure you want to leave? This draft will not be saved.', '', [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Ok', onPress: () => closeModal() },
-                  ]);
+                  confirmDiscard();
                 } else {
                   closeModal();
                 }
               }} style={createStyles.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <FontAwesomeIcon icon={faChevronDown} size={14} color="#8895a7" />
+                <GameIcon name="close" size={26} accessibilityLabel="Close" />
               </TouchableOpacity>
             </View>
             <View style={createStyles.handle} />
@@ -236,15 +180,21 @@ export default function CreateThreadModal({
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   const trimmed = content.trim();
                   const autoTitle = trimmed.split('\n')[0].slice(0, 140);
-                  const newThread = await createThread({
-                    title: autoTitle,
-                    content: trimmed,
-                    team: postType === 'team' && playerTeam ? playerTeam as any : null,
-                  });
-                  if (newThread) {
-                    RootNavigation.navigate('Thread', { thread: newThread.id });
+                  try {
+                    const newThread = await createThread({
+                      title: autoTitle,
+                      content: trimmed,
+                      team: postType === 'team' && playerTeam ? playerTeam as any : null,
+                    });
+                    if (newThread) {
+                      RootNavigation.navigate('Thread', { thread: newThread.id });
+                    }
+                    closeModal();
+                  } catch {
+                    // Keep the draft so nothing the player wrote is lost.
+                    setHasPressed(false);
+                    gameAlert("Couldn't post", 'Your post is still here. Check your connection and try again.');
                   }
-                  closeModal();
                 }}
                 style={[createStyles.submitBtn, !content.trim().length && { opacity: 0.4 }]}
               >
@@ -260,14 +210,14 @@ export default function CreateThreadModal({
                   onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPostType('public'); }}
                   style={[createStyles.togglePill, postType === 'public' && createStyles.toggleActive]}
                 >
-                  <FontAwesomeIcon icon={faGlobe} size={13} color={postType === 'public' ? '#0d1b2a' : '#a0aec0'} />
+                  <GameIcon name="map" size={18} />
                   <Text style={[createStyles.toggleText, postType === 'public' && { color: '#0d1b2a' }]}>Public</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPostType('team'); }}
                   style={[createStyles.togglePill, postType === 'team' && { ...createStyles.toggleActive, backgroundColor: teamInfo.color + '18' }]}
                 >
-                  <Text style={{ fontSize: 13 }}>{teamInfo.emoji}</Text>
+                  <Image source={teamInfo.badge} style={{ width: 18, height: 18 }} contentFit="contain" />
                   <Text style={[createStyles.toggleText, postType === 'team' && { color: teamInfo.color }]}>{teamInfo.name}</Text>
                 </Pressable>
               </View>
@@ -275,7 +225,7 @@ export default function CreateThreadModal({
 
             {postType === 'team' && teamInfo && (
               <View style={createStyles.teamHint}>
-                <FontAwesomeIcon icon={faLock} size={10} color={teamInfo.color} />
+                <GameIcon name="lock" size={14} />
                 <Text style={[createStyles.teamHintText, { color: teamInfo.color }]}>
                   Only {teamInfo.name} members will see this post
                 </Text>
@@ -293,15 +243,13 @@ export default function CreateThreadModal({
                   autoCapitalize="sentences"
                   onChangeText={setContent}
                   value={content}
-                  placeholder="What's on your mind? 🦈"
+                  placeholder="What's on your mind?"
                   placeholderTextColor="#a0aec0"
                   maxLength={2000}
                 />
               </ScrollView>
             </View>
 
-            {/* Reactions */}
-            <ReactionPicker onSelect={insertEmoji} />
         </View>
       </Modal>
     </>

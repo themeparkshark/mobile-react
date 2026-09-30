@@ -10,6 +10,8 @@ import config from '../config';
 import { NotificationContext } from '../context/NotificationProvider';
 import dayjs from '../helpers/dayjs';
 import { NotificationType } from '../models/notification-type';
+import { BRAND, GameIcon, GameRichText } from '../ui';
+import { notificationMessage } from './notificationCopy';
 
 /**
  * Backend screen names / param keys don't always match the navigator.
@@ -124,7 +126,7 @@ export default function Notification({
       <Pressable
         onPress={handleDelete}
         style={{
-          backgroundColor: '#ef4444',
+          backgroundColor: BRAND.red,
           justifyContent: 'center',
           alignItems: 'center',
           width: 80,
@@ -210,17 +212,16 @@ export default function Notification({
 
           {/* Content */}
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text
-              style={{
-                fontFamily: isUnread ? 'Shark' : 'Knockout',
-                fontSize: isUnread ? 14 : 15,
-                color: isUnread ? config.primary : '#334155',
-                lineHeight: 20,
-              }}
+            {/* Server copy: stored rows can predate the emoji cleanup, so it renders through the icon-safe text. */}
+            {/* One typeface for every row; unread reads through navy text, the tinted card and the dot. Icons stay inside the line. */}
+            <GameRichText
+              preset="bodySmall"
+              style={{ fontSize: 15, color: isUnread ? BRAND.navy : BRAND.navySoft, lineHeight: 20 }}
+              iconSize={16}
               numberOfLines={3}
             >
-              {notification.content?.message ?? ''}
-            </Text>
+              {notificationMessage(notification.content?.message)}
+            </GameRichText>
             <Text
               style={{
                 fontFamily: 'Knockout',
@@ -252,15 +253,9 @@ export default function Notification({
 
           {/* Arrow for actionable notifications */}
           {notification.content?.route && hasRead && (
-            <Text
-              style={{
-                fontSize: 16,
-                color: '#cbd5e1',
-                marginLeft: 8,
-              }}
-            >
-              ›
-            </Text>
+            <View style={{ marginLeft: 8, opacity: 0.55 }} accessibilityElementsHidden importantForAccessibility="no">
+              <GameIcon name="arrow" size={18} />
+            </View>
           )}
         </Animated.View>
       </Pressable>
