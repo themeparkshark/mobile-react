@@ -50,3 +50,17 @@ test('no app source imports react-native-maps; previews use the MapLibre game ma
   }
   assert.deepEqual(hits ? hits.split('\n') : [], []);
 });
+
+test('preview screens and dev routes carry no emoji or em dashes in their fixtures', () => {
+  const files = execFileSync('git', ['ls-files', '--', 'src/**/*PreviewScreen.tsx', 'src/devRoutes.tsx', 'src/dev'], { cwd: root, encoding: 'utf8' })
+    .trim().split('\n').filter(Boolean);
+  assert.ok(files.length > 5, 'found the preview screens');
+  const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2B55}\u{FE0F}]/u;
+  const offenders = [];
+  for (const file of files) {
+    read(file).split('\n').forEach((line, i) => {
+      if (emoji.test(line) || line.includes('—')) offenders.push(`${file}:${i + 1}`);
+    });
+  }
+  assert.deepEqual(offenders, []);
+});
