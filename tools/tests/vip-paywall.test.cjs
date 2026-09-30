@@ -48,3 +48,19 @@ test('a signed-in player is linked to Adapty at sign-in, once per id', async () 
   const provider = fs.readFileSync(path.join(root, 'src/context/DailyGiftProvider.tsx'), 'utf8');
   assert.match(provider, /activateVipForPlayer\(player\.id\)/);
 });
+
+test('paywall perks come from the server VIP flags, with a safe fallback', () => {
+  const { loadTs: load } = require('./helpers/ts-module.cjs');
+  const api = load('src/api/endpoints/economy/vip-perks.ts', { '../../client': { default: {} } });
+  const perks = api.parseVipPerks([
+    { key: 'ride', icon: 'xp', title: '3x XP and Shark Coins', body: 'On every ride coin you win at the park.' },
+    { key: 'bad', icon: 'not-an-icon', title: 'Secret Store', body: 'x' },
+    { key: 'badge', icon: 'member', title: 'VIP badge on your profile', body: 'Show it.' },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(perks)).map(p => p.title), ['3x XP and Shark Coins', 'VIP badge on your profile']);
+  assert.equal(api.parseVipPerks([]), null);
+  assert.equal(api.parseVipPerks(undefined), null);
+  const screen = fs.readFileSync(path.join(root, 'src/screens/MembershipScreen.tsx'), 'utf8');
+  assert.match(screen, /getVipPerks\(\)\.then/);
+  assert.match(screen, /\{perks\.map\(/);
+});

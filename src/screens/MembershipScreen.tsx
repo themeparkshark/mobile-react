@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
+import getVipPerks, { type VipPerk } from '../api/endpoints/economy/vip-perks';
 import { buyVip, legalText, loadVipProduct, priceText, restoreVip, trialText, type VipProduct } from '../services/purchases';
 import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 
@@ -23,6 +24,9 @@ import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName 
 // (CompleteTaskAction), VIP home maps spawn two extra finds and double their
 // rewards (PrepItemSpawner, PrepItemController). VIP gear is left
 // out until member items are live in the Shark Shop.
+// This list is the offline fallback; the live list comes from GET /api/economy
+// (vip_perks, built from the server's economy.vip flags), so flipping a VIP
+// multiplier on the server changes this copy too.
 export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[] = [
   { icon: 'xp', title: '2x XP and Shark Coins', body: 'On every ride coin you win at the park.' },
   { icon: 'gift', title: '+2 finds on every home hunt', body: 'More Energy and Ticket chances on your map.' },
@@ -39,6 +43,12 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState<null | 'buy' | 'restore'>(null);
   const [waiting, setWaiting] = useState(false);
+  const [perks, setPerks] = useState<VipPerk[]>(VIP_BENEFITS);
+  useEffect(() => {
+    let live = true;
+    getVipPerks().then(next => { if (live && next) setPerks(next); });
+    return () => { live = false; };
+  }, []);
   const waitStarted = useRef(0);
 
   useEffect(() => {
@@ -118,7 +128,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           <Animated.Text entering={FadeInDown.delay(220)} style={s.sub}>Get more out of every park day and every hunt.</Animated.Text>
 
           <View style={s.benefits}>
-            {VIP_BENEFITS.map((b, i) => (
+            {perks.map((b, i) => (
               <Animated.View key={b.title} entering={FadeInUp.delay(280 + i * 80).springify().damping(15)} style={s.benefit}>
                 <GameIcon name={b.icon} size={34} />
                 <View style={{ flex: 1 }}>
