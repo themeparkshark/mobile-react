@@ -1,5 +1,5 @@
 /**
- * Tutorial Steps — All tutorial content and flow definitions
+ * Tutorial steps: all tutorial content and flow definitions.
  */
 import { TutorialStep, TutorialSequence } from './types';
 
@@ -42,8 +42,10 @@ const parkOnboardingSteps: TutorialStep[] = [
   },
   {
     id: 'park_ride', sequence: 'onboarding', title: 'Start your collection',
-    text: 'Choose a missing ride coin on the map. Visit its attraction and win the challenge to earn it.',
-    subtitle: 'Your souvenirs live in Profile. Scroll to your parks and tap a park to see every coin.',
+    text: 'This is your next park coin. Win its ride challenge to earn it.',
+    subtitle: 'Later: Profile, scroll to your parks, tap a park.',
+    // Spotlights the "YOUR NEXT PARK COIN" card when the map registers it, with Finn above the card.
+    spotlightRef: 'next_park_coin', placement: 'above-spotlight',
     sharkPosition: 'bottom-center', sharkMood: 'pointing', nextText: 'Find a ride coin',
   },
 ];
@@ -105,8 +107,8 @@ const communityCenterSteps: TutorialStep[] = [
   {
     id: 'community_center_intro',
     sequence: 'community_center',
-    text: 'This is the Community Center! Leave a gift for other sharks, and earn tickets when someone claims yours!',
-    subtitle: 'Leaving a gift costs 350 Park Coins but you earn premium Tickets in return.',
+    text: 'This is the Community Center! Leave a gift for another shark, or claim one someone left for you.',
+    subtitle: 'A gift costs 350 coins and gets you 2 Tickets. Claiming a gift gets you 1 Ticket.',
     sharkPosition: 'bottom-center',
     sharkMood: 'happy',
     nextText: 'Nice!',
@@ -135,7 +137,7 @@ const pinSteps: TutorialStep[] = [
   {
     id: 'pin_collections_intro',
     sequence: 'pins',
-    text: 'Pin Collections! Collect pins at the parks and trade them with other sharks. Gotta catch \'em all!',
+    text: 'Pin Collections! Collect pins at the parks and trade them with other sharks.',
     sharkPosition: 'bottom-center',
     sharkMood: 'excited',
     nextText: 'Sweet!',

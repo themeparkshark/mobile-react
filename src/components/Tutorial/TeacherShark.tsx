@@ -1,14 +1,22 @@
 /**
- * TeacherShark — The tutorial guide character
- * 
- * Animated shark character with speech bubble that guides users
- * through the app. Slides in from bottom, has different moods/poses,
- * and displays tutorial text in a styled speech bubble.
- * 
- * Uses the existing approved teacher-shark artwork.
+ * TeacherShark: Finn, the tutorial guide, with his speech bubble.
+ *
+ * Motion (UI thread, Reanimated):
+ *   - Entrance: Finn springs up from below, overshoots and settles, then the
+ *     bubble pops from its tail with a light haptic.
+ *   - Speech: his line appears word by word (every word is laid out from the
+ *     first frame, so the bubble never resizes). Tap the bubble to show it all.
+ *     The subtitle fades in once he has finished.
+ *   - Each new step gives the bubble a small squash so the change reads.
+ *   - Idle: a gentle bob and tilt; waving and celebrating moods get a hop.
+ * Reduced motion: no entrance, no bob, the whole line at once. The Next button
+ * works at every moment, so the guide never blocks the player.
+ *
+ * Uses the existing approved teacher-shark artwork and his yellow button.
  */
-import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Image } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, Pressable, StyleSheet, Dimensions, Image } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   cancelAnimation,
   useSharedValue,
@@ -16,15 +24,19 @@ import Animated, {
   withTiming,
   withSequence,
   withRepeat,
+  withSpring,
+  withDelay,
+  interpolate,
   Easing,
   FadeIn,
   FadeOut,
 } from 'react-native-reanimated';
 import { SharkMood, SharkPosition } from './types';
-import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import config from '../../config';
+import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { BRAND, GameButton } from '../../ui';
+import { REVEAL_START_MS, revealSchedule, splitWords } from './teacherReveal';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TEACHER_SHARK_IMAGE = require('../../../assets/images/tutorial/teacher-shark.png');
 
@@ -41,11 +53,9 @@ interface TeacherSharkProps {
   totalSteps: number;
   onNext: () => void;
   onSkip?: () => void;
-  /** Keep Finn clear of persistent bottom navigation when a screen has it. */
+  /** Keep Finn clear of persistent bottom navigation, or park him above a spotlit card. */
   bottomOffset?: number;
 }
-
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 export default function TeacherShark({
   title,
@@ -62,10 +72,14 @@ export default function TeacherShark({
   onSkip,
   bottomOffset = 20,
 }: TeacherSharkProps) {
-  const reducedMotion = useReducedGameMotion();
+  const reducedMotion = useUiReducedMotion();
   const bobValue = useSharedValue(0);
   const tiltValue = useSharedValue(0);
   const greetingValue = useSharedValue(0);
+  const enterValue = useSharedValue(reducedMotion ? 1 : 0);
+  const bubbleValue = useSharedValue(reducedMotion ? 1 : 0);
+
+  // Idle life.
   useEffect(() => {
     [bobValue, tiltValue, greetingValue].forEach(value => { cancelAnimation(value); value.value = 0; });
     if (!reducedMotion) {
@@ -77,16 +91,74 @@ export default function TeacherShark({
         withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
         withTiming(-1, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
       ), -1, false);
-      if (mood === 'celebrating' || mood === 'waving') greetingValue.value = withSequence(
-        withTiming(1, { duration: 180 }), withTiming(0, { duration: 220 }));
+      if (mood === 'celebrating' || mood === 'waving') greetingValue.value = withDelay(REVEAL_START_MS, withSequence(
+        withTiming(1, { duration: 180 }), withTiming(0, { duration: 220 })));
     }
     return () => [bobValue, tiltValue, greetingValue].forEach(value => cancelAnimation(value));
   }, [reducedMotion, mood, bobValue, tiltValue, greetingValue]);
+
+  // Entrance on mount: Finn rises past his mark and settles, then the bubble pops.
+  useEffect(() => {
+    if (reducedMotion) { enterValue.value = 1; bubbleValue.value = 1; return; }
+    enterValue.value = withSequence(
+      withTiming(1.06, { duration: 240, easing: Easing.out(Easing.cubic) }),
+      withSpring(1, { damping: 9, stiffness: 220, mass: 0.7 }),
+    );
+    bubbleValue.value = withDelay(140, withSpring(1, { damping: 11, stiffness: 240, mass: 0.6 }));
+    return () => { cancelAnimation(enterValue); cancelAnimation(bubbleValue); };
+    // Mount only: steps after the first get the squash below instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reducedMotion]);
+
+  // Word-by-word line. Tap the bubble to show it all at once.
+  const parts = useMemo(() => splitWords(text), [text]);
+  const [shown, setShown] = useState(reducedMotion ? parts.length : 0);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstLine = useRef(true);
+  useEffect(() => {
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+    if (reducedMotion) { setShown(parts.length); return; }
+    // A new step: squash the bubble so the change reads, then talk.
+    if (!firstLine.current) {
+      bubbleValue.value = withSequence(withTiming(0.94, { duration: 90 }), withSpring(1, { damping: 10, stiffness: 260 }));
+    }
+    const startDelay = firstLine.current ? REVEAL_START_MS : 120;
+    firstLine.current = false;
+    const times = revealSchedule(parts);
+    setShown(0);
+    let index = 0;
+    const step = () => {
+      index += 1;
+      while (index < times.length && times[index] === times[index - 1]) index += 1;
+      setShown(index);
+      if (index < times.length) revealTimer.current = setTimeout(step, times[index] - times[index - 1]);
+    };
+    revealTimer.current = setTimeout(() => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      step();
+    }, startDelay);
+    return () => { if (revealTimer.current) clearTimeout(revealTimer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parts, reducedMotion]);
+  const talking = shown < parts.length;
+  const finishLine = () => {
+    if (!talking) return;
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+    setShown(parts.length);
+  };
+
   const sharkAnimStyle = useAnimatedStyle(() => ({ transform: [
-    { translateY: reducedMotion ? 0 : bobValue.value * -3 },
+    { translateY: interpolate(enterValue.value, [0, 1], [110, 0]) + (reducedMotion ? 0 : bobValue.value * -3) },
     { rotate: `${reducedMotion ? 0 : tiltValue.value}deg` },
     { scale: reducedMotion ? 1 : 1 + greetingValue.value * 0.025 },
   ] }));
+  const bubbleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(bubbleValue.value, [0, 0.3, 1], [0, 1, 1], 'clamp'),
+    transform: [
+      { translateY: interpolate(bubbleValue.value, [0, 1], [40, 0]) },
+      { scale: interpolate(bubbleValue.value, [0, 1], [0.6, 1]) },
+    ],
+  }));
 
   // Position the shark
   const getSharkContainerStyle = () => {
@@ -109,62 +181,66 @@ export default function TeacherShark({
   return (
     <Animated.View
       style={[styles.container, getSharkContainerStyle()]}
-      entering={reducedMotion ? undefined : FadeIn.duration(180)}
+      entering={reducedMotion ? undefined : FadeIn.duration(140)}
       exiting={reducedMotion ? undefined : FadeOut.duration(160)}
     >
-      {/* Speech Bubble */}
-      <Animated.View
-        style={styles.speechBubble}
-        entering={reducedMotion ? undefined : FadeIn.duration(180)}
-      >
-        {/* Progress dots */}
-        {totalSteps > 1 && (
-          <View style={styles.progressRow}>
-            {Array.from({ length: totalSteps }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.progressDot,
-                  i === stepIndex && styles.progressDotActive,
-                  i < stepIndex && styles.progressDotCompleted,
-                ]}
-              />
+      {/* Speech bubble: tap to finish Finn's line. */}
+      <Animated.View style={[styles.speechBubble, bubbleStyle]}>
+        <Pressable
+          onPress={finishLine}
+          accessible
+          accessibilityLabel={[title, text, subtitle].filter(Boolean).join('. ')}
+          accessibilityHint={talking ? 'Double tap to show the whole message' : undefined}
+        >
+          {/* Progress dots */}
+          {totalSteps > 1 && (
+            <View style={styles.progressRow}>
+              {Array.from({ length: totalSteps }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.progressDot,
+                    i === stepIndex && styles.progressDotActive,
+                    i < stepIndex && styles.progressDotCompleted,
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+
+          {title && <Text style={styles.title}>{title}</Text>}
+
+          {/* Main text, word by word; hidden words keep their space. */}
+          <Text style={styles.mainText}>
+            {parts.map((part, i) => (
+              <Text key={i} style={i < shown ? undefined : styles.hiddenWord}>{part}</Text>
             ))}
-          </View>
-        )}
+          </Text>
 
-        {title && <Text style={styles.title}>{title}</Text>}
-
-        {/* Main text */}
-        <Text style={styles.mainText}>{text}</Text>
-        
-        {/* Subtitle */}
-        {subtitle && (
-          <Text style={styles.subtitleText}>{subtitle}</Text>
-        )}
+          {subtitle && (
+            <Text style={[styles.subtitleText, talking && styles.hiddenWord]}>{subtitle}</Text>
+          )}
+        </Pressable>
 
         {/* Buttons */}
         <View style={styles.buttonRow}>
-          {showSkip && onSkip && (
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Skip this guide" onPress={onSkip} style={styles.skipButton}>
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
-          )}
           {showNext && (
-            <TouchableOpacity accessibilityRole="button" onPress={onNext} style={styles.nextButton}>
-              <Text style={styles.nextText}>{nextText}</Text>
-            </TouchableOpacity>
+            <GameButton label={nextText} onPress={onNext} accessibilityHint="Continues the guide" />
+          )}
+          {showSkip && onSkip && (
+            <GameButton variant="ghost" label="Skip" onPress={onSkip} accessibilityLabel="Skip this guide" />
           )}
         </View>
 
         {/* Speech bubble tail */}
+        <View style={styles.bubbleTailBorder} />
         <View style={styles.bubbleTail} />
       </Animated.View>
 
-      {/* Shark Character — Teacher Finn */}
+      {/* Shark Character: Teacher Finn */}
       <Animated.View style={[styles.sharkContainer, sharkAnimStyle]}>
-        <Image 
-          source={TEACHER_SHARK_IMAGE} 
+        <Image
+          source={TEACHER_SHARK_IMAGE}
           style={styles.sharkImage}
           resizeMode="contain"
         />
@@ -174,105 +250,89 @@ export default function TeacherShark({
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: 'Shark', fontSize: 23, lineHeight: 28, textAlign: 'center', color: '#075083', marginBottom: 9 },
+  title: { fontFamily: 'Shark', fontSize: 23, lineHeight: 28, textAlign: 'center', color: BRAND.navy, marginBottom: 8 },
   container: {
     position: 'absolute',
     zIndex: 9999,
     maxWidth: SCREEN_WIDTH - 32,
   },
   speechBubble: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    paddingBottom: 16,
-    marginBottom: 8,
+    backgroundColor: BRAND.white,
+    borderRadius: 22,
+    padding: 18,
+    paddingBottom: 12,
+    marginBottom: 12,
     marginHorizontal: 16,
-    // Shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: BRAND.shadow,
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 10,
     elevation: 10,
-    // Border
     borderWidth: 3,
-    borderColor: config.secondary,
+    borderColor: BRAND.blueBright,
+    borderBottomWidth: 5,
+    borderBottomColor: BRAND.blue,
   },
   progressRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     gap: 6,
   },
   progressDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#ddd',
+    backgroundColor: BRAND.sky,
   },
   progressDotActive: {
-    backgroundColor: config.secondary,
+    backgroundColor: BRAND.blueBright,
     width: 20,
-    borderRadius: 4,
   },
   progressDotCompleted: {
-    backgroundColor: config.tertiary,
+    backgroundColor: BRAND.gold,
   },
   mainText: {
     fontFamily: 'Knockout',
-    fontSize: 18,
-    color: '#1a1a2e',
+    fontSize: 19,
+    color: BRAND.navy,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 4,
+    lineHeight: 25,
+    marginBottom: 2,
+  },
+  hiddenWord: {
+    color: 'transparent',
   },
   subtitleText: {
     fontFamily: 'Knockout',
-    fontSize: 14,
-    color: '#666',
+    fontSize: 15,
+    color: BRAND.navySoft,
     textAlign: 'center',
     lineHeight: 20,
     marginTop: 6,
   },
   buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
-    gap: 8,
+    marginTop: 12,
+    gap: 2,
   },
-  skipButton: {
-    minHeight: 48, justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  skipText: {
-    fontFamily: 'Knockout',
-    fontSize: 16,
-    color: '#537082',
-  },
-  nextButton: {
-    flex: 1, minHeight: 48, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: config.secondary,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 25,
-    shadowColor: config.secondary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  nextText: {
-    textAlign: 'center',
-    fontFamily: 'Knockout',
-    fontSize: 18,
-    color: 'white',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
+  bubbleTailBorder: {
+    position: 'absolute',
+    bottom: -17,
+    left: '50%',
+    marginLeft: -13,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 13,
+    borderRightWidth: 13,
+    borderTopWidth: 15,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: BRAND.blue,
   },
   bubbleTail: {
     position: 'absolute',
     bottom: -10,
-    alignSelf: 'center',
     left: '50%',
     marginLeft: -10,
     width: 0,
@@ -282,7 +342,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 12,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: 'white',
+    borderTopColor: BRAND.white,
   },
   sharkContainer: {
     alignSelf: 'center',

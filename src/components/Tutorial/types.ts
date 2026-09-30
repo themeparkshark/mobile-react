@@ -68,6 +68,8 @@ export interface TutorialStep {
   spotlight?: SpotlightTarget | null;
   /** Named ref key to spotlight (resolved at runtime via measure) */
   spotlightRef?: string;
+  /** 'above-spotlight' parks Finn and his bubble just above the spotlit element so it stays readable. */
+  placement?: 'above-spotlight';
   /** Whether this step requires user to tap the highlighted element */
   interactive?: boolean;
   /** Custom "Next" button text */

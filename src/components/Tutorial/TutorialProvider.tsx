@@ -9,6 +9,8 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TutorialContextType, TutorialSequence, TutorialStep, SpotlightTarget } from './types';
 import { getStepsForSequence } from './steps';
+import { teacherBottomOffset } from './tutorialLayout';
+import { Dimensions } from 'react-native';
 import SpotlightOverlay from './SpotlightOverlay';
 import TeacherShark from './TeacherShark';
 import MemoryGame from '../../games/memory/MemoryGame';
@@ -284,7 +286,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
         <>
           <SpotlightOverlay
             target={spotlightTarget}
-            opacity={0.62}
+            opacity={0.55}
             onPress={currentStep.activity ? undefined : nextStep}
             onSpotlightPress={currentStep.interactive ? nextStep : undefined}
             spotlightTappable={currentStep.interactive}
@@ -302,7 +304,8 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
             totalSteps={currentSteps.length}
             onNext={currentStep.activity ? startFirstPlay : nextStep}
             onSkip={skipTutorial}
-            bottomOffset={currentSequence === 'park_arrival' || inParkOnboardingRef.current ? 120 : undefined}
+            bottomOffset={teacherBottomOffset(currentStep, spotlightTarget, Dimensions.get('window').height,
+              currentSequence === 'park_arrival' || inParkOnboardingRef.current ? 120 : 20)}
           />
         </>
       )}
