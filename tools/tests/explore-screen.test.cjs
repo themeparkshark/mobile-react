@@ -35,3 +35,12 @@ test('without an adventure the selected queue ride still offers Play in line', a
   await selectRide(app);
   assert.ok(app.find(label('Play queue games for Space Ride')));
 });
+
+test('the server flag hides every Adventure Ticket surface when off', async () => {
+  const on = exploreScreen({ trip: adventureTrip('discover'), redeemables });
+  await on.settle();
+  assert.ok(on.find(named('AdventureTicketCard')), 'flag on: the ticket chip is in the left slot');
+  const off = exploreScreen({ trip: { ...adventureTrip('discover'), adventure_enabled: false }, redeemables });
+  await off.settle();
+  assert.equal(off.find(named('AdventureTicketCard')), undefined);
+});

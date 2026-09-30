@@ -30,7 +30,8 @@ import { isConfirmedOutsidePark } from '../context/parkLookupPolicy';
 import { ThemeContext } from '../context/ThemeProvider';
 import useTripGoal from '../hooks/useTripGoal';
 import AdventureTicketCard from './ExploreScreen/AdventureTicketCard';
-import { adventureRideClosed } from './ExploreScreen/adventureTicketPresentation';
+import { adventurePlayGate, adventureRideClosed, adventureShelfArrival, rankDetours } from './ExploreScreen/adventureTicketPresentation';
+import useAdventureStampMoment from './ExploreScreen/useAdventureStampMoment';
 import { resolveMapQueueContext } from '../services/lineplay/resolveRide';
 import type { RideContext } from '../services/lineplay/LinePlaySession';
 import checkForRedeemable from '../helpers/check-for-redeemable';
@@ -190,9 +191,12 @@ export default function ExploreScreen() {
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const [adventureOccluded, setAdventureOccluded] = useState(false);
-  const { data: tripGoalData, stale: tripGoalStale, refresh: refreshTripGoal, choose: chooseTripGoal, celebrate: celebrateTicket } = useTripGoal(tripGoalVersion, !!player);
+  const { data: tripGoalData, stale: tripGoalStale, refresh: refreshTripGoal, celebrate: celebrateTicket,
+    select: selectAdventureRide, dismiss: dismissAdventure } = useTripGoal(tripGoalVersion, !!player);
   const tripGoal = tripGoalData?.goal;
-  const adventure = tripGoalData?.adventure_ticket?.park_id === park?.id ? tripGoalData?.adventure_ticket ?? null : null;
+  // The server flag (adventure_enabled) hides every ticket surface when off.
+  const adventure = tripGoalData?.adventure_enabled !== false && tripGoalData?.adventure_ticket?.park_id === park?.id
+    ? tripGoalData?.adventure_ticket ?? null : null;
   const adventureOwner = `${player?.id}:${park?.id}`;
   const adventureScope = useRef(adventureOwner); adventureScope.current = adventureOwner;
   const tripGoalTask = tripGoal?.park_id === park?.id
@@ -418,6 +422,23 @@ export default function ExploreScreen() {
   const mapNow = useMapOpportunityClock(timedOpportunities, refreshMapOpportunities, !!park && !!player);
   const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
     .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);
+
+  // Adventure Ticket: Play opens only in the ride's line; detours rank open, near, short waits.
+  const adventureGate = useMemo(() => adventure ? adventurePlayGate(adventure, location) : undefined,
+    [adventure, nearLat, nearLng]); // eslint-disable-line react-hooks/exhaustive-deps
+  const adventureDetours = useMemo(() => adventure && tripGoalData ? rankDetours(tripGoalData.rides, {
+    parkId: adventure.park_id, currentTaskId: adventure.ride.task_id, live: liveByTask, location,
+    coords: new globalThis.Map((redeemables?.tasks ?? []).map(task => [task.id,
+      { latitude: Number(task.latitude), longitude: Number(task.longitude) }])),
+  }) : [], [adventure, tripGoalData, liveByTask, redeemables?.tasks, nearLat, nearLng]); // eslint-disable-line react-hooks/exhaustive-deps
+  const adventureMoment = useAdventureStampMoment(adventure,
+    mapFocused && !isActive && !adventureOccluded && !bossOccluded && !dailyGiftOccluded && !activeRedeemable);
+  const focusAdventureRide = useCallback(() => {
+    if (!adventure || !player) return;
+    const task = redeemables?.tasks?.find(item => item.id === adventure.ride.task_id);
+    if (task) { setSelectedTask(task); setFocusedFromChecklist(task); }
+    else RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id });
+  }, [adventure, player, redeemables?.tasks]);
 
   useEffect(() => {
     setRedeemables(null);
@@ -894,22 +915,24 @@ export default function ExploreScreen() {
           </View>
         )}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
-          ticket={adventure} data={tripGoalData} stale={tripGoalStale}
+          ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
           closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={hasLiveEvents ? 124 : 64}
+          slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}
-          onChoose={chooseTripGoal} onCelebrate={() => celebrateTicket(adventure.id)}
-          onDiscover={() => {
-            const task = redeemables?.tasks?.find(item => item.id === adventure.ride.task_id);
-            if (task) setSelectedTask(task);
-            else RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id });
-          }}
+          onSelect={selectAdventureRide} onDismiss={dismissAdventure}
+          onCelebrate={() => celebrateTicket(adventure.id)}
+          onDiscover={focusAdventureRide} onFindLine={focusAdventureRide}
           onPlay={async () => {
             const ride = await resolveMapQueueContext(adventure.park_id, adventure.ride.ride_name);
             if (adventureScope.current !== adventureOwner) return;
             if (!ride) throw new Error('This queue adventure could not load.');
             navigation.navigate('LinePlay', { ride });
           }}
-          onShelf={() => RootNavigation.navigate('CoinShelf', { focusCoin: { assetId: adventure.discover?.asset_id ?? adventure.ride.asset_id } })} />}
+          onShelf={() => {
+            // Hand off to the Park screen's measured shelf arrival (Profile -> park -> shelf).
+            const earnedCoin = adventureShelfArrival(adventure);
+            RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id, ...(earnedCoin ? { earnedCoin } : {}) });
+          }} />}
         {!adventure && tripGoal && player && <Pressable
           accessibilityRole="button"
           accessibilityLabel={tripGoal.coin_owned
