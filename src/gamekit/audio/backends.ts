@@ -17,6 +17,37 @@
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
 
+/**
+ * react-native-audio-api 0.6 AudioParam automation is unsafe from JS: the
+ * native setValueAtTime / *RampToValueAtTime read the event deque's back()
+ * without its lock while the audio thread pops it, and cancelScheduledValues
+ * walks past the deque's front. Both segfault (seen on the Whack simulator).
+ * So the engine never schedules param events: it sets `.value` directly (a
+ * param with no events renders its current value) and runs short fades as
+ * JS-timed steps. Fades are 5-400 ms, so 16 ms steps are inaudible.
+ */
+const rampTimers = new WeakMap<object, ReturnType<typeof setInterval>>();
+function rampValue(param: { value: number }, to: number, ms: number, exponential = false): void {
+  const prev = rampTimers.get(param);
+  if (prev) clearInterval(prev);
+  const from = param.value;
+  if (ms <= 16 || !Number.isFinite(from)) {
+    param.value = to;
+    rampTimers.delete(param);
+    return;
+  }
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const k = Math.min(1, (Date.now() - t0) / ms);
+    param.value = exponential && from > 0 && to > 0 ? from * Math.pow(to / from, k) : from + (to - from) * k;
+    if (k >= 1) {
+      clearInterval(iv);
+      rampTimers.delete(param);
+    }
+  }, 16);
+  rampTimers.set(param, iv);
+}
+
 export interface PlayArgs {
   gain: number;
   rate: number;
@@ -391,8 +422,7 @@ export class AudioApiBackend implements AudioBackend {
     if (!v) return;
     try {
       const t = this.ctx.currentTime;
-      v.gain.gain.setValueAtTime(v.gain.gain.value, t);
-      v.gain.gain.linearRampToValueAtTime(0, t + 0.012);
+      v.gain.gain.value = 0;
       v.src.stop(t + 0.015);
     } catch {
       // Already stopped.
@@ -416,8 +446,8 @@ export class AudioApiBackend implements AudioBackend {
       if (a.loopEndMs !== undefined) src.loopEnd = a.loopEndMs / 1000;
       const gain = this.ctx.createGain();
       const t = this.ctx.currentTime;
-      gain.gain.setValueAtTime(a.fadeMs > 0 ? 0 : a.gain, t);
-      if (a.fadeMs > 0) gain.gain.linearRampToValueAtTime(a.gain, t + a.fadeMs / 1000);
+      gain.gain.value = a.fadeMs > 0 ? 0 : a.gain;
+      if (a.fadeMs > 0) rampValue(gain.gain, a.gain, a.fadeMs);
       src.connect(gain);
       gain.connect(this.musicBus);
       src.start(t, a.fromMs / 1000);
@@ -431,10 +461,7 @@ export class AudioApiBackend implements AudioBackend {
   musicGain(deck: string, gain: number, rampMs: number): void {
     const d = this.decks.get(deck);
     if (!d) return;
-    const t = this.ctx.currentTime;
-    d.gain.gain.cancelScheduledValues(t);
-    d.gain.gain.setValueAtTime(d.gain.gain.value, t);
-    d.gain.gain.linearRampToValueAtTime(gain, t + Math.max(0.005, rampMs / 1000));
+    rampValue(d.gain.gain, gain, rampMs);
   }
 
   musicStop(deck: string, fadeMs: number): void {
@@ -443,9 +470,7 @@ export class AudioApiBackend implements AudioBackend {
     this.decks.delete(deck);
     try {
       const t = this.ctx.currentTime;
-      d.gain.gain.cancelScheduledValues(t);
-      d.gain.gain.setValueAtTime(d.gain.gain.value, t);
-      d.gain.gain.linearRampToValueAtTime(0, t + Math.max(0.01, fadeMs / 1000));
+      rampValue(d.gain.gain, 0, fadeMs);
       d.src.stop(t + Math.max(0.02, fadeMs / 1000 + 0.01));
     } catch {
       // Already stopped.
@@ -461,11 +486,8 @@ export class AudioApiBackend implements AudioBackend {
 
   musicFilter(cutoffHz: number | null, rampMs: number): void {
     if (!this.musicLowpass) return;
-    const t = this.ctx.currentTime;
     const f = this.musicLowpass.frequency;
-    f.cancelScheduledValues(t);
-    f.setValueAtTime(f.value, t);
-    f.exponentialRampToValueAtTime(cutoffHz ?? 20000, t + Math.max(0.01, rampMs / 1000));
+    rampValue(f, cutoffHz ?? 20000, rampMs, true);
   }
 
   setMasterGain(gain: number): void {
