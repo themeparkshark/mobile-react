@@ -1,61 +1,52 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Alert, AppState, Platform } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import * as Updates from 'expo-updates';
 
 /**
- * Checks for OTA updates on app launch and when returning from background.
- * Shows a prompt when an update is available, then reloads the app.
+ * OTA update policy.
+ *
+ * Cold start: the native layer checks once (Expo.plist EXUpdatesCheckOnLaunch
+ * ALWAYS, launch wait 0 ms), downloads in the background and applies the
+ * update on the NEXT cold start. JS does not check again at launch.
+ *
+ * Long sessions: when the app returns to the foreground after a long time,
+ * fetch at most once per FOREGROUND_CHECK_INTERVAL_MS. The download is applied
+ * on the next cold start. The JS is never reloaded mid-session: a reload
+ * drops queue-play state, and the old restart prompt crashed Fabric.
  */
+export const FOREGROUND_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+export function shouldCheckOnForeground(lastCheckAt: number, now: number, inFlight: boolean): boolean {
+  return !inFlight && now - lastCheckAt >= FOREGROUND_CHECK_INTERVAL_MS;
+}
+
+export async function fetchUpdateForNextLaunch(updates: Pick<typeof Updates, 'checkForUpdateAsync' | 'fetchUpdateAsync'>): Promise<boolean> {
+  const check = await updates.checkForUpdateAsync();
+  if (!check.isAvailable) return false;
+  const result = await updates.fetchUpdateAsync();
+  return result.isNew;
+}
+
 export function useAppUpdates() {
-  const [isChecking, setIsChecking] = useState(false);
-
-  const checkForUpdate = useCallback(async () => {
-    if (__DEV__) return; // Skip in development
-    if (isChecking) return;
-
-    try {
-      setIsChecking(true);
-      const update = await Updates.checkForUpdateAsync();
-
-      if (update.isAvailable) {
-        const result = await Updates.fetchUpdateAsync();
-
-        if (result.isNew) {
-          Alert.alert(
-            'Update Available',
-            'A new version of Theme Park Shark is ready! Restart to get the latest features.',
-            [
-              { text: 'Later', style: 'cancel' },
-              {
-                text: 'Restart Now',
-                style: 'default',
-                onPress: async () => {
-                  await Updates.reloadAsync();
-                },
-              },
-            ],
-          );
-        }
-      }
-    } catch (e) {
-      // Silently fail - don't disrupt the user experience
-      console.log('Update check failed:', e);
-    } finally {
-      setIsChecking(false);
-    }
-  }, [isChecking]);
+  // The native launch check counts as the first check of this session.
+  const lastCheckAt = useRef(Date.now());
+  const inFlight = useRef(false);
 
   useEffect(() => {
-    // Check on initial mount
-    checkForUpdate();
-
-    // Check when app returns from background
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        checkForUpdate();
-      }
-    });
-
+    if (__DEV__ || !Updates.isEnabled) return undefined;
+    const onChange = (state: AppStateStatus) => {
+      if (state !== 'active') return;
+      const now = Date.now();
+      if (!shouldCheckOnForeground(lastCheckAt.current, now, inFlight.current)) return;
+      lastCheckAt.current = now;
+      inFlight.current = true;
+      fetchUpdateForNextLaunch(Updates)
+        .catch(() => false)
+        .finally(() => {
+          inFlight.current = false;
+        });
+    };
+    const subscription = AppState.addEventListener('change', onChange);
     return () => subscription.remove();
-  }, [checkForUpdate]);
+  }, []);
 }
