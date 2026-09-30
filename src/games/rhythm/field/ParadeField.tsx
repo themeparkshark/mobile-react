@@ -30,7 +30,6 @@ import {
   RoundedRect,
   Skia,
   Text as SkText,
-  useColorBuffer,
   useFont,
   useImage,
   useRSXformBuffer,
@@ -42,8 +41,8 @@ import {
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { useSpriteAtlas } from '../../../gamekit/fx/SpriteAtlas';
 import type { JudgeState } from '../core/judge';
-import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP } from '../core/types';
-import { MAX_LINES, MAX_NOTES, MAX_TAILS, type DrawList, type LaneGeom } from './layout';
+import { J_GREAT, J_PERFECT, J_SHARP } from '../core/types';
+import { MAX_NOTES, type DrawList, type LaneGeom } from './layout';
 import { JUDGE_TEXT, RIBBON_TEXT, TXT_GOOD, TXT_GREAT, type ParadeView } from './view';
 
 const NAVY = '#0b3a6b';
@@ -305,7 +304,7 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
   });
   const feverMatrix = useDerivedValue(() => {
     tick.value;
-    const f = view.value.fever;
+    const f = view.value.fever * 0.65;
     // Golden hour: lift red and green, cool the blue a little. Never purple.
     return [
       1 + 0.1 * f, 0.08 * f, 0, 0, 0.06 * f,
@@ -690,16 +689,6 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     const w = r.width;
     const h = r.height;
     xf.set(c, s, d.x[j] - (c * w / 2 - s * h / 2), d.y[j] - (s * w / 2 + c * h / 2));
-  });
-  const noteColors = useColorBuffer(MAX_NOTES, (col, i) => {
-    'worklet';
-    tick.value;
-    const d = draw.value;
-    const j = d.n - 1 - i;
-    col[0] = 1;
-    col[1] = 1;
-    col[2] = 1;
-    col[3] = j >= 0 ? d.alpha[j] : 0;
   });
   // ECHO (d2): dotted outlines where the notes will be.
   const echoPath = useDerivedValue(() => {

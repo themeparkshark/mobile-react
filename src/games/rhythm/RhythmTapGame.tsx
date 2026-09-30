@@ -28,23 +28,18 @@ import {
   useFrameCallback,
   useSharedValue,
   type FrameInfo,
-  type SharedValue,
 } from 'react-native-reanimated';
 import {
-  FxStage,
   GameAudio,
   GameShellV2,
   Haptic,
   deriveRunSeed,
   drainEvents,
   forEachEvent,
-  playHaptic,
   registerStudioAudio,
   scheduleHaptics,
   setHapticGapMs,
   useWalkSense,
-  type FxStageHandle,
-  type FxState,
   type GameResult,
   type GameShellV2Handle,
   type HapticStep,
@@ -81,9 +76,8 @@ import {
 } from './core/judge';
 import { buildProof } from './core/proof';
 import { autoTuneOffset, summarize, type RoundSummary } from './core/score';
-import { runScript, scriptHuman } from './core/sim';
-import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP, K_BIG, K_CYMBAL, K_RIM, K_ROLL, L_MARCH, STAR_ACCURACY, type Chart, type Difficulty, type RoundFormat } from './core/types';
-import { decodeTouches } from './core/proof';
+import { scriptHuman } from './core/sim';
+import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP, K_BIG, K_CYMBAL, K_RIM, L_MARCH, STAR_ACCURACY, type Chart, type Difficulty, type RoundFormat } from './core/types';
 import { createDrawList, layoutFrame, beatAt } from './field/layout';
 import { ParadeField, fieldGeom, zoneOfX } from './field/ParadeField';
 import { applyEventsUI, createView, showRibbon, stepView, RB_MARCH, RB_READY, type ParadeView } from './field/view';
@@ -204,7 +198,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const [ready, setReady] = useState(false);
   const [pocket, setPocket] = useState(false);
   const [goalHits, setGoalHits] = useState(0);
-  const [rivalScores, setRivalScores] = useState<number[]>([]);
   const [deltaChip, setDeltaChip] = useState<number | null>(null);
 
   useEffect(() => {
@@ -327,7 +320,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     rivalHitT.value = crew.map((r) => r.hitT);
     rivalHitK.value = crew.map(() => 0);
     railFlash.value = [-1e9, -1e9, -1e9];
-    setRivalScores(crew.map(() => 0));
 
     if (AUTOPLAY_SIGMA > 0) {
       const sc = scriptHuman(chart, { sigmaMs: AUTOPLAY_SIGMA, lapse: 0.015 }, plan.seed);
@@ -535,7 +527,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       const vnow = c - offset.value;
       v.now = vnow;
       s.walking = walkingSv.value;
-      if (FAKE_WALK) s.walking = Math.floor(beatAt(beatsSv.value, vnow + 3000) / 32) % 2;
+      if (FAKE_WALK) s.walking = Math.floor(beatAt(beatsSv.value, vnow + 3000) / 16) % 2;
       // Dev autoplay: feed the scripted drummer's touches.
       const ap = auto.value;
       while (ap.i < ap.t.length && ap.t[ap.i] <= vnow) {
@@ -958,4 +950,3 @@ const styles = StyleSheet.create({
 });
 
 export default RhythmTapGame;
-export { runScript, decodeTouches, J_GREAT, K_ROLL };
