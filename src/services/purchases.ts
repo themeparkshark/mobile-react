@@ -71,3 +71,28 @@ export function priceText(product: VipProduct): string {
   const period = product.subscription?.localizedSubscriptionPeriod;
   return period ? `${price} / ${period}` : price;
 }
+
+/**
+ * Apple's auto-renewal disclosure, built from the real product: its price,
+ * billing period and any free trial. Says "Apple ID" (not iTunes).
+ */
+export function legalText(product: VipProduct): string {
+  const price = product.price?.localizedString ?? '';
+  const period = product.subscription?.localizedSubscriptionPeriod;
+  const trial = trialText(product);
+  const billing = period ? `${price} per ${period}` : price;
+  const lead = trial ? `${trial}, then ${billing}.` : `${billing}.`;
+  return `${lead} Payment is charged to your Apple ID ${trial ? 'when the free trial ends' : 'when you confirm the purchase'}. `
+    + 'VIP renews automatically unless it is turned off at least 24 hours before the end of the current period, '
+    + 'and your account is charged for renewal within 24 hours before that. '
+    + 'Manage or cancel anytime in your Apple ID account settings.';
+}
+
+/**
+ * Link the signed-in player to Adapty as soon as they log in, so renewals,
+ * restores and webhooks always carry their id. Safe to call repeatedly.
+ */
+export function activateVipForPlayer(playerId: number | string | null | undefined): void {
+  if (playerId === null || playerId === undefined) return;
+  ensureAdapty(playerId).catch(() => undefined);
+}
