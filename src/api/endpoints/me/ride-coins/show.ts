@@ -8,6 +8,13 @@ export interface CollectedRideCoin extends RideCoinLevelType {
   readonly park_name?: string | null;
   readonly tier_name?: string;
   readonly next_tier_name?: string | null;
+  /** Coin detail only: the ride journal for this ride. */
+  readonly your_rides?: {
+    readonly count: number;
+    readonly last_rode_at: string | null;
+    readonly average_rating: number | null;
+    readonly last_memory: string | null;
+  } | null;
 }
 
 /** One owned coin for its detail sheet (GET /me/ride-coins/{assetId}). 404 when not collected. */

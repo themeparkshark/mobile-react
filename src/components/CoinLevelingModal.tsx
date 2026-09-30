@@ -24,6 +24,14 @@ import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { COIN_TIERS, coinTier } from '../constants/coinTiers';
 import GameIcon from '../ui/GameIcon';
+import type { CollectedRideCoin } from '../api/endpoints/me/ride-coins/show';
+
+const SHORT_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+/** "SEP 27" from an ISO time, read as a calendar day. */
+function ridDay(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return match ? `${SHORT_MONTHS[Number(match[2]) - 1] ?? ''} ${Number(match[3])}` : '';
+}
 import * as RootNavigation from '../RootNavigation';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -164,6 +172,7 @@ export default function CoinLevelingModal({
   const hasEnergy = playerEnergy >= rideCoin.energy_to_next_level;
   const hasParts = playerParts >= rideCoin.parts_to_next_level;
   const canLevelUp = !isMaxLevel && rideCoin.is_unlocked && hasEnergy && hasParts;
+  const yourRides = (rideCoin as CollectedRideCoin).your_rides ?? null;
   const missingAction = rideCoin.is_unlocked && !isMaxLevel
     ? missingResourceAction(Math.max(0, rideCoin.parts_to_next_level - playerParts), Math.max(0, rideCoin.energy_to_next_level - playerEnergy))
     : null;
@@ -466,6 +475,27 @@ export default function CoinLevelingModal({
                       </Text>
                     </View>
                   </TouchableOpacity>
+                )}
+
+                {/* ── Your rides: the ride journal behind this coin ── */}
+                {yourRides && yourRides.count > 0 && (state === 'preview' || state === 'maxed') && !showEditions && (
+                  <View style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffffff',
+                    borderWidth: 2, borderColor: '#bfe5ff', borderRadius: 12, paddingVertical: 7, paddingHorizontal: 10, marginBottom: 8 }}
+                    accessible accessibilityLabel={`You rode this ${yourRides.count} times.`}>
+                    <GameIcon name="ride" size={28} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: '#05346e' }}>
+                        YOUR RIDES: {yourRides.count}{yourRides.last_rode_at ? `, LAST ${ridDay(yourRides.last_rode_at)}` : ''}
+                      </Text>
+                      {!!yourRides.last_memory && <Text numberOfLines={1} style={{ fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c' }}>
+                        “{yourRides.last_memory}”
+                      </Text>}
+                    </View>
+                    {yourRides.average_rating !== null && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <GameIcon name="star" size={18} />
+                      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: '#05346e' }}>{yourRides.average_rating.toFixed(1)}</Text>
+                    </View>}
+                  </View>
                 )}
 
                 {/* ── Level Progress Dots ── */}

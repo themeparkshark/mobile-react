@@ -73,7 +73,8 @@ export default function TaskCoinModal({
     }
     opening.current = true;
     try {
-      const coin = await fetchCoin();
+      // The detail sheet reads its one coin fresh (with the Your rides journal).
+      const coin = await fetchCoin(true);
       if (!mounted.current || !stillRequested()) return;
       if (!coin) {
         if (onPlayInLine) {
