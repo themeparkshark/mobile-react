@@ -25,17 +25,21 @@ import { Callout, type CalloutHandle } from './Hud';
 
 const BOOTH = require('../../assets/games/memory/studio/booth_frame.png');
 const POSES = {
-  idle: require('../../assets/games/memory/studio/shark_idle.png'),
-  hmm: require('../../assets/games/memory/studio/shark_thinking.png'),
-  fist: require('../../assets/games/memory/studio/shark_fist_pump.png'),
-  facepalm: require('../../assets/games/memory/studio/shark_facepalm.png'),
-  party: require('../../assets/games/memory/studio/shark_cheer.png'),
-  coin: require('../../assets/games/memory/studio/shark_coin_overhead.png'),
-  dizzy: require('../../assets/games/memory/studio/shark_dizzy.png'),
+  // Barker shark (striped vest, straw boater): pipeline poses from Alex's refs.
+  idle: require('../../assets/games/memory/studio/barker_idle_cane.png'),
+  hmm: require('../../assets/games/memory/studio/barker_curious.png'),
+  fist: require('../../assets/games/memory/studio/barker_fist_pump.png'),
+  facepalm: require('../../assets/games/memory/studio/barker_facepalm.png'),
+  party: require('../../assets/games/memory/studio/barker_dance.png'),
+  coin: require('../../assets/games/memory/studio/barker_coin_overhead.png'),
+  gasp: require('../../assets/games/memory/studio/barker_gasp.png'),
+  wave: require('../../assets/games/memory/studio/barker_wave.png'),
+  // Comedic loser pose: the face-palm tipping back (code transform, 6.9).
+  dizzy: require('../../assets/games/memory/studio/barker_facepalm.png'),
 };
 const SWEAT = require('../../assets/games/memory/studio/fx_small_sweat_drop.png');
 
-export type Pose = keyof typeof POSES | 'gasp';
+export type Pose = keyof typeof POSES;
 
 export interface SharkStageHandle {
   pose: (p: Pose, holdMs?: number) => void;
@@ -110,7 +114,7 @@ export const SharkStage = forwardRef<SharkStageHandle, {
   const boothH = height;
   const boothW = boothH * BOOTH_ASPECT;
   const sharkH = height * 0.92;
-  const sharkW = sharkH * 0.75;
+  const sharkW = sharkH * 0.8;
 
   const sharkStyle = useAnimatedStyle(() => ({
     transform: [
@@ -122,7 +126,7 @@ export const SharkStage = forwardRef<SharkStageHandle, {
   }));
   const warmStyle = useAnimatedStyle(() => ({ opacity: warmth.value }));
 
-  const sharkSrc = pose === 'gasp' ? POSES.hmm : POSES[pose];
+  const sharkSrc = POSES[pose];
   const cx = width / 2;
 
   return (

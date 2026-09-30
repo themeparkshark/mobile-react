@@ -121,7 +121,10 @@ import { RACE_MS, RACE_PLAY_AT } from './race/raceSim';
 const CARD_BACK = require('../../assets/games/memory/card-back.png');
 const STAMP = require('../../assets/games/memory/studio/match_stamp.png');
 const COIN = require('../../assets/games/memory/studio/coin_alex.png');
-const GULL = require('../../assets/games/memory/studio/seagull.png');
+const GULL_LAND = require('../../assets/games/memory/studio/gull_landing.png');
+const GULL_GRAB = require('../../assets/games/memory/studio/gull_grab.png');
+const GULL_OFF = require('../../assets/games/memory/studio/gull_takeoff.png');
+const TIDE_ARROW = require('../../assets/games/memory/studio/tide_arrow.png');
 const DIZZY = require('../../assets/games/memory/studio/fx_small_dizzy_star.png');
 const SHELF_DROP = require('../../assets/games/memory/sfx/mm_shelf_drop.wav');
 
@@ -364,6 +367,8 @@ export default function MemoryGame({
   const stampV = useSharedValue(0);
   const [stampAt, setStampAt] = useState({ x: 0, y: 0, s: 60 });
   const gull = useSharedValue(0);
+  const tide = useSharedValue(0);
+  const [tideAt, setTideAt] = useState({ x0: 0, x1: 0, y: 0 });
   const [gullAt, setGullAt] = useState({ x1: 0, y1: 0, x2: 0, y2: 0 });
   const dizzy = useSharedValue(0);
   const glow = useSharedValue(0);
@@ -1384,6 +1389,10 @@ export default function MemoryGame({
         case 'tide': {
           GameAudio.play('sh_wave_wash');
           const row = ev.row;
+          // 600ms wave-arrow telegraph sweeps the row before it slides.
+          setTideAt({ x0: g.grid.x - g.cw, x1: g.grid.x + g.grid.w, y: slotCenter(g, row * g.cols).y });
+          tide.value = 0;
+          tide.value = withTiming(1, { duration: 600, easing: Easing.inOut(Easing.sin) });
           for (let c = 0; c < g.cols; c++) {
             const s = row * g.cols + c;
             const id = e.ids[s];
@@ -1656,8 +1665,16 @@ export default function MemoryGame({
     const inn = Math.min(1, t);
     const x = gullAt.x1 + (gullAt.x2 - gullAt.x1) * (inn * 0.5) + out * 120;
     const y = gullAt.y1 + (gullAt.y2 - gullAt.y1) * (inn * 0.5) - 40 - out * 160 - Math.sin(inn * Math.PI) * 20;
-    return { opacity: t > 0.01 && t < 1.99 ? 1 : 0, transform: [{ translateX: x - 36 }, { translateY: y - 36 }, { scaleX: out > 0 ? -1 : 1 }] };
+    return { transform: [{ translateX: x - 40 }, { translateY: y - 36 }, { scaleX: out > 0 ? -1 : 1 }] };
   });
+  // Seagull frames (pipeline sheet): landing on approach, grab while carrying, takeoff.
+  const gullLandStyle = useAnimatedStyle(() => ({ opacity: gull.value > 0.01 && gull.value < 0.85 ? 1 : 0 }));
+  const gullGrabStyle = useAnimatedStyle(() => ({ opacity: gull.value >= 0.85 && gull.value <= 1.0 ? 1 : 0 }));
+  const gullOffStyle = useAnimatedStyle(() => ({ opacity: gull.value > 1.0 && gull.value < 1.99 ? 1 : 0 }));
+  const tideStyle = useAnimatedStyle(() => ({
+    opacity: tide.value > 0.01 && tide.value < 0.99 ? Math.min(1, Math.sin(tide.value * Math.PI) * 2.2) : 0,
+    transform: [{ translateX: tideAt.x0 + (tideAt.x1 - tideAt.x0) * tide.value }],
+  }));
   const dizzyStyle = useAnimatedStyle(() => ({ opacity: dizzy.value }));
   const incomingRimStyle = useAnimatedStyle(() => ({ opacity: incoming.value > 0 && incoming.value < 1 ? 0.6 + 0.4 * Math.abs(Math.sin(incoming.value * Math.PI * 4)) : 0 }));
   const fieldW = field.w;
@@ -1791,7 +1808,13 @@ export default function MemoryGame({
                 style={[styles.abs, { left: stampAt.x - stampAt.s / 2, top: stampAt.y - stampAt.s / 2, width: stampAt.s, height: stampAt.s }, stampStyle]} />
               <Animated.Image source={COIN}
                 style={[styles.abs, { left: stampAt.x - g.cw * 0.7, top: stampAt.y - g.cw * 0.66, width: g.cw * 1.4, height: g.cw * 1.32 }, coinStyle]} />
-              <Animated.Image source={GULL} style={[styles.abs, { width: 72, height: 72 }, gullStyle]} />
+              <Animated.View pointerEvents="none" style={[styles.abs, { width: 80, height: 70 }, gullStyle]}>
+                <Animated.Image source={GULL_LAND} style={[styles.gullFrame, gullLandStyle]} resizeMode="contain" />
+                <Animated.Image source={GULL_GRAB} style={[styles.gullFrame, gullGrabStyle]} resizeMode="contain" />
+                <Animated.Image source={GULL_OFF} style={[styles.gullFrame, gullOffStyle]} resizeMode="contain" />
+              </Animated.View>
+              <Animated.Image source={TIDE_ARROW} resizeMode="contain"
+                style={[styles.abs, { top: tideAt.y - g.ch * 0.32, width: g.cw * 1.1, height: g.ch * 0.64 }, tideStyle]} />
             </Animated.View>
 
             {/* One tap gesture over the felt */}
@@ -1953,6 +1976,7 @@ const styles = StyleSheet.create({
   wash: { position: 'absolute', backgroundColor: '#ffffff', borderRadius: 14 },
   warmFlash: { backgroundColor: '#FFF4D6' },
   dizzy: { position: 'absolute', width: 34, height: 34 },
+  gullFrame: { position: 'absolute', left: 0, top: 0, width: 80, height: 70 },
   peekBtn: {
     position: 'absolute', width: 72, height: 58, borderRadius: 16, backgroundColor: '#ffffff', borderWidth: 3, borderColor: MM.ink,
     alignItems: 'center', justifyContent: 'center',
