@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { createContext, FC, ReactNode, MutableRefObject, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import { createContext, FC, ReactNode, MutableRefObject, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 import { useAsyncEffect, useDebounce, useIntervalWhen } from 'rooks';
 import currentPark from '../api/endpoints/me/current-park';
@@ -23,9 +23,6 @@ export interface LocationContextType {
   /** Latest raw OS sample, even when map movement is filtered as GPS drift. */
   readonly latestLocationSampleRef: MutableRefObject<(LocationType & { timestamp: number;
     accuracyMeters?: number | null; speedMps?: number | null }) | null>;
-  readonly heading: number | null;
-  readonly headingEnabled: boolean;
-  readonly setHeadingEnabled: (enabled: boolean) => void;
   readonly reset: () => void;
   readonly requestLocation: () => void;
   readonly requestPark: () => void;
@@ -47,6 +44,21 @@ export interface LocationContextType {
 export const LocationContext = createContext<LocationContextType>(
   {} as LocationContextType
 );
+
+/**
+ * Compass heading lives in its own context: it ticks many times a second, and
+ * only the map needs it. Screens reading LocationContext no longer re-render
+ * on every heading sample.
+ */
+export interface HeadingContextType {
+  readonly heading: number | null;
+  readonly headingEnabled: boolean;
+  readonly setHeadingEnabled: (enabled: boolean) => void;
+}
+
+export const HeadingContext = createContext<HeadingContextType>({
+  heading: null, headingEnabled: false, setHeadingEnabled: () => undefined,
+});
 
 // Default dev location: Universal Studios Hollywood. EXPO_PUBLIC_DEV_START_LAT/LNG
 // (dev builds only) drop the joystick at a specific ride for playtesting.
@@ -198,7 +210,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
     try {
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Highest,
+        accuracy: Location.Accuracy.High,
       });
 
       return {
@@ -328,11 +340,11 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       try {
         const subscription = await Location.watchPositionAsync(
           {
-            accuracy: accuracyMode === 'queue'
-              ? Location.Accuracy.High : Location.Accuracy.BestForNavigation,
-            // Queue play needs nearby samples for server heartbeats, but the
-            // stationary guest does not need meter-by-meter map animation.
-            distanceInterval: accuracyMode === 'queue' ? 3 : 1,
+            // High (not BestForNavigation) with a 3 m step: the shark still
+            // glides as you walk, and the GPS radio is not flooded. Queue play
+            // keeps the same step for its server heartbeats.
+            accuracy: Location.Accuracy.High,
+            distanceInterval: 3,
             ...(Platform.OS === 'android'
               ? { timeInterval: accuracyMode === 'queue' ? 3000 : 500 } : {}),
           },
@@ -443,30 +455,40 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
+  // Stable callbacks over the latest closures, so the context value only
+  // changes when location state actually changes (not on every render).
+  const latest = useRef({ requestLocation, requestPark, reset });
+  latest.current = { requestLocation, requestPark, reset };
+  const stableRequestLocation = useCallback(() => { void latest.current.requestLocation(); }, []);
+  const stableRequestPark = useCallback(() => { void latest.current.requestPark(); }, []);
+  const stableReset = useCallback(() => latest.current.reset(), []);
+
+  const value = useMemo<LocationContextType>(() => ({
+    permissionChecked,
+    requestPermission,
+    location,
+    latestLocationSampleRef,
+    requestLocation: stableRequestLocation,
+    requestPark: stableRequestPark,
+    reset: stableReset,
+    park,
+    parkLoaded,
+    parkLookupRecord,
+    permissionGranted,
+    setAccuracyMode,
+    devMode,
+    setDevMode,
+    moveDevLocation,
+  }), [permissionChecked, requestPermission, location, stableRequestLocation, stableRequestPark, stableReset,
+    park, parkLoaded, parkLookupRecord, permissionGranted, devMode, moveDevLocation]);
+  const headingValue = useMemo<HeadingContextType>(() => ({ heading, headingEnabled, setHeadingEnabled }),
+    [heading, headingEnabled]);
+
   return (
-    <LocationContext.Provider
-      value={{
-        permissionChecked,
-        requestPermission,
-        location,
-        latestLocationSampleRef,
-        heading,
-        headingEnabled,
-        setHeadingEnabled,
-        requestLocation,
-        requestPark,
-        reset,
-        park,
-        parkLoaded,
-        parkLookupRecord,
-        permissionGranted,
-        setAccuracyMode,
-        devMode,
-        setDevMode,
-        moveDevLocation,
-      }}
-    >
-      {children}
+    <LocationContext.Provider value={value}>
+      <HeadingContext.Provider value={headingValue}>
+        {children}
+      </HeadingContext.Provider>
     </LocationContext.Provider>
   );
 };
