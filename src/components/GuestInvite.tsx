@@ -27,6 +27,8 @@ import useUiReducedMotion from '../ui/useUiReducedMotion';
 const SHARK = require('../../assets/images/screens/welcome/shark.png');
 const LOGO = require('../../assets/images/screens/login/logo.png');
 const WORLD = require('../../assets/images/screens/login/login-bg.png');
+/** The header covers most of the art's painted logo band; this lifts the rest out of view. */
+const WORLD_LOGO_CROP = 24;
 
 export const GUEST_PROMISES: readonly { icon: GameIconName; text: string }[] = [
   { icon: 'coin', text: 'Win a coin for every ride you conquer' },
@@ -75,8 +77,7 @@ export default function GuestInvite() {
   return (
     <View style={styles.root} pointerEvents="box-none">
       {/* His login art fills the top half; a light wash keeps it bright behind the card. */}
-      <Image source={WORLD} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="bottom"
-        pointerEvents="none" accessibilityIgnoresInvertColors />
+      <Image source={WORLD} style={styles.world} contentFit="cover" pointerEvents="none" accessibilityIgnoresInvertColors />
       <View style={styles.wash} pointerEvents="none" />
       <Animated.View style={[styles.card, { paddingBottom: 16 + insets.bottom }, cardStyle]}>
         <Animated.View style={[styles.sharkWrap, sharkStyle]} pointerEvents="none">
@@ -103,6 +104,9 @@ export default function GuestInvite() {
 
 const styles = StyleSheet.create({
   root: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end' },
+  // Full-width art: the header hides its painted logo (the card carries the logo), so the
+  // coaster skyline and his sharks fill the space above the card.
+  world: { position: 'absolute', left: 0, right: 0, top: -WORLD_LOGO_CROP, aspectRatio: 1080 / 1920 },
   wash: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(124,198,245,0.12)' },
   card: {
     backgroundColor: BRAND.cream,
