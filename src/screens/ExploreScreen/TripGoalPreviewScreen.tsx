@@ -6,6 +6,7 @@ import { spacing } from '../../design-system';
 import type { TripGoalData } from '../../api/endpoints/me/trip-goal';
 import type { PrepItemSetListItem } from '../../api/endpoints/me/prep-item-sets';
 import TripGoalCard from './TripGoalCard';
+import Ws2PreviewScene from './Ws2PreviewScene';
 import { GameRichText } from '../../ui';
 
 const starter: TripGoalData = {
@@ -35,8 +36,13 @@ const previewSets: PrepItemSetListItem[] = [{
     title: 'Churro Hunter', badge_url: null },
 }];
 
-/** Development-only visual QA using the real card with in-memory responses. */
+/** Development-only visual QA; EXPO_PUBLIC_WS2_PREVIEW=cycle shows every WS2 map surface instead. */
 export default function TripGoalPreviewScreen() {
+  return __DEV__ && process.env.EXPO_PUBLIC_WS2_PREVIEW ? <Ws2PreviewScene /> : <TripGoalPreview />;
+}
+
+/** Development-only visual QA using the real card with in-memory responses. */
+function TripGoalPreview() {
   const state = useRef<TripGoalData>(starter);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const loadGoal = useCallback(async () => state.current, []);

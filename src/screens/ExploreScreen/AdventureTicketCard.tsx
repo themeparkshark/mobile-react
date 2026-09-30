@@ -39,6 +39,9 @@ interface Props {
   onCelebrate: () => Promise<unknown>;
   onRefresh: () => Promise<void>;
   onOcclusionChange?: (visible: boolean) => void;
+  /** Dev preview only: start with the sheet (or the detour picker) open. */
+  initialOpen?: boolean;
+  initialPicker?: boolean;
 }
 
 const POP = { damping: 9, stiffness: 320, mass: 0.7 };
@@ -134,8 +137,9 @@ function ChipEntrance({ reduced, children, style }: { reduced: boolean; children
 }
 
 export default function AdventureTicketCard({ ticket, data, closed, stale, top, gate, detours = [], slam = [], onSlamDone,
-  onDiscover, onPlay, onFindLine, onShelf, onSelect, onDismiss, onCelebrate, onRefresh, onOcclusionChange }: Props) {
-  const [open, setOpen] = useState(false), [picker, setPicker] = useState(false);
+  onDiscover, onPlay, onFindLine, onShelf, onSelect, onDismiss, onCelebrate, onRefresh, onOcclusionChange,
+  initialOpen = false, initialPicker = false }: Props) {
+  const [open, setOpen] = useState(initialOpen), [picker, setPicker] = useState(initialPicker);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
   const [unfold, setUnfold] = useState(false);
   const mounted = useRef(true), locked = useRef(false), pending = useRef<(() => void) | null>(null);
