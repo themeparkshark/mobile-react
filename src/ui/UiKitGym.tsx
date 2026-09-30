@@ -35,9 +35,19 @@ function Panel({ title, children, blue = false }: { title: string; children: Rea
   </View>;
 }
 
+/** Dev-only tab chip for the gym's own navigation. */
+function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return <Pressable accessibilityRole="tab" accessibilityState={{ selected }} onPress={onPress} style={{
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.pill, borderWidth: OUTLINE.thin,
+    borderColor: BRAND.navy, backgroundColor: selected ? BRAND.gold : BRAND.white,
+  }}>
+    <GameText preset="label">{label}</GameText>
+  </Pressable>;
+}
+
 function IconSheet({ blue, names }: { blue: boolean; names: readonly GameIconName[] }) {
   return <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 6 }}>
-    {names.map(name => <View key={name} style={{ width: '25%', alignItems: 'center' }}>
+    {names.map(name => <View key={name} style={{ width: '33.33%', alignItems: 'center', paddingVertical: 2 }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 50 }}>
         <GameIcon name={name} size={16} />
         <GameIcon name={name} size={24} />
@@ -62,13 +72,7 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
     }}>
       <GameText preset="display" tone="onBlue" align="center">UI Kit</GameText>
       <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: SPACE.xs, paddingHorizontal: SPACE.sm }}>
-        {SECTIONS.map(name => <Pressable key={name} accessibilityRole="tab" accessibilityState={{ selected: section === name }}
-          onPress={() => setSection(name)} style={{
-            paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.pill, borderWidth: OUTLINE.thin,
-            borderColor: BRAND.navy, backgroundColor: section === name ? BRAND.gold : BRAND.white,
-          }}>
-          <GameText preset="label">{name}</GameText>
-        </Pressable>)}
+        {SECTIONS.map(name => <Chip key={name} label={name} selected={section === name} onPress={() => setSection(name)} />)}
       </View>
     </View>
     <ScrollView contentContainerStyle={{ padding: SPACE.lg, paddingBottom: insets.bottom + 120 }}>
@@ -132,9 +136,8 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
 
       {section === 'loaders' && <>
         <View style={{ flexDirection: 'row', gap: 6, marginBottom: SPACE.md, justifyContent: 'center' }}>
-          {(['loading', 'empty', 'error'] as const).map(state => <View key={state} style={{ width: 110 }}>
-            <GameButton label={state} variant={loaderState === state ? 'secondary' : 'ghost'} onPress={() => setLoaderState(state)} />
-          </View>)}
+          {(['loading', 'empty', 'error'] as const).map(state => <Chip key={state} label={state}
+            selected={loaderState === state} onPress={() => setLoaderState(state)} />)}
         </View>
         <Panel title="SharkLoader">
           <View style={{ height: 300 }}>
