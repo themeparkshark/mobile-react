@@ -103,6 +103,7 @@ export const BossArena = React.memo(function BossArena({ L, view, t, fx, anim, i
       <Starburst L={L} view={view} fx={fx} img={img} />
       <BossBody L={L} view={view} t={t} fx={fx} anim={anim} img={img} bossKind={bossKind} reduced={reduced} scaleArt={bossArtScale} />
       <WaterLip L={L} fx={fx} />
+      <DizzyStars L={L} view={view} t={t} img={img} />
       <GaugeArc L={L} view={view} fx={fx} />
       <Telegraphs L={L} view={view} t={t} fx={fx} bossKind={bossKind} />
       <Targets L={L} view={view} t={t} fx={fx} anim={anim} img={img} bossKind={bossKind} />
@@ -292,6 +293,36 @@ function GhostDecoy({ i, L, img, on, t }: { i: number; L: ArenaLayout; img: SkIm
       <SkImage image={img} x={-S / 2} y={-S / 2} width={S} height={S}>
         <BlendColor color="#BFF6FF" mode="modulate" />
       </SkImage>
+    </Group>
+  );
+}
+
+/** Alex-style dizzy stars orbit the boss during a Break (one revolution per 2 beats). */
+function DizzyStars({ L, view, t, img }: { L: ArenaLayout; view: SharedValue<BossView>; t: SharedValue<number>; img: ArenaImages }) {
+  const on = useDerivedValue(() => (view.value.oOn && view.value.oKind === 1 ? 1 : 0));
+  if (!img.star) return null;
+  return (
+    <Group opacity={on}>
+      {[0, 1, 2].map((k) => (
+        <DizzyStar key={k} k={k} L={L} view={view} t={t} star={img.star!} />
+      ))}
+    </Group>
+  );
+}
+
+function DizzyStar({ k, L, view, t, star }: { k: number; L: ArenaLayout; view: SharedValue<BossView>; t: SharedValue<number>; star: SkImageType }) {
+  const S = 30;
+  const tr = useDerivedValue(() => {
+    const v = view.value;
+    const period = v.q * 8;
+    const a = ((t.value - v.oStart) / period) * Math.PI * 2 + (k * Math.PI * 2) / 3;
+    const cx = L.bossX + Math.cos(a) * L.bossSize * 0.34;
+    const cy = L.bossY - L.bossSize * 0.28 + Math.sin(a) * L.bossSize * 0.08;
+    return [{ translateX: cx }, { translateY: cy }, { scale: 0.85 + 0.25 * (Math.sin(a) + 1) / 2 }];
+  });
+  return (
+    <Group transform={tr}>
+      <SkImage image={star} x={-S / 2} y={-S / 2} width={S} height={S} />
     </Group>
   );
 }

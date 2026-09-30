@@ -380,7 +380,7 @@ export function BossBrawl(props: BossBrawlProps) {
         { label: 'PERFECTS', value: `${s.perfect}` },
         { label: 'BREAKS', value: `${s.breaks}` },
         { label: 'RING CRITS', value: `${s.crits}` },
-        { label: 'TIMING', value: timingReadout(s.medianErr) },
+        ...(s.perfect + s.good > 0 ? [{ label: 'TIMING', value: timingReadout(s.medianErr) }] : []),
         ...(s.nextStar ? [{ label: 'NEXT STAR', value: s.nextStar }] : []),
       ],
       meta: {
