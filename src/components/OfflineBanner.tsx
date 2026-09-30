@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   runOnJS,
@@ -25,9 +25,12 @@ const BACK_ONLINE_HOLD_MS = 1400;
 // outage in the park never sits on top of map cards or header counters.
 export const OFFLINE_COMPACT_AFTER_MS = 4000;
 const CHIP_SIZE = 44;
-// Screens whose HUD cards sit right under the header. Here the full card would
-// cover them, so the banner goes straight to the small chip, which fits in the
-// gap between the cards.
+// Explore: map-control column on the right, below the recenter button.
+const MAP_CHIP_TOP = 0.43;
+// Screens whose HUD cards sit right under the header (home: collection and
+// park story cards; park: team banner, boss and ride goal cards). There the full
+// card would cover them, so the banner is only the small chip, docked on the
+// right edge of the map under the recenter button like the other map controls.
 export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore']);
 
 function currentRouteName(): string | undefined {
@@ -64,6 +67,7 @@ function probe(): Promise<unknown> {
  */
 export default function OfflineBanner() {
   const reduceMotion = useReducedMotion();
+  const { height: windowHeight } = useWindowDimensions();
   const [phase, setPhase] = useState<Phase>('hidden');
   const [probing, setProbing] = useState(false);
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -82,7 +86,7 @@ export default function OfflineBanner() {
     return navigationRef.addListener('state', sync);
   }, []);
   const chipOnly = routeName !== undefined && CHIP_ONLY_ROUTES.has(routeName);
-  const compact = phase !== 'hidden' && (timedCompact || chipOnly);
+  const compact = timedCompact;
 
   // Full card first so the player learns what happened, then the small chip.
   useEffect(() => {
@@ -95,16 +99,10 @@ export default function OfflineBanner() {
   }, [phase]);
 
   useEffect(() => {
-    // Arriving straight into the chip (HUD screen, banner still entering):
-    // no card flash first.
-    if (compact && chipOnly && enter.value < 0.5) {
-      shrink.value = 1;
-      return;
-    }
     shrink.value = reduceMotion
       ? withTiming(compact ? 1 : 0, { duration: 160 })
       : withSpring(compact ? 1 : 0, { damping: 16, stiffness: 200, mass: 0.7 });
-  }, [chipOnly, compact, enter, reduceMotion, shrink]);
+  }, [compact, reduceMotion, shrink]);
 
   useEffect(() => {
     const apply = (offline: boolean) => {
@@ -198,13 +196,17 @@ export default function OfflineBanner() {
   const top = (initialWindowMetrics?.insets.top ?? 47) + HEADER_CLEARANCE;
 
   return (
-    <View pointerEvents="box-none" style={[styles.host, { top }]}>
+    <View
+      pointerEvents="box-none"
+      style={chipOnly ? [styles.hostDocked, { top: Math.round(windowHeight * MAP_CHIP_TOP) }] : [styles.host, { top }]}
+    >
       <Animated.View
         style={cardStyle}
         accessibilityLiveRegion="polite"
         accessibilityRole="alert"
         accessibilityLabel={back ? 'Back online' : 'Connection lost. Reconnecting. Some things may not load.'}
       >
+        {!chipOnly && (
         <Animated.View style={[styles.lip, fullStyle]} pointerEvents={compact ? 'none' : 'auto'}>
         <View style={[styles.card, back && styles.cardBack]}>
           <Animated.View style={iconStyle}>
@@ -229,7 +231,13 @@ export default function OfflineBanner() {
           )}
         </View>
         </Animated.View>
-        <Animated.View style={[styles.chipHost, chipStyle]} pointerEvents={compact ? 'box-none' : 'none'}>
+        )}
+        {/* On a HUD screen the chip is the whole banner: it enters with the
+            card animation and never sits on a hidden card. */}
+        <Animated.View
+          style={chipOnly ? styles.chipAlone : [styles.chipHost, chipStyle]}
+          pointerEvents={chipOnly || compact ? 'box-none' : 'none'}
+        >
           <Pressable
             onPress={onChip}
             hitSlop={HIT_SLOP}
@@ -253,6 +261,7 @@ const BANNER_Z = Z.dialog - 1;
 
 const styles = StyleSheet.create({
   host: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: BANNER_Z, elevation: BANNER_Z },
+  hostDocked: { position: 'absolute', right: 16, zIndex: BANNER_Z, elevation: BANNER_Z },
   lip: { borderRadius: 24, backgroundColor: BRAND.navy, paddingBottom: 4, maxWidth: 360, marginHorizontal: 16 },
   card: {
     flexDirection: 'row',
@@ -276,6 +285,7 @@ const styles = StyleSheet.create({
   // The compact chip sits centred where the full card was, small enough to
   // fit between the map cards under the header.
   chipHost: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-start' },
+  chipAlone: { alignItems: 'center' },
   chip: {
     width: CHIP_SIZE,
     height: CHIP_SIZE,

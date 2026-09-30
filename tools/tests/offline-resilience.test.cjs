@@ -292,7 +292,9 @@ test('on Explore the banner goes straight to the chip so it never covers the HUD
   const source = read('src/components/OfflineBanner.tsx');
   assert.match(source, /CHIP_ONLY_ROUTES[^=]*= new Set\(\['Explore'\]\)/);
   assert.match(source, /navigationRef\.addListener\('state'/, 'follows the current route');
-  assert.match(source, /timedCompact \|\| chipOnly/);
+  assert.match(source, /\{!chipOnly && \(/, 'no full card on a HUD screen');
+  assert.match(source, /chipOnly \? styles\.chipAlone/, 'the chip is the whole banner there');
+  assert.match(source, /chipOnly \? \[styles\.hostDocked/, 'docked on the right edge of the map, not over the HUD row');
   assert.match(source, /back \? BACK_ONLINE_ICON : OFFLINE_ICON\} style=\{styles\.chipIcon\}/, 'the chip also says back online');
 });
 
