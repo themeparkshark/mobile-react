@@ -106,8 +106,49 @@ const approvedList = new Set((readJson(path.join(SRC, 'APPROVED.json'))?.approve
 
 const KIND_BUS = { impact: 'sfx', ui: 'ui', tell: 'tell', layer: 'sfx', stinger: 'stinger', music: 'music' };
 
-function inferGame(game, dir) {
-  const files = listAudio(dir);
+/** Directory listing: top-level one-shots, music/ and lanes/ subfolders. */
+function listingFromDir(dir) {
+  return {
+    top: listAudio(dir),
+    music: [...listAudio(path.join(dir, 'music')).map((f) => ({ ...f, sub: 'music' })), ...listAudio(path.join(dir, 'beds')).map((f) => ({ ...f, sub: 'beds' }))],
+    lanes: listAudio(path.join(dir, 'lanes')),
+  };
+}
+
+/**
+ * The audio lead's manifest.json: { files: [{ cue, file, wav?, duration_s,
+ * bpm?, bars?, approval?, source }] } with paths relative to the audio root.
+ */
+function listingFromManifest(game, manifest) {
+  const out = { top: [], music: [], lanes: [] };
+  for (const e of manifest.files || []) {
+    const rel = preferWav && e.wav ? e.wav : e.file;
+    if (!rel || !rel.startsWith(`${game}/`)) continue;
+    const full = path.join(SRC, rel);
+    if (!fs.existsSync(full)) continue;
+    const parts = rel.split('/').slice(1);
+    const file = parts[parts.length - 1];
+    const stem = e.cue || file.replace(/\.[^.]+$/, '');
+    const meta = {
+      approval: e.approval ?? e.approved,
+      durationMs: typeof e.duration_s === 'number' ? Math.round(e.duration_s * 1000) : undefined,
+      bpm: e.bpm,
+    };
+    const f = { stem, file, full, meta };
+    if (parts.length > 1 && (parts[0] === 'music' || parts[0] === 'beds')) out.music.push({ ...f, sub: parts[0] });
+    else if (parts.length > 1 && parts[0] === 'lanes') out.lanes.push(f);
+    else if (parts.length === 1) out.top.push(f);
+  }
+  return out;
+}
+
+function isApproved(meta, id, game) {
+  const a = meta?.approval ?? meta?.approved;
+  return a === true || (typeof a === 'string' && /^(approved|ok|yes)\b/i.test(a)) || approvedList.has(id) || approvedList.has(`${game}/${id}`);
+}
+
+function inferGame(game, dir, listing = listingFromDir(dir)) {
+  const files = listing.top;
   const metrics = metricsFor(game);
   const cues = {};
   const groups = new Map();
@@ -117,7 +158,7 @@ function inferGame(game, dir) {
       if (!groups.has(lk.base)) groups.set(lk.base, []);
       groups.get(lk.base).push({ ...f, order: lk.order });
     }
-    cues[f.stem] = { files: [f], ladder: [] };
+    cues[f.stem] = { files: [f], ladder: [], meta: f.meta };
   }
   for (const [base, members] of groups) {
     members.sort((a, b) => a.order - b.order);
@@ -126,14 +167,18 @@ function inferGame(game, dir) {
   }
   const beds = {};
   const musicReport = readJson(path.join(SRC, '_metrics', 'music.json')) || {};
-  for (const sub of ['music', 'beds']) {
-    for (const f of listAudio(path.join(dir, sub))) {
-      const rep = musicReport[`${game}/${sub}/${f.file}`] || {};
+  {
+    for (const f of listing.music) {
+      const sub = f.sub;
+      const rep = { ...(musicReport[`${game}/${sub}/${f.file}`] || {}) };
+      if (typeof rep.bpm !== 'number' && typeof f.meta?.bpm === 'number') rep.bpm = f.meta.bpm;
+      if (typeof rep.dur_s !== 'number' && f.meta?.durationMs) rep.dur_s = f.meta.durationMs / 1000;
       const isLoop = typeof rep.bpm === 'number' || /loop|^mus_|_bed|^stage_/.test(f.stem);
       if (isLoop) {
         beds[f.stem] = {
           file: f,
           meta: {
+            approval: f.meta?.approval,
             bpm: rep.bpm,
             beatsPerBar: 4,
             offsetMs: Array.isArray(rep.downbeats_s) && rep.downbeats_s.length ? Math.round(rep.downbeats_s[0] * 1000) : undefined,
@@ -146,15 +191,15 @@ function inferGame(game, dir) {
         cues[f.stem] = {
           files: [{ ...f, file: `${sub}/${f.file}`, keep: true }],
           ladder: [],
-          meta: { bus: 'stinger', priority: 3, maxVoices: 1, durationMs: typeof rep.dur_s === 'number' ? Math.round(rep.dur_s * 1000) : undefined },
+          meta: { approval: f.meta?.approval, bus: 'stinger', priority: 3, maxVoices: 1, durationMs: typeof rep.dur_s === 'number' ? Math.round(rep.dur_s * 1000) : undefined },
         };
       }
     }
   }
-  for (const raw of listAudio(path.join(dir, 'lanes'))) {
+  for (const raw of listing.lanes) {
     const f = { ...raw, file: `lanes/${raw.file}` };
     const lk = ladderKey(f.stem);
-    cues[f.stem] = { files: [f], ladder: [] };
+    cues[f.stem] = { files: [f], ladder: [], meta: raw.meta };
     if (lk) {
       const key = `${lk.base}_lanes`;
       if (!cues[key]) cues[key] = { files: [], ladder: [] };
@@ -242,7 +287,9 @@ for (const game of games.sort()) {
   const dir = path.join(SRC, game);
   preferWav = WAV_GAMES.has(game);
   const manifest = readJson(path.join(dir, 'manifest.json'));
-  const { cues, beds, metrics } = manifest ? fromManifest(game, dir, manifest) : inferGame(game, dir);
+  const { cues, beds, metrics } = !manifest ? inferGame(game, dir)
+    : Array.isArray(manifest.files) ? inferGame(game, dir, listingFromManifest(game, manifest))
+    : fromManifest(game, dir, manifest);
   const lines = [];
   const devLines = [];
   for (const id of Object.keys(cues).sort()) {
@@ -263,7 +310,7 @@ for (const game of games.sort()) {
     const bus = meta.bus || KIND_BUS[meta.kind] || (/(^|_)tell(_|$)/.test(id) ? 'tell' : undefined);
     if (bus) parts.push(`bus: '${bus}'`);
     for (const k of ['maxVoices', 'cooldownMs', 'priority', 'pitchJitter']) if (num(meta[k]) !== undefined) parts.push(`${k}: ${meta[k]}`);
-    const approved = meta.approved === true || approvedList.has(id) || approvedList.has(`${game}/${id}`);
+    const approved = isApproved(meta, id, game);
     parts.push(`approved: ${approved}`);
     (approved ? lines : devLines).push(`    '${id}': { ${parts.join(', ')} },`);
     cueCount++;
@@ -279,7 +326,7 @@ for (const game of games.sort()) {
     const m = b.meta || {};
     const parts = [`src: require('${reqPath(game, rel)}')`];
     for (const k of ['bpm', 'beatsPerBar', 'offsetMs', 'loopStartMs', 'loopEndMs', 'gainDb']) if (num(m[k]) !== undefined) parts.push(`${k}: ${m[k]}`);
-    const ok = m.approved === true || approvedList.has(id);
+    const ok = isApproved(m, id, game);
     parts.push(`approved: ${ok}`);
     (ok ? bl : devBl).push(`    '${id}': { ${parts.join(', ')} },`);
   }
