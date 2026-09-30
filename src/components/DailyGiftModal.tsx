@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Modal from 'react-native-modal';
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
@@ -10,18 +10,23 @@ import Animated, {
 import update from '../api/endpoints/daily-gifts/update';
 import getDailyGift from '../api/endpoints/daily-gifts/create';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
+import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
-import type { DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
+import type { DailyGiftAmountsType, DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
+import { BRAND, GameIcon, gameAlert } from '../ui';
 import Ribbon from './Ribbon';
+import RewardBurst from './RewardBurst';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
-const ICON = {
-  coins: require('../../assets/images/coingold.png'),
-  energy: require('../../assets/images/energy.png'),
-  tickets: require('../../assets/images/ticket-icon.png'),
+
+type PrizeKind = 'coins' | 'energy' | 'tickets';
+const PRIZE: Record<PrizeKind, { icon: 'coins' | 'energy' | 'ticket'; one: string; many: string; fly: string }> = {
+  coins: { icon: 'coins', one: 'Shark Coin', many: 'Shark Coins', fly: 'coins' },
+  energy: { icon: 'energy', one: 'Energy', many: 'Energy', fly: 'energy' },
+  tickets: { icon: 'ticket', one: 'Park Ticket', many: 'Park Tickets', fly: 'tickets' },
 };
 
 // Older servers send no ladder; show today's coins as day 1.
@@ -29,16 +34,30 @@ function fallbackLadder(gift: DailyGiftType): DailyGiftRewardType[] {
   return [{ day: 1, coins: gift.coins, energy: 0, tickets: 0 }];
 }
 
-function mainReward(r: DailyGiftRewardType): { icon: number; amount: number; label: string } {
-  if (r.tickets > 0) return { icon: ICON.tickets, amount: r.tickets, label: r.tickets === 1 ? 'Park Ticket' : 'Park Tickets' };
-  if (r.energy > 0) return { icon: ICON.energy, amount: r.energy, label: 'Energy' };
-  return { icon: ICON.coins, amount: r.coins, label: 'Shark Coins' };
+function mainKind(r: DailyGiftAmountsType): PrizeKind {
+  if (r.tickets > 0) return 'tickets';
+  if (r.energy > 0) return 'energy';
+  return 'coins';
+}
+
+export function prizeLabel(kind: PrizeKind, amount: number): string {
+  return amount === 1 ? PRIZE[kind].one : PRIZE[kind].many;
 }
 
 /**
- * Daily chest: a 7-day ladder you climb by coming back. Tap (or keep tapping)
- * the chest to shake it open; the lid pops, rewards burst out and the day's
- * stamp lands on the ladder. Day 7 holds a Park Ticket for your next visit.
+ * The amounts to celebrate. Once opened, only what the server says it paid
+ * (`granted`); before that, the ladder day (never shown as earned).
+ */
+export function chestAmounts(gift: DailyGiftType, today: DailyGiftRewardType): DailyGiftAmountsType {
+  return gift.granted ?? gift.reward ?? today;
+}
+
+/**
+ * Daily chest: a 7-day ladder you climb by coming back, looping weekly with
+ * streak milestones. Tap the chest to shake it open; the lid pops, the real
+ * granted reward bursts out with confetti and counts up, and the day's stamp
+ * lands on the ladder. Day 7 punches a Park Ticket. Closing flies the reward
+ * into its HUD counter. An Energy or Ticket day never shows a chest of coins.
  */
 export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
   readonly dailyGift: DailyGiftType;
@@ -47,10 +66,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
   const occlusion = useRef(onMapOcclusionChange); occlusion.current = onMapOcclusionChange;
   useEffect(() => () => { occlusion.current?.(false); }, []);
   const { player, refreshPlayer } = useContext(AuthContext);
-  const { width } = useWindowDimensions();
+  const { triggerFly } = useCurrencyFly();
+  const dims = useWindowDimensions();
+  const width = dims.width;
+  const height = dims.height ?? 800;
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
   const [confirmedGift, setConfirmedGift] = useState<DailyGiftType | null>(null);
+  const [shown, setShown] = useState(0);
   const { setDailyGift } = useContext(DailyGiftContext);
   const reducedMotion = useReducedGameMotion();
   const reducedMotionRef = useRef(reducedMotion);
@@ -59,11 +82,13 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
   const acknowledgedGift = useRef<DailyGiftType | null>(null);
   const mounted = useRef(true);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (revealTimer.current) clearTimeout(revealTimer.current);
+      if (countTimer.current) clearTimeout(countTimer.current);
     };
   }, []);
 
@@ -71,7 +96,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
   const ladder = displayedGift.ladder?.length ? displayedGift.ladder : fallbackLadder(displayedGift);
   const day = Math.min(ladder.length, Math.max(1, displayedGift.day ?? 1));
   const today = ladder[day - 1];
-  const reward = mainReward(today);
+  const amounts = chestAmounts(displayedGift, today);
+  const kind = mainKind(amounts);
+  const amount = amounts[kind];
+  const ticketDay = kind === 'tickets';
+  const milestone = displayedGift.milestone ?? null;
+  const next = displayedGift.next_milestone ?? null;
+  const extras = (['coins', 'energy', 'tickets'] as PrizeKind[])
+    .filter(k => k !== kind && amounts[k] > 0);
 
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
@@ -79,6 +111,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
   const glow = useSharedValue(0);
   const prize = useSharedValue(0);
   const stamp = useSharedValue(0);
+  const burst = useSharedValue(0);
+  const punch = useSharedValue(0);
+  const cardShake = useSharedValue(0);
 
   useEffect(() => {
     if (!dailyGift.redeemed_at && player?.username) setVisible(true);
@@ -97,20 +132,85 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
     return () => { cancelAnimation(bob); cancelAnimation(glow); };
   }, [visible, phase, reducedMotion, bob, glow]);
   useEffect(() => () => {
-    [shake, pop, prize, stamp].forEach(cancelAnimation);
-  }, [shake, pop, prize, stamp]);
+    [shake, pop, prize, stamp, burst, punch, cardShake].forEach(cancelAnimation);
+  }, [shake, pop, prize, stamp, burst, punch, cardShake]);
   useEffect(() => {
     if (!reducedMotion) return;
-    [shake, pop, prize, stamp].forEach(cancelAnimation);
-    shake.value = 0; pop.value = 1;
+    [shake, pop, prize, stamp, burst, punch, cardShake].forEach(cancelAnimation);
+    shake.value = 0; pop.value = 1; burst.value = 0; cardShake.value = 0;
     prize.value = phase === 'open' ? 1 : 0;
     stamp.value = phase === 'open' ? 1 : 0;
-  }, [reducedMotion, phase, shake, pop, prize, stamp]);
+    punch.value = phase === 'open' ? 1 : 0;
+  }, [reducedMotion, phase, shake, pop, prize, stamp, burst, punch, cardShake]);
+
+  // Count the prize up from zero once the chest is open (instant when reduced).
+  useEffect(() => {
+    if (phase !== 'open') { setShown(0); return; }
+    if (reducedMotion || amount <= 1) { setShown(amount); return; }
+    // ~650 ms in 20 frames; frame-counted so a stalled JS thread never skips the end.
+    const frames = 20;
+    let frame = 0;
+    const step = () => {
+      if (!mounted.current) return;
+      frame += 1;
+      const t = Math.min(1, frame / frames);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setShown(t >= 1 ? amount : Math.max(1, Math.round(amount * eased)));
+      if (t < 1) countTimer.current = setTimeout(step, 32);
+      else void Haptics.selectionAsync?.().catch(() => undefined);
+    };
+    countTimer.current = setTimeout(step, 260);
+    return () => { if (countTimer.current) clearTimeout(countTimer.current); };
+  }, [phase, amount, reducedMotion]);
 
   const dismiss = () => {
     setVisible(false);
-    if (acknowledgedGift.current) setDailyGift(acknowledgedGift.current);
+    if (acknowledgedGift.current) {
+      // The reward lands in its real HUD counter.
+      const paid = chestAmounts(acknowledgedGift.current, today);
+      (['coins', 'tickets', 'energy'] as PrizeKind[]).forEach(k => {
+        if (paid[k] > 0) {
+          triggerFly({ imageSource: k === 'coins' ? require('../../assets/images/coingold.png')
+            : k === 'tickets' ? require('../../assets/images/ticket-icon.png') : require('../../assets/images/energy.png'),
+          amount: Math.min(8, paid[k]), startX: width / 2, startY: height * 0.55, targetPosition: PRIZE[k].fly });
+        }
+      });
+      setDailyGift(acknowledgedGift.current);
+    }
   };
+
+  const celebrate = (isTicket: boolean) => {
+    if (reducedMotionRef.current) {
+      shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1; punch.value = 1;
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      playSfx('win');
+      return;
+    }
+    // Anticipation done: lid pops with overshoot, the prize rises, confetti bursts.
+    pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 }));
+    burst.value = 0;
+    burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) });
+    prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
+    stamp.value = withDelay(650, withSpring(1, { damping: 8, stiffness: 220 }));
+    if (isTicket) {
+      // Day 7: the Ticket slams down, a short hit-stop, then the punch and a card shake.
+      punch.value = withDelay(420, withSequence(
+        withTiming(0.55, { duration: 140, easing: Easing.in(Easing.quad) }),
+        withTiming(0.55, { duration: 90 }),
+        withSpring(1, { damping: 6, stiffness: 260 }),
+      ));
+      cardShake.value = withDelay(650, withSequence(
+        ...[9, -8, 6, -4, 2, 0].map(v => withTiming(v, { duration: 45 })),
+      ));
+      setTimeout(() => {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
+        playSfx('hit');
+      }, 650);
+    }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    playSfx('win'); playSfx('coin', 0.9);
+  };
+
   const open = async () => {
     if (claiming.current || phase !== 'closed') return;
     claiming.current = true;
@@ -130,18 +230,13 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
       void refreshPlayer?.();
       if (!mounted.current) { setDailyGift(confirmed); return; }
       setConfirmedGift(confirmed);
+      const confirmedLadder = confirmed.ladder?.length ? confirmed.ladder : fallbackLadder(confirmed);
+      const confirmedToday = confirmedLadder[Math.min(confirmedLadder.length, Math.max(1, confirmed.day ?? 1)) - 1];
+      const isTicket = mainKind(chestAmounts(confirmed, confirmedToday)) === 'tickets';
       revealTimer.current = setTimeout(() => {
         if (!mounted.current) return;
         setPhase('open');
-        if (reducedMotionRef.current) {
-          shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1;
-        } else {
-          pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 }));
-          prize.value = withDelay(120, withSpring(1, { damping: 9, stiffness: 150 }));
-          stamp.value = withDelay(650, withSpring(1, { damping: 8, stiffness: 220 }));
-        }
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-        playSfx('win'); playSfx('coin', 0.9);
+        celebrate(isTicket);
       }, reducedMotion ? 0 : Math.max(0, 440 - (Date.now() - startedAt)));
     } catch {
       // A previous successful claim can outlive this screen. Reconcile before retrying.
@@ -154,10 +249,10 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
         setDailyGift(current);
         void refreshPlayer?.();
         setVisible(false);
-        Alert.alert('Today’s chest is collected', 'Your rewards are already in your wallet. Come back tomorrow for the next chest.');
+        gameAlert('Today’s chest is collected', 'Your rewards are already in your wallet. Come back tomorrow for the next chest.');
       } else {
         setPhase('closed');
-        Alert.alert('Could not open your chest', 'Your chest is still waiting. Check your connection and try again.');
+        gameAlert('Could not open your chest', 'Your chest is still waiting. Check your connection and try again.');
       }
     }
   };
@@ -171,20 +266,40 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
   const prizeStyle = useAnimatedStyle(() => ({
     opacity: prize.value, transform: [{ translateY: (1 - prize.value) * 40 }, { scale: 0.5 + prize.value * 0.5 }],
   }));
+  const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
+  // The Ticket falls from above tilted, squashes on impact, then settles.
+  const ticketStyle = useAnimatedStyle(() => {
+    const p = punch.value;
+    return {
+      opacity: p === 0 ? 0 : 1,
+      transform: [
+        { translateY: p < 0.55 ? -160 * (1 - p / 0.55) : 0 },
+        { rotate: `${p < 0.55 ? -22 * (1 - p / 0.55) : -6 * (1 - p)}deg` },
+        { scaleY: p >= 0.55 && p < 0.7 ? 0.82 : 1 },
+      ],
+    };
+  });
+  const holeStyle = useAnimatedStyle(() => ({
+    opacity: punch.value >= 0.6 ? 1 : 0,
+    transform: [{ scale: punch.value >= 0.6 ? 0.4 + punch.value * 0.6 : 0 }],
+  }));
 
   const chestSize = Math.min(width * 0.52, 230);
+  // Only a coin day opens onto the pile of coins; other prizes rise from the chest.
+  const openArt = kind === 'coins' ? CHEST_OPEN : CHEST_CLOSED;
 
   return (
     <Modal isVisible={visible} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
       onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => occlusion.current?.(false)}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
       animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
-      backdropOpacity={0.7} onBackdropPress={phase !== 'opening' ? dismiss : undefined}
+      backdropColor={BRAND.navy}
+      backdropOpacity={0.55} onBackdropPress={phase !== 'opening' ? dismiss : undefined}
       onBackButtonPress={phase !== 'opening' ? dismiss : undefined}>
-      <View style={styles.wrap}>
+      <Animated.View style={[styles.wrap, cardStyle]}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
-          <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest · Day ${day} of ${ladder.length}`}</Text>
+          <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest: day ${day} of ${ladder.length}`}</Text>
 
           <View style={styles.ladder}>
             {ladder.map((r) => (
@@ -192,38 +307,58 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
                 stamp={r.day === day ? stamp : undefined} />
             ))}
           </View>
+          {(displayedGift.streak ?? 0) > 1 && (
+            <View style={styles.streakRow}>
+              <GameIcon name="streak" size={18} />
+              <Text style={styles.streakText}>{`${displayedGift.streak} day streak`}</Text>
+            </View>
+          )}
 
           <Pressable onPress={onChestPress} disabled={phase !== 'closed'} accessibilityRole="button"
             accessibilityState={{ disabled: phase !== 'closed', busy: phase === 'opening' }}
-            accessibilityLabel={phase === 'open' ? `Opened: ${reward.amount} ${reward.label}` : 'Open today’s chest'}
+            accessibilityLabel={phase === 'open' ? `Opened: ${amount} ${prizeLabel(kind, amount)}` : 'Open today’s chest'}
             style={[styles.stage, { height: chestSize + 40 }]}>
             <Animated.View style={[styles.glow, { width: chestSize * 1.3, height: chestSize * 1.3, borderRadius: chestSize }, glowStyle]} />
             <Animated.View style={chestStyle}>
-              <Image source={phase === 'open' ? CHEST_OPEN : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
+              <Image source={phase === 'open' ? openArt : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
             </Animated.View>
+            {phase === 'open' && ticketDay && (
+              <Animated.View style={[styles.ticketPunch, ticketStyle]} pointerEvents="none">
+                <GameIcon name="ticket" size={chestSize * 0.62} />
+                <Animated.View style={[styles.punchHole, holeStyle]} />
+              </Animated.View>
+            )}
           </Pressable>
 
           {phase === 'open' ? (
             <Animated.View style={[styles.prize, prizeStyle]}>
-              <Image source={reward.icon} style={styles.prizeIcon} contentFit="contain" />
-              <Text style={styles.prizeText}>+{reward.amount} {reward.label}</Text>
-              {today.tickets > 0 && today.coins > 0 && <Text style={styles.prizeExtra}>+{today.coins} Shark Coins</Text>}
+              {!ticketDay && <GameIcon name={PRIZE[kind].icon} size={56} />}
+              <Text style={styles.prizeText}>+{shown} {prizeLabel(kind, amount)}</Text>
+              {extras.map(k => (
+                <Text key={k} style={styles.prizeExtra}>+{amounts[k]} {prizeLabel(k, amounts[k])}</Text>
+              ))}
+              {milestone && <Text style={styles.milestone}>{`${milestone.label} bonus!`}</Text>}
             </Animated.View>
           ) : (
             <Text style={styles.hint}>{phase === 'opening' ? 'Opening your chest…' : 'Tap the chest to open it!'}</Text>
           )}
 
+          {phase === 'open' && next && (
+            <Text style={styles.next}>{`${next.days_away} more day${next.days_away === 1 ? '' : 's'} to your ${next.label}`}</Text>
+          )}
+
           {phase === 'open' && (
             <Pressable onPress={dismiss} accessibilityRole="button" style={styles.button}>
-              <Text style={styles.buttonText}>{day === 7 ? 'SEE YOU AT THE PARK!' : 'AWESOME!'}</Text>
+              <Text style={styles.buttonText}>{ticketDay ? 'SEE YOU AT THE PARK!' : 'AWESOME!'}</Text>
             </Pressable>
           )}
           {phase === 'closed' && <Pressable onPress={dismiss} accessibilityRole="button"
             accessibilityLabel="Back to map without opening this chest" style={styles.laterButton}>
-            <Text style={styles.laterText}>BACK TO MAP ›</Text>
+            <Text style={styles.laterText}>BACK TO MAP</Text>
           </Pressable>}
         </View>
-      </View>
+        <RewardBurst progress={burst} x={width * 0.47} y={height * 0.36} />
+      </Animated.View>
     </Modal>
   );
 }
@@ -233,49 +368,58 @@ function LadderDay({ reward, state, stamp }: {
   readonly state: 'done' | 'today' | 'future';
   readonly stamp?: SharedValue<number>;
 }) {
-  const r = mainReward(reward);
+  const kind = mainKind(reward);
   const fallback = useSharedValue(state === 'done' ? 1 : 0);
   const s = stamp ?? fallback;
   const checkStyle = useAnimatedStyle(() => ({ opacity: s.value, transform: [{ scale: 1.8 - s.value * 0.8 }] }));
   return (
     <View style={[styles.day, state === 'today' && styles.dayToday, reward.day === 7 && styles.daySeven]}>
-      <Text style={[styles.dayLabel, state === 'today' && styles.dayLabelToday]}>{reward.day === 7 ? 'DAY 7' : `DAY ${reward.day}`}</Text>
-      <Image source={r.icon} style={[styles.dayIcon, state === 'future' && { opacity: 0.55 }]} contentFit="contain" />
-      <Text style={styles.dayAmount}>{r.amount}</Text>
-      {(state === 'done' || stamp) && <Animated.View style={[styles.check, checkStyle]}><Text style={styles.checkText}>✓</Text></Animated.View>}
+      <Text style={[styles.dayLabel, state === 'today' && styles.dayLabelToday]}>{`DAY ${reward.day}`}</Text>
+      <View style={state === 'future' ? styles.dimmed : undefined}>
+        <GameIcon name={PRIZE[kind].icon} size={24} />
+      </View>
+      <Text style={styles.dayAmount}>{reward[kind]}</Text>
+      {(state === 'done' || stamp) && <Animated.View style={[styles.check, checkStyle]}>
+        <GameIcon name="check" size={26} accessibilityLabel="Collected" />
+      </Animated.View>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center' },
-  card: { width: '94%', marginTop: -14, backgroundColor: '#0768b9', borderRadius: 24, borderWidth: 4, borderColor: '#fff',
+  card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 22, paddingBottom: 18, paddingHorizontal: 12, alignItems: 'center' },
   subtitle: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', marginBottom: 10, textAlign: 'center' },
   ladder: { flexDirection: 'row', gap: 4, alignSelf: 'stretch', justifyContent: 'center' },
   day: { flex: 1, maxWidth: 48, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 10,
     paddingVertical: 5 },
-  dayToday: { backgroundColor: '#ffcf3b' },
-  daySeven: { borderWidth: 2, borderColor: '#ffcf3b' },
+  dayToday: { backgroundColor: BRAND.gold },
+  daySeven: { borderWidth: 2, borderColor: BRAND.gold },
   dayLabel: { fontFamily: 'Knockout', fontSize: 10, color: '#cdeaff' },
   dayLabelToday: { color: '#7a3d00' },
-  dayIcon: { width: 24, height: 24, marginVertical: 2 },
-  dayAmount: { fontFamily: 'Shark', fontSize: 13, color: '#fff' },
-  check: { ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: 'rgba(22, 163, 74, 0.8)',
+  dimmed: { opacity: 0.55, marginVertical: 2 },
+  dayAmount: { fontFamily: 'Shark', fontSize: 13, color: BRAND.white },
+  check: { ...StyleSheet.absoluteFillObject, borderRadius: 10, backgroundColor: 'rgba(60, 184, 92, 0.85)',
     justifyContent: 'center', alignItems: 'center' },
-  checkText: { fontFamily: 'Shark', fontSize: 24, color: '#fff' },
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
+  streakText: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },
   glow: { position: 'absolute', backgroundColor: 'rgba(255, 226, 92, 0.35)' },
-  hint: { fontFamily: 'Shark', fontSize: 20, color: '#ffcf3b' },
+  ticketPunch: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0 },
+  punchHole: { position: 'absolute', right: '22%', top: '38%', width: 22, height: 22, borderRadius: 11,
+    backgroundColor: BRAND.blue, borderWidth: 3, borderColor: BRAND.navy },
+  hint: { fontFamily: 'Shark', fontSize: 20, color: BRAND.gold },
   prize: { alignItems: 'center' },
-  prizeIcon: { width: 56, height: 56 },
-  prizeText: { fontFamily: 'Shark', fontSize: 28, color: '#ffcf3b',
+  prizeText: { fontFamily: 'Shark', fontSize: 28, color: BRAND.gold,
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  prizeExtra: { fontFamily: 'Shark', fontSize: 18, color: '#fff' },
-  button: { marginTop: 14, alignSelf: 'stretch', backgroundColor: '#ffcf3b', borderRadius: 16, paddingVertical: 12,
-    alignItems: 'center', borderBottomWidth: 4, borderBottomColor: '#d99a00' },
+  prizeExtra: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white },
+  milestone: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, marginTop: 4 },
+  next: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff', marginTop: 6, textAlign: 'center' },
+  button: { marginTop: 14, alignSelf: 'stretch', backgroundColor: BRAND.gold, borderRadius: 16, paddingVertical: 12,
+    alignItems: 'center', borderBottomWidth: 4, borderBottomColor: BRAND.goldLip },
   buttonText: { fontFamily: 'Shark', fontSize: 20, color: '#075083' },
   laterButton: { minHeight: 44, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center',
     marginTop: 8, borderRadius: 12, borderWidth: 2, borderColor: '#8fcdff', backgroundColor: '#075395' },
-  laterText: { fontFamily: 'Knockout', fontSize: 17, color: '#fff' },
+  laterText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white },
 });
