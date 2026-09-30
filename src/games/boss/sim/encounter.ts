@@ -135,6 +135,9 @@ export interface Bout {
   gaugeHot: boolean;
 }
 
+/** Scoring units per point (points x combo pct x mult pct). */
+export const UNIT_POINTS = UNIT;
+
 export const P_LEAD = 0;
 export const P_ATTACK = 1;
 export const P_OPEN = 2;

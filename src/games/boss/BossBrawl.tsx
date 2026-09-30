@@ -49,6 +49,14 @@ import { IN_END, IN_PAD_DOWN, IN_PAD_UP, IN_PAUSE, IN_RESUME, IN_TARGET, STAR_PO
 import { pickVariant } from './sim/patterns';
 import { boutProof, legacyDamage, summarize, timingReadout, toLegacyProof } from './sim/round';
 import { tauntFor } from './taunts';
+import { CrewLayer, type CrewLayerHandle } from './multiplayer/CrewLayer';
+import {
+  CREW_BREAK, CREW_BREAK_END, CREW_CAUGHT, CREW_LUNGE, CREW_PERFECT, HouseCrew, ghostAt, ghostTimeline,
+  type CrewTransport, type GhostTimeline,
+} from './multiplayer/crew';
+import { createSurge, surgeLevel, surgePip, SYNC_START_MS } from './multiplayer/strikeTeam';
+import { loadGhost, saveGhostIfBest } from './multiplayer/ghostStore';
+import { IN_ALLY, IN_SURGE } from './sim/constants';
 
 export const BOSS_ART: Record<BossId, number> = {
   kraken: require('../../../assets/images/boss/kraken.png'),
@@ -113,6 +121,14 @@ export interface BossBrawlProps {
   readonly rank?: number;
   /** Dev: a bot plays (MiniGameTester / capture). */
   readonly autoplay?: boolean;
+  /**
+   * Strike Team: a live transport (WS6 raid poll / Reverb presence) or 'house'
+   * for the house-crew fill. Teammates share the seed, Team Surge, the Lure's
+   * Ally Openings and Sync Strikes; nobody waits for anyone.
+   */
+  readonly crew?: 'house' | CrewTransport | null;
+  /** Race a ghost on the same seed and variant: 'auto' = this week's local best. */
+  readonly ghost?: 'auto' | { name: string; log: import('./sim/round').RoundLog } | null;
 }
 
 export function BossBrawl(props: BossBrawlProps) {
@@ -135,6 +151,22 @@ export function BossBrawl(props: BossBrawlProps) {
   const [ribbon, setRibbon] = useState<string | null>(null);
   const [taunt, setTaunt] = useState<string | null>(null);
   const [inter, setInter] = useState({ bout: 0, dmg: 0, steps: 0, tide: false });
+  // Crew / ghost
+  const crewOn = props.crew === 'house' || (!!props.crew && typeof props.crew === 'object') ||
+    (__DEV__ && process.env.EXPO_PUBLIC_BOSS_CREW === '1' && props.crew !== null);
+  const crewRef = useRef<CrewTransport | null>(null);
+  const crewLayer = useRef<CrewLayerHandle>(null);
+  const roundWall = useRef(0);
+  const surge = useRef(createSurge());
+  const crewBreaks = useRef(new Map<string, number>());
+  const myBreakAt = useRef(-1e12);
+  const ghostRef = useRef<GhostTimeline | null>(null);
+  const ghostLunge = useRef(0);
+  const [mates, setMates] = useState<{ id: string; name: string; lure: boolean; inBreak: boolean; ghost?: boolean }[]>([]);
+  const [surgeN, setSurgeN] = useState(0);
+  const [surgeOn, setSurgeOn] = useState(false);
+  const [meLure, setMeLure] = useState(false);
+  const [ghostLine, setGhostLine] = useState<string | null>(null);
 
   // Round state (JS)
   const round = useRef({ seed: 0, variant: 0, bouts: [] as Bout[], carry: freshCarry() as Carry, offset: 0, attempt: 0 });
@@ -236,6 +268,26 @@ export function BossBrawl(props: BossBrawlProps) {
     anim.entrance.value = 0;
     anim.exit.value = 0;
     anim.pose.value = 0;
+    crewRef.current = null;
+    ghostRef.current = null;
+    setMates([]);
+    setGhostLine(null);
+    surge.current = createSurge();
+    crewBreaks.current.clear();
+    const g = props.ghost ?? (__DEV__ && process.env.EXPO_PUBLIC_BOSS_GHOST === '1' ? 'auto' : null);
+    if (g === 'auto') {
+      void loadGhost(boss).then((stored) => {
+        if (!stored || stageRef.current !== 'idle') return;
+        // A ghost race is forced onto the ghost's seed and variant.
+        round.current.seed = stored.log.seed >>> 0;
+        round.current.variant = stored.log.variant;
+        ghostRef.current = ghostTimeline(stored.log, 'YOUR BEST');
+      });
+    } else if (g && typeof g === 'object') {
+      r.seed = g.log.seed >>> 0;
+      r.variant = g.log.variant;
+      ghostRef.current = ghostTimeline(g.log, g.name);
+    }
     void loadCalibration().then((cal) => { round.current.offset = Math.max(-120, Math.min(120, Math.round(cal.inputOffsetMs || 0))); }).catch(() => undefined);
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -251,9 +303,11 @@ export function BossBrawl(props: BossBrawlProps) {
     const r = round.current;
     const b = createBout({
       boss, seed: r.seed, bout: n, carry: r.carry, walk: walking, tide, offset: r.offset, variant: r.variant,
+      team: !!crewRef.current,
     });
     boutRef.current = b;
     evIdx.current = 0;
+    ghostLunge.current = 0;
     pending.current = [];
     openingHits.current = 0;
     slamSeen.current = '';
@@ -289,6 +343,13 @@ export function BossBrawl(props: BossBrawlProps) {
 
   const beginRound = useCallback(() => {
     // Entrance: the boss bursts through the water lip.
+    roundWall.current = Date.now();
+    if (crewOn) {
+      crewRef.current = typeof props.crew === 'object' && props.crew ? props.crew : new HouseCrew(boss, round.current.seed, 2);
+      setMates(crewRef.current.roster().filter((m) => m.id !== 'me').map((m) => ({ id: m.id, name: m.name, lure: false, inBreak: false })));
+    } else if (ghostRef.current) {
+      setMates([{ id: 'ghost', name: ghostRef.current.name, lure: false, inBreak: false, ghost: true }]);
+    }
     setStageBoth('intro');
     bossSfx.entrance(boss);
     playHaptic('tierUp', { priority: HP.own });
@@ -297,7 +358,7 @@ export function BossBrawl(props: BossBrawlProps) {
       fxRef.current?.burst('splash', L.bossX, L.bossY + L.bossSize * 0.25, { count: 24 });
     }, 250);
     setTimeout(() => introThen(0, false), 900);
-  }, [boss, anim.entrance, L, introThen]);
+  }, [boss, anim.entrance, L, introThen, crewOn, props.crew]);
 
   // ---- results --------------------------------------------------------------
   const buildResult = useCallback((reason?: string): GameResult => {
@@ -335,6 +396,10 @@ export function BossBrawl(props: BossBrawlProps) {
     const r = round.current;
     const s = summarize(r.bouts);
     const res = buildResult();
+    if (r.bouts.length === 3 && s.damage > 0) {
+      void saveGhostIfBest(boss, { name: 'YOUR BEST', damage: s.damage, savedAt: Date.now(),
+        log: { boss, seed: r.seed, variant: r.variant, bouts: r.bouts.map(boutProof) } });
+    }
     setStageBoth('outro');
     running.value = false;
     const ko = hpLeft - res.score <= 0 && s.damage > 0;
@@ -446,6 +511,30 @@ export function BossBrawl(props: BossBrawlProps) {
       { key: 'stack', size: crit ? 'xl' : 'lg', color: crit ? '#FFCF3B' : '#FFFFFF', rise: 6, ms: 700 });
   };
 
+  const teamPerfect = () => {
+    const now = Date.now() - roundWall.current;
+    const full = surgePip(surge.current, now);
+    setSurgeN(surgeLevel(surge.current, now));
+    if (full) {
+      setSurgeOn(true);
+      setTimeout(() => setSurgeOn(false), 1600);
+      bossSfx.surge();
+      scheduleHaptics([{ at: 0, p: 'medium' }, { at: 100, p: 'medium' }], { priority: HP.own });
+      fxRef.current?.flyUp('TEAM SURGE!', L.W / 2, L.bossY - L.bossSize * 0.2, { size: 'xl', color: '#FFCF3B' });
+      const b = boutRef.current;
+      if (b && stageRef.current === 'bout') {
+        input(b, { t: boutT.value, k: IN_SURGE });
+        view.value = buildView(b);
+      }
+    }
+  };
+  const syncStrike = () => {
+    crewLayer.current?.sync();
+    bossSfx.sync();
+    clock.hitStop(120, { force: true });
+    scheduleHaptics([{ at: 0, p: 'medium' }, { at: 100, p: 'medium' }], { priority: HP.own });
+  };
+
   const onEvent = (e: SimEvent) => {
     const bx = L.bossX;
     const by = L.bossY;
@@ -505,6 +594,10 @@ export function BossBrawl(props: BossBrawlProps) {
           anim.flash.value = withSequence(withTiming(0.4, { duration: 30 }), withTiming(0, { duration: 160 }));
         }
         setHint(null);
+        if (perfect && crewRef.current) {
+          crewRef.current.publish({ kind: CREW_PERFECT, who: 'me', at: Date.now() - roundWall.current });
+          teamPerfect();
+        }
         break;
       }
       case E_PUNISH:
@@ -608,6 +701,11 @@ export function BossBrawl(props: BossBrawlProps) {
         openingHits.current = 0;
         stackTotal.current = e.v;
         setHint('BREAK! Hit the float on every gold ring');
+        myBreakAt.current = Date.now() - roundWall.current;
+        if (crewRef.current) {
+          crewRef.current.publish({ kind: CREW_BREAK, who: 'me', at: myBreakAt.current });
+          for (const at of crewBreaks.current.values()) if (Math.abs(at - myBreakAt.current) <= SYNC_START_MS) syncStrike();
+        }
         break;
       }
       case E_BREAK_END:
@@ -660,6 +758,62 @@ export function BossBrawl(props: BossBrawlProps) {
       default:
     }
   };
+
+  // ---- crew / ghost tick (wall clock; nothing here ever pauses anyone) -------
+  useEffect(() => {
+    if (!visible || stage === 'idle' || stage === 'done') return undefined;
+    const id = setInterval(() => {
+      const now = Date.now() - roundWall.current;
+      const crew = crewRef.current;
+      if (crew) {
+        const lure = crew instanceof HouseCrew ? crew.lure(boutNo, stageRef.current === 'bout') : null;
+        for (const ev of crew.drain(now)) {
+          if (ev.kind === CREW_LUNGE) {
+            crewLayer.current?.lunge(ev.who);
+            GameAudio.play(GameAudio.hasCue('bo_hit') ? 'bo_hit' : 'fx.hit', { volume: 0.3, pitch: 2 });
+            fxRef.current?.burst('sparks', L.bossX + (Math.random() - 0.5) * 60, L.bossY, { count: 5 });
+          } else if (ev.kind === CREW_PERFECT) {
+            teamPerfect();
+            const b = boutRef.current;
+            if (ev.who === lure && b && stageRef.current === 'bout' && b.pendingAlly === 0) {
+              // The Lure's PERFECT exposes the boss's back in my fight: an Ally Opening at my next recover.
+              input(b, { t: boutT.value, k: IN_ALLY });
+              playHaptic('incoming', { priority: HP.own });
+              crewLayer.current?.lunge(ev.who);
+            }
+          } else if (ev.kind === CREW_BREAK) {
+            crewBreaks.current.set(ev.who, ev.at);
+            if (Math.abs(ev.at - myBreakAt.current) <= SYNC_START_MS) syncStrike();
+          } else if (ev.kind === CREW_BREAK_END) {
+            crewBreaks.current.delete(ev.who);
+          } else if (ev.kind === CREW_CAUGHT) {
+            crewLayer.current?.caught(ev.who);
+          }
+        }
+        setMeLure(lure === 'me');
+        setSurgeN(surgeLevel(surge.current, now));
+        setMates((ms) => {
+          const next = ms.map((m) => ({ ...m, lure: m.id === lure, inBreak: crewBreaks.current.has(m.id) }));
+          return next.some((m, i) => m.lure !== ms[i].lure || m.inBreak !== ms[i].inBreak) ? next : ms;
+        });
+      }
+      const g = ghostRef.current;
+      const b = boutRef.current;
+      if (g && b && stageRef.current === 'bout') {
+        const t = boutT.value;
+        const theirs = ghostAt(g, b.cfg.bout, t);
+        const mine = round.current.bouts.reduce((sum, x) => sum + scoreBout(x), 0) + scoreBout(b);
+        const d = mine - theirs;
+        setGhostLine(`vs ${g.name}: ${d >= 0 ? '+' : ''}${d}`);
+        const lunges = g.bouts[b.cfg.bout]?.lunges ?? [];
+        while (ghostLunge.current < lunges.length && lunges[ghostLunge.current] <= t) {
+          ghostLunge.current += 1;
+          if (!crew) crewLayer.current?.lunge('ghost');
+        }
+      }
+    }, 100);
+    return () => clearInterval(id);
+  }, [visible, stage, boutNo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- JS sim loop: advance (with a small lag), fire due events, publish ----
   useEffect(() => {
@@ -1009,6 +1163,9 @@ export function BossBrawl(props: BossBrawlProps) {
           </View>
         )}
 
+        {(mates.length > 0 || ghostLine) && (
+          <CrewLayer ref={crewLayer} L={L} mates={mates} surge={surgeN} surgeOn={surgeOn} meLure={meLure && stage === 'bout'} ghostLine={ghostLine} />
+        )}
         <FxStage ref={fxRef} width={L.W} height={L.H} timeScale={clock.fxScale} reducedMotion={reduced} />
       </GestureHandlerRootView>
     </GameShellV2>
