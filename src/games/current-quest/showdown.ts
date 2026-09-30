@@ -16,10 +16,10 @@
  */
 
 import {
-  A_SPLASH, A_UNDO, applyAction, createRun, currentBoard, PUZZLE_KNOBS, totalShells,
+  A_RESTART, A_SPLASH, A_UNDO, applyAction, strokesLeft, createRun, currentBoard, PUZZLE_KNOBS, totalShells,
   type Board, type Knobs, type RunState,
 } from './rules';
-import { hintFrom } from './solver';
+import { distanceFrom, hintFrom } from './solver';
 import { showdownBoards } from './library';
 
 export const SHOWDOWN_WINDOW_MS = 180000;
@@ -158,7 +158,12 @@ export function stepBot(bot: Bot, nowMs: number): BotEvent[] {
     if (bot.inbox > 0 && !v.stalled) {
       bot.inbox -= 1;
       action = A_SPLASH;
-    } else if (v.stalled || bot.pendingUndo) {
+    } else if (v.stalled || (distanceFrom(board, v, false) > strokesLeft(run) && v.stack.length > 0
+      && distanceFrom(board, { pos: board.start, mask: 0, golden: false, moves: 0, phase: v.phase }, false) <= strokesLeft(run) + v.spent)) {
+      // Out of budget (a Splash can do that): start the voyage fresh, like a person would.
+      action = A_RESTART;
+      bot.pendingUndo = false;
+    } else if (bot.pendingUndo) {
       action = A_UNDO;
       bot.pendingUndo = false;
     } else if (bot.rand() < PROFILE[bot.seat.profile].mistake) {
@@ -168,7 +173,7 @@ export function stepBot(bot: Bot, nowMs: number): BotEvent[] {
       action = dirs[Math.floor(bot.rand() * dirs.length)];
       bot.pendingUndo = true;
     } else {
-      const budget = bot.goldThisVoyage ? Infinity : 0;
+      const budget = bot.goldThisVoyage ? strokesLeft(run) : 0;
       action = hintFrom(board, v, 1, budget)[0] ?? 0;
     }
     const res = applyAction(run, action);

@@ -545,6 +545,8 @@ export function applyAction(runIn: RunState, action: number): { run: RunState; o
     fresh.tips = v.tips;
     fresh.continues = v.continues;
     fresh.restarts = v.restarts + 1;
+    // Puzzle: limitBonus only ever comes from Splashes (world state), so it survives a restart.
+    fresh.limitBonus = trial ? 0 : v.limitBonus;
     fresh.shield = v.stack.length ? v.stack[0].shield : v.shield;
     fresh.parT = v.parT;
     fresh.parGoldT = v.parGoldT;
@@ -572,6 +574,8 @@ export function applyAction(runIn: RunState, action: number): { run: RunState; o
     let blocked = false;
     if (v.shield) { v.shield = false; blocked = true; } else {
       v.phase += 1;
+      // A Splash forces replanning, never a dead end: it brings 2 spare strokes.
+      if (board.P) v.limitBonus += 2;
       if (remainingPar) {
         v.parT = Math.max(v.parT, v.strokes + remainingPar(board, v, false));
         v.parGoldT = Math.max(v.parGoldT, v.strokes + remainingPar(board, v, true));
