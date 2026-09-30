@@ -25,6 +25,9 @@ import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../game
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { useCamera } from '../../gamekit/fx/useCamera';
 import { useFeel, type FeelDef } from '../../gamekit/feel';
+import { createFxGovernor, govHitStop } from '../../gamekit/core/fxGovernor';
+import { TIER_NAMES, TIER_SCALES } from '../../gamekit/core/perfTier';
+import { usePerfTier } from '../../gamekit/perf/usePerfTier';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { registerStudioAudio } from '../../gamekit/audio/studioLibrary';
 import { useGameMusic } from '../../gamekit/audio/useGameMusic';
@@ -149,6 +152,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const shellRef = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
   const perf = usePerfProbe(visible);
+  // Perf tier (full / lite / min): an older phone keeps 60fps by thinning particles, never by dropping a tell.
+  const perfTier = usePerfTier({ active: visible });
+  const tierScale = TIER_SCALES[perfTier.tierJs] ?? TIER_SCALES[0];
   const net = useMemo(() => props.net ?? ((format === 'duel' || format === 'raid') ? createLocalNetAdapter({ rivalName: duel?.rival.name ?? 'Captain Fin' }) : null), [props.net, format, duel?.rival.name]);
 
   // ---------------------------------------------------------------- layout
@@ -200,6 +206,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const tlRef = useRef<Timeline | null>(null);
   const incomingRef = useRef<number[]>(duel?.incomingSplats ?? []);
   const duelWinsRef = useRef<[number, number]>(duel?.wins ?? [0, 0]);
+  /** Rival's verified Burst totals so far (duel), for the near-miss line on the card. */
+  const rivalTotalRef = useRef(0);
   const walkBaseRef = useRef(0);
   const lastBoostRef = useRef(-9);
   const boostAltRef = useRef<WalkBoost>('golden');
@@ -287,13 +295,13 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       ring: { from: 8, to: 40, ms: 150 }, flyUp: { size: 'sm' } },
     good: { sfx: cues.bonk, ladder: true, spatial: true, haptic: 'goodHit', localStop: 45, burst: [{ emitter: 'stars', count: 6 }],
       ring: { from: 10, to: 70, ms: 180 }, flyUp: { size: 'md' } },
-    quick: { sfx: cues.bonk, ladder: true, spatial: true, haptic: 'quickHit', localStop: 65,
+    quick: { prio: 1, sfx: cues.bonk, ladder: true, spatial: true, haptic: 'quickHit', localStop: 65,
       burst: [{ emitter: 'impact' }, { emitter: 'splash', count: 10 }], ring: { color: GOLD, from: 12, to: 80, ms: 200 },
       bloom: { radius: 80, peak: 0.6, ms: 160 }, flyUp: { size: 'lg', color: GOLD } },
-    crit: { sfx: cues.crit, spatial: true, haptic: 'crit', localStop: 90,
+    crit: { prio: 2, sfx: cues.crit, spatial: true, haptic: 'crit', localStop: 90,
       burst: [{ emitter: 'impact', size: 1.4 }, { emitter: 'sparks' }, { emitter: 'splash', count: 8 }],
       ring: { color: GOLD, from: 14, to: 110, ms: 240 }, bloom: { radius: 110, peak: 0.85, ms: 220 }, flyUp: { size: 'lg', color: '#ffe07a' } },
-    golden: { sfx: cues.golden, haptic: 'golden', hitStop: 110, hitStopSim: true, forceStop: true, slowMo: [0.35, 280, 120], punch: 0.03,
+    golden: { prio: 5, sfx: cues.golden, haptic: 'golden', hitStop: 110, hitStopSim: true, forceStop: true, slowMo: [0.35, 280, 120], punch: 0.03,
       burst: [{ emitter: 'speedLines', count: 12 }, { emitter: 'coins', count: 16, magnet: true }, { emitter: 'sparkles' }],
       vignette: { color: GOLD, peak: 0.35, inMs: 40, holdMs: 60, outMs: 260 }, flyUp: { size: 'xl', color: GOLD }, duckDb: 6 },
     angler: { sfx: cues.chomp, haptic: 'punish', localStop: 90, shake: 0.25, burst: [{ emitter: 'bubbles', count: 8, color: 0xffff6b5c }],
@@ -306,12 +314,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     escape: { sfx: cues.duck, volume: 0.55, spatial: true, burst: [{ emitter: 'bubbles', count: 4 }] },
     tierUp: { sfx: cues.tier, ladder: true, haptic: 'tierUp', burst: [{ emitter: 'confetti', count: 16 }] },
     comboBreak: { sfx: cues.breakCue, haptic: 'comboBreak' },
-    fever: { sfx: cues.feverStart, haptic: 'feverStart', hitStop: 80, hitStopSim: true, forceStop: true, flash: { color: '#ffffff', peak: 0.4, ms: 160 },
+    fever: { prio: 4, sfx: cues.feverStart, haptic: 'feverStart', hitStop: 80, hitStopSim: true, forceStop: true, flash: { color: '#ffffff', peak: 0.4, ms: 160 },
       burst: [{ emitter: 'speedLines', count: 16 }, { emitter: 'confetti', count: 26 }],
       vignette: { color: GOLD, peak: 0.28, inMs: 120, holdMs: 6600, outMs: 300 }, flyUp: { size: 'xl', color: GOLD } },
     feverEnd: { sfx: cues.feverEnd },
     bossHit: { sfx: cues.bossHit, haptic: 'quickHit', shake: 0.3 },
-    bossDown: { haptic: 'ko', hitStop: 160, hitStopSim: true, forceStop: true, slowMo: [0.3, 500, 200], shake: 0.8, punch: 0.05,
+    bossDown: { prio: 6, force: true, haptic: 'ko', hitStop: 160, hitStopSim: true, forceStop: true, slowMo: [0.3, 500, 200], shake: 0.8, punch: 0.05,
       burst: [{ emitter: 'confetti', count: 60 }, { emitter: 'coins', count: 24, magnet: true }], flash: { color: '#ffffff', peak: 0.35, ms: 200 },
       flyUp: { size: 'xl', color: GOLD } },
     splat: { sfx: cues.splat, haptic: 'lateHit', burst: [{ emitter: 'ink', count: 8 }] },
@@ -321,7 +329,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     tellAngler: { sfx: cues.tells[2], volume: 0.8, spatial: true, haptic: 'anglerTell', tell: true },
   }), [cues]);
   const clockRef = useRef<ReturnType<typeof useWhackRuntime>['clock'] | null>(null);
-  const feel = useFeel(table, { fx, camera, clock: null, width: field?.w ?? 390, calm: reducedMotion || walk.walking });
+  // One governor per game: stacked goldens, fever and boss beats read as one big moment, never a strobe.
+  const governor = useMemo(() => createFxGovernor({ calm: reducedMotion || walk.walking }), [reducedMotion, walk.walking]);
+  const feel = useFeel(table, { fx, camera, clock: null, width: field?.w ?? 390, calm: reducedMotion || walk.walking, governor });
 
   // ---------------------------------------------------------------- sim events (JS)
   const onEventsRef = useRef<(batch: number[]) => void>(() => undefined);
@@ -346,7 +356,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     // Local hit-stop and global freezes go straight to the Bonk Rush clock.
     if (clock && def) {
       if (def.localStop) clock.localStop(h, reducedMotion ? Math.min(40, def.localStop) : def.localStop);
-      if (def.hitStop) clock.hitStop(reducedMotion ? Math.min(60, def.hitStop) : def.hitStop, { holdSim: def.hitStopSim, force: def.forceStop });
+      if (def.hitStop) {
+        const want = reducedMotion ? Math.min(60, def.hitStop) : def.hitStop;
+        const ms = govHitStop(governor, Date.now(), want, def.prio ?? 0, !!def.forceStop);
+        if (ms > 0) clock.hitStop(ms, { holdSim: def.hitStopSim, force: def.forceStop });
+      }
       if (def.slowMo && !reducedMotion) clock.slowMo(def.slowMo[0], def.slowMo[1], def.slowMo[2]);
     }
   };
@@ -663,6 +677,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       bursts: banked.length,
       proof: ride ? last?.proof : banked.map((b) => b.proof),
       fps_p5: perf.summary().fpsP5,
+      perf_tier: TIER_NAMES[perfTier.tierJs],
       ...(reason ? { reason } : {}),
     };
     setResult({
@@ -671,6 +686,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       message,
       maxCombo: maxStreak,
       thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds,
+      // Duel: "You beat Captain Fin by 600" or "Only 120 behind Captain Fin", always a positive next goal.
+      // (Queue runs get the "off your best" line from the shell's personal best.)
+      rival: format === 'duel' ? { name: duel?.rival.name ?? 'Captain Fin', score: rivalTotalRef.current } : null,
       stats: [
         { label: 'QUICK', value: `${judged ? Math.round((100 * quick) / judged) : 0}%` },
         { label: 'BEST STREAK', value: `${maxStreak}` },
@@ -682,7 +700,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       meta,
     });
     setPhase('done');
-  }, [best, cues, difficulty, format, perf, ride, theme, totalBursts]);
+  }, [best, cues, difficulty, format, perf, perfTier.tierJs, ride, theme, totalBursts, duel?.rival.name]);
 
   const bankBurst = useCallback(async (): Promise<BurstBanked | null> => {
     const t = tlRef.current;
@@ -742,6 +760,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       if (v && v.ok && v.duel) {
         setReveal(v.duel);
         duelWinsRef.current = v.duel.wins;
+        rivalTotalRef.current += v.duel.rival?.score ?? 0;
         incomingRef.current = v.duel.incoming;
         duelLine = v.duel.winner === 'me' ? `BURST ${t.input.burstIndex + 1}: YOU!` : v.duel.winner === 'rival' ? `BURST ${t.input.burstIndex + 1}: RIVAL` : 'DEAD HEAT';
         if (v.duel.matchOver) {
@@ -943,7 +962,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
               </Animated.View>
             </GestureDetector>
           ) : null}
-          {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={140}
+          {L ? <FxStage ref={fx} width={L.w} height={L.h} timeScale={runtime.clock.fxScale} reducedMotion={reducedMotion} capacity={Math.max(48, Math.round(140 * tierScale.particles))}
             onArrive={(n) => { for (let k = 0; k < n; k++) setTimeout(() => GameAudio.playLadder(cues.coinTick, Math.min(12, k)), k * 20); playHaptic('tick'); }} /> : null}
           {L ? <Banner text={banner.text} sub={banner.sub} color={banner.color} stamp={banner.stamp} top={L.topH + (L.h - L.topH) * 0.18} /> : null}
           {phase === 'breather' && breather ? (
