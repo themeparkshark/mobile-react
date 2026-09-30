@@ -45,7 +45,7 @@ test('the unused 3D avatar, its model and its GL stack are gone from the binary'
   assert.ok(!fs.existsSync(path.join(root, 'assets/models/shark-avatar.glb')));
   assert.ok(!fs.existsSync(path.join(root, 'src/components/SharkAvatar3D.tsx')));
   const pkg = JSON.parse(read('package.json'));
-  assert.deepEqual(pkg.expo.autolinking.exclude, ['expo-gl']);
+  assert.ok(pkg.expo.autolinking.exclude.includes('expo-gl'));
   let hits = '';
   try {
     hits = execFileSync('git', ['grep', '-l', '-E', "from 'expo-gl'|from 'expo-three'|three-stdlib", '--', 'src'], { cwd: root, encoding: 'utf8' }).trim();

@@ -109,7 +109,8 @@
   "expo": {
     "autolinking": {
       "exclude": [
-        "expo-gl"
+        "expo-gl",
+        "expo-image-picker"
       ]
     }
   }

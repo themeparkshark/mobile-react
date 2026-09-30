@@ -41,12 +41,12 @@ test('every dev screen module exists', () => {
   assert.equal(listed.length, files.length);
 });
 
-test('only the Trip Goal preview (WS2) still imports react-native-maps', () => {
+test('no app source imports react-native-maps; previews use the MapLibre game map', () => {
   let hits = '';
   try {
     hits = execFileSync('git', ['grep', '-l', "from 'react-native-maps'", '--', 'src'], { cwd: root, encoding: 'utf8' }).trim();
   } catch (error) {
     if (error.status !== 1) throw error;
   }
-  assert.deepEqual(hits ? hits.split('\n') : [], ['src/screens/ExploreScreen/TripGoalPreviewScreen.tsx']);
+  assert.deepEqual(hits ? hits.split('\n') : [], []);
 });
