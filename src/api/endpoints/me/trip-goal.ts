@@ -6,12 +6,18 @@ export interface AdventureRide {
   readonly ride_id: number;
   readonly ride_name: string;
   readonly coin_url: string;
+  /** Where the ride's queue is, so Play can be gated by distance. */
+  readonly lat?: number;
+  readonly lng?: number;
+  readonly radius?: number;
 }
 
 export interface AdventureStamp extends AdventureRide {
   readonly kind: 'owned_coin' | 'coin_win' | 'queue_story';
   readonly confirmed_at: string;
   readonly coin_level?: number;
+  /** The won attempt behind a 'coin_win' Discover stamp. */
+  readonly attempt_id?: number;
   readonly chapter_title?: string;
   readonly route_name?: string | null;
 }
@@ -27,6 +33,10 @@ export interface AdventureTicket {
   readonly play: AdventureStamp | null;
   readonly phase: 'discover' | 'play' | 'celebrate' | 'complete';
   readonly celebrated_at: string | null;
+  /** 'arrival' (started on park check-in) or 'choice'. */
+  readonly origin?: 'arrival' | 'choice';
+  /** 'get_in_line': a story finished away from the queue, so the Play stamp still waits. */
+  readonly play_hint?: 'get_in_line' | null;
 }
 
 export interface TripGoalRide {
@@ -39,9 +49,13 @@ export interface TripGoalRide {
   readonly coin_url: string;
   readonly coin_owned: boolean;
   readonly coin_level: number | null;
+  /** The ride is an attraction that can host an Adventure Ticket. */
+  readonly adventure_ready?: boolean;
 }
 
 export interface TripGoalData {
+  /** Server feature flag (config adventure.enabled). Off: no ticket UI at all. */
+  readonly adventure_enabled?: boolean;
   readonly adventure_ticket?: AdventureTicket | null;
   readonly rides: TripGoalRide[];
   readonly goal: TripGoalRide | null;

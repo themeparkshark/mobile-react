@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Animated } from 'react-native';
+import { Animated, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { opportunityIsActive } from '../screens/ExploreScreen/mapOpportunityTiming';
 import {
@@ -16,6 +16,8 @@ import RedeemKeyModal from './RedeemKeyModal';
 import RedeemRedeemableModal from './RedeemRedeemableModal';
 import RedeemVaultModal from './RedeemVaultModal';
 import YellowButton from './YellowButton';
+import { TaskType } from '../models/task-type';
+import { BRAND, GameIcon } from '../ui';
 
 export default function RedeemModal({
   redeemable,
@@ -23,7 +25,13 @@ export default function RedeemModal({
   onPress,
   onTaskFailed,
   onTaskCompleted,
+  selectedTaskId = null,
+  onOpenChange,
 }: {
+  /** The ride selected on the map; PLAY RIDE hides while a different ride is selected. */
+  readonly selectedTaskId?: number | null;
+  /** The challenge flow opened or closed (for the map's one-overlay-at-a-time queue). */
+  readonly onOpenChange?: (open: boolean) => void;
   readonly redeemable?: CurrentRedeemableType;
   readonly park: ParkType;
   readonly onPress: () => void;
@@ -39,8 +47,14 @@ export default function RedeemModal({
   const lastAnnounced = useRef<string | null>(null);
   const animated = useRef(new Animated.Value(0)).current;
 
+  const openChange = useRef(onOpenChange); openChange.current = onOpenChange;
+  useEffect(() => { openChange.current?.(modalVisible); }, [modalVisible]);
+  useEffect(() => () => openChange.current?.(false), []);
+  const task = redeemable?.type === 'task' ? redeemable.model as TaskType : null;
+  // Selecting a different ride on the map means the player is looking elsewhere.
+  const otherSelected = !!task && selectedTaskId !== null && selectedTaskId !== task.id;
   const timed = redeemable?.type === 'coin' || redeemable?.type === 'key' || redeemable?.type === 'redeemable';
-  const available = !!redeemable && (!timed || opportunityIsActive(
+  const available = !!redeemable && !otherSelected && (!timed || opportunityIsActive(
     redeemable.model as CoinType | KeyType | RedeemableType));
   const identity = redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
   useEffect(() => {
@@ -77,6 +91,14 @@ export default function RedeemModal({
             text={redeemable.type === 'task' ? 'Play Ride!'
               : redeemable.type === 'secret_task' ? 'Play Secret!' : 'Redeem'}
           />
+          {task && <View pointerEvents="none" style={styles.caption} accessible
+            accessibilityLabel={`${task.name}. Costs ${task.ticket_cost ?? 1} ${(task.ticket_cost ?? 1) === 1 ? 'Ticket' : 'Tickets'}.`}>
+            <Text style={styles.captionText} numberOfLines={1}>{task.name}</Text>
+            <View style={styles.cost}>
+              <GameIcon name="ticket" size={16} />
+              <Text style={styles.captionText}>{task.ticket_cost ?? 1}</Text>
+            </View>
+          </View>}
         </Animated.View>
       )}
       {openedRedeemable && (
@@ -125,3 +147,11 @@ export default function RedeemModal({
     </>
   );
 }
+
+const styles: Record<'caption' | 'cost', ViewStyle> & { captionText: TextStyle } = {
+  // Ride name and price under PLAY RIDE, on a white tab with his navy outline.
+  caption: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: -4, maxWidth: '100%',
+    backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 3 },
+  captionText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, flexShrink: 1 },
+  cost: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+};

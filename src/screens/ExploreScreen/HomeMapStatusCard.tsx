@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Image } from 'expo-image';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { GameIcon, GameRichText } from '../../ui';
 
 interface Props {
   readonly mode: 'loading' | 'empty' | 'error' | 'saved' | 'park_check';
@@ -64,18 +65,18 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: 
       {mode === 'empty' && onOpenCollections && <Pressable accessibilityRole="button"
         accessibilityLabel="Open home collections" onPress={onOpenCollections}
         style={styles.button}>
-        <Text style={styles.buttonText}>COLLECTIONS  →</Text>
+        <GameRichText style={styles.buttonText} iconSize={14}>{'COLLECTIONS [icon:arrow]'}</GameRichText>
       </Pressable>}
       {mode === 'error' && onRetry && <Pressable accessibilityRole="button"
         accessibilityLabel="Refresh nearby prep items" onPress={onRetry}
         style={styles.button}>
-        <Text style={styles.buttonText}>TRY AGAIN  →</Text>
+        <GameRichText style={styles.buttonText} iconSize={14}>{'TRY AGAIN [icon:arrow]'}</GameRichText>
       </Pressable>}
     </View>
     {mode === 'empty' && onRetry && <Pressable accessibilityRole="button"
       accessibilityLabel="Refresh nearby prep items" onPress={onRetry}
       style={styles.refreshButton}>
-      <Text style={styles.refreshText}>↻</Text>
+      <GameIcon name="retry" size={22} accessibilityLabel="Refresh" />
     </Pressable>}
   </Animated.View>;
 }

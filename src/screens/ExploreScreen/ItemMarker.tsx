@@ -24,7 +24,7 @@ export default function ItemMarker({
     >
       <View pointerEvents="none">
         <Image
-          source={require('../../../assets/images/screens/explore/item_animation.gif')}
+          source={require('../../../assets/images/screens/explore/item_animation.webp')}
           contentFit="contain"
           style={{ width: 70, height: 70 }}
         />

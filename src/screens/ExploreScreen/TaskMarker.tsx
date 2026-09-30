@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
-import { useContext, useEffect, useMemo, useState } from 'react';
+import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Marker } from '../../components/map/Marker';
 import RideTeamFlag from '../../components/map/RideTeamFlag';
 import Countdown, { zeroPad } from 'react-countdown';
@@ -14,6 +14,10 @@ import { TEAMS } from '../../constants/teams';
 import { MapQueryContext } from '../../components/Map';
 import { BEHIND, RideAmbience, WaterAmbience } from '../../components/map/RideAmbience';
 import { ambienceNow, rideLook, WATER_AMBIENCE, type LandmarkId } from '../../services/rideLandmark';
+import { haptic } from '../../gamekit/Haptics';
+import { BRAND, GameIcon } from '../../ui';
+import { formatDistance } from './adventureTicketPresentation';
+import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentation';
 
 const LANDMARKS: Record<LandmarkId, number> = {
   shark: require('../../../assets/images/map/landmarks/shark.png'),
@@ -83,21 +87,21 @@ function FloatingCoin({ reducedMotion }: { readonly reducedMotion: boolean }) {
   return <Animated.Image source={RIDE_COIN} style={[styles.floatingCoin, style]} />;
 }
 
-/**
- * TaskMarker: a ride's landmark on the game map (themed from its name), its
- * coin, team flag and timer, plus its Easter-egg scene when the player is near.
- * The map pins the outer view by its anchor, so inner animations are safe.
- */
-export default function TaskMarker({
-  task,
-  isSelected,
-  isTripGoal = false,
-  control,
-  flagRaiseKey,
-  ambient = false,
-  live,
-  onPress,
-}: {
+/** "Play here": a soft ring swells out from the island's base while the ride is playable. */
+function PlayPulse({ color, reducedMotion }: { readonly color: string; readonly reducedMotion: boolean }) {
+  const p = useSharedValue(0);
+  useEffect(() => {
+    if (reducedMotion) { p.value = 0.5; return; }
+    p.value = 0;
+    p.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.out(Easing.cubic) }), -1, false);
+    return () => cancelAnimation(p);
+  }, [p, reducedMotion]);
+  const style = useAnimatedStyle(() => ({ opacity: reducedMotion ? 0.55 : 0.75 * (1 - p.value),
+    transform: [{ scaleX: 0.8 + p.value * 0.7 }, { scaleY: 0.8 + p.value * 0.7 }] }));
+  return <Animated.View pointerEvents="none" style={[styles.playPulse, { borderColor: color }, style]} />;
+}
+
+export interface TaskMarkerProps {
   /** Posted wait, status and Rush window from the live park feed. */
   readonly live?: LiveRide;
   /** Play the ride's ambient Easter eggs (only for rides near the player). */
@@ -108,8 +112,36 @@ export default function TaskMarker({
   readonly task: TaskType;
   readonly isSelected: boolean;
   readonly isTripGoal?: boolean;
-  readonly onPress: () => void;
-}) {
+  /** Within walking reach: the floating coin and the timer show. */
+  readonly near?: boolean;
+  /** The player can play this ride right here: the base pulses. */
+  readonly playable?: boolean;
+  /** Today's Adventure Ticket ride (discover and play phases). */
+  readonly adventure?: boolean;
+  /** Other rides folded under this island (declutter), shown as +N. */
+  readonly clusterCount?: number;
+  /** A timed ride that opens later: drawn resting with "Back 2:00 PM". */
+  readonly restingUntil?: number | null;
+  /** Selected chip: distance from the player and the Ticket price. */
+  readonly distanceMeters?: number | null;
+  readonly ticketCost?: number;
+  /** First reveal: drop in after this many ms (stagger). */
+  readonly revealDelay?: number;
+  readonly onPress: (task: TaskType) => void;
+}
+
+/**
+ * TaskMarker: a ride's landmark on the game map (themed from its name), its
+ * coin, team flag and timer, plus its Easter-egg scene when the player is near.
+ * Selecting it lifts the landmark on a spring and opens a chip with the coin,
+ * distance and Ticket price. The map pins the outer view by its anchor, so
+ * inner animations are safe.
+ */
+function TaskMarker({
+  task, isSelected, isTripGoal = false, control, flagRaiseKey, ambient = false, live, onPress,
+  near = false, playable = false, adventure = false, clusterCount = 0, restingUntil = null,
+  distanceMeters = null, ticketCost = 1, revealDelay,
+}: TaskMarkerProps) {
   const reducedMotion = useReducedGameMotion();
   const expiresAt = gameTimestamp(task.active_to);
   const minsLeft = expiresAt !== null ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000)) : null;
@@ -119,11 +151,14 @@ export default function TaskMarker({
     ? live.rush : null;
   const down = live?.status === 'DOWN';
   const closed = live?.status === 'CLOSED' || live?.status === 'REFURBISHMENT';
-
-  // Rush glows gold; a held ride wears its team's color; others keep the timer colors.
-  const ringColor = rush ? '#ffcf3b' : control ? TEAMS[control.controller].color
-    : minsLeft !== null && minsLeft < 5 ? '#ef4444' : '#4ade80';
+  const resting = down || closed || restingUntil !== null;
+  const owned = (task.times_completed ?? 0) > 0;
   const timerUrgent = minsLeft !== null && minsLeft < 5;
+
+  // Rush gold, a held ride its team colour, red only in the last 5 minutes, gold in reach, else blue.
+  const ringColor = markerRingColor({ rush: !!rush, team: control ? TEAMS[control.controller].color : null, urgent: timerUrgent, near: near || playable });
+  const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, selected: isSelected });
+  const showTimer = expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
   const kinds = useMemo(() => {
     const base = ambient && !reducedMotion ? ambienceNow(look.ambience) : [];
     // A Rush always sparkles, near or far: it's worth walking to.
@@ -137,12 +172,37 @@ export default function TaskMarker({
   const latitude = Number(task.latitude);
   const longitude = Number(task.longitude);
   const waterSpot = useWaterSpot(waterKind, latitude, longitude);
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+
+  // Selection: anticipation dip, spring lift to 1.15, settle. Haptic on the lift.
+  const lift = useSharedValue(isSelected ? 1 : 0);
+  const wasSelected = useRef(isSelected);
   useEffect(() => {
-    setTracksViewChanges(true);
-    const timer = setTimeout(() => setTracksViewChanges(false), 700);
-    return () => clearTimeout(timer);
-  }, [isSelected, isTripGoal, control?.controller, control?.contested]);
+    if (isSelected && !wasSelected.current) haptic('tapLight');
+    wasSelected.current = isSelected;
+    if (reducedMotion) { lift.value = isSelected ? 1 : 0; return; }
+    lift.value = isSelected
+      ? withSequence(withTiming(-0.2, { duration: 70 }), withSpring(1, { damping: 8, stiffness: 260, mass: 0.7 }))
+      : withSpring(0, { damping: 14, stiffness: 220 });
+  }, [isSelected, reducedMotion, lift]);
+  const liftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -lift.value * 8 }, { scale: 1 + lift.value * 0.15 }],
+  }));
+
+  // First reveal: islands drop in one after another, bounce and settle.
+  const drop = useSharedValue(revealDelay === undefined || reducedMotion ? 1 : 0);
+  useEffect(() => {
+    if (revealDelay === undefined || reducedMotion) { drop.value = 1; return; }
+    drop.value = withDelay(revealDelay, withSpring(1, { damping: 10, stiffness: 170 }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const dropStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, drop.value * 2),
+    transform: [{ translateY: (1 - drop.value) * -36 }, { scale: 0.7 + drop.value * 0.3 }],
+  }));
+
+  const press = () => onPress(task);
+  const status = live && (live.status === 'OPERATING' && live.wait !== null ? `${live.wait} min wait`
+    : down ? 'Temporarily down' : closed ? 'Closed right now' : null);
 
   return (<>
     {waterKind && waterSpot && (
@@ -152,32 +212,28 @@ export default function TaskMarker({
     )}
     <Marker
       coordinate={{ latitude, longitude }}
-      onPress={onPress}
-      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
+      onPress={press}
+      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${clusterCount ? `${clusterCount} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
       stopPropagation={true}
-      tracksViewChanges={tracksViewChanges}
       anchor={{ x: 0.5, y: 0.9 }}
     >
-      <View style={styles.container}>
-        {isTripGoal && <View style={styles.goalBadge}><Text style={styles.goalText}>MY GOAL</Text></View>}
-        {rush && (
+      <Animated.View style={[styles.container, dropStyle]}>
+        {/* One badge at a time keeps the map calm; the chip replaces it when selected. */}
+        {!isSelected && badge === 'rush' && rush && (
           <View style={styles.rushBadge} accessibilityLabel={`Rush: ${live?.wait ?? rush.wait} minute wait`}>
-            <Text style={styles.rushText}>⚡ RUSH {live?.wait ?? rush.wait} MIN</Text>
+            <GameIcon name="rush" size={14} />
+            <Text style={styles.rushText}>RUSH {live?.wait ?? rush.wait} MIN</Text>
           </View>
         )}
-        {/* Timer badge */}
-        {expiresAt !== null && expiresAt > Date.now() && !rush && (
-          <View style={[
-            styles.timerBadge,
-            timerUrgent && styles.timerBadgeUrgent,
-          ]}>
+        {!isSelected && badge === 'adventure' && <View style={styles.adventureBadge}><GameIcon name="ticket" size={13} /><Text style={styles.adventureText}>ADVENTURE</Text></View>}
+        {!isSelected && badge === 'goal' && <View style={styles.goalBadge}><Text style={styles.goalText}>MY GOAL</Text></View>}
+        {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
+        {!isSelected && showTimer && (
+          <View style={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent, badge !== 'new' && badge !== 'level' && styles.timerLow]}>
             <Countdown
-              date={expiresAt}
+              date={expiresAt!}
               renderer={({ total, seconds }) => (
-                <Text style={[
-                  styles.timerText,
-                  timerUrgent && styles.timerTextUrgent,
-                ]}>
+                <Text style={[styles.timerText, timerUrgent && styles.timerTextUrgent]}>
                   {Math.floor(total / 60000)}:{zeroPad(seconds)}
                 </Text>
               )}
@@ -185,39 +241,35 @@ export default function TaskMarker({
           </View>
         )}
 
-        {/* Task name tooltip - always rendered, toggle opacity to avoid layout shift */}
-        <View pointerEvents="none" style={[styles.tooltipContainer, { opacity: isSelected ? 1 : 0 }]}>
-          <View style={styles.tooltip}>
-            <Text style={styles.tooltipTitle}>
-              {task.name}
-            </Text>
-            {live && (live.status === 'OPERATING' && live.wait !== null
-              ? <Text style={styles.tooltipWait}>{live.wait} min wait{live.typical ? ` · usually ${live.typical}` : ''}</Text>
-              : down ? <Text style={styles.tooltipWait}>Temporarily down</Text>
-                : closed ? <Text style={styles.tooltipWait}>Closed right now</Text> : null)}
+        {/* Selected chip: the coin, how far, and what it costs. */}
+        {isSelected && (
+          <View pointerEvents="none" style={styles.tooltipContainer}>
+            <View style={styles.tooltip}>
+              <View style={styles.tooltipRow}>
+                <Image source={task.coin_url ? { uri: task.coin_url } : RIDE_COIN} style={styles.tooltipCoin} contentFit="contain" />
+                <View style={styles.tooltipCopy}>
+                  <Text style={styles.tooltipTitle} numberOfLines={1}>{task.name}</Text>
+                  <View style={styles.tooltipMeta}>
+                    {distanceMeters !== null && <Text style={styles.tooltipDetail}>{formatDistance(distanceMeters)}</Text>}
+                    {restingUntil ? <Text style={styles.tooltipDetail}>{restingLabel(restingUntil)}</Text> : <>
+                      <GameIcon name="ticket" size={14} />
+                      <Text style={styles.tooltipDetail}>{ticketCost} {ticketCost === 1 ? 'Ticket' : 'Tickets'}</Text>
+                    </>}
+                  </View>
+                  {(status || isTripGoal || adventure) && <Text style={styles.tooltipWait} numberOfLines={1}>
+                    {[adventure ? 'Adventure ride' : isTripGoal ? 'My goal' : null, status].filter(Boolean).join(' · ')}
+                  </Text>}
+                </View>
+              </View>
+              {minsLeft !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.timerTextUrgent]}>{minsLeft} min left</Text>}
+            </View>
+            <View style={styles.tooltipArrow} />
           </View>
-          <View style={styles.tooltipArrow} />
-        </View>
+        )}
 
-        {/* Static glow rings (no animation) */}
-        <View
-          style={[
-            styles.glowRingOuter,
-            {
-              shadowColor: ringColor,
-              borderColor: ringColor,
-            },
-          ]}
-        />
-        <View
-          style={[
-            styles.glowRingInner,
-            {
-              borderColor: ringColor,
-              backgroundColor: `${ringColor}20`,
-            },
-          ]}
-        />
+        {/* Ground ring: flat, bright, no glow. */}
+        <View style={[styles.groundRing, { borderColor: ringColor, backgroundColor: `${ringColor}33` }]} />
+        {playable && !resting && <PlayPulse color={ringColor} reducedMotion={reducedMotion} />}
 
         {control && (
           <View style={styles.teamFlag}>
@@ -228,134 +280,74 @@ export default function TaskMarker({
         <RideAmbience kinds={behindKinds} seed={task.id} origin={GROUND} zIndex={1} />
 
         {/* The ride's landmark: themed art, or the classic shark tower. */}
-        <View style={styles.buildingContainer}>
-          <View style={[styles.landmarkWrap, (down || closed) && styles.landmarkResting]}>
-            <FloatingCoin reducedMotion={reducedMotion} />
+        <Animated.View style={[styles.buildingContainer, liftStyle]}>
+          <View style={[styles.landmarkWrap, resting && styles.landmarkResting]}>
+            {(isSelected || near) && !resting && <FloatingCoin reducedMotion={reducedMotion} />}
             <Image source={LANDMARKS[look.landmark]} style={styles.landmarkImage} contentFit="contain" />
           </View>
-          {down && <View style={styles.downChip}><Text style={styles.downText}>🔧 DOWN</Text></View>}
-        </View>
+          {owned && !isSelected && <View style={styles.levelPip}><Text style={styles.levelText}>{task.coin_level ?? 1}</Text></View>}
+          {down && <View style={styles.downChip}><GameIcon name="wrench" size={12} /><Text style={styles.downText}>DOWN</Text></View>}
+          {!down && restingUntil !== null && !isSelected && <View style={styles.restingSlot}><View style={styles.downChip}><Text style={styles.downText} numberOfLines={1}>{restingLabel(restingUntil).toUpperCase()}</Text></View></View>}
+          {clusterCount > 0 && <View style={styles.clusterBadge}><Text style={styles.clusterText}>+{clusterCount}</Text></View>}
+        </Animated.View>
 
         <RideAmbience kinds={frontKinds} seed={task.id} origin={GROUND} zIndex={8} />
-      </View>
+      </Animated.View>
     </Marker>
   </>);
 }
 
+export default memo(TaskMarker);
+
 const styles = StyleSheet.create({
   teamFlag: { position: 'absolute', top: 25, right: -3, zIndex: 21 },
-  container: {
-    width: 72,
-    height: 96,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 10,
-  },
-  goalBadge: { position: 'absolute', top: -48, zIndex: 22, backgroundColor: '#fbbf24',
-    borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: '#1a1a2e' },
-  goalText: { color: '#1a1a2e', fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
-  timerBadge: {
-    position: 'absolute',
-    top: -24,
-    backgroundColor: '#FFF8E7',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1.5,
-    borderColor: '#FFD700',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-    zIndex: 20,
-  },
-  timerBadgeUrgent: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#ef4444',
-    shadowColor: '#ef4444',
-  },
-  timerText: {
-    fontFamily: 'Shark',
-    fontSize: 13,
-    color: '#B8860B',
-    textAlign: 'center',
-  },
-  timerTextUrgent: {
-    color: '#ef4444',
-  },
-  tooltipContainer: {
-    position: 'absolute',
-    top: -70,
-    left: -54,
-    right: -54,
-    alignItems: 'center',
-    zIndex: 15,
-  },
-  tooltip: {
-    backgroundColor: 'white',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  tooltipTitle: {
-    fontFamily: 'Shark',
-    fontSize: 14,
-    color: '#333',
-    textAlign: 'center',
-  },
-  tooltipArrow: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 6,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: 'white',
-  },
-  glowRingOuter: {
-    position: 'absolute',
-    bottom: 9,
-    width: 62,
-    height: 24,
-    borderRadius: 31,
-    borderWidth: 3,
-    opacity: 0.7,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  glowRingInner: {
-    position: 'absolute',
-    bottom: 12,
-    width: 50,
-    height: 18,
-    borderRadius: 25,
-    borderWidth: 2,
-    opacity: 0.8,
-  },
-  buildingContainer: {
-    zIndex: 5,
-  },
+  container: { width: 72, height: 96, position: 'relative', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 10 },
+  goalBadge: { position: 'absolute', top: -24, zIndex: 22, backgroundColor: BRAND.gold,
+    borderRadius: 9, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 2, borderColor: BRAND.navy },
+  goalText: { color: BRAND.navy, fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
+  adventureBadge: { position: 'absolute', top: -24, zIndex: 22, flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: BRAND.white, borderRadius: 9, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
+  adventureText: { color: BRAND.navy, fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
+  newBadge: { position: 'absolute', top: 2, right: 2, zIndex: 22 },
+  levelPip: { position: 'absolute', bottom: 2, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 3,
+    backgroundColor: BRAND.blueBright, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+  levelText: { fontFamily: 'Shark', fontSize: 10, color: BRAND.white },
+  timerBadge: { position: 'absolute', top: -24, backgroundColor: BRAND.white, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2,
+    borderWidth: 2, borderColor: BRAND.navy, zIndex: 20 },
+  timerLow: { top: -2 },
+  timerBadgeUrgent: { borderColor: BRAND.red },
+  timerText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, textAlign: 'center' },
+  timerTextUrgent: { color: BRAND.red },
+  tooltipContainer: { position: 'absolute', top: -84, left: -74, right: -74, alignItems: 'center', zIndex: 25 },
+  tooltip: { backgroundColor: BRAND.white, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 7,
+    borderWidth: 3, borderColor: BRAND.navy, maxWidth: 220 },
+  tooltipRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  tooltipCoin: { width: 30, height: 30 },
+  tooltipCopy: { flexShrink: 1 },
+  tooltipTitle: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
+  tooltipMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
+  tooltipDetail: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.navySoft, marginRight: 2 },
+  tooltipWait: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.blue },
+  tooltipTimer: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navy, textAlign: 'center', marginTop: 2 },
+  tooltipArrow: { width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 8,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: BRAND.navy },
+  groundRing: { position: 'absolute', bottom: 10, width: 58, height: 20, borderRadius: 29, borderWidth: 3 },
+  playPulse: { position: 'absolute', bottom: 8, width: 62, height: 24, borderRadius: 31, borderWidth: 3 },
+  buildingContainer: { zIndex: 5 },
   // Small enough that a park full of pins stays a calm map, not a sticker sheet.
   landmarkWrap: { width: 64, height: 86, alignItems: 'center', justifyContent: 'flex-end' },
   landmarkResting: { opacity: 0.55 },
-  downChip: { position: 'absolute', bottom: 2, alignSelf: 'center', backgroundColor: '#475569', borderRadius: 8,
-    paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5, borderColor: '#fff' },
-  downText: { fontFamily: 'Shark', fontSize: 11, color: '#fff' },
-  rushBadge: { position: 'absolute', top: -24, zIndex: 23, backgroundColor: '#ffcf3b', borderRadius: 10,
-    paddingHorizontal: 8, paddingVertical: 3, borderWidth: 2, borderColor: '#fff',
-    shadowColor: '#ffb300', shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
-  rushText: { fontFamily: 'Shark', fontSize: 12, color: '#6a3b00' },
-  tooltipWait: { fontFamily: 'Knockout', fontSize: 12, color: '#0768b9', textAlign: 'center', marginTop: 1 },
+  downChip: { position: 'absolute', bottom: 2, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: BRAND.navySoft, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1.5, borderColor: BRAND.white },
+  downText: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white },
+  // Wider than the island so "BACK 2:00 PM" never clips.
+  restingSlot: { position: 'absolute', bottom: 2, left: -30, right: -30, alignItems: 'center' },
+  clusterBadge: { position: 'absolute', top: 16, left: -4, minWidth: 26, height: 22, borderRadius: 11, paddingHorizontal: 5,
+    backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
+  clusterText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
+  rushBadge: { position: 'absolute', top: -24, zIndex: 23, flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
+  rushText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
   landmarkImage: { width: 64, height: 64 },
   floatingCoin: { position: 'absolute', top: 0, width: 20, height: 20 },
 });

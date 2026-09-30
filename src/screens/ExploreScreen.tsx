@@ -1,10 +1,10 @@
 import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
+import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import React, { useCallback, useContext, useMemo, useRef, useState, useEffect, Suspense } from 'react';
-import { Text, TouchableOpacity, View, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
-import Modal from 'react-native-modal';
+import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
+import { Text, View, Pressable } from 'react-native';
 import { Marker } from '../components/map/Marker';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import { opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
@@ -12,8 +12,6 @@ import { TaskType } from '../models/task-type';
 import currencyBalance from '../helpers/currency-balance';
 import * as RootNavigation from '../RootNavigation';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
-// Lazy load ARView to prevent camera module crash
-const ARView = React.lazy(() => import('../components/ARView'));
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Map from '../components/Map';
@@ -32,8 +30,9 @@ import { isConfirmedOutsidePark } from '../context/parkLookupPolicy';
 import { ThemeContext } from '../context/ThemeProvider';
 import useTripGoal from '../hooks/useTripGoal';
 import AdventureTicketCard from './ExploreScreen/AdventureTicketCard';
-import { adventureRideClosed } from './ExploreScreen/adventureTicketPresentation';
-import { resolveMapQueueContext } from '../services/lineplay/resolveRide';
+import { adventurePlayGate, adventureRideClosed, adventureShelfArrival, rankDetours } from './ExploreScreen/adventureTicketPresentation';
+import useAdventureStampMoment from './ExploreScreen/useAdventureStampMoment';
+import { resolveMapQueueContext, resolveRideContextById } from '../services/lineplay/resolveRide';
 import type { RideContext } from '../services/lineplay/LinePlaySession';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
@@ -48,7 +47,8 @@ import ParkProjectWidget from './ExploreScreen/ParkProjectWidget';
 import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
 import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
-import NotSignedIn from './ExploreScreen/NotSignedIn';
+import GuestInvite from './ExploreScreen/GuestInvite';
+import { chestMayPresent, hasFirstCatch, mapSuggestionSlots, suggestionSlotScreenTop, suggestionSlotTop } from './ExploreScreen/mapPresentationQueue';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
 import { rideLook } from '../services/rideLandmark';
@@ -68,6 +68,14 @@ import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
 import TaskMarker from './ExploreScreen/TaskMarker';
+import MapResourcePill from './ExploreScreen/MapResourcePill';
+import TooFarDialog from './ExploreScreen/TooFarDialog';
+import DwellCard from './ExploreScreen/DwellCard';
+import MapSuggestionStub from './ExploreScreen/MapSuggestionStub';
+import { withWs2Profiler } from './ExploreScreen/ws2Profiler';
+import useQueueDwell from './ExploreScreen/useQueueDwell';
+import { clusterMarkers, revealDelays } from './ExploreScreen/mapMarkerPresentation';
+import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
 import VaultMarker from './ExploreScreen/VaultMarker';
 import CommunityCenterMarker from '../components/CommunityCenterMarker';
 import CommunityCenterModal from '../components/CommunityCenterModal';
@@ -77,6 +85,7 @@ import { GymMarker, SwordMarker } from '../components/GymBattle';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
+import { GameIcon, GameRichText } from '../ui';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -97,7 +106,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
 
-export default function ExploreScreen() {
+function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const mapFocused = useIsFocused();
   const route = useRoute();
@@ -109,6 +118,12 @@ export default function ExploreScreen() {
   const [failedTaskIds, setFailedTaskIds] = useState<Set<number>>(new Set());
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   const [focusedFromChecklist, setFocusedFromChecklist] = useState<TaskType | null>(null);
+  // "Find" guide: a dashed path and an edge arrow toward the ride the player asked to find.
+  const [findGuide, setFindGuide] = useState<{ taskId: number; latitude: number; longitude: number; requestId: number } | null>(null);
+  const guideTo = useCallback((task: TaskType) => {
+    setSelectedTask(task);
+    setFindGuide({ taskId: task.id, latitude: Number(task.latitude), longitude: Number(task.longitude), requestId: Date.now() });
+  }, []);
   const [selectedQueueRide, setSelectedQueueRide] = useState<{
     parkId: number; taskId: number; ride: RideContext;
   } | null>(null);
@@ -160,13 +175,13 @@ export default function ExploreScreen() {
   const [tripGoalVersion, setTripGoalVersion] = useState(0);
   const [activeParkProject, setActiveParkProject] = useState<ParkProject | null>(null);
   const [projectOpenRequestVersion, setProjectOpenRequestVersion] = useState(0);
-  const [arMode, setArMode] = useState(false);
   
   // Community Center state
   const [communityCenter, setCommunityCenter] = useState<CommunityCenter | null>(null);
   const [showCommunityCenterModal, setShowCommunityCenterModal] = useState(false);
   const [showTooFarModal, setShowTooFarModal] = useState(false);
-  const [tooFarDistance, setTooFarDistance] = useState<string>('');
+  // null while the player's location is unknown.
+  const [tooFarMeters, setTooFarMeters] = useState<number | null>(null);
   const [tooFarRequiredMeters, setTooFarRequiredMeters] = useState(COMMUNITY_CENTER_RANGE_METERS);
   const [tooFarIsHomeItem, setTooFarIsHomeItem] = useState(false);
   
@@ -193,9 +208,12 @@ export default function ExploreScreen() {
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const [adventureOccluded, setAdventureOccluded] = useState(false);
-  const { data: tripGoalData, stale: tripGoalStale, refresh: refreshTripGoal, choose: chooseTripGoal, celebrate: celebrateTicket } = useTripGoal(tripGoalVersion, !!player);
+  const { data: tripGoalData, stale: tripGoalStale, refresh: refreshTripGoal, celebrate: celebrateTicket,
+    select: selectAdventureRide, dismiss: dismissAdventure } = useTripGoal(tripGoalVersion, !!player);
   const tripGoal = tripGoalData?.goal;
-  const adventure = tripGoalData?.adventure_ticket?.park_id === park?.id ? tripGoalData?.adventure_ticket ?? null : null;
+  // The server flag (adventure_enabled) hides every ticket surface when off.
+  const adventure = tripGoalData?.adventure_enabled !== false && tripGoalData?.adventure_ticket?.park_id === park?.id
+    ? tripGoalData?.adventure_ticket ?? null : null;
   const adventureOwner = `${player?.id}:${park?.id}`;
   const adventureScope = useRef(adventureOwner); adventureScope.current = adventureOwner;
   const tripGoalTask = tripGoal?.park_id === park?.id
@@ -226,10 +244,10 @@ export default function ExploreScreen() {
   useEffect(() => {
     const focusedTask = rideFocusForPark(focusRide, park?.id);
     if (!focusedTask) return;
-    setSelectedTask(focusedTask);
+    guideTo(focusedTask);
     setFocusedFromChecklist(focusedTask);
     navigation.setParams({ focusRide: undefined });
-  }, [focusRide, navigation, park?.id]);
+  }, [focusRide, navigation, park?.id, guideTo]);
 
   // Trigger onboarding tutorial on first visit
   useEffect(() => {
@@ -253,6 +271,8 @@ export default function ExploreScreen() {
   // One overlay at a time: a find that shows up during a tutorial waits for it.
   const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
   const collectedOnce = useRef(false);
+  const [caughtThisSession, setCaughtThisSession] = useState(false);
+  const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
 
   // Handler for when user taps a prep item in home mode — enforce proximity
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
@@ -271,16 +291,13 @@ export default function ExploreScreen() {
       );
 
       if (distance > HOME_PREP_PICKUP_RADIUS_METERS) {
-        const distanceText = distance > 1000
-          ? `${(distance / 1000).toFixed(1)}km`
-          : `${Math.round(distance)}m`;
-        setTooFarDistance(distanceText);
+        setTooFarMeters(distance);
         setShowTooFarModal(true);
         return;
       }
     } else {
       // No location available — show too far modal with unknown distance
-      setTooFarDistance('unknown');
+      setTooFarMeters(null);
       setShowTooFarModal(true);
       return;
     }
@@ -306,7 +323,7 @@ export default function ExploreScreen() {
     setTooFarRequiredMeters(COMMUNITY_CENTER_RANGE_METERS);
     setTooFarIsHomeItem(false);
     if (!communityCenter || !location?.latitude || !location?.longitude) {
-      setTooFarDistance('unknown');
+      setTooFarMeters(null);
       setShowTooFarModal(true);
       return;
     }
@@ -319,10 +336,7 @@ export default function ExploreScreen() {
     );
     
     if (distance > COMMUNITY_CENTER_RANGE_METERS) {
-      const distanceText = distance > 1000 
-        ? `${(distance / 1000).toFixed(1)}km` 
-        : `${Math.round(distance)}m`;
-      setTooFarDistance(distanceText);
+      setTooFarMeters(distance);
       setShowTooFarModal(true);
       return;
     }
@@ -339,7 +353,7 @@ export default function ExploreScreen() {
   const [bossOccluded, setBossOccluded] = useState(false);
   const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
     refreshControl: refreshRideControl,
-    available: mapFocused && permissionGranted && !arMode && !bossOpen && !bossOccluded && !isActive && !activeRedeemable &&
+    available: mapFocused && permissionGranted && !bossOpen && !bossOccluded && !isActive && !activeRedeemable &&
       !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !dailyGiftOccluded && !adventureOccluded });
   const raidActive = raid?.status === 'active';
   const { snapshot: bossRecovery } = useBossAttackRecovery({ playerId: player?.id ?? null, parkId: park?.id ?? null, onResult: () => undefined });
@@ -389,6 +403,7 @@ export default function ExploreScreen() {
     }).sort((a, b) => dist(a.task) - dist(b.task));
   }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
   const hasLiveEvents = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
+  const slotTop = suggestionSlotTop(hasLiveEvents);
 
   const mapContext = `${player?.id ?? ''}:${park?.id ?? ''}`;
   const latestMapContext = useRef(mapContext);
@@ -422,6 +437,75 @@ export default function ExploreScreen() {
   const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
     .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);
 
+  // Rides that open later today rest on the map with "Back 2:00 PM" instead of vanishing.
+  const restingTasks = useMemo(() => (redeemables?.tasks ?? []).filter(task => {
+    const from = gameTimestamp(task.active_from);
+    return from !== null && from > mapNow && !opportunityIsActive(task, mapNow);
+  }), [redeemables?.tasks, mapNow]);
+
+  // Declutter: islands within 48px fold under one (+N); the coin and timer show only near you or selected.
+  const [mapZoom, setMapZoom] = useState(17.6);
+  const onMapZoom = useCallback((zoom: number) => setMapZoom(Math.round(zoom * 4) / 4), []);
+  const playerLat = location?.latitude, playerLng = location?.longitude;
+  const taskDistance = useMemo(() => {
+    const out = new globalThis.Map<number, number>();
+    if (playerLat == null || playerLng == null) return out;
+    const k = Math.cos(playerLat * Math.PI / 180);
+    for (const task of [...visibleTasks, ...restingTasks]) {
+      out.set(task.id, Math.hypot((Number(task.latitude) - playerLat) * 111320, (Number(task.longitude) - playerLng) * 111320 * k));
+    }
+    return out;
+  }, [visibleTasks, restingTasks, playerLat, playerLng]);
+  const playableTaskId = activeRedeemable?.type === 'task' ? activeRedeemable.model.id : null;
+  const adventureTaskId = adventure && (adventure.phase === 'discover' || adventure.phase === 'play') ? adventure.ride.task_id : null;
+  const goalTaskId = tripGoal && !tripGoal.coin_owned ? tripGoal.task_id : null;
+  const rideClusters = useMemo(() => clusterMarkers([...visibleTasks, ...restingTasks].map(task => ({
+    id: task.id, task, latitude: Number(task.latitude), longitude: Number(task.longitude),
+    pinned: task.id === selectedTask?.id,
+    // A ride whose team flag is being raised (boss map moment) always leads its island.
+    priority: (bossMap.flag?.asset_id === Number(task.asset_id) ? 80 : 0) + (task.id === adventureTaskId ? 50 : 0) + (task.id === goalTaskId ? 40 : 0) +
+      (liveByTask.get(task.id)?.rush ? 30 : 0) + (task.id === playableTaskId ? 20 : 0) +
+      ((taskDistance.get(task.id) ?? Infinity) <= 60 ? 10 : 0) + (restingTasks.includes(task) ? -5 : 0),
+  })).filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude)), mapZoom),
+  [visibleTasks, restingTasks, selectedTask?.id, adventureTaskId, goalTaskId, liveByTask, playableTaskId, taskDistance, mapZoom, bossMap.flag?.asset_id]);
+  // First reveal of a park's islands: nearest drop in first.
+  const revealRef = useRef<{ context: string; delays: globalThis.Map<number, number> } | null>(null);
+  if (redeemables && visibleTasks.length && revealRef.current?.context !== mapContext) {
+    revealRef.current = { context: mapContext, delays: revealDelays([...visibleTasks]
+      .sort((a, b) => (taskDistance.get(a.id) ?? 0) - (taskDistance.get(b.id) ?? 0)).map(task => task.id)) };
+  }
+  const [mapFocusRequest, setMapFocusRequest] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
+  const clusterRef = useRef({ rideClusters, mapZoom }); clusterRef.current = { rideClusters, mapZoom };
+  // Tapping a folded island zooms into it; a lone island toggles selection.
+  const handleTaskPress = useCallback((task: TaskType) => {
+    const { rideClusters: clusters, mapZoom: zoom } = clusterRef.current;
+    const cluster = clusters.find(item => item.lead.id === task.id);
+    if (cluster && cluster.members.length > 0 && zoom < 19.5) {
+      setSelectedTask(null);
+      setMapFocusRequest({ latitude: Number(task.latitude), longitude: Number(task.longitude), zoom: Math.min(20, zoom + 1.5), requestId: Date.now() });
+      return;
+    }
+    setMapFocusRequest(null);
+    setSelectedTask(previous => previous?.id === task.id ? null : task);
+  }, []);
+
+  // Adventure Ticket: Play opens only in the ride's line; detours rank open, near, short waits.
+  const adventureGate = useMemo(() => adventure ? adventurePlayGate(adventure, location) : undefined,
+    [adventure, nearLat, nearLng]); // eslint-disable-line react-hooks/exhaustive-deps
+  const adventureDetours = useMemo(() => adventure && tripGoalData ? rankDetours(tripGoalData.rides, {
+    parkId: adventure.park_id, currentTaskId: adventure.ride.task_id, live: liveByTask, location,
+    coords: new globalThis.Map((redeemables?.tasks ?? []).map(task => [task.id,
+      { latitude: Number(task.latitude), longitude: Number(task.longitude) }])),
+  }) : [], [adventure, tripGoalData, liveByTask, redeemables?.tasks, nearLat, nearLng]); // eslint-disable-line react-hooks/exhaustive-deps
+  const adventureMoment = useAdventureStampMoment(adventure,
+    mapFocused && !isActive && !adventureOccluded && !bossOccluded && !dailyGiftOccluded && !activeRedeemable);
+  const focusAdventureRide = useCallback(() => {
+    if (!adventure || !player) return;
+    const task = redeemables?.tasks?.find(item => item.id === adventure.ride.task_id);
+    if (task) { guideTo(task); setFocusedFromChecklist(task); }
+    else RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id });
+  }, [adventure, player, redeemables?.tasks, guideTo]);
+
   useEffect(() => {
     setRedeemables(null);
     setActiveRedeemable(undefined);
@@ -442,8 +526,14 @@ export default function ExploreScreen() {
     }
   }, [park?.id]);
 
-  // Fetch gym battle data
+  // Fetch gym battle data. Owner and generation guards: a slow answer for an
+  // earlier park or player never lands on the current map.
+  const gymGeneration = useRef(0);
+  const gymOwner = `${player?.id ?? ''}:${park?.id ?? ''}`;
+  const gymOwnerRef = useRef(gymOwner); gymOwnerRef.current = gymOwner;
   const fetchGymData = useCallback(async () => {
+    const generation = ++gymGeneration.current;
+    const owner = gymOwner;
     if (!park?.id) {
       setGymData(null);
       setSwords([]);
@@ -454,39 +544,42 @@ export default function ExploreScreen() {
         getGym(park.id).catch(() => null),
         getSwords(park.id).catch(() => ({ swords: [] })),
       ]);
+      if (generation !== gymGeneration.current || owner !== gymOwnerRef.current) return;
       setGymData(gym);
       setSwords(swordsData.swords);
     } catch (error) {
       console.log('Gym data fetch error:', error);
     }
-  }, [park?.id]);
+  }, [park?.id, gymOwner]);
 
   // Check player team and sword count on mount
   useEffect(() => {
+    let current = true;
+    setPlayerTeam(null);
+    setPlayerSwordCount(0);
     const checkTeamAndSwords = async () => {
       try {
         const team = await getMyTeam();
+        if (!current) return;
         setPlayerTeam(team);
-        
-        // Also fetch sword count
         const swordsData = await getMySwords();
-        setPlayerSwordCount(swordsData.swords);
+        if (current) setPlayerSwordCount(swordsData.swords);
       } catch (error) {
         console.log('Team/swords check error:', error);
       }
     };
     if (player) {
-      checkTeamAndSwords();
+      void checkTeamAndSwords();
     }
+    return () => { current = false; };
   }, [player?.id]);
 
   // Fetch gym data when park changes and refresh periodically (even without team - to show marker)
   useEffect(() => {
-    if (park?.id) {
-      fetchGymData();
-      const interval = setInterval(fetchGymData, 30000); // Refresh every 30s
-      return () => clearInterval(interval);
-    }
+    if (!park?.id) { setGymData(null); setSwords([]); return; }
+    void fetchGymData();
+    const interval = setInterval(fetchGymData, 30000); // Refresh every 30s
+    return () => { clearInterval(interval); gymGeneration.current++; };
   }, [park?.id, fetchGymData]);
 
   // Handle gym marker press
@@ -507,7 +600,7 @@ export default function ExploreScreen() {
     
     // Check distance to gym
     if (!gymData || !location?.latitude || !location?.longitude) {
-      setTooFarDistance('unknown');
+      setTooFarMeters(null);
       setShowTooFarModal(true);
       return;
     }
@@ -520,10 +613,7 @@ export default function ExploreScreen() {
     );
     
     if (distance > GYM_RANGE_METERS) {
-      const distanceText = distance > 1000 
-        ? `${(distance / 1000).toFixed(1)}km` 
-        : `${Math.round(distance)}m`;
-      setTooFarDistance(distanceText);
+      setTooFarMeters(distance);
       setShowTooFarModal(true);
       return;
     }
@@ -557,6 +647,27 @@ export default function ExploreScreen() {
     });
     return () => { current = false; };
   }, [mapFocused, park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds]);
+
+  // Every ride island, not the zoom-dependent clusters, so the beacon's spot stays put while zooming.
+  const beaconAvoid = useMemo(() => [...visibleTasks, ...restingTasks].map(task => ({
+    latitude: Number(task.latitude), longitude: Number(task.longitude) })), [visibleTasks, restingTasks]);
+  const queueDwell = useQueueDwell(park?.id ?? null, mapFocused && !!player);
+  const [dismissedDwell, setDismissedDwell] = useState<number | null>(null);
+  const dwellShown = !!queueDwell && dismissedDwell !== queueDwell.rideId &&
+    !adventureOccluded && queueDwell.rideName !== adventure?.ride.ride_name && queueDwell.rideName !== selectedTask?.name;
+  const suggestionSlots = mapSuggestionSlots({
+    dwell: dwellShown,
+    bossMoment: !!bossMap.moment && bossMap.moment.phase !== 'settled',
+    queueRide: !!(selectedTask && queueRide), adventure: !!adventure, goal: !!tripGoal, project: !!activeParkProject,
+    adventureSlam: !!adventureMoment.slam?.length,
+  });
+  const chestReady = chestMayPresent({
+    tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
+    firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
+    boss: bossOpen || bossOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
+    rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
+    otherModalOpen: showTooFarModal || showCommunityCenterModal,
+  });
 
   return (
     <Wrapper>
@@ -603,7 +714,7 @@ export default function ExploreScreen() {
                     fontFamily: 'Shark',
                     textTransform: 'uppercase',
                     letterSpacing: 2,
-                    textShadowColor: 'rgba(0, 0, 0, .5)',
+                    textShadowColor: '#05346e',
                     textShadowOffset: { width: 2, height: 2 },
                     textShadowRadius: 0,
                     textAlign: 'center',
@@ -623,7 +734,7 @@ export default function ExploreScreen() {
               fontFamily: 'Shark',
               textTransform: 'uppercase',
               letterSpacing: 2,
-              textShadowColor: 'rgba(0, 0, 0, .5)',
+              textShadowColor: '#05346e',
               textShadowOffset: { width: 2, height: 2 },
               textShadowRadius: 0,
               textAlign: 'center',
@@ -632,37 +743,25 @@ export default function ExploreScreen() {
         )}
       </Topbar>
       {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
-        onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion} />}
+        onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion}
+        pillHidden={!!park && suggestionSlots.right !== 'project'}
+        pillCollapsed={!!park && suggestionSlots.rightStub}
+        topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0, hasLiveEvents) : undefined} />}
       {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
         presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
         onMapOcclusionChange={setBossOccluded} onCelebrationDismiss={result => { void bossMap.enqueue(result); }}
         onState={state => { setRaidState(state); void refreshRideControl(); }} />}
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
-      {/* One overlay at a time: the daily gift waits for the first-run tutorial. */}
-      {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && !isActive && hasCompleted('onboarding') &&
+      {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
+      {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && hasCompleted('onboarding') && chestReady &&
         <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} />}
       {/* Home Mode: Show prep items map instead of "Not at Park" message */}
       {player && parkLoaded && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed} />
       )}
-      {/* Guest: Sign-in prompt */}
-      {!player && (
-        <View style={{ flex: 1, backgroundColor: '#d9d9d9', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-          <Image
-            source={require('../../assets/images/screens/login/logo.png')}
-            style={{ width: 260, height: 260 * (322 / 1284), marginBottom: 24 }}
-            contentFit="contain"
-          />
-          <Text style={{ color: '#333', fontFamily: 'Shark', fontSize: 22, textAlign: 'center', marginBottom: 8 }}>
-            Welcome to Theme Park Shark!
-          </Text>
-          <Text style={{ color: 'rgba(0,0,0,0.5)', fontFamily: 'Knockout', fontSize: 15, textAlign: 'center', marginBottom: 28, lineHeight: 22 }}>
-            Sign in to collect coins, battle at gyms, customize your shark, and explore theme parks!
-          </Text>
-          <SignInButtons />
-        </View>
-      )}
+      {/* Guest: a bright sign-in invitation over the live map */}
+      {!player && <GuestInvite />}
       
       {/* Prep Item Redeem Modal (Home Mode) */}
       <PrepItemRedeemModal
@@ -680,6 +779,7 @@ export default function ExploreScreen() {
         }}
         onCollected={() => {
           collectedOnce.current = true;
+          setCaughtThisSession(true);
           setHomeCollectionVersion((version) => version + 1);
         }}
         onUnavailable={() => setHomeCollectionVersion((version) => version + 1)}
@@ -760,6 +860,8 @@ export default function ExploreScreen() {
             <RedeemModal
               redeemable={mapFocused ? activeRedeemable : undefined}
               park={park}
+              selectedTaskId={selectedTask?.id ?? null}
+              onOpenChange={setRedeemFlowOpen}
               onPress={async () => {
                 await getRedeemables();
                 await refreshPlayer();
@@ -804,61 +906,10 @@ export default function ExploreScreen() {
               alignItems: 'center',
             }}
           >
-            {/* Energy & Swords Display - Vertical Stack */}
-            <View
-              style={{
-                marginBottom: 12,
-                backgroundColor: '#1a1a2e',
-                borderRadius: 16,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                borderWidth: 3,
-                borderColor: '#FBBF24',
-                shadowColor: '#FBBF24',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.4,
-                shadowRadius: 12,
-                elevation: 8,
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              {/* Energy */}
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{
-                  backgroundColor: '#FBBF24',
-                  borderRadius: 8,
-                  padding: 4,
-                  marginRight: 6,
-                }}>
-                  <Text style={{ fontSize: 14 }}>⚡</Text>
-                </View>
-                <Text style={{ 
-                  fontSize: 20, 
-                  color: '#FBBF24', 
-                  fontFamily: 'Shark',
-                  textShadowColor: 'rgba(251, 191, 36, 0.6)',
-                  textShadowOffset: { width: 0, height: 2 },
-                  textShadowRadius: 10,
-                }}>{player?.energy ?? 0}</Text>
-              </View>
-              {/* Swords */}
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Image
-                  source={require('../../assets/images/sword-icon.png')}
-                  style={{ width: 20, height: 20, marginRight: 6 }}
-                  contentFit="contain"
-                />
-                <Text style={{ 
-                  fontSize: 20, 
-                  color: playerSwordCount > 0 ? '#FBBF24' : '#64748B', 
-                  fontFamily: 'Shark',
-                  textShadowColor: 'rgba(251, 191, 36, 0.6)',
-                  textShadowOffset: { width: 0, height: 2 },
-                  textShadowRadius: 10,
-                }}>{playerSwordCount}</Text>
-              </View>
+            {/* Energy and Swords: bright pills in the header's Currency language. */}
+            <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
+              <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0} />
+              <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0} />
             </View>
             {/* Profile Avatar - navigates to Park Profile */}
             {player && (
@@ -873,16 +924,8 @@ export default function ExploreScreen() {
           </View>
         </>
       )}
-      {/* AR Toggle removed - feature disabled */}
-      {/* Park Mode View - Map or AR */}
-      {park && arMode && redeemables && (
-        <View style={{ flex: 1, marginTop: -8 }}>
-          <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" /></View>}>
-            <ARView redeemables={redeemables} onRefresh={() => getRedeemables()} />
-          </Suspense>
-        </View>
-      )}
-      {park && !arMode && (
+      {/* Park Mode: the game map */}
+      {park && (
       <View
         style={{
           flex: 1,
@@ -904,24 +947,46 @@ export default function ExploreScreen() {
               onRush={(task) => setSelectedTask(task)} />
           </View>
         )}
-        {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
-          ticket={adventure} data={tripGoalData} stale={tripGoalStale}
-          closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={hasLiveEvents ? 124 : 64}
+        {suggestionSlots.left === 'dwell' && suggestionSlots.leftStub && queueDwell && <MapSuggestionStub side="left" top={slotTop}
+          label={`In line at ${queueDwell.rideName}? Show queue games`} onPress={() => setSelectedTask(null)}>
+          <GameIcon name="queue" size={32} />
+        </MapSuggestionStub>}
+        {suggestionSlots.left === 'dwell' && !suggestionSlots.leftStub && queueDwell && <DwellCard key={`dwell-${queueDwell.rideId}`}
+          rideName={queueDwell.rideName} top={slotTop}
+          onDismiss={() => setDismissedDwell(queueDwell.rideId)}
+          onPlay={async () => {
+            const ride = await resolveRideContextById(park.id, queueDwell.rideId)
+              ?? await resolveMapQueueContext(park.id, queueDwell.rideName);
+            if (!ride) throw new Error('This line could not load.');
+            navigation.navigate('LinePlay', { ride });
+          }} />}
+        {adventure && suggestionSlots.left === 'adventure' && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
+          ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
+          closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={slotTop} collapsed={suggestionSlots.leftStub}
+          slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}
-          onChoose={chooseTripGoal} onCelebrate={() => celebrateTicket(adventure.id)}
-          onDiscover={() => {
-            const task = redeemables?.tasks?.find(item => item.id === adventure.ride.task_id);
-            if (task) setSelectedTask(task);
-            else RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id });
-          }}
+          onSelect={selectAdventureRide} onDismiss={dismissAdventure}
+          onCelebrate={() => celebrateTicket(adventure.id)}
+          onDiscover={focusAdventureRide} onFindLine={focusAdventureRide}
           onPlay={async () => {
             const ride = await resolveMapQueueContext(adventure.park_id, adventure.ride.ride_name);
             if (adventureScope.current !== adventureOwner) return;
             if (!ride) throw new Error('This queue adventure could not load.');
             navigation.navigate('LinePlay', { ride });
           }}
-          onShelf={() => RootNavigation.navigate('CoinShelf', { focusCoin: { assetId: adventure.discover?.asset_id ?? adventure.ride.asset_id } })} />}
-        {!adventure && tripGoal && player && <Pressable
+          onShelf={() => {
+            // Hand off to the Park screen's measured shelf arrival (Profile -> park -> shelf).
+            const earnedCoin = adventureShelfArrival(adventure);
+            RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id, ...(earnedCoin ? { earnedCoin } : {}) });
+          }} />}
+        {suggestionSlots.left === 'goal' && suggestionSlots.leftStub && tripGoal && player && <MapSuggestionStub side="left" top={slotTop}
+          label={`Your ride goal: ${tripGoal.ride_name}. Show it`} onPress={() => {
+            if (tripGoalTask) guideTo(tripGoalTask);
+            else RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
+          }}>
+          <GameIcon name="ride" size={32} />
+        </MapSuggestionStub>}
+        {suggestionSlots.left === 'goal' && !suggestionSlots.leftStub && tripGoal && player && <Pressable
           accessibilityRole="button"
           accessibilityLabel={tripGoal.coin_owned
             ? `Open ${tripGoal.ride_name} on my coin shelf`
@@ -931,12 +996,12 @@ export default function ExploreScreen() {
             if (tripGoal.coin_owned) {
               RootNavigation.navigate('CoinShelf', { focusCoin: { assetId: tripGoal.asset_id } });
             } else if (tripGoalTask) {
-              setSelectedTask(tripGoalTask);
+              guideTo(tripGoalTask);
             } else {
               RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
             }
           }}
-          style={{ position: 'absolute', top: player ? (hasLiveEvents ? 124 : 64) : 12, left: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? slotTop : 12, left: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#ffffff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.6 }}>
@@ -953,17 +1018,17 @@ export default function ExploreScreen() {
                 : 'Open Ride Guide for its coin'}
           </Text>
         </Pressable>}
-        {!adventure && selectedTask && queueRide && <Pressable
+        {suggestionSlots.right === 'ride' && selectedTask && queueRide && <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
           onPress={() => navigation.navigate('LinePlay', { ride: queueRide })}
-          style={{ position: 'absolute', top: player ? (hasLiveEvents ? 124 : 64) : 12, right: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? slotTop : 12, right: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
-          <Text style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} numberOfLines={1}>
-            {queueRide.lineRewardsReady === false ? 'QUEUE GAMES  ›' : 'PLAY IN LINE  ›'}
-          </Text>
+          <GameRichText style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} iconSize={16} numberOfLines={1}>
+            {queueRide.lineRewardsReady === false ? 'QUEUE GAMES [icon:arrow]' : 'PLAY IN LINE [icon:arrow]'}
+          </GameRichText>
           <Text style={{ color: '#fff', fontFamily: 'Knockout', fontSize: 11 }} numberOfLines={1}>
             {selectedTask.name}
           </Text>
@@ -971,15 +1036,13 @@ export default function ExploreScreen() {
             {queueRide.lineRewardsReady === false ? 'Games only · Parts not set up' : 'Parts need a verified wait'}
           </Text>
         </Pressable>}
-        <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }}
-          controlsTop={(adventure ? 162 : queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+        <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
+          onZoomChange={onMapZoom}
+          guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
+          controlsTop={slotTop + (queueRide ? 104 : 76)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
-        } : null}>
-          {activeParkProject?.park_id === park.id && (
-            <ParkProjectMapBeacon project={activeParkProject}
-              onPress={() => setProjectOpenRequestVersion(version => version + 1)} />
-          )}
+        } : mapFocusRequest}>
           {redeemables?.items
             .filter((item) => !item.is_hidden)
             .map((item) => (
@@ -990,20 +1053,36 @@ export default function ExploreScreen() {
             .map((item) => (
               <PinMarker key={item.id} item={item} />
             ))}
-          {visibleTasks.map((task) => (
-            <TaskMarker
-              key={`${task.id}-${tripGoal?.task_id === task.id && !tripGoal.coin_owned ? 'goal' : 'regular'}`}
+          {rideClusters.map(({ lead, members }) => {
+            const task = lead.task;
+            const resting = restingTasks.includes(task);
+            const distance = taskDistance.get(task.id) ?? null;
+            return <TaskMarker
+              key={`${task.id}-${goalTaskId === task.id ? 'goal' : 'regular'}`}
               task={task}
               isSelected={selectedTask?.id === task.id}
-              isTripGoal={tripGoal?.task_id === task.id && !tripGoal.coin_owned}
+              isTripGoal={goalTaskId === task.id}
+              adventure={adventureTaskId === task.id}
+              near={distance !== null && distance <= 60}
+              playable={playableTaskId === task.id}
+              clusterCount={members.length}
+              restingUntil={resting ? gameTimestamp(task.active_from) : null}
+              distanceMeters={selectedTask?.id === task.id ? distance : null}
+              ticketCost={task.ticket_cost ?? tripGoalData?.wallet.ticket_cost ?? 1}
+              revealDelay={revealRef.current?.delays.get(task.id)}
               control={rideControlByAsset.get(Number(task.asset_id))}
               flagRaiseKey={bossMap.flag?.asset_id === Number(task.asset_id) &&
                 (bossMap.moment?.phase === 'flag' || bossMap.moment?.phase === 'settled') ? bossMap.moment.impact.key : undefined}
               ambient={ambientTaskIds.has(task.id)}
               live={liveByTask.get(task.id)}
-              onPress={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
-            />
-          ))}
+              onPress={handleTaskPress}
+            />;
+          })}
+          {/* After the ride islands so their ambience never prints over the label; it settles clear of them. */}
+          {activeParkProject?.park_id === park.id && (
+            <ParkProjectMapBeacon project={activeParkProject} avoid={beaconAvoid}
+              onPress={() => setProjectOpenRequestVersion(version => version + 1)} />
+          )}
           {bossMap.moment && (bossMap.moment.phase === 'exit' || bossMap.moment.phase === 'flag') &&
             <Circle center={bossMap.moment.impact.coordinate} radius={65} fillColor="rgba(255,207,59,0.12)" strokeColor="#ffcf3b" strokeWidth={2} />}
           {bossMap.moment?.phase === 'exit' && <BossMapDeparture impact={bossMap.moment.impact} onComplete={bossMap.finishExit} />}
@@ -1128,146 +1207,11 @@ export default function ExploreScreen() {
         onAction={refreshCommunityCenter}
       />
       
-      {/* Too Far Away Modal */}
-      <Modal
-        isVisible={showTooFarModal}
-        onBackdropPress={() => setShowTooFarModal(false)}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
-      >
-        <View style={tooFarStyles.container}>
-          <View style={tooFarStyles.iconContainer}>
-            <Text style={tooFarStyles.icon}>📍</Text>
-          </View>
-          <View style={tooFarStyles.content}>
-            <Text style={tooFarStyles.title}>{tooFarDistance === 'unknown' ? 'Location Needed' : 'Almost There!'}</Text>
-            <Text style={tooFarStyles.message}>
-              {tooFarDistance === 'unknown' ? 'Finding your location. Try again when it is available.'
-                : tooFarIsHomeItem ? 'Stay on public paths. You can collect from nearby without entering private or restricted areas.'
-                  : 'Walk closer to interact with this location.'}
-            </Text>
-            {tooFarDistance !== 'unknown' && <View style={tooFarStyles.distanceBox}>
-              <View style={tooFarStyles.distanceRow}>
-                <Text style={tooFarStyles.distanceLabel}>You are</Text>
-                <Text style={tooFarStyles.distanceValue}>{tooFarDistance}</Text>
-              </View>
-              <View style={tooFarStyles.distanceDivider} />
-              <View style={tooFarStyles.distanceRow}>
-                <Text style={tooFarStyles.distanceLabel}>Need to be within</Text>
-                <Text style={tooFarStyles.distanceValueGreen}>{tooFarRequiredMeters}m</Text>
-              </View>
-            </View>}
-            <TouchableOpacity
-              style={tooFarStyles.button}
-              onPress={() => setShowTooFarModal(false)}
-            >
-              <Text style={tooFarStyles.buttonText}>Got it!</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Too Far Away: ribbon + blue card with a distance meter */}
+      <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
+        homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />
     </Wrapper>
   );
 }
 
-const tooFarStyles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-  },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#1a3a5c',
-    borderWidth: 4,
-    borderColor: '#f59e0b',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    marginBottom: -40,
-    shadowColor: '#f59e0b',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  icon: {
-    fontSize: 36,
-  },
-  content: {
-    backgroundColor: '#1a3a5c',
-    borderRadius: 20,
-    width: '90%',
-    paddingTop: 50,
-    paddingBottom: 24,
-    paddingHorizontal: 24,
-    borderWidth: 3,
-    borderColor: '#3b82f6',
-    alignItems: 'center',
-  },
-  title: {
-    fontFamily: 'Shark',
-    fontSize: 26,
-    color: '#f59e0b',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  message: {
-    fontFamily: 'Knockout',
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 22,
-  },
-  distanceBox: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 12,
-    padding: 16,
-    width: '100%',
-    marginBottom: 24,
-  },
-  distanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  distanceDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    marginVertical: 4,
-  },
-  distanceLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  distanceValue: {
-    fontFamily: 'Shark',
-    fontSize: 20,
-    color: '#ef4444',
-  },
-  distanceValueGreen: {
-    fontFamily: 'Shark',
-    fontSize: 20,
-    color: '#4ade80',
-  },
-  button: {
-    backgroundColor: '#4ade80',
-    borderRadius: 14,
-    paddingHorizontal: 40,
-    paddingVertical: 14,
-    shadowColor: '#4ade80',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  buttonText: {
-    fontFamily: 'Shark',
-    fontSize: 18,
-    color: 'white',
-    textAlign: 'center',
-  },
-});
+export default withWs2Profiler(ExploreScreen, 'ExploreScreen');

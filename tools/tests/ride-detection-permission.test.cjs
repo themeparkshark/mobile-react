@@ -56,6 +56,7 @@ function makeHarness({ backgroundGranted = false, deferredPermissionCheck = fals
       } };
       if (name === 'expo-location') return location;
       if (name === 'expo-task-manager') return { defineTask: () => {} };
+      if (name === '../constants/queueRideTypes') return { QUEUE_RIDE_TYPES: ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride'] };
       if (name === 'react-native') return { AppState: {
         currentState: 'active', addEventListener: () => ({ remove: () => {} }),
       } };

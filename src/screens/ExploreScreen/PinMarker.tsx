@@ -25,7 +25,7 @@ export default function PinMarker({
     >
       <View pointerEvents="none">
         <Image
-          source={require('../../../assets/images/screens/explore/pin_animation.gif')}
+          source={require('../../../assets/images/screens/explore/pin_animation.webp')}
           contentFit="contain"
           style={{ width: 70, height: 70 }}
         />

@@ -5,6 +5,7 @@ import { PrepItemType } from '../../models/prep-item-type';
 import config from '../../config';
 import dayjs from 'dayjs';
 import prepItemImage from '../../helpers/prepItemImages';
+import { GameIcon } from '../../ui';
 
 /** Pulse cycle for in-range markers (toggles between two static visual states) */
 function usePulse(enabled: boolean, intervalMs = 800): boolean {
@@ -229,7 +230,7 @@ export default function PrepItem({ prepItem, onExpire, inRange = false }: Props)
             zIndex: 10,
           }}
         >
-          <Text style={{ fontSize: 24 }}>🎁</Text>
+          <GameIcon name="gift" size={28} />
         </View>
       )}
 

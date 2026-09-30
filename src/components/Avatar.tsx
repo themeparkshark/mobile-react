@@ -3,6 +3,8 @@ import { Text, View } from 'react-native';
 import config from '../config';
 import { PlayerType } from '../models/player-type';
 
+export const DEFAULT_PORTRAIT = require('../../assets/images/screens/pin-collections/shark.png');
+
 export default function Avatar({
   player,
   size = 'md',
@@ -181,7 +183,10 @@ export default function Avatar({
             </View>
           ) : (
             <Image
-              source={player.avatar_url}
+              // No outfit or photo yet: Dustin's TPS shark instead of an empty ring.
+              source={player.avatar_url ? player.avatar_url : DEFAULT_PORTRAIT}
+              placeholder={DEFAULT_PORTRAIT}
+              contentFit="contain"
               style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }}
             />
           )}

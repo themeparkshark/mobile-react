@@ -1,5 +1,6 @@
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { Marker } from './map/Marker';
+import { GameIcon } from '../ui';
 
 const CommunityCenterIcon = require('../assets/community-center.png');
 
@@ -37,7 +38,8 @@ export default function CommunityCenterMarker({ center, onPress }: Props) {
         {/* Gift count badge */}
         {hasGifts && (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>🎁 {center.available_gifts}</Text>
+            <GameIcon name="gift" size={14} />
+            <Text style={styles.badgeText}>{center.available_gifts}</Text>
           </View>
         )}
         
@@ -79,6 +81,9 @@ const styles = StyleSheet.create({
   badge: {
     position: 'absolute',
     top: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     backgroundColor: '#FF6B6B',
     borderRadius: 12,
     paddingHorizontal: 8,
@@ -86,10 +91,10 @@ const styles = StyleSheet.create({
     zIndex: 10,
     borderWidth: 2,
     borderColor: 'white',
-    shadowColor: '#FF6B6B',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
+    shadowColor: '#05346e',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
     elevation: 5,
   },
   badgeText: {

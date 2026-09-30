@@ -1,14 +1,21 @@
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { AdventureTicket, TripGoalData, TripGoalRide } from '../../api/endpoints/me/trip-goal';
+import type { AdventureTicket, TripGoalData } from '../../api/endpoints/me/trip-goal';
 import { playSfx } from '../../gamekit/SFX';
 import { haptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { adventurePrompt } from './adventureTicketPresentation';
+import { BRAND, GameButton, GameIcon, SHADOW } from '../../ui';
+import {
+  adventureErrorMessage, adventurePrompt, adventureStamps, detourDetail, type DetourPick,
+} from './adventureTicketPresentation';
+import MapSuggestionStub from './MapSuggestionStub';
+
+const COIN_FALLBACK = require('../../../assets/images/coingold.png');
+const FINN = require('../../../assets/images/screens/pin-collections/shark.png');
 
 interface Props {
   ticket: AdventureTicket;
@@ -16,37 +23,128 @@ interface Props {
   closed: boolean;
   stale: boolean;
   top: number;
+  /** Another suggestion leads: show only the 56pt stub (coin plus stamp count); tapping opens the ticket. */
+  collapsed?: boolean;
+  /** Distance to the ticket ride's queue; Play opens only in its line. */
+  gate?: { state: 'near' | 'far' | 'unknown'; meters: number | null };
+  /** Ranked detour rides (rankDetours): open first, nearest, shortest wait, top 3. */
+  detours?: readonly DetourPick[];
+  /** Stamps earned since the player last looked at the map, for the slam moment. */
+  slam?: readonly number[];
+  onSlamDone?: () => void;
   onDiscover: () => void;
   onPlay: () => Promise<void>;
+  onFindLine?: () => void;
   onShelf: () => void;
-  onChoose: (taskId: number) => Promise<unknown>;
+  /** Adventure-only ride change (PUT /me/adventure-ticket); the trip goal stays. */
+  onSelect: (taskId: number) => Promise<unknown>;
+  onDismiss?: () => Promise<unknown>;
   onCelebrate: () => Promise<unknown>;
   onRefresh: () => Promise<void>;
   onOcclusionChange?: (visible: boolean) => void;
+  /** Dev preview only: start with the sheet (or the detour picker) open. */
+  initialOpen?: boolean;
+  initialPicker?: boolean;
 }
 
-/** An earned stamp stays legible when still; only a newly confirmed stamp gets a finite punch. */
-function Punch({ earned, number, reduced }: { earned: boolean; number: number; reduced: boolean }) {
-  const scale = useRef(new Animated.Value(1)).current;
+const POP = { damping: 9, stiffness: 320, mass: 0.7 };
+
+/**
+ * One punch on the ticket. Earned stamps stay legible when still; a newly
+ * confirmed stamp winds up, slams in with an overshoot and settles, rotating
+ * like an ink stamp. Reduced motion shows the punched state at once.
+ */
+export function Punch({ earned, number, reduced }: { earned: boolean; number: number; reduced: boolean }) {
+  const scale = useSharedValue(1), tilt = useSharedValue(0);
   const previous = useRef(earned);
   useEffect(() => {
-    scale.stopAnimation(); scale.setValue(1);
     if (earned && !previous.current && !reduced) {
-      scale.setValue(0.76);
-      Animated.timing(scale, { toValue: 1, duration: 240, useNativeDriver: true }).start();
-    }
+      scale.value = withSequence(withTiming(1.28, { duration: 90, easing: Easing.out(Easing.quad) }),
+        withTiming(0.86, { duration: 70 }), withSpring(1, POP));
+      tilt.value = withSequence(withTiming(-10, { duration: 90 }), withSpring(0, POP));
+    } else { scale.value = 1; tilt.value = 0; }
     previous.current = earned;
-    return () => { scale.stopAnimation(); };
-  }, [earned, reduced, scale]);
-  return <Animated.View style={[styles.punch, earned && styles.punched, { transform: [{ scale }] }]}>
-    <Text style={[styles.punchText, earned && styles.punchedText]}>{earned ? '✓' : number}</Text>
+  }, [earned, reduced, scale, tilt]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: `${tilt.value}deg` }] }));
+  return <Animated.View style={[styles.punch, earned && styles.punched, style]}>
+    {earned ? <GameIcon name="check" size={22} accessibilityLabel="Stamped" />
+      : <Text style={styles.punchText}>{number}</Text>}
   </Animated.View>;
 }
 
-export default function AdventureTicketCard({ ticket, data, closed, stale, top, onDiscover, onPlay, onShelf,
-  onChoose, onCelebrate, onRefresh, onOcclusionChange }: Props) {
-  const [open, setOpen] = useState(false), [picker, setPicker] = useState(false);
+/**
+ * A stamp dot on the folded chip. When `slam` is set, a coin drops onto it,
+ * the dot squashes and an ink ring bursts: haptic and sound land on the impact
+ * frame. Reduced motion: the dot fills and the haptic still confirms it.
+ */
+export function StampDot({ earned, slam, reduced, coin, onDone }: {
+  earned: boolean; slam: boolean; reduced: boolean; coin: number | { uri: string }; onDone?: () => void;
+}) {
+  const drop = useSharedValue(slam && !reduced ? 0 : 1), squash = useSharedValue(1), ink = useSharedValue(0);
+  const done = useRef(onDone); done.current = onDone;
+  useEffect(() => {
+    if (!slam) return;
+    if (reduced) {
+      haptic('success');
+      const timer = setTimeout(() => done.current?.(), 0);
+      return () => clearTimeout(timer);
+    }
+    drop.value = 0; ink.value = 0;
+    drop.value = withDelay(120, withTiming(1, { duration: 300, easing: Easing.in(Easing.quad) }));
+    squash.value = withDelay(420, withSequence(withTiming(0.6, { duration: 60 }), withSpring(1, POP)));
+    ink.value = withDelay(420, withTiming(1, { duration: 460, easing: Easing.out(Easing.cubic) }));
+    // Impact frame: the coin touches the dot 420ms in.
+    const impact = setTimeout(() => { haptic('success'); playSfx('coin', 0.8); }, 420);
+    const finish = setTimeout(() => done.current?.(), 950);
+    return () => { clearTimeout(impact); clearTimeout(finish); };
+  }, [slam, reduced, drop, squash, ink]);
+  const dotStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: 2 - squash.value }, { scaleY: squash.value }] }));
+  const coinStyle = useAnimatedStyle(() => ({
+    opacity: drop.value < 1 ? 1 : 0,
+    transform: [{ translateY: (drop.value - 1) * 90 }, { scale: 1.6 - drop.value * 0.9 }, { rotate: `${(1 - drop.value) * 200}deg` }],
+  }));
+  const inkStyle = useAnimatedStyle(() => ({ opacity: ink.value > 0 && ink.value < 1 ? 0.85 * (1 - ink.value) : 0,
+    transform: [{ scale: 0.4 + ink.value * 2.2 }] }));
+  return <View style={styles.dotWrap}>
+    {slam && !reduced && <Animated.View pointerEvents="none" style={[styles.ink, inkStyle]} />}
+    <Animated.View style={[styles.dot, earned && styles.dotEarned, dotStyle]} />
+    {slam && !reduced && <Animated.Image source={coin} style={[styles.dropCoin, coinStyle]} />}
+  </View>;
+}
+
+/** The earned souvenir unfolds like a folded ticket: hinge, overshoot, settle. */
+export function Souvenir({ ticket, reduced, unfold }: { ticket: AdventureTicket; reduced: boolean; unfold: boolean }) {
+  const open = useSharedValue(unfold && !reduced ? 0 : 1);
+  useEffect(() => {
+    if (!unfold || reduced) { open.value = 1; return; }
+    open.value = 0;
+    open.value = withDelay(80, withSpring(1, { damping: 11, stiffness: 150, mass: 0.9 }));
+  }, [unfold, reduced, open]);
+  const style = useAnimatedStyle(() => ({
+    opacity: Math.min(1, open.value * 2),
+    transform: [{ perspective: 800 }, { rotateX: `${(1 - open.value) * 80}deg` }, { scale: 0.85 + open.value * 0.15 }],
+  }));
+  const coin = ticket.discover?.coin_url || ticket.ride.coin_url;
+  return <Animated.View style={[styles.souvenir, style]}>
+    <View style={styles.coinHalo}><Image source={coin ? { uri: coin } : COIN_FALLBACK} style={styles.heroCoin} contentFit="contain" /></View>
+    <Image source={FINN} style={styles.finn} contentFit="contain" />
+  </Animated.View>;
+}
+
+/** A chip that springs into Dustin's left suggestion slot. */
+function ChipEntrance({ reduced, children, style }: { reduced: boolean; children: ReactNode; style: object }) {
+  const enter = useSharedValue(reduced ? 1 : 0);
+  useEffect(() => { enter.value = reduced ? 1 : withSpring(1, { damping: 13, stiffness: 190 }); }, [enter, reduced]);
+  const animated = useAnimatedStyle(() => ({ opacity: enter.value, transform: [{ translateX: (1 - enter.value) * -28 }, { scale: 0.92 + enter.value * 0.08 }] }));
+  return <Animated.View style={[style, animated]}>{children}</Animated.View>;
+}
+
+export default function AdventureTicketCard({ ticket, data, closed, stale, top, collapsed = false, gate, detours = [], slam = [], onSlamDone,
+  onDiscover, onPlay, onFindLine, onShelf, onSelect, onDismiss, onCelebrate, onRefresh, onOcclusionChange,
+  initialOpen = false, initialPicker = false }: Props) {
+  const [open, setOpen] = useState(initialOpen), [picker, setPicker] = useState(initialPicker);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
+  const [unfold, setUnfold] = useState(false);
   const mounted = useRef(true), locked = useRef(false), pending = useRef<(() => void) | null>(null);
   const occlusion = useRef(onOcclusionChange); occlusion.current = onOcclusionChange;
   const reduced = useReducedGameMotion(), insets = useSafeAreaInsets();
@@ -54,15 +152,18 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
     mounted.current = true;
     return () => { mounted.current = false; pending.current = null; occlusion.current?.(false); };
   }, []);
-  const prompt = adventurePrompt(ticket, closed);
-  const stamps = [!!ticket.discover, !!ticket.play, ticket.phase === 'complete'];
-  const choices = data.rides.filter(ride => ride.park_id === ticket.park_id && ride.ride_id && ride.task_id !== ticket.ride.task_id);
+  const prompt = adventurePrompt(ticket, closed, gate);
+  const stamps = adventureStamps(ticket);
+  const earnedCount = stamps.filter(Boolean).length;
+  const coinUrl = ticket.discover?.coin_url || ticket.ride.coin_url;
+  const coinSource = coinUrl ? { uri: coinUrl } : COIN_FALLBACK;
+  const complete = ticket.phase === 'complete';
   const close = () => { pending.current = null; setOpen(false); };
   const transact = async (operation: () => Promise<unknown>) => {
-    if (locked.current) return;
+    if (locked.current) return false;
     locked.current = true; setBusy(true); setError(null);
-    try { await operation(); }
-    catch { if (mounted.current) setError('Your ticket is safe. Reconnect and try again.'); }
+    try { await operation(); return true; }
+    catch (cause) { if (mounted.current) setError(adventureErrorMessage(cause)); return false; }
     finally { locked.current = false; if (mounted.current) setBusy(false); }
   };
   const navigateAfterHide = (action: () => void) => {
@@ -71,42 +172,72 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
   };
   const next = () => {
     if (stale) { void transact(onRefresh); return; }
-    if (closed && ticket.phase !== 'celebrate' && ticket.phase !== 'complete') { setPicker(true); return; }
-    if (ticket.phase === 'celebrate') {
-      void transact(async () => {
-        const confirmed = await onCelebrate();
-        if (!confirmed || !mounted.current) return;
-        if (!reduced) haptic('success');
-        playSfx('star', 0.55);
-      });
-    } else if (ticket.phase === 'complete') navigateAfterHide(onShelf);
-    else if (ticket.phase === 'discover') navigateAfterHide(onDiscover);
-    else navigateAfterHide(() => {
-      void onPlay().catch(() => {
-        if (mounted.current) { setOpen(true); setError('Could not open this ride’s adventure. Try again.'); }
-      });
-    });
+    switch (prompt.intent) {
+      case 'detour': setPicker(true); return;
+      case 'celebrate':
+        void transact(async () => {
+          const confirmed = await onCelebrate();
+          if (!confirmed || !mounted.current) return;
+          setUnfold(true);
+          haptic('success');
+          playSfx('star', 0.7);
+        });
+        return;
+      case 'shelf': navigateAfterHide(onShelf); return;
+      case 'discover': navigateAfterHide(onDiscover); return;
+      case 'find_line': navigateAfterHide(onFindLine ?? onDiscover); return;
+      default:
+        navigateAfterHide(() => {
+          void onPlay().catch(() => {
+            if (mounted.current) { setOpen(true); setError('Could not open this ride\'s adventure. Try again.'); }
+          });
+        });
+    }
   };
-  const pick = (ride: TripGoalRide) => void transact(async () => {
-    const result = await onChoose(ride.task_id);
-    if (result && mounted.current) { setPicker(false); if (!reduced) haptic('tickSelection'); }
+  const pick = (pickRide: DetourPick) => void transact(async () => {
+    const result = await onSelect(pickRide.ride.task_id);
+    if (result && mounted.current) { setPicker(false); haptic('tickSelection'); }
   });
+  const tuckAway = () => void transact(async () => {
+    await onDismiss?.();
+    if (mounted.current) setOpen(false);
+  });
+  const openSheet = () => { setPicker(false); setError(null); setOpen(true); haptic('tapLight'); };
+  const a11y = `Open Adventure Ticket. ${ticket.ride.ride_name}. ${prompt.title}. ${earnedCount} of 3 chapters complete.`;
+
   return <>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Open Adventure Ticket. ${ticket.ride.ride_name}. ${prompt.title}. ${stamps.filter(Boolean).length} of 3 chapters complete.`}
-      onPress={() => { setPicker(false); setError(null); setOpen(true); }} style={[styles.folded, { top }]}>
-      <LinearGradient colors={['#fff7d5', '#ffdf81']} style={styles.foldedInside}>
-        <Image source={ticket.ride.coin_url ? { uri: ticket.ride.coin_url } : require('../../../assets/images/coingold.png')}
-          style={styles.smallCoin} contentFit="contain" />
-        <View style={styles.foldedCopy}>
-          <Text style={styles.eyebrow}>{stale ? 'LAST CONFIRMED ADVENTURE' : 'YOUR ADVENTURE'} <Text style={styles.chapterCount}>{stamps.filter(Boolean).length}/3</Text></Text>
-          <Text numberOfLines={1} style={styles.foldedTitle}>{prompt.title}</Text>
-          <Text numberOfLines={1} style={styles.foldedRide}>{ticket.ride.ride_name}</Text>
-        </View>
-        <Text style={styles.chevron}>›</Text>
-      </LinearGradient>
-    </Pressable>
+    {complete ? (
+      // Finished: the ticket tucks into a small souvenir stub in the same slot.
+      <ChipEntrance reduced={reduced} style={[styles.stubSlot, { top }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={a11y} onPress={openSheet} style={styles.stub}>
+          <Image source={coinSource} style={styles.stubCoin} contentFit="contain" />
+          <View style={styles.stubCheck}><GameIcon name="check" size={16} /></View>
+        </Pressable>
+      </ChipEntrance>
+    ) : collapsed ? (
+      <MapSuggestionStub side="left" top={top} label={a11y} badge={`${earnedCount}/3`}
+        onPress={() => { setPicker(false); setError(null); setOpen(true); }}>
+        <Image source={coinSource} style={styles.stubCoin} contentFit="contain" />
+      </MapSuggestionStub>
+    ) : (
+      <ChipEntrance reduced={reduced} style={[styles.chipSlot, { top }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={a11y} onPress={openSheet} style={styles.chip}>
+          <Image source={coinSource} style={styles.chipCoin} contentFit="contain" />
+          <View style={styles.chipCopy}>
+            <View style={styles.chipKickerRow}>
+              <Text style={styles.chipKicker}>{stale ? 'LAST KNOWN' : 'ADVENTURE'}</Text>
+              {stamps.map((earned, index) => <StampDot key={index} earned={earned} reduced={reduced} coin={coinSource}
+                slam={slam.includes(index)} onDone={index === Math.max(...slam) ? onSlamDone : undefined} />)}
+            </View>
+            <Text numberOfLines={1} style={styles.chipTitle}>{prompt.chip}</Text>
+            <Text numberOfLines={1} style={styles.chipRide}>{ticket.ride.ride_name}</Text>
+          </View>
+        </Pressable>
+      </ChipEntrance>
+    )}
     <Modal isVisible={open} onBackdropPress={close} onBackButtonPress={close}
       animationIn="slideInUp" animationOut="slideOutDown" animationInTiming={reduced ? 0 : 280} animationOutTiming={reduced ? 0 : 200}
+      backdropColor={BRAND.navy} backdropOpacity={0.3}
       backdropTransitionInTiming={reduced ? 0 : 180} backdropTransitionOutTiming={reduced ? 0 : 180}
       onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => {
         occlusion.current?.(false);
@@ -115,53 +246,56 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
       }} style={styles.modal}>
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetEyebrow}>PARK-DAY ADVENTURE • {ticket.park_day.slice(5).replace('-', '/')}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close Adventure Ticket" onPress={close} style={styles.close}>
-            <Text style={styles.closeText}>×</Text>
+          <Text style={styles.sheetEyebrow}>PARK-DAY ADVENTURE  {ticket.park_day.slice(5).replace('-', '/')}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close Adventure Ticket" onPress={close} hitSlop={8} style={styles.close}>
+            <GameIcon name="close" size={34} />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {picker ? <>
             <Text style={styles.title}>Choose your detour</Text>
-            <Text style={styles.support}>A different ride. The same adventure. Every earned stamp stays with you.</Text>
-            {choices.map(ride => <Pressable key={ride.task_id} accessibilityRole="button" accessibilityLabel={`Continue adventure at ${ride.ride_name}`} disabled={busy} onPress={() => pick(ride)} style={styles.choice}>
-              <Image source={ride.coin_url ? { uri: ride.coin_url } : require('../../../assets/images/coingold.png')} style={styles.choiceCoin} contentFit="contain" />
-              <View style={{ flex: 1 }}><Text style={styles.choiceTitle}>{ride.ride_name}</Text><Text style={styles.choiceDetail}>{ride.coin_owned ? 'Your coin • a new queue story' : 'A new coin to discover'}</Text></View>
-              <Text style={styles.chevron}>›</Text>
+            <Text style={styles.support}>A different ride, the same adventure. Every stamp you earned stays.</Text>
+            {detours.map(choice => <Pressable key={choice.ride.task_id} accessibilityRole="button"
+              accessibilityLabel={`Continue adventure at ${choice.ride.ride_name}`} disabled={busy} onPress={() => pick(choice)}
+              style={({ pressed }) => [styles.choice, pressed && styles.choicePressed]}>
+              <Image source={choice.ride.coin_url ? { uri: choice.ride.coin_url } : COIN_FALLBACK} style={styles.choiceCoin} contentFit="contain" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.choiceTitle} numberOfLines={1}>{choice.ride.ride_name}</Text>
+                <Text style={styles.choiceDetail} numberOfLines={1}>{detourDetail(choice)}</Text>
+              </View>
+              <GameIcon name="arrow" size={22} />
             </Pressable>)}
-            {!choices.length && <Text style={styles.support}>No other linked queue adventures are available at this park yet. Your stamps are saved.</Text>}
-            <Pressable accessibilityRole="button" onPress={() => setPicker(false)} style={styles.secondary}><Text style={styles.secondaryText}>Back to my ticket</Text></Pressable>
+            {!detours.length && <Text style={styles.support}>No other open attractions can host an adventure right now. Your stamps are saved.</Text>}
+            <GameButton variant="ghost" label="Back to my ticket" accessibilityLabel="Back to my ticket" onPress={() => setPicker(false)} />
           </> : <>
-            <View style={styles.hero}>
-              <View style={styles.coinHalo}><Image source={(ticket.discover?.coin_url || ticket.ride.coin_url)
-                ? { uri: ticket.discover?.coin_url || ticket.ride.coin_url } : require('../../../assets/images/coingold.png')}
-                style={styles.heroCoin} contentFit="contain" /></View>
-              <Image source={require('../../../assets/images/screens/pin-collections/shark.png')} style={styles.finn} contentFit="contain" />
-            </View>
+            <Souvenir ticket={ticket} reduced={reduced} unfold={unfold} />
             <Text style={styles.title}>{prompt.title}</Text>
             <Text style={styles.ride}>{ticket.ride.ride_name}</Text>
             <Text style={styles.support}>{prompt.detail}</Text>
             <View style={styles.chapters}>
-              {[{ label: 'Discover', detail: ticket.discover ? `${ticket.discover.ride_name} • ${ticket.discover.kind === 'owned_coin' ? 'already on your shelf' : 'coin collected'}` : 'Win this ride’s coin challenge.' },
-                { label: 'Play', detail: ticket.play ? `${ticket.play.chapter_title}${ticket.play.route_name ? ` • ${ticket.play.route_name}` : ''}` : 'Repair, discover, and finish a short queue story.' },
-                { label: 'Celebrate', detail: ticket.phase === 'complete' ? 'Your souvenir is ready to revisit.' : 'Bring your coin and story together.' }].map((chapter, index) =>
+              {[{ label: 'Discover', detail: ticket.discover ? `${ticket.discover.ride_name}, ${ticket.discover.kind === 'owned_coin' ? 'already on your shelf' : 'coin collected'}` : 'Win this ride\'s coin challenge.' },
+                { label: 'Play', detail: ticket.play ? `${ticket.play.chapter_title}${ticket.play.route_name ? `, ${ticket.play.route_name}` : ''}` : 'Finish a short queue story in its line.' },
+                { label: 'Celebrate', detail: complete ? 'Your souvenir is ready to revisit.' : 'Bring your coin and story together.' }].map((chapter, index) =>
                 <View key={chapter.label} style={[styles.chapter, index < 2 && styles.perforation]}>
                   <Punch earned={stamps[index]} number={index + 1} reduced={reduced} />
                   <View style={{ flex: 1 }}><Text style={styles.chapterTitle}>{chapter.label}</Text><Text style={styles.chapterDetail}>{chapter.detail}</Text></View>
                 </View>)}
             </View>
             {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && <View style={styles.resource}>
-              <Image source={require('../../../assets/images/ticket-icon.png')} style={styles.resourceIcon} contentFit="contain" />
+              <GameIcon name="ticket" size={34} />
               <Text style={styles.resourceText}>{data.wallet.rescue_pass_available ? 'Your first-coin pass is ready for this challenge.'
                 : `${data.wallet.tickets_needed} more ${data.wallet.tickets_needed === 1 ? 'Ticket' : 'Tickets'} needed. Verified queue time and home finds can help.`}</Text>
             </View>}
-            <Pressable accessibilityRole="button" accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action} disabled={busy} onPress={next} style={[styles.primary, busy && { opacity: 0.65 }]}>
-              {busy ? <ActivityIndicator color="#123e5a" /> : <Text style={styles.primaryText}>{stale ? 'Refresh my ticket' : prompt.action}  ›</Text>}
-            </Pressable>
-            {ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && <Pressable accessibilityRole="button" accessibilityLabel="Choose a different adventure ride" disabled={busy} onPress={() => setPicker(true)} style={styles.secondary}>
-              <Text style={styles.secondaryText}>Choose a different ride</Text>
-            </Pressable>}
-            {ticket.phase === 'complete' && <Text style={styles.private}>Saved for you. Sharing is always your choice.</Text>}
+            <View style={styles.primaryRow}>
+              <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}
+                icon={prompt.intent === 'play' ? 'queue' : prompt.intent === 'find_line' || prompt.intent === 'discover' ? 'map' : undefined}
+                loading={busy} disabled={busy} onPress={next} />
+            </View>
+            {ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && <GameButton variant="ghost" label="Choose a different ride"
+              accessibilityLabel="Choose a different adventure ride" disabled={busy} onPress={() => setPicker(true)} />}
+            {onDismiss && <GameButton variant="ghost" label="Tuck away for today" accessibilityLabel="Tuck the Adventure Ticket away for today"
+              disabled={busy} onPress={tuckAway} />}
+            {complete && <Text style={styles.private}>Saved for you. Sharing is always your choice.</Text>}
           </>}
           {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
         </ScrollView>
@@ -171,18 +305,56 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
 }
 
 const styles = StyleSheet.create({
-  folded: { position: 'absolute', left: 12, right: 12, zIndex: 20, borderRadius: 19, borderWidth: 3, borderColor: '#fff', overflow: 'hidden', shadowColor: '#0c3049', shadowOpacity: 0.22, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 5 },
-  foldedInside: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, gap: 10 },
-  smallCoin: { width: 48, height: 48 }, foldedCopy: { flex: 1 }, eyebrow: { color: '#365365', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 1 },
-  chapterCount: { color: '#137da3' }, foldedTitle: { fontFamily: 'Shark', fontSize: 18, color: '#113b56', marginTop: 3 }, foldedRide: { fontFamily: 'Knockout', fontSize: 12, color: '#365365', marginTop: 3 },
-  chevron: { fontFamily: 'Knockout', fontSize: 30, color: '#0a6da0' }, modal: { justifyContent: 'flex-end', margin: 0 },
-  sheet: { maxHeight: '88%', backgroundColor: '#fff8e4', borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 3, borderColor: '#fff', overflow: 'hidden' },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', paddingLeft: 22, paddingRight: 10, backgroundColor: '#0b628f', minHeight: 54 }, sheetEyebrow: { flex: 1, fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1, color: '#fff3bf' },
-  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }, closeText: { fontSize: 30, color: '#fff' }, scroll: { paddingHorizontal: 22, paddingBottom: 10 },
-  hero: { height: 132, alignItems: 'center', justifyContent: 'center', marginTop: 14 }, coinHalo: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#ffe7a0', borderWidth: 2, borderColor: '#f2c65c', alignItems: 'center', justifyContent: 'center' }, heroCoin: { width: 106, height: 106 }, finn: { position: 'absolute', width: 83, height: 90, right: 14, bottom: 2 },
-  title: { fontFamily: 'Shark', fontSize: 27, color: '#123e5a', textAlign: 'center', marginTop: 14 }, ride: { fontFamily: 'Shark', fontSize: 16, color: '#1b7c9f', textAlign: 'center', marginTop: 6 }, support: { fontFamily: 'Knockout', fontSize: 15, color: '#496273', textAlign: 'center', lineHeight: 21, marginTop: 8, marginBottom: 14 },
-  chapters: { borderRadius: 19, borderWidth: 2, borderColor: '#e8cf97', backgroundColor: '#fffdf6', marginTop: 2 }, chapter: { flexDirection: 'row', alignItems: 'center', padding: 13, gap: 12, minHeight: 78 }, perforation: { borderBottomColor: '#dfcba5', borderBottomWidth: 1, borderStyle: 'dashed' },
-  punch: { width: 38, height: 38, borderRadius: 19, borderWidth: 2, borderColor: '#d8c8a6', backgroundColor: '#f8f0dc', alignItems: 'center', justifyContent: 'center' }, punched: { backgroundColor: '#0d83a1', borderColor: '#096c88' }, punchText: { fontFamily: 'Knockout', color: '#947f5b', fontSize: 20 }, punchedText: { color: '#fff5ce' }, chapterTitle: { fontFamily: 'Shark', fontSize: 19, color: '#123e5a' }, chapterDetail: { fontFamily: 'Knockout', fontSize: 13, color: '#496273', lineHeight: 18, marginTop: 3 },
-  primary: { minHeight: 54, borderRadius: 17, backgroundColor: '#ffcc4d', borderWidth: 2, borderColor: '#e9ac30', alignItems: 'center', justifyContent: 'center', marginTop: 18, padding: 10 }, primaryText: { fontFamily: 'Shark', fontSize: 19, color: '#123e5a', textAlign: 'center' }, secondary: { minHeight: 46, alignItems: 'center', justifyContent: 'center', padding: 10 }, secondaryText: { fontFamily: 'Knockout', fontSize: 15, color: '#1b7298' }, private: { fontFamily: 'Knockout', fontSize: 12, color: '#496273', textAlign: 'center', marginTop: 12 },
-  choice: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, minHeight: 76, borderWidth: 2, borderColor: '#e8cf97', borderRadius: 17, backgroundColor: '#fffdf6', marginBottom: 10 }, choiceCoin: { width: 48, height: 48 }, choiceTitle: { fontFamily: 'Shark', fontSize: 18, color: '#123e5a' }, choiceDetail: { fontFamily: 'Knockout', fontSize: 13, color: '#496273', marginTop: 4 }, resource: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#e6f3f6', borderRadius: 14, padding: 12, marginTop: 14 }, resourceIcon: { width: 38, height: 38 }, resourceText: { flex: 1, fontFamily: 'Knockout', fontSize: 14, color: '#23566e', lineHeight: 19 }, error: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 20, color: '#983c29', paddingVertical: 12, textAlign: 'center' },
+  // Dustin's left suggestion slot: the same blue pill as the trip goal chip.
+  chipSlot: { position: 'absolute', left: 12, width: '43%', zIndex: 20 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.blueBright, borderColor: BRAND.white,
+    borderWidth: 3, borderRadius: 14, padding: 7, ...SHADOW.card },
+  chipCoin: { width: 34, height: 34 },
+  chipCopy: { flex: 1, minWidth: 0 },
+  chipKickerRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  chipKicker: { color: '#ffdc61', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.6, marginRight: 2 },
+  chipTitle: { color: BRAND.white, fontFamily: 'Shark', fontSize: 13, marginTop: 1 },
+  chipRide: { color: '#dff4ff', fontFamily: 'Knockout', fontSize: 11 },
+  dotWrap: { width: 11, height: 11, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, borderColor: '#dff4ff', backgroundColor: 'transparent' },
+  dotEarned: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
+  ink: { position: 'absolute', width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: BRAND.gold },
+  dropCoin: { position: 'absolute', width: 20, height: 20 },
+  stubSlot: { position: 'absolute', left: 12, zIndex: 20 },
+  stub: { width: 56, height: 56, borderRadius: 28, backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white,
+    alignItems: 'center', justifyContent: 'center', ...SHADOW.card },
+  stubCoin: { width: 42, height: 42 },
+  stubCheck: { position: 'absolute', right: -4, bottom: -4 },
+  modal: { justifyContent: 'flex-end', margin: 0 },
+  sheet: { maxHeight: '88%', backgroundColor: BRAND.cream, borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 3, borderColor: BRAND.white, overflow: 'hidden' },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', paddingLeft: 22, paddingRight: 10, backgroundColor: BRAND.blueBright, minHeight: 54 },
+  sheetEyebrow: { flex: 1, fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1, color: '#fff3bf' },
+  close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  scroll: { paddingHorizontal: 22, paddingBottom: 10 },
+  souvenir: { height: 132, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+  coinHalo: { width: 120, height: 120, borderRadius: 60, backgroundColor: '#ffe7a0', borderWidth: 3, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
+  heroCoin: { width: 106, height: 106 },
+  finn: { position: 'absolute', width: 83, height: 90, right: 14, bottom: 2 },
+  title: { fontFamily: 'Shark', fontSize: 26, color: BRAND.navy, textAlign: 'center', marginTop: 14 },
+  ride: { fontFamily: 'Shark', fontSize: 16, color: BRAND.blue, textAlign: 'center', marginTop: 6 },
+  support: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navySoft, textAlign: 'center', lineHeight: 21, marginTop: 8, marginBottom: 14 },
+  chapters: { borderRadius: 19, borderWidth: 2, borderColor: BRAND.creamDeep, backgroundColor: '#fffdf6', marginTop: 2 },
+  chapter: { flexDirection: 'row', alignItems: 'center', padding: 13, gap: 12, minHeight: 74 },
+  perforation: { borderBottomColor: '#dfcba5', borderBottomWidth: 1, borderStyle: 'dashed' },
+  punch: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#d8c8a6', backgroundColor: '#f8f0dc', alignItems: 'center', justifyContent: 'center' },
+  punched: { backgroundColor: BRAND.blueBright, borderColor: BRAND.white, borderWidth: 3 },
+  punchText: { fontFamily: 'Shark', color: '#947f5b', fontSize: 18 },
+  chapterTitle: { fontFamily: 'Shark', fontSize: 19, color: BRAND.navy },
+  chapterDetail: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.navySoft, lineHeight: 18, marginTop: 3 },
+  primaryRow: { alignItems: 'center', marginTop: 18 },
+  private: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.navySoft, textAlign: 'center', marginTop: 12 },
+  choice: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, minHeight: 72, borderWidth: 2, borderColor: BRAND.creamDeep,
+    borderRadius: 17, backgroundColor: '#fffdf6', marginBottom: 10 },
+  choicePressed: { borderColor: BRAND.gold, backgroundColor: '#fff3c9' },
+  choiceCoin: { width: 48, height: 48 },
+  choiceTitle: { fontFamily: 'Shark', fontSize: 18, color: BRAND.navy },
+  choiceDetail: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.navySoft, marginTop: 4 },
+  resource: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#e6f3f6', borderRadius: 14, padding: 12, marginTop: 14 },
+  resourceText: { flex: 1, fontFamily: 'Knockout', fontSize: 14, color: '#23566e', lineHeight: 19 },
+  error: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 20, color: BRAND.redLip, paddingVertical: 12, textAlign: 'center' },
 });

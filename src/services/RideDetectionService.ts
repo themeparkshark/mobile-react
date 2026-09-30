@@ -20,6 +20,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { AppState } from 'react-native';
 import { RideType } from '../api/endpoints/rides';
+import { QUEUE_RIDE_TYPES } from '../constants/queueRideTypes';
 
 const STORAGE_KEY = 'pending_ride_detections';
 const RIDES_CACHE_KEY = 'ride_detection_rides_cache';
@@ -32,7 +33,12 @@ const BACKGROUND_LOCATION_TASK = 'ride-detection-background';
 // Catalog APIs also contain dining and shops; these are never ride candidates.
 const DETECTABLE_TYPES = new Set(['ride', 'attraction', 'coaster', 'dark_ride',
   'flat_ride', 'water_ride', 'show', 'walk_through', 'transport', 'other']);
-const AMBIGUOUS_DISTANCE_MARGIN = 15; // wait for a clearer GPS position between overlapping attractions
+// wait for a clearer GPS position between overlapping attractions
+const AMBIGUOUS_DISTANCE_MARGIN = 15;
+/** Standing at one attraction this long suggests "In line at X? Play". */
+export const DWELL_SUGGESTION_MS = 90_000;
+/** Rides with a real queue to play in (no shows, walk-throughs or transport). */
+const QUEUE_TYPES = new Set<string>(QUEUE_RIDE_TYPES);
 
 function isDetectionCandidate(ride: RideType): boolean {
   return DETECTABLE_TYPES.has(ride.type) && Number.isFinite(ride.lat) &&
@@ -146,7 +152,7 @@ class RideDetectionService {
   }
 
   setRides(rides: RideType[]) {
-    this.rides = rides.filter(isDetectionCandidate);
+    this.rides = Array.isArray(rides) ? rides.filter(isDetectionCandidate) : [];
     // Cache to AsyncStorage for background task (BUG 3 fix)
     this.cacheRides();
   }
@@ -188,7 +194,7 @@ class RideDetectionService {
       const raw = await AsyncStorage.getItem(RIDES_CACHE_KEY);
       if (raw) {
         const cached = JSON.parse(raw) as RideType[];
-        this.rides = cached.filter(isDetectionCandidate);
+        this.rides = Array.isArray(cached) ? cached.filter(isDetectionCandidate) : [];
       }
     } catch (e) {
       console.warn('Failed to load rides from cache:', e);
@@ -232,7 +238,7 @@ class RideDetectionService {
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: 'Theme Park Shark',
-        notificationBody: 'Tracking your rides 🦈',
+        notificationBody: 'Tracking your rides',
         notificationColor: '#00A5F5',
       },
     });
@@ -421,6 +427,20 @@ class RideDetectionService {
     });
   }
 
+  /**
+   * The attraction the player has been standing at for at least `minMs` right
+   * now (the map's "In line at X? Play" card). Read-only; null when none.
+   */
+  currentDwell(minMs = DWELL_SUGGESTION_MS, now = Date.now()): { rideId: number; rideName: string; parkId: number; dwellMs: number } | null {
+    for (const state of this.zoneStates.values()) {
+      const dwellMs = now - state.enteredAt;
+      if (dwellMs >= minMs && QUEUE_TYPES.has(state.rideType) && now - state.lastSeenAt < 60_000) {
+        return { rideId: state.rideId, rideName: state.rideName, parkId: state.parkId, dwellMs };
+      }
+    }
+    return null;
+  }
+
   isRunning(): boolean {
     return this.running;
   }
@@ -436,7 +456,9 @@ const rideDetectionService = new RideDetectionService();
 // Background location task — must be defined at top level
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   if (error) {
-    console.error('Background location error:', error);
+    // Code 0 is CoreLocation's kCLErrorLocationUnknown: transient, the next fix
+    // follows on its own. Anything else is worth a warning, never a red box.
+    if ((error as { code?: number }).code !== 0) console.warn('Background location error:', error);
     return;
   }
 
@@ -459,3 +481,4 @@ export function removePendingDetection(id: string) { return rideDetectionService
 export function setDetectionRides(rides: RideType[]) { rideDetectionService.setRides(rides); }
 
 export default rideDetectionService;
+export function currentRideDwell(minMs?: number) { return rideDetectionService.currentDwell(minMs); }

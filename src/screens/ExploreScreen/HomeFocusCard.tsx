@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { PlayerStatsType } from '../../models/player-stats-type';
+import { GameIcon, GameRichText } from '../../ui';
 
 type FocusedSet = NonNullable<PlayerStatsType['focused_prep_set']>;
 
@@ -18,17 +19,17 @@ export default function HomeFocusCard({ set, onPress, topOffset = 55 }: {
   const progress = hasProgress ? `${collected}/${set.total_items}` : null;
   const kicker = waiting
     ? progress ? `${progress} · ${set.theme === 'night' ? 'AFTER SUNSET' : set.theme === 'weather' ? 'WAIT FOR RAIN' : 'RETURNS SOON'}` : reason
-    : progress ? `FOCUSED · ${progress} FOUND` : 'FOCUSED HUNT  ✦';
+    : progress ? `FOCUSED · ${progress} FOUND` : '[icon:sparkle] FOCUSED HUNT';
   return <Pressable accessibilityRole="button"
     accessibilityLabel={`Focused collection: ${set.name}. ${progress ? `${collected} of ${set.total_items} found. ` : ''}${waiting ? reason : 'New finds favor this set'}. Open collection.`}
     onPress={onPress} style={[styles.card, { top: topOffset }]}>
     <Image source={require('../../../assets/images/screens/profile/pin_collections.png')}
       style={styles.icon} contentFit="contain" />
     <View style={styles.copy}>
-      <Text style={styles.kicker} numberOfLines={1}>{kicker}</Text>
+      <GameRichText style={styles.kicker} iconSize={11} numberOfLines={1}>{kicker}</GameRichText>
       <Text style={styles.name} numberOfLines={1}>{set.name}</Text>
     </View>
-    <Text style={styles.arrow}>›</Text>
+    <GameIcon name="arrow" size={18} style={styles.arrow} />
   </Pressable>;
 }
 
@@ -42,5 +43,5 @@ const styles = StyleSheet.create({
   copy: { flex: 1, minWidth: 0 },
   kicker: { color: '#ffdb61', fontFamily: 'Knockout', fontSize: 9, letterSpacing: 0.5 },
   name: { color: '#fff', fontFamily: 'Shark', fontSize: 13, marginTop: 1 },
-  arrow: { color: '#ffdb61', fontFamily: 'Shark', fontSize: 21, marginLeft: 2 },
+  arrow: { marginLeft: 2 },
 });

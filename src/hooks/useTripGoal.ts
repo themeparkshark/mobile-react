@@ -1,6 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { celebrateAdventureTicket, getTripGoal, setTripGoal, type TripGoalData } from '../api/endpoints/me/trip-goal';
+import { dismissAdventureTicket, selectAdventureRide } from '../api/endpoints/me/adventure-ticket';
 import { AuthContext } from '../context/AuthProvider';
 
 /** Reads and writes belong to one signed-in player; a slow read cannot undo their choice. */
@@ -53,9 +54,21 @@ export default function useTripGoal(refreshVersion = 0, enabled = true) {
     if (!data || data.adventure_ticket?.id !== ticket.id) throw new Error('Adventure changed. Refresh your ticket.');
     return { ...data, adventure_ticket: ticket };
   }), [change, data]);
+  /** Detour or explicit adventure ride. Keeps the trip goal untouched. */
+  const select = useCallback((taskId: number) => change(async () => {
+    const ticket = await selectAdventureRide(taskId);
+    if (!data) throw new Error('Adventure changed. Refresh your ticket.');
+    return { ...data, adventure_ticket: ticket };
+  }), [change, data]);
+  /** Tuck today's ticket away for the rest of the park day. */
+  const dismiss = useCallback(() => change(async () => {
+    await dismissAdventureTicket();
+    if (!data) throw new Error('Adventure changed. Refresh your ticket.');
+    return { ...data, adventure_ticket: null };
+  }), [change, data]);
   useFocusEffect(useCallback(() => {
     void refresh();
     return () => { generation.current++; };
   }, [refresh, refreshVersion]));
-  return { data, stale: frame?.owner === owner ? frame.stale : false, busy, refresh, choose, celebrate };
+  return { data, stale: frame?.owner === owner ? frame.stale : false, busy, refresh, choose, celebrate, select, dismiss };
 }

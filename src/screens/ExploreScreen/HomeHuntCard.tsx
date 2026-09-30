@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import prepItemImage from '../../helpers/prepItemImages';
 import type { HomeHuntTarget } from './homeHuntTarget';
 import { HOME_PREP_PICKUP_RADIUS_METERS } from './homePickupRange';
+import { GameIcon, GameRichText } from '../../ui';
 
 export default function HomeHuntCard({ target, onPress, findsUntilTicket }: {
   readonly target: HomeHuntTarget;
@@ -24,12 +25,11 @@ export default function HomeHuntCard({ target, onPress, findsUntilTicket }: {
         require('../../../assets/images/screens/pin-collections/star.png'))}
       style={styles.image} contentFit="contain" />
     <View style={styles.copy}>
-      <Text style={styles.kicker} numberOfLines={1}>✦  {spare ? 'SPARE FOR' : 'NEW FOR'} {target.item.set_name?.toUpperCase() ?? 'YOUR SET'}</Text>
+      <GameRichText style={styles.kicker} iconSize={12} numberOfLines={1}>{`[icon:sparkle] ${spare ? 'SPARE FOR' : 'NEW FOR'} ${target.item.set_name?.toUpperCase() ?? 'YOUR SET'}`}</GameRichText>
       <Text style={styles.name} numberOfLines={1}>{target.item.name}</Text>
-      <Text style={styles.action}>{distance} · {nearby ? spare ? 'COLLECT SPARE  →' : 'COLLECT NOW  →' : 'SHOW ON MAP  →'}</Text>
+      <GameRichText style={styles.action} iconSize={13}>{`${distance} · ${nearby ? spare ? 'COLLECT SPARE' : 'COLLECT NOW' : 'SHOW ON MAP'} [icon:arrow]`}</GameRichText>
       {ticketFinds != null && <View style={styles.ticketRow}>
-        <Image source={require('../../../assets/images/ticket-icon.png')}
-          style={styles.ticketIcon} contentFit="contain" />
+        <GameIcon name="ticket" size={13} />
         <Text style={styles.ticket} numberOfLines={1}>TICKET WITHIN {ticketFinds} {ticketFinds === 1 ? 'FIND' : 'FINDS'}</Text>
       </View>}
     </View>
