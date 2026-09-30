@@ -89,6 +89,7 @@ import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay'
 import SharkDropHandler from './components/SharkDropHandler';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { releaseNativeSplash } from './nativeSplash';
+import { addBreadcrumb, setTelemetryUser } from './services/telemetry';
 
 const Stack = createNativeStackNavigator();
 
@@ -188,6 +189,9 @@ export default function App() {
           : 'Splash';
   useAppUpdates();
   const { player } = useContext(AuthContext);
+  useEffect(() => {
+    setTelemetryUser(player?.id);
+  }, [player?.id]);
   const { setCrumbs } = useContext(CrumbContext);
   const { retrieveCurrencies } = useContext(CurrencyContext);
   const { retrieveTheme } = useContext(ThemeContext);
@@ -231,7 +235,14 @@ export default function App() {
 
   return (
     <View style={{ flex: 1 }}>
-    <NavigationContainer ref={navigationRef} onReady={flushPendingNavigation}>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={flushPendingNavigation}
+      onStateChange={() => {
+        const route = navigationRef.getCurrentRoute?.();
+        if (route?.name) addBreadcrumb('navigation', route.name);
+      }}
+    >
       <Stack.Navigator
         initialRouteName={initialRouteName}
         screenOptions={{

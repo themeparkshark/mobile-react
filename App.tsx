@@ -3,10 +3,19 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
 import { holdNativeSplash } from './src/nativeSplash';
+import { captureException, captureMessage, initTelemetry } from './src/services/telemetry';
 
 // Must run at module scope, before the first render, or the native launch
 // screen may already be gone.
 holdNativeSplash();
+// Crash reporting starts before any provider can throw.
+if (initTelemetry() && __DEV__ && process.env.EXPO_PUBLIC_TELEMETRY_TEST === '1') {
+  captureMessage('Telemetry test event', 'info', { test: 'true' });
+}
+
+const reportBoundaryError = (error: Error) => {
+  captureException(error, { source: 'error-boundary', handled: true });
+};
 
 const ErrorFallback = ({ resetError }: { error: Error; resetError: () => void }) => {
   return (
@@ -67,7 +76,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     {/* @ts-ignore */}
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
+    <ErrorBoundary FallbackComponent={ErrorFallback} onError={reportBoundaryError}>
       <AuthProvider>
         <LinePlayRewardRecovery />
         <SoundEffectProvider>
