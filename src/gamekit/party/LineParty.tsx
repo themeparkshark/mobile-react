@@ -29,6 +29,12 @@ import { useLineHeadsUp } from '../motion/QueueMotion';
 import GameIcon from '../../ui/GameIcon';
 import type { EmoteId } from '../net/partyTypes';
 import BonkBoard from './BonkBoard';
+import WhackLiveBoard from '../../games/whack/party/WhackLiveBoard';
+import type { Timeline } from '../../games/whack/timeline';
+import { partySim } from '../../games-registry/partySims';
+
+/** Bot score curves sample every 250 ms of board time. */
+const CURVE_STEP_MS = 250;
 import PartyLobby from './PartyLobby';
 import PartyResults from './PartyResults';
 import RaceStrip, { type RacerLine } from './RaceStrip';
@@ -108,12 +114,24 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   const local = client.round;
   const [boardT, setBoardT] = useState(-3000);
   const [myScore, setMyScore] = useState(0);
-  const spawns = useMemo(() => (local?.spawns.length ? local.spawns : round ? buildTimeline(round.seed) : []), [local?.roundId, round?.seed]);
+  const game = round?.game ?? local?.game ?? 'bonk_race';
+  const spawns = useMemo(() => (local?.spawns.length ? local.spawns : round && game === 'bonk_race' ? buildTimeline(round.seed) : []), [local?.roundId, round?.seed, game]);
   const botLogs = useMemo(() => {
     const m = new Map<number, ReturnType<typeof botTaps>>();
-    round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, botTaps(spawns, round.seed, s.seat, s.profile)); });
+    if (game === 'bonk_race') round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, botTaps(spawns, round.seed, s.seat, s.profile)); });
     return m;
-  }, [round?.id, spawns]);
+  }, [round?.id, spawns, game]);
+  // Heavier sims (Whack Rush) give each bot a score curve in one pass instead of a replay per frame.
+  const botCurves = useMemo(() => {
+    const m = new Map<number, number[]>();
+    const sim = partySim(game);
+    if (!round || game === 'bonk_race' || !sim?.scoreCurve) return m;
+    const board = local?.roundId === round.id && local.board ? local.board : sim.build(round.seed);
+    round.seats.forEach((s) => {
+      if (s.kind === 'bot' && s.profile) m.set(s.seat, sim.scoreCurve!(board, sim.botTaps(board, round.seed, s.seat, s.profile), CURVE_STEP_MS));
+    });
+    return m;
+  }, [round?.id, game]);
   const perfNow = useCallback(() => (globalThis.performance?.now ? globalThis.performance.now() : Date.now()), []);
 
   // Board clock for the HUD when the board is not mounted (ghosting, spectating).
@@ -137,8 +155,9 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         score = myScore;
         ghost = state.ghostedRoundId === round.id;
       } else if (seat.kind === 'bot') {
-        const log = botLogs.get(seat.seat) ?? [];
-        score = resolve(spawns, log.filter(([t]) => t <= boardT)).score;
+        const curve = botCurves.get(seat.seat);
+        if (curve) score = curve[Math.max(0, Math.min(curve.length - 1, Math.floor(boardT / CURVE_STEP_MS)))] ?? 0;
+        else score = resolve(spawns, (botLogs.get(seat.seat) ?? []).filter(([t]) => t <= boardT)).score;
       } else {
         const rival = seat.user_id !== undefined ? state.rivals[seat.user_id] : undefined;
         const member = state.room?.members.find((m) => m.id === seat.user_id);
@@ -153,7 +172,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
     });
     const all = raw.map((r) => r.score);
     return raw.map((r) => ({ ...r, placement: placementOf(r.score, all) }));
-  }, [boardT, botLogs, myScore, round, spawns, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
+  }, [boardT, botLogs, botCurves, myScore, round, spawns, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
 
   const phase = state.phase;
   const playing = (phase === 'countdown' || phase === 'playing') && local && local.roundId === round?.id && !local.ended;
@@ -183,7 +202,21 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         </View>
       </View>
       <View style={styles.boardWrap}>
-        {playing && local ? (
+        {playing && local && local.game === 'whack_rush' && local.board ? (
+          <WhackLiveBoard
+            key={local.roundId}
+            board={local.board as Timeline}
+            goAt={local.goAt}
+            durationMs={local.durationMs}
+            perfNow={perfNow}
+            boardClock={boardClock}
+            held={!!state.hold}
+            recordTap={(t, hole) => client.recordTapAt(t, hole)}
+            onProgress={onProgress}
+            onTick={onTick}
+            autoplay={!!autoplay}
+          />
+        ) : playing && local ? (
           <BonkBoard
             key={local.roundId}
             spawns={spawns}

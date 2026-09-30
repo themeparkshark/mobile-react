@@ -28,6 +28,8 @@ export interface PartySim<Board = unknown, Result extends { score: number } = { 
   botTaps(board: Board, seed: number, seat: number, profile: SimProfile, fromMs?: number): SimTap[];
   ghostFill(board: Board, seed: number, seat: number, own: SimTap[], untilMs: number, profile: SimProfile): SimTap[];
   resultHash(result: Result): string;
+  /** Optional: score after every stepMs of board time in one pass (live scoreboards for heavier sims). */
+  scoreCurve?(board: Board, taps: SimTap[], stepMs?: number): number[];
 }
 
 export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
@@ -67,6 +69,7 @@ export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
     botTaps: rush.botTaps,
     ghostFill: rush.ghostFill,
     resultHash: rush.resultHash,
+    scoreCurve: rush.scoreCurve,
   },
 };
 

@@ -37,7 +37,7 @@ import { useWhackCues, useWhackJuice, pickCue as pick } from './useWhackJuice';
 import { useWalkSense } from '../../gamekit/motion/useWalkSense';
 import { usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { ART_BOX, BOSS_ART, THEMED_SHARK_FRAMES, THEME_BOX, type WhackTheme } from './assets';
+import { BOSS_ART, THEMED_SHARK_FRAMES, type WhackTheme } from './assets';
 import { buildBurst, walkOk, type Timeline, type WalkBoost } from './timeline';
 import {
   E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_END, E_SPLAT, E_SPLAT_CLEAR, NO_CARRY, createSim, type BurstCarry, type BurstResult,
@@ -48,7 +48,7 @@ import {
 } from './waves';
 import { A_CANDY, A_FADE, A_INK, A_SCAN, BOSS_NAMES } from './timeline';
 import { computeLayout, type BoardLayout } from './render/layout';
-import { F_ANGLER, F_BRUISER, F_BRUISER_DAZED, F_DAZED, F_GOLDEN, F_PEEK, F_POP, F_PUFFED, F_PUFFER } from './render/renderState';
+import { boxesFor } from './render/boxes';
 import { WhackBoard, useBoardImages } from './render/WhackBoard';
 import { useWhackRuntime } from './useWhackRuntime';
 import { Banner, Breather, DuelCard } from './ui/Overlays';
@@ -106,20 +106,6 @@ const GOLD = '#ffcf3b';
 type Phase = 'play' | 'finish' | 'breather' | 'done';
 
 
-function boxesFor(theme: WhackTheme): number[][] {
-  const t = THEME_BOX[theme];
-  const b: number[][] = [];
-  b[F_PEEK] = [...t[0]];
-  b[F_POP] = [...t[1]];
-  b[F_DAZED] = [...t[2]];
-  b[F_GOLDEN] = [...ART_BOX.golden];
-  b[F_ANGLER] = [...ART_BOX.angler];
-  b[F_BRUISER] = [...ART_BOX.bruiser];
-  b[F_BRUISER_DAZED] = [...ART_BOX.bruiserDazed];
-  b[F_PUFFER] = [...ART_BOX.puffer];
-  b[F_PUFFED] = [...ART_BOX.pufferPuffed];
-  return b;
-}
 
 function formatName(f: WhackFormat): string {
   return f === 'ride' ? 'Ride Challenge' : f === 'duel' ? 'Bonk Battle' : f === 'raid' ? 'Crew Raid' : f === 'daily' ? 'Daily Bonk' : f === 'weekly' ? 'Weekly Ride Seed' : 'Bonk Rush';

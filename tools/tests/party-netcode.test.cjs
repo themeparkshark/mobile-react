@@ -265,6 +265,38 @@ test('a full round: server-timed GO, taps relative to GO, submit with the replay
   c.destroy();
 });
 
+test('a Whack Rush round: sim-stamped taps (recordTapAt), clamped to the board clock, submitted with the replayed claim', async () => {
+  const rush = loadTs('src/games/whack/party/whackRush.ts');
+  const w = world();
+  const http = fakeHttp(w);
+  const socket = fakeSocket();
+  const c = await joined(w, http, socket);
+  const ch = 'presence-party.11111111-1111-4111-8111-111111111111';
+  const round = roundAt(w.serverNow() + 3500, { game: 'whack_rush', duration_ms: 20000 });
+  http.setRoom(snapshot({ version: 3, status: 'countdown', round_no: 1, round, you: { user_id: 7, seat: 0, submitted: false } }));
+  socket.emit(ch, 'round.scheduled', { round });
+  await w.advance(3500);
+  assert.equal(c.getState().phase, 'playing');
+  const board = c.round.board;
+  assert.equal(board.lengthMs, 20000);
+  const e = board.events.find((x) => x.kind === 0);
+  await w.advance(e.emergeAt + 260);
+  // The UI-thread sim stamped the bonk 20 ms ago (the event reached JS a frame later).
+  assert.equal(c.recordTapAt(e.emergeAt + 240, e.hole), e.emergeAt + 240);
+  // A stamp from the future is clamped to this phone's board clock (+50 ms).
+  assert.equal(c.recordTapAt(e.emergeAt + 5000, 4), e.emergeAt + 310);
+  await w.advance(20000);
+  const submit = http.calls.find(([, u]) => u.endsWith('/submit'));
+  assert.ok(submit);
+  const taps = plain(submit[2].taps);
+  assert.deepEqual(taps, [[e.emergeAt + 240, e.hole], [e.emergeAt + 310, 4]]);
+  const claim = rush.resolve(rush.buildBoard(round.seed), taps);
+  assert.equal(submit[2].client_score, claim.score);
+  assert.equal(submit[2].client_hash, rush.resultHash(claim));
+  assert.ok(claim.hits >= 1);
+  c.destroy();
+});
+
 test('a round that arrives late still plays its full length (latency-tolerant start)', async () => {
   const w = world();
   const http = fakeHttp(w);
@@ -410,7 +442,7 @@ test('a round in a game this build cannot draw goes straight to the ghost', asyn
   assert.equal(submit[2].partial, true);
   assert.equal(submit[2].until_ms, 0);
   const play = http.calls.find(([, u]) => u === '/party/play');
-  assert.deepEqual(plain(play[2].games), ['bonk_race'], 'the server only rotates in games this build can play');
+  assert.deepEqual(plain(play[2].games), ['bonk_race', 'whack_rush'], 'the server only rotates in games this build can play');
   c.destroy();
 });
 

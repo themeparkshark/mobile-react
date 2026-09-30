@@ -41,7 +41,12 @@ export interface RuntimeFlags {
   reducedMotion: boolean;
   /** Wall ms spent playing this Burst (proof wall_ms). */
   wallMs: number;
+  /** Live party round: every logged touch-down is echoed to JS as E_TAPLOG [hole, 0, 0, gameTime]. */
+  logTaps: boolean;
 }
+
+/** Runtime-only event (outside the sim's range): a logged touch-down, for the Line Party tap log. */
+export const E_TAPLOG = 90;
 
 function createFlags(): RuntimeFlags {
   'worklet';
@@ -52,7 +57,7 @@ function createFlags(): RuntimeFlags {
   };
   return {
     running: false, acc: 0, easeT: 600, endSeen: false, bot: false, botEv: z(-1), botAt: z(0), botHits: z(0),
-    swipeHole: -1, swipeX0: 0, reducedMotion: false, wallMs: 0,
+    swipeHole: -1, swipeX0: 0, reducedMotion: false, wallMs: 0, logTaps: false,
   };
 }
 
@@ -93,8 +98,10 @@ export interface WhackRuntime {
   rt: SharedValue<RuntimeFlags>;
   clock: GameClockHandle;
   gesture: ReturnType<typeof Gesture.Manual>;
-  /** Start a Burst on a fresh sim (JS thread). */
-  start: (s: WhackSim, bot: boolean) => void;
+  /** Start a Burst on a fresh sim (JS thread). `logTaps` echoes every touch-down (live party rounds). */
+  start: (s: WhackSim, bot: boolean, logTaps?: boolean) => void;
+  /** Shift game time by `ms` (positive runs ahead, negative holds) to stay on the room's board clock. */
+  nudge: (ms: number) => void;
   setRunning: (on: boolean, easeIn?: boolean) => void;
   /** Bank now (line call / BANK & EXIT). */
   bank: () => void;
@@ -153,7 +160,9 @@ export function useWhackRuntime(opts: {
     'worklet';
     const helmBefore = s.hHelm[h];
     const wasFrozen = s.frozen;
+    const logged = s.tapCount;
     simTap(s, h);
+    if (r.logTaps && s.tapCount > logged) s.ev.push(E_TAPLOG, h, 0, 0, s.t);
     if (wasFrozen && !s.frozen) r.easeT = 0;
     if (helmBefore === 1 && s.hHelm[h] === 0) {
       a.helmPopAt[h] = a.local[h];
@@ -222,8 +231,11 @@ export function useWhackRuntime(opts: {
         r.wallMs += c.paused ? 0 : fxDt > 0 ? fxDt : 0;
         r.acc += fxDt * f;
         const whole = Math.floor(r.acc);
-        r.acc -= whole;
-        if (whole > 0) simAdvance(s, whole);
+        // acc can be negative after a party nudge (the board ran ahead of the room clock): hold until caught up.
+        if (whole > 0) {
+          r.acc -= whole;
+          simAdvance(s, whole);
+        }
         if (s.frozen) r.acc = 0;
         if (r.bot) botStep(s, r, a, L);
       }
@@ -304,12 +316,13 @@ export function useWhackRuntime(opts: {
 
   return useMemo<WhackRuntime>(() => ({
     sim, rs, an, tick, rt, clock, gesture,
-    start: (s: WhackSim, bot: boolean) => {
-      runOnUI((next: WhackSim, b: boolean) => {
+    start: (s: WhackSim, bot: boolean, logTaps = false) => {
+      runOnUI((next: WhackSim, b: boolean, lt: boolean) => {
         'worklet';
         sim.value = next;
         const r = rt.value;
         r.running = true;
+        r.logTaps = lt;
         r.acc = 0;
         r.easeT = 600;
         r.endSeen = false;
@@ -327,7 +340,13 @@ export function useWhackRuntime(opts: {
           a.hitAt[i] = -99999;
           a.helmPopAt[i] = -99999;
         }
-      })(s, bot);
+      })(s, bot, logTaps);
+    },
+    nudge: (ms: number) => {
+      runOnUI((d: number) => {
+        'worklet';
+        rt.value.acc += d;
+      })(ms);
     },
     setRunning: (on: boolean, easeIn = false) => {
       runOnUI((v: boolean, ease: boolean) => {

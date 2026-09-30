@@ -133,7 +133,8 @@ export const HOLD_BUDGET_MS = 6000;
 /** The quick 3-2-1 before a held board resumes (part of the hold). */
 export const RESUME_COUNT_MS = 900;
 /** Games this build can render. */
-export const DEFAULT_GAMES = ['bonk_race'];
+/** Games this build can draw. Servers ignore any game they have not registered, so advertising early is safe. */
+export const DEFAULT_GAMES = ['bonk_race', 'whack_rush'];
 
 const PENDING_KEY = 'party:pending-submit';
 
@@ -269,6 +270,23 @@ export class PartyClient {
     if (!r || r.ended || r.heldAt !== null || this.state.phase !== 'playing') return null;
     const t = Math.round(this.perfNow() - r.goAt - r.heldMs);
     if (t < 0 || t > r.durationMs) return null;
+    const last = r.taps.length ? r.taps[r.taps.length - 1][0] : 0;
+    r.taps.push([Math.max(t, last), choice]);
+    return t;
+  }
+
+  /**
+   * Record a touch-down the board already stamped on its own sim clock (ms since
+   * GO). Boards that run the sim on the UI thread (Whack Rush) use this so the
+   * submitted log is exactly what the player saw scored. The stamp is clamped
+   * to this client's board clock (+50 ms), so it can never run ahead of the room.
+   */
+  recordTapAt(boardMs: number, choice: number): number | null {
+    const r = this.local;
+    if (!r || r.ended || r.heldAt !== null || this.state.phase !== 'playing') return null;
+    const now = this.perfNow() - r.goAt - r.heldMs;
+    const t = Math.round(Math.min(boardMs, now + 50));
+    if (!Number.isFinite(t) || t < 0 || t > r.durationMs) return null;
     const last = r.taps.length ? r.taps[r.taps.length - 1][0] : 0;
     r.taps.push([Math.max(t, last), choice]);
     return t;

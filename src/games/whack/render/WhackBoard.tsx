@@ -56,6 +56,8 @@ export interface HudProps {
   feverOn: boolean;
   boss: boolean;
   notches: number;
+  /** Live party round: the room HUD shows the clock, so the board skips its timer ring. */
+  compact?: boolean;
 }
 
 export interface WhackBoardProps {
@@ -424,11 +426,15 @@ function TopZone({ L, sim, rs, tick, hud, fontS, fontM, fontL, boss, bossFx, pac
   return (
     <Group>
       {/* Timer ring */}
-      <Circle cx={tcx} cy={tcy} r={timerR + 4} color={NAVY} />
-      <Circle cx={tcx} cy={tcy} r={timerR} color="#0a6fc2" />
-      <Path path={timerPath} style="stroke" strokeWidth={6} strokeCap="round" color={timerColor} />
-      {fontM ? <Text x={timerTextX} y={tcy + 8} text={timerText} font={fontM} color="#ffffff" /> : null}
-      {fontS ? <Text x={16} y={tcy + timerR + 22} text={hud.burstLabel} font={fontS} color="#ffffff" /> : null}
+      {hud.compact ? null : (
+        <Group>
+          <Circle cx={tcx} cy={tcy} r={timerR + 4} color={NAVY} />
+          <Circle cx={tcx} cy={tcy} r={timerR} color="#0a6fc2" />
+          <Path path={timerPath} style="stroke" strokeWidth={6} strokeCap="round" color={timerColor} />
+          {fontM ? <Text x={timerTextX} y={tcy + 8} text={timerText} font={fontM} color="#ffffff" /> : null}
+          {fontS ? <Text x={16} y={tcy + timerR + 22} text={hud.burstLabel} font={fontS} color="#ffffff" /> : null}
+        </Group>
+      )}
       {/* Combo badge */}
       <Group opacity={badgeOp}>
         <Circle cx={bx} cy={by} r={badgeR + 4} color={NAVY} />

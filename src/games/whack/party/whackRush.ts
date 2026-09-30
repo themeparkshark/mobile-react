@@ -94,6 +94,30 @@ export function resolve(board: Timeline, taps: RushTap[]): RushResult {
   };
 }
 
+/**
+ * Score after each `stepMs` of board time for one tap log (one sim pass), so a
+ * live scoreboard can show bots and ghosts climbing without re-running the sim
+ * every frame. curve[k] is the score at k * stepMs.
+ */
+export function scoreCurve(board: Timeline, taps: RushTap[], stepMs = 250): number[] {
+  const s = createSim(board, undefined, false);
+  const curve: number[] = [0];
+  let next = stepMs;
+  let i = 0;
+  while (next <= board.lengthMs) {
+    while (i < taps.length && taps[i][0] <= next) {
+      simAdvanceTo(s, taps[i][0]);
+      if (s.ended || s.t !== taps[i][0]) { i = taps.length; break; }
+      simTap(s, taps[i][1]);
+      i++;
+    }
+    simAdvanceTo(s, next);
+    curve.push(s.score);
+    next += stepMs;
+  }
+  return curve;
+}
+
 const PROFILE_OF: Record<RushProfile, ProfileName> = { rookie: 'novice', regular: 'median', ace: 'expert' };
 
 /** A house bot (or a ghost from `fromMs`) for `seat`: seeded, so the server and every phone agree. */
