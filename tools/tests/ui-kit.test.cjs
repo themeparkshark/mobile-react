@@ -23,7 +23,8 @@ function hue(hex) {
 }
 
 test('brand tokens: navy scrim instead of black, and no purple or near-black surfaces', () => {
-  assert.match(tokens.BRAND.scrim, /^rgba\(4,40,90,0\.55\)$/);
+  // A bluer, lighter navy than the first pass (0.55 over cream read slate and turned yellow buttons olive).
+  assert.match(tokens.BRAND.scrim, /^rgba\(8,56,128,0\.45\)$/);
   assert.equal(tokens.BRAND.cream, '#fff8e4');
   assert.equal(tokens.BRAND.navy, '#05346e');
   assert.equal(tokens.BRAND.gold, '#ffcf3b');
@@ -57,7 +58,7 @@ test('text presets never fake bold, use the brand faces, and outline display tex
   assert.equal(presets.textPreset('body').color, tokens.BRAND.navy);
 });
 
-const ICON_DIR = path.join(root, 'assets/images/icons');
+const ICON_DIR = path.join(root, 'assets/icons/game');
 /** Width, height and PNG colour type from the IHDR chunk, plus whether a tRNS chunk exists. */
 function pngInfo(file) {
   const buf = fs.readFileSync(file);
@@ -99,9 +100,9 @@ test('icons are hand-drawn art: no vector shapes, no icon fonts, no drawn-over o
       `src/ui/${file} draws icons with vectors or an icon font`);
   }
   const sources = iconSources();
-  // New art (GPT Image 2.5 from Alex's references) lives in assets/images/icons, trimmed, long side 384.
+  // New art (GPT Image 2.5 from Alex's references) lives in assets/icons/game, trimmed, long side 384.
   for (const name of names.GENERATED_ICON_NAMES) {
-    assert.equal(path.dirname(sources[name]), ICON_DIR, `${name} is in assets/images/icons`);
+    assert.equal(path.dirname(sources[name]), ICON_DIR, `${name} is in assets/icons/game`);
     const { width, height } = pngInfo(sources[name]);
     assert.equal(Math.max(width, height), 384, `${name} is ~384px on the long side`);
   }
@@ -109,17 +110,18 @@ test('icons are hand-drawn art: no vector shapes, no icon fonts, no drawn-over o
   const feb2026 = ['energy.png', 'ticket-icon.png', 'sword-icon.png', 'ride-parts.png', 'coingold.png', 'shield.png'];
   const febUsers = Object.entries(sources).filter(([, file]) => feb2026.includes(path.basename(file))).map(([name]) => name).sort();
   assert.deepEqual(febUsers, ['energy', 'parts', 'swords', 'ticket']);
-  // Alex's originals copied into assets/images/icons keep their names; nothing else hides in there.
+  // Alex's originals copied into assets/icons/game keep their names; nothing else hides in there.
   const inDir = fs.readdirSync(ICON_DIR).filter(file => file.endsWith('.png')).map(file => file.replace(/\.png$/, ''));
   const used = new Set(Object.values(sources).filter(file => path.dirname(file) === ICON_DIR).map(file => path.basename(file, '.png')));
-  for (const file of inDir) assert.ok(used.has(file), `assets/images/icons/${file}.png is unused`);
+  for (const file of inDir) assert.ok(used.has(file), `assets/icons/game/${file}.png is unused`);
 });
 
 test('icon tokens split copy, and legacy emoji become icons or disappear cleanly', () => {
   assert.deepEqual(plain(iconTokens.parseIconTokens('Spend [icon:ticket] 1 Ticket')), [
     { kind: 'text', text: 'Spend ' }, { kind: 'icon', name: 'ticket' }, { kind: 'text', text: ' 1 Ticket' }]);
   assert.deepEqual(plain(iconTokens.parseIconTokens('[icon:nope] stays text')), [{ kind: 'text', text: '[icon:nope] stays text' }]);
-  assert.equal(iconTokens.tokenizeLegacyEmoji('⚡ +20 Energy'), '[icon:rush] +20 Energy');
+  assert.equal(iconTokens.tokenizeLegacyEmoji('⚡ +20 Energy'), '[icon:energy] +20 Energy');
+  assert.equal(iconTokens.iconForEmoji('\u26A1\uFE0F'), 'energy', 'the bolt is Energy, never rush');
   assert.equal(iconTokens.tokenizeLegacyEmoji('Streak \u{1F525}️ 3 days'), 'Streak [icon:streak] 3 days');
   assert.equal(iconTokens.tokenizeLegacyEmoji('Nice \u{1F92F} !'), 'Nice!');
   assert.equal(iconTokens.tokenizeLegacyEmoji('\u{1F468}‍\u{1F469}‍\u{1F467} Family day'), 'Family day');
@@ -181,12 +183,38 @@ test('dialog store: falls back to the native alert with no host, queues one at a
   assert.equal(native.length, 2, 'detached hosts fall back to native again');
 });
 
+test('dialog store: a second host takes over cleanly, and the last host leaving hands the queue to native', async () => {
+  const native = [];
+  const store = dialogModel.createDialogStore((title, message, buttons) => native.push({ title, buttons }));
+  const root = [];
+  const detachRoot = store.attach(request => root.push(request && request.title));
+  const first = store.show({ title: 'One' });
+  const second = store.show({ title: 'Two' });
+  assert.deepEqual(root, [null, 'One']);
+  const screen = [];
+  const detachScreen = store.attach(request => screen.push(request && request.title));
+  assert.deepEqual(root, [null, 'One', null], 'the previous host clears, so two Modals never show the same request');
+  assert.deepEqual(screen, ['One']);
+  detachScreen();
+  assert.deepEqual(root, [null, 'One', null, 'One'], 'the remaining host picks the request back up');
+  detachRoot();
+  assert.equal(native.length, 1, 'no host left: the open request goes to the native alert');
+  assert.equal(native[0].title, 'One');
+  native[0].buttons[0].onPress();
+  assert.equal(await first, 0);
+  assert.equal(native.length, 2, 'then the next queued one');
+  assert.equal(native[1].title, 'Two');
+  native[1].buttons[0].onPress();
+  assert.equal(await second, 0);
+  assert.equal(store.pending(), 0);
+});
+
 const artText = loadTs('src/ui/artButtonText.ts');
 
 function buttonView(props, reduced = false) {
   const hapticCalls = [];
   const view = runtime('src/ui/GameButton.tsx', {
-    '../hooks/useReducedGameMotion': { default: () => reduced },
+    './useUiReducedMotion': { default: () => reduced },
     '../gamekit/Haptics': { haptic: intent => hapticCalls.push(intent) },
     './GameIcon': { default: 'GameIcon' },
     './artButtonText': artText,
@@ -249,7 +277,7 @@ test("GameButton: Dustin's own button art and YellowButton's label, sized from t
 
 function loaderView(props) {
   return runtime('src/ui/SharkLoader.tsx', {
-    '../hooks/useReducedGameMotion': { default: () => true },
+    './useUiReducedMotion': { default: () => true },
     './GameButton': { default: 'GameButton' },
     './GameIcon': { default: 'GameIcon' },
     './GameText': { default: 'GameText' },
@@ -282,11 +310,72 @@ test('SharkLoader: loading turns slow and offers retry; error and empty never sp
   assert.equal(empty.timers.size, 0, 'empty state starts no slow timer');
 });
 
-test('Loading is a thin wrapper over SharkLoader', () => {
-  const loading = runtime('src/components/Loading.tsx', { '../ui/SharkLoader': { default: 'SharkLoader' } }, { state: 'error', onRetry: 'r' });
+function loadingView(props, labels = {}) {
+  return runtime('src/components/Loading.tsx', {
+    '../ui/SharkLoader': { default: 'SharkLoader' },
+    '../hooks/useCrumbs': { default: () => ({ labels }) },
+    '../ui/iconTokens': iconTokens,
+  }, props);
+}
+
+test('Loading is a thin wrapper over SharkLoader that keeps the CMS slow copy', () => {
+  const loading = loadingView({ state: 'error', onRetry: 'r' }, { slow_connectivity: 'Slow signal in the park' });
   assert.equal(loading.tree.type, 'SharkLoader');
   assert.equal(loading.tree.props.state, 'error');
   assert.equal(loading.tree.props.onRetry, 'r');
+  assert.equal(loading.tree.props.message, undefined, 'the crumb is loading copy only, never the error message');
+  assert.equal(loadingView({}, { slow_connectivity: '\u{1F40C} Slow signal in the park' }).tree.props.message,
+    'Slow signal in the park', 'labels.slow_connectivity is the slow message, with any emoji dropped');
+  assert.equal(loadingView({ message: 'Own copy' }, { slow_connectivity: 'Slow' }).tree.props.message, 'Own copy');
+  assert.equal(loadingView({}, {}).tree.props.message, undefined, 'no crumb falls back to SHARK_LOADER_COPY.slow');
+});
+
+test('useUiReducedMotion knows the preference on the first render', () => {
+  const hook = (startup) => runtime('src/ui/useUiReducedMotion.ts', {
+    'react-native-reanimated': { useReducedMotion: () => startup },
+  }, {}, {}, { arguments: () => [] });
+  assert.equal(hook(false).tree, false, 'Reduce Motion off: a dialog that mounts open can spring right away');
+  assert.equal(hook(true).tree, true);
+});
+
+function dialogView(props, reduced = false) {
+  return runtime('src/ui/GameDialog.tsx', {
+    './useUiReducedMotion': { default: () => reduced },
+    '../gamekit/Haptics': { haptic() {} },
+    './GameButton': { default: 'GameButton' },
+    './GameIcon': { default: 'GameIcon' },
+    './GameText': { default: 'GameText' },
+    '../components/Ribbon': { default: 'Ribbon' },
+    './gameDialogModel': dialogModel,
+    './tokens': tokens,
+  }, { visible: true, title: 'Leave the line?', buttons: [{ text: 'Stay', style: 'cancel' }, { text: 'Leave' }], ...props },
+  {}, { exportName: 'GameDialog' });
+}
+
+test('GameDialog: mounting open springs when motion is on, fades under reduced motion', () => {
+  const open = dialogView({});
+  assert.ok(open.motions.includes('spring'), 'a host-mounted dialog (visible on mount) gets the spring pop');
+  const reduced = dialogView({}, true);
+  assert.ok(!reduced.motions.includes('spring'), 'reduced motion never springs');
+  assert.ok(reduced.motions.includes('timing'));
+});
+
+test('GameDialog: short titles sit in the ribbon, long Alert titles wrap on the card', () => {
+  assert.equal(dialogModel.RIBBON_TITLE_MAX, 22);
+  assert.deepEqual(plain(dialogModel.dialogTitleLayout('  Leave the line? ')), { placement: 'ribbon', text: 'Leave the line?' });
+  assert.equal(dialogModel.dialogTitleLayout('HOW DID YOUR WAIT END?').placement, 'ribbon');
+  const long = 'Are you sure you want to leave? This draft will not be saved.';
+  assert.equal(dialogModel.dialogTitleLayout(long).placement, 'card');
+  assert.equal(dialogModel.dialogTitleLayout('Play while your phone is locked').placement, 'card');
+
+  const short = dialogView({});
+  assert.equal(short.find(n => n.type === 'Ribbon').props.text, 'Leave the line?');
+  const wrapped = dialogView({ title: long });
+  assert.equal(wrapped.find(n => n.type === 'Ribbon'), undefined, 'a long title never shrinks inside the one-line ribbon');
+  const heading = wrapped.find(n => n.type === 'GameText' && n.props.children === long);
+  assert.ok(heading, 'the long title is a wrapping heading on the card');
+  assert.equal(heading.props.numberOfLines, undefined);
+  assert.equal(heading.props.accessibilityRole, 'header');
 });
 
 test('image button labels: one size per button height instead of shrink-from-72', () => {

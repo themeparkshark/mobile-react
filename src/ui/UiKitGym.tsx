@@ -2,11 +2,14 @@
  * UiKitGym (dev only): shows every WS0 UI kit component in every state.
  *
  * Route params: { section?: 'icons' | 'buttons' | 'dialogs' | 'loaders' | 'text' }
- * opens straight on one section (used for the approval screenshots).
+ * opens straight on one section (used for the approval screenshots);
+ * { demo?: DialogDemo, backdrop?: 'cream' | 'blue' } also opens one dialog
+ * demo over that page colour, so the scrim can be judged on both.
  * Mounts its own GameDialogHost so the imperative dialog demos work before
- * the app root adopts one.
+ * the app root adopts one. The store shows dialogs on the newest host only,
+ * so this one takes over cleanly while the gym is open.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import YellowButton from '../components/YellowButton';
@@ -58,14 +61,44 @@ function IconSheet({ blue, names }: { blue: boolean; names: readonly GameIconNam
   </View>;
 }
 
-export default function UiKitGym({ route }: { route?: { params?: { section?: Section } } }) {
+type DialogDemo = 'simple' | 'confirm' | 'three' | 'long';
+type Backdrop = 'cream' | 'blue';
+
+const DIALOG_DEMOS: Record<DialogDemo, () => void> = {
+  simple: () => gameAlert('Coin saved!', 'It is waiting on your park shelf.'),
+  confirm: () => {
+    void confirmGame({ title: 'Leave the line?', message: 'Your queue progress is saved for today.', confirmLabel: 'Leave', cancelLabel: 'Keep playing', destructive: true })
+      .then(leave => { if (leave) gameAlert('You left the line', undefined, undefined, { icon: 'check' }); });
+  },
+  three: () => gameAlert('How did your wait end?', 'You keep any eligible rewards either way.', [
+    { text: 'I reached boarding' },
+    { text: 'I left the line' },
+    { text: 'Keep playing', style: 'cancel' },
+  ], { icon: 'timer' }),
+  // A real Alert.alert title from the app that is a whole sentence: it must not shrink inside the ribbon.
+  long: () => gameAlert('Are you sure you want to leave? This draft will not be saved.', 'Your picks so far will be lost.', [
+    { text: 'Leave', style: 'destructive' },
+    { text: 'Stay', style: 'cancel' },
+  ]),
+};
+
+export default function UiKitGym({ route }: { route?: { params?: { section?: Section; demo?: DialogDemo; backdrop?: Backdrop } } }) {
   const insets = useSafeAreaInsets();
-  const [section, setSection] = useState<Section>(route?.params?.section ?? 'icons');
+  const [section, setSection] = useState<Section>(route?.params?.section ?? (route?.params?.demo ? 'dialogs' : 'icons'));
+  const [backdrop, setBackdrop] = useState<Backdrop>(route?.params?.backdrop ?? 'cream');
+  const demo = route?.params?.demo;
+  useEffect(() => {
+    if (!demo) return;
+    const timer = setTimeout(() => DIALOG_DEMOS[demo](), 600);
+    return () => clearTimeout(timer);
+  }, [demo]);
   const [controlled, setControlled] = useState(false);
   const [loaderState, setLoaderState] = useState<'loading' | 'empty' | 'error'>('loading');
   const [busy, setBusy] = useState(false);
 
-  return <View style={{ flex: 1, backgroundColor: BRAND.cream }}>
+  const pageColor = section === 'dialogs' && backdrop === 'blue' ? BRAND.blueBright : BRAND.cream;
+
+  return <View style={{ flex: 1, backgroundColor: pageColor }}>
     <View style={{
       backgroundColor: BRAND.blueBright, paddingTop: insets.top + SPACE.sm, paddingBottom: SPACE.sm,
       borderBottomWidth: OUTLINE.thick, borderBottomColor: BRAND.navy,
@@ -112,18 +145,15 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
         </Panel>
       </>}
 
+      {section === 'dialogs' && <View style={{ flexDirection: 'row', gap: 6, marginBottom: SPACE.md, justifyContent: 'center' }}>
+        {(['cream', 'blue'] as const).map(name => <Chip key={name} label={`on ${name}`}
+          selected={backdrop === name} onPress={() => setBackdrop(name)} />)}
+      </View>}
       {section === 'dialogs' && <Panel title="GameDialog">
-        <GameButton label="Simple alert" variant="secondary" onPress={() => gameAlert('Coin saved!', 'It is waiting on your park shelf.')} />
-        <GameButton label="Confirm, destructive" variant="secondary" onPress={async () => {
-          const leave = await confirmGame({ title: 'Leave the line?', message: 'Your queue progress is saved for today.', confirmLabel: 'Leave', cancelLabel: 'Keep playing', destructive: true });
-          if (leave) gameAlert('You left the line', undefined, undefined, { icon: 'check' });
-        }} />
-        <GameButton label="Three choices with icon" variant="secondary" onPress={() => gameAlert(
-          'How did your wait end?', 'You keep any eligible rewards either way.', [
-            { text: 'I reached boarding' },
-            { text: 'I left the line' },
-            { text: 'Keep playing', style: 'cancel' },
-          ], { icon: 'timer' })} />
+        <GameButton label="Simple alert" variant="secondary" onPress={DIALOG_DEMOS.simple} />
+        <GameButton label="Confirm, destructive" variant="secondary" onPress={DIALOG_DEMOS.confirm} />
+        <GameButton label="Three choices with icon" variant="secondary" onPress={DIALOG_DEMOS.three} />
+        <GameButton label="Long title" variant="secondary" onPress={DIALOG_DEMOS.long} />
         <GameButton label="Two queued" variant="secondary" onPress={() => {
           gameAlert('First', 'Dialogs queue, one at a time.');
           gameAlert('Second', 'This one waited its turn.', undefined, { icon: 'gift' });

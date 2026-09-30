@@ -78,7 +78,7 @@ Every icon is a hand-drawn PNG. Three sources, in this order of preference:
    `trophy` / `trophySilver` / `trophyBronze` (park cups), `map` (compass),
    `xp` (potion), `shark` (classic shark), `fin`, `search`, `new`, `member`,
    `queue`, `coin` and `coins` (Alex's coin art). Files copied from Alex's pack
-   live in `assets/images/icons/`; the rest point at the existing screen art.
+   live in `assets/icons/game/`; the rest point at the existing screen art.
 2. **Currencies exactly as they look today**: `energy`, `ticket`, `swords`,
    `parts`. These are the Feb-2026 files; they are used only for the currency
    they already represent and are never a style reference.
@@ -96,7 +96,7 @@ default; pass `accessibilityLabel` when the icon is the only content.
 `tps-prime-time-audit/references/alex/`, then `assets/images/screens/**`). Only
 if none exists, generate it with the pipeline (GPT Image 2.5, Alex's
 references, 2 variants), pass the review sheet, save it as
-`assets/images/icons/<name>.png`, add the name to `GENERATED_ICON_NAMES` and
+`assets/icons/game/<name>.png`, add the name to `GENERATED_ICON_NAMES` and
 `ICON_SOURCES`, run `npm test` and check it in UiKitGym at 16, 24 and 48.
 
 ### GameRichText and icon tokens (`GameRichText.tsx`, `iconTokens.ts`)
@@ -104,8 +104,9 @@ references, 2 variants), pass the review sheet, save it as
 <GameRichText preset="body">{'Spend [icon:ticket] 1 Ticket to play'}</GameRichText>
 ```
 Server strings should send `[icon:name]` tokens instead of emoji. Until they
-do, legacy emoji are mapped (`⚡` rush, `🔥` streak, `🎟️` ticket, `🏆` trophy
-and more) or dropped. `stripIconTokens()` gives plain text for share sheets
+do, legacy emoji are mapped (`⚡` energy, `🔥` streak, `🎟️` ticket, `🏆` trophy
+and more) or dropped. The bolt always means Energy; Rush copy must use
+`[icon:rush]`. `stripIconTokens()` gives plain text for share sheets
 and accessibility.
 
 ### GameButton (`GameButton.tsx`) and YellowButton
@@ -126,7 +127,10 @@ ignored), `disabled` (his 50% fade), a light haptic (`haptics={false}` to skip),
 press scale 0.97 on the UI thread. Reduced motion keeps presses instant.
 
 ### GameDialog (`GameDialog.tsx`, logic in `gameDialogModel.ts`)
-Mount `<GameDialogHost />` once near the root. Then:
+Mount `<GameDialogHost />` exactly once near the root, never per screen: only
+the newest host shows dialogs (the previous one is cleared when another
+attaches), and if the last host unmounts mid-dialog the queue moves to the
+native alert so nothing is left unanswered. Then:
 ```tsx
 gameAlert('Out of Tickets', 'Start a queue adventure to earn your next Ticket.');
 gameAlert('How did your wait end?', undefined, [
@@ -146,6 +150,16 @@ queue one at a time. With no host mounted the call falls back to the native
 after the close animation, so they can navigate or open another modal.
 A controlled `<GameDialog visible ... onAnswer />` is also available.
 
+Titles: the ribbon holds one line of Shark, so keep titles to
+`RIBBON_TITLE_MAX` (22) characters, like "Leave the line?". A longer title
+(many existing `Alert.alert` titles are sentences) is not squeezed into the
+ribbon: it becomes a wrapping heading on the card and warns in dev. When you
+swap a call site, shorten the title and move the rest into the message.
+
+Motion: scrim fade plus a spring pop on the UI thread, a fade under Reduce
+Motion. `useUiReducedMotion` knows the preference on the first render, so
+host dialogs (which mount already open) spring too.
+
 ### SharkLoader (`SharkLoader.tsx`) and `Loading`
 ```tsx
 if (error) return <SharkLoader state="error" onRetry={load} />;
@@ -153,10 +167,14 @@ if (!items.length) return <SharkLoader state="empty" title="Be the first on the 
 return <SharkLoader onRetry={load} />;   // loading; "Still loading" and retry after 6s
 ```
 Art: Dustin's TPS shark (`assets/images/screens/pin-collections/shark.png`),
-bobbing while it loads; reduced motion holds him still. `compact` for cards,
+bobbing while it loads; reduced motion holds him still. The art is never
+edited: the moving shark is cropped above his baked-in ground shadow in
+layout, and a separate still navy shadow shrinks slightly as he rises. `compact` for cards,
 `tone="onBlue"` on blue panels. `components/Loading` is
 now SharkLoader with the same props, so existing `<Loading />` calls get the new
-look and can add `state` and `onRetry` without changing imports.
+look and can add `state` and `onRetry` without changing imports. Its slow
+message is the CMS crumb `labels.slow_connectivity` when the server sends one,
+falling back to SharkLoader's own line.
 
 ## Rule gate: `tools/tests/no-emoji.test.cjs`
 
@@ -164,15 +182,31 @@ Scans player-visible copy in `src/` (string literals, template chunks, JSX
 text, JSON values; not comments, import paths or console calls) and prints
 offender counts per file:
 
-- `emoji` and `emdash` fail the build once the gate is strict.
-- `glyph` (dingbats used as icons) and `phrase` (third-party phrases) are
-  report-only.
+- `emoji`, `emdash` and `glyph` (dingbats used as icons: stars, checks, X
+  marks, arrows, notes, most of which are not emoji to Unicode) fail the build
+  once the gate is strict. Each owning stream swaps its glyphs to `<GameIcon>`
+  or `[icon:]` tokens before the flip.
+- `phrase` (third-party phrases) is report-only.
 - Dev-only preview and tester screens are listed with `[dev]` and never fail.
 
 It runs in report mode until integration. Preview strict mode with
 `UI_COPY_STRICT=1 npm test`. A real exception sits next to the code:
-`// ui-copy-allow(emoji): why` on the line above, or on a declaration to cover
-a whole lookup table. There is no shared allowlist.
+`// ui-copy-allow(emoji): why` on the same line or the line above, or on a
+lookup-table declaration (`const X = { ... }` or `[ ... ]`) to cover the whole
+table. A pragma above a function, class or component never covers its body.
+There is no shared allowlist.
+
+Server-sent display strings: `UI_COPY_BACKEND=<backend checkout> npm test`
+also scans the backend's `app/` PHP string literals (read only; comments, log
+calls, exceptions and console commands are skipped) for emoji and em dashes.
+
+Preconditions for flipping `STRICT` to true (WS0, at integration):
+1. `UI_COPY_STRICT=1 npm test` passes: every owning stream has swapped its
+   emoji, em dashes and glyphs.
+2. `UI_COPY_BACKEND=<backend> UI_COPY_STRICT=1 npm test` passes: the backend
+   owner has replaced server emoji (UpdatePlayerStreakAction, SwordController,
+   PlayerTeam, PrepItemSet, PlayerRideController and the rest the scan lists)
+   with `[icon:name]` tokens or plain words.
 
 ESLint is not installed in this repo, so the node test is the gate.
 
