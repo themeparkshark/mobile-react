@@ -28,6 +28,7 @@ import { MusicContext } from '../context/MusicProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
+import { wardrobeCategoryLabel } from '../helpers/wardrobe';
 
 export default function InventoryScreen() {
   const route = useRoute();
@@ -35,7 +36,7 @@ export default function InventoryScreen() {
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>([]);
   const [currentItemType, setCurrentItemType] = useState<ItemTypeType>();
   const [items, setItems] = useState<ItemType[]>([]);
-  const { player } = useContext(AuthContext);
+  const { player, setPlayer } = useContext(AuthContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const { refreshPlayer } = useContext(AuthContext);
@@ -61,8 +62,11 @@ export default function InventoryScreen() {
       : require('../../assets/sounds/inventory_item_tap.mp3'));
     if (fromAvatar) HapticPatterns.buttonTap();
     try {
-      await updateInventory(item);
-      await refreshPlayer();
+      const outfit = await updateInventory(item);
+      // The server answers with the saved outfit: dress the shark now, then
+      // refresh the rest of the profile quietly.
+      if (player) setPlayer({ ...player, inventory: outfit });
+      refreshPlayer().catch(() => undefined);
     } catch {
       // The server may have changed the outfit even if its response was lost.
       // Block every wardrobe control until a profile read confirms its state.
@@ -136,6 +140,18 @@ export default function InventoryScreen() {
       {!loading && !currentItemType && loadError && (
         <Pressable onPress={() => { setLoading(true); setLoadError(null); setTypeLoadAttempt((value) => value + 1); }} style={{ padding: 24, alignItems: 'center' }}>
           <Text style={{ color: 'white', textAlign: 'center' }}>{loadError} Tap to retry.</Text>
+        </Pressable>
+      )}
+      {!loading && !player?.inventory && currentItemType && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Reload your shark"
+          onPress={() => { refreshPlayer().catch(() => undefined); }}
+          style={{ padding: 24, alignItems: 'center' }}
+        >
+          <Text style={{ color: 'white', textAlign: 'center', fontFamily: 'Knockout', fontSize: 18 }}>
+            Your shark is still getting dressed. Tap to reload.
+          </Text>
         </Pressable>
       )}
       {!loading && player?.inventory && itemTypes && currentItemType && (
@@ -212,6 +228,10 @@ export default function InventoryScreen() {
                     }}
                   >
                     <Pressable
+                      accessibilityRole="tab"
+                      accessibilityLabel={wardrobeCategoryLabel(itemType)}
+                      accessibilityState={{ selected: itemType.id === currentItemType?.id }}
+                      style={{ alignItems: 'center', justifyContent: 'center', minWidth: 60, paddingVertical: 4 }}
                       onPress={async () => {
                         if (itemType.id === currentItemType.id) {
                           return;
@@ -230,14 +250,26 @@ export default function InventoryScreen() {
                         setPage(1);
                       }}
                     >
-                      <Image
+                      {!!itemType.image_url && (
+                        <Image
+                          style={{
+                            width: 44,
+                            height: 44,
+                          }}
+                          source={itemType.image_url}
+                          contentFit="contain"
+                        />
+                      )}
+                      <Text
                         style={{
-                          width: 60,
-                          height: 60,
+                          color: '#15395B',
+                          fontFamily: 'Knockout',
+                          fontSize: itemType.image_url ? 13 : 18,
+                          paddingVertical: itemType.image_url ? 0 : 12,
                         }}
-                        source={itemType.image_url}
-                        contentFit="contain"
-                      />
+                      >
+                        {wardrobeCategoryLabel(itemType)}
+                      </Text>
                     </Pressable>
                   </View>
                 );

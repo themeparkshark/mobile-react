@@ -1,6 +1,9 @@
 import { Image } from 'expo-image';
+import { useContext } from 'react';
 import { Text, View } from 'react-native';
 import config from '../config';
+import { AuthContext } from '../context/AuthProvider';
+import { liveOutfitFor, outfitLayerUrls } from '../helpers/wardrobe';
 import { PlayerType } from '../models/player-type';
 
 export default function Avatar({
@@ -29,7 +32,8 @@ export default function Avatar({
   };
 
   const s = sizes[size];
-  const inventory = player.inventory;
+  const { player: signedInPlayer } = useContext(AuthContext);
+  const inventory = liveOutfitFor(player, signedInPlayer);
 
   // Build layered avatar URL — use skin + eyes + items for live outfit
   // The circle container clips it so background is fine
@@ -155,29 +159,17 @@ export default function Avatar({
           {hasSkin ? (
             <View style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }}>
               {/* Background */}
-              {inventory.background_item?.paper_url && (
+              {inventory?.background_item?.paper_url && (
                 <Image source={{ uri: inventory.background_item.paper_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
               )}
               {/* Skin */}
-              <Image source={{ uri: inventory.skin_item.no_eye_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
+              <Image source={{ uri: inventory!.skin_item.no_eye_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
               {/* Eyes */}
               <Image source={require('../../assets/images/screens/inventory/blink.png')} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
               {/* Items */}
-              {inventory.body_item?.paper_url && (
-                <Image source={{ uri: inventory.body_item.paper_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
-              )}
-              {inventory.face_item?.paper_url && (
-                <Image source={{ uri: inventory.face_item.paper_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
-              )}
-              {inventory.neck_item?.paper_url && (
-                <Image source={{ uri: inventory.neck_item.paper_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
-              )}
-              {inventory.hand_item?.paper_url && (
-                <Image source={{ uri: inventory.hand_item.paper_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
-              )}
-              {inventory.head_item?.paper_url && (
-                <Image source={{ uri: inventory.head_item.paper_url }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
-              )}
+              {outfitLayerUrls(inventory).map((uri) => (
+                <Image key={uri} source={{ uri }} style={{ width: '100%', height: '100%', position: 'absolute' }} contentFit="contain" />
+              ))}
             </View>
           ) : (
             <Image

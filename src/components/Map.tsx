@@ -13,6 +13,7 @@ import { buildDecorations, DECO_ICONS, decorationBand } from './map/decorations'
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { outfitLayerUrls } from '../helpers/wardrobe';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -300,22 +301,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
                 style={{ width: 60, height: 60, position: 'absolute' }}
                 contentFit="contain"
               />
-              {/* Equipped items layered on top */}
-              {player.inventory.body_item?.paper_url && (
-                <Image source={{ uri: player.inventory.body_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-              )}
-              {player.inventory.face_item?.paper_url && (
-                <Image source={{ uri: player.inventory.face_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-              )}
-              {player.inventory.head_item?.paper_url && (
-                <Image source={{ uri: player.inventory.head_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-              )}
-              {player.inventory.neck_item?.paper_url && (
-                <Image source={{ uri: player.inventory.neck_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-              )}
-              {player.inventory.hand_item?.paper_url && (
-                <Image source={{ uri: player.inventory.hand_item.paper_url }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
-              )}
+              {/* Equipped items layered on top, in the shared outfit order */}
+              {outfitLayerUrls(player.inventory).map((uri) => (
+                <Image key={uri} source={{ uri }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
+              ))}
             </View>
           ) : (
             <Image

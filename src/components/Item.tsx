@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useContext } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
+import { isItemWorn, isLockedWhileWorn } from '../helpers/wardrobe';
 import { ItemType } from '../models/item-type';
 
 export default function Item({ item, onToggle, disabled = false, saving = false }: {
@@ -13,11 +14,8 @@ export default function Item({ item, onToggle, disabled = false, saving = false 
   const { player } = useContext(AuthContext);
   const { width } = useWindowDimensions();
   const artSize = Math.max(60, Math.floor(width / 3) - 44);
-  const isEquipped = Object.values(player?.inventory ?? {}).some((inventoryItem) =>
-    inventoryItem && typeof inventoryItem === 'object' && 'id' in inventoryItem &&
-    inventoryItem.id === item.id);
-  const fixedEquippedItem = isEquipped &&
-    (player?.inventory?.skin_item?.id === item.id || player?.inventory?.background_item?.id === item.id);
+  const isEquipped = isItemWorn(player?.inventory, item);
+  const fixedEquippedItem = isLockedWhileWorn(player?.inventory, item);
 
   return (
     <View style={styles.container}>
@@ -42,7 +40,7 @@ export default function Item({ item, onToggle, disabled = false, saving = false 
         )}
         {isEquipped && <View style={styles.wornBadge}><Text style={styles.wornText}>WORN</Text></View>}
         <View style={[styles.artArea, { height: artSize + 16 }]}>
-          {item.item_type.id === 4 ? (
+          {item.item_type?.id === 4 && !!item.paper_url ? (
             <View style={{ width: artSize, height: artSize }}>
               <Image
                 source={player?.inventory?.skin_item?.no_eye_url
