@@ -2,8 +2,8 @@ import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamL
 import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
-import React, { useCallback, useContext, useMemo, useRef, useState, useEffect, Suspense } from 'react';
-import { Text, TouchableOpacity, View, ActivityIndicator, Pressable, StyleSheet } from 'react-native';
+import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
+import { Text, TouchableOpacity, View, Pressable, StyleSheet } from 'react-native';
 import Modal from 'react-native-modal';
 import { Marker } from '../components/map/Marker';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
@@ -12,8 +12,6 @@ import { TaskType } from '../models/task-type';
 import currencyBalance from '../helpers/currency-balance';
 import * as RootNavigation from '../RootNavigation';
 import currentRedeemables from '../api/endpoints/me/current-redeemables';
-// Lazy load ARView to prevent camera module crash
-const ARView = React.lazy(() => import('../components/ARView'));
 import Avatar from '../components/Avatar';
 import Button from '../components/Button';
 import Map from '../components/Map';
@@ -160,7 +158,6 @@ export default function ExploreScreen() {
   const [tripGoalVersion, setTripGoalVersion] = useState(0);
   const [activeParkProject, setActiveParkProject] = useState<ParkProject | null>(null);
   const [projectOpenRequestVersion, setProjectOpenRequestVersion] = useState(0);
-  const [arMode, setArMode] = useState(false);
   
   // Community Center state
   const [communityCenter, setCommunityCenter] = useState<CommunityCenter | null>(null);
@@ -339,7 +336,7 @@ export default function ExploreScreen() {
   const [bossOccluded, setBossOccluded] = useState(false);
   const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
     refreshControl: refreshRideControl,
-    available: mapFocused && permissionGranted && !arMode && !bossOpen && !bossOccluded && !isActive && !activeRedeemable &&
+    available: mapFocused && permissionGranted && !bossOpen && !bossOccluded && !isActive && !activeRedeemable &&
       !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !dailyGiftOccluded && !adventureOccluded });
   const raidActive = raid?.status === 'active';
   const { snapshot: bossRecovery } = useBossAttackRecovery({ playerId: player?.id ?? null, parkId: park?.id ?? null, onResult: () => undefined });
@@ -873,16 +870,8 @@ export default function ExploreScreen() {
           </View>
         </>
       )}
-      {/* AR Toggle removed - feature disabled */}
-      {/* Park Mode View - Map or AR */}
-      {park && arMode && redeemables && (
-        <View style={{ flex: 1, marginTop: -8 }}>
-          <Suspense fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" /></View>}>
-            <ARView redeemables={redeemables} onRefresh={() => getRedeemables()} />
-          </Suspense>
-        </View>
-      )}
-      {park && !arMode && (
+      {/* Park Mode: the game map */}
+      {park && (
       <View
         style={{
           flex: 1,
