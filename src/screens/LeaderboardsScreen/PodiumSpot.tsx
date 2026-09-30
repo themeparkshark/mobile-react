@@ -144,7 +144,7 @@ export default function PodiumSpot({ rank, player, score, scoreIcon, progress, l
     <Animated.View style={[{ alignItems: 'center' }, riseStyle]}>
       {first && (
         <Animated.Image source={STARBURST} resizeMode="contain"
-          style={[{ position: 'absolute', top: -34, width: 190, height: 190 }, burstStyle]} />
+          style={[{ position: 'absolute', top: -34, width: 190, height: 190, tintColor: BRAND.goldLight }, burstStyle]} />
       )}
       <Animated.View style={[{ marginBottom: -12, zIndex: 2 }, crownStyle]}>
         <Image source={CROWN_ART[rank]} style={{ width: crownPx, height: crownPx }} contentFit="contain" />
@@ -159,7 +159,11 @@ export default function PodiumSpot({ rank, player, score, scoreIcon, progress, l
           borderWidth: first ? 5 : 4, borderColor: ring.ring, borderBottomColor: ring.lip, borderRadius: 999, padding: 2,
           backgroundColor: BRAND.white, shadowColor: BRAND.shadow, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
         }}>
-          <View style={{ borderRadius: 999, overflow: 'hidden' }}>
+          <View style={{ borderRadius: 999, overflow: 'hidden', backgroundColor: BRAND.sky }}>
+            {/* His shark sits behind the avatar, so a player with no outfit yet still has a face. */}
+            <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+              <GameIcon name="shark" size={avatarPx * 0.8} />
+            </View>
             <Avatar player={player} size={first ? 'xl' : 'lg'} />
           </View>
         </View>

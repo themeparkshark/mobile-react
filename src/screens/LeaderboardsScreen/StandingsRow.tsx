@@ -57,7 +57,12 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
             <Text style={{ fontFamily: 'Shark', fontSize: rank > 99 ? 12 : 16, color: BRAND.white }}>{rank}</Text>
           </View>
         )}
-        <Avatar player={player} size="sm" />
+        <View style={{ width: 50, height: 50, borderRadius: 25, overflow: 'hidden', backgroundColor: BRAND.sky }}>
+          <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+            <GameIcon name="shark" size={40} />
+          </View>
+          <Avatar player={player} size="sm" />
+        </View>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text numberOfLines={1} style={{ fontFamily: 'Shark', fontSize: 18, color: BRAND.navy, textTransform: 'uppercase' }}>
             {player.screen_name}
