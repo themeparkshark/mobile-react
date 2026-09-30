@@ -14,7 +14,8 @@ export type CopyPart = { readonly kind: 'text'; readonly text: string } | { read
 
 // ui-copy-allow(emoji, glyph): legacy emoji to GameIcon lookup, the emoji are never rendered
 const LEGACY_EMOJI: Readonly<Record<string, GameIconName>> = {
-  '\u26A1': 'rush',
+  // The bolt is Energy everywhere in this game (HUD, daily login, line play). Rush copy uses [icon:rush].
+  '\u26A1': 'energy',
   '\u{1F3AB}': 'ticket',
   '\u{1F39F}': 'ticket',
   '\u{1FA99}': 'coin',
