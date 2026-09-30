@@ -58,6 +58,18 @@ test('an inline ui-copy-allow pragma exempts only the named kind on that line', 
     [{ line: 3, kind: 'emoji' }, { line: 3, kind: 'emdash' }]);
 });
 
+test('a pragma on a declaration covers the whole lookup table, and nothing after it', () => {
+  const found = scanSource([
+    '// ui-copy-allow(emoji): legacy lookup, never rendered',
+    'const TABLE = {',
+    "  a: '\u{1F988}',",
+    "  b: '\u{1F525}',",
+    '};',
+    "const shown = '\u{1F525}';",
+  ].join('\n'), 'x.ts');
+  assert.deepEqual(found.map(f => [f.line, f.kind]), [[6, 'emoji']]);
+});
+
 test('JSON string values are scanned', () => {
   const found = scanSource('{\n  "title": "Park day \u{1F3A2}",\n  "ok": "plain"\n}', 'x.json');
   assert.deepEqual(found.map(f => [f.line, f.kind]), [[2, 'emoji']]);

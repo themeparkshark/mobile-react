@@ -83,11 +83,25 @@ function isModulePath(node) {
   return ts.isCallExpression(parent) && parent.expression.kind === ts.SyntaxKind.ImportKeyword;
 }
 
-function allowedKinds(lines, lineIndex) {
+function addKinds(kinds, text) {
+  const match = text && ALLOW_RE.exec(text);
+  if (match) match[1].split(',').map(kind => kind.trim()).filter(Boolean).forEach(kind => kinds.add(kind));
+}
+
+/**
+ * Kinds allowed for a node: a pragma on its line or the line above, or a
+ * pragma in the leading comment of any enclosing declaration (so one comment
+ * covers a whole lookup table).
+ */
+function allowedKinds(node, sourceFile, lines, lineIndex) {
   const kinds = new Set();
-  for (const line of [lines[lineIndex], lines[lineIndex - 1]]) {
-    const match = line && ALLOW_RE.exec(line);
-    if (match) match[1].split(',').map(kind => kind.trim()).filter(Boolean).forEach(kind => kinds.add(kind));
+  addKinds(kinds, lines[lineIndex]);
+  addKinds(kinds, lines[lineIndex - 1]);
+  const text = sourceFile.text;
+  for (let current = node.parent; current && current !== sourceFile; current = current.parent) {
+    for (const range of ts.getLeadingCommentRanges(text, current.getFullStart()) ?? []) {
+      addKinds(kinds, text.slice(range.pos, range.end));
+    }
   }
   return kinds;
 }
@@ -110,7 +124,7 @@ function scanSource(source, fileName = 'file.tsx') {
     if (!kinds.length) return;
     const start = node.getStart(sourceFile);
     const line = sourceFile.getLineAndCharacterOfPosition(start).line;
-    const allowed = allowedKinds(lines, line);
+    const allowed = allowedKinds(node, sourceFile, lines, line);
     for (const found of kinds) {
       if (allowed.has(found)) continue;
       findings.push({ line: line + 1, kind: found, text: text.replace(/\s+/g, ' ').trim().slice(0, 60) });
