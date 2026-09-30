@@ -16,6 +16,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
 import type { DailyGiftAmountsType, DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
 import { BRAND, GameIcon, gameAlert } from '../ui';
+import { ws7Preview } from '../dev/ws7Preview';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
 
@@ -59,7 +60,7 @@ export function chestAmounts(gift: DailyGiftType, today: DailyGiftRewardType): D
  * lands on the ladder. Day 7 punches a Park Ticket. Closing flies the reward
  * into its HUD counter. An Energy or Ticket day never shows a chest of coins.
  */
-export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOpen = false }: {
+export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOpen = ws7Preview() === 'chest' }: {
   readonly dailyGift: DailyGiftType;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
   /** Dev visual QA only: open the chest without a tap. */

@@ -42,3 +42,25 @@ test('the Shark Shop always reaches an end state and uses brand pills', () => {
   assert.match(card, /is_member_item/);
   assert.match(card, /navigate\('Membership'\)/);
 });
+
+test('the restock timer never sits on zero and uses brand surfaces', () => {
+  const countdown = loadTs('src/components/StoreCountdown.tsx', {
+    react: { useEffect() {}, useState: (v) => [typeof v === 'function' ? v() : v, () => {}] },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null },
+    'react-native': { StyleSheet: { create: (s) => s }, Text: 'Text', View: 'View' },
+    '../ui': { BRAND: { blue: '#0768b9', navy: '#05346e', white: '#fff', sky: '#bfe5ff' }, GameIcon: 'GameIcon' },
+  });
+  const now = Date.parse('2026-09-30T12:00:00Z');
+  assert.deepEqual(plainObj(countdown.splitTimeLeft(now + 90_061_000, now)), { days: 1, hours: 1, minutes: 1, seconds: 1 });
+  assert.equal(countdown.splitTimeLeft(now, now), null);
+  assert.equal(countdown.splitTimeLeft(now - 5000, now), null);
+  assert.equal(countdown.splitTimeLeft(NaN, now), null);
+
+  const source = fs.readFileSync(path.join(root, 'src/components/StoreCountdown.tsx'), 'utf8');
+  assert.doesNotMatch(source, /rgba\(0,\s*0,\s*0|FontAwesome/);
+  assert.match(source, /Fresh gear is on its way/);
+  const screen = fs.readFileSync(path.join(root, 'src/screens/StoreScreen.tsx'), 'utf8');
+  assert.match(screen, /onElapsed=\{\(\) => setRestockPending\(true\)\}/);
+});
+
+function plainObj(value) { return JSON.parse(JSON.stringify(value)); }

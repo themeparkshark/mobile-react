@@ -1,126 +1,99 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faClock } from '@fortawesome/free-solid-svg-icons';
+import { BRAND, GameIcon } from '../ui';
 
 interface Props {
   nextRotationAt: string | null;
+  /** Called once when the countdown reaches zero, so the shop can look for the restock. */
+  onElapsed?: () => void;
 }
 
-export default function StoreCountdown({ nextRotationAt }: Props) {
-  const [timeLeft, setTimeLeft] = useState<{
-    days: number;
-    hours: number;
-    minutes: number;
-    seconds: number;
-  } | null>(null);
+type TimeLeft = { days: number; hours: number; minutes: number; seconds: number };
+
+/** Split a remaining duration into whole days, hours, minutes and seconds (null once it has elapsed). */
+export function splitTimeLeft(targetMs: number, nowMs: number): TimeLeft | null {
+  const diff = targetMs - nowMs;
+  if (!Number.isFinite(diff) || diff <= 0) return null;
+  return {
+    days: Math.floor(diff / 86_400_000),
+    hours: Math.floor((diff % 86_400_000) / 3_600_000),
+    minutes: Math.floor((diff % 3_600_000) / 60_000),
+    seconds: Math.floor((diff % 60_000) / 1000),
+  };
+}
+
+/**
+ * Shark Shop restock timer on a brand-blue plate. At zero it never sits on
+ * 0:00:00:00: it says the restock is on the way and tells the shop to check.
+ */
+export default function StoreCountdown({ nextRotationAt, onElapsed }: Props) {
+  const target = nextRotationAt ? new Date(nextRotationAt).getTime() : NaN;
+  const [timeLeft, setTimeLeft] = useState<TimeLeft | null>(() => splitTimeLeft(target, Date.now()));
 
   useEffect(() => {
-    if (!nextRotationAt) return;
-
-    const updateCountdown = () => {
-      const now = new Date().getTime();
-      const target = new Date(nextRotationAt).getTime();
-      const diff = target - now;
-
-      if (diff <= 0) {
-        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-        return;
-      }
-
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-      setTimeLeft({ days, hours, minutes, seconds });
+    if (!Number.isFinite(target)) return;
+    let fired = false;
+    const tick = () => {
+      const next = splitTimeLeft(target, Date.now());
+      setTimeLeft(next);
+      if (!next && !fired) { fired = true; onElapsed?.(); }
     };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [nextRotationAt]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
 
-  if (!timeLeft) return null;
+  if (!Number.isFinite(target)) return null;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <FontAwesomeIcon icon={faClock} size={14} color="#FFD700" />
-        <Text style={styles.headerText}>NEW ITEMS IN</Text>
+        <GameIcon name="timer" size={18} />
+        <Text style={styles.headerText}>{timeLeft ? 'NEW ITEMS IN' : 'NEW ITEMS'}</Text>
       </View>
-      <View style={styles.timerRow}>
-        <View style={styles.timeBlock}>
-          <Text style={styles.timeValue}>{timeLeft.days}</Text>
-          <Text style={styles.timeLabel}>DAYS</Text>
+      {timeLeft ? (
+        <View style={styles.timerRow}>
+          {([
+            [String(timeLeft.days), 'DAYS'],
+            [String(timeLeft.hours).padStart(2, '0'), 'HRS'],
+            [String(timeLeft.minutes).padStart(2, '0'), 'MIN'],
+            [String(timeLeft.seconds).padStart(2, '0'), 'SEC'],
+          ] as const).map(([value, label], index) => (
+            <View key={label} style={styles.timerRow}>
+              {index > 0 && <Text style={styles.separator}>:</Text>}
+              <View style={styles.timeBlock}>
+                <Text style={styles.timeValue}>{value}</Text>
+                <Text style={styles.timeLabel}>{label}</Text>
+              </View>
+            </View>
+          ))}
         </View>
-        <Text style={styles.separator}>:</Text>
-        <View style={styles.timeBlock}>
-          <Text style={styles.timeValue}>{String(timeLeft.hours).padStart(2, '0')}</Text>
-          <Text style={styles.timeLabel}>HRS</Text>
-        </View>
-        <Text style={styles.separator}>:</Text>
-        <View style={styles.timeBlock}>
-          <Text style={styles.timeValue}>{String(timeLeft.minutes).padStart(2, '0')}</Text>
-          <Text style={styles.timeLabel}>MIN</Text>
-        </View>
-        <Text style={styles.separator}>:</Text>
-        <View style={styles.timeBlock}>
-          <Text style={styles.timeValue}>{String(timeLeft.seconds).padStart(2, '0')}</Text>
-          <Text style={styles.timeLabel}>SEC</Text>
-        </View>
-      </View>
+      ) : (
+        <Text style={styles.restock}>Fresh gear is on its way. Check back in a few minutes.</Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: BRAND.blue,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     marginHorizontal: 16,
     marginVertical: 8,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
+    borderWidth: 3,
+    borderColor: BRAND.navy,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 6,
-  },
-  headerText: {
-    fontFamily: 'Knockout',
-    fontSize: 12,
-    color: '#FFD700',
-    letterSpacing: 1,
-  },
-  timerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  timeBlock: {
-    alignItems: 'center',
-    minWidth: 45,
-  },
-  timeValue: {
-    fontFamily: 'Shark',
-    fontSize: 24,
-    color: 'white',
-  },
-  timeLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.6)',
-    marginTop: 2,
-  },
-  separator: {
-    fontFamily: 'Shark',
-    fontSize: 24,
-    color: 'rgba(255, 255, 255, 0.4)',
-    marginHorizontal: 4,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 },
+  headerText: { fontFamily: 'Shark', fontSize: 15, color: '#ffcf3b', letterSpacing: 1 },
+  timerRow: { flexDirection: 'row', alignItems: 'center' },
+  timeBlock: { alignItems: 'center', minWidth: 45 },
+  timeValue: { fontFamily: 'Shark', fontSize: 26, color: BRAND.white },
+  timeLabel: { fontFamily: 'Knockout', fontSize: 11, color: BRAND.sky, marginTop: 2 },
+  separator: { fontFamily: 'Shark', fontSize: 22, color: BRAND.sky, marginHorizontal: 4, marginBottom: 14 },
+  restock: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.white, textAlign: 'center' },
 });

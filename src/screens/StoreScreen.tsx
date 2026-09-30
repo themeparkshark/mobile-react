@@ -262,6 +262,21 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
     }
   }, []);
   const [rotation, setRotation] = useState<StoreRotation | null>(null);
+  const [restockPending, setRestockPending] = useState(false);
+
+  // At zero the server restocks on its hourly job: check the timer each minute
+  // and reload the shop once a new rotation is live.
+  useEffect(() => {
+    if (!restockPending || !currentStore) return;
+    const interval = setInterval(async () => {
+      const next = await getStoreRotation(currentStore.id).catch(() => null);
+      if (next?.next_rotation_at && new Date(next.next_rotation_at).getTime() > Date.now()) {
+        setRestockPending(false);
+        setAttempt(a => a + 1);
+      }
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [restockPending, currentStore?.id]);
 
   // One load path with an end state: the shop never spins forever.
   useEffect(() => {
@@ -408,7 +423,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
             </View>
             {/* Countdown Timer */}
             {rotation?.next_rotation_at && (
-              <StoreCountdown nextRotationAt={rotation.next_rotation_at} />
+              <StoreCountdown nextRotationAt={rotation.next_rotation_at} onElapsed={() => setRestockPending(true)} />
             )}
             <View
               style={{

@@ -1,7 +1,6 @@
 import { createContext, FC, ReactNode, useContext, useEffect, useState } from 'react';
 import { useTimeoutWhen } from 'rooks';
 import getDailyGift from '../api/endpoints/daily-gifts/create';
-import DailyGiftModal from '../components/DailyGiftModal';
 import { ws7Preview } from '../dev/ws7Preview';
 import { DailyGiftType } from '../models/daily-gift-type';
 import * as RootNavigation from '../RootNavigation';
@@ -58,7 +57,6 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
       }}
     >
       {children}
-      {preview === 'chest' && dailyGift && !dailyGift.redeemed_at && <DailyGiftModal dailyGift={dailyGift} autoOpen />}
     </DailyGiftContext.Provider>
   );
 };
