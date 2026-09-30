@@ -74,10 +74,11 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
     if (s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE) {
       return Math.max(0, Math.min(1, s.clockSteps / Math.max(CLOCK_BASE, CLOCK_BASE + s.bonusSteps)));
     }
-    // Ride/race: progress toward the final gate.
-    const total = s.mode === MODE_RACE ? 7500 : 15000;
-    const start = s.mode === MODE_RACE ? s.sprintStart : 0;
-    return Math.max(0, Math.min(1, ((s.dist >> 8) - start) / total));
+    // Ride: 3 sprints to the Ride Gate; race: one course to the finish.
+    const within = Math.max(0, Math.min(1, ((s.dist >> 8) - s.sprintStart) / Math.max(1, s.gateX - s.sprintStart)));
+    if (s.mode === MODE_RACE) return within;
+    const done = s.phase === PH_POCKET ? s.sprint : s.sprint + within;
+    return Math.max(0, Math.min(1, done / 3));
   });
   const barFill = useDerivedValue(() => Skia.RRectXY(Skia.XYWHRect(barX + 3, barY + 3, Math.max(0, (barW - 6) * frac.value), barH - 6), 7, 7));
   const low = useDerivedValue(() => {

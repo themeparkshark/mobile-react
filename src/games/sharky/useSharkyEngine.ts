@@ -150,6 +150,14 @@ function ambStep(a: Ambient, s: SimState, dtMs: number): void {
   } else {
     a.jetAcc = 0;
   }
+  // Frenzy: a gold sparkle trail off the tail (kind 3).
+  if (playing && s.frenzy > 0) {
+    a.puffAcc += dtMs;
+    while (a.puffAcc >= 45) {
+      a.puffAcc -= 45;
+      ambSpawn(a, du - 60 + ambRand(a) * 20, y - 10 + ambRand(a) * 30, -120 - ambRand(a) * 80, -30 + ambRand(a) * 60, 0.45, 18 + ambRand(a) * 8, 3);
+    }
+  }
   // Ambient bubbles rise from the reef (cap stays low: 60 ambient max).
   a.riseAcc += dtMs;
   while (a.riseAcc >= 420) {

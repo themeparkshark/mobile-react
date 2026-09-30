@@ -237,7 +237,8 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
       const k = am.life[i] / am.max[i];
       const vx = anc + (am.x[i] - dist);
       if (vx < -40 || vx > VIEW_W + 40) continue;
-      if (am.kind[i] === 1) put(SPR_BUBBLE, vx, am.y[i], am.size[i] * (1.6 - k * 0.6), 0, 1);
+      if (am.kind[i] === 3) put(SPR_COIN, vx, am.y[i], am.size[i] * k, am.life[i] * 9, 1);
+      else if (am.kind[i] === 1) put(SPR_BUBBLE, vx, am.y[i], am.size[i] * (1.6 - k * 0.6), 0, 1);
       else put(SPR_BUBBLE, vx, am.y[i], am.size[i] * (am.kind[i] === 0 ? 0.6 + 0.4 * k : 1), 0, 1);
     }
     for (let i = 0; i < ENT_CAP; i++) {
@@ -668,8 +669,23 @@ const Shark = React.memo(function Shark({ sim, tick, alpha, swim, dash, dizzy, b
   });
   const shieldT = useDerivedValue(() => [{ translateX: pose.value.x }, { translateY: pose.value.y }]);
   const DH = (SHARK_W * 458) / 768;
+  // Dash afterimages: 3 ghosts trailing 30u apart, fading 0.45 -> 0.
+  const ghostOp = useDerivedValue(() => (sim.value.dash > 0 ? 1 : 0));
+  const ghostT = [1, 2, 3].map((k) => useDerivedValue(() => {
+    const p = pose.value;
+    return [{ translateX: p.x - k * 34 }, { translateY: p.y }, { rotate: p.tilt }, { scaleX: 1.12 }, { scaleY: 0.92 }];
+  }));
   return (
     <Group>
+      {dash ? (
+        <Group opacity={ghostOp}>
+          {ghostT.map((t, k) => (
+            <Group key={k} transform={t} opacity={0.45 - k * 0.13}>
+              <SkImage image={dash} x={-SHARK_W * 0.55} y={-DH / 2} width={SHARK_W * 1.1} height={DH * 1.1} />
+            </Group>
+          ))}
+        </Group>
+      ) : null}
       <Group transform={transform}>
         {swim ? (
           <Group opacity={o0}>
