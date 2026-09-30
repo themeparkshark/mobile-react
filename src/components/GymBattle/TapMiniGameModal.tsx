@@ -19,6 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { checkinGym } from '../../api/endpoints/gym-battle';
 import { battleHUDEvents } from './battleHUDEvents';
+import { GameIcon } from '../../ui';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -141,8 +142,8 @@ export default function TapMiniGameModal({
           {/* Ready State */}
           {gameState === 'ready' && (
             <View style={styles.content}>
-              <Text style={styles.title}>📍 CHECK IN 📍</Text>
-              <Text style={styles.freeLabel}>FREE • Every 30 mins</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><GameIcon name="pin" size={28} /><Text style={styles.title}>CHECK IN</Text></View>
+              <Text style={styles.freeLabel}>FREE  ·  Every 30 mins</Text>
               <Text style={styles.subtitle}>
                 Tap as fast as you can for 10 seconds!{'\n'}
                 More taps = more points for YOUR team!
@@ -150,7 +151,7 @@ export default function TapMiniGameModal({
               {isUnderdog && (
                 <View style={styles.underdogBanner}>
                   <Text style={styles.underdogText}>
-                    💪 UNDERDOG BONUS: 1.5x Points!
+                    UNDERDOG BONUS: 1.5x Points!
                   </Text>
                 </View>
               )}
@@ -171,7 +172,7 @@ export default function TapMiniGameModal({
                   style={styles.tapButton}
                   onPress={handleTap}
                 >
-                  <Text style={styles.tapEmoji}>👆</Text>
+                  <GameIcon name="shark" size={64} />
                   <Text style={styles.tapText}>TAP!</Text>
                 </Pressable>
               </Animated.View>
@@ -191,16 +192,14 @@ export default function TapMiniGameModal({
           {/* Submitting State */}
           {gameState === 'submitting' && (
             <View style={styles.content}>
-              <Text style={styles.submittingText}>⏳ Submitting...</Text>
+              <Text style={styles.submittingText}>Submitting...</Text>
             </View>
           )}
 
           {/* Finished State */}
           {gameState === 'finished' && result && (
             <View style={styles.content}>
-              <Text style={styles.resultEmoji}>
-                {result.points > 0 ? '🎉' : '😢'}
-              </Text>
+              <GameIcon name={result.points > 0 ? 'trophy' : 'retry'} size={64} />
               <Text style={styles.resultTitle}>
                 {result.points > 0 ? 'NICE WORK!' : 'Oops!'}
               </Text>
@@ -240,7 +239,7 @@ const styles = StyleSheet.create({
   },
   gradient: {
     padding: 30,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0768b9',
   },
   content: {
     alignItems: 'center',
@@ -267,7 +266,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   underdogBanner: {
-    backgroundColor: 'rgba(124, 58, 237, 0.3)',
+    backgroundColor: 'rgba(255, 207, 59, 0.3)',
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -318,7 +317,7 @@ const styles = StyleSheet.create({
   tapText: {
     fontSize: 24,
     fontWeight: '900',
-    color: '#1E293B',
+    color: '#05468f',
     marginTop: 4,
   },
   tapCount: {
@@ -330,7 +329,7 @@ const styles = StyleSheet.create({
   progressBar: {
     width: '100%',
     height: 8,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#05468f',
     borderRadius: 4,
     marginTop: 12,
     overflow: 'hidden',

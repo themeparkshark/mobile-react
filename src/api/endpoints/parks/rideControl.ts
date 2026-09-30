@@ -37,6 +37,8 @@ export interface RideControlPark {
   readonly rides: readonly RideControlRide[];
   readonly points: Record<string, number>;
   readonly player_daily_cap: number;
+  /** Team display names (server override for trademark review). */
+  readonly team_names?: Partial<Record<TeamId, string>>;
 }
 
 export async function getRideControl(parkId: number): Promise<RideControlPark> {

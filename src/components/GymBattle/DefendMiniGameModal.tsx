@@ -13,6 +13,7 @@ import Modal from 'react-native-modal';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { battleHUDEvents } from './battleHUDEvents';
+import { GameIcon } from '../../ui';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -351,11 +352,11 @@ export default function DefendMiniGameModal({
 
   // Simple tier based on taps (just for fun labels)
   const getTierName = (tapCount: number) => {
-    if (tapCount >= 300) return 'LEGENDARY! 👑';
-    if (tapCount >= 250) return 'EPIC! ⚡';
-    if (tapCount >= 200) return 'AMAZING! 🔥';
-    if (tapCount >= 150) return 'GREAT! 💪';
-    if (tapCount >= 100) return 'GOOD! ✨';
+    if (tapCount >= 300) return 'LEGENDARY!';
+    if (tapCount >= 250) return 'EPIC!';
+    if (tapCount >= 200) return 'AMAZING!';
+    if (tapCount >= 150) return 'GREAT!';
+    if (tapCount >= 100) return 'GOOD!';
     if (tapCount >= 50) return 'NICE!';
     return 'KEEP GOING!';
   };
@@ -386,10 +387,10 @@ export default function DefendMiniGameModal({
               <Text style={styles.readyTitle}>DEFEND YOUR TEAM!</Text>
               <Text style={styles.readySubtitle}>
                 Tap the shield as fast as you can{'\n'}
-                25 seconds • The more taps, the more points!
+                25 seconds. The more taps, the more points!
               </Text>
               <TouchableOpacity style={styles.startButton} onPress={startGame}>
-                <Text style={styles.startButtonText}>⚔️ READY FOR BATTLE ⚔️</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="swords" size={24} /><Text style={styles.startButtonText}>READY FOR BATTLE</Text></View>
               </TouchableOpacity>
               <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
                 <Text style={styles.cancelButtonText}>Not now</Text>
@@ -437,7 +438,7 @@ export default function DefendMiniGameModal({
               {/* Multiplier banner when active */}
               {multiplier > 1 && (
                 <View style={styles.multiplierBanner}>
-                  <Text style={styles.multiplierBannerText}>🔥 x{multiplier} BONUS! 🔥</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><GameIcon name="streak" size={22} /><Text style={styles.multiplierBannerText}>x{multiplier} BONUS!</Text></View>
                 </View>
               )}
 
@@ -483,7 +484,7 @@ export default function DefendMiniGameModal({
           {/* Finished State */}
           {gameState === 'finished' && result && (
             <Animated.View entering={ZoomIn.duration(400)} style={styles.finishedContent}>
-              <Text style={styles.resultTitle}>🏆 DEFENDED! 🏆</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="trophy" size={34} /><Text style={styles.resultTitle}>DEFENDED!</Text></View>
               <Image
                 source={require('../../../assets/images/shield.png')}
                 style={styles.resultShield}
@@ -492,14 +493,14 @@ export default function DefendMiniGameModal({
               <Text style={styles.resultTier}>{getTierName(totalPoints)}</Text>
               <Text style={styles.resultTaps}>{taps} taps</Text>
               {multiplier > 1 && (
-                <Text style={styles.resultBonus}>🔥 x{multiplier} bonus in final 7s!</Text>
+                <Text style={styles.resultBonus}>x{multiplier} bonus in the final 7s!</Text>
               )}
               <Text style={styles.resultPoints}>
                 +{result.points} points for your team!
               </Text>
               
               <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
-                <Text style={styles.doneButtonText}>NICE! 🔥</Text>
+                <Text style={styles.doneButtonText}>NICE!</Text>
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -527,7 +528,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(5, 52, 110, 0.5)',
   },
   readyShield: {
     width: 180,
@@ -568,7 +569,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   startButtonText: {
-    color: '#1a1a2e',
+    color: '#05346e',
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 1,
@@ -585,7 +586,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5, 52, 110, 0.6)',
   },
   countdownNumber: {
     fontSize: 150,
@@ -750,7 +751,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5, 52, 110, 0.6)',
   },
   submittingShield: {
     width: 120,
@@ -771,7 +772,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5, 52, 110, 0.6)',
   },
   resultTitle: {
     fontSize: 36,
@@ -844,7 +845,7 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
   },
   doneButtonText: {
-    color: '#1a1a2e',
+    color: '#05346e',
     fontSize: 24,
     fontWeight: '900',
   },

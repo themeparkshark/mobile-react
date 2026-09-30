@@ -21,6 +21,8 @@ import SwordAttackModal from '../../components/GymBattle/SwordAttackModal';
 import PlaceCoinModal from '../../components/GymBattle/PlaceCoinModal';
 import DefendMiniGameModal from '../../components/GymBattle/DefendMiniGameModal';
 import { battleHUDEvents } from '../../components/GymBattle/battleHUDEvents';
+import { TEAMS, teamName, type TeamId } from '../../constants/teams';
+import { GameIcon } from '../../ui';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -31,19 +33,9 @@ const PILLAR_IMAGES = {
   shark: require('../../../assets/images/pillar-shark.png'),
 };
 
-// Team colors for effects
-const TEAM_COLORS = {
-  mouse: '#F59E0B',
-  globe: '#22C55E',
-  shark: '#3B82F6',
-};
-
-// Team names for display
-const TEAM_NAMES = {
-  mouse: 'Team Mouse',
-  globe: 'Team Globe', 
-  shark: 'Team Shark',
-};
+// Team colours and names come from the one team table (constants/teams).
+const TEAM_COLORS: Record<TeamId, string> = { mouse: TEAMS.mouse.color, globe: TEAMS.globe.color, shark: TEAMS.shark.color };
+const TEAM_NAMES = { get mouse() { return teamName('mouse'); }, get globe() { return teamName('globe'); }, get shark() { return teamName('shark'); } };
 
 // Animated Pillar Component
 const AnimatedPillar = ({ 
@@ -257,14 +249,9 @@ const AnimatedPillar = ({
 
         {/* Winner crown/sparkles */}
         {isWinner && (
-          <Animated.Text
-            style={[
-              styles.winnerCrown,
-              { opacity: sparkleOpacity },
-            ]}
-          >
-            👑
-          </Animated.Text>
+          <Animated.View style={[styles.winnerCrown, { opacity: sparkleOpacity }]}>
+            <GameIcon name="crown" size={30} />
+          </Animated.View>
         )}
 
         {/* Score badge */}
@@ -489,7 +476,7 @@ const Sparkle = ({ x, y, delay }: { x: number; y: number; delay: number }) => {
   }, []);
 
   return (
-    <Animated.Text
+    <Animated.View
       style={[
         styles.sparkle,
         {
@@ -503,8 +490,8 @@ const Sparkle = ({ x, y, delay }: { x: number; y: number; delay: number }) => {
         },
       ]}
     >
-      ✦
-    </Animated.Text>
+      <GameIcon name="sparkle" size={18} />
+    </Animated.View>
   );
 };
 
@@ -739,7 +726,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
     try {
       const result = await checkinGym(parkId);
       // Show toast with points earned
-      setPillarToast(`+${result.points_earned} points! 🦈`);
+      setPillarToast(`+${result.points_earned} points!`);
       setTimeout(() => setPillarToast(null), 2000);
       // Refetch gym data + notify BattleHUD on ExploreScreen
       fetchGym();
@@ -819,7 +806,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
           <View style={styles.noTeamOverlay}>
             <BlurView intensity={30} style={styles.noTeamBlur}>
               <View style={styles.noTeamBox}>
-                <Text style={styles.noTeamTitle}>⚔️ Join a Team!</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><GameIcon name="swords" size={26} /><Text style={styles.noTeamTitle}>Join a Team!</Text></View>
                 <Text style={styles.noTeamText}>Pick a team to enter the arena battle.</Text>
                 <TouchableOpacity
                   style={[styles.pickTeamButton, styles.pickTeamGradient]}
@@ -832,7 +819,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
           </View>
           
           <TouchableOpacity style={styles.backButtonAbsolute} onPress={handleGoBack}>
-            <Text style={styles.backButtonText}>← BACK</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><GameIcon name="back" size={20} /><Text style={styles.backButtonText}>BACK</Text></View>
           </TouchableOpacity>
         </ImageBackground>
       </Animated.View>
@@ -844,7 +831,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
       <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
         <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
           <View style={styles.loadingOverlay}>
-            <Text style={styles.loadingText}>⚔️ Loading Arena...</Text>
+            <Text style={styles.loadingText}>Loading Arena...</Text>
           </View>
         </ImageBackground>
       </Animated.View>
@@ -857,7 +844,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
       <Animated.View style={[styles.container, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
         <ImageBackground source={require('../../../assets/images/arena-bg.png')} style={styles.bgImage} resizeMode="cover">
           <View style={styles.loadingOverlay}>
-            <Text style={styles.loadingText}>⚔️ Arena Unavailable</Text>
+            <Text style={styles.loadingText}>Arena Unavailable</Text>
             <TouchableOpacity style={styles.goBackBtn} onPress={handleGoBack}>
               <Text style={styles.goBackText}>GO BACK</Text>
             </TouchableOpacity>
@@ -887,7 +874,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
         {/* Arena Header */}
         <View style={styles.arenaHeader}>
           {/* Title */}
-          <Text style={styles.arenaTitle}>⚔️ ARENA BATTLE ⚔️</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="swords" size={30} /><Text style={styles.arenaTitle}>ARENA BATTLE</Text><GameIcon name="swords" size={30} /></View>
           
           {/* Stats Row */}
           <View style={styles.statsRow}>
@@ -895,7 +882,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>YOUR TEAM</Text>
               <Text style={[styles.statValue, { color: TEAM_COLORS[player?.team as keyof typeof TEAM_COLORS] || '#fff' }]}>
-                {player?.team ? TEAM_NAMES[player.team as keyof typeof TEAM_NAMES]?.replace('Team ', '') : '—'}
+                {player?.team ? TEAM_NAMES[player.team as keyof typeof TEAM_NAMES]?.replace('Team ', '') : 'None'}
               </Text>
             </View>
             
@@ -1011,7 +998,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
                   </View>
                 ) : !hasSwords ? (
                   <View style={styles.lockedBadge}>
-                    <Text style={styles.lockedText}>NEED 2 ⚔️</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}><Text style={styles.lockedText}>NEED 2</Text><GameIcon name="swords" size={14} /></View>
                   </View>
                 ) : (
                   <View style={styles.cooldownBadge}>
@@ -1096,7 +1083,7 @@ export default function GymBattleScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a1a',
+    backgroundColor: '#0768b9',
   },
   bgImage: {
     flex: 1,
@@ -1169,7 +1156,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 250,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(5, 52, 110, 0.5)',
   },
   actionsContainer: {
     position: 'absolute',
@@ -1211,7 +1198,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: SCREEN_H * 0.36,
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(5, 52, 110, 0.75)',
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 12,
@@ -1225,7 +1212,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
   },
   cooldownBadge: {
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(5, 52, 110, 0.8)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
@@ -1240,7 +1227,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
   },
   readyBadge: {
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(5, 52, 110, 0.8)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
@@ -1255,7 +1242,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
   },
   lockedBadge: {
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(5, 52, 110, 0.8)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
@@ -1294,7 +1281,7 @@ const styles = StyleSheet.create({
   },
   statBox: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5, 52, 110, 0.6)',
     borderRadius: 12,
     padding: 10,
     alignItems: 'center',
@@ -1328,7 +1315,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(5, 52, 110, 0.4)',
   },
   loadingText: {
     color: '#FBBF24',
@@ -1343,7 +1330,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 12,
-    backgroundColor: 'rgba(71, 85, 105, 0.9)',
+    backgroundColor: 'rgba(5, 70, 143, 0.9)',
   },
   goBackText: {
     color: 'white',
@@ -1361,7 +1348,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
   },
   noTeamBox: {
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    backgroundColor: 'rgba(7, 104, 185, 0.85)',
     padding: 32,
     alignItems: 'center',
     borderWidth: 2,
@@ -1389,7 +1376,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FBBF24',
   },
   pickTeamText: {
-    color: '#0F172A',
+    color: '#0768b9',
     fontWeight: '900',
     fontSize: 18,
   },
@@ -1398,7 +1385,7 @@ const styles = StyleSheet.create({
     bottom: 40,
     left: 20,
     right: 20,
-    backgroundColor: 'rgba(71, 85, 105, 0.9)',
+    backgroundColor: 'rgba(5, 70, 143, 0.9)',
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
