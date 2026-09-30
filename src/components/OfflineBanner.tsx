@@ -13,6 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
 import client from '../api/client';
+import { navigationRef } from '../RootNavigation';
 import * as Haptics from '../helpers/haptics';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
 import { BRAND, FONT, GameButton, HIT_SLOP, OUTLINE, Z } from '../ui';
@@ -24,12 +25,25 @@ const BACK_ONLINE_HOLD_MS = 1400;
 // outage in the park never sits on top of map cards or header counters.
 export const OFFLINE_COMPACT_AFTER_MS = 4000;
 const CHIP_SIZE = 44;
+// Screens whose HUD cards sit right under the header. Here the full card would
+// cover them, so the banner goes straight to the small chip, which fits in the
+// gap between the cards.
+export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore']);
+
+function currentRouteName(): string | undefined {
+  try {
+    return navigationRef.isReady() ? navigationRef.getCurrentRoute()?.name : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 type Phase = 'hidden' | 'offline' | 'back';
 
 // Drawn with the art pipeline (GPT Image 2.5 with Alex's original gift,
 // compass, foam finger and sunglasses art as references) and checked beside
-// his originals at 128px and 40px: tps-prime-time-audit/art-ws9/review-sheet-1.png.
+// his originals at 128px and 40px. Raw outputs, prompts, references and the
+// review sheet: tps-prime-time-audit/art-pilot/raw/ws9/offline-v2/.
 const OFFLINE_ICON = require('../../assets/images/offline/offline.png');
 const BACK_ONLINE_ICON = require('../../assets/images/offline/back-online.png');
 const ICON_SIZE = 34;
@@ -60,7 +74,15 @@ export default function OfflineBanner() {
   const enter = useSharedValue(0);
   const pulse = useSharedValue(1);
   const shrink = useSharedValue(0);
-  const [compact, setCompact] = useState(false);
+  const [timedCompact, setCompact] = useState(false);
+  const [routeName, setRouteName] = useState<string | undefined>(currentRouteName);
+  useEffect(() => {
+    const sync = () => setRouteName(currentRouteName());
+    sync();
+    return navigationRef.addListener('state', sync);
+  }, []);
+  const chipOnly = routeName !== undefined && CHIP_ONLY_ROUTES.has(routeName);
+  const compact = phase !== 'hidden' && (timedCompact || chipOnly);
 
   // Full card first so the player learns what happened, then the small chip.
   useEffect(() => {
@@ -73,10 +95,16 @@ export default function OfflineBanner() {
   }, [phase]);
 
   useEffect(() => {
+    // Arriving straight into the chip (HUD screen, banner still entering):
+    // no card flash first.
+    if (compact && chipOnly && enter.value < 0.5) {
+      shrink.value = 1;
+      return;
+    }
     shrink.value = reduceMotion
       ? withTiming(compact ? 1 : 0, { duration: 160 })
       : withSpring(compact ? 1 : 0, { damping: 16, stiffness: 200, mass: 0.7 });
-  }, [compact, reduceMotion, shrink]);
+  }, [chipOnly, compact, enter, reduceMotion, shrink]);
 
   useEffect(() => {
     const apply = (offline: boolean) => {
@@ -206,11 +234,12 @@ export default function OfflineBanner() {
             onPress={onChip}
             hitSlop={HIT_SLOP}
             accessibilityRole="button"
-            accessibilityLabel="Offline. Try to reconnect"
+            accessibilityLabel={back ? 'Back online' : 'Offline. Try to reconnect'}
+            disabled={back}
             style={styles.chip}
           >
             <Animated.View style={iconStyle}>
-              <Image source={OFFLINE_ICON} style={styles.chipIcon} accessibilityElementsHidden importantForAccessibility="no" />
+              <Image source={back ? BACK_ONLINE_ICON : OFFLINE_ICON} style={styles.chipIcon} accessibilityElementsHidden importantForAccessibility="no" />
             </Animated.View>
           </Pressable>
         </Animated.View>

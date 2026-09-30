@@ -287,3 +287,17 @@ test('the offline banner is built from the WS0 kit: brand tokens and his yellow 
   assert.doesNotMatch(source, /'#[0-9a-f]{6}'/i, 'colours come from BRAND tokens');
   assert.doesNotMatch(source, /—/);
 });
+
+test('on Explore the banner goes straight to the chip so it never covers the HUD cards', () => {
+  const source = read('src/components/OfflineBanner.tsx');
+  assert.match(source, /CHIP_ONLY_ROUTES[^=]*= new Set\(\['Explore'\]\)/);
+  assert.match(source, /navigationRef\.addListener\('state'/, 'follows the current route');
+  assert.match(source, /timedCompact \|\| chipOnly/);
+  assert.match(source, /back \? BACK_ONLINE_ICON : OFFLINE_ICON\} style=\{styles\.chipIcon\}/, 'the chip also says back online');
+});
+
+test('offline icon provenance points at the saved raw outputs and review sheet', () => {
+  const source = read('src/components/OfflineBanner.tsx');
+  assert.match(source, /art-pilot\/raw\/ws9\/offline-v2/);
+  assert.doesNotMatch(source, /art-ws9\/review-sheet-1/);
+});
