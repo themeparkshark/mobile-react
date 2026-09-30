@@ -11,8 +11,7 @@
  * notes. Shake, zoom and flashes live in the world group only.
  */
 
-import { EMITTERS, packHex, type EmitterDef } from '../../../gamekit/core/particles';
-import { fxEmitUI, fxFlashUI, type FxState } from '../../../gamekit/fx/FxStage';
+type FxState = unknown;
 import {
   EV_BIG_DOUBLE,
   EV_FEVER_ARMED,
@@ -118,6 +117,16 @@ export interface ParadeView {
   fwY: number[];
   /** Consecutive PERFECT-or-better run (SHARP x8 ribbon, glock throttle). */
   perfRun: number;
+  /** Analytic bursts (drawn by ParadeField): type 0 gold stars, 1 sky stars, 2 white stars, 3 firework, 4 confetti, 5 grey puff. */
+  bAt: number[];
+  bType: number[];
+  bX: number[];
+  bY: number[];
+  bN: number[];
+  bHead: number;
+  /** World-layer flash (never over the reading surface). */
+  flashAt: number;
+  flashPeak: number;
   reduced: number;
   pocket: number;
   /** Count-in numerals 4-3-2-1 run on these 5 beat times (pre-roll or resume bar). */
@@ -148,23 +157,32 @@ export function createView(n: number, cx: number, yLine: number, width: number, 
     touchX: 0, touchY: 0, touchZone: 0, inputFrom: -1e9,
     missAt: z(n), hitAt: z(n),
     fwAt: z(6), fwX: z(6, 0), fwY: z(6, 0),
-    perfRun: 0, reduced: 0, pocket: 0,
+    perfRun: 0,
+    bAt: z(24), bType: z(24, 0), bX: z(24, 0), bY: z(24, 0), bN: z(24, 0), bHead: 0, flashAt: -1e9, flashPeak: 0,
+    reduced: 0, pocket: 0,
     countBeats,
     cx, yLine, width,
   };
 }
 
-// FX emitters tuned for the parade (sprite-stamped, navy-outlined atlas cells).
-const HIT_STARS: EmitterDef = { ...EMITTERS.stars, angle: -90, spread: 140, speed: [400, 650], life: [0.3, 0.38], gravity: 900 };
-const RIM_STARS: EmitterDef = { ...HIT_STARS, colors: [packHex('#bfe9ff'), packHex('#ffffff')] };
-const GOLD_STARS: EmitterDef = { ...HIT_STARS, colors: [packHex('#ffcf3b'), packHex('#ffffff')] };
-const FEVER_STARS: EmitterDef = { ...HIT_STARS, colors: [packHex('#ffffff'), packHex('#7fd4ff'), packHex('#ff8a6b')] };
-const PUFF: EmitterDef = { ...EMITTERS.puff, count: [2, 3], life: [0.2, 0.26] };
-const FIREWORK: EmitterDef = {
-  ...EMITTERS.sparks, count: [30, 36], speed: [260, 420], spread: 360, life: [0.8, 0.95], gravity: 220, drag: 1.4,
-  colors: [packHex('#ffffff'), packHex('#7fd4ff'), packHex('#ff8a6b')],
-};
-const CONFETTI: EmitterDef = { ...EMITTERS.confetti, count: [26, 34] };
+export const B_GOLD = 0;
+export const B_SKY = 1;
+export const B_WHITE = 2;
+export const B_FIREWORK = 3;
+export const B_CONFETTI = 4;
+export const B_PUFF = 5;
+export const B_FEVER = 6;
+
+export function addBurst(v: ParadeView, type: number, x: number, y: number, n: number): void {
+  'worklet';
+  const k = v.bHead;
+  v.bAt[k] = v.wt;
+  v.bType[k] = type;
+  v.bX[k] = x;
+  v.bY[k] = y;
+  v.bN[k] = v.reduced ? Math.min(n, 6) : n;
+  v.bHead = (k + 1) % v.bAt.length;
+}
 
 export function pushErr(v: ParadeView, delta: number): void {
   'worklet';
@@ -192,11 +210,11 @@ export function stepView(v: ParadeView, fx: FxState | null, dt: number): void {
   const km = Math.min(1, dt / 450);
   v.march += (v.marchTarget - v.march) * km;
   v.crowd += (v.crowdTarget - v.crowd) * Math.min(1, dt / 400);
-  if (fx) {
+  if (fx || true) {
     for (let i = 0; i < v.fwAt.length; i++) {
       if (v.fwAt[i] > 0 && v.wt >= v.fwAt[i]) {
         v.fwAt[i] = -1e9;
-        fxEmitUI(fx, FIREWORK, v.fwX[i], v.fwY[i], v.reduced ? { count: 12 } : {});
+        addBurst(v, B_FIREWORK, v.fwX[i], v.fwY[i], 32);
       }
     }
   }
@@ -242,11 +260,10 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       pushErr(v, c);
       v.perfRun = b <= J_PERFECT ? v.perfRun + 1 : 0;
       if (v.perfRun === 8) ribbon(v, 21);
-      if (fx) {
-        const n = b <= J_PERFECT ? 8 : b === J_GREAT ? 5 : 3;
-        const def = fever ? FEVER_STARS : rim ? RIM_STARS : b <= J_PERFECT ? GOLD_STARS : HIT_STARS;
-        const x = rim ? (v.rimSide ? v.cx + 44 : v.cx - 44) : v.cx;
-        fxEmitUI(fx, def, x, v.yLine - 6, { count: fever ? Math.round(n * 1.5) : n });
+      {
+        const n = b <= J_PERFECT ? 10 : b === J_GREAT ? 6 : 3;
+        const x = rim ? (v.rimSide ? v.cx + 30 : v.cx - 30) : v.cx;
+        addBurst(v, fever ? B_FEVER : rim ? B_SKY : b <= J_PERFECT ? B_GOLD : B_WHITE, x, v.yLine - 6, fever ? Math.round(n * 1.5) : n);
         if (s.kind[a] === K_BIG) scheduleFireworks(v, 3, true);
       }
     } else if (kind === EV_MISS) {
@@ -260,7 +277,7 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
         v.stumbleAt = v.wt;
         v.drumAt = v.wt;
         v.drumAmt = -0.06;
-        if (fx) fxEmitUI(fx, PUFF, v.cx, v.yLine - 4, { count: 3 });
+        addBurst(v, B_PUFF, v.cx, v.yLine - 4, 3);
       }
     } else if (kind === EV_WRONG) {
       v.judgAt = v.wt;
@@ -268,9 +285,9 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       v.judgFS = 0;
       v.perfRun = 0;
       v.rimAt = v.wt - 60;
-      if (fx) fxEmitUI(fx, PUFF, v.cx, v.yLine - 4, { count: 1 });
+      addBurst(v, B_PUFF, v.cx, v.yLine - 4, 1);
     } else if (kind === EV_STRAY) {
-      if (fx) fxEmitUI(fx, PUFF, v.touchX, v.touchY, { count: 2 });
+      addBurst(v, B_PUFF, v.touchX, v.touchY, 2);
     } else if (kind === EV_OOS) {
       v.judgAt = v.wt;
       v.judgTxt = TXT_OOS;
@@ -287,7 +304,7 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
     } else if (kind === EV_ROLL_TICK) {
       v.drumAt = v.wt;
       v.drumAmt = 0.05;
-      if (fx && b % 2 === 0) fxEmitUI(fx, fever ? FEVER_STARS : GOLD_STARS, v.cx, v.yLine - 6, { count: 2 });
+      if (b % 2 === 0) addBurst(v, fever ? B_FEVER : B_GOLD, v.cx, v.yLine - 6, 3);
     } else if (kind === EV_ROLL_BREAK) {
       v.judgAt = v.wt;
       v.judgTxt = TXT_MISS;
@@ -298,21 +315,22 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       v.shakeAt = v.wt;
       v.shakeAmp = 5;
       scheduleFireworks(v, 3, true);
-      if (fx) fxFlashUI(fx, [1, 0.95, 0.8, 1], 0.3, 140);
+      v.flashAt = v.wt;
+      v.flashPeak = 0.3;
     } else if (kind === EV_FLICK) {
-      if (fx) fxEmitUI(fx, GOLD_STARS, v.cx, v.yLine - 20, { count: 6 });
+      addBurst(v, B_GOLD, v.cx, v.yLine - 20, 8);
     } else if (kind === EV_POPPER_TAP) {
       v.popperAt = v.wt;
       v.popperTaps = b;
       v.drumAt = v.wt;
       v.drumAmt = 0.08;
-      if (fx) fxEmitUI(fx, EMITTERS.glints, v.cx, v.yLine - 10, {});
+      addBurst(v, B_WHITE, v.cx, v.yLine - 10, 4);
     } else if (kind === EV_POPPER_POP) {
       v.judgAt = v.wt;
       v.judgTxt = TXT_POP;
       v.judgFS = 0;
       v.popperTaps = 0;
-      if (fx) fxEmitUI(fx, CONFETTI, v.cx, v.yLine - 30, {});
+      addBurst(v, B_CONFETTI, v.cx, v.yLine - 30, 30);
     } else if (kind === EV_FEVER_ARMED) {
       v.armed = 1;
     } else if (kind === EV_FEVER_DEPLOY) {
@@ -324,13 +342,14 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       v.shakeAmp = 4;
       ribbon(v, RB_FEVER);
       scheduleFireworks(v, 3, false);
-      if (fx) fxFlashUI(fx, [1, 0.93, 0.7, 1], 0.35, 260);
+      v.flashAt = v.wt;
+      v.flashPeak = 0.35;
     } else if (kind === EV_FEVER_END) {
       v.feverTarget = 0;
     } else if (kind === EV_MILESTONE) {
       v.milestoneAt = v.wt;
       ribbon(v, a >= 100 ? 5 : a >= 50 ? 4 : a >= 25 ? 3 : 2);
-      if (fx) fxEmitUI(fx, CONFETTI, v.width * 0.5, 60, v.reduced ? { count: 8 } : {});
+      addBurst(v, B_CONFETTI, v.width * 0.5, 40, 30);
     } else if (kind === EV_STALL) {
       v.stallAt = v.wt;
       ribbon(v, RB_STALL);

@@ -151,6 +151,101 @@ function bop(phase: number): number {
   return 1 - u;
 }
 
+function rnd(a: number, b: number): number {
+  'worklet';
+  let h = (a * 374761393 + b * 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function addStar(p: SkPathLike, x: number, y: number, r: number, rot: number): void {
+  'worklet';
+  for (let i = 0; i < 10; i++) {
+    const a = rot + (i * Math.PI) / 5 - Math.PI / 2;
+    const rr = i % 2 === 0 ? r : r * 0.45;
+    const px = x + Math.cos(a) * rr;
+    const py = y + Math.sin(a) * rr;
+    if (i === 0) p.moveTo(px, py);
+    else p.lineTo(px, py);
+  }
+  p.close();
+}
+
+type SkPathLike = ReturnType<typeof Skia.Path.Make>;
+
+/**
+ * Analytic bursts (closed-form motion, no simulation): hit stars flying up
+ * and away from the thumb, Fever fireworks with stepped trails, confetti and
+ * grey puffs. Paths per colour, navy outline on the stars (Alex's cel look).
+ */
+function buildBursts(v: ParadeView): SkPathLike[] {
+  'worklet';
+  const gold = Skia.Path.Make();
+  const sky = Skia.Path.Make();
+  const white = Skia.Path.Make();
+  const coral = Skia.Path.Make();
+  const grey = Skia.Path.Make();
+  const outline = Skia.Path.Make();
+  for (let k = 0; k < v.bAt.length; k++) {
+    const age = v.wt - v.bAt[k];
+    const type = v.bType[k];
+    const life = type === 3 ? 950 : type === 4 ? 1500 : type === 5 ? 260 : 420;
+    if (age < 0 || age > life) continue;
+    const t = age / 1000;
+    const u = age / life;
+    const n = v.bN[k];
+    const bx = v.bX[k];
+    const by = v.bY[k];
+    for (let j = 0; j < n; j++) {
+      const r1 = rnd(k * 131 + Math.floor(v.bAt[k]), j);
+      const r2 = rnd(j * 17 + 3, Math.floor(v.bAt[k]) + k);
+      if (type <= 2 || type === 6) {
+        const ang = ((-165 + (150 * (j + 0.5)) / n + (r1 - 0.5) * 16) * Math.PI) / 180;
+        const sp = 420 + 260 * r2;
+        const x = bx + Math.cos(ang) * sp * t;
+        const y = by + Math.sin(ang) * sp * t + 0.5 * 950 * t * t;
+        const r = (type === 2 ? 8 : 11.5) * (1 - 0.55 * u);
+        const path = type === 0 ? (j % 3 === 2 ? white : gold) : type === 1 ? (j % 3 === 2 ? white : sky) : type === 2 ? white : j % 3 === 0 ? white : j % 3 === 1 ? sky : coral;
+        addStar(path, x, y, r, age * 0.01 * (r1 - 0.5));
+        addStar(outline, x, y, r, age * 0.01 * (r1 - 0.5));
+      } else if (type === 3) {
+        const ang = (j / n) * Math.PI * 2 + r1 * 0.2;
+        const sp = 240 + 150 * r2;
+        const path = j % 3 === 0 ? white : j % 3 === 1 ? sky : coral;
+        for (let s = 0; s < 3; s++) {
+          const ts = Math.max(0, t - s * 0.035);
+          const d = (sp * (1 - Math.exp(-2.2 * ts))) / 2.2;
+          const x = bx + Math.cos(ang) * d;
+          const y = by + Math.sin(ang) * d + 0.5 * 220 * ts * ts;
+          const r = (s === 0 ? 4.2 : s === 1 ? 3 : 2) * (1 - 0.7 * u);
+          if (r > 0.4) path.addCircle(x, y, r);
+        }
+      } else if (type === 4) {
+        const ang = ((-90 + (r1 - 0.5) * 120) * Math.PI) / 180;
+        const sp = 260 + 280 * r2;
+        const d = (sp * (1 - Math.exp(-1.8 * t))) / 1.8;
+        const x = bx + Math.cos(ang) * d + Math.sin(t * 9 + j) * 8;
+        const y = by + Math.sin(ang) * d + 0.5 * 420 * t * t;
+        const rot = t * (6 + 8 * r1) + j;
+        const w = 5;
+        const h = 3.2 * Math.abs(Math.cos(t * 10 + j));
+        const c = Math.cos(rot);
+        const sn = Math.sin(rot);
+        const path = j % 4 === 0 ? gold : j % 4 === 1 ? sky : j % 4 === 2 ? coral : white;
+        path.moveTo(x - c * w + sn * h, y - sn * w - c * h);
+        path.lineTo(x + c * w + sn * h, y + sn * w - c * h);
+        path.lineTo(x + c * w - sn * h, y + sn * w + c * h);
+        path.lineTo(x - c * w - sn * h, y - sn * w + c * h);
+        path.close();
+      } else if (type === 5) {
+        const ang = (j / Math.max(1, n)) * Math.PI * 2 + r1;
+        grey.addCircle(bx + Math.cos(ang) * 14 * u, by + Math.sin(ang) * 10 * u - 10 * u, 5 + 9 * u);
+      }
+    }
+  }
+  return [gold, sky, white, coral, grey, outline];
+}
+
 export const ParadeField = React.memo(function ParadeField({ geom, judge, view, draw, tick, reducedMotion, rails, railFlash }: Props) {
   const { width: W, height: H, cx, yLine, halfW, touchTop, yHorizon } = geom;
   const font = useFont(FONT, 22);
@@ -832,6 +927,32 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
   });
   const starburstOpacity = useDerivedValue(() => 0.35 * view.value.fever);
 
+  const bursts = useDerivedValue(() => {
+    tick.value;
+    return buildBursts(view.value);
+  });
+  const bGold = useDerivedValue(() => bursts.value[0]);
+  const bSky = useDerivedValue(() => bursts.value[1]);
+  const bWhite = useDerivedValue(() => bursts.value[2]);
+  const bCoral = useDerivedValue(() => bursts.value[3]);
+  const bGrey = useDerivedValue(() => bursts.value[4]);
+  const bOutline = useDerivedValue(() => bursts.value[5]);
+  const worldFlash = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const t = v.wt - v.flashAt;
+    if (t < 0 || t > 260) return 0;
+    const peak = reducedMotion ? Math.min(0.15, v.flashPeak) : v.flashPeak;
+    return t < 60 ? peak * (t / 60) : peak * (1 - (t - 60) / 200);
+  });
+  // 1-frame white flash inside the ring on SHARP/PERFECT (Supercell hit flash).
+  const coreFlash = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const t = v.wt - v.ringAt;
+    return t >= 0 && t < 50 && v.ringGrade <= J_PERFECT ? 0.85 : t >= 0 && t < 40 ? 0.5 : 0;
+  });
+
   const railFlashOpacity = [0, 1, 2].map((i) => useDerivedValue(() => {
     tick.value;
     const t = view.value.wt - (railFlash.value[i] ?? -1e9);
@@ -869,6 +990,7 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
           <Path path={trackArcR} color="rgba(11,58,107,0.35)" style="stroke" strokeWidth={9} strokeCap="round" />
           <Path path={feverArc} color={feverArcColor} style="stroke" strokeWidth={7} strokeCap="round" />
         </Group>
+        <Rect x={0} y={0} width={W} height={H} color="#fff6d8" opacity={worldFlash} />
         {/* Count-in */}
         {bigFont ? (
           <Group transform={countTransform} opacity={countOpacity}>
@@ -903,8 +1025,9 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       </Path>
       <Path path={popPips} color={GOLD} />
       {/* hit ring + line flash (screen-ish white bar with gold edge) */}
-      <Circle cx={cx} cy={yLine} r={hitRingR} color={NAVY} style="stroke" strokeWidth={7} opacity={hitRingOpacity} />
-      <Circle cx={cx} cy={yLine} r={hitRingR} color={hitRingColor} style="stroke" strokeWidth={4} opacity={hitRingOpacity} />
+      <Circle cx={cx} cy={yLine} r={hitRingR} color={NAVY} style="stroke" strokeWidth={9} opacity={hitRingOpacity} />
+      <Circle cx={cx} cy={yLine} r={hitRingR} color={hitRingColor} style="stroke" strokeWidth={5.5} opacity={hitRingOpacity} />
+      <Circle cx={cx} cy={yLine} r={ringR} color="#ffffff" opacity={coreFlash} />
       <Group opacity={lineFlashOpacity}>
         <Rect x={lineFlashX} y={yLine - 5} width={lineFlashW} height={10} color="#ffffff" />
         <Rect x={lineFlashX} y={yLine + 4} width={lineFlashW} height={2} color={GOLD} />
@@ -921,6 +1044,12 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
           <SkText x={fsX} y={yLine - 26} text={fsText} font={smallFont} color={fsColor} />
         </Group>
       ) : null}
+      <Path path={bGrey} color="rgba(214,223,232,0.8)" />
+      <Path path={bCoral} color="#ff8a6b" />
+      <Path path={bSky} color="#7fd4ff" />
+      <Path path={bGold} color={GOLD} />
+      <Path path={bWhite} color="#ffffff" />
+      <Path path={bOutline} color={NAVY} style="stroke" strokeWidth={2.2} strokeJoin="round" />
       <RoundedRect x={cx - 60} y={errBarY - 3} width={120} height={6} r={3} color="rgba(11,58,107,0.55)" />
       <Rect x={cx - 1.5} y={errBarY - 6} width={3} height={12} color={GOLD} />
       <Path path={errPath} color="#ffffff" />

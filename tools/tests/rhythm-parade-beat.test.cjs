@@ -9,6 +9,7 @@ const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadTs } = require('./helpers/ts-module.cjs');
+const { plain } = require('./helpers/plain.cjs');
 
 const root = path.resolve(__dirname, '../..');
 const T = loadTs('src/games/rhythm/core/types.ts');
@@ -503,4 +504,51 @@ test('score read-outs: steadiness, timing words, histogram, auto-tune offset', (
   const next = sc.autoTuneOffset(25, late);
   assert.ok(next > 25 && next <= 65, `auto-tune moves toward late taps (${next})`);
   assert.equal(sc.clampOffset(999), 350);
+});
+
+test('progress: FTUE, unlock order, PB boards, mastery XP and tiers', () => {
+  const stub = {
+    '@react-native-async-storage/async-storage': { default: { getItem: async () => null, setItem: async () => {} } },
+    '../stages': { STAGE_ORDER: ['opening_day_a', 'waiting_room_a', 'shark_shop_a', 'backpack_bounce_a'] },
+  };
+  const prog = loadTs('src/games/rhythm/meta/progress.ts', stub);
+  let p = prog.emptyProgress();
+  assert.deepEqual(plain(prog.unlockedStages(p)), ['opening_day_a']);
+  assert.equal(prog.pickQueueStage(p, 7), 'opening_day_a');
+  const r1 = prog.recordRound(p, { stage: 'opening_day_a', difficulty: 1, board: 'ride', score: 36000, stars: 1, ftue: true });
+  p = r1.next;
+  assert.equal(p.firstParadeDone, true);
+  assert.equal(r1.newPb, true);
+  assert.deepEqual(plain(prog.unlockedStages(p)), ['opening_day_a', 'waiting_room_a']);
+  assert.equal(prog.pickQueueStage(p, 7), 'waiting_room_a');
+  const r2 = prog.recordRound(p, { stage: 'waiting_room_a', difficulty: 2, board: 'march', score: 50000, stars: 2, ftue: false });
+  assert.equal(r2.next.pb['waiting_room_a:2:march'], 50000);
+  assert.equal(prog.recordRound(r2.next, { stage: 'waiting_room_a', difficulty: 2, board: 'march', score: 40000, stars: 2, ftue: false }).newPb, false);
+  assert.equal(prog.masteryXp(10000, 3, true), 200 + 800);
+  assert.equal(prog.masteryTier(0), 0);
+  assert.equal(prog.masteryTier(22000), 5);
+  // Backpack Bounce needs 2 stars on 3 stages.
+  const all = { ...prog.emptyProgress(), stars: { opening_day_a: 2, waiting_room_a: 2, shark_shop_a: 2 } };
+  assert.ok(prog.unlockedStages(all).includes('backpack_bounce_a'));
+});
+
+test('drumline: house crew and ghosts race the same chart; a ghost replays its own score', () => {
+  const dl = loadTs('src/games/rhythm/multiplayer/drumline.ts');
+  const ch = chartOf('waiting_room_a', 'queue', 2, 555);
+  const script = sim.scriptHuman(ch, { sigmaMs: 30 }, 4);
+  const live = sim.runScript(ch, script, { forceMarch: 0 });
+  const ghostRun = {
+    stage: 'waiting_room_a', format: 'queue', difficulty: 2, seed: 555, name: 'Maya', autoFever: false, marchBars: [],
+    touches: proof.encodeTouches(live), score: live.score, barScores: [], at: 0,
+  };
+  const crew = dl.crewForRound(ch, { seed: 555, autoFever: false }, null, ghostRun);
+  assert.equal(crew.length, 3);
+  assert.equal(crew[0].isGhost, true);
+  assert.equal(crew[0].finalScore, live.score, 'ghost replays to the same verified score');
+  assert.equal(crew[0].barScores.length, ch.playableBars);
+  for (let i = 1; i < crew[0].hitT.length; i++) assert.ok(crew[0].hitT[i] >= crew[0].hitT[i - 1]);
+  // A ghost from another seed is refused (identical chart only).
+  assert.equal(dl.ghostRival(chartOf('waiting_room_a', 'queue', 2, 556), ghostRun, 'g', '#fff', false), null);
+  const again = dl.crewForRound(ch, { seed: 555, autoFever: false }, null, null);
+  assert.deepEqual(again.map((r) => r.id), dl.crewForRound(ch, { seed: 555, autoFever: false }, null, null).map((r) => r.id));
 });

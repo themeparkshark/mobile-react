@@ -193,7 +193,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const { visible, seed: roundSeed, onComplete, onClose, onQuit } = props;
   const reducedMotion = useReducedGameMotion();
   const shellRef = useRef<GameShellV2Handle>(null);
-  const fxRef = useRef<FxStageHandle>(null);
   const baseSeed = useMemo(() => (roundSeed ?? (Math.floor(Math.random() * 0xffffffff) ^ Date.now())) >>> 0, [roundSeed]);
   const [runIndex, setRunIndex] = useState(0);
   const [progress, setProgress] = useState<ParadeProgress | null>(null);
@@ -512,20 +511,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     }
   }, [pocket, plan]);
 
-  // FX stage state for UI-thread emission (FxStage owns it; null until mounted).
-  const [fxSv, setFxSv] = useState<SharedValue<FxState> | null>(null);
-  useEffect(() => {
-    if (fxSv) return;
-    const id = setInterval(() => {
-      const st = fxRef.current?.state as SharedValue<FxState> | undefined;
-      if (st) {
-        setFxSv(() => st);
-        clearInterval(id);
-      }
-    }, 50);
-    return () => clearInterval(id);
-  }, [fxSv, ready]);
-
   // -- The frame: clock, judge tick, layout, FX, events ----------------------------
   const onEnded = useRef<() => void>(() => {});
   const fireEnded = useCallback(() => onEnded.current(), []);
@@ -608,7 +593,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         runOnJS(fireEnded)();
       }
     }
-    const fx = fxSv ? fxSv.value : null;
+    const fx = null;
     stepView(v, fx, dt);
     layoutFrame(draw.value, s, beatsSv.value, geom, v.now, approachSv.value, v.march, v.missAt, v.wt, echoStyleSv.value, 1);
     const batch = drainEvents(s.ev);
@@ -617,7 +602,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       runOnJS(onBatch)(batch, s.score, s.combo, feverActiveAt(s, v.now) ? 1 : 0, s.hitN);
     }
     tick.value = tick.value + 1;
-  }, [fxSv, onBatch, onBar, fireEnded, geom]);
+  }, [onBatch, onBar, fireEnded, geom]);
   useFrameCallback(frame);
 
   // -- Touch: judged on touch-down on the UI thread (design 10.3) --------------------
@@ -638,7 +623,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       }
       const batch = drainEvents(s.ev);
       if (batch.length) {
-        applyEventsUI(v, s, fxSv ? fxSv.value : null, batch);
+        applyEventsUI(v, s, null, batch);
         runOnJS(onBatch)(batch, s.score, s.combo, feverActiveAt(s, v.now) ? 1 : 0, s.hitN);
       }
     })
@@ -660,7 +645,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       const s = judge.value;
       const t = clock.value - offset.value;
       for (const touch of e.changedTouches) judgeUp(s, t, touch.id);
-    }), [judge, view, clock, lastWall, offset, running, geom, fxSv, onBatch]);
+    }), [judge, view, clock, lastWall, offset, running, geom, onBatch]);
 
   // -- Round end -----------------------------------------------------------------------
   const finishRound = useCallback(async (reason: 'end' | 'stall' | 'wrap') => {
@@ -882,7 +867,6 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
               railFlash={railFlash}
             />
           ) : null}
-          <FxStage ref={fxRef} width={SCREEN_W} height={fieldH} reducedMotion={reducedMotion} flashCap={0.12} />
           <GestureDetector gesture={gesture}>
             <View style={[styles.touchZone, { top: geom.touchTop, height: fieldH - geom.touchTop }]} />
           </GestureDetector>
