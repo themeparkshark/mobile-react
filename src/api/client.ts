@@ -1,8 +1,10 @@
-import axios, { type AxiosError, type AxiosResponse } from 'axios';
+import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import * as Device from 'expo-device';
 import config from '../config';
 import { classifyCoreLoopRequest } from '../services/telemetry/coreLoopEvents';
 import { addBreadcrumb, captureMessage } from '../services/telemetry';
+import { reportReachable, reportUnreachable } from '../services/connectivity';
+import { nextGetRetryDelay } from './getRetry';
 
 const client = axios.create({
   baseURL: config.apiUrl,
@@ -37,15 +39,28 @@ export function recordCoreLoopResponse(
   }
 }
 
+type RetryableConfig = AxiosRequestConfig & { tpsRetryCount?: number; tpsNoRetry?: boolean };
+
+const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 client.interceptors.response.use(
   (response: AxiosResponse) => {
+    reportReachable();
     recordCoreLoopResponse(response.config?.method, response.config?.url, response.status);
     return response;
   },
-  (error: AxiosError) => {
-    if (!axios.isCancel(error)) {
-      recordCoreLoopResponse(error.config?.method, error.config?.url, error.response?.status);
+  async (error: AxiosError) => {
+    if (axios.isCancel(error)) return Promise.reject(error);
+    if (error.response) reportReachable();
+    const config = error.config as RetryableConfig | undefined;
+    const delay = nextGetRetryDelay(config, error);
+    if (config && delay !== null) {
+      config.tpsRetryCount = (config.tpsRetryCount ?? 0) + 1;
+      await wait(delay);
+      return client.request(config);
     }
+    if (!error.response) reportUnreachable();
+    recordCoreLoopResponse(config?.method, config?.url, error.response?.status);
     return Promise.reject(error);
   },
 );

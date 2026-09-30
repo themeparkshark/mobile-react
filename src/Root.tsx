@@ -87,6 +87,7 @@ import RideOnboardingScreen from './screens/RideTracker/RideOnboardingScreen';
 import RideBatchConfirmScreen from './screens/RideTracker/RideBatchConfirmScreen';
 import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay';
 import SharkDropHandler from './components/SharkDropHandler';
+import OfflineBanner from './components/OfflineBanner';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { releaseNativeSplash } from './nativeSplash';
 import { addBreadcrumb, setTelemetryUser } from './services/telemetry';
@@ -456,6 +457,7 @@ export default function App() {
       <RideDetectionOverlay />
       <SharkDropHandler />
     </NavigationContainer>
+    <OfflineBanner />
     {__DEV__ && !isStandalonePreview && player && devMode && currentLocation && (
       <DevJoystick
         onMove={handleJoystickMove}
