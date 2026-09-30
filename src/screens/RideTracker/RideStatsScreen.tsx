@@ -117,7 +117,7 @@ export default function RideStatsScreen() {
                   <Text style={styles.rankName}>{r.name}</Text>
                   <SharkRating rating={Math.round(r.avg_rating)} size={14} readonly />
                 </View>
-                <Text style={styles.rankScore}>{r.avg_rating}</Text>
+                <Text style={styles.rankScore}>{Number(r.avg_rating).toFixed(1)}</Text>
               </View>
             ))}
           </>
