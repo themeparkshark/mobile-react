@@ -53,7 +53,8 @@ export function useParkRaid(parkId: number | null | undefined) {
     return () => { clearInterval(id); generation.current += 1; };
   }, [scope, refresh]);
   const state = selection?.scope === scope ? selection.state : null;
-  applyTeamNames(state?.raid?.team_names);
+  const names = state?.raid?.team_names;
+  useEffect(() => applyTeamNames(names), [names]);
   return { raid: state?.raid ?? null, nextAt: state?.next_at ?? null, loaded: !!state, refresh, setState };
 }
 
@@ -79,6 +80,7 @@ export const ERRORS: Record<Exclude<AttackResult, { ok: true }>['error'], string
   raid_over: 'The fight is over!',
   no_remote_pass: 'Joining from home costs 1 Park Ticket. Hunt at home to earn more!',
   not_found: 'This fight is no longer available.',
+  damage_cap: "You've dealt the most one shark can in this raid. No Energy was spent. Your team can finish it!",
   network: 'Your round is awaiting confirmation.',
 };
 
@@ -293,6 +295,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
             hpLeft={raid.hp_left}
             hpMax={raid.hp_max}
             damageRate={round.current?.body.remote ? roundRate : 1}
+            damage={raid.damage ?? DEFAULT_DAMAGE}
+            maxHits={roundLimits.current?.max_hits}
             onComplete={(_, meta) => submit(renderedRound, meta)}
             onClose={() => { if (round.current === renderedRound) { round.current = null; setFighting(false); } }}
           />}

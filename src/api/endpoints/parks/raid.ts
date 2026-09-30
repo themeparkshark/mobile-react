@@ -93,7 +93,7 @@ export type RoundResult =
   | { ok: true; round: RaidRound }
   | { ok: false; error: 'too_far' | 'no_energy' | 'no_attacks_left' | 'raid_over' | 'no_remote_pass' | 'not_found' | 'network'; reason?: PresenceReason };
 
-const ROUND_ERRORS = new Set(['too_far', 'no_energy', 'no_attacks_left', 'raid_over', 'no_remote_pass', 'not_found']);
+const ROUND_ERRORS = new Set(['too_far', 'no_energy', 'no_attacks_left', 'raid_over', 'no_remote_pass', 'not_found', 'damage_cap']);
 
 /** FIGHT: ask the server for this round's token (and whether it counts as remote). */
 export async function startRaidRound(raidId: number, body: { latitude?: number; longitude?: number; remote?: boolean }): Promise<RoundResult> {
@@ -113,7 +113,7 @@ export async function startRaidRound(raidId: number, body: { latitude?: number; 
 
 export type AttackResult =
   | { ok: true; damage: number; state: RaidState }
-  | { ok: false; error: 'too_far' | 'no_energy' | 'no_attacks_left' | 'bad_proof' | 'bad_round' | 'raid_over' | 'no_remote_pass' | 'not_found' | 'network'; state?: RaidState };
+  | { ok: false; error: 'too_far' | 'no_energy' | 'no_attacks_left' | 'bad_proof' | 'bad_round' | 'raid_over' | 'no_remote_pass' | 'not_found' | 'damage_cap' | 'network'; state?: RaidState };
 
 export interface RaidAttackBody {
   client_request_id: string; latitude?: number; longitude?: number; hits: number; weak_hits: number; duration_ms: number;
@@ -121,7 +121,7 @@ export interface RaidAttackBody {
   round_token?: string;
 }
 
-const ATTACK_ERRORS = new Set(['too_far', 'no_energy', 'no_attacks_left', 'bad_proof', 'bad_round', 'raid_over', 'no_remote_pass', 'not_found']);
+const ATTACK_ERRORS = new Set(['too_far', 'no_energy', 'no_attacks_left', 'bad_proof', 'bad_round', 'raid_over', 'no_remote_pass', 'not_found', 'damage_cap']);
 
 function isState(result: any): boolean {
   return !!result && Object.prototype.hasOwnProperty.call(result, 'raid') && (result.raid === null ||
