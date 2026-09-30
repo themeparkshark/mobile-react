@@ -38,6 +38,7 @@ export interface SharkyProgress {
   ghosts: Record<string, GhostRecord>;
   missions: MissionState[];
   rank: number;
+  rankCount: number;
   rideTokens: Record<string, number>;
   boostHintSeen: boolean;
 }
@@ -49,6 +50,7 @@ export const EMPTY_PROGRESS: SharkyProgress = {
   ghosts: {},
   missions: [],
   rank: 0,
+  rankCount: 0,
   rideTokens: {},
   boostHintSeen: false,
 };
@@ -89,8 +91,7 @@ export function unlockCard(runsBefore: number, runsAfter: number): string | null
   const cards: Record<number, string> = {
     1: 'NEW: Prize Boxes and Ride Tokens',
     2: 'NEW: Puffers and Boost Dash',
-    3: 'NEW: Bumper Boats and Ghost Races',
-    4: 'NEW: Power-ups',
+    3: 'NEW: Bumper Boats, Sprint Races and missions',
   };
   for (let r = runsBefore + 1; r <= runsAfter; r++) if (cards[r]) return cards[r];
   return null;

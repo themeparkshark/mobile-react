@@ -30,7 +30,7 @@ import { usePerfProbe, PerfOverlay } from '../../gamekit/perf/PerfOverlay';
 import { starsFor } from '../../gamekit/core/scoring';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import {
-  END_FINISH, END_GATE, END_TIME, EXT_PAUSE_RESUME, EXT_REVIVE, IN_DASH, IN_PRESS, IN_RELEASE,
+  END_FINISH, END_GATE, END_TIME, G_TIDE, EXT_PAUSE_RESUME, EXT_REVIVE, IN_DASH, IN_PRESS, IN_RELEASE,
   MODE_GHOST, MODE_PRACTICE, MODE_QUEUE, MODE_RACE, MODE_RIDE, decodeInputs, encodeInputs, hash2, multiplier, replay,
   type InputEntry, type SimConfig, type SimState,
 } from './sim/core';
@@ -44,6 +44,7 @@ import { SharkyCanvas } from './render/SharkyCanvas';
 import { SharkyHud } from './render/SharkyHud';
 import { sharkyLayout, type SharkyLayout } from './render/view';
 import { createSharkyFeel } from './sharkyFeel';
+import { applyRun, missionTarget, missionText, type MissionUpdate } from './meta/missions';
 import {
   EMPTY_PROGRESS, loadProgress, ratedDifficulty, saveProgress, unlockCard, unlockTier,
   type GhostRecord, type SharkyProgress,
@@ -107,6 +108,7 @@ export function SharkySwim({
   const [banner, setBanner] = useState<string | null>(null);
   const [gates, setGates] = useState(0);
   const [newCard, setNewCard] = useState<string | null>(null);
+  const [missionView, setMissionView] = useState<MissionUpdate | null>(null);
   const startedAt = useRef(0);
   const pausedMs = useRef(0);
   const endedRef = useRef(false);
@@ -146,6 +148,9 @@ export function SharkySwim({
       runs: ghost ? ghost.runs : prog.runs,
     };
   }, [runMode, seed, runIdx, ghost, difficulty, prog, round]);
+
+  // Reset only when the run itself changes (not when saved progress re-creates cfg).
+  const cfgKey = `${cfg.seed}:${cfg.mode}:${cfg.difficulty}:${cfg.tier}:${cfg.runs}:${runIdx}:${ghost ? ghost.at : 0}`;
 
   // --- engine ---------------------------------------------------------------------
   const feelRef = useRef<ReturnType<typeof createSharkyFeel> | null>(null);
@@ -187,6 +192,19 @@ export function SharkySwim({
           };
         }
         if (rideId != null) next.rideTokens[String(rideId)] = (prog.rideTokens[String(rideId)] ?? 0) + s.tokens;
+        // Missions from run 3 (design 5.5), local with a rank bar until WS7 pays out.
+        if (before >= 3 && m !== MODE_RIDE) {
+          const mu = applyRun(prog.missions, prog.rank, prog.rankCount ?? 0, cfg.tier, {
+            skims: s.stSkims, perfects: s.stPerfects, frenzies: s.stFrenzies, tokens: s.tokens, chomps: s.stChomps,
+            score: s.score, gates: s.gates, coins: s.stCoins, dashes: s.stDashes, hits: s.stHits,
+          }, cfg.seed);
+          next.missions = mu.missions.filter((x) => !x.done);
+          next.rank = mu.rank;
+          next.rankCount = mu.rankCount;
+          setMissionView(mu);
+        } else {
+          setMissionView(null);
+        }
         setNewCard(m === MODE_QUEUE ? unlockCard(before, before + 1) : null);
         setProgress(next);
         void saveProgress(next);
@@ -228,7 +246,8 @@ export function SharkySwim({
     tier: () => cfg.tier,
     hooks: {
       onScore: (sc) => setScore(sc),
-      onGate: (_bonus, _kind, _step, g) => {
+      onGate: (_bonus, kind, _step, g) => {
+        if (kind !== G_TIDE) return;
         setGates(g);
         setBanner(`SPRINT ${g + 1}`);
         setTimeout(() => setBanner(null), 1800);
@@ -244,6 +263,7 @@ export function SharkySwim({
       },
       onRevive: () => setReviveOffer(false),
       onEnd: (reason) => {
+        engine.setRunning(false);
         setReviveOffer(false);
         finish(reason);
       },
@@ -314,7 +334,7 @@ export function SharkySwim({
     slotNames.current = names;
     engine.reset(cfg, rv);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg, progress == null, round?.roundId]);
+  }, [cfgKey, progress == null, round?.roundId]);
 
   // Live rivals: 10 Hz display whispers, interpolated on the UI thread.
   useEffect(() => {
@@ -446,6 +466,7 @@ export function SharkySwim({
     setRunMode(mode);
     setResult(null);
     setNewCard(null);
+    setMissionView(null);
     setRunIdx((n) => n + 1);
   }, [mode]);
 
@@ -503,7 +524,7 @@ export function SharkySwim({
       visible={visible}
       title={title}
       subtitle={taskName}
-      score={score}
+      score={result?.score ?? score}
       multiplier={1}
       fever={fever}
       personalBest={prog.best[runMode] ?? 0}
@@ -523,6 +544,23 @@ export function SharkySwim({
       onQuit={onQuit}
       onRematch={runMode === 'ride' ? undefined : onRematch}
       onChallenge={runMode === 'ride' || prog.runs < 1 ? undefined : onChallenge}
+      challengeLabel={prog.runs < 3 ? 'Race my ghost' : 'Sprint race'}
+      resultsExtra={(newCard || missionView) && runMode !== 'ride' ? (
+        <View style={styles.extra}>
+          {newCard ? <Text style={styles.extraNew}>{newCard}</Text> : null}
+          {missionView ? (
+            <>
+              {missionView.missions.map((mm) => (
+                <View key={mm.id} style={styles.mRow}>
+                  <Text style={[styles.mText, mm.done && styles.mDone]} numberOfLines={1}>{missionText(mm.id)}</Text>
+                  <View style={styles.mTrack}><View style={[styles.mFill, { width: `${Math.round((100 * mm.progress) / missionTarget(mm.id))}%` }]} /></View>
+                </View>
+              ))}
+              <Text style={styles.mRank}>{missionView.rankedUp ? `RANK UP! Rank ${missionView.rank}` : `Rank ${missionView.rank}  ·  ${missionView.rankProgress}/3 to next`}</Text>
+            </>
+          ) : null}
+        </View>
+      ) : undefined}
     >
       <GestureHandlerRootView style={styles.fill}>
         <GestureDetector gesture={gesture}>
@@ -606,12 +644,6 @@ export function SharkySwim({
                 onAgain={() => { setRaceDone(false); race.transport?.ready(); }} onLeave={onClose} />
             ) : null}
 
-            {result && newCard ? (
-              <View pointerEvents="none" style={styles.newCard}>
-                <Text style={styles.newCardTitle}>NEXT RUN</Text>
-                <Text style={styles.newCardText}>{newCard}</Text>
-              </View>
-            ) : null}
 
             {__DEV__ ? <PerfOverlay probe={perf} style={styles.perf} extra={() => `mult x${multiplier(engine.sim.value)} ${walk.walking ? 'walking' : ''}`} /> : null}
           </View>
@@ -650,6 +682,14 @@ const styles = StyleSheet.create({
   newCardTitle: { fontFamily: 'Knockout', fontSize: 13, color: INK, letterSpacing: 1 },
   newCardText: { fontFamily: 'Shark', fontSize: 22, color: INK },
   perf: { top: undefined, bottom: 4, left: 4, right: undefined },
+  extra: { backgroundColor: '#fff8e4', borderRadius: 16, borderWidth: 3, borderColor: INK, padding: 10, marginTop: 8 },
+  extraNew: { fontFamily: 'Shark', fontSize: 17, color: INK, textAlign: 'center', backgroundColor: '#ffc233', borderRadius: 10, overflow: 'hidden', paddingVertical: 4, marginBottom: 4 },
+  mRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 2 },
+  mText: { flex: 1, fontFamily: 'Knockout', fontSize: 13, color: INK },
+  mDone: { color: '#1b8f3a' },
+  mTrack: { width: 70, height: 8, borderRadius: 4, backgroundColor: '#cfe6fb', borderWidth: 2, borderColor: INK, overflow: 'hidden' },
+  mFill: { height: '100%', backgroundColor: '#ffc233' },
+  mRank: { fontFamily: 'Shark', fontSize: 14, color: INK, textAlign: 'center', marginTop: 4 },
 });
 
 export default SharkySwim;

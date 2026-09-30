@@ -577,3 +577,31 @@ test('integer sine stays in range and is symmetric', () => {
   assert.equal(core.isin(256), 256);
   assert.equal(core.isin(0), 0);
 });
+
+test('missions: 3 active, sum and best-in-run progress, 3 completions rank up; unlock cards teach one verb per run', () => {
+  const m = loadTs('src/games/sharky/meta/missions.ts');
+  const p = loadTs('src/games/sharky/meta/progress.ts', { '@react-native-async-storage/async-storage': { default: {} } });
+  const stats = { skims: 4, perfects: 3, frenzies: 1, tokens: 3, chomps: 2, score: 3200, gates: 3, coins: 70, dashes: 2, hits: 1 };
+  const act = m.activeMissions([], 4, 11);
+  assert.equal(act.length, 3);
+  assert.equal(new Set(act.map((x) => x.id)).size, 3);
+  let r = m.applyRun([], 0, 0, 4, stats, 11);
+  assert.equal(r.missions.length, 3);
+  assert.equal(r.completed.length, r.missions.filter((x) => x.done).length);
+  // Force three completable missions: rank up.
+  const slots = [{ id: 'perfect3', progress: 0, done: false }, { id: 'frenzy1', progress: 0, done: false }, { id: 'tokens3', progress: 0, done: false }];
+  r = m.applyRun(slots, 2, 1, 4, stats, 1);
+  assert.equal(r.completed.length, 3);
+  assert.equal(r.rank, 3);
+  assert.equal(r.rankProgress, 1);
+  // Sum missions accumulate across runs.
+  const s1 = m.applyRun([{ id: 'skim10', progress: 7, done: false }], 0, 0, 4, stats, 1);
+  assert.equal(s1.missions.find((x) => x.id === 'skim10').done, true);
+  // Locked missions never appear on run 1.
+  assert.ok(m.activeMissions([], 0, 5).every((x) => m.MISSION_POOL.find((d) => d.id === x.id).unlock === 0));
+  assert.equal(p.unlockCard(0, 1), 'NEW: Prize Boxes and Ride Tokens');
+  assert.equal(p.unlockCard(1, 2), 'NEW: Puffers and Boost Dash');
+  assert.equal(p.unlockCard(5, 6), null);
+  assert.equal(p.unlockTier(40), 12);
+  assert.equal(p.ratedDifficulty({ ...p.EMPTY_PROGRESS, recentStars: [0, 3, 1] }), 2);
+});

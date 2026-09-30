@@ -154,6 +154,10 @@ interface GameShellV2Props {
   onRematch?: () => void;
   /** Offer CHALLENGE (ghost / score challenge to a friend or crew). */
   onChallenge?: () => void;
+  /** Label for the CHALLENGE button (default 'Challenge'). */
+  challengeLabel?: string;
+  /** Optional game content under the results card (missions, unlock card). */
+  resultsExtra?: React.ReactNode;
   /**
    * Movement never pauses (QUEUE REALITY). 'pause' is accepted for older
    * call sites and treated as play-through.
@@ -202,6 +206,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       onQuit,
       onRematch,
       onChallenge,
+      challengeLabel = 'Challenge',
+      resultsExtra,
       resumeStyle = 'countdown',
       gameId,
       sessionKey,
@@ -685,6 +691,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                   note={wrap ? WRAP_UP_COPY[wrap.reason].body : undefined}
                   reducedMotion={reducedMotion}
                 />
+                {resultsExtra}
                 <View style={styles.actions}>
                   <TouchableOpacity
                     style={[styles.sheetBtn, styles.primaryBtn, styles.claimBtn]}
@@ -703,7 +710,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                       {onChallenge ? (
                         <TouchableOpacity style={[styles.sheetBtn, styles.secondaryBtn, styles.half]} onPress={onChallenge}>
                           <GameIcon name="swords" size={20} />
-                          <Text style={styles.secondaryBtnTxtBold}>Challenge</Text>
+                          <Text style={styles.secondaryBtnTxtBold}>{challengeLabel}</Text>
                         </TouchableOpacity>
                       ) : null}
                     </View>
