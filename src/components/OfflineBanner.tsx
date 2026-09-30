@@ -29,8 +29,9 @@ const BACK_ONLINE_HOLD_MS = 1400;
 
 type Phase = 'hidden' | 'offline' | 'back';
 
-// Illustrated in Dustin's icon style (GPT Image 2.5 with his coin, sword,
-// energy and shield art as references; review sheet in the audit folder).
+// Drawn with the art pipeline (GPT Image 2.5 with Alex's original gift,
+// compass, foam finger and sunglasses art as references) and checked beside
+// his originals at 128px and 40px: tps-prime-time-audit/art-ws9/review-sheet-1.png.
 const OFFLINE_ICON = require('../../assets/images/offline/offline.png');
 const BACK_ONLINE_ICON = require('../../assets/images/offline/back-online.png');
 const ICON_SIZE = 34;
