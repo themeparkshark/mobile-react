@@ -37,3 +37,13 @@ test('CI runs typecheck and node tests', () => {
   assert.match(ci, /npm run typecheck/);
   assert.match(ci, /npm test/);
 });
+
+test('AdMob is gone from JS and unlinked from the native binary', () => {
+  const { execFileSync } = require('node:child_process');
+  let hits = ''; try { hits = execFileSync('git', ['grep', '-l', '-E', 'ads-stub|google-mobile-ads|mobileAds\\(', '--', 'src', 'App.tsx', 'index.js'], { cwd: root, encoding: 'utf8' }).trim(); } catch (error) { if (error.status !== 1) throw error; }
+  assert.equal(hits, '');
+  assert.ok(!fs.existsSync(path.join(root, 'app.json')), 'app.json only held the AdMob app id');
+  const rnConfig = require(path.join(root, 'react-native.config.js'));
+  assert.equal(rnConfig.dependencies['react-native-google-mobile-ads'].platforms.ios, null);
+  assert.equal(rnConfig.dependencies['react-native-worklets-core'].platforms.ios, null);
+});

@@ -5,11 +5,6 @@ import { useContext, useCallback, useEffect } from 'react';
 import { View, StyleSheet as RNStyleSheet } from 'react-native';
 import { DevJoystick } from './components/DevJoystick';
 import { LocationContext } from './context/LocationProvider';
-import mobileAds, {
-  InterstitialAd,
-  MaxAdContentRating,
-  TestIds,
-} from './helpers/ads-stub';
 import { useAsyncEffect } from 'rooks';
 import { flushPendingNavigation, navigationRef } from './RootNavigation';
 import getCrumbs from './api/endpoints/crumbs/getCrumbs';
@@ -219,17 +214,6 @@ export default function App() {
 
   useAsyncEffect(async () => {
     if (isStandalonePreview) return;
-    await mobileAds().setRequestConfiguration({
-      maxAdContentRating: MaxAdContentRating.PG,
-      tagForChildDirectedTreatment: true,
-      tagForUnderAgeOfConsent: true,
-      testDeviceIdentifiers: ['EMULATOR'],
-    });
-
-    await mobileAds().initialize();
-
-    InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
-
     // These resources do not depend on one another. Keep a slow theme request
     // from delaying currencies or the fallback copy needed to leave Splash.
     void Promise.allSettled([
