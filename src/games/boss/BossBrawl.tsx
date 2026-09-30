@@ -48,6 +48,7 @@ import { IN_END, IN_PAD_DOWN, IN_PAD_UP, IN_PAUSE, IN_RESUME, IN_TARGET, STAR_PO
 import { pickVariant } from './sim/patterns';
 import { boutProof, legacyDamage, summarize, timingReadout, toLegacyProof } from './sim/round';
 import { tauntFor } from './taunts';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useArenaImages } from './useArenaImages';
 import { CrewLayer, type CrewLayerHandle } from './multiplayer/CrewLayer';
 import {
@@ -167,6 +168,15 @@ export function BossBrawl(props: BossBrawlProps) {
   const [surgeOn, setSurgeOn] = useState(false);
   const [meLure, setMeLure] = useState(false);
   const [ghostLine, setGhostLine] = useState<string | null>(null);
+  // First encounter with this boss: the very first wind-up plays at half speed (the sim is unaffected).
+  const firstRun = useRef(false);
+  useEffect(() => {
+    const k = `boss_drill_seen_v4:${boss}`;
+    void AsyncStorage.getItem(k).then((v) => {
+      firstRun.current = v !== '1';
+      if (v !== '1') void AsyncStorage.setItem(k, '1');
+    }).catch(() => undefined);
+  }, [boss]);
 
   // Round state (JS)
   const round = useRef({ seed: 0, variant: 0, bouts: [] as Bout[], carry: freshCarry() as Carry, offset: 0, attempt: 0 });
@@ -539,6 +549,12 @@ export function BossBrawl(props: BossBrawlProps) {
     const by = L.bossY;
     switch (e.code) {
       case E_TELL:
+        if (firstRun.current && boutRef.current?.cfg.bout === 0 && boutRef.current.attacksDone === 0 && !autoplay) {
+          // Tell Drill lite: slow the first telegraph so a new player sees the whole read.
+          firstRun.current = false;
+          clock.slowMo(0.5, (boutRef.current.attack?.W ?? 900) * 2, 250, true);
+          setHint('Watch the tentacle. Tap its buoy as it lands');
+        }
         bossSfx.tell(boss, e.a);
         playHaptic(e.a === 0 ? 'lane1' : e.a === 1 ? 'lane2' : 'lane3', { priority: HP.telegraph, tell: true });
         if (!walking && !reduced) camera.lean((lane2x(e.a) - bx) * 0.05, 0);
