@@ -494,7 +494,7 @@ export class MusicDirector {
    * Switch beds on the next beat or bar of the current bed (musical
    * transitions: main -> intense at a level up, -> boss).
    */
-  async switchTo(name: string, at: 'now' | 'beat' | 'bar' = 'bar', fadeMs = 300): Promise<void> {
+  async switchTo(name: string, at: 'now' | 'beat' | 'bar' = 'bar', fadeMs = 300, keepPosition = false): Promise<void> {
     if (this.switchTimer) clearTimeout(this.switchTimer);
     const clock = this.clock();
     const b = this.engine.backend;
@@ -505,8 +505,10 @@ export class MusicDirector {
     const pos = await b.musicPosition(this.deck);
     const target = nextGridMs(clock, pos, at === 'bar' ? clock.beatsPerBar : 1, 40);
     const wait = Math.max(0, target - pos - fadeMs / 2);
-    // Keep phase: the new bed starts at the same bar position.
-    const from = barMs(clock) > 0 ? target % barMs(clock) : 0;
+    // Keep phase: the new bed starts at the same bar position. Stem layers of
+    // one mix (same length, sample-aligned) keep the absolute position.
+    const loopEnd = this.engine.bed(name)?.loopEndMs ?? 0;
+    const from = keepPosition && loopEnd > 0 ? target % loopEnd : barMs(clock) > 0 ? target % barMs(clock) : 0;
     this.switchTimer = setTimeout(() => void this.play(name, fadeMs, from), wait);
   }
 

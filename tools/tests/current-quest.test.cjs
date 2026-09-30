@@ -452,3 +452,70 @@ test('parity: vectors.v2.json replays exactly', () => {
     assert.deepEqual(plain(got), v.expect, `vector ${v.name}`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Presentation logic (pure): motion timeline, FX governor, subtitle table
+
+const M = loadTs('src/games/current-quest/motion.ts');
+const G = loadTs('src/games/current-quest/fxGovernor.ts');
+const T = loadTs('src/games/current-quest/themeSubtitle.ts');
+
+test('motion: a carry rides 75 ms per tile, overshoots toward the blocker and settles on the last tile', () => {
+  const pts = [0, 0, 100, 0, 200, 0, 300, 0];
+  const plan = { kind: M.PLAN_STROKE, t0: 0, pts, carry: 2, facing: 1, dive: 0, beached: 0, wasBeached: 0, bx: 0, by: 0, speed: 1 };
+  const f = M.newFrame();
+  M.evalShark(plan, M.T_ANTIC + M.T_TRAVEL, 0, f);
+  assert.ok(Math.abs(f.x - 100) < 1);
+  M.evalShark(plan, M.T_ANTIC + M.T_TRAVEL + M.T_GRAB + M.T_TILE * 1.5, 0, f);
+  assert.ok(Math.abs(f.x - 250) < 1, `mid ride x ${f.x}`);
+  assert.equal(f.pose, M.POSE_DASH);
+  assert.equal(f.carrying, 1);
+  M.evalShark(plan, M.T_ANTIC + M.T_TRAVEL + M.T_GRAB + M.T_TILE * 2 + 10, 0, f);
+  assert.ok(f.x > 300, 'overshoot past the last tile toward the blocker');
+  M.evalShark(plan, M.planDuration(plan) + 5, 0, f);
+  assert.ok(Math.abs(f.x - 300) < 0.5);
+  assert.equal(f.done, true);
+  assert.equal(M.planDuration(plan), M.T_ANTIC + M.T_TRAVEL + M.T_GRAB + M.T_TILE * 2 + M.T_SPIT);
+});
+
+test('motion: bump swaps to the ouch pose and returns home; mesh indices cover the 10x3 grid', () => {
+  const plan = { ...M.idlePlan(50, 50, 1), kind: M.PLAN_BUMP, pts: [50, 50], bx: 150, by: 50 };
+  const f = M.newFrame();
+  M.evalShark(plan, 60, 0, f);
+  assert.equal(f.pose, M.POSE_OUCH);
+  assert.ok(f.x > 60 && f.x < 70);
+  M.evalShark(plan, 400, 0, f);
+  assert.ok(Math.abs(f.x - 50) < 0.5);
+  assert.equal(M.meshIndices().length, 9 * 2 * 6);
+  const out = Array.from({ length: 30 }, () => ({ x: 0, y: 0 }));
+  M.meshVertices({ ...M.newFrame(), x: 100, y: 100 }, 80, 40, true, 0, 0, out);
+  assert.ok(Math.abs(out[0].x - 60) < 0.01 && Math.abs(out[9].x - 140) < 0.01);
+});
+
+test('fx governor: flash gap and cap, punch vs shake, one hit-stop per stroke, priority, GOLDEN banner first', () => {
+  const g = G.createGovernor();
+  assert.equal(G.requestFlash(g, 1000, 0.5), 0.2);
+  assert.equal(G.requestFlash(g, 2500, 0.1), 0);
+  assert.equal(G.requestFlash(g, 3100, 0.1), 0.1);
+  assert.equal(G.requestShake(g, 5000), true);
+  assert.equal(G.requestPunch(g, 5100), false);
+  assert.equal(G.requestPunch(g, 5200), true);
+  assert.equal(G.requestShake(g, 5300), false);
+  assert.equal(G.requestHitStop(g, 7), true);
+  assert.equal(G.requestHitStop(g, 7), false);
+  assert.equal(G.requestHitStop(g, 8), true);
+  // Scripted golden + unlock + riptide on one stroke: golden keeps the big moves.
+  assert.equal(G.claimBig(g, 9, G.PRI_GOLDEN), true);
+  assert.equal(G.claimBig(g, 9, G.PRI_UNLOCK), false);
+  assert.equal(G.claimBig(g, 9, G.PRI_RIPTIDE), false);
+  const at = G.bannerAt(g, 10000, G.PRI_GOLDEN);
+  assert.equal(at, 10000);
+  assert.equal(G.bannerAt(g, 10050, G.PRI_RIPTIDE), 10000 + G.GOLDEN_BANNER_MS + G.BANNER_AFTER_GOLDEN_MS);
+});
+
+test('subtitle comes from the land table, never the ride name', () => {
+  assert.equal(T.themeSubtitle('pirates'), 'Pirate Harbor');
+  assert.equal(T.themeSubtitle(undefined), 'Lagoon');
+  assert.equal(T.themeSubtitle('Space Mountain'), 'Lagoon');
+  assert.equal(T.themeSubtitle('Pirates of the Caribbean').includes('Caribbean'), false);
+});
