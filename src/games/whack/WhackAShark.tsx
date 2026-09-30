@@ -101,7 +101,7 @@ export interface WhackHandle {
 
 const LIFETIME_KEY = '@whack/lifetime_bursts';
 const PB_KEY = '@whack_a_shark/best';
-const RIDE_PB_KEY = '@whack_a_shark/ride_best';
+const pbKeyFor = (f: WhackFormat) => (f === 'ride' ? '@whack_a_shark/ride_best' : f === 'queue' ? PB_KEY : `@whack_a_shark/best_${f}`);
 const GOLD = '#ffcf3b';
 const CORAL = '#ff6b5c';
 
@@ -215,7 +215,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (props.unlockLevel == null) {
       AsyncStorage.getItem(LIFETIME_KEY).then((v) => { if (alive) setLifetime(v ? parseInt(v, 10) || 0 : 0); }).catch(() => alive && setLifetime(0));
     }
-    AsyncStorage.getItem(ride ? RIDE_PB_KEY : PB_KEY).then((v) => { if (alive && v) setBest(parseInt(v, 10) || 0); }).catch(() => undefined);
+    AsyncStorage.getItem(pbKeyFor(format)).then((v) => { if (alive && v) setBest(parseInt(v, 10) || 0); }).catch(() => undefined);
     return () => { alive = false; };
   }, [props.unlockLevel, ride]);
 
@@ -644,7 +644,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const isNewBest = total > best;
     if (isNewBest) {
       setBest(total);
-      AsyncStorage.setItem(ride ? RIDE_PB_KEY : PB_KEY, String(total)).catch(() => undefined);
+      AsyncStorage.setItem(pbKeyFor(format), String(total)).catch(() => undefined);
     }
     const goal = ride ? null : nextStarGoal(total, thresholds);
     GameAudio.play(stars > 0 ? cues.stingWin : cues.stingLose);
@@ -677,7 +677,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         ...(ride ? [{ label: 'COIN', value: `${last?.result.coin ?? 0}%` }]
           : format === 'raid' ? [{ label: 'BOSS DAMAGE', value: `${last?.result.bossDamage ?? 0}` }]
             : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}` }]),
-        ...(goal && goal.remaining > 0 && format !== 'raid' ? [{ label: 'NEXT STAR', value: `+${goal.remaining}` }] : []),
+        ...(goal && goal.remaining > 0 && format !== 'raid' && format !== 'duel' ? [{ label: 'NEXT STAR', value: `+${goal.remaining}` }] : []),
       ],
       meta,
     });
