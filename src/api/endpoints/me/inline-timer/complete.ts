@@ -7,6 +7,7 @@ export interface QueueStoryMemento {
   readonly chapter_id: string;
   readonly chapter_title: string;
   readonly route_name: string | null;
+  readonly completed_missions?: readonly ('signal' | 'observation' | 'finale')[];
 }
 
 /**

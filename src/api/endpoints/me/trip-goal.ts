@@ -1,6 +1,36 @@
 import client from '../../client';
 
+export interface AdventureRide {
+  readonly task_id: number;
+  readonly asset_id: number;
+  readonly ride_id: number;
+  readonly ride_name: string;
+  readonly coin_url: string;
+}
+
+export interface AdventureStamp extends AdventureRide {
+  readonly kind: 'owned_coin' | 'coin_win' | 'queue_story';
+  readonly confirmed_at: string;
+  readonly coin_level?: number;
+  readonly chapter_title?: string;
+  readonly route_name?: string | null;
+}
+
+export interface AdventureTicket {
+  readonly id: number;
+  readonly park_id: number;
+  readonly park_day: string;
+  readonly started_at: string;
+  readonly ride: AdventureRide;
+  readonly ride_choices: readonly AdventureRide[];
+  readonly discover: AdventureStamp | null;
+  readonly play: AdventureStamp | null;
+  readonly phase: 'discover' | 'play' | 'celebrate' | 'complete';
+  readonly celebrated_at: string | null;
+}
+
 export interface TripGoalRide {
+  readonly ride_id?: number | null;
   readonly task_id: number;
   readonly asset_id: number;
   readonly park_id: number;
@@ -12,6 +42,7 @@ export interface TripGoalRide {
 }
 
 export interface TripGoalData {
+  readonly adventure_ticket?: AdventureTicket | null;
   readonly rides: TripGoalRide[];
   readonly goal: TripGoalRide | null;
   readonly goal_unavailable: boolean;
@@ -49,5 +80,10 @@ export async function setTripGoal(taskId: number): Promise<TripGoalData> {
 
 export async function clearTripGoal(): Promise<TripGoalData> {
   const { data } = await client.delete<{ data: TripGoalData }>('/me/trip-goal');
+  return data.data;
+}
+
+export async function celebrateAdventureTicket(ticketId: number): Promise<AdventureTicket> {
+  const { data } = await client.post<{ data: AdventureTicket }>(`/me/adventure-tickets/${ticketId}/celebrate`, {}, { timeout: 10_000 });
   return data.data;
 }

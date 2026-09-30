@@ -1385,6 +1385,11 @@ export class LinePlaySession {
     return {
       chapter_id: chapter.id,
       chapter_title: chapter.title,
+      completed_missions: [
+        ...(this.completedActivityIds.has(`${chapter.id}-trivia`) ? ['signal' as const] : []),
+        ...(this.completedActivityIds.has(`${chapter.id}-field-note`) ? ['observation' as const] : []),
+        ...(this.completedActivityIds.has(`${chapter.id}-${chapter.finale.idSuffix}`) ? ['finale' as const] : []),
+      ],
       route_name: route === 'alpha' ? chapter.relay.routeNames[0]
         : route === 'omega' ? chapter.relay.routeNames[1] : null,
     };

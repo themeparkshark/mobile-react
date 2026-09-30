@@ -31,6 +31,8 @@ import { LocationContext } from '../context/LocationProvider';
 import { isConfirmedOutsidePark } from '../context/parkLookupPolicy';
 import { ThemeContext } from '../context/ThemeProvider';
 import useTripGoal from '../hooks/useTripGoal';
+import AdventureTicketCard from './ExploreScreen/AdventureTicketCard';
+import { adventureRideClosed } from './ExploreScreen/adventureTicketPresentation';
 import { resolveMapQueueContext } from '../services/lineplay/resolveRide';
 import type { RideContext } from '../services/lineplay/LinePlaySession';
 import checkForRedeemable from '../helpers/check-for-redeemable';
@@ -190,8 +192,12 @@ export default function ExploreScreen() {
   const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
-  const { data: tripGoalData, stale: tripGoalStale } = useTripGoal(tripGoalVersion, !!player);
+  const [adventureOccluded, setAdventureOccluded] = useState(false);
+  const { data: tripGoalData, stale: tripGoalStale, refresh: refreshTripGoal, choose: chooseTripGoal, celebrate: celebrateTicket } = useTripGoal(tripGoalVersion, !!player);
   const tripGoal = tripGoalData?.goal;
+  const adventure = tripGoalData?.adventure_ticket?.park_id === park?.id ? tripGoalData?.adventure_ticket ?? null : null;
+  const adventureOwner = `${player?.id}:${park?.id}`;
+  const adventureScope = useRef(adventureOwner); adventureScope.current = adventureOwner;
   const tripGoalTask = tripGoal?.park_id === park?.id
     ? redeemables?.tasks?.find(task => task.id === tripGoal?.task_id) : undefined;
 
@@ -334,7 +340,7 @@ export default function ExploreScreen() {
   const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
     refreshControl: refreshRideControl,
     available: mapFocused && permissionGranted && !arMode && !bossOpen && !bossOccluded && !isActive && !activeRedeemable &&
-      !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !dailyGiftOccluded });
+      !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !dailyGiftOccluded && !adventureOccluded });
   const raidActive = raid?.status === 'active';
   const { snapshot: bossRecovery } = useBossAttackRecovery({ playerId: player?.id ?? null, parkId: park?.id ?? null, onResult: () => undefined });
   const receiptNeedsCheck = !!bossRecovery?.pending || bossRecovery?.phase === 'storage_error';
@@ -342,11 +348,13 @@ export default function ExploreScreen() {
   // Live park: posted waits, rides that are down, and short-wait Rushes.
   const [livePark, setLivePark] = useState<LivePark | null>(null);
   useEffect(() => {
-    if (!park?.id) { setLivePark(null); return; }
-    const load = () => getParkLive(park.id).then(setLivePark).catch(() => undefined);
-    load();
+    let active = true;
+    setLivePark(null);
+    if (!park?.id) return;
+    const load = () => getParkLive(park.id).then(result => { if (active) setLivePark(result); }).catch(() => undefined);
+    void load();
     const id = setInterval(load, 60000);
-    return () => clearInterval(id);
+    return () => { active = false; clearInterval(id); };
   }, [park?.id]);
   const liveByTask = useMemo(() => new globalThis.Map<number, LiveRide>(
     (livePark?.rides ?? []).map(r => [r.task_id, r])), [livePark]);
@@ -896,7 +904,24 @@ export default function ExploreScreen() {
               onRush={(task) => setSelectedTask(task)} />
           </View>
         )}
-        {tripGoal && player && <Pressable
+        {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
+          ticket={adventure} data={tripGoalData} stale={tripGoalStale}
+          closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={hasLiveEvents ? 124 : 64}
+          onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}
+          onChoose={chooseTripGoal} onCelebrate={() => celebrateTicket(adventure.id)}
+          onDiscover={() => {
+            const task = redeemables?.tasks?.find(item => item.id === adventure.ride.task_id);
+            if (task) setSelectedTask(task);
+            else RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id });
+          }}
+          onPlay={async () => {
+            const ride = await resolveMapQueueContext(adventure.park_id, adventure.ride.ride_name);
+            if (adventureScope.current !== adventureOwner) return;
+            if (!ride) throw new Error('This queue adventure could not load.');
+            navigation.navigate('LinePlay', { ride });
+          }}
+          onShelf={() => RootNavigation.navigate('CoinShelf', { focusCoin: { assetId: adventure.discover?.asset_id ?? adventure.ride.asset_id } })} />}
+        {!adventure && tripGoal && player && <Pressable
           accessibilityRole="button"
           accessibilityLabel={tripGoal.coin_owned
             ? `Open ${tripGoal.ride_name} on my coin shelf`
@@ -928,7 +953,7 @@ export default function ExploreScreen() {
                 : 'Open Ride Guide for its coin'}
           </Text>
         </Pressable>}
-        {selectedTask && queueRide && <Pressable
+        {!adventure && selectedTask && queueRide && <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
@@ -947,7 +972,7 @@ export default function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }}
-          controlsTop={(queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+          controlsTop={(adventure ? 162 : queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : null}>

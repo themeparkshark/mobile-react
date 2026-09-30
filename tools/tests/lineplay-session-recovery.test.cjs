@@ -699,7 +699,7 @@ test('a solo guest can request fresh rounds, pause safely, and restore the longe
 
 test('a played queue chapter keeps its private story choice through offline completion', async () => {
   const chapter = { id: 'queue-2-test-ride-episode-0', title: 'The Lost Star Chart',
-    relay: { routeNames: ['Follow the stars', 'Chart a new orbit'] } };
+    relay: { routeNames: ['Follow the stars', 'Chart a new orbit'] }, finale: { idSuffix: 'star-chart' } };
   const played = { ...saved, playlist: [{ kind: 'trivia',
     id: 'queue-2-test-ride-episode-0-trivia', seed: 1 }],
     completedActivityIds: ['queue-2-test-ride-episode-0-trivia'], prediction: null };
@@ -708,7 +708,7 @@ test('a played queue chapter keeps its private story choice through offline comp
   const session = new Session();
   await session.start(ride, undefined, 12);
   await session.complete();
-  const expected = { chapter_id: chapter.id, chapter_title: chapter.title, route_name: null };
+  const expected = { chapter_id: chapter.id, chapter_title: chapter.title, route_name: null, completed_missions: ['signal'] };
   assert.deepEqual(JSON.parse(JSON.stringify(calls.completeArgs[0][4])), expected);
   assert.deepEqual(JSON.parse(JSON.stringify(calls.queued[0].value.storyMemento)), expected);
   assert.equal(calls.queued[0].key, 'complete_server-123');
