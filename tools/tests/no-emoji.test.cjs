@@ -5,9 +5,15 @@
  * REPORT MODE (today): prints offender counts per file and never fails.
  * STRICT MODE: flip STRICT to true (WS0 does this at integration, before any
  * external build) or run with UI_COPY_STRICT=1 to preview it. Strict fails on
- * emoji and em dashes in shipped files; glyph icons and third-party phrases
- * stay report-only. Dev-only preview and tester screens are listed but never
- * fail the gate.
+ * emoji, em dashes and dingbat glyph icons (star, check, X, arrows, notes) in
+ * shipped files; each owning stream swaps its glyphs to <GameIcon> first.
+ * Third-party phrases stay report-only. Dev-only preview and tester screens are
+ * listed but never fail the gate.
+ *
+ * SERVER STRINGS: set UI_COPY_BACKEND=<backend checkout> to also scan the
+ * backend's app/ PHP string literals (read only). Strict mode fails on emoji
+ * and em dashes there too. A clean backend scan is a precondition for flipping
+ * STRICT to true.
  *
  * Fix an offender by using <GameIcon>, <GameRichText> '[icon:name]' tokens, or
  * a comma. For a real exception (a storage key that is never rendered), put
@@ -16,7 +22,7 @@
  */
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { scanSource, scanApp, STRICT_KINDS } = require('./helpers/ui-copy-rules.cjs');
+const { scanSource, scanApp, scanPhpSource, scanBackend, STRICT_KINDS } = require('./helpers/ui-copy-rules.cjs');
 const { plain } = require('./helpers/plain.cjs');
 
 const STRICT = false || process.env.UI_COPY_STRICT === '1';
@@ -58,6 +64,45 @@ test('an inline ui-copy-allow pragma exempts only the named kind on that line', 
     [{ line: 3, kind: 'emoji' }, { line: 3, kind: 'emdash' }]);
 });
 
+test('dingbat glyphs that are not Unicode emoji are caught and are strict', () => {
+  const found = scanSource([
+    "const a = 'Rated \u2605\u2605\u2606';",
+    "const b = 'Done \u2713';",
+    "const c = <Text>Next \u2192</Text>;",
+    "const d = 'Music \u266A';",
+    "const e = 'Close \u2717';",
+  ].join('\n'), 'x.tsx');
+  assert.deepEqual(found.map(f => [f.line, f.kind]), [[1, 'glyph'], [2, 'glyph'], [3, 'glyph'], [4, 'glyph'], [5, 'glyph']]);
+  assert.ok(STRICT_KINDS.includes('glyph'));
+});
+
+test('a pragma above a function or component never covers its body', () => {
+  const found = scanSource([
+    '// ui-copy-allow(emoji, emdash): not a lookup table',
+    'export default function Screen() {',
+    "  const label = 'Nice \u{1F389}';",
+    '  return <Text>Ride again \u2014 soon</Text>;',
+    '}',
+    '// ui-copy-allow(emoji)',
+    'export const View = () => (',
+    '  <Text>Hi \u{1F988}</Text>',
+    ');',
+  ].join('\n'), 'x.tsx');
+  assert.deepEqual(found.map(f => [f.line, f.kind]), [[3, 'emoji'], [4, 'emdash'], [8, 'emoji']]);
+});
+
+test('server PHP strings: emoji and em dashes are found, comments and log lines are not', () => {
+  const found = scanPhpSource([
+    '<?php',
+    '// streak \u{1F525} comment',
+    "$message = 'Streak \u{1F525} 3 days';",
+    "Log::info('debug \u{1F41B}');",
+    '$b = "Ride \u2014 again";',
+    "$c = 'plain';",
+  ].join('\n'));
+  assert.deepEqual(found.map(f => [f.line, f.kind]), [[3, 'emoji'], [5, 'emdash']]);
+});
+
 test('a pragma on a declaration covers the whole lookup table, and nothing after it', () => {
   const found = scanSource([
     '// ui-copy-allow(emoji): legacy lookup, never rendered',
@@ -90,6 +135,23 @@ test('player-visible copy report (report mode until integration)', t => {
     const offenders = shipped.flatMap(file => file.findings
       .filter(finding => STRICT_KINDS.includes(finding.kind))
       .map(finding => `${file.file}:${finding.line} ${finding.kind} "${finding.text}"`));
-    assert.deepEqual(offenders, [], 'player-visible copy has emoji or em dashes');
+    assert.deepEqual(offenders, [], 'player-visible copy has emoji, em dashes or glyph icons');
+  }
+});
+
+test('server-sent display strings report (set UI_COPY_BACKEND to a backend checkout)', t => {
+  const backend = process.env.UI_COPY_BACKEND;
+  if (!backend) {
+    t.diagnostic('Server strings not scanned: set UI_COPY_BACKEND=<backend checkout>. A clean scan is required before STRICT flips.');
+    return;
+  }
+  const { files, totals } = scanBackend(backend);
+  t.diagnostic(`Server strings: ${totals.emoji} emoji, ${totals.emdash} em dash in ${files.length} backend files${STRICT ? ' (STRICT)' : ' (report mode)'}`);
+  for (const file of files) {
+    t.diagnostic(`${file.file}: ${file.findings.length} (first: line ${file.findings[0].line} "${file.findings[0].text}")`);
+  }
+  if (STRICT) {
+    const offenders = files.flatMap(file => file.findings.map(finding => `${file.file}:${finding.line} ${finding.kind} "${finding.text}"`));
+    assert.deepEqual(offenders, [], 'server-sent display strings have emoji or em dashes');
   }
 });

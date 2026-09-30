@@ -10,8 +10,8 @@
  * Kinds:
  *   emoji  - any pictographic emoji, flag or keycap (strict gate)
  *   emdash - U+2014 in copy (strict gate)
- *   glyph  - dingbats used as icons, like an X, a check or a star (report only;
- *            use <GameIcon> instead)
+ *   glyph  - dingbats used as icons, like an X, a check, a star, an arrow or a
+ *            note, that are not emoji to Unicode (strict gate; use <GameIcon>)
  *   phrase - third-party phrases the plan removes from copy (report only)
  *
  * A deliberate exception lives next to the code, never in a shared list:
@@ -26,7 +26,7 @@ const ts = require(path.join(ROOT, 'node_modules/typescript'));
 
 const NOT_EMOJI = new Set(['©', '®', '™']);
 const EMOJI_RE = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}⃣️]/gu;
-const GLYPH_RE = /[✓✔✕✖✗✘★☆✦✧♪♫◆◇●○■□▲△▼▽↻⟳⟲➔➜→←]/gu;
+const GLYPH_RE = /[✓✔✕✖✗✘★☆✦✧✩✪✫✬✭✮✯✰⭑⭒♡♪♫♩♬◆◇●○■□▲△▼▽↻⟳⟲➔➜➝➞→←↑↓⇒⇐⟶⟵✚❖]/gu;
 const PHRASES = [
   /gotta catch/i,
   /\bjaws\b/i,
@@ -88,10 +88,25 @@ function addKinds(kinds, text) {
   if (match) match[1].split(',').map(kind => kind.trim()).filter(Boolean).forEach(kind => kinds.add(kind));
 }
 
+/** A lookup table: `const X = { ... }` or `const X = [ ... ]` (optionally `as const` or typed). */
+function isLookupTable(node) {
+  if (!ts.isVariableStatement(node)) return false;
+  return node.declarationList.declarations.every(declaration => {
+    let init = declaration.initializer;
+    while (init && (ts.isAsExpression(init) || ts.isSatisfiesExpression?.(init) || ts.isParenthesizedExpression(init)
+      || (ts.isCallExpression(init) && ts.isPropertyAccessExpression(init.expression)
+        && init.expression.getText() === 'Object.freeze' && init.arguments.length === 1))) {
+      init = ts.isCallExpression(init) ? init.arguments[0] : init.expression;
+    }
+    return !!init && (ts.isObjectLiteralExpression(init) || ts.isArrayLiteralExpression(init));
+  });
+}
+
 /**
  * Kinds allowed for a node: a pragma on its line or the line above, or a
- * pragma in the leading comment of any enclosing declaration (so one comment
- * covers a whole lookup table).
+ * pragma in the leading comment of an enclosing lookup-table declaration
+ * (`const X = { ... }` or `[ ... ]`), so one comment covers a whole table.
+ * A pragma above a function, class or component never covers its body.
  */
 function allowedKinds(node, sourceFile, lines, lineIndex) {
   const kinds = new Set();
@@ -99,6 +114,7 @@ function allowedKinds(node, sourceFile, lines, lineIndex) {
   addKinds(kinds, lines[lineIndex - 1]);
   const text = sourceFile.text;
   for (let current = node.parent; current && current !== sourceFile; current = current.parent) {
+    if (!isLookupTable(current)) continue;
     for (const range of ts.getLeadingCommentRanges(text, current.getFullStart()) ?? []) {
       addKinds(kinds, text.slice(range.pos, range.end));
     }
@@ -174,4 +190,54 @@ function scanApp(root = ROOT) {
   return { files, totals };
 }
 
-module.exports = { scanSource, scanApp, classify, emojiIn, STRICT_KINDS: ['emoji', 'emdash'] };
+/**
+ * Server-sent display strings (backend PHP). Quoted string literals outside
+ * comments are checked for emoji and em dashes, the kinds a player sees when
+ * the app renders a server message in plain <Text>. Log and exception text is
+ * skipped. Read only: the backend lives in its own repo and is never edited
+ * from here.
+ */
+function scanPhpSource(source) {
+  const findings = [];
+  const re = /\/\*[\s\S]*?\*\/|\/\/[^\n]*|#(?!\[)[^\n]*|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g;
+  for (const match of source.matchAll(re)) {
+    const token = match[0];
+    if (token[0] !== "'" && token[0] !== '"') continue;
+    const before = source.slice(Math.max(0, match.index - 40), match.index);
+    if (/(Log::\w+|logger\(|->(info|debug|warning|error)|new \w*Exception)\s*\(\s*$/.test(before)) continue;
+    const text = token.slice(1, -1).replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
+    const kinds = [];
+    if (emojiIn(text).length) kinds.push('emoji');
+    if (text.includes('\u2014')) kinds.push('emdash');
+    const line = source.slice(0, match.index).split('\n').length;
+    for (const kind of kinds) findings.push({ line, kind, text: text.replace(/\s+/g, ' ').trim().slice(0, 60) });
+  }
+  return findings;
+}
+
+function listPhp(dir, out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      // Console commands print to an operator's terminal, never to a player.
+      if (['vendor', 'node_modules', 'Console'].includes(entry.name) || entry.name.startsWith('.')) continue;
+      listPhp(full, out);
+    } else if (entry.name.endsWith('.php')) out.push(full);
+  }
+  return out;
+}
+
+/** Scan <backend>/app for server-sent display strings. Returns { files, totals }. */
+function scanBackend(backendRoot) {
+  const files = [];
+  const totals = { emoji: 0, emdash: 0 };
+  for (const full of listPhp(path.join(backendRoot, 'app')).sort()) {
+    const findings = scanPhpSource(fs.readFileSync(full, 'utf8'));
+    if (!findings.length) continue;
+    findings.forEach(finding => { totals[finding.kind] += 1; });
+    files.push({ file: path.relative(backendRoot, full).split(path.sep).join('/'), findings });
+  }
+  return { files, totals };
+}
+
+module.exports = { scanSource, scanApp, scanPhpSource, scanBackend, classify, emojiIn, STRICT_KINDS: ['emoji', 'emdash', 'glyph'] };
