@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useRef, useState } from 'react';
 import { Image as NativeImage, ImageBackground, Pressable, ScrollView, Text, View } from 'react-native';
-import MapView from 'react-native-maps';
+import PreviewMap from '../dev/PreviewMap';
 import Topbar from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -73,10 +73,10 @@ export default function ParkChecklistPreviewScreen() {
       <TopbarColumn><TopbarText>PARK MAP</TopbarText></TopbarColumn>
       <TopbarColumn stretch={false} />
     </Topbar>
-    <MapView style={{ flex: 1 }} initialRegion={{ latitude: Number(mapRide.latitude),
+    <PreviewMap style={{ flex: 1 }} initialRegion={{ latitude: Number(mapRide.latitude),
       longitude: Number(mapRide.longitude), latitudeDelta: 0.005, longitudeDelta: 0.005 }}>
       <TaskMarker task={mapRide} isSelected onPress={() => setMapRide(null)} />
-    </MapView>
+    </PreviewMap>
   </Wrapper>;
   return <Wrapper previewMode>
     <Topbar>
