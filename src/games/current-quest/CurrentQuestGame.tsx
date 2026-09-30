@@ -101,6 +101,9 @@ function deriveSeed(base: number, attempt: number): number {
 
 function emptyShells(): boolean[][] { return [[false, false, false], [false, false, false], [false, false, false]]; }
 
+/** Seed for retry `attempt` (1..4) of a run issued with `base` (server mirrors this). */
+export { deriveSeed };
+
 export default function CurrentQuestGame({ visible, seed, themeId, context: contextProp, onClose, onQuit, onComplete }: CurrentQuestGameProps) {
   const context: RunContext = contextProp ?? (seed != null ? 'line' : 'quick');
   const knobs = knobsFor(context);
@@ -821,7 +824,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
     }
     const elapsed = Date.now() - startedAt.current;
     const proof: CurrentQuestProofV2 = {
-      game: 'current', v: 2, context, profile: knobs.profile, rings: knobs.rings, seed: runSeed,
+      game: 'current', v: 2, context, profile: knobs.profile, rings: knobs.rings, seed: runSeed, attempt,
       treasure: tr, stars, shells, elapsed_ms: elapsed,
       voyages: boardRefs(run.boards).map((ref, i) => ({ id: ref.id, tf: ref.tf, a: run.actions[i].slice(), t: times.current[i].slice(), ready: readyAt.current[i] })),
     };

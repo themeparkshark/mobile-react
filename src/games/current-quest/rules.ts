@@ -665,7 +665,9 @@ export interface CurrentQuestProofV2 {
   readonly context: string;
   readonly profile: Profile;
   readonly rings: number;
+  /** The board seed (attempt 0: the issued seed; retries: deriveSeed(seed, attempt)). */
   readonly seed: number;
+  readonly attempt?: number;
   readonly treasure: number;
   readonly stars: number;
   readonly shells: number;
