@@ -130,32 +130,45 @@ export default function WhackLiveBoard({
   }, [board, goAt]);
 
   // My HOLD freezes only my board.
+  const runtimeRef = useRef(runtime);
+  runtimeRef.current = runtime;
   useEffect(() => {
     if (!started.current) return;
-    runtime.setRunning(!held);
-  }, [held, runtime]);
+    runtimeRef.current.setRunning(!held);
+  }, [held]);
 
-  // Stay on the board clock; feed the room HUD; last-3s pips.
+  // Stay on the board clock; feed the room HUD; last-3s pips. One interval for the
+  // whole round: everything it reads comes through refs (the runtime handle and
+  // the parent's callbacks change identity on every render).
+  const live = useRef({ runtime, boardClock, held, onTick, onProgress });
+  live.current = { runtime, boardClock, held, onTick, onProgress };
   useEffect(() => {
     let lastProgress = 0;
     let lastPip = -1;
+    let endLogged = false;
     const iv = setInterval(() => {
       if (!started.current) return;
-      const bt = boardClock();
-      void runtime.mirror().then((m) => {
-        if (bt !== null && !held && !m.ended) {
+      const { runtime: rt, boardClock: clockNow, held: onHold } = live.current;
+      const bt = clockNow();
+      void rt.mirror().then((m) => {
+        const cur = live.current;
+        if (m.ended && !endLogged) {
+          endLogged = true;
+          if (__DEV__) console.log('[whack-rush] board final', { score: m.score, taps: m.taps.length / 3, t: m.t });
+        }
+        if (bt !== null && !onHold && !m.ended) {
           const drift = bt - m.t;
-          if (Math.abs(drift) > DRIFT_MS) runtime.nudge(Math.max(-NUDGE_CAP_MS, Math.min(NUDGE_CAP_MS, drift)));
+          if (Math.abs(drift) > DRIFT_MS) cur.runtime.nudge(Math.max(-NUDGE_CAP_MS, Math.min(NUDGE_CAP_MS, drift)));
         }
         const t = bt ?? m.t;
-        onTick?.(t, m.score);
+        cur.onTick?.(t, m.score);
         const now = Date.now();
         if (now - lastProgress > 250) {
           lastProgress = now;
-          onProgress?.(m.score, m.streak);
+          cur.onProgress?.(m.score, m.streak);
         }
         const left = Math.ceil((durationMs - t) / 1000);
-        if (left <= 3 && left >= 1 && left !== lastPip && !held) {
+        if (left <= 3 && left >= 1 && left !== lastPip && !onHold) {
           lastPip = left;
           GameAudio.play(cues.tick, { volume: 0.6 });
           playHaptic('tick');
@@ -163,7 +176,7 @@ export default function WhackLiveBoard({
       });
     }, 100);
     return () => clearInterval(iv);
-  }, [boardClock, runtime, held, onTick, onProgress, durationMs, cues]);
+  }, [durationMs, cues]);
 
   const images = useBoardImages(theme, null);
   const hud = useMemo(() => ({ burstLabel: 'WHACK RUSH', ride: false, feverOn: true, boss: false, notches: 0, compact: true }), []);

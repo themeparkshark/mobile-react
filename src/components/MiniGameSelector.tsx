@@ -9,6 +9,7 @@ import SharkMiniGame from './SharkMiniGame';
 // components above stay importable so USE_QUEUE_KIT_GAMES=false is a
 // one-line rollback to the old games.
 import { WhackAShark, type WhackFormat } from '../games/whack';
+import WhackRushLab from '../games/whack/party/WhackRushLab';
 import type { WhackTheme } from '../games/whack/assets';
 import { SnapTheRide } from '../games/snap/SnapTheRide';
 import { RhythmTapGame } from '../games/rhythm';
@@ -188,6 +189,10 @@ export default function MiniGameSelector({
   if (USE_QUEUE_KIT_GAMES) {
     switch (selectedGame) {
       case 'tap':
+        // Dev-only: EXPO_PUBLIC_WHACK_FORMAT=party opens a live Whack Rush Line Party against the house crew.
+        if (__DEV__ && (WHACK_DEV.format as string) === 'party') {
+          return <WhackRushLab visible={visible} onClose={onClose} autoplay={process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1'} />;
+        }
         return (
           <WhackAShark visible={visible} seed={seed} taskName={taskName}
             format={WHACK_DEV.format ?? (rewardMode === 'task-attempt' ? 'ride' : 'queue')}

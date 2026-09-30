@@ -16,7 +16,7 @@
  * movement never pauses (QUEUE REALITY).
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   runOnJS,
   runOnUI,
@@ -99,6 +99,10 @@ export function useGameClock({
     simMs.value = c.simMs;
   }, autostart);
 
+  // useFrameCallback returns a new handle every render; read it through a ref so
+  // this clock handle (and every hook that memoizes on it) stays stable.
+  const frameRef = useRef(frame);
+  frameRef.current = frame;
   return useMemo<GameClockHandle>(() => ({
     clock,
     fxScale,
@@ -123,7 +127,7 @@ export function useGameClock({
       'worklet';
       resumeClock(clock.value);
     })(),
-    setActive: (active) => frame.setActive(active),
+    setActive: (active) => frameRef.current.setActive(active),
     snapshot: () => new Promise((resolve) => {
       // The clock is mutated in place on the UI thread: read it there.
       runOnUI(() => {
@@ -135,5 +139,5 @@ export function useGameClock({
       'worklet';
       restoreClock(clock.value, s);
     })(snap),
-  }), [clock, fxScale, simMs, frame]);
+  }), [clock, fxScale, simMs]);
 }

@@ -40,6 +40,10 @@ function ReadyDot({ ready }: { ready: boolean }) {
   return <View style={[styles.dot, { backgroundColor: ready ? BRAND.green : BRAND.creamDeep }]} />;
 }
 
+
+/** The room's game, as the lobby names it. */
+const GAME_LABEL: Record<string, string> = { bonk_race: 'BONK RACE', whack_rush: 'WHACK RUSH', trivia_sprint: 'TRIVIA SPRINT' };
+
 function PartyLobby({ state, serverNow, onReady, onStart, onEmote, onLeave, title = 'LINE PARTY' }: PartyLobbyProps) {
   const room = state.room as RoomSnapshot;
   const me = room.members.find((m) => m.id === state.userId);
@@ -57,7 +61,7 @@ function PartyLobby({ state, serverNow, onReady, onStart, onEmote, onLeave, titl
     <View style={styles.wrap}>
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.sub}>BONK RACE  ·  20 SECONDS  ·  SAME BOARD FOR EVERYONE</Text>
+        <Text style={styles.sub}>{`${GAME_LABEL[state.room?.game ?? ''] ?? 'BONK RACE'}  ·  20 SECONDS  ·  SAME BOARD FOR EVERYONE`}</Text>
       </View>
 
       <View style={styles.seats}>

@@ -330,14 +330,17 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   };
   const splatHint = useRef(false);
 
-  // Flurry resolve + pace line + last-3s pips (4 Hz, JS).
+  // Pace line + last-3s pips (4 Hz, JS). The runtime handle changes identity every
+  // render, so the interval reads it through a ref and survives re-renders.
+  const runtimeRef = useRef(runtime);
+  runtimeRef.current = runtime;
   useEffect(() => {
     if (!visible) return undefined;
     let lastPip = -1;
     const iv = setInterval(() => {
       const now = Date.now();
       if (phase !== 'play') return;
-      void runtime.mirror().then((m) => {
+      void runtimeRef.current.mirror().then((m) => {
         const t = tlRef.current;
         if (!t || m.ended) return;
         const left = Math.ceil((t.lengthMs - m.t) / 1000);
@@ -351,7 +354,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       });
     }, 250);
     return () => clearInterval(iv);
-  }, [visible, phase, runtime, cues, pace]);
+  }, [visible, phase, cues, pace]);
 
   // ---------------------------------------------------------------- flow
   const flash = useCallback((text: string, sub: string | null = null, color = '#ffffff', ms = 1100) => {
@@ -654,9 +657,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const wrapMirror = useRef<{ score: number } | null>(null);
   useEffect(() => {
     if (!visible || phase !== 'play') return undefined;
-    const iv = setInterval(() => { void runtime.mirror().then((m) => { wrapMirror.current = { score: m.score }; }); }, 500);
+    const iv = setInterval(() => { void runtimeRef.current.mirror().then((m) => { wrapMirror.current = { score: m.score }; }); }, 500);
     return () => clearInterval(iv);
-  }, [visible, phase, runtime]);
+  }, [visible, phase]);
   const onWrapUp = useCallback((reason: string): GameResult | null => {
     runtime.bank();
     const live = phase === 'play' ? wrapMirror.current?.score ?? Math.max(0, liveScoreRef.current) : 0;
