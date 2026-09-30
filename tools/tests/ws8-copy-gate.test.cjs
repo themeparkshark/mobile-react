@@ -49,6 +49,7 @@ const WS8_CLEAN = [
   'src/screens/NotificationsScreen.tsx',
   'src/screens/CommunityCenterScreen.tsx',
   'src/components/CommunityCenterModal.tsx',
+  'src/components/GuestInvite.tsx',
 ];
 
 /** Files WS8 moved off the FontAwesome icon font onto hand-drawn art. */
@@ -148,4 +149,12 @@ test('server icons for achievements and collections map to art and never render 
   assert.equal(serverIcon('\u{1F525}', 'trophy'), 'streak');
   assert.equal(serverIcon('\u{1F9A9}', 'trophy'), 'trophy');
   assert.equal(serverIcon(null, 'trophy'), 'trophy');
+});
+
+test('guest invite: bright card over the live map, sign-in inside, no gym promise or grey wall', () => {
+  const source = fs.readFileSync(path.join(root, 'src/components/GuestInvite.tsx'), 'utf8');
+  assert.match(source, /<SignInButtons \/>/);
+  assert.match(source, /absoluteFillObject/, 'overlays the map instead of replacing it');
+  assert.doesNotMatch(source, /#d9d9d9|gyms?\b/i);
+  assert.match(source, /reduced \? undefined/, 'reduced-motion path');
 });
