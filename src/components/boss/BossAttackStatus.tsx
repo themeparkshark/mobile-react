@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BOSS_NAMES } from '../../api/endpoints/parks/raid';
-import { BOSS_ART_SCALE, BOSS_ART } from '../../games/boss/BossBrawl';
+import { BOSS_ART } from './bossArt';
 import type { BossAttackSnapshot } from '../../services/boss/attackRecovery';
 
 /** One compact receipt replaces the fight button until the original round is resolved. */
@@ -25,12 +25,12 @@ export default function BossAttackStatus({ snapshot, onRetry }: {
             : 'The reply didn’t arrive. Confirm this round before spending more Energy.';
   return <View style={styles.card} accessibilityLiveRegion="polite">
     <View style={styles.head}>
-      {snapshot.pending && <Image source={BOSS_ART[snapshot.pending.boss]} contentFit="contain" style={[styles.art, { transform: [{ scale: BOSS_ART_SCALE?.[snapshot.pending.boss] ?? 1 }] }]} />}
+      {snapshot.pending && <Image source={BOSS_ART[snapshot.pending.boss]} contentFit="contain" style={styles.art} />}
       <View style={styles.copy}>
         <Text style={styles.kicker}>BRAWL RECEIPT</Text>
         <Text style={styles.title}>{title}</Text>
         {snapshot.pending && <Text style={styles.where} numberOfLines={2}>
-          {BOSS_NAMES[snapshot.pending.boss]}{snapshot.pending.rideName ? ` · ${snapshot.pending.rideName}` : ''}
+          {BOSS_NAMES[snapshot.pending.boss]}{snapshot.pending.rideName ? `  ·  ${snapshot.pending.rideName}` : ''}
         </Text>}
       </View>
     </View>
@@ -42,15 +42,16 @@ export default function BossAttackStatus({ snapshot, onRetry }: {
 }
 
 const styles = StyleSheet.create({
-  card: { marginTop: 14, backgroundColor: '#153861', borderWidth: 2, borderColor: '#A9E4F4', borderRadius: 19, padding: 13 },
+  card: { marginTop: 14, backgroundColor: '#fff8e4', borderWidth: 3, borderColor: '#ffffff', borderRadius: 19, padding: 13,
+    shadowColor: '#05346e', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
   head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   art: { width: 58, height: 58 },
   copy: { flex: 1 },
-  kicker: { color: '#8EDCEB', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 1.4 },
-  title: { color: '#FFF0B4', fontFamily: 'Shark', fontSize: 20, marginTop: 3 },
-  where: { color: '#D9EFFF', fontFamily: 'Knockout', fontSize: 13, marginTop: 3 },
-  detail: { color: '#E3F3FF', fontFamily: 'Knockout', fontSize: 14, lineHeight: 19, marginTop: 10 },
-  button: { backgroundColor: '#FFE079', borderBottomWidth: 3, borderBottomColor: '#BB843A', borderRadius: 12, paddingVertical: 12,
-    alignItems: 'center', marginTop: 11, paddingHorizontal: 12 },
-  buttonText: { fontFamily: 'Shark', color: '#153861', fontSize: 17, textAlign: 'center' },
+  kicker: { color: '#3d5f8c', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1.4 },
+  title: { color: '#05346e', fontFamily: 'Shark', fontSize: 20, marginTop: 3 },
+  where: { color: '#3d5f8c', fontFamily: 'Knockout', fontSize: 14, marginTop: 3 },
+  detail: { color: '#05346e', fontFamily: 'Knockout', fontSize: 15, lineHeight: 20, marginTop: 10 },
+  button: { backgroundColor: '#ffcf3b', borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#d99a00',
+    borderRadius: 14, paddingVertical: 12, alignItems: 'center', marginTop: 11, paddingHorizontal: 12, minHeight: 48 },
+  buttonText: { fontFamily: 'Shark', color: '#05346e', fontSize: 17, textAlign: 'center' },
 });
