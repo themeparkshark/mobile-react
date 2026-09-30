@@ -32,7 +32,11 @@ const BACKGROUND_LOCATION_TASK = 'ride-detection-background';
 // Catalog APIs also contain dining and shops; these are never ride candidates.
 const DETECTABLE_TYPES = new Set(['ride', 'attraction', 'coaster', 'dark_ride',
   'flat_ride', 'water_ride', 'show', 'walk_through', 'transport', 'other']);
-const AMBIGUOUS_DISTANCE_MARGIN = 15; // wait for a clearer GPS position between overlapping attractions
+const AMBIGUOUS_DISTANCE_MARGIN = 15;
+/** Standing at one attraction this long suggests "In line at X? Play". */
+export const DWELL_SUGGESTION_MS = 90_000;
+/** Rides with a real queue to play in (no shows, walk-throughs or transport). */
+const QUEUE_TYPES = new Set(['ride', 'attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride', 'other']); // wait for a clearer GPS position between overlapping attractions
 
 function isDetectionCandidate(ride: RideType): boolean {
   return DETECTABLE_TYPES.has(ride.type) && Number.isFinite(ride.lat) &&
@@ -421,6 +425,20 @@ class RideDetectionService {
     });
   }
 
+  /**
+   * The attraction the player has been standing at for at least `minMs` right
+   * now (the map's "In line at X? Play" card). Read-only; null when none.
+   */
+  currentDwell(minMs = DWELL_SUGGESTION_MS, now = Date.now()): { rideId: number; rideName: string; parkId: number; dwellMs: number } | null {
+    for (const state of this.zoneStates.values()) {
+      const dwellMs = now - state.enteredAt;
+      if (dwellMs >= minMs && QUEUE_TYPES.has(state.rideType) && now - state.lastSeenAt < 60_000) {
+        return { rideId: state.rideId, rideName: state.rideName, parkId: state.parkId, dwellMs };
+      }
+    }
+    return null;
+  }
+
   isRunning(): boolean {
     return this.running;
   }
@@ -459,3 +477,4 @@ export function removePendingDetection(id: string) { return rideDetectionService
 export function setDetectionRides(rides: RideType[]) { rideDetectionService.setRides(rides); }
 
 export default rideDetectionService;
+export function currentRideDwell(minMs?: number) { return rideDetectionService.currentDwell(minMs); }

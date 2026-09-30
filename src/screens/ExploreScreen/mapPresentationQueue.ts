@@ -22,19 +22,22 @@ export function chestMayPresent(state: MapOverlayState): boolean {
     !state.boss && !state.rideOpen && !state.adventureOpen && !state.otherModalOpen;
 }
 
-export type MapSuggestion = 'boss' | 'ride' | 'adventure' | 'goal' | 'project' | null;
+export type MapSuggestion = 'boss' | 'ride' | 'dwell' | 'adventure' | 'goal' | 'project' | null;
 
 /** Which suggestion chips may show. The left slot holds adventure or goal; the right slot ride or project. */
 export function mapSuggestionSlots(state: {
   readonly bossMoment: boolean;
   readonly queueRide: boolean;
+  /** Standing in a line (90 s dwell) at a ride that is not already the adventure or selected ride. */
+  readonly dwell?: boolean;
   readonly adventure: boolean;
   readonly goal: boolean;
   readonly project: boolean;
-}): { left: 'adventure' | 'goal' | null; right: 'ride' | 'project' | null; lead: MapSuggestion } {
+}): { left: 'dwell' | 'adventure' | 'goal' | null; right: 'ride' | 'project' | null; lead: MapSuggestion } {
   // A boss map moment owns the screen until it settles.
   if (state.bossMoment) return { left: null, right: null, lead: 'boss' };
-  const left = state.adventure ? 'adventure' : state.goal ? 'goal' : null;
+  // Waiting in a line is the most contextual suggestion: it takes the left slot.
+  const left = state.dwell ? 'dwell' : state.adventure ? 'adventure' : state.goal ? 'goal' : null;
   const right = state.queueRide ? 'ride' : state.project ? 'project' : null;
   const lead: MapSuggestion = state.queueRide ? 'ride' : left ?? (state.project ? 'project' : null);
   return { left, right, lead };

@@ -69,6 +69,8 @@ import Redeemable from './ExploreScreen/Redeemable';
 import TaskMarker from './ExploreScreen/TaskMarker';
 import MapResourcePill from './ExploreScreen/MapResourcePill';
 import TooFarDialog from './ExploreScreen/TooFarDialog';
+import DwellCard from './ExploreScreen/DwellCard';
+import useQueueDwell from './ExploreScreen/useQueueDwell';
 import { clusterMarkers, revealDelays } from './ExploreScreen/mapMarkerPresentation';
 import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
 import VaultMarker from './ExploreScreen/VaultMarker';
@@ -641,7 +643,12 @@ export default function ExploreScreen() {
     return () => { current = false; };
   }, [mapFocused, park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds]);
 
+  const queueDwell = useQueueDwell(park?.id ?? null, mapFocused && !!player);
+  const [dismissedDwell, setDismissedDwell] = useState<number | null>(null);
+  const dwellShown = !!queueDwell && dismissedDwell !== queueDwell.rideId &&
+    !adventureOccluded && queueDwell.rideName !== adventure?.ride.ride_name && queueDwell.rideName !== selectedTask?.name;
   const suggestionSlots = mapSuggestionSlots({
+    dwell: dwellShown,
     bossMoment: !!bossMap.moment && bossMap.moment.phase !== 'settled',
     queueRide: !!(selectedTask && queueRide), adventure: !!adventure, goal: !!tripGoal, project: !!activeParkProject,
   });
@@ -929,6 +936,13 @@ export default function ExploreScreen() {
               onRush={(task) => setSelectedTask(task)} />
           </View>
         )}
+        {suggestionSlots.left === 'dwell' && queueDwell && <DwellCard key={`dwell-${queueDwell.rideId}`}
+          rideName={queueDwell.rideName} top={hasLiveEvents ? 124 : 64}
+          onDismiss={() => setDismissedDwell(queueDwell.rideId)}
+          onPlay={async () => {
+            const ride = await resolveMapQueueContext(park.id, queueDwell.rideName);
+            if (ride) navigation.navigate('LinePlay', { ride });
+          }} />}
         {adventure && suggestionSlots.left === 'adventure' && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
           closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={hasLiveEvents ? 124 : 64}
