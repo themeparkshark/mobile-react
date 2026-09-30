@@ -252,7 +252,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
       </Animated.View>
       {/* Light overlay for button contrast — only bottom half */}
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.4)']}
+        colors={['transparent', 'rgba(5,52,110,0.3)']}
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: SCREEN_HEIGHT * 0.4 }}
       />
 
@@ -275,7 +275,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
 
       {/* Bottom gradient for readability */}
       <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.6)']}
+        colors={['transparent', 'rgba(5,52,110,0.45)']}
         style={{
           position: 'absolute',
           bottom: 0,
@@ -313,7 +313,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
                     fontSize: 15,
                     paddingTop: 24,
                     fontFamily: 'Knockout',
-                    color: '#666',
+                    color: '#05346e',
                   }}
                 >
                   {labels.continue_as_guest}

@@ -1,9 +1,11 @@
 import { BlurView } from 'expo-blur';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { ReactNode, useContext, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
+import { gameAlert, SharkLoader } from '../ui';
+import { signInErrorCopy } from './signInErrors';
 
 export default function SignInButtons({
   children = null,
@@ -56,13 +58,11 @@ export default function SignInButtons({
               appleCompleted = true;
               await login(credential);
             } catch (error: any) {
-              if (error?.code !== 'ERR_REQUEST_CANCELED') {
-                Alert.alert(
-                  appleCompleted ? "Couldn't sign in" : warnings?.something_went_wrong || "Couldn't sign in",
-                  appleCompleted
-                    ? 'Theme Park Shark sign-in is unavailable right now. Please check your connection and try again in a few minutes.'
-                    : labels?.please_try_again || 'Please try again.'
-                );
+              const copy = signInErrorCopy(error, appleCompleted, {
+                title: warnings?.something_went_wrong, message: labels?.please_try_again,
+              });
+              if (copy) {
+                gameAlert(copy.title, copy.message, undefined, { icon: 'info' });
               }
             } finally {
               signingIn.current = false;
@@ -71,13 +71,8 @@ export default function SignInButtons({
           }}
         />
         {isSigningIn && (
-          <View
-            accessibilityRole="progressbar"
-            accessibilityLabel="Signing in"
-            style={{ flexDirection: 'row', alignItems: 'center', marginTop: 16 }}
-          >
-            <ActivityIndicator color="#09268f" />
-            <Text style={{ color: '#09268f', marginLeft: 8 }}>Signing in…</Text>
+          <View accessibilityRole="progressbar" accessibilityLabel="Signing in" style={{ marginTop: 12 }}>
+            <SharkLoader compact title="Signing in" />
           </View>
         )}
         {children}
