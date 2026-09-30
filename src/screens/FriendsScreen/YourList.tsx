@@ -6,16 +6,19 @@ import { useAsyncEffect } from 'rooks';
 import getFriends, { searchFriends } from '../../api/endpoints/me/friends';
 import FriendPlayer from '../../components/FriendPlayer';
 import Loading from '../../components/Loading';
+import { SharkLoader } from '../../ui';
 import SearchBar from '../../components/SearchBar';
 import config from '../../config';
 import { AuthContext } from '../../context/AuthProvider';
 import useCrumbs from '../../hooks/useCrumbs';
 import { PlayerType } from '../../models/player-type';
 
-export default function YourList() {
+/** onReady fires once the first load has finished (list, empty or error), so a tutorial never covers a spinner. */
+export default function YourList({ onReady }: { readonly onReady?: () => void } = {}) {
   const [friends, setFriends] = useState<PlayerType[]>([]);
   const [searchResults, setSearchResults] = useState<PlayerType[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [failed, setFailed] = useState(false);
   const [searching, setSearching] = useState(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
@@ -31,13 +34,23 @@ export default function YourList() {
     });
   };
 
+  const loadFirstPage = () => {
+    setLoading(true);
+    setFailed(false);
+    setFriends([]);
+    setPage(1);
+    fetchFriends(1)
+      .catch(() => setFailed(true))
+      .finally(() => { setLoading(false); onReady?.(); });
+  };
+
   useEffect(() => {
-    fetchFriends(page).then(() => setLoading(false));
+    loadFirstPage();
   }, []);
 
   useAsyncEffect(async () => {
     if (page > 1) {
-      await fetchFriends(page);
+      await fetchFriends(page).catch(() => undefined);
     }
   }, [page]);
 
@@ -71,7 +84,7 @@ export default function YourList() {
   const handleInvite = async () => {
     try {
       await Share.share({
-        message: `I'm playing Theme Park Shark — add me as a friend! My username is ${player?.screen_name ?? 'on the app'}. Download it here: https://apps.apple.com/app/theme-park-shark/id6758812566`,
+        message: `I'm playing Theme Park Shark, add me as a friend! My username is ${player?.screen_name ?? 'on the app'}. Download it here: https://apps.apple.com/app/theme-park-shark/id6758812566`,
         url: 'https://apps.apple.com/app/theme-park-shark/id6758812566',
       });
     } catch {}
@@ -79,8 +92,11 @@ export default function YourList() {
 
   return (
     <View style={{ paddingTop: 8, flex: 1 }}>
-      {loading && <Loading />}
-      {!loading && (
+      {loading && <Loading tone="onBlue" />}
+      {!loading && failed && (
+        <SharkLoader state="error" tone="onBlue" title="Friends didn't load" onRetry={loadFirstPage} />
+      )}
+      {!loading && !failed && (
         <View style={{ flex: 1 }}>
           <SearchBar
             placeholder="Search your friends..."
@@ -98,7 +114,7 @@ export default function YourList() {
                 letterSpacing: 1,
                 paddingHorizontal: 20,
                 marginBottom: 8,
-                textShadowColor: 'rgba(0,0,0,0.6)',
+                textShadowColor: 'rgba(5,52,110,0.6)',
                 textShadowOffset: { width: 1, height: 1 },
                 textShadowRadius: 2,
               }}
@@ -115,7 +131,7 @@ export default function YourList() {
               onRefresh={() => {
                 setRefreshing(true);
                 setFriends([]);
-                fetchFriends(1).then(() => setRefreshing(false));
+                fetchFriends(1).catch(() => undefined).finally(() => setRefreshing(false));
                 setPage(1);
               }}
               refreshing={refreshing}
@@ -140,7 +156,7 @@ export default function YourList() {
           )}
           {searching && (
             <View style={{ paddingTop: 32, alignItems: 'center' }}>
-              <Loading />
+              <Loading tone="onBlue" />
             </View>
           )}
           {!filtered.length && !search && !searching && (
@@ -150,7 +166,7 @@ export default function YourList() {
                 fontSize: 24,
                 fontFamily: 'Knockout',
                 color: 'white',
-                textShadowColor: 'rgba(0,0,0,0.5)',
+                textShadowColor: 'rgba(5,52,110,0.6)',
                 textShadowOffset: { width: 1, height: 1 },
                 textShadowRadius: 2,
                 paddingTop: 32,
@@ -166,7 +182,7 @@ export default function YourList() {
                 fontSize: 18,
                 fontFamily: 'Knockout',
                 color: 'white',
-                textShadowColor: 'rgba(0,0,0,0.5)',
+                textShadowColor: 'rgba(5,52,110,0.6)',
                 textShadowOffset: { width: 1, height: 1 },
                 textShadowRadius: 2,
                 paddingTop: 32,
@@ -194,7 +210,7 @@ export default function YourList() {
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
-                shadowColor: '#000',
+                shadowColor: '#05346e',
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.2,
                 shadowRadius: 8,

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useContext, useState, useEffect } from 'react';
+import { useContext, useState } from 'react';
 import { ImageBackground, Text, TouchableOpacity, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import Button from '../components/Button';
@@ -11,7 +11,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import Suggestions from './FriendsScreen/Suggestions';
 import YourList from './FriendsScreen/YourList';
-import { useTutorial } from '../components/Tutorial';
+import { useTutorialWhenReady } from '../components/Tutorial';
 
 const whooshSound = require('../../assets/sounds/whoosh.mp3');
 
@@ -24,15 +24,10 @@ export default function FriendsScreen() {
   const { player } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState(0);
   const { playSound } = useContext(SoundEffectContext);
-  const { startTutorial, hasCompleted } = useTutorial();
-  
-  // Trigger friends tutorial on first visit
-  useEffect(() => {
-    if (!hasCompleted('friends')) {
-      const timer = setTimeout(() => startTutorial('friends'), 800);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+  const [listReady, setListReady] = useState(false);
+
+  // First visit: Finn explains Friends once the list (or its empty or error state) is on screen, never over a spinner.
+  useTutorialWhenReady('friends', listReady);
 
   return (
     <>
@@ -65,13 +60,13 @@ export default function FriendsScreen() {
         style={{
           marginTop: -8,
           flex: 1,
-          backgroundColor: '#0a1628',
+          backgroundColor: '#0768b9',
         }}
       >
         <ImageBackground
           style={{ flex: 1 }}
           source={require('../../assets/images/screens/leaderboard/standings-bg.png')}
-          imageStyle={{ opacity: 0.4 }}
+
         >
           {/* Tab Picker — matches Standings style */}
           <View
@@ -80,7 +75,9 @@ export default function FriendsScreen() {
               marginHorizontal: 16,
               marginTop: 12,
               marginBottom: 4,
-              backgroundColor: 'rgba(0,0,0,0.25)',
+              backgroundColor: 'rgba(5,52,110,0.35)',
+              borderWidth: 2,
+              borderColor: 'rgba(255,255,255,0.45)',
               borderRadius: 16,
               padding: 4,
             }}
@@ -104,7 +101,7 @@ export default function FriendsScreen() {
                     justifyContent: 'center',
                     ...(isActive
                       ? {
-                          shadowColor: '#000',
+                          shadowColor: '#05346e',
                           shadowOffset: { width: 0, height: 2 },
                           shadowOpacity: 0.2,
                           shadowRadius: 4,
@@ -118,7 +115,7 @@ export default function FriendsScreen() {
                       fontFamily: 'Knockout',
                       fontSize: 16,
                       color: isActive ? 'white' : 'rgba(255,255,255,0.6)',
-                      textShadowColor: isActive ? 'rgba(0,0,0,0.2)' : 'transparent',
+                      textShadowColor: isActive ? 'rgba(5,52,110,0.3)' : 'transparent',
                       textShadowRadius: isActive ? 2 : 0,
                     }}
                   >
@@ -131,7 +128,7 @@ export default function FriendsScreen() {
 
           {/* Content */}
           <View style={{ flex: 1 }}>
-            {activeTab === 0 ? <YourList /> : <Suggestions />}
+            {activeTab === 0 ? <YourList onReady={() => setListReady(true)} /> : <Suggestions />}
           </View>
         </ImageBackground>
       </View>
