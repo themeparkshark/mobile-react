@@ -1,32 +1,40 @@
-import { useContext, useEffect, useRef, useMemo, useState } from 'react';
-import {
-  Animated,
-  Dimensions,
-  Easing,
-  Pressable,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-  StyleSheet,
-} from 'react-native';
+import { useContext, useEffect, useRef, useState } from 'react';
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import Animated, {
+  Easing,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
 import Ribbon from './Ribbon';
-import CoinCatchReveal from './CoinCatchReveal';
+import CoinCatchReveal, { type CatchHandoff } from './CoinCatchReveal';
 import YellowButton from './YellowButton';
+import ShelfCoin from './collection/ShelfCoin';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import type { EarnedCoinEdition, RideControlReward, RushReward } from '../api/endpoints/me/task-attempts';
+import type { CollectionMilestones } from '../api/endpoints/me/ride-coins/milestones';
 import { TEAMS } from '../constants/teams';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import type { StampData } from '../api/endpoints/me/stamps';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { playSfx } from '../gamekit/SFX';
+import GameIcon from '../ui/GameIcon';
+import type { GameIconName } from '../ui/iconNames';
+import { milestoneHeadline, nextUnlockLine, partsProgress, rewardChips } from './rewards/postWinModel';
 
 const { width: SW } = Dimensions.get('window');
+const HERO = 150;
 
 interface Props {
   visible: boolean;
@@ -46,7 +54,10 @@ interface Props {
   nextRideTicketEarned?: number;
   coinProgress?: RideCoinLevelType | null;
   playerEnergy?: number | null;
-  onViewCoin?: () => void;
+  /** What this win did for the park shelf (first coin, 25/50/75%, complete). */
+  milestones?: CollectionMilestones | null;
+  /** Opens the coin on its shelf; `true` asks to open mastery as soon as it lands. */
+  onViewCoin?: (openMastery?: boolean) => void;
   onViewStampBook?: () => void;
   onHidden?: () => void;
   onClose: () => void;
@@ -59,23 +70,27 @@ function RideControlBanner({ result, playerId, onPickTeam }: {
   if (result.needs_team) {
     return (
       <TouchableOpacity accessibilityRole="button" onPress={onPickTeam} style={[styles.rcBanner, { borderColor: '#ffcf3b' }]}>
-        <Text style={styles.rcTitle}>CLAIM {(result.ride_name ?? 'THIS RIDE').toUpperCase()}!</Text>
-        <Text style={styles.rcBody}>Pick a team and your wins take rides for it. Tap to choose.</Text>
+        <GameIcon name="crown" size={34} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.rcTitle}>CLAIM {(result.ride_name ?? 'THIS RIDE').toUpperCase()}</Text>
+          <Text style={styles.rcBody}>Pick a team and your wins take rides for it.</Text>
+        </View>
+        <GameIcon name="arrow" size={24} />
       </TouchableOpacity>
     );
   }
   const team = TEAMS[result.team];
   const captain = result.captain !== null && result.captain === playerId;
   const title = result.flipped
-    ? `${team.name.toUpperCase()} TOOK ${result.ride_name.toUpperCase()}!`
+    ? `${team.name.toUpperCase()} TOOK ${result.ride_name.toUpperCase()}`
     : result.controller === result.team ? `${team.name.toUpperCase()} HOLDS IT` : `+${result.points} FOR ${team.name.toUpperCase()}`;
   const body = [
     result.flipped || result.controller === result.team ? `+${result.points} power` : 'Keep going to take this ride',
     result.underdog ? 'underdog 1.5x' : null,
-    captain ? 'you’re the Captain!' : null,
-  ].filter(Boolean).join(' · ');
+    captain ? 'you’re the Captain' : null,
+  ].filter(Boolean).join(', ');
   return (
-    <View style={[styles.rcBanner, { borderColor: team.color, backgroundColor: `${team.color}33` }]}>
+    <View style={[styles.rcBanner, { borderColor: team.color }]}>
       <Image source={team.badge} style={styles.rcBadge} contentFit="contain" />
       <View style={{ flex: 1 }}>
         <Text style={styles.rcTitle} numberOfLines={2}>{title}</Text>
@@ -85,112 +100,42 @@ function RideControlBanner({ result, playerId, onPickTeam }: {
   );
 }
 
-/* ─── Animated radial light rays behind the hero coin ─── */
-function LightRays({ color, size, reducedMotion }: { color: string; size: number; reducedMotion: boolean }) {
-  const spin = useRef(new Animated.Value(0)).current;
+/* ─── Count-up number (JS timer, lands exactly on the confirmed amount) ─── */
+function CountUp({ value, start, reduced, style }: { value: number; start: boolean; reduced: boolean; style: object }) {
+  const [shown, setShown] = useState(reduced ? value : 0);
   useEffect(() => {
-    if (reducedMotion) { spin.setValue(0); return; }
-    const animation = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 12000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [reducedMotion, spin]);
-
-  const rotate = spin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  return (
-    <Animated.View
-      style={{
-        position: 'absolute',
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'center',
-        transform: [{ rotate }],
-      }}
-    >
-      {Array.from({ length: 14 }).map((_, i) => (
-        <View
-          key={i}
-          style={{
-            position: 'absolute',
-            width: 3,
-            height: size * 0.48,
-            borderRadius: 2,
-            backgroundColor: color,
-            opacity: i % 2 === 0 ? 0.18 : 0.09,
-            transform: [{ rotate: `${(i * 360) / 14}deg` }, { translateY: -size * 0.15 }],
-          }}
-        />
-      ))}
-    </Animated.View>
-  );
+    if (reduced || !start) { setShown(reduced ? value : 0); return undefined; }
+    let step = 0;
+    const steps = 14;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      step += 1;
+      const t = step / steps;
+      setShown(Math.round(value * (1 - Math.pow(1 - t, 3))));
+      if (step < steps) timer = setTimeout(tick, 34);
+    };
+    timer = setTimeout(tick, 34);
+    return () => clearTimeout(timer);
+  }, [value, start, reduced]);
+  return <Text style={style}>+{shown.toLocaleString()}</Text>;
 }
 
-/* ─── Floating sparkle particle ─── */
-function Sparkle({ delay, x, color }: { delay: number; x: number; color: string }) {
-  const anim = useRef(new Animated.Value(0)).current;
-  const particle = useMemo(() => ({ size: 3 + Math.random() * 5,
-    lift: -80 - Math.random() * 100, drift: (Math.random() - 0.5) * 120,
-    duration: 1400 + Math.random() * 800 }), []);
-  const size = particle.size;
-  useEffect(() => {
-    anim.setValue(0);
-    const animation = Animated.loop(Animated.sequence([
-      Animated.delay(delay),
-      Animated.timing(anim, { toValue: 1, duration: particle.duration,
-        easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    ]));
-    animation.start();
-    return () => animation.stop();
-  }, [anim, delay, particle]);
-
+/* ─── One reward chip; pops in on the shared entrance clock ─── */
+function RewardChip({ icon, amount, label, index, enter, reduced, started }: {
+  icon: GameIconName; amount: number; label: string; index: number; enter: SharedValue<number>; reduced: boolean; started: boolean;
+}) {
+  const style = useAnimatedStyle(() => {
+    const t = Math.max(0, Math.min(1, (enter.value - 0.35 - index * 0.08) / 0.3));
+    return { opacity: t, transform: [{ translateY: (1 - t) * 14 }, { scale: 0.85 + 0.15 * t }] };
+  });
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        left: x,
-        bottom: '45%',
-        width: size,
-        height: size,
-        borderRadius: size,
-        backgroundColor: color,
-        opacity: anim.interpolate({
-          inputRange: [0, 0.15, 0.7, 1],
-          outputRange: [0, 1, 0.6, 0],
-        }),
-        transform: [
-          {
-            translateY: anim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, particle.lift],
-            }),
-          },
-          {
-            translateX: anim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, particle.drift],
-            }),
-          },
-          {
-            scale: anim.interpolate({
-              inputRange: [0, 0.3, 1],
-              outputRange: [0.2, 1.3, 0.4],
-            }),
-          },
-        ],
-      }}
-    />
+    <Animated.View style={[styles.chip, style]} accessible accessibilityLabel={`${amount} ${label}`}>
+      <GameIcon name={icon} size={26} />
+      <View>
+        <CountUp value={amount} start={started} reduced={reduced} style={styles.chipAmount} />
+        <Text style={styles.chipLabel} numberOfLines={1}>{label}</Text>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -212,6 +157,7 @@ export default function PostWinRewardsModal({
   nextRideTicketEarned = 0,
   coinProgress,
   playerEnergy,
+  milestones,
   onViewCoin,
   onViewStampBook,
   onHidden,
@@ -225,130 +171,107 @@ export default function PostWinRewardsModal({
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const hasCoin = typeof coinTimesCollected === 'number' && coinTimesCollected > 0;
+  const isNewCoin = coinTimesCollected === 1;
   const [coinArtFailed, setCoinArtFailed] = useState(false);
   useEffect(() => { setCoinArtFailed(false); }, [taskCoinUrl, visible]);
-  // The coin catch plays first; the rewards summary animates in after it.
+  // The coin catch plays first and hands its coin to the summary's hero slot.
   const [caught, setCaught] = useState(false);
-  const [receiptExpanded, setReceiptExpanded] = useState(false);
+  const [handoff, setHandoff] = useState<CatchHandoff | null>(null);
+  const heroRef = useRef<View>(null);
   useEffect(() => {
-    if (!visible) { setCaught(false); setReceiptExpanded(false); }
+    if (!visible) { setCaught(false); setHandoff(null); }
     else if (!hasCoin) setCaught(true);
   }, [visible, hasCoin]);
-  const missingParts = coinProgress
-    ? Math.max(0, coinProgress.parts_to_next_level - (coinProgress.available_parts ?? 0)) : 0;
-  const missingEnergy = coinProgress && playerEnergy !== null && playerEnergy !== undefined
-    ? Math.max(0, coinProgress.energy_to_next_level - playerEnergy) : 0;
-  const nextGoal = coinProgress && playerEnergy !== null && playerEnergy !== undefined
-    ? coinProgress.current_level >= coinProgress.max_level
-      ? 'Max level! Show this coin off on your profile.'
-      : missingParts === 0 && missingEnergy === 0
-        ? `Ready to power up to Level ${coinProgress.current_level + 1}!`
-        : missingParts > 0 && missingEnergy > 0
-          ? `Level ${coinProgress.current_level + 1} needs ${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} and ${missingEnergy} Energy.`
-          : missingParts > 0
-            ? `${missingParts} more Ride Part${missingParts === 1 ? '' : 's'} to reach Level ${coinProgress.current_level + 1}.`
-            : `${missingEnergy} more Energy for Level ${coinProgress.current_level + 1}. Find it on your home map.`
-    : hasCoin ? 'Open your shelf to see this coin’s next level.' : null;
-  const upgradeReady = !!coinProgress && coinProgress.current_level < coinProgress.max_level &&
-    coinProgress.is_unlocked && missingParts === 0 && missingEnergy === 0 &&
-    playerEnergy !== null && playerEnergy !== undefined;
-  const cardScale = useRef(new Animated.Value(0)).current;
-  const heroAnim = useRef(new Animated.Value(0)).current;
-  const coinSpin = useRef(new Animated.Value(0)).current;
-  const coinGlow = useRef(new Animated.Value(0)).current;
-  const shelfPulse = useRef(new Animated.Value(0)).current;
-  const buttonAnim = useRef(new Animated.Value(0)).current;
-  const rowAnims = useRef([
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-  ]).current;
 
-  // Sparkle positions (memoized so they don't change on re-render)
-  const sparkles = useMemo(
-    () =>
-      Array.from({ length: 20 }).map((_, i) => ({
-        x: Math.random() * (SW * 0.7) + SW * 0.05,
-        delay: 400 + i * 80,
-        color: ['#FFD84A', '#4cdcff', '#f472b6', '#57E389', '#8A8CFF'][i % 5],
-      })),
-    [],
-  );
+  const parts = partsProgress(coinProgress ?? null, playerEnergy, ridePartsEarned);
+  const upgradeReady = parts?.ready === true;
+  const chips = rewardChips({ coinsEarned, xpEarned, ridePartsEarned, energyEarned });
+  const headline = milestoneHeadline(milestones ?? null);
+  const nextUnlock = nextUnlockLine(milestones ?? null);
 
+  // One entrance clock for the whole summary (UI thread): card settle, hero
+  // squash, chips, then the parts meter. Reduced motion jumps to the end.
+  const enter = useSharedValue(reducedMotion ? 1 : 0);
+  const heroSquash = useSharedValue(1);
+  const burst = useSharedValue(0);
+  const spin = useSharedValue(0);
+  const partsFill = useSharedValue(parts ? parts.before : 0);
+  const readyPop = useSharedValue(0);
   useEffect(() => {
-    if (!visible || !caught) return;
-
-    const values = [cardScale, heroAnim, coinSpin, shelfPulse, buttonAnim, ...rowAnims];
-    if (reducedMotion || coinTimesCollected !== 1) {
-      values.forEach(value => value.setValue(1));
-      coinGlow.setValue(0.5);
-      return;
+    const values = [enter, heroSquash, burst, spin, partsFill, readyPop];
+    if (!visible || !caught) { values.forEach(value => cancelAnimation(value)); return undefined; }
+    if (reducedMotion) {
+      enter.value = 1; heroSquash.value = 1; burst.value = 0; spin.value = 0;
+      partsFill.value = parts ? parts.after : 0; readyPop.value = upgradeReady ? 1 : 0;
+      return undefined;
     }
-    values.forEach(value => value.setValue(0));
-    coinGlow.setValue(0);
-    const spring = (value: Animated.Value, delay: number, tension = 65) =>
-      Animated.sequence([Animated.delay(delay), Animated.spring(value, {
-        toValue: 1, tension, friction: 7, useNativeDriver: true,
-      })]);
-    const animations = [
-      spring(cardScale, 0, 55), spring(heroAnim, 200, 60),
-      Animated.sequence([Animated.delay(200), Animated.timing(coinSpin, {
-        toValue: 1, duration: 650, easing: Easing.out(Easing.back(1.2)), useNativeDriver: true,
-      })]),
-      Animated.loop(Animated.sequence([
-        Animated.timing(coinGlow, { toValue: 1, duration: 1200,
-          easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
-        Animated.timing(coinGlow, { toValue: 0.3, duration: 1200,
-          easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
-      ])),
-      ...rowAnims.map((value, i) => spring(value, 500 + i * 80, 90)),
-      spring(shelfPulse, 850, 70), spring(buttonAnim, 0),
-    ];
-    animations.forEach(animation => animation.start());
-    return () => animations.forEach(animation => animation.stop());
-  }, [visible, caught, reducedMotion, coinTimesCollected, cardScale, heroAnim, coinSpin, coinGlow, shelfPulse, buttonAnim, rowAnims]);
+    enter.value = 0;
+    enter.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
+    // The coin arrives from the catch: land with a squash and settle.
+    heroSquash.value = withSequence(withTiming(0.88, { duration: 80 }), withSpring(1, { damping: 6, stiffness: 240 }));
+    burst.value = 0;
+    burst.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.quad) });
+    spin.value = 0;
+    if (isNewCoin) spin.value = withRepeat(withTiming(360, { duration: 14000, easing: Easing.linear }), -1, false);
+    if (parts) {
+      partsFill.value = parts.before;
+      partsFill.value = withDelay(650, withTiming(parts.after, { duration: 700, easing: Easing.out(Easing.cubic) }));
+    }
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (upgradeReady) {
+      readyPop.value = 0;
+      readyPop.value = withDelay(1400, withSpring(1, { damping: 7, stiffness: 200 }));
+      timers.push(setTimeout(() => {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+        playSfx('star', 0.8);
+      }, 1400));
+    }
+    return () => { timers.forEach(clearTimeout); values.forEach(value => cancelAnimation(value)); };
+  }, [visible, caught, reducedMotion]);
 
-  const statRows = [
-    {
-      icon: require('../../assets/images/coingold.png'),
-      amount: coinsEarned,
-      label: 'Shark Coins',
-      accent: '#FFD84A',
-      glowColor: 'rgba(255, 216, 74, 0.25)',
-      show: coinsEarned > 0,
-    },
-    {
-      icon: require('../../assets/images/screens/explore/xp.png'),
-      amount: xpEarned,
-      label: 'XP',
-      accent: '#57E389',
-      glowColor: 'rgba(87, 227, 137, 0.25)',
-      show: xpEarned > 0,
-    },
-    {
-      icon: require('../../assets/images/ride-parts.png'),
-      amount: ridePartsEarned,
-      label: 'Ride Parts',
-      accent: '#8A8CFF',
-      glowColor: 'rgba(138, 140, 255, 0.25)',
-      show: ridePartsEarned > 0,
-    },
-    {
-      icon: require('../../assets/images/energy-reward.png'),
-      amount: energyEarned,
-      label: 'Energy',
-      accent: '#FFBE55',
-      glowColor: 'rgba(255, 190, 85, 0.25)',
-      show: energyEarned > 0,
-    },
-  ].filter((r) => r.show);
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, enter.value * 4),
+    transform: [{ scale: 0.94 + 0.06 * Math.min(1, enter.value * 2.2) }],
+  }));
+  const heroStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: heroSquash.value }, { scaleX: 2 - heroSquash.value }] }));
+  const raysStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value}deg` }, { scale: 0.85 + 0.15 * enter.value }] }));
+  const burstStyle = useAnimatedStyle(() => ({
+    opacity: burst.value === 0 ? 0 : 1 - burst.value,
+    transform: [{ scale: 0.7 + burst.value * 0.9 }],
+  }));
+  const textStyle = useAnimatedStyle(() => {
+    const t = Math.max(0, Math.min(1, (enter.value - 0.15) / 0.35));
+    return { opacity: t, transform: [{ translateY: (1 - t) * 10 }] };
+  });
+  const lowerStyle = useAnimatedStyle(() => {
+    const t = Math.max(0, Math.min(1, (enter.value - 0.55) / 0.4));
+    return { opacity: t, transform: [{ translateY: (1 - t) * 12 }] };
+  });
+  const partsStyle = useAnimatedStyle(() => ({ width: `${Math.round(partsFill.value * 100)}%` }));
+  const readyStyle = useAnimatedStyle(() => ({ opacity: readyPop.value, transform: [{ scale: 0.6 + 0.4 * readyPop.value }] }));
+  const footerStyle = useAnimatedStyle(() => {
+    const t = Math.max(0, Math.min(1, (enter.value - 0.2) / 0.4));
+    return { opacity: t, transform: [{ translateY: (1 - t) * 20 }] };
+  });
+
+  // Measure the hero slot while the catch plays so the caught coin flies into it.
+  const measureHero = () => {
+    heroRef.current?.measureInWindow((x, y, width, height) => {
+      if ([x, y, width, height].every(Number.isFinite) && width > 0) setHandoff({ x, y, size: width });
+    });
+  };
+
+  const coinSource = taskCoinUrl && !coinArtFailed ? taskCoinUrl : null;
+  const primaryLabel = hasCoin && onViewCoin
+    ? upgradeReady && !isNewCoin ? 'Upgrade Your Coin' : 'See It On Your Shelf'
+    : 'Continue Park';
 
   return (
     <Modal
       animationIn="fadeIn"
       animationOut="fadeOut"
       isVisible={visible}
+      style={{ margin: 0 }}
       animationInTiming={reducedMotion ? 120 : 250}
       animationOutTiming={reducedMotion ? 120 : 200}
       onBackButtonPress={caught ? onClose : undefined}
@@ -357,330 +280,143 @@ export default function PostWinRewardsModal({
         onHidden?.(); next?.();
       }}
       onBackdropPress={caught ? onClose : undefined}
-      backdropOpacity={0.92}
+      backdropColor="#05346e"
+      backdropOpacity={0.6}
     >
-      {/* The rewards summary mounts once the coin catch finishes. */}
-      {caught && <View style={{ flex: 1 }}>
+      {/* The summary is laid out under the catch (hidden) so its hero slot can be measured. */}
+      <View style={{ flex: 1, opacity: caught ? 1 : 0 }} pointerEvents={caught ? 'auto' : 'none'}>
       <ScrollView style={styles.scroll}
         contentContainerStyle={[styles.container, {
-          paddingTop: Math.max(insets.top, 20) + 16,
+          paddingTop: Math.max(insets.top, 20) + 8,
           paddingBottom: 16,
         }]}
         showsVerticalScrollIndicator={false}>
-        {/* Sparkle particles floating behind everything */}
-        {!reducedMotion && coinTimesCollected === 1 && sparkles.map((s, i) => (
-          <Sparkle key={i} delay={s.delay} x={s.x} color={s.color} />
-        ))}
+        <Animated.View style={[styles.card, cardStyle]}>
+          <Ribbon text={headline?.ribbon ?? (hasCoin ? isNewCoin ? 'Coin Caught!' : 'Coin Added!' : 'Challenge Complete!')} />
 
-
-        <Animated.View style={[styles.card, { transform: [{ scale: cardScale }] }]}>
-          <Ribbon text={hasCoin ? 'Coin Caught!' : 'Challenge Complete!'} />
-
-          {/* Main content card with glass effect */}
           <View style={styles.content}>
-            {/* Gradient background */}
-            <LinearGradient
-              colors={['#161E35', '#0E1428', '#0A0F1E']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
+            <Image source={require('../../assets/images/water_background.png')} contentFit="cover"
+              style={[StyleSheet.absoluteFill, { opacity: 0.35 }]} />
 
-            {/* Inner top-edge highlight */}
-            <LinearGradient
-              colors={['rgba(76,220,255,0.08)', 'transparent']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 0.25 }}
-              style={[StyleSheet.absoluteFill, { borderRadius: 22 }]}
-            />
-
-            <Text style={styles.subtitle}>{rideName} cleared</Text>
-
-            {/* ── Hero coin section ── */}
-            <Animated.View
-              style={[
-                styles.heroCard,
-                {
-                  transform: [
-                    { scale: heroAnim },
-                    {
-                      translateY: heroAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [24, 0],
-                      }),
-                    },
-                  ],
-                  opacity: heroAnim,
-                },
-              ]}
-            >
-              {/* Gradient BG for hero card */}
-              <LinearGradient
-                colors={['rgba(76,220,255,0.06)', 'rgba(10,15,30,0.4)']}
-                style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
-              />
-
-              {/* Rotating light rays */}
-              <View style={styles.raysWrap}>
-                <LightRays color={earnedEdition?.color ?? '#4cdcff'} size={200} reducedMotion={reducedMotion || coinTimesCollected !== 1} />
-              </View>
-
-              {/* Animated glow behind coin */}
-              <Animated.View
-                style={[
-                  styles.heroGlow,
-                  {
-                    backgroundColor: earnedEdition?.color ?? '#4cdcff',
-                    opacity: coinGlow.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.15, 0.4],
-                    }),
-                    transform: [
-                      {
-                        scale: coinGlow.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.9, 1.15],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              />
-
-              {/* Coin with spin entrance + ring */}
-              <Animated.View
-                style={[
-                  styles.heroCoinRing,
-                  {
-                    transform: [
-                      {
-                        rotateY: coinSpin.interpolate({
-                          inputRange: [0, 0.5, 1],
-                          outputRange: ['90deg', '-15deg', '0deg'],
-                        }),
-                      },
-                      {
-                        scale: coinSpin.interpolate({
-                          inputRange: [0, 0.5, 1],
-                          outputRange: [0.5, 1.1, 1],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                {/* Ring glow border */}
-                <LinearGradient
-                  colors={earnedEdition
-                    ? [earnedEdition.color, 'rgba(255,255,255,0.06)', earnedEdition.color]
-                    : ['rgba(76,220,255,0.35)', 'rgba(76,220,255,0.05)', 'rgba(76,220,255,0.35)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.coinRingGradient}
-                />
-
-                <View style={styles.heroCoinInner}>
-                  {taskCoinUrl && hasCoin && !coinArtFailed ? (
-                    <Image
-                      source={{ uri: taskCoinUrl }}
-                      style={styles.heroCoin}
-                      contentFit="contain"
-                      onError={() => setCoinArtFailed(true)}
-                    />
-                  ) : hasCoin ? (
-                    <Image source={require('../../assets/images/coingold.png')}
-                      style={styles.heroCoin} contentFit="contain" />
-                  ) : (
-                    <View style={styles.heroCoinFallback}>
-                      <Text style={styles.heroCoinFallbackText}>{hasCoin ? '?' : '✓'}</Text>
-                    </View>
-                  )}
+            {/* ── Hero coin ── */}
+            <View style={styles.heroStage}>
+              <Animated.View style={[styles.rays, raysStyle]} pointerEvents="none">
+                <Image source={require('../../assets/images/screens/explore/starburst.png')} contentFit="contain"
+                  style={{ width: HERO * 2.1, height: HERO * 2.1, opacity: 0.5 }} tintColor="#fff3b0" />
+              </Animated.View>
+              <Animated.View style={[styles.burstRing, burstStyle]} pointerEvents="none" />
+              <Animated.View style={heroStyle}>
+                <View ref={heroRef} collapsable={false} onLayout={measureHero} style={{ width: HERO, height: HERO }}>
+                  {hasCoin
+                    ? coinSource
+                      ? <ShelfCoin coinUrl={coinSource} level={coinProgress?.current_level ?? 1} size={HERO} />
+                      : <Image source={require('../../assets/icons/game/coin.png')} style={{ width: HERO, height: HERO }} contentFit="contain" />
+                    : <View style={styles.heroCheck}><GameIcon name="check" size={96} /></View>}
                 </View>
               </Animated.View>
+              {coinSource && <Image source={coinSource} style={{ width: 1, height: 1, opacity: 0 }} onError={() => setCoinArtFailed(true)} />}
+            </View>
 
+            <Animated.View style={[{ alignItems: 'center' }, textStyle]}>
               <Text style={styles.heroEyebrow}>{hasCoin
-                ? coinTimesCollected === 1 ? 'NEW RIDE COIN' : 'RIDE COIN RECOLLECTED'
+                ? isNewCoin ? 'NEW RIDE COIN' : `COLLECTED ${coinTimesCollected} TIMES`
                 : 'RIDE CHALLENGE COMPLETE'}</Text>
-              <Text style={styles.heroTitle}>{rideName}{hasCoin ? ' Coin' : ''}</Text>
-              <Text style={[styles.heroBody, earnedEdition && { color: earnedEdition.color }]}>{earnedEdition
-                ? `✦ ${earnedEdition.name} Project Edition earned · ${earnedEdition.project_title}`
-                : hasCoin
-                  ? coinTimesCollected === 1 ? 'Added to your coin shelf.' : `Collected ${coinTimesCollected} times.`
-                  : 'Your confirmed rewards are below.'}</Text>
+              <Text style={styles.heroTitle} numberOfLines={2}>{rideName}</Text>
+              {earnedEdition && <View style={styles.edition}>
+                <GameIcon name="sparkle" size={18} />
+                <Text style={styles.editionText} numberOfLines={2}>{earnedEdition.name} Edition, {earnedEdition.project_title}</Text>
+              </View>}
+              {headline && <View style={[styles.milestone, headline.big && styles.milestoneBig]}
+                accessibilityRole="text" accessibilityLabel={`${headline.title}. ${headline.body}`}>
+                <GameIcon name={headline.icon} size={headline.big ? 40 : 30} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.milestoneTitle}>{headline.title}</Text>
+                  <Text style={styles.milestoneBody}>{headline.body}</Text>
+                </View>
+              </View>}
               {nextRideTicketEarned > 0 && (
                 <View style={styles.ticketReward}>
-                  <Image source={require('../../assets/images/ticket-icon.png')}
-                    style={styles.rewardFlourish} contentFit="contain" />
-                  <Text style={styles.nextRideTicket}>+{nextRideTicketEarned} Park Ticket · Next ride ready</Text>
+                  <GameIcon name="ticket" size={26} />
+                  <Text style={styles.nextRideTicket}>+{nextRideTicketEarned} Park Ticket, your next ride is ready</Text>
                 </View>
               )}
             </Animated.View>
 
-            {rideControl && <RideControlBanner result={rideControl} playerId={playerId ?? null}
-              onPickTeam={() => closeTo(() => RootNavigation.navigate('TeamSelection', {}))} />}
-
-            {hasCoin && (statRows.length > 0 || rush || earnedStamp) && (
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: receiptExpanded }}
-                accessibilityLabel={`Reward receipt. ${receiptExpanded ? 'Hide' : 'Show'} confirmed bonuses`}
-                onPress={() => setReceiptExpanded(value => !value)} style={styles.receiptToggle}>
-                <View style={styles.receiptIcons}>
-                  {statRows.slice(0, 4).map(reward => <Image key={reward.label} source={reward.icon}
-                    style={styles.receiptIcon} contentFit="contain" />)}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.receiptTitle}>Reward receipt</Text>
-                  <Text style={styles.receiptHint}>{receiptExpanded ? 'Confirmed rewards from this win' : 'Your bonuses are safely collected'}</Text>
-                </View>
-                <Text style={styles.receiptChevron}>{receiptExpanded ? '−' : '+'}</Text>
-              </Pressable>
-            )}
-            {(!hasCoin || receiptExpanded) && <View>
-            {rush && (
-              <View style={styles.rushBonus} accessibilityLabel={`Rush bonus: ${rush.bonus_parts} extra Ride Parts and ${rush.bonus_xp} extra XP`}>
-                <Text style={styles.rushBonusTitle}>⚡ RUSH BONUS</Text>
-                <Text style={styles.rushBonusBody}>
-                  Caught at {rush.wait} min (usually {rush.typical}) · +{rush.bonus_parts} Parts{rush.bonus_xp ? ` · +${rush.bonus_xp} XP` : ''}
-                </Text>
-              </View>
-            )}
-
-            {/* ── Stat grid with glowing cards ── */}
-            <View style={styles.statsGrid}>
-              {statRows.map((reward, index) => (
-                <Animated.View
-                  key={reward.label}
-                  style={[
-                    styles.statCard,
-                    {
-                      transform: [
-                        {
-                          translateX: rowAnims[index].interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [index % 2 === 0 ? -30 : 30, 0],
-                          }),
-                        },
-                        {
-                          scale: rowAnims[index].interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0.8, 1],
-                          }),
-                        },
-                      ],
-                      opacity: rowAnims[index],
-                    },
-                  ]}
-                >
-                  {/* Card gradient BG */}
-                  <LinearGradient
-                    colors={[`${reward.accent}14`, `${reward.accent}06`]}
-                    start={{ x: 0.5, y: 0 }}
-                    end={{ x: 0.5, y: 1 }}
-                    style={[StyleSheet.absoluteFill, { borderRadius: 16 }]}
-                  />
-
-                  {/* Glow dot behind icon */}
-                  <View style={[styles.statGlow, { backgroundColor: reward.accent }]} />
-
-                  <View style={[styles.statIconWrap, { backgroundColor: `${reward.accent}18` }]}>
-                    <Image source={reward.icon} style={styles.statIcon} contentFit="contain" />
-                  </View>
-
-                  <Text style={[styles.statAmount, { color: reward.accent }]}>
-                    +{reward.amount.toLocaleString()}
-                  </Text>
-                  <Text style={styles.statLabel}>{reward.label}</Text>
-
-                  {/* Bottom accent line */}
-                  <LinearGradient
-                    colors={['transparent', `${reward.accent}30`, 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.statAccentLine}
-                  />
-                </Animated.View>
-              ))}
-            </View>
-
-            {/* The moment VIP is worth the most: show what this exact win would have paid. */}
-            {!isVip && (xpEarned > 0 || coinsEarned > 0) && (
-              <Pressable style={styles.vipChip} accessibilityRole="button"
-                accessibilityLabel={`VIP would have doubled this win: plus ${xpEarned} XP and ${coinsEarned} Shark Coins. See VIP.`}
-                onPress={() => closeTo(() => RootNavigation.navigate('Membership'))}>
-                <Image source={require('../../assets/images/screens/leaderboard/crown-gold.png')}
-                  style={styles.rewardFlourish} contentFit="contain" />
-                <Text style={styles.vipChipText} numberOfLines={1}>
-                  VIP doubles this win: +{xpEarned} XP{coinsEarned > 0 ? ` · +${coinsEarned} coins` : ''}
-                </Text>
-                <Text style={styles.vipChipGo}>›</Text>
-              </Pressable>
-            )}
-
-            {/* ── Shelf progress pill ── */}
-            {earnedStamp ? (
-              <TouchableOpacity style={styles.stampUnlock} onPress={onViewStampBook}
-                disabled={!onViewStampBook} accessibilityRole="button"
-                accessibilityLabel={`${earnedStamp.name} stamp unlocked. Open Stamp Book to claim its rewards.`}>
-                <Image source={require('../../assets/images/stamps/first-ride-coin-v1.png')}
-                  style={styles.stampImage} contentFit="contain" />
-                <View style={styles.stampCopy}>
-                  <Text style={styles.stampEyebrow}>STAMP BOOK UNLOCK</Text>
-                  <Text style={styles.stampName}>{earnedStamp.name}</Text>
-                  <Text style={styles.stampReward}>
-                    {`Claim +${earnedStamp.rewards.energy} Energy and +${earnedStamp.rewards.xp} XP`}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ) : hasCoin && (
-              <Animated.View
-                style={[
-                  styles.progressPill,
-                  {
-                    transform: [
-                      {
-                        scale: shelfPulse.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.7, 1],
-                        }),
-                      },
-                    ],
-                    opacity: shelfPulse,
-                  },
-                ]}
-              >
-                <LinearGradient
-                  colors={['rgba(244,114,182,0.18)', 'rgba(244,114,182,0.06)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[StyleSheet.absoluteFill, { borderRadius: 999 }]}
-                />
-                <Image source={require('../../assets/images/stamps/first-ride-coin-v1.png')}
-                  style={styles.rewardFlourish} contentFit="contain" />
-                <Text style={styles.progressPillText}>{coinTimesCollected === 1
-                  ? 'First Collection' : `${coinTimesCollected} Total Collections`}</Text>
-              </Animated.View>
-            )}
-
+            {/* ── Confirmed rewards, always visible, counting up ── */}
+            {chips.length > 0 && <View style={styles.chips}>
+              {chips.map((chip, index) => <RewardChip key={chip.label} {...chip} index={index} enter={enter}
+                reduced={reducedMotion} started={caught} />)}
             </View>}
-            {hasCoin && coinTimesCollected === 1
-              ? <Text style={styles.hint}>A new souvenir for your park story. See it on your shelf.</Text>
-              : nextGoal && <Text style={styles.hint}>{nextGoal}</Text>}
 
+            <Animated.View style={lowerStyle}>
+              {rush && (
+                <View style={styles.rushBonus} accessibilityLabel={`Rush bonus: ${rush.bonus_parts} extra Ride Parts and ${rush.bonus_xp} extra XP`}>
+                  <GameIcon name="rush" size={28} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rushBonusTitle}>RUSH BONUS</Text>
+                    <Text style={styles.rushBonusBody}>
+                      Caught at {rush.wait} min (usually {rush.typical}), +{rush.bonus_parts} Parts{rush.bonus_xp ? `, +${rush.bonus_xp} XP` : ''}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Repeat wins fill the coin's Ride Parts meter toward its next level. */}
+              {parts && !isNewCoin && <View style={styles.partsCard}
+                accessible accessibilityLabel={parts.ready ? 'Ready to power up' : `${parts.have} of ${parts.need} Ride Parts for level ${parts.nextLevel}`}>
+                <View style={styles.partsHead}>
+                  <GameIcon name="parts" size={24} />
+                  <Text style={styles.partsTitle}>{parts.maxed ? 'MAX LEVEL' : `LEVEL ${parts.nextLevel} PARTS`}</Text>
+                  <Text style={styles.partsCount}>{parts.maxed ? '' : `${parts.have}/${parts.need}`}</Text>
+                </View>
+                {!parts.maxed && <View style={styles.partsTrack}><Animated.View style={[styles.partsFill, partsStyle]} /></View>}
+                {parts.ready && <Animated.View style={[styles.readyBadge, readyStyle]}>
+                  <GameIcon name="sparkle" size={20} />
+                  <Text style={styles.readyText}>READY TO POWER UP</Text>
+                </Animated.View>}
+                {!parts.ready && !parts.maxed && <Text style={styles.partsHint}>{parts.hint}</Text>}
+              </View>}
+
+              {rideControl && <RideControlBanner result={rideControl} playerId={playerId ?? null}
+                onPickTeam={() => closeTo(() => RootNavigation.navigate('TeamSelection', {}))} />}
+
+              {earnedStamp && (
+                <TouchableOpacity style={styles.stampUnlock} onPress={onViewStampBook}
+                  disabled={!onViewStampBook} accessibilityRole="button"
+                  accessibilityLabel={`${earnedStamp.name} stamp unlocked. Open Stamp Book to claim its rewards.`}>
+                  <Image source={require('../../assets/images/stamps/first-ride-coin-v1.png')}
+                    style={styles.stampImage} contentFit="contain" />
+                  <View style={styles.stampCopy}>
+                    <Text style={styles.stampEyebrow}>STAMP BOOK UNLOCK</Text>
+                    <Text style={styles.stampName}>{earnedStamp.name}</Text>
+                    <Text style={styles.stampReward}>
+                      {`Claim +${earnedStamp.rewards.energy} Energy and +${earnedStamp.rewards.xp} XP`}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              {!isVip && (xpEarned > 0 || coinsEarned > 0) && (
+                <Pressable style={styles.vipChip} accessibilityRole="button"
+                  accessibilityLabel={`VIP would have doubled this win: plus ${xpEarned} XP and ${coinsEarned} Shark Coins. See VIP.`}
+                  onPress={() => closeTo(() => RootNavigation.navigate('Membership'))}>
+                  <GameIcon name="member" size={26} />
+                  <Text style={styles.vipChipText} numberOfLines={1}>
+                    VIP doubles this win: +{xpEarned} XP{coinsEarned > 0 ? `, +${coinsEarned} coins` : ''}
+                  </Text>
+                  <GameIcon name="arrow" size={20} />
+                </Pressable>
+              )}
+
+              {nextUnlock && <Text style={styles.hint}>{nextUnlock}</Text>}
+            </Animated.View>
           </View>
         </Animated.View>
       </ScrollView>
-      {/* The earned coin's next action stays reachable on smaller phones while
-          the artwork and reward ledger can scroll above it. */}
-      <Animated.View style={[styles.footer, {
-        paddingBottom: Math.max(insets.bottom, 12) + 4,
-        transform: [{ translateY: buttonAnim.interpolate({
-          inputRange: [0, 1], outputRange: [20, 0],
-        }) }],
-        opacity: buttonAnim,
-      }]}>
-        <YellowButton text={hasCoin && onViewCoin
-          ? upgradeReady && coinTimesCollected !== 1 ? 'Upgrade Your Coin' : 'See Your Coin'
-          : 'Continue Park'}
-          onPress={hasCoin && onViewCoin ? onViewCoin : onClose} />
+      {/* The next action stays reachable on small phones while the card scrolls. */}
+      <Animated.View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) + 4 }, footerStyle]}>
+        <YellowButton text={primaryLabel}
+          onPress={hasCoin && onViewCoin ? () => onViewCoin(upgradeReady && !isNewCoin) : onClose} />
         {hasCoin && onViewCoin && (
           <TouchableOpacity onPress={onClose} accessibilityRole="button"
             accessibilityLabel="Continue exploring the park" style={styles.continuePark}>
@@ -688,286 +424,80 @@ export default function PostWinRewardsModal({
           </TouchableOpacity>
         )}
       </Animated.View>
-      </View>}
+      </View>
       {visible && hasCoin && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
-        isNewCoin={coinTimesCollected === 1}
+        isNewCoin={isNewCoin} handoff={handoff}
         onDone={() => setCaught(true)} />}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  receiptToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 62,
-    marginTop: 16, padding: 12, borderWidth: 1, borderColor: '#39617B',
-    borderRadius: 16, backgroundColor: '#112940' },
-  receiptIcons: { flexDirection: 'row', width: 46, flexWrap: 'wrap', gap: 2 },
-  receiptIcon: { width: 21, height: 21 },
-  receiptTitle: { color: '#E8F8FF', fontFamily: 'Shark', fontSize: 17 },
-  receiptHint: { color: '#B1CDDF', fontFamily: 'Knockout', fontSize: 12, marginTop: 3 },
-  receiptChevron: { color: '#FFD84A', fontFamily: 'Shark', fontSize: 26, width: 22, textAlign: 'center' },
-  vipChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'center',
-    backgroundColor: 'rgba(59, 26, 92, 0.85)', borderRadius: 14, borderWidth: 2, borderColor: '#ffcf3b',
-    paddingVertical: 6, paddingHorizontal: 12 },
-  rewardFlourish: { width: 24, height: 24 },
-  ticketReward: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
-  vipChipText: { fontFamily: 'Knockout', fontSize: 14, color: '#fff' },
-  vipChipGo: { fontFamily: 'Shark', fontSize: 16, color: '#ffcf3b' },
-  rushBonus: { marginTop: 8, backgroundColor: '#ffcf3b', borderRadius: 14, borderWidth: 3, borderColor: '#fff',
-    paddingVertical: 6, paddingHorizontal: 10, alignItems: 'center' },
-  rushBonusTitle: { fontFamily: 'Shark', fontSize: 16, color: '#6a3b00' },
-  rushBonusBody: { fontFamily: 'Knockout', fontSize: 13, color: '#7a4a00', textAlign: 'center' },
-  rcBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch', borderWidth: 3,
-    borderRadius: 16, padding: 10, marginTop: 12, backgroundColor: 'rgba(255, 207, 59, 0.15)' },
-  rcBadge: { width: 44, height: 44 },
-  rcTitle: { fontFamily: 'Shark', fontSize: 18, color: '#fff' },
-  rcBody: { fontFamily: 'Knockout', fontSize: 14, color: '#e4f7ff', marginTop: 2 },
   scroll: { flex: 1 },
-  footer: {
-    width: (SW - 34) * 0.88,
-    alignSelf: 'center',
-    paddingTop: 8,
-  },
-  continuePark: { paddingVertical: 9, alignItems: 'center' },
-  continueParkText: {
-    color: '#D9EBF4',
-    textAlign: 'center',
-    fontFamily: 'Knockout',
-    fontSize: 14,
-  },
-  container: {
-    flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confetti: {
-    position: 'absolute',
-    width: 900,
-    height: 400,
-    top: 15,
-    zIndex: 20,
-    left: -80,
-  },
-  card: {
-    width: SW - 34,
-    alignItems: 'center',
-    zIndex: 10,
-  },
+  container: { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
+  card: { width: SW - 28, alignItems: 'center', zIndex: 10 },
   content: {
-    borderRadius: 22,
-    marginTop: '-10%',
-    width: '88%',
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderWidth: 1.5,
-    borderColor: 'rgba(76,220,255,0.12)',
-    overflow: 'hidden',
-    // Deep shadow for floating effect
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.5,
-    shadowRadius: 32,
+    borderRadius: 24, marginTop: '-10%', width: '92%', paddingHorizontal: 16, paddingTop: 30, paddingBottom: 14,
+    borderWidth: 4, borderColor: '#ffffff', overflow: 'hidden', backgroundColor: '#0879ca',
+    shadowColor: '#05346e', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.35, shadowRadius: 20, elevation: 12,
   },
-  subtitle: {
-    color: 'rgba(255,255,255,0.6)',
-    fontFamily: 'Knockout',
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
-
-  /* ── Hero ── */
-  heroCard: {
-    borderRadius: 20,
-    paddingTop: 12,
-    paddingBottom: 10,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    marginBottom: 9,
-    borderWidth: 1,
-    borderColor: 'rgba(76,220,255,0.14)',
-    overflow: 'hidden',
-  },
-  raysWrap: {
-    position: 'absolute',
-    top: -10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 200,
-    height: 200,
-  },
-  heroGlow: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: '#4cdcff',
-    top: -20,
-  },
-  heroCoinRing: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  coinRingGradient: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 42,
-    padding: 3,
-  },
-  heroCoinInner: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(76,220,255,0.06)',
-    borderWidth: 2,
-    borderColor: 'rgba(76,220,255,0.2)',
-  },
-  heroCoin: {
-    width: 64,
-    height: 64,
-  },
-  heroCoinFallback: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  heroCoinFallbackText: {
-    color: '#4cdcff',
-    fontFamily: 'Shark',
-    fontSize: 30,
-  },
-  heroEyebrow: {
-    color: '#4cdcff',
-    fontFamily: 'Knockout',
-    fontSize: 10,
-    letterSpacing: 1.5,
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  heroTitle: {
-    color: '#fff',
-    fontFamily: 'Shark',
-    fontSize: 22,
-    textAlign: 'center',
-    marginBottom: 4,
-    textShadowColor: 'rgba(76,220,255,0.3)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
-  },
-  heroBody: {
-    color: 'rgba(255,255,255,0.55)',
-    fontFamily: 'Knockout',
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  nextRideTicket: {
-    color: '#F4CD72',
-    fontFamily: 'Knockout',
-    fontSize: 13,
-    textAlign: 'center',
-    flexShrink: 1,
-  },
-
-  /* ── Stats ── */
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'nowrap',
-    justifyContent: 'space-between',
-    gap: 4,
-  },
-  statCard: { width: '23.5%', borderRadius: 14, paddingVertical: 8, alignItems: 'center', overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.06)' },
-  statGlow: {
-    position: 'absolute',
-    top: 8,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    opacity: 0.08,
-  },
-  statIconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  statIcon: { width: 22, height: 22 },
-  statAmount: {
-    fontFamily: 'Shark',
-    fontSize: 18,
-    marginBottom: 2,
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 0,
-  },
-  statLabel: { color: 'rgba(255,255,255,0.6)', fontFamily: 'Knockout', fontSize: 11 },
-  statAccentLine: {
-    position: 'absolute',
-    bottom: 0,
-    left: 16,
-    right: 16,
-    height: 1.5,
-    borderRadius: 1,
-  },
-
-  /* ── Progress pill ── */
-  progressPill: {
-    marginTop: 10,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderWidth: 1,
-    borderColor: 'rgba(244,114,182,0.2)',
-    overflow: 'hidden',
-    gap: 6,
-  },
-  progressEmoji: {
-    fontSize: 14,
-  },
-  progressPillText: {
-    color: '#f472b6',
-    fontFamily: 'Shark',
-    fontSize: 14,
-    textShadowColor: 'rgba(244,114,182,0.3)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 6,
-  },
-
-  stampUnlock: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 15,
-    borderWidth: 2,
-    borderColor: '#f6c744',
-    backgroundColor: '#e7f7ff',
-  },
+  heroStage: { height: HERO + 24, alignItems: 'center', justifyContent: 'center' },
+  rays: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  burstRing: { position: 'absolute', width: HERO, height: HERO, borderRadius: HERO, borderWidth: 6, borderColor: '#fff3b0' },
+  heroCheck: { width: HERO, height: HERO, borderRadius: HERO, backgroundColor: '#dff4ff', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 4, borderColor: '#ffffff' },
+  heroEyebrow: { color: '#ffe07a', fontFamily: 'Shark', fontSize: 15, letterSpacing: 1, marginTop: 4,
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  heroTitle: { color: '#ffffff', fontFamily: 'Shark', fontSize: 28, lineHeight: 33, textAlign: 'center', marginTop: 2,
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
+  edition: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: '#fff8e4', borderRadius: 12,
+    paddingHorizontal: 10, paddingVertical: 4 },
+  editionText: { fontFamily: 'Knockout', fontSize: 14, color: '#05346e', flexShrink: 1 },
+  milestone: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch', marginTop: 10,
+    backgroundColor: '#fff4cc', borderRadius: 16, borderWidth: 3, borderColor: '#ffcf3b', paddingVertical: 8, paddingHorizontal: 12 },
+  milestoneBig: { backgroundColor: '#ffcf3b', borderColor: '#ffffff', paddingVertical: 12 },
+  milestoneTitle: { fontFamily: 'Shark', fontSize: 19, color: '#05346e' },
+  milestoneBody: { fontFamily: 'Knockout', fontSize: 15, color: '#3d5f8c' },
+  ticketReward: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },
+  nextRideTicket: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 16, flexShrink: 1 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 14 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff8e4', borderRadius: 14,
+    borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9',
+    paddingVertical: 6, paddingLeft: 8, paddingRight: 12, minWidth: 92 },
+  chipAmount: { fontFamily: 'Shark', fontSize: 20, lineHeight: 22, color: '#05346e', fontVariant: ['tabular-nums'] },
+  chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c' },
+  rushBonus: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 14,
+    borderWidth: 3, borderColor: '#ffffff', paddingVertical: 6, paddingHorizontal: 10 },
+  rushBonusTitle: { fontFamily: 'Shark', fontSize: 16, color: '#05346e' },
+  rushBonusBody: { fontFamily: 'Knockout', fontSize: 14, color: '#05346e' },
+  partsCard: { marginTop: 12, backgroundColor: '#fff8e4', borderRadius: 16, borderWidth: 3, borderColor: '#ffffff', padding: 10 },
+  partsHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  partsTitle: { flex: 1, fontFamily: 'Shark', fontSize: 16, color: '#05346e' },
+  partsCount: { fontFamily: 'Shark', fontSize: 16, color: '#0768b9' },
+  partsTrack: { height: 14, borderRadius: 8, backgroundColor: '#bfe5ff', borderWidth: 2, borderColor: '#ffffff', overflow: 'hidden', marginTop: 6 },
+  partsFill: { height: '100%', borderRadius: 8, backgroundColor: '#ffcf3b' },
+  partsHint: { fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c', marginTop: 5 },
+  readyBadge: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: '#ffcf3b',
+    borderRadius: 14, borderBottomWidth: 4, borderBottomColor: '#d99a00', paddingHorizontal: 12, paddingVertical: 5 },
+  readyText: { fontFamily: 'Shark', fontSize: 16, color: '#05346e' },
+  rcBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch', borderWidth: 3,
+    borderRadius: 16, padding: 10, marginTop: 12, backgroundColor: '#fff8e4' },
+  rcBadge: { width: 44, height: 44 },
+  rcTitle: { fontFamily: 'Shark', fontSize: 17, color: '#05346e' },
+  rcBody: { fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c', marginTop: 2 },
+  stampUnlock: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, paddingHorizontal: 10,
+    paddingVertical: 8, borderRadius: 15, borderWidth: 3, borderColor: '#ffcf3b', backgroundColor: '#fff8e4' },
   stampImage: { width: 62, height: 62 },
   stampCopy: { flex: 1 },
-  stampEyebrow: { color: '#0871ad', fontFamily: 'Knockout', fontSize: 11,
-    letterSpacing: 0.7 },
-  stampName: { color: '#103b72', fontFamily: 'Shark', fontSize: 16 },
-  stampReward: { color: '#315e78', fontFamily: 'Knockout', fontSize: 12,
-    marginTop: 2 },
-
-  hint: {
-    color: '#C9E9F7',
-    fontFamily: 'Knockout',
-    fontSize: 14,
-    lineHeight: 19,
-    textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 6,
-  },
+  stampEyebrow: { color: '#8a5a00', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.7 },
+  stampName: { color: '#05346e', fontFamily: 'Shark', fontSize: 17 },
+  stampReward: { color: '#3d5f8c', fontFamily: 'Knockout', fontSize: 14, marginTop: 2 },
+  vipChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, alignSelf: 'center',
+    backgroundColor: '#fff4cc', borderRadius: 14, borderWidth: 2, borderColor: '#ffcf3b', paddingVertical: 6, paddingHorizontal: 12 },
+  vipChipText: { fontFamily: 'Knockout', fontSize: 15, color: '#05346e', flexShrink: 1 },
+  hint: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 16, lineHeight: 20, textAlign: 'center', marginTop: 10,
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0.1 },
+  footer: { width: (SW - 28) * 0.9, alignSelf: 'center', paddingTop: 8 },
+  continuePark: { paddingVertical: 9, alignItems: 'center' },
+  continueParkText: { color: '#ffffff', textAlign: 'center', fontFamily: 'Shark', fontSize: 17 },
 });

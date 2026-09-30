@@ -23,11 +23,16 @@ import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import MiniGameSelector from './MiniGameSelector';
 import PostWinRewardsModal from './PostWinRewardsModal';
-import getRideCoins from '../api/endpoints/me/ride-coins';
+import { invalidateCoinCollection, loadCoin } from '../context/CoinCollection';
 import { getStamps, type StampData } from '../api/endpoints/me/stamps';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
+import ChallengeStatusCard from './rewards/ChallengeStatusCard';
+import { challengeRibbon, outOfTicketsCopy, type TicketSources } from './rewards/challengeCopy';
+import { prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
+import getCollectionMilestones, { type CollectionMilestones } from '../api/endpoints/me/ride-coins/milestones';
+import GameIcon from '../ui/GameIcon';
 import { createEarnedShelfArrival } from '../services/collection/earnedShelf';
 import { RideChallengeContext } from '../gamekit/RideChallengeContext';
 import {
@@ -126,6 +131,7 @@ export default function RedeemRedeemableModal({
   const [nextRideTicketEarned, setNextRideTicketEarned] = useState(0);
   const [postWinCoin, setPostWinCoin] = useState<RideCoinLevelType | null>(null);
   const [postWinEnergy, setPostWinEnergy] = useState<number | null>(null);
+  const [milestones, setMilestones] = useState<CollectionMilestones | null>(null);
   const [firstCoinTicketReturned, setFirstCoinTicketReturned] = useState(false);
   const [lostTicketCost, setLostTicketCost] = useState(0);
   const [usedRescuePass, setUsedRescuePass] = useState(false);
@@ -154,6 +160,9 @@ export default function RedeemRedeemableModal({
   const canUseRescuePass = taskType === 'task' && !hasEnoughTickets && !rescueUnavailable &&
     redeemable?.rescue_pass_available === true;
   const taskName = redeemable ? (redeemable.model as TaskType | SecretTaskType).name : '';
+  const ribbon = challengeRibbon(taskType, (redeemable?.model as { coin_kind?: string | null } | undefined)?.coin_kind);
+  const ticketSources = (redeemable as { ticket_sources?: TicketSources } | undefined)?.ticket_sources;
+  const ticketHelp = outOfTicketsCopy({ sources: ticketSources, rescuePassUsedToday: !!redeemable?.rescue_pass_used_today });
   const rideRewardTask = isTaskType ? redeemable.model as TaskType | SecretTaskType : null;
   const previewRideRewards = rideRewardTask ? [
     { label: 'RIDE PARTS', amount: rideRewardTask.ride_parts_reward ?? (taskType === 'secret_task' ? 2 : 1),
@@ -167,9 +176,9 @@ export default function RedeemRedeemableModal({
   const backgrounds = {
     task: '#0788e4',
     coin: '#ffaa4a',
-    item: '#b680e9',
-    pin: '#b680e9',
-    secret_task: '#023493',
+    item: '#0879ca',
+    pin: '#0879ca',
+    secret_task: '#0768b9',
   };
 
   // Reset state when modal opens/closes
@@ -191,6 +200,7 @@ export default function RedeemRedeemableModal({
       setEarnedFirstCoinStamp(null);
       setPostWinCoin(null);
       setPostWinEnergy(null);
+      setMilestones(null);
       setFirstCoinTicketReturned(false);
       setLostTicketCost(0);
       setUsedRescuePass(false);
@@ -249,14 +259,21 @@ export default function RedeemRedeemableModal({
             setEarnedFirstCoinStamp(stamp);
         }).catch(() => undefined);
       }
-      if (attempt.rewards.coin_asset_id) {
-        getRideCoins().then(response => {
-          if (savedAttemptIdRef.current !== attempt.id) return;
-          const coin = response.data.find(item => item.id === attempt.rewards?.coin_asset_id);
-          setPostWinCoin(coin ?? null);
+      if (attempt.rewards.coin_asset_id && player?.id) {
+        const assetId = attempt.rewards.coin_asset_id;
+        invalidateCoinCollection();
+        loadCoin(player.id, assetId, { force: true }).then(coin => {
+          if (savedAttemptIdRef.current === attempt.id) setPostWinCoin(coin);
         }).catch(() => {
           if (savedAttemptIdRef.current === attempt.id) setPostWinCoin(null);
         });
+        // The shelf the coin will fly to loads while the player reads the summary.
+        prefetchParkShelf(park.id, player.id);
+        if (attempt.rewards.coin_times_collected === 1) {
+          getCollectionMilestones(attempt.id).then(result => {
+            if (savedAttemptIdRef.current === attempt.id) setMilestones(result);
+          }).catch(() => undefined);
+        }
       }
       onTaskCompleted?.(attempt.task_id, attempt.task_type === 'secret_task');
       if (currencies[0]?.icon_url) {
@@ -276,7 +293,7 @@ export default function RedeemRedeemableModal({
     } else if (attempt.status !== 'started') {
       setFlowState('claim-error');
     }
-  }, [refreshPlayer, onTaskCompleted, currencies, triggerFly]);
+  }, [refreshPlayer, onTaskCompleted, currencies, triggerFly, player?.id, park.id]);
 
   const applyAttemptStateRef = useRef(applyAttemptState);
   useEffect(() => { applyAttemptStateRef.current = applyAttemptState; }, [applyAttemptState]);
@@ -478,7 +495,6 @@ export default function RedeemRedeemableModal({
   }, [resolveAttempt]);
 
   const handleLostClose = useCallback(async () => {
-    console.log('❌ Closing loss modal');
     if (flowStateRef.current === 'lost' || flowStateRef.current === 'expired') {
       await clearAttemptCheckpoint().catch(error =>
         console.warn('Could not clear resolved ride challenge:', error));
@@ -519,7 +535,7 @@ export default function RedeemRedeemableModal({
     close();
   }, [onPress, close, clearAttemptCheckpoint]);
 
-  const handleViewCoin = useCallback(async () => {
+  const handleViewCoin = useCallback(async (openMastery = false) => {
     const focusCoinAssetId = attemptRef.current?.rewards?.coin_asset_id;
     const earnedCoin = createEarnedShelfArrival(attemptRef.current);
     const ownerId = player?.id;
@@ -527,7 +543,9 @@ export default function RedeemRedeemableModal({
       console.warn('Could not clear confirmed ride win:', error));
     onPress();
     afterRewardsHidden.current = () => {
-      if (earnedCoin && ownerId) RootNavigation.navigate('Park', { park: park.id, player: ownerId, earnedCoin });
+      if (earnedCoin && ownerId) RootNavigation.navigate('Park', {
+        park: park.id, player: ownerId, earnedCoin, ...(openMastery ? { openMastery: true } : {}),
+      });
       else RootNavigation.navigate('CoinShelf', {
         focusCoin: focusCoinAssetId ? { assetId: focusCoinAssetId } : undefined,
       });
@@ -566,21 +584,11 @@ export default function RedeemRedeemableModal({
         style={flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' ? { margin: 0 } : undefined}
       >
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          {flowState === 'recovering' && (
-            <View style={styles.lostCard}>
-              <Text style={styles.lostTitle}>CHECKING RIDE CHALLENGE</Text>
-              <Text style={styles.lostMsg}>Restoring any Ticket and game already in progress…</Text>
-            </View>
-          )}
-          {flowState === 'auth-required' && (
-            <View style={styles.lostCard}>
-              <Text style={styles.lostTitle}>SIGN IN TO PLAY</Text>
-              <Text style={styles.lostMsg}>Your ride challenge and Ticket balance need a player account. Return to the map and sign in before starting.</Text>
-              <TouchableOpacity style={styles.lostBtn} onPress={handleLostClose}>
-                <Text style={styles.lostBtnText}>Return to map</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          {flowState === 'recovering' && <ChallengeStatusCard title="Checking" art="loading"
+            message="Restoring any Ticket and game already in progress." />}
+          {flowState === 'auth-required' && <ChallengeStatusCard title="Sign In to Play"
+            message="Ride challenges and Tickets need a player account. Sign in from the map to start."
+            primary={{ label: 'Return to Map', onPress: handleLostClose }} />}
           
           {/* PREVIEW STATE */}
           {flowState === 'preview' && (
@@ -600,7 +608,7 @@ export default function RedeemRedeemableModal({
                 />}
               </Pressable>
               <View style={{ width: Dimensions.get('window').width - 40, position: 'relative', zIndex: 10, alignItems: 'center' }}>
-                <Ribbon text={isTaskType ? canUseRescuePass ? 'Shark Rescue Pass' : 'Ride Challenge' : 'Congratulations'} />
+                <Ribbon text={isTaskType ? canUseRescuePass ? 'Shark Rescue Pass' : ribbon.title : 'Congratulations'} />
                 <View style={{
                   backgroundColor: backgrounds[redeemable.type as keyof typeof backgrounds],
                   borderRadius: 16, marginTop: '-10%', width: '85%', zIndex: 10,
@@ -633,7 +641,7 @@ export default function RedeemRedeemableModal({
                       type={redeemable.type}
                       pulse
                     />
-                    {isTaskType && <Text style={styles.rideCoinPromise}>WIN TO COLLECT THIS RIDE COIN</Text>}
+                    {isTaskType && <Text style={styles.rideCoinPromise}>{ribbon.promise}</Text>}
                     <View style={{ marginLeft: -4, marginRight: -4, marginTop: 8, flexDirection: 'row', justifyContent: 'center' }}>
                       {isTaskType ? previewRideRewards.map(reward => (
                         <View key={reward.label} accessible accessibilityLabel={`${reward.amount} ${reward.label.toLowerCase()}`}
@@ -668,7 +676,10 @@ export default function RedeemRedeemableModal({
                     {isTaskType ? (
                       <>
                         {canUseRescuePass && <View style={styles.rescueCard}>
-                          <Text style={styles.rescueEyebrow}>✦  ONE FREE CHALLENGE TODAY</Text>
+                          <View style={styles.rescueHead}>
+                            <GameIcon name="gift" size={24} />
+                            <Text style={styles.rescueEyebrow}>ONE FREE CHALLENGE TODAY</Text>
+                          </View>
                           <Text style={styles.rescueCopy}>Out of Tickets? Play this new ride coin challenge free, with one retry if you miss. Win to earn a Ticket for your next ride.</Text>
                         </View>}
                         <YellowButton
@@ -679,15 +690,17 @@ export default function RedeemRedeemableModal({
                             ? handleStartWheel : () => { void handleCheckRideAccess(); }}
                         />
                         {!hasEnoughTickets && !canUseRescuePass && <View style={styles.ticketHelpCard}>
-                          <Text style={styles.ticketHelpTitle}>NEED A PARK TICKET?</Text>
-                          <Text style={styles.ticketHelpCopy}>
-                            {redeemable?.rescue_pass_used_today
-                              ? 'Today’s Rescue Pass was used. Refresh your balance above. Home finds earn Tickets; LinePlay may offer one where available.'
-                              : 'Refresh your balance above. Home finds earn Tickets; LinePlay may offer one where available.'}
-                          </Text>
+                          <View style={styles.rescueHead}>
+                            <GameIcon name="ticket" size={26} />
+                            <Text style={styles.ticketHelpTitle}>{ticketHelp.title}</Text>
+                          </View>
+                          <Text style={styles.ticketHelpCopy}>{ticketHelp.body}</Text>
                         </View>}
                         {startError && <Text style={styles.ticketError}>{startError}</Text>}
-                        <Text style={styles.ticketCount}>Your tickets: {playerTickets}</Text>
+                        <View style={styles.ticketCountRow} accessible accessibilityLabel={`You have ${playerTickets} Park Ticket${playerTickets === 1 ? '' : 's'}`}>
+                          <GameIcon name="ticket" size={24} />
+                          <Text style={styles.ticketCount}>{playerTickets} {playerTickets === 1 ? 'Ticket' : 'Tickets'}</Text>
+                        </View>
                       </>
                     ) : (
                       <YellowButton
@@ -698,7 +711,6 @@ export default function RedeemRedeemableModal({
                           
                           if (redeemable.type === 'coin') {
                             await redeemCoin(redeemable.model as CoinType, doubleXP);
-                            // 🪙 Fly coins to header!
                             if (currencies[0]?.icon_url) {
                               triggerFly({
                                 imageUrl: currencies[0].icon_url,
@@ -734,115 +746,55 @@ export default function RedeemRedeemableModal({
               onDone={() => setFlowState('minigame')}
             />
           )}
-          {flowState === 'wheel' && (
-            <View style={styles.lostCard}>
-              <Text style={styles.lostTitle}>CHALLENGE READY</Text>
-              <Text style={styles.lostMsg}>Your Ticket is spent. Update the app to play this challenge.</Text>
-              <TouchableOpacity accessibilityRole="button" style={styles.lostBtn} onPress={handlePlayNow}>
-                <Text style={styles.lostBtnText}>Play now</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {flowState === 'spend-error' && (
-            <View style={styles.lostCard}>
-              <Text style={styles.lostTitle}>CHALLENGE STATUS UNKNOWN</Text>
-              <Text style={styles.lostMsg}>We couldn't confirm whether this ride challenge started. Reconnect to resume without starting a second attempt.</Text>
-              <TouchableOpacity style={styles.lostBtn} onPress={handleStartWheel}>
-                <Text style={styles.lostBtnText}>Reconnect</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.lostBtn} onPress={handleLostClose}>
-                <Text style={styles.lostBtnText}>Return to map</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {flowState === 'save-error' && (
-            <View style={styles.lostCard}>
-              <Text style={styles.lostTitle}>CHALLENGE NOT STARTED</Text>
-              <Text style={styles.lostMsg}>No new Ticket was spent. We could not safely prepare this challenge. Try again.</Text>
-              <TouchableOpacity style={styles.lostBtn} onPress={(firstCoinTicketReturned || rescueRetryAvailable) &&
-                  ['lost', 'expired'].includes(attemptRef.current?.status ?? '') ? handleProtectedRetry : handleStartWheel}>
-                <Text style={styles.lostBtnText}>Try Again</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.lostBtn} onPress={handleLostClose}>
-                <Text style={styles.lostBtnText}>Return to map</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {flowState === 'retrying' && (
-            <View style={styles.lostCard}>
-              <Text style={styles.lostTitle}>SETTING UP RETRY</Text>
-              <Text style={styles.lostMsg}>Checking your Ticket and starting a fresh ride challenge…</Text>
-            </View>
-          )}
-
-          {flowState === 'expired' && (
-            <View style={styles.lostCard}>
-              <Text style={styles.lostTitle}>ATTEMPT EXPIRED</Text>
-              <Text style={styles.lostMsg}>{usedRescuePass
-                ? rescueRetryAvailable
-                  ? 'This Rescue Pass attempt expired. No Ticket was spent, and you have one more try at this ride today.'
-                  : 'This Rescue Pass attempt expired. No Ticket was spent; find more Tickets to play again.'
-                : 'This challenge was not completed. Your Ticket was returned. Return to the map to refresh your balance.'}</Text>
-              {rescueRetryAvailable && <TouchableOpacity style={styles.lostBtn} onPress={handleProtectedRetry}>
-                <Text style={styles.lostBtnText}>Try Again</Text>
-              </TouchableOpacity>}
-              <TouchableOpacity style={styles.lostBtn} onPress={handleLostClose}>
-                <Text style={styles.lostBtnText}>Return to map</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* LOST STATE */}
-          {flowState === 'claim-error' && (
-            <View style={styles.lostCard}>
-              <Text style={styles.lostTitle}>{proofRejected ? 'REPLAY THIS GAME' : 'RESULT PENDING'}</Text>
-              <Text style={styles.lostMsg}>{proofRejected
-                ? 'This result did not pass the challenge check. Your attempt is still open; replay its game without another Ticket.'
-                : 'We could not confirm your result. Reconnect to check the same attempt. No extra Ticket will be spent.'}</Text>
-              <TouchableOpacity style={styles.lostBtn} onPress={() => {
-                if (proofRejected) {
-                  proofRef.current = null;
-                  outcomeRef.current = null;
-                  setSelectedGame(null);
-                  setSelectedGameData(null);
-                  setFlowState('wheel');
-                } else if (outcomeRef.current) resolveAttempt(outcomeRef.current);
-              }}>
-                <Text style={styles.lostBtnText}>{proofRejected ? 'Replay Game' : 'Reconnect'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.lostBtn} onPress={handleLostClose}>
-                <Text style={styles.lostBtnText}>Return to map</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-          {flowState === 'lost' && (
-            <View style={styles.lostCard}>
-              <Text style={styles.lostIcon}>X</Text>
-              <Text style={styles.lostTitle}>CHALLENGE FAILED</Text>
-              <Text style={styles.lostMsg}>{usedRescuePass
-                ? rescueRetryAvailable
-                  ? 'No Ticket was spent. Your Rescue Pass gives you one more try at this ride today.'
-                  : 'Your Rescue Pass tries ended without a win. No Ticket was spent; prepare more Tickets to try again.'
-                : firstCoinTicketReturned
-                ? 'This ride coin is still ahead. Your Ticket was returned, so you can try this challenge again.'
-                : `You did not complete this challenge. ${lostTicketCost} Ticket${lostTicketCost === 1 ? '' : 's'} spent.`}</Text>
-              {(firstCoinTicketReturned || rescueRetryAvailable) && (
-                <TouchableOpacity style={[styles.lostBtn, !location && { opacity: 0.5 }]}
-                  disabled={!location} onPress={handleProtectedRetry}>
-                  <Text style={styles.lostBtnText}>{location ? 'Try Again' : 'Waiting for location'}</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={firstCoinTicketReturned || rescueRetryAvailable ? styles.cancelBtn : styles.lostBtn}
-                onPress={handleLostClose}>
-                <Text style={firstCoinTicketReturned || rescueRetryAvailable ? styles.cancelText : styles.lostBtnText}>
-                  {firstCoinTicketReturned || rescueRetryAvailable ? 'Return to map' : 'Continue'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
+          {flowState === 'wheel' && <ChallengeStatusCard title="Challenge Ready"
+            message="Your Ticket is spent and your game is waiting. Update the app if it does not start."
+            primary={{ label: 'Play Now', onPress: handlePlayNow }} />}
+          {flowState === 'spend-error' && <ChallengeStatusCard title="Reconnect" art="loading"
+            message="We could not confirm whether this challenge started. Reconnect to resume it. No second Ticket is spent."
+            primary={{ label: 'Reconnect', onPress: handleStartWheel }}
+            quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
+          {flowState === 'save-error' && <ChallengeStatusCard title="Not Started"
+            message="No Ticket was spent. This challenge could not be prepared safely. Try again."
+            primary={{ label: 'Try Again', onPress: (firstCoinTicketReturned || rescueRetryAvailable) &&
+              ['lost', 'expired'].includes(attemptRef.current?.status ?? '') ? handleProtectedRetry : handleStartWheel }}
+            quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
+          {flowState === 'retrying' && <ChallengeStatusCard title="Setting Up" art="loading"
+            message="Checking your Ticket and starting a fresh ride challenge." />}
+          {flowState === 'expired' && <ChallengeStatusCard title="Time Ran Out"
+            message={usedRescuePass
+              ? rescueRetryAvailable
+                ? 'This Rescue Pass try timed out. No Ticket was spent, and you have one more try here today.'
+                : 'This Rescue Pass try timed out. No Ticket was spent.'
+              : 'This challenge was not finished, so your Ticket came back to you.'}
+            primary={rescueRetryAvailable ? { label: 'Try Again', onPress: handleProtectedRetry } : { label: 'Return to Map', onPress: handleLostClose }}
+            quiet={rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined} />}
+          {flowState === 'claim-error' && <ChallengeStatusCard title={proofRejected ? 'Replay This Game' : 'Result Pending'}
+            art={proofRejected ? 'none' : 'loading'}
+            message={proofRejected
+              ? 'This result did not pass the challenge check. Your attempt is still open. Replay the game, no new Ticket needed.'
+              : 'We could not confirm your result yet. Reconnect to check the same attempt. No extra Ticket is spent.'}
+            primary={{ label: proofRejected ? 'Replay Game' : 'Reconnect', onPress: () => {
+              if (proofRejected) {
+                proofRef.current = null;
+                outcomeRef.current = null;
+                setSelectedGame(null);
+                setSelectedGameData(null);
+                setFlowState('wheel');
+              } else if (outcomeRef.current) resolveAttempt(outcomeRef.current);
+            } }}
+            quiet={{ label: 'Return to map', onPress: handleLostClose }} />}
+          {flowState === 'lost' && <ChallengeStatusCard title="So Close!" art="soClose"
+            message={usedRescuePass
+              ? rescueRetryAvailable
+                ? 'No Ticket spent. Your Rescue Pass gives you one more try at this ride today.'
+                : 'Your Rescue Pass tries are used up. No Ticket was spent.'
+              : firstCoinTicketReturned
+              ? 'This coin is still out there, and your Ticket came back. Give it another go.'
+              : `This one got away. ${lostTicketCost} Ticket${lostTicketCost === 1 ? '' : 's'} spent.`}
+            primary={firstCoinTicketReturned || rescueRetryAvailable
+              ? { label: location ? 'Try Again' : 'Finding You', onPress: handleProtectedRetry, disabled: !location }
+              : { label: 'Continue', onPress: handleLostClose }}
+            quiet={firstCoinTicketReturned || rescueRetryAvailable ? { label: 'Return to map', onPress: handleLostClose } : undefined} />}
 
           {/* MINIGAME STATE - rendered inside the same modal */}
           {selectedGame && flowState === 'minigame' && (
@@ -889,6 +841,7 @@ export default function RedeemRedeemableModal({
         nextRideTicketEarned={nextRideTicketEarned}
         coinProgress={postWinCoin}
         playerEnergy={postWinEnergy}
+        milestones={milestones}
         onViewCoin={handleViewCoin}
         onViewStampBook={handleViewStampBook}
         onHidden={() => {
@@ -919,17 +872,9 @@ const styles = StyleSheet.create({
   ticketHelpTitle: { color: '#075b9b', fontFamily: 'Shark', fontSize: 15 },
   ticketHelpCopy: { color: '#17446c', fontFamily: 'Knockout', fontSize: 15,
     lineHeight: 19, marginTop: 3 },
-  ticketCount: { color: 'rgba(255,255,255,0.8)', fontSize: 13, textAlign: 'center', marginTop: 6, fontWeight: '600' },
+  ticketCountRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 6 },
+  ticketCount: { color: '#ffffff', fontFamily: 'Shark', fontSize: 18, textShadowColor: '#05346e',
+    textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
+  rescueHead: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   minigameContainer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  
-  cancelBtn: { marginTop: 12, padding: 10 },
-  cancelText: { color: 'rgba(255,255,255,0.5)', fontSize: 15 },
-
-  // Lost styles
-  lostCard: { backgroundColor: '#1a1a2e', borderRadius: 20, padding: 32, alignItems: 'center', borderWidth: 3, borderColor: '#ef4444', width: '85%' },
-  lostIcon: { fontSize: 64, fontWeight: '900', color: '#ef4444', marginBottom: 16 },
-  lostTitle: { fontSize: 24, fontWeight: '900', color: '#ef4444', marginBottom: 16 },
-  lostMsg: { fontSize: 16, color: '#fff', textAlign: 'center', lineHeight: 24, marginBottom: 24 },
-  lostBtn: { backgroundColor: '#ef4444', paddingHorizontal: 48, paddingVertical: 14, borderRadius: 12 },
-  lostBtnText: { color: '#fff', fontSize: 18, fontWeight: '800' },
 });

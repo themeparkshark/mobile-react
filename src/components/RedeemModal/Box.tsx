@@ -28,20 +28,21 @@ export default function Box({
     outputRange: ['0deg', '360deg'],
   });
 
+  // Bright cards with the navy cartoon outline (no purple, no muddy black strips).
   const backgrounds = {
-    task: '#4cdcff',
-    coin: '#ffe7a2',
-    item: '#e5d4ff',
-    pin: '#e5d4ff',
-    secret_task: '#c3eaff',
+    task: '#bfe5ff',
+    coin: '#fff4cc',
+    item: '#fff8e4',
+    pin: '#fff8e4',
+    secret_task: '#dff4ff',
   };
 
   const borders = {
-    task: '#0d3249',
-    coin: '#3d4a24',
-    item: '#4a2a66',
-    pin: '#4a2a66',
-    secret_task: '#0c3f6c',
+    task: '#05346e',
+    coin: '#05346e',
+    item: '#05346e',
+    pin: '#05346e',
+    secret_task: '#05346e',
   };
 
   useEffect(() => {
@@ -64,11 +65,12 @@ export default function Box({
         justifyContent: 'center',
         borderColor: borders[type as keyof typeof borders],
         borderWidth: 3,
+        shadowColor: '#05346e',
         shadowOffset: {
           width: 0,
           height: 3,
         },
-        shadowOpacity: 0.4,
+        shadowOpacity: 0.3,
         shadowRadius: 0,
       }}
     >
@@ -125,7 +127,7 @@ export default function Box({
           >
             <Text
               style={{
-                textShadowColor: 'rgba(0, 0, 0, .5)',
+                textShadowColor: '#05346e',
                 textShadowOffset: {
                   width: 2,
                   height: 2,
@@ -161,7 +163,7 @@ export default function Box({
       {text && (
         <View
           style={{
-            backgroundColor: 'rgba(0, 0, 0, .7)',
+            backgroundColor: '#0768b9',
             borderBottomLeftRadius: 7,
             borderBottomRightRadius: 7,
             padding: 4,
@@ -172,8 +174,11 @@ export default function Box({
             style={{
               color: 'white',
               textAlign: 'center',
-              fontFamily: 'Knockout',
-              fontSize: small ? 18 : 24,
+              fontFamily: 'Shark',
+              fontSize: small ? 18 : 22,
+              textShadowColor: '#05346e',
+              textShadowOffset: { width: 0, height: 2 },
+              textShadowRadius: 0.1,
               paddingLeft: 8,
               paddingRight: 8,
             }}
