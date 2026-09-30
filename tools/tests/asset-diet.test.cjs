@@ -20,19 +20,25 @@ test('login and loading loops are small HEVC files iOS can hardware decode', { s
   }
 });
 
-test('stamp art is capped at 600px and quantized', () => {
+// Stamp art is Dustin's hand-illustrated art: it may be downscaled (the
+// largest on-screen use is 180pt, 540px at 3x) but never palette-quantized or
+// re-styled. Quantizing added visible dither noise to the cel shading.
+test('stamp art is capped at 600px and stays full-colour RGBA', () => {
   const dir = path.join(root, 'assets/images/stamps');
   let total = 0;
   for (const name of fs.readdirSync(dir).filter(f => f.endsWith('.png'))) {
     const bytes = size(`assets/images/stamps/${name}`);
     total += bytes;
-    assert.ok(bytes < 400_000, `${name} is ${bytes} bytes`);
-    const header = fs.readFileSync(path.join(dir, name)).subarray(16, 24);
+    const header = fs.readFileSync(path.join(dir, name)).subarray(16, 26);
     const width = header.readUInt32BE(0);
     const height = header.readUInt32BE(4);
+    const bitDepth = header[8];
+    const colorType = header[9];
+    assert.equal(colorType, 6, `${name} must stay truecolour RGBA (PNG colour type 6), got ${colorType}`);
+    assert.equal(bitDepth, 8, `${name} bit depth`);
     if (name !== 'stamp-logo.png') assert.ok(Math.max(width, height) <= 600, `${name} is ${width}x${height}`);
   }
-  assert.ok(total < 3_000_000, `stamps total ${total} bytes`);
+  assert.ok(total < 9_000_000, `stamps total ${total} bytes`);
 });
 
 test('the unused 3D avatar, its model and its GL stack are gone from the binary', () => {
