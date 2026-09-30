@@ -252,9 +252,15 @@ function BossBody({ L, view, t, fx, anim, img, bossKind, reduced, scaleArt }: {
     } else for (const d of v.decoys) out[d] = 1;
     return out;
   });
+  // Entrance and KO / Retreat happen behind the water lip: clip the boss to it while they run.
+  const lipY = L.bossY + L.bossSize * 0.34 + 26;
+  const clip = useDerivedValue(() => (anim.exit.value > 0 || anim.entrance.value < 1
+    ? Skia.XYWHRect(-L.W, -L.H, L.W * 3, lipY + L.H)
+    : Skia.XYWHRect(-L.W, -L.H, L.W * 3, L.H * 3)));
   if (!img.boss) return null;
   return (
     <Group>
+      <Group clip={clip}>
       <Group transform={transform}>
         <Group opacity={ghostOp}>
           <SkImage image={img.boss} x={-S / 2} y={-S / 2} width={S} height={S} />
@@ -264,6 +270,7 @@ function BossBody({ L, view, t, fx, anim, img, bossKind, reduced, scaleArt }: {
             <BlendColor color={WHITE} mode="srcIn" />
           </SkImage>
         </Group>
+      </Group>
       </Group>
       {bossKind === 2 ? [0, 1, 2].map((i) => (
         <GhostDecoy key={i} i={i} L={L} img={img.boss!} on={decoys} t={t} />
