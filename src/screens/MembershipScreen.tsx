@@ -8,23 +8,29 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing, FadeInDown, FadeInUp, ZoomIn, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { vsprintf } from 'sprintf-js';
 import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
-import { buyVip, loadVipProduct, priceText, restoreVip, trialText, type VipProduct } from '../services/purchases';
+import getVipPerks, { type VipPerk } from '../api/endpoints/economy/vip-perks';
+import { buyVip, legalText, loadVipProduct, priceText, restoreVip, trialText, type VipProduct } from '../services/purchases';
+import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
 
-// Every line here is backed by server logic (TaskAttempt/Trivia 2x, spawner +2, member items).
-const BENEFITS: { icon: string; title: string; body: string }[] = [
-  { icon: '⚡', title: '2x XP & Shark Coins', body: 'On every ride coin you win and every trivia round.' },
-  { icon: '🍩', title: '+2 treats every home hunt', body: 'More Energy and Ticket chances on your map.' },
-  { icon: '👑', title: 'Members-only shark gear', body: 'Exclusive items to style your shark.' },
-  { icon: '🦈', title: 'VIP badge on your profile', body: 'Show every shark you’re part of the crew.' },
+// Every line here is backed by live server logic: ride wins pay VIP double
+// (CompleteTaskAction), VIP home maps spawn two extra finds and double their
+// rewards (PrepItemSpawner, PrepItemController). VIP gear is left
+// out until member items are live in the Shark Shop.
+// This list is the offline fallback; the live list comes from GET /api/economy
+// (vip_perks, built from the server's economy.vip flags), so flipping a VIP
+// multiplier on the server changes this copy too.
+export const VIP_BENEFITS: { icon: GameIconName; title: string; body: string }[] = [
+  { icon: 'xp', title: '2x XP and Shark Coins', body: 'On every ride coin you win at the park.' },
+  { icon: 'gift', title: '+2 finds on every home hunt', body: 'More Energy and Ticket chances on your map.' },
+  { icon: 'member', title: 'VIP badge on your profile', body: 'Show every shark you’re part of the crew.' },
 ];
 
 export default function MembershipScreen({ route }: { route: { params?: { intro?: boolean } } }) {
@@ -33,18 +39,27 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
   const { player, refreshPlayer } = useContext(AuthContext);
   const [product, setProduct] = useState<VipProduct | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState<null | 'buy' | 'restore'>(null);
   const [waiting, setWaiting] = useState(false);
+  const [perks, setPerks] = useState<VipPerk[]>(VIP_BENEFITS);
+  useEffect(() => {
+    let live = true;
+    getVipPerks().then(next => { if (live && next) setPerks(next); });
+    return () => { live = false; };
+  }, []);
   const waitStarted = useRef(0);
 
   useEffect(() => {
     if (!player) { setLoading(false); return; }
     let live = true;
+    setLoading(true); setLoadFailed(false);
     loadVipProduct(player.id).then(p => { if (live) setProduct(p); })
-      .catch((e) => { if (__DEV__) console.log('[vip] load failed', e?.adaptyCode ?? e?.code, e?.message ?? String(e)); if (live) setProduct(null); })
+      .catch((e) => { if (__DEV__) console.log('[vip] load failed', e?.adaptyCode ?? e?.code, e?.message ?? String(e)); if (live) { setProduct(null); setLoadFailed(true); } })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [player?.id]);
+  }, [player?.id, attempt]);
 
   // After a purchase/restore: poll until the server marks us VIP (webhook), max ~60 s.
   useEffect(() => {
@@ -57,12 +72,12 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           clearInterval(id);
           setWaiting(false);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert('Welcome to VIP! 🦈👑', labels.payment_complete ?? 'Your VIP perks are live.');
+          gameAlert('Welcome to VIP!', labels.payment_complete ?? 'Your VIP perks are live.');
           RootNavigation.navigate('Profile');
         } else if (Date.now() - waitStarted.current > 60000) {
           clearInterval(id);
           setWaiting(false);
-          Alert.alert('Almost there', 'Your purchase went through. VIP will switch on in a moment; you can keep playing.');
+          gameAlert('Almost there', 'Your purchase went through. VIP will switch on in a moment; you can keep playing.');
         }
       } catch { /* keep polling */ }
     }, 3000);
@@ -77,8 +92,8 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
     const outcome = await buyVip(product);
     setBusy(null);
     if (outcome === 'success') setWaiting(true);
-    else if (outcome === 'pending') Alert.alert('Waiting for approval', 'Your purchase is pending. VIP switches on once it’s approved.');
-    else if (outcome === 'failed') Alert.alert('Purchase didn’t go through', 'You weren’t charged. Please try again.');
+    else if (outcome === 'pending') gameAlert('Waiting for approval', 'Your purchase is pending. VIP switches on once it’s approved.');
+    else if (outcome === 'failed') gameAlert('Purchase didn’t go through', 'You weren’t charged. Please try again.');
   };
 
   const restore = async () => {
@@ -87,9 +102,9 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
     try {
       const active = await restoreVip();
       if (active) setWaiting(true);
-      else Alert.alert('Nothing to restore', 'We couldn’t find an active VIP membership on this Apple ID.');
+      else gameAlert('Nothing to restore', 'We couldn’t find an active VIP membership on this Apple ID.');
     } catch {
-      Alert.alert('Couldn’t restore', 'Check your connection and try again.');
+      gameAlert('Couldn’t restore', 'Check your connection and try again.');
     } finally {
       setBusy(null);
     }
@@ -105,7 +120,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
       <View style={[StyleSheet.absoluteFill, s.tint]} />
       <SafeAreaView style={{ flex: 1 }}>
         <Pressable style={s.close} onPress={close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
-          <Text style={s.closeText}>✕</Text>
+          <GameIcon name="close" size={40} />
         </Pressable>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
           <Hero />
@@ -113,9 +128,9 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           <Animated.Text entering={FadeInDown.delay(220)} style={s.sub}>Get more out of every park day and every hunt.</Animated.Text>
 
           <View style={s.benefits}>
-            {BENEFITS.map((b, i) => (
+            {perks.map((b, i) => (
               <Animated.View key={b.title} entering={FadeInUp.delay(280 + i * 80).springify().damping(15)} style={s.benefit}>
-                <Text style={s.benefitIcon}>{b.icon}</Text>
+                <GameIcon name={b.icon} size={34} />
                 <View style={{ flex: 1 }}>
                   <Text style={s.benefitTitle}>{b.title}</Text>
                   <Text style={s.benefitBody}>{b.body}</Text>
@@ -124,12 +139,18 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
             ))}
           </View>
 
-          {loading ? (
-            <ActivityIndicator color="#fff" size="large" style={{ marginTop: 24 }} />
+          {!player ? (
+            // Guests see the perks and a way in, never a dead purchase button.
+            <Animated.View entering={FadeInUp.delay(620)} style={s.guest}>
+              <Text style={s.guestText}>Sign in to join VIP. Your perks follow your shark to every device.</Text>
+              <GameButton label="Sign in to join VIP" onPress={() => RootNavigation.navigate('Login')} />
+            </Animated.View>
+          ) : loading ? (
+            <SharkLoader compact tone="onBlue" style={{ marginTop: 20 }} />
           ) : !product ? (
-            <View style={s.unavailable}>
-              <Text style={s.unavailableText}>VIP isn’t available right now. Please try again in a bit.</Text>
-            </View>
+            <SharkLoader compact tone="onBlue" state="error" style={{ marginTop: 20 }}
+              title={loadFailed ? 'VIP couldn’t load' : 'VIP isn’t available right now'}
+              message="Check your connection and try again." onRetry={() => setAttempt(a => a + 1)} />
           ) : (
             <Animated.View entering={FadeInUp.delay(620)} style={{ width: '100%' }}>
               <View style={s.priceCard}>
@@ -139,8 +160,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
               </View>
               <Pressable style={({ pressed }) => [s.cta, pressed && s.ctaPressed]} onPress={() => void buy()}
                 disabled={!!busy || waiting} accessibilityRole="button">
-                {busy === 'buy' ? <ActivityIndicator color="#6a3b00" />
-                  : <Text style={s.ctaText}>{trial ? 'START FREE TRIAL' : 'BECOME VIP'}</Text>}
+                <Text style={s.ctaText}>{busy === 'buy' ? 'ONE MOMENT…' : trial ? 'START FREE TRIAL' : 'BECOME VIP'}</Text>
               </Pressable>
             </Animated.View>
           )}
@@ -158,9 +178,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
               <Text style={s.link}>Privacy</Text>
             </Pressable>
           </View>
-          {product && labels?.membership_terms && (
-            <Text style={s.legal}>{vsprintf(labels.membership_terms, [product.price?.currencyCode ?? '', product.price?.localizedString ?? ''])}</Text>
-          )}
+          {product && <Text style={s.legal}>{legalText(product)}</Text>}
           {intro && (
             <Pressable onPress={close} hitSlop={8}><Text style={s.skip}>{labels?.skip_for_now ?? 'Skip for now'}</Text></Pressable>
           )}
@@ -169,7 +187,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
 
       {waiting && (
         <View style={s.overlay}>
-          <ActivityIndicator size="large" color="#fff" />
+          <SharkLoader compact tone="onBlue" />
           <Text style={s.overlayText}>{labels?.processing_payment ?? 'Switching on your VIP perks…'}</Text>
         </View>
       )}
@@ -199,10 +217,9 @@ function Hero() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0768b9' },
-  tint: { backgroundColor: 'rgba(40, 18, 80, 0.45)' },
-  close: { position: 'absolute', top: 54, right: 18, zIndex: 5, width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
-  closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  tint: { backgroundColor: 'rgba(7, 104, 185, 0.35)' },
+  close: { position: 'absolute', top: 50, right: 14, zIndex: 5, width: 44, height: 44,
+    alignItems: 'center', justifyContent: 'center' },
   scroll: { alignItems: 'center', paddingHorizontal: 20, paddingBottom: 40 },
   heroStage: { width: 260, height: 230, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   burst: { position: 'absolute', width: 340, height: 340, opacity: 0.18 },
@@ -212,14 +229,13 @@ const s = StyleSheet.create({
   benefits: { width: '100%', gap: 8, marginTop: 16 },
   benefit: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16,
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', padding: 10 },
-  benefitIcon: { fontSize: 26, width: 34, textAlign: 'center' },
   benefitTitle: { fontFamily: 'Shark', fontSize: 18, color: '#fff' },
   benefitBody: { fontFamily: 'Knockout', fontSize: 14, color: '#dbeafe' },
-  unavailable: { marginTop: 20, backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 14, padding: 14 },
-  unavailableText: { fontFamily: 'Knockout', fontSize: 16, color: '#fff', textAlign: 'center' },
+  guest: { width: '100%', marginTop: 18, alignItems: 'center', gap: 12 },
+  guestText: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.white, textAlign: 'center' },
   priceCard: { marginTop: 18, backgroundColor: '#fff', borderRadius: 20, paddingVertical: 12, alignItems: 'center',
     borderWidth: 3, borderColor: '#ffcf3b' },
-  trial: { fontFamily: 'Shark', fontSize: 22, color: '#16a34a' },
+  trial: { fontFamily: 'Shark', fontSize: 22, color: BRAND.greenLip },
   price: { fontFamily: 'Shark', fontSize: 20, color: '#09268f' },
   cancel: { fontFamily: 'Knockout', fontSize: 13, color: '#64748b', marginTop: 2 },
   cta: { marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 20, paddingVertical: 17, alignItems: 'center',
@@ -231,6 +247,6 @@ const s = StyleSheet.create({
   dot: { color: 'rgba(255,255,255,0.6)' },
   legal: { fontFamily: 'Knockout', fontSize: 11, color: 'rgba(255,255,255,0.7)', textAlign: 'center', marginTop: 12, lineHeight: 15 },
   skip: { fontFamily: 'Knockout', fontSize: 16, color: '#fff', marginTop: 14 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', gap: 14 },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,52,110,0.82)', alignItems: 'center', justifyContent: 'center', gap: 14 },
   overlayText: { fontFamily: 'Knockout', fontSize: 16, color: '#fff' },
 });

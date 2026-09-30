@@ -69,13 +69,36 @@ export interface TaskAttempt {
     ride_control?: RideControlReward;
     /** Bonus paid because the ride was on a short-wait Rush when the attempt started. */
     rush?: RushReward;
+    /** True on the first catch of this ride coin (paid at the top of the ride-coin ladder). */
+    first_catch?: boolean;
+    /** XP before the VIP bonus. */
+    base_xp?: number;
   } | null;
   expires_at: string;
+}
+
+/**
+ * Where Park Tickets come from right now (server config). Out-of-Tickets copy
+ * reads this so it never points at a source that is switched off.
+ */
+export interface TicketSources {
+  home: boolean;
+  queue: boolean;
+  queue_per_park_day: number;
 }
 
 export interface TaskAttemptResponse {
   attempt: TaskAttempt;
   tickets: number;
+  ticket_sources?: TicketSources;
+}
+
+/** One line telling a player where their next Ticket comes from. */
+export function ticketSourceCopy(sources: TicketSources | null | undefined): string {
+  if (sources?.queue) {
+    return `Earn Tickets from home finds, or play while you wait in line (up to ${sources.queue_per_park_day} a park day).`;
+  }
+  return 'Earn Tickets from home finds before your next park visit.';
 }
 
 export async function startTaskAttempt(

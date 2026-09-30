@@ -20,8 +20,8 @@ import {
 } from '../context/SoundEffectProvider';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
 import { KeyType } from '../models/key-type';
-import WatchAd from './WatchAd';
 import YellowButton from './YellowButton';
+import { BRAND, gameAlert } from '../ui';
 
 export default function RedeemKeyModal({
   open,
@@ -37,7 +37,7 @@ export default function RedeemKeyModal({
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const progress = useRef(new Animated.Value(0)).current;
   const rotate = useRef(new Animated.Value(0)).current;
-  const [doubleKey, setDoubleKey] = useState<boolean>(false);
+  const [collecting, setCollecting] = useState(false);
   const spin = rotate.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
@@ -90,7 +90,7 @@ export default function RedeemKeyModal({
       onSwipeComplete={() => close()}
       onModalWillHide={() => {
         playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
-        setDoubleKey(false);
+        setCollecting(false);
       }}
       backdropOpacity={0.95}
       customBackdrop={
@@ -176,7 +176,7 @@ export default function RedeemKeyModal({
                 textTransform: 'uppercase',
                 fontSize: 42,
                 color: 'white',
-                textShadowColor: 'rgba(0, 0, 0, .5)',
+                textShadowColor: BRAND.navy,
                 textShadowOffset: {
                   width: 1,
                   height: 1,
@@ -186,7 +186,7 @@ export default function RedeemKeyModal({
                 paddingBottom: 32,
               }}
             >
-              {doubleKey ? `2 ${currency.name}` : `1 ${currency.singular_name}`}
+              {`1 ${currency.singular_name}`}
             </Text>
             <Image
               source={{
@@ -204,15 +204,24 @@ export default function RedeemKeyModal({
             <YellowButton
               text="Collect"
               onPress={async () => {
-                await redeemKey(redeemable.model as KeyType, doubleKey);
+                if (collecting) return;
+                setCollecting(true);
+                try {
+                  await redeemKey(redeemable.model as KeyType);
+                } catch {
+                  setCollecting(false);
+                  gameAlert('Could not collect this Key', 'It is still here. Check your connection and try again.');
+                  return;
+                }
+                setCollecting(false);
 
-                // 🔑 Fly keys to header!
+                // Fly the key to the header.
                 if (currency?.icon_url) {
                   const screenCenterX = Dimensions.get('window').width / 2;
                   const screenCenterY = Dimensions.get('window').height / 2;
                   triggerFly({
                     imageUrl: currency.icon_url,
-                    amount: doubleKey ? 2 : 1,
+                    amount: 1,
                     startX: screenCenterX,
                     startY: screenCenterY,
                     targetPosition: 'keys',
@@ -226,16 +235,6 @@ export default function RedeemKeyModal({
                 close();
               }}
             />
-            <View
-              style={{
-                width: '60%',
-                marginLeft: 'auto',
-                marginRight: 'auto',
-                marginTop: 16,
-              }}
-            >
-              <WatchAd onClose={() => setDoubleKey(true)} />
-            </View>
           </View>
         </View>
       </View>
