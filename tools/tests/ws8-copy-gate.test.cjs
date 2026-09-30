@@ -47,6 +47,7 @@ const WS8_CLEAN = [
   'src/screens/NewsScreen/Entry.tsx',
   'src/screens/ArticleScreen.tsx',
   'src/screens/NotificationsScreen.tsx',
+  'src/components/Notification.tsx',
   'src/screens/CommunityCenterScreen.tsx',
   'src/components/CommunityCenterModal.tsx',
   'src/components/GuestInvite.tsx',
@@ -157,4 +158,12 @@ test('guest invite: bright card over the live map, sign-in inside, no gym promis
   assert.match(source, /absoluteFillObject/, 'overlays the map instead of replacing it');
   assert.doesNotMatch(source, /#d9d9d9|gyms?\b/i);
   assert.match(source, /reduced \? undefined/, 'reduced-motion path');
+});
+
+test('a notification row renders server copy through the icon-safe text and draws its arrow as art', () => {
+  const source = fs.readFileSync(path.join(root, 'src/components/Notification.tsx'), 'utf8');
+  assert.match(source, /<GameRichText[\s\S]*notification\.content\?\.message/);
+  assert.doesNotMatch(source, /<Text[^>]*>\s*\{notification\.content\?\.message/);
+  assert.match(source, /<GameIcon name="arrow"/);
+  assert.doesNotMatch(source, /›/);
 });
