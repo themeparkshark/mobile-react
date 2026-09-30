@@ -52,6 +52,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
     require(name) {
       if (Object.hasOwn(imports, name)) return imports[name];
       if (name === 'react') return react;
+      if (name === '@react-navigation/native') return { useFocusEffect: fn => react.useEffect(fn, [fn]) };
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'react-native') return native;
       if (name === 'react-native-reanimated') return { default: { View: 'ReanimatedView' },

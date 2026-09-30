@@ -12,6 +12,7 @@ import { LocationContext } from '../../context/LocationProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import HapticPatterns from '../../helpers/hapticPatterns';
 import * as RootNavigation from '../../RootNavigation';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 interface Props {
   readonly refreshVersion: number;
@@ -33,61 +34,116 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sets, setSets] = useState<PrepItemSetListItem[] | null>(null);
+  const mounted = useRef(true);
+  const requestVersion = useRef(0);
+  const collectionVersion = useRef(0);
+  const mutationBusy = useRef(false);
+  const refreshPending = useRef(false);
+  const retryAction = useRef<(() => void) | null>(null);
+  const pendingNavigation = useRef<(() => void) | null>(null);
+  const reducedMotion = useReducedGameMotion();
   const { location } = useContext(LocationContext);
   const { playSound } = useContext(SoundEffectContext);
   const insets = useSafeAreaInsets();
   const locationRef = useRef(location);
   locationRef.current = location;
 
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      requestVersion.current++;
+      collectionVersion.current++;
+      pendingNavigation.current = null;
+    };
+  }, []);
+
   const loadSets = useCallback(async () => {
-    try { setSets(await loadCollections(locationRef.current)); }
-    catch { setSets(null); }
+    const version = ++collectionVersion.current;
+    try {
+      const result = await loadCollections(locationRef.current);
+      if (mounted.current && version === collectionVersion.current) setSets(result);
+    } catch {
+      if (mounted.current && version === collectionVersion.current) setSets(null);
+    }
   }, [loadCollections]);
 
   const load = useCallback(async () => {
+    if (mutationBusy.current) { refreshPending.current = true; return; }
+    const version = ++requestVersion.current;
     try {
-      setData(await loadGoal());
+      const result = await loadGoal();
+      if (!mounted.current || version !== requestVersion.current) return;
+      setData(result);
       setStale(false);
       setError(null);
+      retryAction.current = null;
     } catch {
+      if (!mounted.current || version !== requestVersion.current) return;
       setStale(true);
       setError('Could not refresh your park goal. Try again when connected.');
+      retryAction.current = () => void load();
     } finally {
-      setLoading(false);
+      if (mounted.current && version === requestVersion.current) setLoading(false);
     }
   }, [loadGoal]);
 
-  useFocusEffect(useCallback(() => { void load(); if (open) void loadSets(); }, [load, loadSets, open]));
+  useFocusEffect(useCallback(() => {
+    void load();
+    return () => { requestVersion.current++; };
+  }, [load]));
+  useEffect(() => {
+    if (open) void loadSets();
+    return () => { collectionVersion.current++; };
+  }, [open, loadSets]);
   useEffect(() => { if (refreshVersion > 0) void load(); }, [refreshVersion, load]);
 
   const choose = async (taskId: number) => {
-    if (busy) return;
+    if (mutationBusy.current) return;
+    mutationBusy.current = true;
+    const version = ++requestVersion.current;
     setBusy(true);
     setError(null);
     try {
-      setData(await saveGoal(taskId));
+      const result = await saveGoal(taskId);
+      if (!mounted.current || version !== requestVersion.current) return;
+      setData(result);
       setStale(false);
       setOpen(false);
+      retryAction.current = null;
       HapticPatterns.selection();
       void playSound?.(require('../../../assets/sounds/pin_swap_select_pin.mp3'));
     } catch {
+      if (!mounted.current || version !== requestVersion.current) return;
       setError('Could not save this ride goal. Try again.');
+      retryAction.current = () => void choose(taskId);
     } finally {
-      setBusy(false);
+      mutationBusy.current = false;
+      if (mounted.current) { setBusy(false); setLoading(false); }
+      if (mounted.current && refreshPending.current) { refreshPending.current = false; void load(); }
     }
   };
 
   const clear = async () => {
-    if (busy) return;
+    if (mutationBusy.current) return;
+    mutationBusy.current = true;
+    const version = ++requestVersion.current;
     setBusy(true);
     setError(null);
     try {
-      setData(await removeGoal());
+      const result = await removeGoal();
+      if (!mounted.current || version !== requestVersion.current) return;
+      setData(result);
       setStale(false);
+      retryAction.current = null;
     } catch {
+      if (!mounted.current || version !== requestVersion.current) return;
       setError('Could not clear this ride goal. Try again.');
+      retryAction.current = () => void clear();
     } finally {
-      setBusy(false);
+      mutationBusy.current = false;
+      if (mounted.current) { setBusy(false); setLoading(false); }
+      if (mounted.current && refreshPending.current) { refreshPending.current = false; void load(); }
     }
   };
 
@@ -121,25 +177,43 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
   const rewardReady = !!((starter?.is_unlocked && !starter.rewards_claimed) ||
     (suggestedSet?.is_complete && !suggestedSet.rewards_claimed));
 
+  const close = () => { pendingNavigation.current = null; setOpen(false); };
+  const goAfterClose = (navigate: () => void) => {
+    if (pendingNavigation.current) return;
+    pendingNavigation.current = navigate;
+    setOpen(false);
+  };
+
   return <>
     <Pressable style={styles.pill} accessibilityRole="button"
+      disabled={busy} accessibilityState={{ disabled: busy, busy }}
       accessibilityLabel={goal ? `Next park goal: ${goal.ride_name}. Open ride choices.` : 'Choose your next park ride coin'}
       onPress={() => { setPickerMode(!goal); setOpen(true); if (stale) void load(); }}>
       <Image source={require('../../../assets/images/coingold.png')} style={styles.pillCoin} contentFit="contain" />
       <Text style={styles.pillTitle} numberOfLines={1}>
-        {loading && !data ? 'Loading park goal…' : goal ? goal.ride_name
+        {busy ? 'Saving your goal…' : loading && !data ? 'Loading park goal…' : goal ? goal.ride_name
           : data?.goal_unavailable ? 'Choose a new ride' : data ? 'Choose a park goal' : 'Park goals unavailable'}
       </Text>
       <Text style={styles.pillDetail} numberOfLines={1}>
         {goal && wallet ? plan?.maxed ? 'PARK GOAL · MAX LEVEL'
-          : goal.coin_owned && plan ? `PARK GOAL · LV ${plan.current_level} · ${plan.parts_needed} PARTS TO GO`
+          : upgradeReady ? 'PARK GOAL · UPGRADE READY'
+          : goal.coin_owned && plan ? plan.parts_needed
+            ? `LV ${plan.current_level} · ${plan.parts_needed} ${plan.parts_needed === 1 ? 'PART' : 'PARTS'} TO GO`
+            : `LV ${plan.current_level} · ${plan.energy_needed} ENERGY TO GO`
           : wallet.tickets_needed > 0 ? `PARK GOAL · ${wallet.tickets_needed} ${wallet.tickets_needed === 1 ? 'TICKET' : 'TICKETS'} TO GO`
           : 'PARK GOAL · TICKET READY'
           : data ? 'PICK YOUR NEXT RIDE COIN' : 'TAP TO RETRY'}
       </Text>
     </Pressable>
 
-    <Modal isVisible={open} propagateSwipe onBackdropPress={() => setOpen(false)} onBackButtonPress={() => setOpen(false)}
+    <Modal isVisible={open} propagateSwipe onBackdropPress={close} onBackButtonPress={close}
+      animationIn={reducedMotion ? 'fadeIn' : 'slideInUp'} animationOut={reducedMotion ? 'fadeOut' : 'slideOutDown'}
+      animationInTiming={reducedMotion ? 0 : 240} animationOutTiming={reducedMotion ? 0 : 180}
+      onModalHide={() => {
+        const navigate = pendingNavigation.current;
+        pendingNavigation.current = null;
+        if (mounted.current) navigate?.();
+      }}
       style={[styles.modalWrap, { marginTop: insets.top + spacing.sm, marginBottom: insets.bottom + spacing.sm }]}>
       <ScrollView style={styles.modal} contentContainerStyle={styles.modalContent}>
         <LinearGradient colors={['#149de7', '#0873c3', '#064787']} style={styles.header}>
@@ -153,7 +227,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
           <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
             style={styles.headerShark} contentFit="contain" accessibilityLabel="Theme Park Shark mascot" />
           <Pressable accessibilityRole="button" accessibilityLabel="Close ride goal planner"
-            style={styles.closeButton} onPress={() => setOpen(false)}>
+            style={styles.closeButton} onPress={close}>
             <Text style={styles.close}>×</Text>
           </Pressable>
         </LinearGradient>
@@ -178,7 +252,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
             ? plan?.maxed ? 'This coin is at its current max. Choose another ride to keep collecting.'
               : plan?.energy_needed ? `${plan.energy_needed} Energy to find at home for your next upgrade`
               : upgradeReady ? 'Your next coin upgrade is ready.'
-              : 'Energy is ready; earn Ride Parts at the ride.'
+              : 'Energy is ready; collect the remaining Ride Parts.'
             : wallet.tickets_needed > 0
               ? `${wallet.tickets_needed} more ${wallet.tickets_needed === 1 ? 'Ticket' : 'Tickets'} for a ride attempt`
               : 'You have enough Tickets for one ride attempt'}</Text>
@@ -193,11 +267,12 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
           </View>
           <Text style={styles.changeRideArrow}>CHANGE ›</Text>
         </Pressable>}
-        {goal && plan && !pickerMode && <Pressable style={styles.levelPlan} disabled={!upgradeReady}
+        {goal && plan && !pickerMode && <Pressable style={styles.levelPlan} disabled={!upgradeReady || busy}
           accessibilityRole={upgradeReady ? 'button' : undefined}
-          onPress={() => { setOpen(false); RootNavigation.navigate('CoinShelf', {
+          accessibilityState={upgradeReady ? { disabled: busy } : undefined}
+          onPress={() => goAfterClose(() => RootNavigation.navigate('CoinShelf', {
             focusCoin: { assetId: goal.asset_id },
-          }); }}>
+          }))}>
           <Text style={styles.planEyebrow}>✦  {goal.coin_owned ? 'COIN MASTERY' : 'FIRST UPGRADE PLAN'}</Text>
           <Text style={styles.planTitle}>{plan.maxed ? 'Current max level reached'
             : goal.coin_owned ? `Level ${plan.current_level} → ${plan.next_level}`
@@ -205,12 +280,13 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
           <Text style={styles.planHint}>{plan.maxed
             ? 'This coin has reached its current maximum level. Choose another ride to keep collecting.'
             : goal.coin_owned
-              ? `${plan.parts_needed === 0 ? 'Ride Parts ready' : `${plan.parts_needed} Ride Parts to earn at the ride`} · ${plan.energy_needed === 0 ? 'Energy ready' : `${plan.energy_needed} Energy to find at home`}`
+              ? `${plan.parts_needed === 0 ? 'Ride Parts ready' : `${plan.parts_needed} ${plan.parts_needed === 1 ? 'Ride Part' : 'Ride Parts'} to collect`} · ${plan.energy_needed === 0 ? 'Energy ready' : `${plan.energy_needed} Energy to find at home`}`
               : `${plan.energy_needed === 0 ? 'Energy ready for your first upgrade' : `${plan.energy_needed} Energy to find at home for your first upgrade`}. Earn the coin and its Ride Parts at the park.`}</Text>
           {upgradeReady && <Text style={styles.huntAction}>Upgrade on Coin Shelf →</Text>}
         </Pressable>}
         {goal && suggestedSet && !pickerMode && <Pressable accessibilityRole="button" style={styles.hunt}
-          onPress={() => { setOpen(false); RootNavigation.navigate('SetCollection', { slug: suggestedSet.slug }); }}>
+          disabled={busy} accessibilityState={{ disabled: busy }}
+          onPress={() => goAfterClose(() => RootNavigation.navigate('SetCollection', { slug: suggestedSet.slug }))}>
           <Text style={styles.huntTitle}>{rewardReady ? '🎁 HOME REWARD READY'
             : collectionHelpsGoal ? '🗺️ HOME PREP FOR THIS GOAL' : '🗺️ HOME COLLECTION'}</Text>
           <Text style={styles.huntName}>{suggestedSet.name}</Text>
@@ -221,7 +297,14 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
               : `${suggestedSet.collected_count}/${suggestedSet.total_items} found · ${suggestedSet.completion_rewards.tickets} Tickets and ${suggestedSet.completion_rewards.energy} Energy on completion`}</Text>
           <Text style={styles.huntAction}>View collection →</Text>
         </Pressable>}
-        {error && <Pressable onPress={() => void load()} accessibilityRole="button"><Text style={styles.error}>{error} Tap to retry.</Text></Pressable>}
+        {busy && <View style={styles.saving} accessibilityLiveRegion="polite">
+          <ActivityIndicator color="#075b9b" />
+          <Text style={styles.savingText}>Saving your park goal…</Text>
+        </View>}
+        {error && <Pressable disabled={busy} onPress={() => retryAction.current?.()} accessibilityRole="button"
+          accessibilityLabel={`${error} Retry`} style={styles.errorCard}>
+          <Text style={styles.error}>{error}</Text><Text style={styles.retry}>RETRY ›</Text>
+        </Pressable>}
         {loading && !data ? <ActivityIndicator color={colors.tertiary} style={styles.spinner} /> : (pickerMode || !goal) &&
           <View style={styles.list}>
             <Text style={styles.listTitle}>{goal ? 'CHOOSE ANOTHER RIDE' : 'CHOOSE YOUR FIRST RIDE'}</Text>
@@ -233,6 +316,8 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
                   <Text style={styles.parkCount}>{rides.length} {rides.length === 1 ? 'COIN' : 'COINS'}</Text></View>
                 {rides.map(ride => <Pressable key={ride.task_id} accessibilityRole="button"
                   disabled={busy} onPress={() => void choose(ride.task_id)}
+                  accessibilityLabel={`${ride.ride_name}. ${goal?.task_id === ride.task_id ? 'Current goal' : ride.coin_owned ? 'Collected coin' : 'Uncollected coin'}. Choose as park goal.`}
+                  accessibilityState={{ disabled: busy, selected: goal?.task_id === ride.task_id }}
                   style={[styles.ride, goal?.task_id === ride.task_id && styles.selected]}>
                   {ride.coin_url
                     ? <Image source={{ uri: ride.coin_url }} style={styles.coin} contentFit="contain"
@@ -280,8 +365,8 @@ const styles = StyleSheet.create({
   heading: { color: '#fff', fontFamily: 'Shark', fontSize: 26, lineHeight: 31, marginTop: 8,
     textShadowColor: '#053b75', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
   heroHint: { color: '#dbf5ff', fontFamily: 'Knockout', fontSize: 13, lineHeight: 17, marginTop: 8 },
-  closeButton: { position: 'absolute', top: 10, right: 10, width: 34, height: 34,
-    borderWidth: 2, borderColor: '#ffce3d', borderRadius: 17, backgroundColor: '#065599',
+  closeButton: { position: 'absolute', top: 8, right: 8, width: 44, height: 44,
+    borderWidth: 2, borderColor: '#ffce3d', borderRadius: 22, backgroundColor: '#065599',
     alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   close: { color: '#fff', fontFamily: 'Knockout', fontSize: 26, lineHeight: 29 },
   body: { paddingHorizontal: 15, paddingTop: 15 },
@@ -312,7 +397,13 @@ const styles = StyleSheet.create({
   huntName: { color: '#073e79', fontFamily: 'Shark', fontSize: 18, marginTop: 4 },
   huntHint: { color: '#315b7b', fontFamily: 'Knockout', fontSize: 13, lineHeight: 17, marginTop: 4 },
   huntAction: { color: '#006db8', fontFamily: 'Knockout', fontSize: 15, marginTop: 7 },
-  error: { color: colors.error, fontSize: 13, marginTop: spacing.md },
+  saving: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 12,
+    marginTop: 12, borderRadius: 12, backgroundColor: '#d2ecff' },
+  savingText: { color: '#075b9b', fontFamily: 'Knockout', fontSize: 16 },
+  errorCard: { backgroundColor: '#fff4e6', borderWidth: 2, borderColor: '#e4b176',
+    borderRadius: 13, padding: 12, marginTop: 12 },
+  error: { color: '#733a1c', fontFamily: 'Knockout', fontSize: 15, lineHeight: 20 },
+  retry: { color: '#075b9b', fontFamily: 'Knockout', fontSize: 16, marginTop: 5 },
   spinner: { marginVertical: spacing.lg },
   list: { paddingTop: 18, paddingBottom: spacing.sm },
   listTitle: { color: '#064a82', fontFamily: 'Shark', fontSize: 21 },

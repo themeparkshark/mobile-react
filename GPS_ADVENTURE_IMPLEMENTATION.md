@@ -122,6 +122,27 @@ with isolated Metro 8096. No production rewards or player records were changed.
   showed a JPEG thumbnail (425 KB), then was canceled. No message or post sent.
   Deliverable: outputs/tps-polish/local-qa-park-day-share-export.jpg (outside repo).
 
+- Fresh original Profile -> Universal Studios Hollywood verified 3/26 coins.
+  Forbidden Journey remains row 2 slot 1, Secret Life of Pets row 4 slot 1 and
+  Snowball row 4 slot 2. All 26 normal slots and ten secret slots are intact.
+  Sharing from this original park screen produced an inspected 1080x1920 JPEG
+  with three coin artworks, three new coins, one upgrade and three challenge wins.
+  Native share sheet showed the 452 KB image and was canceled without publishing.
+  Deliverable: outputs/tps-polish/local-qa-three-coin-park-day-share-export.jpg.
+
+- Ride goal planner now coalesces rapid saves, rejects older refresh responses,
+  resumes a refresh requested during saving, retries the exact failed selection,
+  and ignores delayed work after unmount. Opening the planner no longer creates
+  redundant goal requests. Coin upgrade/home collection navigation waits for its
+  native modal to close. Reduced motion uses an immediate fade presentation.
+  Saving/retry cards, a 44-point close target and precise mastery readiness copy
+  use the existing style and preserve the same planner/navigation structure.
+  Native in-memory preview checked choose Space Mountain -> owned coin -> one
+  missing Part -> upgrade ready, with clean close/reopen. Preview fixture buttons
+  grant no real player coins or Parts; the actual local player remains at three
+  owned coins. Native reduce-motion preference and real planner-navigation QA
+  remain pending.
+
 ## Backend corrections
 
 Applied to the isolated backend and the original LOCAL backend serving the preview:
@@ -141,7 +162,7 @@ Applied to the isolated backend and the original LOCAL backend serving the previ
 
 ## Validation and remaining work
 
-TypeScript and git diff checks pass. Full app checks: 200 tests. Focused backend
+TypeScript and git diff checks pass. Full app checks: 204 tests. Focused backend
 checks: seven tests, 53 assertions. PHP 8.5 emits an existing PDO deprecation. The
 legacy full migration suite needs Doctrine DBAL; unrelated test-discovery warnings
 remain and are not claimed clean.
