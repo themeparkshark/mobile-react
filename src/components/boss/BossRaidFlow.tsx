@@ -5,7 +5,8 @@ import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import {
-  acknowledgeRaid, BOSS_NAMES, getParkRaid, startRaidRound, type AttackResult, type BossRaid, type PresenceReason, type RaidState,
+  acknowledgeRaid, BOSS_NAMES, DEFAULT_DAMAGE, fitToRound, getParkRaid, startRaidRound, type AttackResult, type BossRaid,
+  type PresenceReason, type RaidRound, type RaidState,
 } from '../../api/endpoints/parks/raid';
 import { applyTeamNames } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
@@ -110,6 +111,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   const [starting, setStarting] = useState(false);
   const round = useRef<Omit<BossAttackCheckpoint, 'savedAt'> | null>(null);
   const [roundRate, setRoundRate] = useState(1);
+  const roundLimits = useRef<Pick<RaidRound, 'max_ms' | 'max_hits'> | null>(null);
   const [note, setNote] = useState<string | null>(null);
   // The server said this player is not at the ride for this raid: offer the remote join.
   const [awayFor, setAwayFor] = useState<{ raidId: number; reason: PresenceReason } | null>(null);
@@ -201,8 +203,9 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     setFighting(false);
     if (!meta || finished.playerId !== playerId || finished.parkId !== parkId || finished.raidId !== raid?.id) return;
     if (Number(meta.hits ?? 0) <= 0) { setNote('No hits landed. Give it another try. No Energy was spent.'); return; }
-    void recovery.capture({ ...finished, savedAt: Date.now(), body: { ...finished.body,
-      hits: Number(meta.hits), weak_hits: Number(meta.weak_hits), duration_ms: Number(meta.duration_ms) } })
+    const fitted = fitToRound({ hits: Number(meta.hits), weak_hits: Number(meta.weak_hits),
+      duration_ms: Number(meta.duration_ms) }, roundLimits.current, raid?.damage ?? DEFAULT_DAMAGE);
+    void recovery.capture({ ...finished, savedAt: Date.now(), body: { ...finished.body, ...fitted } })
       .catch(() => { setNote('That round couldn’t be saved. No attack was sent.'); });
   };
 
@@ -254,6 +257,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
         ...at, hits: 0, weak_hits: 0, duration_ms: 20000, round_token: result.round.token,
         ...(result.round.remote ? { remote: true } : {}) } };
     setRoundRate(result.round.damage_rate);
+    roundLimits.current = { max_ms: result.round.max_ms, max_hits: result.round.max_hits };
     setFighting(true);
   };
   const renderedRound = round.current;

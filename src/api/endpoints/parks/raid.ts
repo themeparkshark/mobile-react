@@ -181,6 +181,25 @@ export const BOSS_NAMES: Record<BossId, string> = {
   ghost_squid: 'Ghost Squid',
 };
 
+/**
+ * Fit a finished brawl's report to the round the server issued: play time within
+ * [min_ms, max_ms], hits within the per-boss cap and weak hits within the one-in-N share,
+ * so an honest round never comes back as bad_proof.
+ */
+export function fitToRound(
+  meta: { hits: number; weak_hits: number; duration_ms: number },
+  round: Pick<RaidRound, 'max_ms' | 'max_hits'> | null | undefined,
+  weights: RaidDamageWeights = DEFAULT_DAMAGE,
+  minMs = 12000,
+): { hits: number; weak_hits: number; duration_ms: number } {
+  const whole = (n: unknown) => (Number.isFinite(Number(n)) ? Math.max(0, Math.floor(Number(n))) : 0);
+  const maxMs = round && round.max_ms > 0 ? round.max_ms : 21000;
+  const duration_ms = Math.min(maxMs, Math.max(minMs, whole(meta.duration_ms)));
+  const hits = round && round.max_hits > 0 ? Math.min(round.max_hits, whole(meta.hits)) : whole(meta.hits);
+  const weak_hits = Math.min(whole(meta.weak_hits), Math.floor(hits / Math.max(1, weights.weak_share)));
+  return { hits, weak_hits, duration_ms };
+}
+
 /** The server's damage formula with the raid's weights (rounded once after the remote rate). */
 export function raidDamage(hits: number, weak: number, weights: RaidDamageWeights = DEFAULT_DAMAGE, rate = 1): number {
   return Math.floor((hits * weights.per_hit + weak * weights.per_weak_hit) * rate);

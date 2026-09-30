@@ -47,3 +47,11 @@ test('attack lookup validates its reply and never throws',async()=>{
  }
  assert.equal((await api(async()=>{throw Error('offline');}).lookupRaidAttack(77,'x')).ok,false);
 });
+test('a finished brawl is fitted to the server round so an honest report is never bad_proof',()=>{
+ const {fitToRound}=api(async()=>({}));
+ const round={max_ms:21000,max_hits:120};
+ assert.deepEqual({...fitToRound({hits:30,weak_hits:9,duration_ms:26000},round)},{hits:30,weak_hits:9,duration_ms:21000});
+ assert.deepEqual({...fitToRound({hits:200,weak_hits:80,duration_ms:5000},round)},{hits:120,weak_hits:40,duration_ms:12000});
+ assert.deepEqual({...fitToRound({hits:6,weak_hits:5,duration_ms:NaN},null)},{hits:6,weak_hits:2,duration_ms:12000});
+ assert.deepEqual({...fitToRound({hits:-3,weak_hits:-1,duration_ms:19000.7},round)},{hits:0,weak_hits:0,duration_ms:19000});
+});

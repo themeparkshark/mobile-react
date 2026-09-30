@@ -109,7 +109,7 @@ function flow({reduced=false,round}={}){
   '../../hooks/useBossAttackRecovery':{default:()=>({snapshot,canStart:()=>snapshot.phase==='ready'&&!snapshot.pending,capture:async cp=>{captures.push(cp);},retry:async()=>{}})},
   '../../hooks/useReducedGameMotion':{default:()=>reduced},
   '@react-navigation/native':{useIsFocused:()=>focus.value},
-  '../../api/endpoints/parks/raid':{BOSS_NAMES:{kraken:'The Kraken'},
+  '../../api/endpoints/parks/raid':{BOSS_NAMES:{kraken:'The Kraken'},DEFAULT_DAMAGE:{},fitToRound:m=>({hits:m.hits,weak_hits:m.weak_hits,duration_ms:m.duration_ms}),
    startRaidRound:async(id,body)=>{rounds.push([id,body]);return answer(body);},acknowledgeRaid:async id=>{acks.push(id);return true;}},
   './bossArt':{BOSS_ART:{kraken:1}},'../../games/boss/BossBrawl':{BossBrawl:'BossBrawl'},
   '../../ui':{BRAND:{},GameButton:'GameButton',GameIcon:'GameIcon'},
