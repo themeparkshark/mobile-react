@@ -1,6 +1,5 @@
 import { useCallback, useContext, useEffect, useState, useRef } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -31,6 +30,29 @@ import { LocationContext } from '../context/LocationProvider';
 import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import api from '../api/client';
 import * as Haptics from '../helpers/haptics';
+import { GameIcon, SharkLoader } from '../ui';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
+
+/** A small busy mark for buttons and slots: his fin bobbing, still under reduced motion. */
+function SharkLoaderDot({ style }: { readonly style?: object }) {
+  const reduced = useUiReducedMotion();
+  const bob = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced) return;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(bob, { toValue: 1, duration: 320, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(bob, { toValue: 0, duration: 320, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [reduced, bob]);
+  return (
+    <Animated.View accessibilityRole="progressbar" accessibilityLabel="Working"
+      style={[style, { transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) }] }]}>
+      <GameIcon name="fin" size={22} />
+    </Animated.View>
+  );
+}
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -501,7 +523,7 @@ export default function CommunityCenterScreen() {
         setShowCooldownModal(true);
       } else if (errorData?.error_code === 'gift_not_found' || errorData?.error_code === 'already_claimed') {
         // Gift was claimed by someone else - refresh and show message
-        setErrorMessage('Oops! Another shark grabbed that gift first. 🦈');
+        setErrorMessage('Oops! Another shark grabbed that gift first.');
         setShowErrorModal(true);
         await fetchCenter(); // Refresh to show updated state
         // Reset the revealed slot
@@ -630,7 +652,7 @@ export default function CommunityCenterScreen() {
         setShowCooldownModal(true);
       } else if (errorData?.error?.includes('full')) {
         // Center is full
-        setErrorMessage('The community center is full! Come back later when someone claims a gift. 🎁');
+        setErrorMessage('The community center is full! Come back later when someone claims a gift.');
         setShowErrorModal(true);
       } else if (errorData?.error?.includes('Not enough coins')) {
         // Not enough coins (shouldn't happen since we check first, but just in case)
@@ -746,7 +768,7 @@ export default function CommunityCenterScreen() {
                     { opacity: giftPlacedAnim }
                   ]}
                 >
-                  <Text style={styles.yourGiftText}>Your Gift! 🎁</Text>
+                  <Text style={styles.yourGiftText}>Your Gift!</Text>
                 </Animated.View>
               )}
             </TouchableOpacity>
@@ -779,11 +801,8 @@ export default function CommunityCenterScreen() {
                 contentFit="contain"
               />
               {claiming === slotIndex && (
-                <ActivityIndicator
-                  style={styles.claimingSpinner}
-                  color="#fff"
-                  size="small"
-                />
+                <SharkLoaderDot
+                  style={styles.claimingSpinner} />
               )}
             </Animated.View>
             <Text style={styles.giverName} numberOfLines={1}>
@@ -868,7 +887,7 @@ export default function CommunityCenterScreen() {
         
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4ade80" />
+            <SharkLoader tone="onBlue" />
           </View>
         ) : (
           <>
@@ -888,7 +907,7 @@ export default function CommunityCenterScreen() {
               ]}
             >
               <Text style={styles.giftCountText}>
-                🎁 {center?.available_gifts ?? 0} gift{(center?.available_gifts ?? 0) !== 1 ? 's' : ''} available
+                {center?.available_gifts ?? 0} gift{(center?.available_gifts ?? 0) !== 1 ? 's' : ''} available
               </Text>
             </Animated.View>
             
@@ -920,7 +939,7 @@ export default function CommunityCenterScreen() {
                 />
                 {giving && (
                   <View style={styles.leaveGiftSpinner}>
-                    <ActivityIndicator color="#fff" size="small" />
+                    <SharkLoaderDot />
                   </View>
                 )}
               </TouchableOpacity>
@@ -929,8 +948,9 @@ export default function CommunityCenterScreen() {
             {/* Cooldown message - live countdown */}
             {liveCooldown > 0 && (
               <View style={styles.cooldownBadge}>
+                <GameIcon name="timer" size={20} />
                 <Text style={styles.cooldownText}>
-                  ⏱️ {Math.floor(liveCooldown / 60)}:{(liveCooldown % 60).toString().padStart(2, '0')} until you can give again
+                  {Math.floor(liveCooldown / 60)}:{(liveCooldown % 60).toString().padStart(2, '0')} until you can give again
                 </Text>
               </View>
             )}
@@ -990,7 +1010,7 @@ export default function CommunityCenterScreen() {
       >
         <View style={styles.cooldownModalContainer}>
           <View style={styles.cooldownModalIcon}>
-            <Text style={styles.cooldownModalIconText}>⏱️</Text>
+            <GameIcon name="timer" size={56} />
           </View>
           <View style={styles.cooldownModalContent}>
             <Text style={styles.cooldownModalTitle}>
@@ -1026,12 +1046,12 @@ export default function CommunityCenterScreen() {
       >
         <View style={styles.confirmModalContainer}>
           <View style={styles.confirmModalIcon}>
-            <Text style={styles.confirmModalIconText}>🎁</Text>
+            <GameIcon name="gift" size={56} />
           </View>
           <View style={styles.confirmModalContent}>
             <Text style={styles.confirmModalTitle}>Leave a Gift, Get Tickets!</Text>
             <Text style={styles.confirmModalMessage}>
-              Spend coins to leave a gift for another player — and earn tickets as a thank you! 🎟️
+              Spend coins to leave a gift for another shark, and get Tickets right away as a thank you!
             </Text>
             <View style={styles.exchangeContainer}>
               <View style={styles.exchangeItem}>
@@ -1043,7 +1063,7 @@ export default function CommunityCenterScreen() {
                 <Text style={styles.exchangeValue}>-350</Text>
                 <Text style={styles.exchangeLabel}>Coins</Text>
               </View>
-              <Text style={styles.exchangeArrow}>→</Text>
+              <GameIcon name="arrow" size={32} />
               <View style={styles.exchangeItem}>
                 <Image
                   source={require('../../assets/images/ticket-icon.png')}
@@ -1081,7 +1101,7 @@ export default function CommunityCenterScreen() {
       >
         <View style={styles.successModalContainer}>
           <View style={styles.successModalIcon}>
-            <Text style={styles.successModalIconText}>🎉</Text>
+            <GameIcon name="chestOpen" size={60} />
           </View>
           <View style={styles.successModalContent}>
             <Text style={styles.successModalTitle}>
@@ -1120,7 +1140,7 @@ export default function CommunityCenterScreen() {
       >
         <View style={styles.notEnoughModalContainer}>
           <View style={styles.notEnoughModalIcon}>
-            <Text style={styles.notEnoughModalIconText}>🪙</Text>
+            <GameIcon name="coin" size={56} />
           </View>
           <View style={styles.notEnoughModalContent}>
             <Text style={styles.notEnoughModalTitle}>Not Enough Coins!</Text>
@@ -1174,7 +1194,7 @@ export default function CommunityCenterScreen() {
       >
         <View style={styles.errorModalContainer}>
           <View style={styles.errorModalIcon}>
-            <Text style={styles.errorModalIconText}>😅</Text>
+            <GameIcon name="shark" size={60} />
           </View>
           <View style={styles.errorModalContent}>
             <Text style={styles.errorModalTitle}>Whoops!</Text>
@@ -1195,7 +1215,7 @@ export default function CommunityCenterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a1628',
+    backgroundColor: '#0768b9',
   },
   background: {
     width: SCREEN_WIDTH,
@@ -1221,7 +1241,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     right: 20,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5,52,110,0.6)',
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -1269,8 +1289,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     fontFamily: 'Shark',
     fontSize: 24,
-    color: '#4ade80',
-    textShadowColor: 'rgba(0,0,0,0.8)',
+    color: '#ffe07a',
+    textShadowColor: 'rgba(5,52,110,0.8)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 4,
     top: -8,
@@ -1285,7 +1305,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 120,
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(5,52,110,0.7)',
     borderRadius: 20,
     paddingHorizontal: 20,
     paddingVertical: 10,
@@ -1325,11 +1345,11 @@ const styles = StyleSheet.create({
   yourGiftText: {
     fontFamily: 'Shark',
     fontSize: 14,
-    color: '#4ade80',
-    textShadowColor: 'rgba(0,0,0,0.8)',
+    color: '#ffe07a',
+    textShadowColor: 'rgba(5,52,110,0.8)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5,52,110,0.6)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
@@ -1353,7 +1373,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
     marginTop: 4,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(5,52,110,0.5)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
@@ -1375,14 +1395,19 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(5,52,110,0.3)',
     borderRadius: 12,
   },
   cooldownBadge: {
     position: 'absolute',
     bottom: 145,
     alignSelf: 'center',
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    backgroundColor: 'rgba(5,52,110,0.88)',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -1401,7 +1426,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderWidth: 4,
     borderColor: '#f59e0b',
     justifyContent: 'center',
@@ -1418,7 +1443,7 @@ const styles = StyleSheet.create({
     fontSize: 36,
   },
   cooldownModalContent: {
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderRadius: 20,
     width: '90%',
     paddingTop: 50,
@@ -1444,7 +1469,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   cooldownTimerContainer: {
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(5,52,110,0.4)',
     borderRadius: 16,
     paddingHorizontal: 30,
     paddingVertical: 16,
@@ -1460,14 +1485,14 @@ const styles = StyleSheet.create({
   cooldownTimerValue: {
     fontFamily: 'Shark',
     fontSize: 36,
-    color: '#4ade80',
+    color: '#ffe07a',
   },
   cooldownModalButton: {
-    backgroundColor: '#4ade80',
+    backgroundColor: '#ffcf3b',
     borderRadius: 14,
     paddingHorizontal: 40,
     paddingVertical: 14,
-    shadowColor: '#4ade80',
+    shadowColor: '#d99a00',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1487,14 +1512,14 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderWidth: 4,
-    borderColor: '#4ade80',
+    borderColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
     marginBottom: -40,
-    shadowColor: '#4ade80',
+    shadowColor: '#d99a00',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 15,
@@ -1504,7 +1529,7 @@ const styles = StyleSheet.create({
     fontSize: 36,
   },
   confirmModalContent: {
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderRadius: 20,
     width: '90%',
     paddingTop: 50,
@@ -1517,7 +1542,7 @@ const styles = StyleSheet.create({
   confirmModalTitle: {
     fontFamily: 'Shark',
     fontSize: 24,
-    color: '#4ade80',
+    color: '#ffe07a',
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -1533,7 +1558,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(5,52,110,0.3)',
     borderRadius: 16,
     paddingHorizontal: 20,
     paddingVertical: 16,
@@ -1562,7 +1587,7 @@ const styles = StyleSheet.create({
   exchangeValueGreen: {
     fontFamily: 'Shark',
     fontSize: 24,
-    color: '#4ade80',
+    color: '#ffe07a',
   },
   exchangeLabel: {
     fontFamily: 'Knockout',
@@ -1593,11 +1618,11 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.7)',
   },
   confirmGiveButton: {
-    backgroundColor: '#4ade80',
+    backgroundColor: '#ffcf3b',
     borderRadius: 14,
     paddingHorizontal: 24,
     paddingVertical: 14,
-    shadowColor: '#4ade80',
+    shadowColor: '#d99a00',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1616,7 +1641,7 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderWidth: 4,
     borderColor: '#fbbf24',
     justifyContent: 'center',
@@ -1633,7 +1658,7 @@ const styles = StyleSheet.create({
     fontSize: 44,
   },
   successModalContent: {
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderRadius: 20,
     width: '90%',
     paddingTop: 55,
@@ -1662,7 +1687,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(74, 222, 128, 0.2)',
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: '#4ade80',
+    borderColor: '#ffffff',
     paddingHorizontal: 30,
     paddingVertical: 16,
     marginBottom: 24,
@@ -1676,12 +1701,12 @@ const styles = StyleSheet.create({
   rewardAmount: {
     fontFamily: 'Shark',
     fontSize: 36,
-    color: '#4ade80',
+    color: '#ffe07a',
   },
   rewardLabel: {
     fontFamily: 'Knockout',
     fontSize: 14,
-    color: '#4ade80',
+    color: '#ffe07a',
     marginTop: 2,
   },
   successButton: {
@@ -1698,7 +1723,7 @@ const styles = StyleSheet.create({
   successButtonText: {
     fontFamily: 'Shark',
     fontSize: 18,
-    color: '#1a1a1a',
+    color: '#05346e',
     textAlign: 'center',
   },
   // Not Enough Coins Modal Styles
@@ -1709,7 +1734,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderWidth: 4,
     borderColor: '#ef4444',
     justifyContent: 'center',
@@ -1726,7 +1751,7 @@ const styles = StyleSheet.create({
     fontSize: 36,
   },
   notEnoughModalContent: {
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderRadius: 20,
     width: '90%',
     paddingTop: 50,
@@ -1752,7 +1777,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   coinCompareContainer: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(5,52,110,0.3)',
     borderRadius: 16,
     paddingHorizontal: 20,
     paddingVertical: 16,
@@ -1789,7 +1814,7 @@ const styles = StyleSheet.create({
   coinCompareValueGreen: {
     fontFamily: 'Shark',
     fontSize: 20,
-    color: '#4ade80',
+    color: '#ffe07a',
   },
   coinCompareDivider: {
     width: 1,
@@ -1830,7 +1855,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderWidth: 4,
     borderColor: '#f59e0b',
     justifyContent: 'center',
@@ -1847,7 +1872,7 @@ const styles = StyleSheet.create({
     fontSize: 36,
   },
   errorModalContent: {
-    backgroundColor: '#1a3a5c',
+    backgroundColor: '#0a77bf',
     borderRadius: 20,
     width: '90%',
     paddingTop: 50,
@@ -1886,7 +1911,7 @@ const styles = StyleSheet.create({
   errorModalButtonText: {
     fontFamily: 'Shark',
     fontSize: 18,
-    color: '#1a1a1a',
+    color: '#05346e',
     textAlign: 'center',
   },
 });

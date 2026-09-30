@@ -43,6 +43,8 @@ const WS8_CLEAN = [
   'src/screens/NewsScreen/Entry.tsx',
   'src/screens/ArticleScreen.tsx',
   'src/screens/NotificationsScreen.tsx',
+  'src/screens/CommunityCenterScreen.tsx',
+  'src/components/CommunityCenterModal.tsx',
 ];
 
 /** Files WS8 moved off the FontAwesome icon font onto hand-drawn art. */
@@ -111,4 +113,12 @@ test('Notifications: mark-all-read hides when nothing is unread, a failed load c
   assert.match(source, /\{showMarkAllRead\(notifications\) && <Button/);
   assert.match(source, /state="error"/);
   assert.match(source, /GameIcon name="bell"/);
+});
+
+test('Community Center: bright blue cards, no black scrims or neon green, no stock spinners', () => {
+  for (const file of ['src/screens/CommunityCenterScreen.tsx', 'src/components/CommunityCenterModal.tsx']) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    assert.doesNotMatch(source, /#1a3a5c|#0a1628|#4ade80|rgba\(0,\s*0,\s*0/i, file);
+    assert.doesNotMatch(source, /ActivityIndicator/, file);
+  }
 });
