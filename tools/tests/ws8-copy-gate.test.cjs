@@ -27,6 +27,24 @@ const WS8_CLEAN = [
   'src/screens/LeaderboardsScreen/StandingsPodium.tsx',
   'src/screens/LeaderboardsScreen/StandingsRow.tsx',
   'src/screens/LeaderboardsScreen/standingsModel.ts',
+  'src/components/Tutorial/steps.ts',
+  'src/components/Tutorial/TeacherShark.tsx',
+  'src/components/Tutorial/TutorialProvider.tsx',
+  'src/components/Tutorial/SpotlightOverlay.tsx',
+  'src/screens/FriendsScreen.tsx',
+  'src/screens/FriendsScreen/YourList.tsx',
+  'src/screens/SocialScreen.tsx',
+  'src/components/CreateThreadModal.tsx',
+  'src/components/SocialPost.tsx',
+  'src/components/Comment.tsx',
+];
+
+/** Files WS8 moved off the FontAwesome icon font onto hand-drawn art. */
+const NO_ICON_FONT = [
+  'src/screens/SettingsScreen.tsx',
+  'src/screens/SocialScreen.tsx',
+  'src/components/CreateThreadModal.tsx',
+  'src/components/Comment.tsx',
 ];
 
 test('WS8 surfaces have no emoji, em dashes, glyph icons or third-party phrases', () => {
@@ -45,4 +63,19 @@ test('Welcome drops the third-party name word and shows the fan-app disclaimer',
   assert.match(source, /independent fan app/);
   assert.match(source, /GameIcon name="dice"/);
   assert.doesNotMatch(source, /ActivityIndicator/);
+});
+
+test('WS8 social and settings surfaces use hand-drawn art, not an icon font, and one team source', () => {
+  for (const file of NO_ICON_FONT) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    assert.doesNotMatch(source, /@fortawesome|@expo\/vector-icons/, file);
+  }
+  for (const file of ['src/screens/SocialScreen.tsx', 'src/components/CreateThreadModal.tsx']) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    assert.match(source, /from '\.\.\/constants\/teams'/, `${file} reads teams from constants/teams.ts`);
+    assert.doesNotMatch(source, /const TEAMS = \{/, `${file} has no local team copy`);
+  }
+  const social = fs.readFileSync(path.join(root, 'src/screens/SocialScreen.tsx'), 'utf8');
+  assert.match(social, /Tap \+ below/);
+  assert.doesNotMatch(social, /pencil icon above/);
 });
