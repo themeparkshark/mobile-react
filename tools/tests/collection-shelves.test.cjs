@@ -162,3 +162,8 @@ test('unfound coin copy: rescue pass wording follows the coin kind and Ride Part
   assert.match(src, /kind === 'ride' \? 'at the ride' : 'at this spot'/);
   assert.match(src, /Ride Part\{task\.ride_parts_reward === 1 \? '' : 's'\}/);
 });
+
+test('park shelf loads on its underwater art, not a grey page', () => {
+  const src = fs.readFileSync('src/screens/ParkScreen.tsx', 'utf8');
+  assert.match(src, /\{loading && <ImageBackground[^]*?background-new\.png[^]*?<Loading \/>/);
+});

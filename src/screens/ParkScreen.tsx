@@ -345,7 +345,11 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
           <InformationModal id={InformationModalEnums.ParkScreen} />
         </TopbarColumn>
       </Topbar>
-      {loading && <Loading />}
+      {loading && <ImageBackground style={{ flex: 1, marginTop: -8 }}
+        source={require('../../assets/images/screens/park/background-new.png')}>
+        {/* Same underwater park art while the shelf loads, never a grey page. */}
+        <Loading />
+      </ImageBackground>}
       {!loading && (
         <View ref={frameRef} collapsable={false} onLayout={event => {
           const { width: frameWidth, height: frameHeight } = event.nativeEvent.layout;
