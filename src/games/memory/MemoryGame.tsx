@@ -270,7 +270,7 @@ export default function MemoryGame({
 }: MemoryGameProps) {
   const partyRef = useRef(party);
   partyRef.current = party;
-  const devMode = typeof __DEV__ !== 'undefined' && __DEV__ ? (process.env.EXPO_PUBLIC_MEMORY_MODE as MemoryMode | undefined) : undefined;
+  const devMode = typeof __DEV__ !== 'undefined' && __DEV__ ? ((process.env.EXPO_PUBLIC_MEMORY_MODE || undefined) as MemoryMode | undefined) : undefined;
   const mode: MemoryMode = party ? 'race' : devMode ?? modeProp ?? (difficulty === 0 ? 'ride' : 'timeAttack');
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
@@ -1139,7 +1139,8 @@ export default function MemoryGame({
           const mx = (ca.x + cb.x) / 2;
           const my = (ca.y + cb.y) / 2;
           const land = ev.last && (r.mode === 'ride' || r.mode === 'daily') ? 0 : flipMs;
-          if (ev.last && r.mode !== 'timeAttack') break;
+          const finalSpectacle = ev.last && (r.mode === 'ride' || r.mode === 'daily');
+          if (finalSpectacle) break;
           later(land, () => {
             const stop = recall ? hitStopFor(chain, show) : 0;
             const leanDeg = 0.12 * 20;
@@ -1190,7 +1191,7 @@ export default function MemoryGame({
             warmth.value = withTiming(Math.min(3, chain) * 0.06 + (show ? 0.12 : 0), { duration: 300 });
             chainPlate.current?.quick();
             // Prize shelf flight (not the Final Pair).
-            if (!ev.last || r.mode === 'timeAttack') {
+            if (!finalSpectacle) {
               const k = r.shelfNext++;
               const sp = shelfXY(g, k, r.pairs);
               const sc = sp.h / g.ch;
@@ -1297,6 +1298,7 @@ export default function MemoryGame({
           break;
         }
         case 'showtimeOff': {
+          fx.current?.vignette({ color: '#ffcf3b', peak: 0.3, inMs: 0, holdMs: 0, outMs: 400 });
           rays.value = withTiming(0, { duration: 400 });
           glow.value = withTiming(0, { duration: 400 });
           if (!calm) camera.frame(1);
