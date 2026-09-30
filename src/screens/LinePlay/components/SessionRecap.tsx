@@ -1,8 +1,9 @@
 /**
- * The queue recap, shown when a wait ends. When the queue itself ended the
- * wait (the guest left the queue area or boarded) it opens as "Your ride's
- * up!". Verified rewards count up in a staggered row with his currency art,
- * the crew's story replays, and the next coin move is one clear action.
+ * The queue recap, shown when a wait ends. A confirmed boarding opens as
+ * "Your ride's up!"; leaving the queue area opens as "Wait wrapped up" with a
+ * "Still in line?" way back in. Verified rewards count up in a staggered row
+ * with his currency art (the crew story plays once, on the relay card), and
+ * the next coin move is one clear action.
  *
  * Only server-confirmed amounts are shown as earned; nothing here grants.
  */
@@ -20,7 +21,6 @@ import { crewRelayScore, type CrewRelayProgress } from '../../../services/linepl
 import type { EndReason } from '../../../services/lineplay/LinePlaySession';
 import type { RideCoinLevelType } from '../../../models/ride-coin-level-type';
 import type { LinePlayFeedback, WaitRating, FavoriteLinePlayActivity } from '../../../api/endpoints/me/inline-timer/feedback';
-import CrewStoryPayoff from './CrewStoryPayoff';
 
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
@@ -112,6 +112,8 @@ export interface SessionRecapProps {
   onFavoriteActivity?: (favorite: FavoriteLinePlayActivity) => void;
   /** Why the wait ended; the queue ending it opens as "Your ride's up!". */
   endReason?: EndReason | null;
+  /** Left the queue area by mistake: start a fresh wait that keeps the playlist. */
+  onStillInLine?: () => void;
   doneLabel?: string;
   onDone: () => void;
 }
@@ -122,13 +124,14 @@ export default function SessionRecap({
   rewardTrackingAvailable, queueStamp = null, onOpenStampBook, resolution, predictionUnscored, crewPuzzle,
   crewRelay, crewRouteNames, crewScoreNoun, coin, coinState, playerEnergy, energyUnavailable = false, rideName,
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
-  feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null,
+  feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine,
   doneLabel = 'Done', onDone,
 }: SessionRecapProps) {
   const reducedMotion = useReducedGameMotion();
   const minutes = useCountUp(Math.floor(elapsedSeconds / 60), 120, reducedMotion);
   const secs = elapsedSeconds % 60;
-  const rideUp = endReason === 'left_queue' || endReason === 'boarded';
+  const rideUp = endReason === 'boarded';
+  const leftQueue = endReason === 'left_queue';
   const enter = (index: number) => reducedMotion ? undefined : FadeInDown.delay(420 + index * 90).springify().damping(14);
   const upgradeReady = coin != null && coin.current_level < coin.max_level &&
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
@@ -139,17 +142,28 @@ export default function SessionRecap({
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
       <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={styles.recapHero}>
         <View style={styles.recapHeroCopy}>
-          <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : 'LINEPLAY COMPLETE'}</Text>
+          <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : leftQueue ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</Text>
           <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
           <Text style={styles.recapTime} accessibilityLabel={`${Math.floor(elapsedSeconds / 60)} minutes ${secs} seconds`}>
             {minutes}m {secs}s</Text>
-          <Text style={styles.recapSub}>{rideUp ? 'of queue play, all saved' : 'session time'}</Text>
+          <Text style={styles.recapSub}>{rideUp || leftQueue ? 'of queue play, all saved' : 'session time'}</Text>
         </View>
         <Animated.View entering={reducedMotion ? undefined : ZoomIn.delay(80).springify().damping(9)} style={styles.recapSharkWrap}>
           <Image source={QUEUE_RECAP_SHARK} style={styles.recapShark} contentFit="contain"
             accessibilityLabel="Shark celebrating with a ride coin and park ticket" />
         </Animated.View>
       </LinearGradient>
+
+      {leftQueue && onStillInLine && (
+        <Animated.View entering={enter(0)} style={styles.stillInLineCard}>
+          <GameIcon name="queue" size={34} />
+          <View style={styles.stillInLineCopy}>
+            <Text style={styles.stillInLineTitle}>Still in line?</Text>
+            <Text style={styles.stillInLineBody}>Pick up where you left off. This recap keeps its rewards.</Text>
+          </View>
+          <GameButton label="Keep playing" variant="secondary" onPress={onStillInLine} />
+        </Animated.View>
+      )}
 
       <Text style={styles.recapSectionTitle}>{rewardsConfirmed ? 'YOUR VERIFIED HAUL' : 'YOUR LINEPLAY ADVENTURE'}</Text>
       <View style={styles.recapStats}>
@@ -189,8 +203,14 @@ export default function SessionRecap({
 
       {crewRelay?.step === 'complete' && (
         <Animated.View entering={enter(1)}>
-          <CrewStoryPayoff progress={crewRelay} routeNames={crewRouteNames ?? ['Alpha', 'Omega']} />
-          <Text style={styles.crewScore}>{crewScoreNoun}: {crewRelayScore(crewRelay)}/2</Text>
+          <View style={styles.recapPrediction}>
+            <View style={styles.bonusLine}>
+              <GameIcon name="chest" size={26} />
+              <Text style={styles.recapPredictionText}>
+                {`Crew story complete. ${crewScoreNoun}: ${crewRelayScore(crewRelay)}/2`}
+              </Text>
+            </View>
+          </View>
         </Animated.View>
       )}
 
@@ -358,7 +378,11 @@ const styles = StyleSheet.create({
   queueStampTitle: { color: '#083d73', fontFamily: 'Shark', fontSize: 17, marginTop: 1 },
   queueStampAction: { color: '#205570', fontFamily: 'Knockout', fontSize: 14, marginTop: 3 },
   bonusLine: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.sm },
-  crewScore: { color: '#a86500', fontFamily: 'Knockout', fontSize: 15, textAlign: 'center' },
+  stillInLineCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md,
+    padding: spacing.md, borderRadius: borderRadius.lg, backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#ffd443' },
+  stillInLineCopy: { flex: 1 },
+  stillInLineTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 17 },
+  stillInLineBody: { color: '#315d77', fontFamily: 'Knockout', fontSize: 13, lineHeight: 17, marginTop: 2 },
   recapPrediction: { marginTop: spacing.md, padding: spacing.md, borderRadius: borderRadius.lg,
     backgroundColor: '#ffffff', borderWidth: 2, borderColor: '#a3d8ef' },
   recapPredictionText: { flexShrink: 1, color: '#205570', fontFamily: 'Knockout', fontSize: 14, lineHeight: 19 },

@@ -91,7 +91,11 @@ export function linePlayTourSteps(c: LinePlayTourControls): Array<() => void> {
     () => c.startResume(), // 8: 3-2-1
     () => c.openEndSheet(true), // 9: wait-end sheet
     () => c.openEndSheet(false),
-    () => c.session.beginEnding(false, 'left_queue'), // ride up
-    () => { void c.session.endNow(true); }, // 11: recap
+    () => c.session.suggestBoarded(), // ride detection only asks
+    () => c.session.dismissBoardingSuggestion(),
+    () => c.session.beginEnding(false, 'left_queue'), // line done? countdown
+    () => { void c.session.endNow(false); }, // wait wrapped up recap with "Still in line?"
+    () => { void c.session.continueInLine(); }, // back in line, playlist kept
+    () => { void c.session.endNow(true); }, // boarded recap
   ];
 }

@@ -233,6 +233,13 @@ export interface SessionSnapshot {
   readonly prediction: { card: PredictionCard; guess: 'beat' | 'miss' } | null;
   /** Guest explicitly said they reached boarding; never inferred from ending a session. */
   readonly boardingConfirmed: boolean;
+  /**
+   * Ride detection thinks the guest boarded. Only a question for the guest:
+   * it never ends the wait, starts a countdown or confirms boarding.
+   */
+  readonly boardingSuggested: boolean;
+  /** A mini-game is open; the wrap-up countdown is held until it closes. */
+  readonly gameOpen: boolean;
   readonly boardingAt: number | null;
   readonly crewRelay: CrewRelayProgress | null;
 }
@@ -251,11 +258,15 @@ const ADVANCE_WINDOW_MS = 90_000;
 /** At most one heads up in this span; the guest is playing, not being nagged. */
 const ADVANCE_COOLDOWN_MS = 4 * 60_000;
 /** Consecutive fresh "not near the ride" answers before a wait is treated as over. */
-const EXIT_AWAY_SAMPLES = 3;
-/** ...and they must span at least this long, so one GPS jump never ends a wait. */
-const EXIT_AWAY_MIN_MS = 75_000;
-/** Grace window for exit undo. */
-const EXIT_GRACE_MS = 60_000;
+export const EXIT_AWAY_SAMPLES = 4;
+/**
+ * ...and they must span at least this long. Indoor queues drift and outdoor
+ * overflow switchbacks cross the server radius, so a short streak never ends
+ * a wait; three minutes of consistently away answers does.
+ */
+export const EXIT_AWAY_MIN_MS = 3 * 60_000;
+/** Grace window for exit undo. It never runs while a mini-game is open. */
+export const EXIT_GRACE_MS = 60_000;
 /** One accrual tick per this many seconds (display model). */
 const ACCRUAL_TICK_SECONDS = 30;
 /** Display-only energy per tick. Server value overrides at complete. */
@@ -551,6 +562,10 @@ export class LinePlaySession {
   private firstAwayAt: number | null = null;
   private prediction: { card: PredictionCard; guess: 'beat' | 'miss' } | null = null;
   private boardingConfirmed = false;
+  private boardingSuggested = false;
+  private gameOpen = false;
+  /** Grace left when the countdown was held for an open game. */
+  private graceHeldMs: number | null = null;
   private boardingAt: number | null = null;
   private crewRelay: CrewRelayProgress | null = null;
 
@@ -684,6 +699,8 @@ export class LinePlaySession {
       endReason: this.endReason,
       prediction: this.prediction,
       boardingConfirmed: this.boardingConfirmed,
+      boardingSuggested: this.boardingSuggested,
+      gameOpen: this.gameOpen,
       boardingAt: this.boardingAt,
       crewRelay: this.crewRelay,
     };
@@ -794,12 +811,62 @@ export class LinePlaySession {
   }
 
   /**
-   * Ride detection saw this guest ride. Wrap up with boarding confirmed, which
-   * also scores a saved wait prediction.
+   * Ride detection thinks this guest rode. That signal comes from a single
+   * fix leaving the ride radius, which indoor queue drift can fake, so it only
+   * asks the guest. Play keeps going, nothing counts down, and boarding is
+   * recorded only when the guest says so (endNow(true)).
    */
-  markBoarded(): void {
+  suggestBoarded(): void {
     if (this.state !== 'active' && this.state !== 'paused') return;
-    this.beginEnding(true, 'boarded');
+    if (this.boardingSuggested) return;
+    this.boardingSuggested = true;
+    this.emit();
+  }
+
+  /** The guest answered "Still in line" to a ride detection. */
+  dismissBoardingSuggestion(): void {
+    if (!this.boardingSuggested) return;
+    this.boardingSuggested = false;
+    this.emit();
+  }
+
+  /**
+   * A full-screen mini-game opened or closed. While one is open the wrap-up
+   * countdown is held (the guest cannot see its sheet), and it resumes with
+   * the time it had left when the game closes.
+   */
+  setGameOpen(open: boolean): void {
+    if (this.gameOpen === open) return;
+    this.gameOpen = open;
+    if (this.state === 'ending') {
+      if (open) this.holdGrace();
+      else this.releaseGrace();
+    }
+    this.emit();
+  }
+
+  private holdGrace(): void {
+    if (this.graceHeldMs != null) return;
+    this.graceHeldMs = this.computeGraceRemaining();
+    if (this.graceTimer) {
+      clearTimeout(this.graceTimer);
+      this.graceTimer = null;
+    }
+  }
+
+  private releaseGrace(): void {
+    if (this.graceHeldMs == null) return;
+    const remaining = this.graceHeldMs;
+    this.graceHeldMs = null;
+    this.armGrace(remaining);
+  }
+
+  private armGrace(remainingMs: number): void {
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+    this.graceStartedAt = Date.now() - (EXIT_GRACE_MS - remainingMs);
+    this.graceTimer = setTimeout(() => {
+      void this.complete();
+    }, remainingMs);
   }
 
   private recordPlayedAdaptiveEpisode(activityId: string): void {
@@ -984,7 +1051,9 @@ export class LinePlaySession {
   }
 
   private computeGraceRemaining(): number {
-    if (this.state !== 'ending' || this.graceStartedAt == null) return 0;
+    if (this.state !== 'ending') return 0;
+    if (this.graceHeldMs != null) return this.graceHeldMs;
+    if (this.graceStartedAt == null) return 0;
     return Math.max(0, EXIT_GRACE_MS - (Date.now() - this.graceStartedAt));
   }
 
@@ -1091,6 +1160,8 @@ export class LinePlaySession {
     this.endReason = saved?.endReason ?? null;
     this.awaySamples = 0;
     this.firstAwayAt = null;
+    this.boardingSuggested = false;
+    this.graceHeldMs = null;
     this.advanceTrail = [];
     const originalWaitStillFresh = ride.postedWaitMinutes === saved?.plannedWaitMinutes &&
       ride.postedWaitObservedAt != null &&
@@ -1430,15 +1501,15 @@ export class LinePlaySession {
     if (this.state !== 'active' && this.state !== 'paused') return;
     this.endReason = reason;
     this.boardingConfirmed = boardingConfirmed;
+    this.boardingSuggested = false;
     this.boardingAt = boardingConfirmed ? Date.now() : null;
     this.state = 'ending';
-    this.graceStartedAt = Date.now();
+    this.graceHeldMs = null;
+    this.armGrace(EXIT_GRACE_MS);
+    // An open mini-game hides the wrap-up sheet: hold the countdown for it.
+    if (this.gameOpen) this.holdGrace();
     this.persistCheckpoint();
     this.emit();
-    if (this.graceTimer) clearTimeout(this.graceTimer);
-    this.graceTimer = setTimeout(() => {
-      void this.complete();
-    }, EXIT_GRACE_MS);
     // Keep ticking so graceMsRemaining animates down.
   }
 
@@ -1455,6 +1526,47 @@ export class LinePlaySession {
     await this.complete();
   }
 
+  /**
+   * "Still in line" after the wrap-up already settled (the countdown ran out,
+   * or the guest tapped through too fast). The finished server session keeps
+   * its rewards; a fresh one starts for the rest of the wait, carrying the
+   * playlist, finished rounds, replays, difficulty and the story so far.
+   */
+  async continueInLine(): Promise<void> {
+    if (this.disposed || this.state !== 'complete' || !this.ride || this.completionInFlight) return;
+    this.startRequestId =
+      `line-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    this.serverSessionId = null;
+    this.serverStartInFlight = null;
+    this.lastServerStartAttemptAt = 0;
+    this.backgroundTrackingSessionId = null;
+    this.backgroundTrackingAvailable = null;
+    this.rewardConnectionIssue = null;
+    this.verifiedEligibleSeconds = 0;
+    this.creditedParts = null;
+    this.rewards = null;
+    this.rewardsPending = false;
+    this.currentQuestVerified = false;
+    this.currentQuestSeed = null;
+    this.currentQuestBonusEnabled = false;
+    this.endedAt = null;
+    this.endReason = null;
+    this.boardingConfirmed = false;
+    this.boardingSuggested = false;
+    this.boardingAt = null;
+    this.graceStartedAt = null;
+    this.graceHeldMs = null;
+    this.awaySamples = 0;
+    this.firstAwayAt = null;
+    this.pauseReason = null;
+    this.state = 'active';
+    this.startTicking();
+    this.persistCheckpoint();
+    this.emit();
+    const sample = this.lastSample;
+    if (sample) await this.connectServer(sample, true);
+  }
+
   /** Cancel an in-progress ending and return to active. */
   undoEnd(): void {
     if (this.state !== 'ending') return;
@@ -1463,6 +1575,7 @@ export class LinePlaySession {
       this.graceTimer = null;
     }
     this.graceStartedAt = null;
+    this.graceHeldMs = null;
     this.boardingConfirmed = false;
     this.boardingAt = null;
     this.endReason = null;
@@ -1495,6 +1608,8 @@ export class LinePlaySession {
       this.graceTimer = null;
     }
     this.graceStartedAt = null;
+    this.graceHeldMs = null;
+    this.boardingSuggested = false;
     this.endedAt = Date.now();
     this.state = 'complete';
     this.backgroundTrackingAvailable = null;
@@ -1662,6 +1777,8 @@ export class LinePlaySession {
     this.extraRoundsAdded = 0;
     this.pauseReason = null;
     this.graceStartedAt = null;
+    this.graceHeldMs = null;
+    this.boardingSuggested = false;
     this.playlist = [];
     this.rewards = null;
     this.rewardsPending = false;

@@ -380,20 +380,14 @@ export default function LinePlayScreen() {
     return () => subscription.remove();
   }, [snapshot.state === 'active' || snapshot.state === 'paused', showToast]);
 
-  // Boarding detection: the ride tracker saw this guest ride this ride.
+  // Boarding detection: the ride tracker thinks this guest rode. One fix
+  // outside the ride radius can fake that in an indoor queue, so it only asks.
   useEffect(() => {
     if (!ride) return;
     return rideDetectionEmitter.on('rideDetected', detection => {
-      if (detection.rideId === ride.rideId) session.markBoarded();
+      if (detection.rideId === ride.rideId) session.suggestBoarded();
     });
   }, [ride?.rideId, session]);
-
-  // The queue ended the wait: a success haptic lands with the wrap-up sheet.
-  const rideUp = snapshot.state === 'ending' &&
-    (snapshot.endReason === 'left_queue' || snapshot.endReason === 'boarded');
-  useEffect(() => {
-    if (rideUp) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [rideUp]);
 
   useEffect(() => {
     if (!snapshot.parkProject) {
@@ -409,6 +403,17 @@ export default function LinePlayScreen() {
 
   const [activeGame, setActiveGame] =
     useState<(Extract<ActivityItem, { kind: 'minigame' }> & { difficulty: QueueDifficulty }) | null>(null);
+
+  // A full-screen game hides every sheet: hold the wrap-up countdown for it.
+  useEffect(() => { session.setGameOpen(activeGame != null); }, [activeGame != null, session]);
+
+  // Leaving the queue area starts a wrap-up; it shows once no game covers it.
+  const lineDone = snapshot.state === 'ending' && snapshot.endReason === 'left_queue' && activeGame == null;
+  const boardingAsk = snapshot.boardingSuggested && activeGame == null &&
+    (snapshot.state === 'active' || snapshot.state === 'paused');
+  useEffect(() => {
+    if (lineDone || boardingAsk) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  }, [lineDone, boardingAsk]);
 
   // TriviaGame holds its question cursor in the source. Keep one source for
   // the whole round even while LinePlay emits a new timer snapshot each second.
@@ -826,6 +831,8 @@ export default function LinePlayScreen() {
               energyUnavailable={recapEnergyUnavailable}
               rideName={ride.rideName}
               endReason={snapshot.endReason}
+              onStillInLine={snapshot.endReason === 'left_queue'
+                ? () => { void session.continueInLine(); } : undefined}
               onOpenCoin={() => void handleOpenCoin()}
               onOpenPark={() => void handleOpenPark()}
               parkAvailable={ride.parkId != null && player?.id != null}
@@ -1035,28 +1042,38 @@ export default function LinePlayScreen() {
         onAnswer={index => answerWaitEnd(index === 1 ? true : index === 0 ? false : null)}
       />
 
-      {/* The queue ended the wait: leaving the queue area or boarding. */}
+      {/* Ride detection only asks: nothing counts down and play keeps going. */}
       <GameDialog
-        visible={rideUp}
-        title="Your ride’s up!"
-        message={`${snapshot.endReason === 'boarded'
-          ? 'Enjoy the ride! Your games and wait time are saved.'
-          : 'Looks like you left the line. Your games and wait time are saved.'} Wrapping up in ${Math.ceil(snapshot.graceMsRemaining / 1000)}s.`}
+        visible={boardingAsk}
+        title="Did your ride start?"
+        message="Looks like you might be boarding. Your games and wait time are saved either way."
         icon="ride"
         haptic="none"
-        buttons={snapshot.endReason === 'boarded' ? [
-          { text: 'See my recap' },
-          { text: 'Still in line', style: 'cancel' },
-        ] : [
-          { text: 'I left the line' },
-          { text: 'I reached boarding' },
-          { text: 'Still in line', style: 'cancel' },
+        buttons={[
+          { text: 'Still in line', style: 'cancel', variant: 'secondary' },
+          { text: 'I’m boarding' },
         ]}
         onAnswer={index => {
-          const cancel = snapshot.endReason === 'boarded' ? 1 : 2;
-          if (index == null || index === cancel) { session.undoEnd(); return; }
-          const boarded = snapshot.endReason === 'boarded' || index === 1;
-          void session.endNow(boarded).catch(finishFailed);
+          if (index !== 1) { session.dismissBoardingSuggestion(); return; }
+          void session.endNow(true).catch(finishFailed);
+        }}
+      />
+
+      {/* Several minutes of away answers: the guest likely left the queue. */}
+      <GameDialog
+        visible={lineDone}
+        title="Line done?"
+        message={`Looks like you left the queue area. Your games and wait time are saved. Wrapping up in ${Math.ceil(snapshot.graceMsRemaining / 1000)}s.`}
+        icon="queue"
+        haptic="none"
+        buttons={[
+          { text: 'I reached boarding', variant: 'secondary' },
+          { text: 'Still in line', style: 'cancel', variant: 'secondary' },
+          { text: 'I left the line' },
+        ]}
+        onAnswer={index => {
+          if (index == null || index === 1) { session.undoEnd(); return; }
+          void session.endNow(index === 0).catch(finishFailed);
         }}
       />
     </View>

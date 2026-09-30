@@ -277,7 +277,7 @@ test('a big forward advance raises one non-pausing heads up, then cools down', a
   session.dispose();
 });
 
-test('leaving the queue area starts the ride-up wrap-up only after several fresh away fixes', async () => {
+test('leaving the queue area starts the wrap-up only after three minutes of fresh away fixes', async () => {
   let near = true;
   const { Session } = makeHarness(null, server, null, null, null, { granted: true }, null, async () => {
     if (near) return server;
@@ -292,44 +292,109 @@ test('leaving the queue area starts the ride-up wrap-up only after several fresh
   const t0 = Date.now();
   await heartbeatAway(t0);
   await heartbeatAway(t0 + 30_000);
-  assert.equal(session.snapshot().state, 'active', 'two away fixes are not enough');
   await heartbeatAway(t0 + 60_000);
-  assert.equal(session.snapshot().state, 'active', 'three fixes inside a minute are not enough');
   await heartbeatAway(t0 + 90_000);
+  assert.equal(session.snapshot().state, 'active', 'a 90 second drift through an indoor queue is not enough');
+  await heartbeatAway(t0 + 150_000);
+  assert.equal(session.snapshot().state, 'active', 'still under three minutes');
+  await heartbeatAway(t0 + 180_000);
   assert.equal(session.snapshot().state, 'ending');
   assert.equal(session.snapshot().endReason, 'left_queue');
+  assert.equal(session.snapshot().boardingConfirmed, false, 'leaving never confirms boarding');
   // "Still in line" undoes it and clears the streak.
   session.undoEnd();
   assert.equal(session.snapshot().state, 'active');
   assert.equal(session.snapshot().endReason, null);
-  await heartbeatAway(t0 + 120_000);
+  await heartbeatAway(t0 + 210_000);
   assert.equal(session.snapshot().state, 'active');
   // A noisy fix never counts, and one near answer resets the streak.
-  await session.heartbeat({ ...sample, accuracyMeters: 120, timestamp: t0 + 150_000 });
+  await session.heartbeat({ ...sample, accuracyMeters: 120, timestamp: t0 + 240_000 });
   assert.equal(session.awaySamples, 1);
   near = true;
-  await session.heartbeat({ ...sample, timestamp: t0 + 180_000 });
+  await session.heartbeat({ ...sample, timestamp: t0 + 270_000 });
   assert.equal(session.awaySamples, 0);
   session.dispose();
 });
 
-test('a 422 heartbeat is an away sample, and boarding detection wraps up with boarding confirmed', async () => {
+test('one out-of-radius ride detection mid-queue never ends the wait or confirms boarding', async () => {
   const { Session, calls } = makeHarness(null, server);
   const session = new Session();
   const sample = { latitude: 34.1, longitude: -118.3, timestamp: Date.now(), accuracyMeters: 8 };
   await session.start(ride, sample, 12);
-  session.markBoarded();
-  assert.equal(session.snapshot().state, 'ending');
-  assert.equal(session.snapshot().endReason, 'boarded');
-  assert.equal(session.snapshot().boardingConfirmed, true);
-  // A round finished during the wrap-up still counts in the recap.
+  session.suggestBoarded();
+  let snap = session.snapshot();
+  assert.equal(snap.state, 'active', 'a detection only asks; play keeps going');
+  assert.equal(snap.boardingSuggested, true);
+  assert.equal(snap.boardingConfirmed, false, 'boarding is never inferred');
+  assert.equal(snap.endReason, null);
+  assert.equal(snap.graceMsRemaining, 0, 'no countdown runs');
+  // "Still in line" clears the question; the session is untouched.
+  session.dismissBoardingSuggestion();
+  assert.equal(session.snapshot().boardingSuggested, false);
+  assert.equal(session.snapshot().state, 'active');
+  assert.equal(calls.complete, 0);
+  // Only the guest's own answer records boarding.
+  session.suggestBoarded();
   session.markActivityCompleted('mg-late');
-  assert.ok(session.snapshot().completedActivityIds.includes('mg-late'));
   await session.endNow(true);
-  assert.equal(session.snapshot().state, 'complete');
-  assert.equal(session.snapshot().endReason, 'boarded');
+  snap = session.snapshot();
+  assert.equal(snap.state, 'complete');
+  assert.equal(snap.endReason, 'boarded');
+  assert.equal(snap.boardingConfirmed, true);
+  assert.equal(snap.boardingSuggested, false);
+  assert.ok(snap.completedActivityIds.includes('mg-late'));
   assert.equal(calls.complete, 1);
   await session.forgetCheckpoint();
+  session.dispose();
+});
+
+test('the wrap-up countdown holds while a mini-game is open and resumes where it left off', async () => {
+  const { Session, calls } = makeHarness(null, server);
+  const session = new Session();
+  const sample = { latitude: 34.1, longitude: -118.3, timestamp: Date.now(), accuracyMeters: 8 };
+  await session.start(ride, sample, 12);
+  session.setGameOpen(true);
+  session.beginEnding(false, 'left_queue');
+  assert.equal(session.snapshot().state, 'ending');
+  const held = session.snapshot().graceMsRemaining;
+  assert.ok(held > 59_000);
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(session.snapshot().graceMsRemaining, held, 'held while the game is open');
+  assert.equal(session.graceTimer, null, 'no timer can complete the wait mid-game');
+  // A round finished inside the game still lands in the recap.
+  session.markActivityCompleted('mg-in-game');
+  session.setGameOpen(false);
+  assert.ok(session.graceTimer != null);
+  assert.ok(session.snapshot().graceMsRemaining <= held);
+  assert.ok(session.snapshot().graceMsRemaining > held - 1_000);
+  assert.ok(session.snapshot().completedActivityIds.includes('mg-in-game'));
+  assert.equal(calls.complete, 0);
+  session.dispose();
+});
+
+test('"Still in line" after the wrap-up settled starts a fresh session that keeps the playlist', async () => {
+  let starts = 0;
+  const { Session, calls } = makeHarness(null, () => ({ ...server, session_id: `server-${++starts}` }));
+  const session = new Session();
+  const sample = { latitude: 34.1, longitude: -118.3, timestamp: Date.now(), accuracyMeters: 8 };
+  await session.start(ride, sample, 12);
+  session.ingestLocation(sample);
+  const first = session.snapshot();
+  assert.equal(first.serverSessionId, 'server-1');
+  session.markActivityCompleted(first.playlist[0].id);
+  session.beginEnding(false, 'left_queue');
+  await session.complete();
+  assert.equal(session.snapshot().state, 'complete');
+  assert.equal(calls.complete, 1);
+  await session.continueInLine();
+  const next = session.snapshot();
+  assert.equal(next.state, 'active');
+  assert.equal(next.endReason, null);
+  assert.equal(next.endedAt, null);
+  assert.equal(next.serverSessionId, 'server-2', 'a new server session, the settled one keeps its rewards');
+  assert.deepEqual(next.playlist.map(item => item.id), first.playlist.map(item => item.id));
+  assert.ok(next.completedActivityIds.includes(first.playlist[0].id));
+  assert.equal(next.startedAt, first.startedAt, 'the wait clock keeps running');
   session.dispose();
 });
 
