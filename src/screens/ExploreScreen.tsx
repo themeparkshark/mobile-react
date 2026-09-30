@@ -67,6 +67,8 @@ import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
 import TaskMarker from './ExploreScreen/TaskMarker';
+import { clusterMarkers, revealDelays } from './ExploreScreen/mapMarkerPresentation';
+import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
 import VaultMarker from './ExploreScreen/VaultMarker';
 import CommunityCenterMarker from '../components/CommunityCenterMarker';
 import CommunityCenterModal from '../components/CommunityCenterModal';
@@ -422,6 +424,57 @@ export default function ExploreScreen() {
   const mapNow = useMapOpportunityClock(timedOpportunities, refreshMapOpportunities, !!park && !!player);
   const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
     .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);
+
+  // Rides that open later today rest on the map with "Back 2:00 PM" instead of vanishing.
+  const restingTasks = useMemo(() => (redeemables?.tasks ?? []).filter(task => {
+    const from = gameTimestamp(task.active_from);
+    return from !== null && from > mapNow && !opportunityIsActive(task, mapNow);
+  }), [redeemables?.tasks, mapNow]);
+
+  // Declutter: islands within 48px fold under one (+N); the coin and timer show only near you or selected.
+  const [mapZoom, setMapZoom] = useState(17.6);
+  const onMapZoom = useCallback((zoom: number) => setMapZoom(Math.round(zoom * 4) / 4), []);
+  const playerLat = location?.latitude, playerLng = location?.longitude;
+  const taskDistance = useMemo(() => {
+    const out = new globalThis.Map<number, number>();
+    if (playerLat == null || playerLng == null) return out;
+    const k = Math.cos(playerLat * Math.PI / 180);
+    for (const task of [...visibleTasks, ...restingTasks]) {
+      out.set(task.id, Math.hypot((Number(task.latitude) - playerLat) * 111320, (Number(task.longitude) - playerLng) * 111320 * k));
+    }
+    return out;
+  }, [visibleTasks, restingTasks, playerLat, playerLng]);
+  const playableTaskId = activeRedeemable?.type === 'task' ? activeRedeemable.model.id : null;
+  const adventureTaskId = adventure && (adventure.phase === 'discover' || adventure.phase === 'play') ? adventure.ride.task_id : null;
+  const goalTaskId = tripGoal && !tripGoal.coin_owned ? tripGoal.task_id : null;
+  const rideClusters = useMemo(() => clusterMarkers([...visibleTasks, ...restingTasks].map(task => ({
+    id: task.id, task, latitude: Number(task.latitude), longitude: Number(task.longitude),
+    pinned: task.id === selectedTask?.id,
+    priority: (task.id === adventureTaskId ? 50 : 0) + (task.id === goalTaskId ? 40 : 0) +
+      (liveByTask.get(task.id)?.rush ? 30 : 0) + (task.id === playableTaskId ? 20 : 0) +
+      ((taskDistance.get(task.id) ?? Infinity) <= 60 ? 10 : 0) + (restingTasks.includes(task) ? -5 : 0),
+  })).filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude)), mapZoom),
+  [visibleTasks, restingTasks, selectedTask?.id, adventureTaskId, goalTaskId, liveByTask, playableTaskId, taskDistance, mapZoom]);
+  // First reveal of a park's islands: nearest drop in first.
+  const revealRef = useRef<{ context: string; delays: globalThis.Map<number, number> } | null>(null);
+  if (redeemables && visibleTasks.length && revealRef.current?.context !== mapContext) {
+    revealRef.current = { context: mapContext, delays: revealDelays([...visibleTasks]
+      .sort((a, b) => (taskDistance.get(a.id) ?? 0) - (taskDistance.get(b.id) ?? 0)).map(task => task.id)) };
+  }
+  const [mapFocusRequest, setMapFocusRequest] = useState<{ latitude: number; longitude: number; zoom: number; requestId: number } | null>(null);
+  const clusterRef = useRef({ rideClusters, mapZoom }); clusterRef.current = { rideClusters, mapZoom };
+  // Tapping a folded island zooms into it; a lone island toggles selection.
+  const handleTaskPress = useCallback((task: TaskType) => {
+    const { rideClusters: clusters, mapZoom: zoom } = clusterRef.current;
+    const cluster = clusters.find(item => item.lead.id === task.id);
+    if (cluster && cluster.members.length > 0 && zoom < 19.5) {
+      setSelectedTask(null);
+      setMapFocusRequest({ latitude: Number(task.latitude), longitude: Number(task.longitude), zoom: Math.min(20, zoom + 1.5), requestId: Date.now() });
+      return;
+    }
+    setMapFocusRequest(null);
+    setSelectedTask(previous => previous?.id === task.id ? null : task);
+  }, []);
 
   // Adventure Ticket: Play opens only in the ride's line; detours rank open, near, short waits.
   const adventureGate = useMemo(() => adventure ? adventurePlayGate(adventure, location) : undefined,
@@ -983,11 +1036,12 @@ export default function ExploreScreen() {
             {queueRide.lineRewardsReady === false ? 'Games only · Parts not set up' : 'Parts need a verified wait'}
           </Text>
         </Pressable>}
-        <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }}
-          controlsTop={(adventure ? 162 : queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+        <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
+          onZoomChange={onMapZoom}
+          controlsTop={(queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
-        } : null}>
+        } : mapFocusRequest}>
           {activeParkProject?.park_id === park.id && (
             <ParkProjectMapBeacon project={activeParkProject}
               onPress={() => setProjectOpenRequestVersion(version => version + 1)} />
@@ -1002,20 +1056,31 @@ export default function ExploreScreen() {
             .map((item) => (
               <PinMarker key={item.id} item={item} />
             ))}
-          {visibleTasks.map((task) => (
-            <TaskMarker
-              key={`${task.id}-${tripGoal?.task_id === task.id && !tripGoal.coin_owned ? 'goal' : 'regular'}`}
+          {rideClusters.map(({ lead, members }) => {
+            const task = lead.task;
+            const resting = restingTasks.includes(task);
+            const distance = taskDistance.get(task.id) ?? null;
+            return <TaskMarker
+              key={`${task.id}-${goalTaskId === task.id ? 'goal' : 'regular'}`}
               task={task}
               isSelected={selectedTask?.id === task.id}
-              isTripGoal={tripGoal?.task_id === task.id && !tripGoal.coin_owned}
+              isTripGoal={goalTaskId === task.id}
+              adventure={adventureTaskId === task.id}
+              near={distance !== null && distance <= 60}
+              playable={playableTaskId === task.id}
+              clusterCount={members.length}
+              restingUntil={resting ? gameTimestamp(task.active_from) : null}
+              distanceMeters={selectedTask?.id === task.id ? distance : null}
+              ticketCost={task.ticket_cost ?? tripGoalData?.wallet.ticket_cost ?? 1}
+              revealDelay={revealRef.current?.delays.get(task.id)}
               control={rideControlByAsset.get(Number(task.asset_id))}
               flagRaiseKey={bossMap.flag?.asset_id === Number(task.asset_id) &&
                 (bossMap.moment?.phase === 'flag' || bossMap.moment?.phase === 'settled') ? bossMap.moment.impact.key : undefined}
               ambient={ambientTaskIds.has(task.id)}
               live={liveByTask.get(task.id)}
-              onPress={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
-            />
-          ))}
+              onPress={handleTaskPress}
+            />;
+          })}
           {bossMap.moment && (bossMap.moment.phase === 'exit' || bossMap.moment.phase === 'flag') &&
             <Circle center={bossMap.moment.impact.coordinate} radius={65} fillColor="rgba(255,207,59,0.12)" strokeColor="#ffcf3b" strokeWidth={2} />}
           {bossMap.moment?.phase === 'exit' && <BossMapDeparture impact={bossMap.moment.impact} onComplete={bossMap.finishExit} />}

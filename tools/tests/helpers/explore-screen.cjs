@@ -8,6 +8,11 @@
  * reward-hook-runtime.cjs plus `navigation` calls.
  */
 const { runtime } = require('./reward-hook-runtime.cjs');
+const { loadTs } = require('./ts-module.cjs');
+// Pure presentation modules run for real so the screen's rules are exercised.
+const markers = loadTs('src/screens/ExploreScreen/mapMarkerPresentation.ts');
+const adventure = loadTs('src/screens/ExploreScreen/adventureTicketPresentation.ts');
+const timing = loadTs('src/screens/ExploreScreen/mapOpportunityTiming.ts');
 
 // Modules the runtime implements itself; the stub proxy must not shadow them.
 const RUNTIME_OWNED = new Set(['react', 'react/jsx-runtime', 'react-native', 'react-native-reanimated',
@@ -68,7 +73,9 @@ exports.exploreScreen = function exploreScreen(options = {}) {
       if (enabled && !loaded) { loaded = true; void refresh(); }
       return Date.parse('2026-09-30T18:00:00Z');
     } },
-    './ExploreScreen/mapOpportunityTiming': { opportunityIsActive: () => true },
+    './ExploreScreen/mapOpportunityTiming': { ...timing, opportunityIsActive: () => true },
+    './ExploreScreen/mapMarkerPresentation': markers,
+    './ExploreScreen/adventureTicketPresentation': adventure,
     '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined, hasCompleted: () => true, isReady: true, isActive: false }) },
     '../components/boss/BossRaidFlow': { default: component('BossRaidFlow'), useParkRaid: () => ({ raid: null, setState: () => undefined }) },
     '../hooks/useBossMapMoment': { default: () => ({ moment: null, flag: null, enqueue: async () => undefined, dismiss: () => undefined, finishExit: () => undefined }) },

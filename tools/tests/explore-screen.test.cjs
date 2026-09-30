@@ -20,7 +20,7 @@ async function selectRide(app) {
   await app.settle(); await app.settle();
   const marker = app.find(node => named('TaskMarker')(node) && node.props.task?.id === task.id);
   assert.ok(marker, 'the ride marker is on the map');
-  marker.props.onPress(); app.render();
+  marker.props.onPress(marker.props.task); app.render();
   await app.settle(); await app.settle();
 }
 
@@ -43,4 +43,20 @@ test('the server flag hides every Adventure Ticket surface when off', async () =
   const off = exploreScreen({ trip: { ...adventureTrip('discover'), adventure_enabled: false }, redeemables });
   await off.settle();
   assert.equal(off.find(named('AdventureTicketCard')), undefined);
+});
+
+test('stacked rides fold into one island; tapping it zooms in instead of selecting', async () => {
+  const stack = [0, 1, 2].map(i => ({ ...task, id: 20 + i, name: `Ride ${i}`, latitude: 34.13808 + i * 0.00001 }));
+  const app = exploreScreen({ trip: null, redeemables: { ...redeemables, tasks: stack } });
+  await app.settle(); await app.settle();
+  const islands = [];
+  const walk = node => { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk);
+    if (named('TaskMarker')(node)) islands.push(node); walk(node.props?.children); };
+  walk(app.tree);
+  assert.equal(islands.length, 1);
+  assert.equal(islands[0].props.clusterCount, 2);
+  islands[0].props.onPress(islands[0].props.task); app.render();
+  const map = app.find(named('Map'));
+  assert.ok(map.props.focusCoordinate.zoom > 17.6, 'the camera zooms into the stack');
+  assert.equal(app.find(label('Play queue games for')), undefined);
 });

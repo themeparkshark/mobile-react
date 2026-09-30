@@ -28,11 +28,14 @@ export const MapQueryContext = createContext<{
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72 }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
-  readonly focusCoordinate?: { latitude: number; longitude: number; requestId?: number } | null;
+  /** Move the camera here; `zoom` defaults to the ride focus zoom. */
+  readonly focusCoordinate?: { latitude: number; longitude: number; requestId?: number; zoom?: number } | null;
   readonly controlsTop?: number;
+  /** Camera zoom after each move, for marker declutter. */
+  readonly onZoomChange?: (zoom: number) => void;
 }) {
   const { location, heading, headingEnabled, setHeadingEnabled } = useContext(LocationContext);
   const { player } = useContext(AuthContext);
@@ -208,7 +211,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     setFocusedOnPlayer(false);
     followRef.current = false;
     cameraRef.current?.setCamera({ centerCoordinate: [focusCoordinate.longitude, focusCoordinate.latitude],
-      heading: 0, zoomLevel: 17.9, animationDuration: reducedMotion ? 0 : 450, animationMode: reducedMotion ? 'moveTo' : 'easeTo' });
+      heading: 0, zoomLevel: focusCoordinate.zoom ?? 17.9, animationDuration: reducedMotion ? 0 : 450, animationMode: reducedMotion ? 'moveTo' : 'easeTo' });
   }, [focusCoordinate?.latitude, focusCoordinate?.longitude, focusCoordinate?.requestId, reducedMotion]);
   // Animated value for user location heading indicator
   const userHeadingRotation = useRef(new Animated.Value(0)).current;
@@ -385,6 +388,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap(); }}
         onRegionDidChange={(feature) => {
           refreshDecorations();
+          const zoom = Number(feature.properties?.zoomLevel);
+          if (Number.isFinite(zoom)) onZoomChange?.(zoom);
           // A real pan (not a pinch around the shark) drops follow mode.
           if (!feature.properties?.isUserInteraction || !followRef.current || !location) return;
           const [lng, lat] = feature.geometry.coordinates;
