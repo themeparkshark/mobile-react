@@ -23,7 +23,8 @@ const ROOM_ID = '0c0c0c0c-0000-4000-8000-00000000c0de';
 const LOBBY_MS = 5000;
 const COUNT_IN_MS = 3500;
 const RESULTS_MS = 9000;
-const GRACE_MS = 3000;
+// Same as the server: a board on HOLD finishes late (up to 6 s), so the round waits 15 s for submits.
+const GRACE_MS = 15000;
 const POINTS = [4, 2, 1, 0];
 const BOTS: { name: string; avatar: string; profile: 'ace' | 'regular' | 'rookie' }[] = [
   { name: 'Captain Fin', avatar: 'bot:captain', profile: 'ace' },

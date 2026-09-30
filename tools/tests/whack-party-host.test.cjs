@@ -99,3 +99,35 @@ test('a HOLD past the budget hands my seat to my ghost: a no-contest, never a lo
   assert.ok(me.verdict.startsWith('no_contest'));
   c.destroy();
 });
+
+test('a HOLD inside the budget: my board pauses, resumes after the quick 3-2-1, and my round still counts', async () => {
+  const w = world();
+  const host = hostMod.createLocalPartyHost({ userId: 7, game: 'whack_rush', now: w.now, seed: 11 });
+  const c = new net.PartyClient({
+    http: host.http, userId: 7, games: ['whack_rush'], now: w.now, perfNow: w.now, setTimer: w.setTimer, clearTimer: w.clearTimer,
+  });
+  const joining = c.join(194);
+  await w.advance(700);
+  await joining;
+  await w.advance(8300);
+  const board = c.round.board;
+  const e1 = board.events.find((x) => x.kind === 0 && x.emergeAt > 1500);
+  await w.advance(e1.emergeAt + 200 - c.boardTime());
+  c.recordTapAt(c.boardTime(), e1.hole);
+  assert.ok(c.hold('manual'));
+  const frozenAt = c.boardTime();
+  await w.advance(3000);
+  assert.equal(c.boardTime(), frozenAt, 'my board clock is frozen on HOLD');
+  c.release();
+  await w.advance(1200);
+  assert.ok(c.boardTime() > frozenAt, 'the board runs again after the 3-2-1');
+  const e2 = board.events.find((x) => x.kind === 0 && x.emergeAt > c.boardTime() + 300);
+  await w.advance(e2.emergeAt + 200 - c.boardTime());
+  c.recordTapAt(c.boardTime(), e2.hole);
+  await w.advance(20000 - c.boardTime() + 1500);
+  const me = c.getState().room.round.results.find((x) => x.kind === 'human');
+  assert.equal(me.verdict, 'ok');
+  assert.equal(me.filled_by, null);
+  assert.equal(me.stats.hits, 2);
+  c.destroy();
+});
