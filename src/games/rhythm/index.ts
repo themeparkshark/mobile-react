@@ -1,13 +1,16 @@
 /**
- * Rhythm Tap — public surface.
+ * Parade Beat (Rhythm Tap rework): public surface.
  *
- * Usage (from MiniGameSelector or a LinePlay playlist):
  *   import { RhythmTapGame } from '../games/rhythm';
- *   <RhythmTapGame visible difficulty={2} onComplete={...} onClose={...} />
+ *   <RhythmTapGame visible seed={seed} difficulty={2} format="queue" onComplete={...} onClose={...} />
+ *
+ * Code id stays `rhythm`; the game key stays `timing` (LinePlay,
+ * MiniGameSelector, TaskGameProofService). Only the display title changed.
  */
 
 export { RhythmTapGame, default } from './RhythmTapGame';
 export type { RhythmTapGameProps } from './RhythmTapGame';
-export { buildRound, makeSeed, maxScoreFor } from './patterns';
-export type { RoundPlan, Target } from './patterns';
-export type { Judgment } from './constants';
+export { generate } from './core/generate';
+export { replayProof, buildProof } from './core/proof';
+export type { RhythmProofV4 } from './core/proof';
+export type { Chart, Difficulty, RoundFormat } from './core/types';

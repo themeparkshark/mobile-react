@@ -163,6 +163,11 @@ interface GameShellV2Props {
   pauseOnLineMove?: boolean;
   /** 'countdown' = quick 3-2-1 after a hold (default); 'instant' = none. */
   resumeStyle?: 'countdown' | 'instant';
+  /**
+   * false = no shell 3-2-1 at the start: play begins at once and the game
+   * runs its own count-in (Parade Beat counts in on the song's own bar).
+   */
+  introCountdown?: boolean;
   /** Game id for snapshots and proof meta, e.g. 'whack'. */
   gameId?: string;
   /** Session key (game + ride + attempt) for interruption snapshots. */
@@ -203,6 +208,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       onRematch,
       onChallenge,
       resumeStyle = 'countdown',
+      introCountdown = true,
       gameId,
       sessionKey,
       getSnapshot,
@@ -308,6 +314,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     useEffect(() => {
       if (phase !== 'countdown' || !visible) return;
       clearCountdown();
+      if (!introCountdown) {
+        beginPlay();
+        return;
+      }
       const steps = ['3', '2', '1', 'GO!'];
       steps.forEach((label, i) => {
         const t = setTimeout(() => {
@@ -323,7 +333,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }, steps.length * COUNTDOWN.stepMs - (COUNTDOWN.stepMs - COUNTDOWN.goMs));
       countdownTimers.current.push(done);
       return clearCountdown;
-    }, [phase, visible, beginPlay, clearCountdown, punchCount]);
+    }, [phase, visible, beginPlay, clearCountdown, punchCount, introCountdown]);
 
     // -- Transition to results when the game (or a wrap-up) reports one. ----
     useEffect(() => {

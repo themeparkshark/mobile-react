@@ -536,7 +536,120 @@ function chartNotesIn(s: JudgeState, t0: number, t1: number): number {
   return n;
 }
 
+// -- time -------------------------------------------------------------------
+
+export function judgeTick(s: JudgeState, now: number): void {
+  'worklet';
+  if (s.finished || now < s.now) return;
+  s.now = now;
+  // March layer look-ahead lock: barStart - approach - 1 beat.
+  for (let b = 0; b < s.nBars; b++) {
+    if (s.barLayer[b] !== 0) continue;
+    if (now < lockTime(s, b)) break;
+    let march = s.walking;
+    if (s.marchPlan[b] >= 0) march = s.marchPlan[b];
+    else if (s.forceMarch >= 0) march = s.forceMarch;
+    if (b < s.firstBar || b > s.lastBar) march = 0;
+    s.barLayer[b] = march ? L_MARCH : L_STANDING;
+    pushEvent(s.ev, EV_BAR_LAYER, b, s.barLayer[b], 0, now);
+  }
+  // Fever lifecycle on bar lines.
+  if (s.feverFrom >= 0) {
+    const b = barAt(s, now);
+    if (b >= s.feverTo || (s.feverKillAt > 0 && now >= s.feverKillAt)) {
+      const fizz = s.feverKillAt > 0 && now >= s.feverKillAt && b < s.feverTo ? 1 : 0;
+      s.feverBarsUsed += Math.max(0, Math.min(b, s.feverTo) - s.feverFrom);
+      s.feverFrom = -1;
+      s.feverTo = -1;
+      s.feverKillAt = 0;
+      pushEvent(s.ev, EV_FEVER_END, fizz, 0, 0, now);
+    }
+  }
+  if (s.armed && s.autoFever && s.pendingDeploy < 0 && s.feverFrom < 0) deploy(s, now);
+  if (s.pendingDeploy >= 0 && s.pendingDeploy < s.nBars && now >= s.barStart[s.pendingDeploy]) {
+    s.feverFrom = s.pendingDeploy;
+    s.feverTo = Math.min(s.pendingDeploy + 4, s.lastBar + 1);
+    s.pendingDeploy = -1;
+    s.feverKillAt = 0;
+    pushEvent(s.ev, EV_FEVER_START, s.feverFrom, 0, 0, now);
+  }
+  // Pending CYMBAL flicks time out.
+  for (let k = 0; k < MAX_POINTERS; k++) {
+    const ci = s.pCym[k];
+    if (ci >= 0 && now - s.pStartT[k] > FLICK_MS) {
+      s.pCym[k] = -1;
+      s.res[ci] = J_NONE;
+      logInput(s, ci, s.pCymDelta[k], 0, 0);
+      applyMiss(s, ci, now, s.pCymDelta[k]);
+    }
+  }
+  // ROLL ticks every 8th while held.
+  for (let k = 0; k < MAX_POINTERS; k++) {
+    const ri = s.pRoll[k];
+    if (ri < 0) continue;
+    const step = s.beatLen[ri] / 2;
+    const due = Math.floor((Math.min(now, s.end[ri]) - s.t[ri]) / step);
+    while (s.pRollTicks[k] < due) {
+      s.pRollTicks[k]++;
+      s.rollTicks++;
+      points(s, now, BASE_POINTS.rollTick);
+      addGroove(s, now, GROOVE.rollTick);
+      addMeter(s, now, FEVER_METER.rollTick);
+      pushEvent(s.ev, EV_ROLL_TICK, ri, s.pRollTicks[k], 0, now);
+    }
+    if (now >= s.end[ri]) {
+      s.pRoll[k] = -1;
+      pushEvent(s.ev, EV_ROLL_DONE, ri, 0, 0, now);
+    }
+  }
+  // Auto-resolve passed notes.
+  for (let i = s.cursor; i < s.n; i++) {
+    const nt = s.t[i];
+    if (nt > now) break;
+    if (s.res[i] !== J_NONE) continue;
+    const k = s.kind[i];
+    if (!noteActive(s, i)) {
+      if (s.barLayer[s.bar[i]] !== 0) s.res[i] = J_VOID;
+      continue;
+    }
+    if (k === K_FREEZE) {
+      if (now > nt + FREEZE_FAULT_MS) {
+        s.res[i] = J_PASS;
+        pushEvent(s.ev, EV_FREEZE_PASS, i, 0, 0, now);
+      }
+      continue;
+    }
+    if (k === K_POPPER) {
+      if (now > s.end[i]) {
+        s.res[i] = J_UNPOPPED;
+        s.popperLog.push(i, s.popperIdx === i ? s.popperTaps : 0, 0);
+        pushEvent(s.ev, EV_POPPER_GONE, i, 0, 0, now);
+      }
+      continue;
+    }
+    if (now > nt + s.wGood) applyMiss(s, i, now, 0);
+  }
+  while (s.cursor < s.n && s.res[s.cursor] !== J_NONE && s.res[s.cursor] !== -1) s.cursor++;
+  if (now >= s.endMs && s.cursor >= s.n) s.finished = 1;
+}
+
 // -- inputs -----------------------------------------------------------------
+
+function isPendingCymbal(s: JudgeState, i: number): boolean {
+  'worklet';
+  return s.res[i] === -1;
+}
+
+function findPopper(s: JudgeState, t: number): number {
+  'worklet';
+  // Poppers are rare: scan a small window around the cursor.
+  const from = s.cursor > 8 ? s.cursor - 8 : 0;
+  for (let i = from; i < s.n; i++) {
+    if (s.t[i] > t + s.wGood) break;
+    if (s.kind[i] === K_POPPER && s.res[i] === J_NONE && t >= s.t[i] - s.wGood && t <= s.end[i] && noteActive(s, i)) return i;
+  }
+  return -1;
+}
 
 /** Touch-down. Returns the judged note index, or -1. */
 export function judgeDown(s: JudgeState, t0: number, zone: number, pid: number, y: number): number {
@@ -689,22 +802,6 @@ export function judgeDown(s: JudgeState, t0: number, zone: number, pid: number, 
   return cand;
 }
 
-function isPendingCymbal(s: JudgeState, i: number): boolean {
-  'worklet';
-  return s.res[i] === -1;
-}
-
-function findPopper(s: JudgeState, t: number): number {
-  'worklet';
-  // Poppers are rare: scan a small window around the cursor.
-  const from = s.cursor > 8 ? s.cursor - 8 : 0;
-  for (let i = from; i < s.n; i++) {
-    if (s.t[i] > t + s.wGood) break;
-    if (s.kind[i] === K_POPPER && s.res[i] === J_NONE && t >= s.t[i] - s.wGood && t <= s.end[i] && noteActive(s, i)) return i;
-  }
-  return -1;
-}
-
 export function judgeMove(s: JudgeState, t0: number, pid: number, y: number): void {
   'worklet';
   const t = Math.round(t0);
@@ -755,103 +852,6 @@ export function judgeUp(s: JudgeState, t0: number, pid: number): void {
     applyMiss(s, ci, t, s.pCymDelta[slot]);
   }
   s.pId[slot] = -1;
-}
-
-// -- time -------------------------------------------------------------------
-
-export function judgeTick(s: JudgeState, now: number): void {
-  'worklet';
-  if (s.finished || now < s.now) return;
-  s.now = now;
-  // March layer look-ahead lock: barStart - approach - 1 beat.
-  for (let b = 0; b < s.nBars; b++) {
-    if (s.barLayer[b] !== 0) continue;
-    if (now < lockTime(s, b)) break;
-    let march = s.walking;
-    if (s.marchPlan[b] >= 0) march = s.marchPlan[b];
-    else if (s.forceMarch >= 0) march = s.forceMarch;
-    if (b < s.firstBar || b > s.lastBar) march = 0;
-    s.barLayer[b] = march ? L_MARCH : L_STANDING;
-    pushEvent(s.ev, EV_BAR_LAYER, b, s.barLayer[b], 0, now);
-  }
-  // Fever lifecycle on bar lines.
-  if (s.feverFrom >= 0) {
-    const b = barAt(s, now);
-    if (b >= s.feverTo || (s.feverKillAt > 0 && now >= s.feverKillAt)) {
-      const fizz = s.feverKillAt > 0 && now >= s.feverKillAt && b < s.feverTo ? 1 : 0;
-      s.feverBarsUsed += Math.max(0, Math.min(b, s.feverTo) - s.feverFrom);
-      s.feverFrom = -1;
-      s.feverTo = -1;
-      s.feverKillAt = 0;
-      pushEvent(s.ev, EV_FEVER_END, fizz, 0, 0, now);
-    }
-  }
-  if (s.armed && s.autoFever && s.pendingDeploy < 0 && s.feverFrom < 0) deploy(s, now);
-  if (s.pendingDeploy >= 0 && s.pendingDeploy < s.nBars && now >= s.barStart[s.pendingDeploy]) {
-    s.feverFrom = s.pendingDeploy;
-    s.feverTo = Math.min(s.pendingDeploy + 4, s.lastBar + 1);
-    s.pendingDeploy = -1;
-    s.feverKillAt = 0;
-    pushEvent(s.ev, EV_FEVER_START, s.feverFrom, 0, 0, now);
-  }
-  // Pending CYMBAL flicks time out.
-  for (let k = 0; k < MAX_POINTERS; k++) {
-    const ci = s.pCym[k];
-    if (ci >= 0 && now - s.pStartT[k] > FLICK_MS) {
-      s.pCym[k] = -1;
-      s.res[ci] = J_NONE;
-      logInput(s, ci, s.pCymDelta[k], 0, 0);
-      applyMiss(s, ci, now, s.pCymDelta[k]);
-    }
-  }
-  // ROLL ticks every 8th while held.
-  for (let k = 0; k < MAX_POINTERS; k++) {
-    const ri = s.pRoll[k];
-    if (ri < 0) continue;
-    const step = s.beatLen[ri] / 2;
-    const due = Math.floor((Math.min(now, s.end[ri]) - s.t[ri]) / step);
-    while (s.pRollTicks[k] < due) {
-      s.pRollTicks[k]++;
-      s.rollTicks++;
-      points(s, now, BASE_POINTS.rollTick);
-      addGroove(s, now, GROOVE.rollTick);
-      addMeter(s, now, FEVER_METER.rollTick);
-      pushEvent(s.ev, EV_ROLL_TICK, ri, s.pRollTicks[k], 0, now);
-    }
-    if (now >= s.end[ri]) {
-      s.pRoll[k] = -1;
-      pushEvent(s.ev, EV_ROLL_DONE, ri, 0, 0, now);
-    }
-  }
-  // Auto-resolve passed notes.
-  for (let i = s.cursor; i < s.n; i++) {
-    const nt = s.t[i];
-    if (nt > now) break;
-    if (s.res[i] !== J_NONE) continue;
-    const k = s.kind[i];
-    if (!noteActive(s, i)) {
-      if (s.barLayer[s.bar[i]] !== 0) s.res[i] = J_VOID;
-      continue;
-    }
-    if (k === K_FREEZE) {
-      if (now > nt + FREEZE_FAULT_MS) {
-        s.res[i] = J_PASS;
-        pushEvent(s.ev, EV_FREEZE_PASS, i, 0, 0, now);
-      }
-      continue;
-    }
-    if (k === K_POPPER) {
-      if (now > s.end[i]) {
-        s.res[i] = J_UNPOPPED;
-        s.popperLog.push(i, s.popperIdx === i ? s.popperTaps : 0, 0);
-        pushEvent(s.ev, EV_POPPER_GONE, i, 0, 0, now);
-      }
-      continue;
-    }
-    if (now > nt + s.wGood) applyMiss(s, i, now, 0);
-  }
-  while (s.cursor < s.n && s.res[s.cursor] !== J_NONE && s.res[s.cursor] !== -1) s.cursor++;
-  if (now >= s.endMs && s.cursor >= s.n) s.finished = 1;
 }
 
 /** Walk sense feeds this each frame (it only affects bars not yet locked). */

@@ -50,10 +50,13 @@ function sd(a: readonly number[]): number {
   return Math.sqrt(s / (a.length - 1));
 }
 
-/** osu! unstable rate in kid words: 100 - UR/3, clamped. */
+/**
+ * osu!'s unstable rate (UR = 10 x sd) in kid words, scaled for a phone
+ * speaker: sd 12 ms -> 91 "Rock steady", 22 ms -> 69 "Steady", 45 ms -> 19.
+ */
 export function steadinessOf(errs: readonly number[]): number {
   const ur = sd(errs) * 10;
-  return Math.max(0, Math.min(100, Math.round(100 - ur / 3)));
+  return Math.max(0, Math.min(100, Math.round(100 - (ur - 80) * 0.22)));
 }
 
 export function steadinessLabel(v: number): string {
