@@ -282,7 +282,8 @@ test('the offline banner is built from the WS0 kit: brand tokens and his yellow 
   const source = read('src/components/OfflineBanner.tsx');
   assert.match(source, /from '\.\.\/ui'/);
   assert.match(source, /<GameButton\s+label="Retry"/);
-  assert.doesNotMatch(source, /<Pressable/, 'no hand-rolled CTA');
+  assert.equal((source.match(/<Pressable/g) || []).length, 1, 'only the compact icon chip; the Retry CTA is his button');
+  assert.match(source, /OFFLINE_COMPACT_AFTER_MS/, 'a long outage shrinks to the small chip');
   assert.doesNotMatch(source, /'#[0-9a-f]{6}'/i, 'colours come from BRAND tokens');
   assert.doesNotMatch(source, /—/);
 });

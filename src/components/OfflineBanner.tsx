@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Image, StyleSheet, Text, View } from 'react-native';
+import { AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   runOnJS,
@@ -15,11 +15,15 @@ import { initialWindowMetrics } from 'react-native-safe-area-context';
 import client from '../api/client';
 import * as Haptics from '../helpers/haptics';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
-import { BRAND, FONT, GameButton, OUTLINE, Z } from '../ui';
+import { BRAND, FONT, GameButton, HIT_SLOP, OUTLINE, Z } from '../ui';
 
 export const OFFLINE_SHOW_DELAY_MS = 1200;
 export const OFFLINE_PROBE_INTERVAL_MS = 15000;
 const BACK_ONLINE_HOLD_MS = 1400;
+// After this long the card shrinks to his illustrated offline icon, so a long
+// outage in the park never sits on top of map cards or header counters.
+export const OFFLINE_COMPACT_AFTER_MS = 4000;
+const CHIP_SIZE = 44;
 
 type Phase = 'hidden' | 'offline' | 'back';
 
@@ -55,6 +59,24 @@ export default function OfflineBanner() {
 
   const enter = useSharedValue(0);
   const pulse = useSharedValue(1);
+  const shrink = useSharedValue(0);
+  const [compact, setCompact] = useState(false);
+
+  // Full card first so the player learns what happened, then the small chip.
+  useEffect(() => {
+    if (phase !== 'offline') {
+      setCompact(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setCompact(true), OFFLINE_COMPACT_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  useEffect(() => {
+    shrink.value = reduceMotion
+      ? withTiming(compact ? 1 : 0, { duration: 160 })
+      : withSpring(compact ? 1 : 0, { damping: 16, stiffness: 200, mass: 0.7 });
+  }, [compact, reduceMotion, shrink]);
 
   useEffect(() => {
     const apply = (offline: boolean) => {
@@ -117,6 +139,10 @@ export default function OfflineBanner() {
 
   // GameButton plays its own light tap haptic.
   const onRetry = runProbe;
+  const onChip = useCallback(() => {
+    Haptics.selectionAsync();
+    runProbe();
+  }, [runProbe]);
 
   const cardStyle = useAnimatedStyle(() => {
     const progress = enter.value;
@@ -128,6 +154,14 @@ export default function OfflineBanner() {
     };
   });
   const iconStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
+  const fullStyle = useAnimatedStyle(() => ({
+    opacity: 1 - shrink.value,
+    transform: reduceMotion ? [] : [{ scale: 1 - 0.18 * shrink.value }],
+  }));
+  const chipStyle = useAnimatedStyle(() => ({
+    opacity: shrink.value,
+    transform: reduceMotion ? [] : [{ scale: 0.6 + 0.4 * shrink.value }],
+  }));
 
   if (!mounted) return null;
   const back = phase === 'back';
@@ -138,11 +172,12 @@ export default function OfflineBanner() {
   return (
     <View pointerEvents="box-none" style={[styles.host, { top }]}>
       <Animated.View
-        style={[styles.lip, cardStyle]}
+        style={cardStyle}
         accessibilityLiveRegion="polite"
         accessibilityRole="alert"
         accessibilityLabel={back ? 'Back online' : 'Connection lost. Reconnecting. Some things may not load.'}
       >
+        <Animated.View style={[styles.lip, fullStyle]} pointerEvents={compact ? 'none' : 'auto'}>
         <View style={[styles.card, back && styles.cardBack]}>
           <Animated.View style={iconStyle}>
             <Image source={back ? BACK_ONLINE_ICON : OFFLINE_ICON} style={styles.icon} accessibilityElementsHidden importantForAccessibility="no" />
@@ -165,6 +200,20 @@ export default function OfflineBanner() {
             />
           )}
         </View>
+        </Animated.View>
+        <Animated.View style={[styles.chipHost, chipStyle]} pointerEvents={compact ? 'box-none' : 'none'}>
+          <Pressable
+            onPress={onChip}
+            hitSlop={HIT_SLOP}
+            accessibilityRole="button"
+            accessibilityLabel="Offline. Try to reconnect"
+            style={styles.chip}
+          >
+            <Animated.View style={iconStyle}>
+              <Image source={OFFLINE_ICON} style={styles.chipIcon} accessibilityElementsHidden importantForAccessibility="no" />
+            </Animated.View>
+          </Pressable>
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -195,4 +244,19 @@ const styles = StyleSheet.create({
   body: { fontFamily: FONT.body, fontSize: 14, color: BRAND.blue, marginTop: -1 },
   // His yellow button art at 3.8:1, so 112 wide is about 30pt tall.
   retry: { width: 112 },
+  // The compact chip sits centred where the full card was, small enough to
+  // fit between the map cards under the header.
+  chipHost: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'flex-start' },
+  chip: {
+    width: CHIP_SIZE,
+    height: CHIP_SIZE,
+    borderRadius: CHIP_SIZE / 2,
+    backgroundColor: BRAND.cream,
+    borderColor: BRAND.navy,
+    borderWidth: OUTLINE.thick,
+    borderBottomWidth: OUTLINE.thick + 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipIcon: { width: 30, height: 30, resizeMode: 'contain' },
 });
