@@ -32,6 +32,7 @@ test('critical openings never exceed the server one-third limit and remote damag
  for(let i=0;i<3;i++){hit=m.registerStrike(stats,state,i*200,true);stats=hit.stats;}
  assert.equal(hit.critical,true);assert.equal(stats.hits,3);assert.equal(stats.weak,1);
  assert.equal(m.brawlDamage(stats,0.25),12);
+ assert.equal(m.brawlDamage(stats,0.6),30); // current backend remote rate; preview reads the raid's rate
  assert.equal(m.registerStrike(stats,state,401,true),null);
  assert.equal(m.registerStrike(stats,state,601,true).critical,false);
  assert.equal(m.registerStrike(stats,state,20000,true),null);

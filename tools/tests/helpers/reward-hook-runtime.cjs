@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '../../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
-exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}) {
+exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, options = {}) {
   const slots = [], animations = [], timers = new Map(), sounds = [], cancelled = [], motions = [], jsCalls = [];
   let index = 0, dirty = true, effects = [], tree, timerId = 0, preferenceListener;
   let Component;
@@ -74,9 +74,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}) 
       return { default: name };
     },
   }, { filename: file });
-  Component = module.exports.default ?? module.exports.MemoryCard ?? module.exports.GameShellV2 ?? module.exports.BossBrawl ?? module.exports.ScoreDisplay;
+  Component = options.exportName ? module.exports[options.exportName] : module.exports.default ?? module.exports.MemoryCard ?? module.exports.GameShellV2 ?? module.exports.BossBrawl ?? module.exports.ScoreDisplay;
   function render() { let count = 0; do {
-    assert.ok(count++ < 20, 'hooks settle'); dirty = false; index = 0; effects = []; tree = Component(props); effects.forEach(fn => fn());
+    assert.ok(count++ < 20, 'hooks settle'); dirty = false; index = 0; effects = []; tree = options.arguments ? Component(...options.arguments(props)) : Component(props); effects.forEach(fn => fn());
   } while (dirty); }
   function find(node, predicate) {
     if (!node || typeof node !== 'object') return undefined;

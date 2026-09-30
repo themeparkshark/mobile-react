@@ -56,6 +56,7 @@ import type { RushPick } from '../components/RushCallout';
 import LiveEventsPill from '../components/LiveEventsPill';
 import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
+import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
@@ -335,6 +336,8 @@ export default function ExploreScreen() {
   const { raid, setState: setRaidState } = useParkRaid(park?.id);
   const [bossOpen, setBossOpen] = useState(false);
   const raidActive = raid?.status === 'active';
+  const { snapshot: bossRecovery } = useBossAttackRecovery({ playerId: player?.id ?? null, parkId: park?.id ?? null, onResult: () => undefined });
+  const receiptNeedsCheck = !!bossRecovery?.pending || bossRecovery?.phase === 'storage_error';
 
   // Live park: posted waits, rides that are down, and short-wait Rushes.
   const [livePark, setLivePark] = useState<LivePark | null>(null);
@@ -377,6 +380,7 @@ export default function ExploreScreen() {
       return live?.rush && live.status === 'OPERATING' ? [{ task, rush: live.rush, wait: live.wait ?? live.rush.wait }] : [];
     }).sort((a, b) => dist(a.task) - dist(b.task));
   }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
+  const hasLiveEvents = !!rushes.length || raidActive || receiptNeedsCheck;
 
   const mapContext = `${player?.id ?? ''}:${park?.id ?? ''}`;
   const latestMapContext = useRef(mapContext);
@@ -621,7 +625,7 @@ export default function ExploreScreen() {
       </Topbar>
       {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion} />}
-      {player && park && <BossRaidFlow raid={raid} open={bossOpen} onClose={() => setBossOpen(false)} onState={setRaidState} />}
+      {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)} onState={setRaidState} />}
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
       {/* One overlay at a time: the daily gift waits for the first-run tutorial. */}
       {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && !isActive && hasCompleted('onboarding') &&
@@ -880,6 +884,7 @@ export default function ExploreScreen() {
             <RideControlBar control={rideControl} tasks={visibleTasks}
               onFocusTask={(task) => setSelectedTask(task)} />
             <LiveEventsPill raid={raid} rushes={rushes} onBoss={() => setBossOpen(true)}
+              pendingAttack={bossRecovery?.pending} receiptNeedsCheck={receiptNeedsCheck}
               onRush={(task) => setSelectedTask(task)} />
           </View>
         )}
@@ -898,7 +903,7 @@ export default function ExploreScreen() {
               RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
             }
           }}
-          style={{ position: 'absolute', top: player ? (rushes.length || raidActive ? 124 : 64) : 12, left: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? (hasLiveEvents ? 124 : 64) : 12, left: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#ffffff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.6 }}>
@@ -920,7 +925,7 @@ export default function ExploreScreen() {
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
           onPress={() => navigation.navigate('LinePlay', { ride: queueRide })}
-          style={{ position: 'absolute', top: player ? (rushes.length || raidActive ? 124 : 64) : 12, right: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? (hasLiveEvents ? 124 : 64) : 12, right: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} numberOfLines={1}>
@@ -934,7 +939,7 @@ export default function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }}
-          controlsTop={(queueRide ? 168 : 124) + (rushes.length || raidActive ? 60 : 0)} focusCoordinate={selectedTask ? {
+          controlsTop={(queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : null}>
           {activeParkProject?.park_id === park.id && (

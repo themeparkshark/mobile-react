@@ -205,7 +205,7 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
         </View>
       </Modal>
 
-      <BossRaidFlow raid={raidPark ? raid : null} open={raidPark !== null && !!raid}
+      <BossRaidFlow parkId={raidPark} raid={raidPark ? raid : null} open={raidPark !== null}
         onClose={() => { setRaidPark(null); load(); }} onState={setRaidState} />
 
       {cheer && (

@@ -51,18 +51,28 @@ export async function getParkRaid(parkId: number): Promise<RaidState> {
 
 export type AttackResult =
   | { ok: true; damage: number; state: RaidState }
-  | { ok: false; error: 'too_far' | 'no_energy' | 'no_attacks_left' | 'bad_proof' | 'raid_over' | 'no_remote_pass' | 'network'; state?: RaidState };
+  | { ok: false; error: 'too_far' | 'no_energy' | 'no_attacks_left' | 'bad_proof' | 'raid_over' | 'no_remote_pass' | 'not_found' | 'network'; state?: RaidState };
 
-export async function attackRaid(raidId: number, body: {
+export interface RaidAttackBody {
   client_request_id: string; latitude: number; longitude: number; hits: number; weak_hits: number; duration_ms: number;
   remote?: boolean;
-}): Promise<AttackResult> {
+}
+
+const ATTACK_ERRORS = new Set(['too_far', 'no_energy', 'no_attacks_left', 'bad_proof', 'raid_over', 'no_remote_pass', 'not_found']);
+
+export async function attackRaid(raidId: number, body: RaidAttackBody): Promise<AttackResult> {
   try {
     const { data } = await client.post<{ data: RaidState & { damage: number } }>(`/raids/${raidId}/attack`, body);
-    return { ok: true, damage: data.data.damage, state: data.data };
+    const result = data?.data;
+    if (!result || !Number.isSafeInteger(result.damage) || result.damage < 0 ||
+      !Object.prototype.hasOwnProperty.call(result, 'raid') || (result.raid !== null &&
+        (!Number.isSafeInteger(result.raid?.id) || !result.raid?.you || !result.raid?.teams))) {
+      return { ok: false, error: 'network' }; // A malformed reply cannot retire the original proof.
+    }
+    return { ok: true, damage: result.damage, state: result };
   } catch (e: any) {
     const payload = e?.response?.data?.data;
-    if (payload?.error) return { ok: false, error: payload.error, state: payload.raid !== undefined ? payload : undefined };
+    if (ATTACK_ERRORS.has(payload?.error)) return { ok: false, error: payload.error, state: payload.raid !== undefined ? payload : undefined };
     return { ok: false, error: 'network' };
   }
 }

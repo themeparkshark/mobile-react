@@ -3,6 +3,7 @@
   "transparent_background": true,
   "modelVersion": "not exposed",
   "correction": "Retire v1 after Dustin identified a distorted head in the helmet. Remove duplicate head fins and give the head one continuous contour inside a coherent helmet.",
+  "rejectedReferenceArchive": "workspace work/rejected-art/space-navigation-shark-v1.png (outside app assets; original path below is historical provenance)",
   "source": "exec-8c568e12-21c4-4c16-ba02-73af0a5916d6.png",
   "references": [
     "assets/images/screens/lineplay/space-navigation-shark-v1.png",

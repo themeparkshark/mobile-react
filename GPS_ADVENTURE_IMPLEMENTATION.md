@@ -422,3 +422,59 @@ the ordinary player successfully; the optional chest was declined. This crash
 has not been fixed or attributed to a specific source change. Native reload and
 release stability require reproduction and further review; passing JavaScript
 tests does not resolve that finding.
+
+## Boss round recovery and rejected-art retirement
+
+A finished brawl is now persisted before its first attack request. The immutable
+receipt belongs to the player and park and keeps its raid ID, request ID, hit
+proof, original GPS fix and explicit remote-join choice. Lost replies keep that
+receipt, block another round at that park and retry the exact same request. Local
+expiry never discards an uncertain spend: the backend checks the existing attack
+ID before raid expiry. Account changes and unmounts cannot submit the saved proof
+under another owner or apply its late result to the current map/wallet.
+
+Storage reads fail closed; failed saves never post; rapid claims/retries coalesce
+across Home and Explore. A confirmed receipt remains reserved if local cleanup
+fails, and cleanup retry does not repost it. Unknown/malformed attack replies
+remain unconfirmed rather than erasing proof. Zero-hit rounds submit no attack.
+The raid poll is scoped to player/park and invalidates older responses when a
+confirmed state arrives, preventing stale HP from returning.
+
+The saved brawl takes the existing live-event slot, including after raid expiry.
+Its compact illustrated receipt says the reply is pending and offers one action:
+Confirm saved round. The boss sheet scrolls on shorter screens and retains the
+same native modal when the raid disappears. A separate celebration waits until
+the sheet has actually hidden. Reduced motion uses short fades; celebration seen
+keys include the player, and are persisted at dismissal rather than before the
+player could see the result.
+
+Read-only iOS 18.6 recovery fixture: one simulated 50-damage attack deliberately
+lost its reply; closing/reopening retained the round; confirmation showed 4,950
+of 5,000 HP, 50 personal damage and four attacks left. The fixture receipt read
+two requests / one simulated spend / same saved round. This is native UI and
+recovery verification using an in-memory server fixture, not a real raid charge
+or backend retry receipt. No normal-player Energy, Tickets or rewards were changed.
+
+The current server's remote rate is 60%; production always uses the raid response's
+rate. Tests also exercise a 25% rate to verify whole-contribution rounding and
+locked join choice. No payout or rate was changed in the backend.
+All 273 checks pass, including 17 new attack API/recovery/celebration cases;
+TypeScript and diff checks are clean.
+The final visibility guard also aborts a brawl on navigation away and rejects
+stale entry/result taps. Normal play was restored with all practice flags off;
+native readback showed the unchanged 180 Coins / 0 Keys / 7 Tickets / 185 Energy /
+0 Swords. The optional Day 2 chest was left unclaimed. No new native crash was
+observed in this restoration; the earlier crash remains unresolved.
+
+The rejected first astronaut image was archived outside the app in workspace
+work/rejected-art/space-navigation-shark-v1.png (SHA256
+394707ec8655b2b08d447c8466735b8704fc47937b146ff28031311346dae541).
+All four runtime consumers still use the reviewed v2 character. Its full-size
+head/helmet contour was rechecked; no newly generated art was accepted in this
+pass. Generated imagery remains draft until anatomy, costume/prop fit, reference
+identity and actual phone-size presentation have been reviewed.
+
+Further work remains on confirmed team takeover/featured-district celebration,
+boss exit choreography, Adventure Ticket progression, crew payoff, physical
+GPS/accessibility/performance and the unresolved native reload crash. The six-part
+goal remains active.

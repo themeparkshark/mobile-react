@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BOSS_NAMES, type BossRaid } from '../api/endpoints/parks/raid';
 import { BOSS_ART } from '../games/boss/BossBrawl';
 import type { TaskType } from '../models/task-type';
+import type { BossAttackCheckpoint } from '../services/boss/attackRecovery';
 import type { RushPick } from './RushCallout';
 
 function clock(endsAt: string, now: number): string {
@@ -16,11 +17,13 @@ function clock(endsAt: string, now: number): string {
  * boss raid takes the slot (with a small Rush chip when a ride is also on Rush),
  * otherwise the nearest Rush does. Nothing rotates under your finger.
  */
-export default function LiveEventsPill({ raid, rushes, onBoss, onRush }: {
+export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAttack, receiptNeedsCheck }: {
   readonly raid: BossRaid | null;
   readonly rushes: readonly RushPick[];
   readonly onBoss: () => void;
   readonly onRush: (task: TaskType) => void;
+  readonly pendingAttack?: BossAttackCheckpoint | null;
+  readonly receiptNeedsCheck?: boolean;
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -29,6 +32,16 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush }: {
   }, []);
   const liveRushes = rushes.filter(r => new Date(r.rush.ends_at).getTime() > now);
   const boss = raid && raid.status === 'active' && new Date(raid.ends_at).getTime() > now ? raid : null;
+  if (pendingAttack || receiptNeedsCheck) return <Pressable accessibilityRole="button" onPress={onBoss}
+    accessibilityLabel="Your boss brawl receipt needs confirmation. Open saved round."
+    style={[styles.pill, styles.bossPill]}>
+    {pendingAttack && <Image source={BOSS_ART[pendingAttack.boss]} style={styles.bossIcon} contentFit="contain" />}
+    <View style={{ flex: 1 }}>
+      <Text style={[styles.title, styles.bossTitle]} numberOfLines={1}>YOUR SAVED BRAWL</Text>
+      <Text style={[styles.sub, styles.bossSub]} numberOfLines={1}>Confirm your round before another attack</Text>
+    </View>
+    <Text style={[styles.go, styles.bossGo]}>CHECK ›</Text>
+  </Pressable>;
   if (!boss && !liveRushes.length) return null;
 
   if (boss) {
