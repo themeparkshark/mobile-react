@@ -935,7 +935,9 @@ export default function CommunityCenterScreen() {
               ]}
             >
               <Text style={styles.giftCountText}>
-                {center?.available_gifts ?? 0} gift{(center?.available_gifts ?? 0) !== 1 ? 's' : ''} available
+                {(center?.available_gifts ?? 0) > 0
+                  ? `${center?.available_gifts} gift${center?.available_gifts !== 1 ? 's' : ''} available`
+                  : 'No gifts yet. Leave the first one!'}
               </Text>
             </Animated.View>
             
@@ -1659,7 +1661,7 @@ const styles = StyleSheet.create({
   confirmGiveText: {
     fontFamily: 'Shark',
     fontSize: 16,
-    color: 'white',
+    color: '#05346e', // navy on his yellow, like the Awesome! button; white on yellow was hard to read
   },
   // Success Modal Styles
   successModalContainer: {
