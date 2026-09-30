@@ -239,6 +239,9 @@ export default function SettingsScreen() {
         await showGameDialog({ title: DELETION_COPY.doneTitle, message: deletionDoneMessage(result.result), icon: 'check',
           buttons: [{ text: 'OK' }], dismissible: false, haptic: 'none' });
         await signOut();
+      } else if (result.outcome === 'emailSent') {
+        // Server without immediate delete: the emailed link finishes it, so the player stays signed in.
+        gameAlert(DELETION_COPY.emailTitle, DELETION_COPY.emailMessage, undefined, { icon: 'bell' });
       } else if (result.outcome === 'failed') {
         gameAlert(DELETION_COPY.failTitle, DELETION_COPY.failMessage, [
           { text: 'Cancel', style: 'cancel' },

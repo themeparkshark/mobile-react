@@ -4,7 +4,11 @@
  * Pure orchestration with injected steps, so every path is unit tested
  * (tools/tests/settings-account.test.cjs):
  *   confirm sheet -> Apple re-confirm (for the grant revoke) -> DELETE now ->
- *   deleted | failed | cancelled.
+ *   deleted | emailSent | failed | cancelled.
+ *
+ * Ship order: 'deleted' needs WS1's backend (mode=immediate). A server that
+ * predates it answers 204 with no body after emailing a confirm link, so the
+ * client reports 'emailSent' (check your email) instead of a false failure.
  * Nothing is deleted unless the player confirmed, and a failure never signs
  * the player out, so they can try again.
  */
@@ -25,6 +29,8 @@ export type AppleReconfirm =
 export type DeletionOutcome =
   | { readonly outcome: 'cancelled' }
   | { readonly outcome: 'deleted'; readonly result: DeletionResult }
+  /** Older server: it accepted the request and emailed a link that finishes the deletion. */
+  | { readonly outcome: 'emailSent' }
   | { readonly outcome: 'failed'; readonly error: unknown };
 
 export type DeletionSteps = {
@@ -48,10 +54,24 @@ export async function runAccountDeletion(steps: DeletionSteps): Promise<Deletion
     const result = await steps.deleteNow(apple.kind === 'code' ? apple.code : null);
     return { outcome: 'deleted', result };
   } catch (error) {
+    if (isEmailConfirmFallback(error)) return { outcome: 'emailSent' };
     return { outcome: 'failed', error };
   } finally {
     steps.setBusy?.(false);
   }
+}
+
+/**
+ * deleteAccountNow (delete-account.ts) throws this when the request succeeded
+ * (2xx) but the server did not confirm an immediate delete: the pre-WS1 server,
+ * which answers 204 after emailing the confirm link. HTTP failures carry a
+ * response or come from axios and stay 'failed'.
+ */
+export const UNCONFIRMED_DELETION_MESSAGE = 'Account deletion was not confirmed.';
+
+export function isEmailConfirmFallback(error: unknown): boolean {
+  const e = error as { message?: unknown; response?: unknown; isAxiosError?: unknown } | null;
+  return !!e && e.message === UNCONFIRMED_DELETION_MESSAGE && e.response === undefined && e.isAxiosError !== true;
 }
 
 /** Map an expo-apple-authentication error to a re-confirm answer. */
@@ -74,6 +94,8 @@ export const DELETION_COPY = {
   failTitle: "Couldn't delete your account",
   failMessage: `Nothing was deleted. Check your connection and try again. If it keeps happening, email ${SUPPORT_EMAIL}.`,
   retryLabel: 'Try again',
+  emailTitle: 'Check your email',
+  emailMessage: 'We sent a link to the email on your Apple Account. Tap it to finish deleting your account.',
   deactivateTitle: 'Deactivate your account?',
   deactivateMessage: 'Your shark takes a break. Sign in again any time to pick up where you left off.',
   deactivateLabel: 'Deactivate',

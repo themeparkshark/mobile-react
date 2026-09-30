@@ -93,3 +93,19 @@ test('Settings uses the brand kit: no icon font, no system alerts, no email-conf
     assert.ok(fs.existsSync(path.join(root, `assets/images/screens/settings/${art}.png`)), `${art} art`);
   }
 });
+
+test('a server without immediate delete (204 after emailing a link) reads as check your email, not a failure', async () => {
+  const deleteSource = fs.readFileSync(path.join(root, 'src/api/endpoints/me/delete-account.ts'), 'utf8');
+  assert.ok(deleteSource.includes(`'${flow.UNCONFIRMED_DELETION_MESSAGE}'`), 'matches the client error');
+  const s = {
+    confirm: async () => true,
+    reconfirmWithApple: async () => ({ kind: 'unavailable' }),
+    deleteNow: async () => { throw new Error(flow.UNCONFIRMED_DELETION_MESSAGE); },
+  };
+  assert.equal((await flow.runAccountDeletion(s)).outcome, 'emailSent');
+  const httpError = Object.assign(new Error(flow.UNCONFIRMED_DELETION_MESSAGE), { isAxiosError: true, response: { status: 500 } });
+  assert.equal((await flow.runAccountDeletion({ ...s, deleteNow: async () => { throw httpError; } })).outcome, 'failed');
+  assert.match(flow.DELETION_COPY.emailMessage, /email/);
+  const settings = fs.readFileSync(path.join(root, 'src/screens/SettingsScreen.tsx'), 'utf8');
+  assert.match(settings, /outcome === 'emailSent'/);
+});
