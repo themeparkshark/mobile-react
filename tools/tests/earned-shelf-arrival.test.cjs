@@ -87,3 +87,15 @@ test('explicit mastery opens once and cannot present a late response after its a
  resolve({id:24,current_level:1,ride_name:'Snowball'});await view.settle();
  assert.equal(view.find(n=>n.type==='./CoinLevelingModal').props.visible,true);
 });
+test('the landing clink and light haptic fire exactly once, with and without reduced motion',()=>{
+ for(const reduced of [false,true]){
+  const sfx=[],haptics=[];const view=runtime('src/components/CoinShelfArrival.tsx',{
+   '../hooks/useReducedGameMotion':{default:()=>reduced},'../gamekit/SFX':{playSfx:(...args)=>sfx.push(args)},
+   'expo-haptics':{impactAsync:style=>{haptics.push(style);return Promise.resolve();},ImpactFeedbackStyle:{Light:'light'}},
+  },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,onLand(){},onInspect(){},onClose(){}});
+  view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='View coin mastery')?.props.onPress();view.render();
+  for(const fire of [...view.timers.values()])fire();
+  assert.deepEqual(sfx.map(([name])=>name),['coin'],`reduced=${reduced}`);assert.deepEqual(haptics,['light']);
+  view.unmount();
+ }
+});
