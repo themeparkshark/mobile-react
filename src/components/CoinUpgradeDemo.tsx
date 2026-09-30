@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, View, Text, StyleSheet, Animated, Easing, Platform } from 'react-native';
 import { Image } from 'expo-image';
+import { COIN_TIERS } from '../constants/coinTiers';
 
 interface Props {
   level: number;
@@ -8,21 +9,20 @@ interface Props {
   size?: number;
   labelColor?: string;
   animate?: boolean;
+  /** Hide the "Lv.N Tier" caption where the screen already names the level. */
+  showLabel?: boolean;
 }
 
-const LEVEL_CONFIG = [
-  { label: 'Basic', labelColor: '#a8a29e', borderColor: '#57534e', bgTint: 'rgba(120,113,108,0.08)' },
-  { label: 'Silver', labelColor: '#cbd5e1', borderColor: '#94a3b8', bgTint: 'rgba(148,163,184,0.12)' },
-  { label: 'Gold', labelColor: '#fbbf24', borderColor: '#f59e0b', bgTint: 'rgba(251,191,36,0.1)' },
-  { label: 'Prismatic', labelColor: '#c4b5fd', borderColor: '#a78bfa', bgTint: 'rgba(167,139,250,0.1)' },
-  { label: 'Legendary', labelColor: '#fb923c', borderColor: '#f97316', bgTint: 'rgba(249,115,22,0.12)' },
-];
+// Blue, white and gold tier tokens only (constants/coinTiers): no neon, pink or purple.
+const LEVEL_CONFIG = COIN_TIERS.map(tier => ({
+  label: tier.name, labelColor: tier.ringDeep, borderColor: tier.ringDeep, bgTint: tier.halo,
+}));
 
-// Prismatic color cycle positions
-const PRISMATIC_COLORS = ['#a78bfa', '#ec4899', '#3b82f6', '#22c55e', '#fbbf24', '#a78bfa'];
-const EARNED_RIM_COLORS = ['#57534e', '#E5F2FA', '#FFD873', '#D4B8FF', '#FFC27A'];
+// Prismatic sparkle cycle: water blues, white and gold.
+const PRISMATIC_COLORS = ['#5fd0ff', '#ffffff', '#0879ca', '#ffcf3b', '#bfe5ff', '#5fd0ff'];
+const EARNED_RIM_COLORS = COIN_TIERS.map(tier => tier.ring);
 
-export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor, animate = true }: Props) {
+export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor, animate = true, showLabel = true }: Props) {
   const cfg = LEVEL_CONFIG[Math.min(level - 1, 4)];
   const effectArea = size * 1.5; // total effect zone
   const [reducedMotion, setReducedMotion] = useState(true);
@@ -272,7 +272,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
             top: effectArea / 2 - 1,
             width: 2, height: i % 3 === 0 ? 12 : 8,
             borderRadius: 1,
-            backgroundColor: i % 2 === 0 ? '#60a5fa' : '#c084fc',
+            backgroundColor: i % 2 === 0 ? '#ffffff' : '#ffcf3b',
             opacity: bolt.opacity,
             transform: [
               { translateX: bolt.x },
@@ -296,7 +296,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
               top: effectArea / 2 - size * 0.4,
               width: 3, height: size * 0.8,
               borderRadius: 1.5,
-              backgroundColor: level >= 5 ? '#fb923c' : '#c4b5fd',
+              backgroundColor: level >= 5 ? '#ffcf3b' : '#bfe5ff',
               opacity: ray.opacity,
               transform: [
                 { rotate: `${(i * 45)}deg` },
@@ -325,11 +325,11 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
               height: ringSize + 8,
               borderRadius: (ringSize + 8) / 2,
               borderWidth: 2.5,
-              borderColor: '#f97316',
+              borderColor: '#ffb400',
               opacity: 0.7,
               transform: [{ rotate: plasmaRotation }, { scale: pulseAnim }],
               ...Platform.select({
-                ios: { shadowColor: '#f97316', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 12 },
+                ios: { shadowColor: '#ffb400', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 12 },
                 android: { elevation: 8 },
               }),
             }}
@@ -349,7 +349,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
               borderColor: cfg.borderColor,
               transform: [{ scale: pulseAnim }],
               ...Platform.select({
-                ios: { shadowColor: '#a78bfa', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 10 },
+                ios: { shadowColor: '#5fd0ff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 10 },
                 android: { elevation: 6 },
               }),
             }}
@@ -431,7 +431,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
           borderColor: EARNED_RIM_COLORS[Math.min(level - 1, 4)],
           ...Platform.select({
             ios: {
-              shadowColor: level >= 5 ? '#f97316' : level >= 4 ? '#a78bfa' : level >= 3 ? '#fbbf24' : '#000',
+              shadowColor: level >= 5 ? '#ffb400' : level >= 4 ? '#5fd0ff' : level >= 3 ? '#fbbf24' : '#05346e',
               shadowOffset: { width: 0, height: level >= 3 ? 0 : 3 },
               shadowOpacity: level >= 3 ? 0.6 : 0.4,
               shadowRadius: level >= 3 ? 8 : 5,
@@ -469,7 +469,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
                 top: -5,
                 width: level >= 4 ? 16 : 10,
                 height: size + 10,
-                backgroundColor: level >= 5 ? 'rgba(251,191,36,0.35)' : level >= 4 ? 'rgba(196,181,253,0.3)' : 'rgba(255,255,255,0.25)',
+                backgroundColor: level >= 5 ? 'rgba(251,191,36,0.35)' : level >= 4 ? 'rgba(95,208,255,0.3)' : 'rgba(255,255,255,0.25)',
                 transform: [{ translateX: shimmerX }, { rotate: '20deg' }],
               }} />
             </Animated.View>
@@ -485,7 +485,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
             outputRange: [`${i * 60}deg`, `${i * 60 + (i % 2 === 0 ? 360 : -360)}deg`],
           });
           const color = level >= 5
-            ? (i % 3 === 0 ? '#f97316' : i % 3 === 1 ? '#fbbf24' : '#ef4444')
+            ? (i % 3 === 0 ? '#ffb400' : i % 3 === 1 ? '#ffcf3b' : '#ffffff')
             : level >= 4
               ? PRISMATIC_COLORS[i % PRISMATIC_COLORS.length]
               : '#fbbf24';
@@ -547,10 +547,10 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
       </Animated.View>
 
       {/* ── Label ── */}
-      <View style={s.labelWrap}>
+      {showLabel && <View style={s.labelWrap}>
         <Text style={[s.label, { color: labelColor ?? cfg.labelColor }]}>{'Lv.' + level}</Text>
         <Text style={[s.labelName, { color: labelColor ?? cfg.labelColor }]}>{cfg.label}</Text>
-      </View>
+      </View>}
     </View>
   );
 }
@@ -578,13 +578,14 @@ const s = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1e293b',
+    backgroundColor: '#0768b9',
   },
   placeholderCoin: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   placeholderText: {
+    fontFamily: 'Shark',
     fontSize: 20,
   },
   labelWrap: {
@@ -592,13 +593,13 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   label: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontFamily: 'Shark',
+    fontSize: 12,
     letterSpacing: 0.5,
   },
   labelName: {
-    fontSize: 8,
-    fontWeight: '700',
+    fontFamily: 'Knockout',
+    fontSize: 10,
     opacity: 0.7,
     marginTop: 1,
     textTransform: 'uppercase',
@@ -607,16 +608,17 @@ const s = StyleSheet.create({
   demoContainer: {
     padding: 16,
     alignItems: 'center',
-    backgroundColor: '#0d0d1a',
+    backgroundColor: '#0879ca',
   },
   demoTitle: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
+    fontFamily: 'Shark',
+    fontSize: 20,
   },
   demoSub: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontFamily: 'Knockout',
+    fontSize: 15,
     marginTop: 2,
     marginBottom: 12,
   },

@@ -22,6 +22,17 @@ import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { COIN_TIERS, coinTier } from '../constants/coinTiers';
+import GameIcon from '../ui/GameIcon';
+import type { CollectedRideCoin } from '../api/endpoints/me/ride-coins/show';
+
+const SHORT_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+/** "SEP 27" from an ISO time, read as a calendar day. */
+function ridDay(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return match ? `${SHORT_MONTHS[Number(match[2]) - 1] ?? ''} ${Number(match[3])}` : '';
+}
+import * as RootNavigation from '../RootNavigation';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -38,20 +49,17 @@ interface Props {
 
 type ModalState = 'preview' | 'confirm' | 'leveling' | 'success' | 'maxed';
 
-// ── Level tier names matching CoinUpgradeDemo ──
-const TIER_NAMES = ['Basic', 'Silver', 'Gold', 'Prismatic', 'Legendary'];
-const TIER_VISUAL_REWARDS = [
-  'Basic coin', 'Silver rim and animated shimmer', 'Gold glow and orbiting sparks',
-  'Prismatic light rays', 'Legendary plasma and sparks',
-];
-const TIER_COLORS = ['#a8a29e', '#cbd5e1', '#fbbf24', '#c4b5fd', '#fb923c'];
-const TIER_BG = [
-  'rgba(120,113,108,0.15)',
-  'rgba(148,163,184,0.15)',
-  'rgba(251,191,36,0.15)',
-  'rgba(167,139,250,0.15)',
-  'rgba(249,115,22,0.15)',
-];
+// Tier names, colours and looks come from the one tier token file.
+const TIER_NAMES = COIN_TIERS.map(tier => tier.name);
+const TIER_VISUAL_REWARDS = COIN_TIERS.map(tier => tier.look);
+const TIER_COLORS = COIN_TIERS.map(tier => tier.ring === '#ffffff' ? tier.ringDeep : tier.ringDeep);
+
+/** The one next step when a coin cannot power up yet (never a dead end). */
+export function missingResourceAction(missingParts: number, missingEnergy: number): { label: string; kind: 'parts' | 'energy' } | null {
+  if (missingParts > 0) return { label: `Get ${missingParts} Ride Part${missingParts === 1 ? '' : 's'}`, kind: 'parts' };
+  if (missingEnergy > 0) return { label: `Find ${missingEnergy} Energy`, kind: 'energy' };
+  return null;
+}
 
 export default function CoinLevelingModal({
   visible,
@@ -98,6 +106,8 @@ export default function CoinLevelingModal({
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const confettiRef = useRef<Lottie>(null);
   const pendingLinePlayRef = useRef(false);
+  const pendingExploreRef = useRef(false);
+  const [showPartsHelp, setShowPartsHelp] = useState(false);
 
   // Staggered resource bar animations
   const energyBarAnim = useRef(new Animated.Value(0)).current;
@@ -162,6 +172,10 @@ export default function CoinLevelingModal({
   const hasEnergy = playerEnergy >= rideCoin.energy_to_next_level;
   const hasParts = playerParts >= rideCoin.parts_to_next_level;
   const canLevelUp = !isMaxLevel && rideCoin.is_unlocked && hasEnergy && hasParts;
+  const yourRides = (rideCoin as CollectedRideCoin).your_rides ?? null;
+  const missingAction = rideCoin.is_unlocked && !isMaxLevel
+    ? missingResourceAction(Math.max(0, rideCoin.parts_to_next_level - playerParts), Math.max(0, rideCoin.energy_to_next_level - playerEnergy))
+    : null;
 
   // ── Level up sequence ──
   const handleLevelUp = async () => {
@@ -312,13 +326,18 @@ export default function CoinLevelingModal({
           pendingLinePlayRef.current = false;
           onPlayInLine?.();
         }
+        if (pendingExploreRef.current) {
+          pendingExploreRef.current = false;
+          RootNavigation.navigate('Explore');
+        }
       }}
       onBackdropPress={state !== 'leveling' ? handleClose : undefined}
-      backdropOpacity={0.85}
+      backdropColor="#05346e"
+      backdropOpacity={0.6}
       statusBarTranslucent
       style={{ margin: 0, alignItems: 'center', justifyContent: 'center' }}
     >
-      {/* Confetti overlay — only render during success to avoid artifact */}
+      {/* Confetti overlay: only render during success to avoid artifact */}
       {state === 'success' && !reducedMotion && (
         <Lottie
           ref={confettiRef}
@@ -342,7 +361,7 @@ export default function CoinLevelingModal({
         {/* ── Ribbon Header ── */}
         <Ribbon text={
           state === 'success' ? 'Level Up!' :
-          isMaxLevel ? '★ Legendary ★' :
+          isMaxLevel ? 'Legendary' :
           rideCoin.ride_name
         } />
 
@@ -392,7 +411,7 @@ export default function CoinLevelingModal({
                       level={state === 'success' ? nextLevel : currentLevel}
                       coinUrl={rideCoin.coin_url}
                       size={120}
-                      labelColor="#FFFFFF"
+                      showLabel={false}
                     />
                   </TouchableOpacity>
                 </Animated.View>
@@ -418,9 +437,9 @@ export default function CoinLevelingModal({
                   gap: 6,
                 }}>
                   <Text style={{
-                    fontFamily: 'Knockout',
-                    fontSize: 12,
-                    color: '#17476B',
+                    fontFamily: 'Shark',
+                    fontSize: 15,
+                    color: '#05346e',
                     textTransform: 'uppercase',
                     letterSpacing: 0.5,
                   }}>
@@ -429,11 +448,11 @@ export default function CoinLevelingModal({
 
                   {!isMaxLevel && state !== 'success' && (
                     <>
-                      <Text style={{ color: '#316D90', fontSize: 12 }}>→</Text>
+                      <GameIcon name="arrow" size={16} />
                       <Text style={{
-                        fontFamily: 'Knockout',
-                        fontSize: 12,
-                        color: '#A36609',
+                        fontFamily: 'Shark',
+                        fontSize: 15,
+                        color: '#a36609',
                         textTransform: 'uppercase',
                         letterSpacing: 0.5,
                         opacity: 1,
@@ -449,10 +468,12 @@ export default function CoinLevelingModal({
                     accessibilityLabel={`View ${rideCoin.editions.length} ride coin editions`}
                     onPress={() => setShowEditions(!showEditions)}
                     style={{ paddingVertical: 5, marginBottom: 4 }}>
-                    <Text style={{ fontFamily: 'Knockout', fontSize: 12,
-                      color: rideCoin.editions[0].color, textAlign: 'center' }}>
-                      ✦ {showEditions ? 'Back to coin' : `${rideCoin.editions[0].name} · View ${rideCoin.editions.length}`}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <GameIcon name="sparkle" size={16} />
+                      <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: '#0768b9', textAlign: 'center' }}>
+                        {showEditions ? 'Back to coin' : `${rideCoin.editions[0].name}, view ${rideCoin.editions.length}`}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 )}
 
@@ -480,13 +501,32 @@ export default function CoinLevelingModal({
                           shadowRadius: 4,
                         } : {}),
                       }}>
-                        {filled && (
-                          <Text style={{ fontSize: 10, color: 'white', fontWeight: '900' }}>✓</Text>
-                        )}
+                        {filled && <GameIcon name="check" size={12} />}
                       </View>
                     );
                   })}
                 </View>
+
+                {/* ── Your rides: the ride journal behind this coin ── */}
+                {yourRides && yourRides.count > 0 && (state === 'preview' || state === 'maxed') && !showEditions && (
+                  <View style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffffff',
+                    borderWidth: 2, borderColor: '#bfe5ff', borderRadius: 12, paddingVertical: 7, paddingHorizontal: 10, marginBottom: 8 }}
+                    accessible accessibilityLabel={`You rode this ${yourRides.count} times.`}>
+                    <GameIcon name="ride" size={28} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: '#05346e' }}>
+                        YOUR RIDES: {yourRides.count}{yourRides.last_rode_at ? `, LAST ${ridDay(yourRides.last_rode_at)}` : ''}
+                      </Text>
+                      {!!yourRides.last_memory && <Text numberOfLines={1} style={{ fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c' }}>
+                        “{yourRides.last_memory}”
+                      </Text>}
+                    </View>
+                    {yourRides.average_rating !== null && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <GameIcon name="star" size={18} />
+                      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: '#05346e' }}>{yourRides.average_rating.toFixed(1)}</Text>
+                    </View>}
+                  </View>
+                )}
 
                 {showEditions && (state === 'preview' || state === 'maxed') && (
                   <ScrollView style={{ maxHeight: 180, width: '100%', marginBottom: 10 }}
@@ -524,7 +564,7 @@ export default function CoinLevelingModal({
                       paddingVertical: 7, paddingHorizontal: 13, marginBottom: 8 }}>
                     <Text style={{ color: '#795015', fontFamily: 'Knockout', fontSize: 13,
                       textAlign: 'center' }}>
-                      {featureBusy ? 'Saving…' : featured ? '★ Featured on Profile · Remove' : '☆ Feature on Profile'}
+                      {featureBusy ? 'Saving…' : featured ? 'Featured on your Profile. Remove' : 'Feature on your Profile'}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -649,9 +689,7 @@ export default function CoinLevelingModal({
                           }}>
                             {playerEnergy.toLocaleString()}
                           </Text>
-                          {hasEnergy && (
-                            <Text style={{ fontSize: 12, color: '#168052' }}>✓</Text>
-                          )}
+                          {hasEnergy && <GameIcon name="check" size={16} />}
                         </View>
 
                         {/* Ride Parts Balance */}
@@ -664,9 +702,7 @@ export default function CoinLevelingModal({
                           }}>
                             {playerParts.toLocaleString()}
                           </Text>
-                          {hasParts && (
-                            <Text style={{ fontSize: 12, color: '#168052' }}>✓</Text>
-                          )}
+                          {hasParts && <GameIcon name="check" size={16} />}
                         </View>
                       </View>
                     </View>
@@ -685,8 +721,10 @@ export default function CoinLevelingModal({
                         <View style={{ marginTop: 7, borderTopWidth: 1, borderTopColor: '#EBC970',
                           paddingTop: 7 }}>
                         {rideCoin.next_level_perks.map(perk => (
-                          <Text key={perk.id} style={{ fontFamily: 'Knockout', fontSize: 14,
-                            color: '#19496B' }}>★ {perk.description}</Text>
+                          <View key={perk.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <GameIcon name="star" size={16} />
+                            <Text style={{ flex: 1, fontFamily: 'Knockout', fontSize: 14, color: '#19496B' }}>{perk.description}</Text>
+                          </View>
                         ))}
                         </View>
                       )}
@@ -704,11 +742,22 @@ export default function CoinLevelingModal({
                       </Text>
                     </View>}
                     {/* ── Level Up Button ── */}
-                    <YellowButton
-                      text={canLevelUp ? 'Power Up!' : 'Not Enough Resources'}
+                    {canLevelUp || !missingAction ? <YellowButton
+                      text="Power Up!"
                       disabled={!canLevelUp}
                       onPress={handleLevelUp}
-                    />
+                    /> : <YellowButton
+                      text={missingAction.label}
+                      onPress={() => {
+                        if (missingAction.kind === 'parts' && onPlayInLine) {
+                          pendingLinePlayRef.current = true; handleClose();
+                        } else if (missingAction.kind === 'energy') {
+                          pendingExploreRef.current = true; handleClose();
+                        } else {
+                          setShowPartsHelp(true);
+                        }
+                      }}
+                    />}
 
                     {/* Helper text for what you're missing */}
                     {!canLevelUp && (
@@ -717,11 +766,11 @@ export default function CoinLevelingModal({
                         color: '#315D7B',
                         textAlign: 'center', marginTop: 8,
                       }}>
-                        {!hasEnergy && !hasParts
-                          ? `Need ${rideCoin.energy_to_next_level - playerEnergy} Energy and ${rideCoin.parts_to_next_level - playerParts} Ride Part${rideCoin.parts_to_next_level - playerParts === 1 ? '' : 's'} to power up.`
-                          : !hasEnergy
-                            ? `Find home items for ${rideCoin.energy_to_next_level - playerEnergy} more Energy.`
-                            : `Need ${rideCoin.parts_to_next_level - playerParts} more Ride Part${rideCoin.parts_to_next_level - playerParts === 1 ? '' : 's'} to power up.`}
+                        {!hasParts
+                          ? showPartsHelp || !onPlayInLine
+                            ? 'Win this ride again or play a queue adventure in its line to earn Ride Parts.'
+                            : 'Play a queue adventure in this line to earn Ride Parts.'
+                          : 'Energy comes from finds on your home map.'}
                       </Text>
                     )}
                   </>
@@ -820,7 +869,7 @@ export default function CoinLevelingModal({
                               fontFamily: 'Knockout', fontSize: 14,
                               color: '#19496B', marginBottom: 2,
                             }}>
-                              ⭐ {perk.description}
+                              {perk.description}
                             </Text>
                           ))}
                         </View>
@@ -852,7 +901,7 @@ export default function CoinLevelingModal({
                         color: '#9D6300',
                         marginBottom: 4,
                       }}>
-                        ★ LEGENDARY ★
+                        LEGENDARY
                       </Text>
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 14,
@@ -870,7 +919,7 @@ export default function CoinLevelingModal({
                             <View key={perk.id} style={{
                               flexDirection: 'row', alignItems: 'center', marginBottom: 4,
                             }}>
-                              <Text style={{ fontSize: 12, marginRight: 8 }}>🏆</Text>
+                              <View style={{ marginRight: 8 }}><GameIcon name="trophy" size={18} /></View>
                               <Text style={{
                                 fontFamily: 'Knockout', fontSize: 14, color: '#19496B',
                               }}>
@@ -902,7 +951,7 @@ export default function CoinLevelingModal({
                     onPress={() => { pendingLinePlayRef.current = true; handleClose(); }}
                     style={{ alignSelf: 'center', paddingVertical: 10, marginTop: 5 }}>
                     <Text style={{ color: '#075b9b', fontFamily: 'Shark', fontSize: 15,
-                      textDecorationLine: 'underline' }}>Waiting here? Play in Line ›</Text>
+                      textDecorationLine: 'underline' }}>Waiting here? Play in Line</Text>
                   </TouchableOpacity>}
 
               </View>

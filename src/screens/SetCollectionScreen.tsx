@@ -16,15 +16,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from '../helpers/haptics';
 import HapticPatterns from '../helpers/hapticPatterns';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import {
-  faLock,
-  faStar,
-  faCheck,
-  faClock,
-  faTrophy,
-  faGem,
-} from '@fortawesome/free-solid-svg-icons';
 import Wrapper from '../components/Wrapper';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -39,6 +30,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import prepItemImage from '../helpers/prepItemImages';
 import * as RootNavigation from '../RootNavigation';
+import GameIcon from '../ui/GameIcon';
 import type { GiftReceipt } from '../api/endpoints/me/prep-variant-gifts';
 import getPrepItemSets, {
   getPrepItemSet,
@@ -52,6 +44,7 @@ import getPrepItemSets, {
   PrepItemSetItem,
   PrepItemSetDetailResponse,
 } from '../api/endpoints/me/prep-item-sets';
+import { RARITY_TONES } from '../constants/coinTiers';
 
 // Churro image mapping - require all images statically
 const CHURRO_IMAGES: Record<string, any> = {
@@ -105,14 +98,8 @@ const getChurroImage = (variantSlug: string) => {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ITEM_SIZE = (SCREEN_WIDTH - 56) / 4; // 4 items per row with padding
 
-// Rarity configuration — modern, softer palette
-const RARITY_CONFIG = {
-  1: { name: 'common', label: 'Common', color: '#22c55e', bgColor: 'rgba(34, 197, 94, 0.08)', glowColor: 'rgba(34, 197, 94, 0.2)' },
-  2: { name: 'uncommon', label: 'Uncommon', color: '#3b82f6', bgColor: 'rgba(59, 130, 246, 0.08)', glowColor: 'rgba(59, 130, 246, 0.2)' },
-  3: { name: 'rare', label: 'Rare', color: '#a855f7', bgColor: 'rgba(168, 85, 247, 0.08)', glowColor: 'rgba(168, 85, 247, 0.2)' },
-  4: { name: 'epic', label: 'Epic', color: '#ec4899', bgColor: 'rgba(236, 72, 153, 0.08)', glowColor: 'rgba(236, 72, 153, 0.2)' },
-  5: { name: 'legendary', label: 'Legendary', color: '#f59e0b', bgColor: 'rgba(245, 158, 11, 0.1)', glowColor: 'rgba(245, 158, 11, 0.3)' },
-};
+// Rarity tones come from the shared blue, white and gold collection ramp.
+const RARITY_CONFIG = RARITY_TONES;
 
 // Animated collection item card
 function CollectionCard({
@@ -237,7 +224,7 @@ function CollectionCard({
                     ]}
                   >
                     {!isCollected && (
-                      <FontAwesomeIcon icon={faLock} size={18} color="rgba(0,0,0,0.12)" />
+                      <GameIcon name="lock" size={18 + 4} style={{ opacity: 0.35 }} />
                     )}
                   </View>
                 );
@@ -248,11 +235,7 @@ function CollectionCard({
           {/* Lock overlay for uncollected */}
           {!isCollected && (
             <View style={styles.lockOverlay}>
-              <FontAwesomeIcon
-                icon={faLock}
-                size={16}
-                color="rgba(0,0,0,0.15)"
-              />
+              <GameIcon name="lock" size={16 + 4} style={{ opacity: 0.35 }} />
             </View>
           )}
 
@@ -283,11 +266,11 @@ function CollectionCard({
         <Text
           style={[
             styles.itemName,
-            { color: isCollected ? '#1a1a2e' : 'rgba(0,0,0,0.25)' },
+            { color: isCollected ? '#05346e' : 'rgba(5,52,110,0.3)' },
           ]}
           numberOfLines={1}
         >
-          {isCollected ? `${item.found_in_world && item.rarity === 5 ? '✦ ' : ''}${item.name}` : '???'}
+          {isCollected ? item.name : '???'}
         </Text>
       </TouchableOpacity>
     </Animated.View>
@@ -806,18 +789,14 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
           {/* Completion Badge */}
           {isComplete && (
             <View style={styles.completeBadge}>
-              <FontAwesomeIcon icon={faStar} size={14} color="#FFD700" />
+              <GameIcon name="star" size={14 + 4} />
             </View>
           )}
 
           {/* Time Gate Indicator */}
           {set.time_gate && set.time_gate.is_spawning_now === false && (
             <View style={styles.timeGateBadge}>
-              <FontAwesomeIcon
-                icon={faClock}
-                size={10}
-                color="rgba(255,255,255,0.4)"
-              />
+              <GameIcon name="timer" size={10 + 4} />
             </View>
           )}
         </View>
@@ -898,11 +877,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             {/* Time gate info */}
             {set.is_in_rotation !== false && set.time_gate && (
               <View style={styles.timeGateInfo}>
-                <FontAwesomeIcon
-                  icon={faClock}
-                  size={12}
-                  color="rgba(255,255,255,0.6)"
-                />
+                <GameIcon name="timer" size={12 + 4} />
                 <Text style={styles.timeGateText}>
                   {set.time_gate.description}
                 </Text>
@@ -942,7 +917,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
               </Text>
             </View>
             {set.is_in_rotation === false ? <View style={styles.archivePanel}>
-              <Text style={styles.archiveKicker}>✦  YOUR COLLECTOR ARCHIVE</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <GameIcon name="sparkle" size={18} />
+                <Text style={styles.archiveKicker}>YOUR COLLECTOR ARCHIVE</Text>
+              </View>
               <Text style={styles.archiveBody}>This book is off the map for now. Your finds, spare copies, and earned rewards are safe. You can still use saved spares and claim rewards you earned.</Text>
             </View> : <View style={styles.focusRow}>
               <View style={styles.focusCopy}>
@@ -975,9 +953,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             <Text style={styles.tripPrepExplanation}>
               {set.is_in_rotation === false
                 ? progress.starter_milestone.is_unlocked
-                  ? `You earned this trip-prep milestone before the hunt rotated out. Claim ${progress.starter_milestone.rewards.tickets} Tickets, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP.`
+                  ? `You earned this trip-prep milestone before the hunt rotated out. Claim ${progress.starter_milestone.rewards.tickets} Ticket${progress.starter_milestone.rewards.tickets === 1 ? '' : 's'}, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP.`
                   : `Your ${progress.starter_milestone.collected} unique finds toward this reward are saved. The set is off the map for now.`
-                : `Find eight different items to bring ${progress.starter_milestone.rewards.tickets} Tickets, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP toward your next park day${progress.starter_milestone.rewards.title ? `, and earn the ${progress.starter_milestone.rewards.title} profile title` : ''}. Keep collecting for the full set reward.`}
+                : `Find eight different items to bring ${progress.starter_milestone.rewards.tickets} Ticket${progress.starter_milestone.rewards.tickets === 1 ? '' : 's'}, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP toward your next park day${progress.starter_milestone.rewards.title ? `, and earn the ${progress.starter_milestone.rewards.title} profile title` : ''}. Keep collecting for the full set reward.`}
             </Text>
             {!!progress.starter_milestone.wearable_choices?.length && !progress.starter_milestone.rewards_claimed && (
               <View style={{ marginBottom: 12 }}>
@@ -1002,7 +980,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                         backgroundColor: item.owned ? '#E8E5DE' : selectedWearableId === item.id ? '#0B72BB' : '#F4FBFF' }}
                     >
                       {item.icon_url ? <Image source={{ uri: item.icon_url }} style={{ width: 65, height: 65 }} contentFit="contain" />
-                        : <Text style={{ fontSize: 28 }}>🦈</Text>}
+                        : <GameIcon name="shark" size={52} />}
                       <View style={{ flex: wearableChoices.length === 1 ? 1 : undefined, alignItems: 'center' }}>
                         <Text style={{ color: selectedWearableId === item.id && !item.owned ? '#FFFFFF' : '#174D79',
                           fontFamily: 'Knockout', textAlign: 'center', fontSize: wearableChoices.length === 1 ? 15 : 12,
@@ -1077,7 +1055,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             ) : progress.starter_milestone.is_unlocked ? (
               <Button onPress={handleClaimStarter} hasPermission={!claimingStarter}>
                 <LinearGradient colors={['#FFBE57', '#F18B32']} style={styles.claimButton}>
-                  <FontAwesomeIcon icon={faStar} size={18} color="white" />
+                  <GameIcon name="star" size={18 + 4} />
                   <Text style={styles.claimButtonText}>{claimingStarter ? 'Claiming...' : 'Claim Trip Prep'}</Text>
                 </LinearGradient>
               </Button>
@@ -1128,8 +1106,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             <Text style={styles.chaseNote}>An exchange fills your book; finding it on the map remains a separate collector feat.</Text>
             <TouchableOpacity accessibilityRole="button" onPress={() => setShowMissingChoices(value => !value)}
               style={styles.chaseButton}>
-              <Text style={styles.chaseButtonText}>{showMissingChoices ? 'HIDE MISSING VARIANTS  ↑'
-                : sparesNeeded === 0 ? 'CHOOSE A MISSING VARIANT  ↓' : 'VIEW MISSING VARIANTS  ↓'}</Text>
+              <Text style={styles.chaseButtonText}>{showMissingChoices ? 'HIDE MISSING VARIANTS'
+                : sparesNeeded === 0 ? 'CHOOSE A MISSING VARIANT' : 'VIEW MISSING VARIANTS'}</Text>
             </TouchableOpacity>
             {showMissingChoices && missingItems.map((item: PrepItemSetItem) => (
               <TouchableOpacity key={item.id} accessibilityRole="button"
@@ -1142,7 +1120,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                   <Text style={styles.missingName}>{item.name}</Text>
                   <Text style={styles.missingRarity}>{item.rarity_label}</Text>
                 </View>
-                <Text style={styles.missingArrow}>→</Text>
+                <GameIcon name="arrow" size={24} />
               </TouchableOpacity>
             ))}
           </View>
@@ -1157,7 +1135,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             {progress.spare_count} spare copies · Exchange {progress.exchange_cost} for any missing item
           </Text>}
           <View style={styles.rewardsSectionHeader}>
-            <FontAwesomeIcon icon={faTrophy} size={16} color="#FFD700" />
+            <GameIcon name="trophy" size={16 + 4} />
             <Text style={styles.sectionTitle}>Completion Rewards</Text>
           </View>
           <View style={styles.rewardsGrid}>
@@ -1220,11 +1198,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                     { backgroundColor: 'rgba(255,215,0,0.15)' },
                   ]}
                 >
-                  <FontAwesomeIcon
-                    icon={faTrophy}
-                    size={16}
-                    color="#FFD700"
-                  />
+                  <GameIcon name="trophy" size={16 + 4} />
                 </View>
                 <Text style={[styles.rewardValue, { fontSize: 11 }]} numberOfLines={2}>
                   {completion_rewards.title}
@@ -1244,11 +1218,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                 colors={['#FFD700', '#FFA000']}
                 style={styles.claimButton}
               >
-                <FontAwesomeIcon
-                  icon={faStar}
-                  size={18}
-                  color="white"
-                />
+                <GameIcon name="star" size={18 + 4} />
                 <Text style={styles.claimButtonText}>
                   {claiming ? 'Claiming...' : 'Claim Rewards!'}
                 </Text>
@@ -1258,7 +1228,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
           {progress.rewards_claimed && completion_rewards.title && (
               <Button onPress={() => handleEquipTitle('complete')} hasPermission={!equippingTitle}>
               <LinearGradient colors={['#254A72', '#142C4B']} style={styles.claimButton}>
-                <FontAwesomeIcon icon={faTrophy} size={17} color="white" />
+                <GameIcon name="trophy" size={17 + 4} />
                 <Text style={styles.claimButtonText}>
                   {equippingTitle ? 'Saving...' : player?.title === completion_rewards.title
                     ? 'Remove Profile Title' : 'Wear Profile Title'}
@@ -1382,11 +1352,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
               </View>
             ) : sets.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <FontAwesomeIcon
-                  icon={faGem}
-                  size={48}
-                  color="rgba(0,0,0,0.1)"
-                />
+                <GameIcon name="sparkle" size={48 + 4} style={{ opacity: 0.35 }} />
                 <Text style={styles.emptyText}>
                   No collections available
                 </Text>
@@ -1419,7 +1385,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                         : 'OPENING SOON'}</Text>
                       <Text style={styles.upcomingBody} numberOfLines={2}>{set.description}</Text>
                       {set.collected_count > 0 && <Text style={styles.upcomingSaved}>
-                        {set.collected_count}/{set.total_items} SAVED · VIEW YOUR BOOK →
+                        {set.collected_count}/{set.total_items} SAVED · VIEW YOUR BOOK
                       </Text>}
                     </View>
                   </TouchableOpacity>)}
@@ -1438,7 +1404,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                     <Text style={styles.mapHuntKicker}>YOUR NEXT MOVE</Text>
                     <Text style={styles.mapHuntTitle}>FIND ITEMS ON THE MAP</Text>
                     <Text style={styles.mapHuntBody}>Every pickup builds your park-day resources. New variants fill your active books.</Text>
-                    <Text style={styles.mapHuntAction}>OPEN HOME MAP  →</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.mapHuntAction}>OPEN HOME MAP</Text>
+                      <GameIcon name="arrow" size={20} />
+                    </View>
                   </View>
                 </TouchableOpacity>}
               </>
@@ -1592,11 +1561,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                 <View style={styles.modalStatusRow}>
                   {selectedItem.is_collected ? (
                     <>
-                      <FontAwesomeIcon
-                        icon={faCheck}
-                        size={14}
-                        color="#4CAF50"
-                      />
+                      <GameIcon name="check" size={14 + 4} />
                       <Text
                         style={[
                           styles.modalStatus,
@@ -1611,11 +1576,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                     </>
                   ) : (
                     <>
-                      <FontAwesomeIcon
-                        icon={faLock}
-                        size={14}
-                        color="rgba(255,255,255,0.5)"
-                      />
+                      <GameIcon name="lock" size={14 + 4} />
                       <Text style={styles.modalStatus}>
                         Not Yet Collected
                       </Text>
@@ -1717,7 +1678,7 @@ const styles = StyleSheet.create({
   listHeroEyebrow: { color: '#bfeaff', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
   listHeroTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 29, lineHeight: 33, marginTop: 5,
     textShadowColor: '#003c7a', textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1 },
-  listHeroSub: { color: '#e5f7ff', fontSize: 12, lineHeight: 16, marginTop: 6, maxWidth: 215 },
+  listHeroSub: { color: '#e5f7ff', fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, marginTop: 6, maxWidth: 215 },
   listHeroShark: { position: 'absolute', width: 132, height: 142, right: -14, bottom: -4 },
   listSectionTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 20,
     textShadowColor: '#003c7a', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
@@ -1735,7 +1696,7 @@ const styles = StyleSheet.create({
   upcomingEyebrow: { color: '#ffcf4c', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8 },
   upcomingTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 19, marginTop: 2 },
   upcomingDate: { color: '#ffcf4c', fontFamily: 'Knockout', fontSize: 14, marginTop: 2 },
-  upcomingBody: { color: '#d9f1ff', fontSize: 12, lineHeight: 16, marginTop: 4 },
+  upcomingBody: { color: '#d9f1ff', fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, marginTop: 4 },
   upcomingSaved: { color: '#ffcf4c', fontFamily: 'Knockout', fontSize: 12, marginTop: 5 },
   noCurrentHunts: { color: '#e6f7ff', fontFamily: 'Knockout', fontSize: 15,
     paddingHorizontal: 10, paddingVertical: 9 },
@@ -1747,7 +1708,7 @@ const styles = StyleSheet.create({
   mapHuntCopy: { flex: 1 },
   mapHuntKicker: { color: '#07569e', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
   mapHuntTitle: { color: '#093d77', fontFamily: 'Shark', fontSize: 17, marginTop: 2 },
-  mapHuntBody: { color: '#244d70', fontSize: 12, lineHeight: 16, marginTop: 3 },
+  mapHuntBody: { color: '#244d70', fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, marginTop: 3 },
   mapHuntAction: { color: '#005da4', fontFamily: 'Knockout', fontSize: 16, marginTop: 6 },
   setCard: {
     borderRadius: 18,
@@ -2022,9 +1983,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4, elevation: 3 },
   chaseKicker: { color: '#ffdf54', fontFamily: 'Knockout', fontSize: 13, letterSpacing: 0.8 },
   chaseTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 20, marginTop: 5 },
-  chaseBody: { color: '#e4f5ff', fontSize: 13, lineHeight: 19, marginTop: 8 },
+  chaseBody: { color: '#e4f5ff', fontFamily: 'Knockout', fontSize: 16, lineHeight: 20, marginTop: 8 },
   chaseDiscovery: { color: '#ffdf54', fontFamily: 'Knockout', fontSize: 14, marginTop: 12 },
-  chaseNote: { color: '#d6eeff', fontSize: 11, lineHeight: 16, marginTop: 6 },
+  chaseNote: { color: '#d6eeff', fontFamily: 'Knockout', fontSize: 14, lineHeight: 17, marginTop: 6 },
   chaseButton: { marginTop: 14, padding: 12, borderRadius: 12, borderWidth: 2,
     borderColor: '#fff', backgroundColor: '#ffca30', alignItems: 'center' },
   chaseButtonText: { color: '#093d77', fontFamily: 'Knockout', fontSize: 17 },
@@ -2033,8 +1994,8 @@ const styles = StyleSheet.create({
   missingImage: { width: 43, height: 43, marginRight: 8 },
   missingCopy: { flex: 1 },
   missingName: { color: '#093d77', fontFamily: 'Knockout', fontSize: 15 },
-  missingRarity: { color: '#376888', fontSize: 11 },
-  missingArrow: { color: '#0875c9', fontSize: 21, fontWeight: '800' },
+  missingRarity: { color: '#376888', fontFamily: 'Knockout', fontSize: 13 },
+  missingArrow: { color: '#0875c9', fontFamily: 'Shark', fontSize: 21 },
   rewardsSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2070,7 +2031,7 @@ const styles = StyleSheet.create({
   rewardValue: {
     fontFamily: 'Knockout',
     fontSize: 16,
-    color: '#1a1a2e',
+    color: '#05346e',
     marginTop: 2,
   },
   rewardLabel: {
@@ -2080,7 +2041,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 2,
   },
-  tripPrepExplanation: { color: '#315674', fontSize: 13, lineHeight: 18,
+  tripPrepExplanation: { color: '#315674', fontFamily: 'Knockout', fontSize: 16, lineHeight: 20,
     marginTop: 7, marginBottom: 12 },
   claimButton: {
     flexDirection: 'row',
@@ -2256,7 +2217,7 @@ const styles = StyleSheet.create({
   // Item Detail Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(5,52,110,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },

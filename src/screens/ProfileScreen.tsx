@@ -33,6 +33,7 @@ import Verified from '../components/Verified';
 import VisitedParks from '../components/VisitedParks';
 import Wrapper from '../components/Wrapper';
 import YellowButton from '../components/YellowButton';
+import GameIcon from '../ui/GameIcon';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
 import { NotificationContext } from '../context/NotificationProvider';
@@ -209,7 +210,7 @@ export default function ProfileScreen() {
     }
   }, [stores, labels.pin_packs, player?.is_subscribed]);
 
-  // Redirect guests to login — must be in useEffect, not during render
+  // Redirect guests to login: must be in useEffect, not during render
   useEffect(() => {
     if (!player) {
       RootNavigation.navigate('Login');
@@ -338,7 +339,7 @@ export default function ProfileScreen() {
                 />
               </Pressable>
 
-              {/* Edit button tap zone — independent */}
+              {/* Edit button tap zone: independent */}
               <Pressable
                 onPressIn={() => {
                   Animated.spring(editScale, {
@@ -378,7 +379,7 @@ export default function ProfileScreen() {
                 <View
                   style={{
                     borderTopRightRadius: 6,
-                    backgroundColor: 'rgba(0, 0, 0, .5)',
+                    backgroundColor: 'rgba(5, 52, 110, 0.6)',
                     paddingLeft: 8,
                     paddingRight: 8,
                     paddingTop: 4,
@@ -429,20 +430,25 @@ export default function ProfileScreen() {
             </ImageBackground>
             <View
               style={{
-                backgroundColor: '#f0f4f8',
+                backgroundColor: '#dff4ff',
               }}
             >
               {!!player.title && (
-                <View style={{ alignSelf: 'center', backgroundColor: '#182A39', borderRadius: 16,
-                  paddingHorizontal: 16, paddingVertical: 7, marginTop: 12 }}>
-                  <Text style={{ color: '#F4CD72', fontFamily: 'Knockout', fontSize: 17,
+                <View style={{ alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6,
+                  backgroundColor: '#ffcf3b', borderRadius: 16, borderWidth: 2, borderColor: '#ffffff',
+                  borderBottomWidth: 4, borderBottomColor: '#d99a00',
+                  paddingHorizontal: 14, paddingVertical: 6, marginTop: 12 }}>
+                  <GameIcon name="crown" size={20} />
+                  <Text style={{ color: '#05346e', fontFamily: 'Shark', fontSize: 17,
                     textAlign: 'center' }} numberOfLines={1}>{player.title}</Text>
                 </View>
               )}
               {!!player.featured_ride_coin && (
                 <View style={{ marginHorizontal: 16 }}>
                   <FeaturedRideCoinCard coin={player.featured_ride_coin}
-                    onPress={() => RootNavigation.navigate('CoinShelf')} />
+                    onPress={() => RootNavigation.navigate('CoinShelf', {
+                      focusCoin: { assetId: player.featured_ride_coin!.id },
+                    })} />
                 </View>
               )}
               <View style={{ paddingTop: 20 }}>
@@ -500,9 +506,9 @@ export default function ProfileScreen() {
                   style={{ width: 55, height: 55 }} contentFit="contain" />
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: '#174D76', fontSize: 19, fontFamily: 'Shark' }}>Ride Tracker</Text>
-                  <Text style={{ color: '#366A8C', fontSize: 13 }}>Your rides and park memories</Text>
+                  <Text style={{ color: '#366A8C', fontSize: 15, fontFamily: 'Knockout' }}>Your rides and park memories</Text>
                 </View>
-                <Text style={{ color: '#174D76', fontSize: 22, fontFamily: 'Shark' }}>›</Text>
+                <GameIcon name="arrow" size={28} />
               </Pressable>
               {extrasUnavailable && (
                 <Text style={{ color: '#526477', fontFamily: 'Knockout', fontSize: 14,
@@ -583,6 +589,7 @@ export default function ProfileScreen() {
                         fontSize: 20,
                         textAlign: 'center',
                         paddingTop: 8,
+                        color: '#05346e',
                       }}
                     >
                       {warnings.no_friends || 'You have no friends yet.'}

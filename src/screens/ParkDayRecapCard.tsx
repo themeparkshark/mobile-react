@@ -4,7 +4,10 @@ import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { AuthContext } from '../context/AuthProvider';
 import ParkDayShareCard, { SHARE_CARD_HEIGHT, SHARE_CARD_WIDTH } from '../components/ParkDayShareCard';
-import { Alert, Image, PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { parkDayLabel } from '../services/collection/parkDayLabel';
+import { gameAlert } from '../ui/GameDialog';
+import GameIcon from '../ui/GameIcon';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import { parkDayCaptureSize } from '../components/parkDayShareMetrics';
 import * as RootNavigation from '../RootNavigation';
@@ -38,14 +41,14 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     setSharing(true);
     try {
       if (!await Sharing.isAvailableAsync()) {
-        Alert.alert('Sharing unavailable', 'This device cannot open a share sheet right now.');
+        gameAlert('Sharing unavailable', 'This device cannot open a share sheet right now.');
         return;
       }
       await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       const uri = await captureRef(shareRef, { format: 'jpg', quality: 0.92, ...parkDayCaptureSize(Platform.OS, PixelRatio.get()) });
       await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', UTI: 'public.jpeg', dialogTitle: 'Share your park day' });
     } catch {
-      Alert.alert('Could not make your park card', 'Your game moments are saved. Try sharing again.');
+      gameAlert('Card not made', 'Your game moments are saved. Try sharing again.', undefined, { icon: 'retry' });
     } finally {
       shareBusy.current = false;
       setSharing(false);
@@ -84,7 +87,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   return <View style={styles.card}>
     <View style={styles.header}>
       <View style={styles.headerCopy}>
-        <Text style={styles.kicker}>{recap.park_day} · {recap.park_name}</Text>
+        <Text style={styles.kicker}>{parkDayLabel(recap.park_day)} · {recap.park_name}</Text>
         <Text style={styles.title}>{selectedDay ? 'PARK DAY STORY' : "TODAY'S PARK STORY"}</Text>
       </View>
       <Image source={require('../../assets/images/screens/pin-collections/shark.png')}
@@ -97,7 +100,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         <View style={styles.stat}><Text style={styles.statValue}>{recap.coin_upgrades}</Text><Text style={styles.statLabel}>UPGRADES</Text></View>
       </View>
       {recap.line_play_sessions > 0 && <Text style={styles.copy}>
-        {recap.eligible_line_minutes} verified queue minutes · {recap.ride_parts_earned} Ride Parts
+        {recap.eligible_line_minutes} verified queue minutes · {recap.ride_parts_earned} Ride Part{recap.ride_parts_earned === 1 ? '' : 's'}
       </Text>}
       {recap.park_project_points > 0 && <Text style={styles.copy}>
         +{recap.park_project_points} points toward the shared Park Project
@@ -130,7 +133,8 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         <Text style={styles.shareText}>{sharing ? 'Making your card…' : !artworkReady ? 'Preparing artwork…' : 'SHARE MY DAY'}</Text>
       </Pressable>}
       <Pressable style={styles.link} accessibilityRole="button" onPress={() => RootNavigation.navigate('CoinShelf')}>
-        <Text style={styles.linkText}>See your Ride Coins →</Text>
+        <Text style={styles.linkText}>All your Ride Coins</Text>
+        <GameIcon name="arrow" size={20} />
       </Pressable>
       {recap.distinct_rides_won > 0 && <View style={styles.offscreen} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <ParkDayShareCard ref={shareRef} recap={recap} sharkName={player?.username}
@@ -142,10 +146,12 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     </Text>}
     {recap.previous_active_day && <Pressable style={styles.link} accessibilityRole="button"
       onPress={() => showEarlier(recap.previous_active_day!)}>
-      <Text style={styles.linkText}>Earlier park day: {recap.previous_active_day} →</Text>
+      <Text style={styles.linkText}>Earlier park day: {parkDayLabel(recap.previous_active_day)}</Text>
+      <GameIcon name="arrow" size={20} />
     </Pressable>}
     {selectedDay && <Pressable style={styles.link} accessibilityRole="button" onPress={() => showEarlier(null)}>
-      <Text style={styles.linkText}>Back to today →</Text>
+      <Text style={styles.linkText}>Back to today</Text>
+      <GameIcon name="arrow" size={20} />
     </Pressable>}
     <Text style={styles.note}>Your game wins and verified queue time form this story. Ride memories live in your ride journal.</Text>
   </View>;
@@ -186,7 +192,7 @@ const styles = StyleSheet.create({
   storyTitle: { color: '#075b9b', fontFamily: 'Shark', fontSize: 16, marginTop: 2 },
   storyRoute: { color: '#376888', fontFamily: 'Knockout', fontSize: 13, marginTop: 1, marginBottom: 4 },
   momentTime: { color: '#427a9d', fontFamily: 'Knockout', fontSize: 12 },
-  link: { alignSelf: 'flex-start', paddingVertical: 8 },
+  link: { alignSelf: 'flex-start', paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 },
   linkText: { color: '#005da4', fontFamily: 'Knockout', fontSize: 16 },
   note: { color: '#376888', fontFamily: 'Knockout', fontSize: 12, lineHeight: 16, marginTop: 8 },
 });

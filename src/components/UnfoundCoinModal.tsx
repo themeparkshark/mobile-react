@@ -3,6 +3,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
 } from 'react-native';
@@ -15,6 +16,8 @@ import { TaskType } from '../models/task-type';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import MysteryCoinArtwork from './MysteryCoinArtwork';
+import CoinSocket from './collection/CoinSocket';
+import GameIcon from '../ui/GameIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 interface Props {
@@ -26,9 +29,34 @@ interface Props {
   onPlayInLine?: () => void;
   trigger?: ReactNode;
   size?: number;
+  /** A reviewed ride (Ride Passport) or another park coin; unknown reads as a coin. */
+  kind?: 'ride' | 'coin';
+  /** Highlight the empty socket as the player's goal. */
+  isGoal?: boolean;
 }
 
-export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger, size = 62 }: Props) {
+/** Copy for the missing coin, by what kind of place earns it. */
+export function unfoundCoinCopy({ isSecret, isArchived, isResting, kind }: {
+  isSecret: boolean; isArchived: boolean; isResting: boolean; kind?: 'ride' | 'coin';
+}): { ribbon: string; hint: string; challenge: string } {
+  if (isSecret) return {
+    ribbon: 'Secret Coin',
+    hint: isResting
+      ? 'This mystery is resting this week. Check back when it rotates into play.'
+      : 'A secret coin. Explore the park to find where it hides.',
+    challenge: 'Secret Challenge',
+  };
+  if (isArchived) return {
+    ribbon: 'Archived Coin',
+    hint: 'This coin is from a past event. It may come back in a future event.',
+    challenge: 'Event Challenge',
+  };
+  return kind === 'ride'
+    ? { ribbon: 'Ride Coin', hint: 'Win this ride’s challenge at the ride to add its coin to your shelf.', challenge: 'Ride Challenge' }
+    : { ribbon: 'Park Coin', hint: 'Win this spot’s challenge in the park to add its coin to your shelf.', challenge: 'Coin Challenge' };
+}
+
+export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger, size = 62, kind, isGoal = false }: Props) {
   const [visible, setVisible] = useState(false);
   const [afterClose, setAfterClose] = useState<'map' | 'line' | null>(null);
   const [goalBusy, setGoalBusy] = useState(false);
@@ -36,6 +64,8 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
   const { playSound } = useContext(SoundEffectContext);
   const reducedMotion = useReducedGameMotion();
   const isRestingSecret = isSecret && 'is_active' in task && task.is_active === false;
+  const copy = unfoundCoinCopy({ isSecret, isArchived, isResting: isRestingSecret, kind });
+  const playable = !isSecret && !isArchived;
 
   const handleOpen = () => {
     setGoalError(false);
@@ -65,8 +95,9 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
       <Pressable onPress={handleOpen} accessibilityRole="button"
         accessibilityLabel={`${task.name} ride coin, ${isRestingSecret ? 'secret, resting this week' : isSecret ? 'secret' : isArchived ? 'archived' : 'undiscovered'}`}
         style={{ opacity: isRestingSecret ? 0.68 : 1 }}>
-        {trigger ?? <MysteryCoinArtwork size={size}
-          variant={isSecret ? 'secret' : isArchived ? 'archived' : 'normal'} />}
+        {trigger ?? (isSecret || !task.coin_url
+          ? <MysteryCoinArtwork size={size} variant={isSecret ? 'secret' : isArchived ? 'archived' : 'normal'} />
+          : <CoinSocket size={size} coinUrl={task.coin_url} goal={isGoal} />)}
       </Pressable>
 
       <Modal
@@ -83,18 +114,19 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
         animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
         animationInTiming={reducedMotion ? 120 : 220}
         animationOutTiming={reducedMotion ? 120 : 180}
-        backdropOpacity={0.85}
+        backdropColor="#05346e"
+        backdropOpacity={0.6}
         hideModalContentWhileAnimating
       >
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1,
           alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }}
           showsVerticalScrollIndicator={false}>
           <View style={{ alignItems: 'center', width: '85%', zIndex: 10 }}>
-            <Ribbon text={isSecret ? 'Secret Coin' : isArchived ? 'Archived Coin' : 'Undiscovered Coin'} />
+            <Ribbon text={copy.ribbon} />
 
             <View
               style={{
-                backgroundColor: isSecret ? '#423b9e' : '#0a77bf',
+                backgroundColor: isSecret ? '#05509a' : '#0a77bf',
                 marginTop: '-10%',
                 width: '95%',
                 borderRadius: 20,
@@ -137,13 +169,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                   lineHeight: 20,
                 }}
               >
-                {isSecret
-                  ? isRestingSecret
-                    ? 'This mystery is resting this week. Check back when it rotates into play.'
-                    : 'This is a secret coin! Explore the park to discover how to unlock it.'
-                  : isArchived
-                    ? 'This coin is from a past event. It may return in the future!'
-                    : 'Win this ride’s challenge to add its coin to your shelf.'}
+                {copy.hint}
               </Text>
 
               {!isSecret && !isArchived && (
@@ -151,7 +177,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                   borderColor: '#bceaff', borderWidth: 2,
                   borderRadius: 14, padding: 14, marginBottom: 16 }}>
                   <Text style={{ color: '#075b9b', fontFamily: 'Shark', fontSize: 16, marginBottom: 5 }}>
-                    Ride Challenge
+                    {copy.challenge}
                   </Text>
                   <Text style={{ color: '#204c6e', fontFamily: 'Knockout', fontSize: 14, lineHeight: 19 }}>
                     {task.ticket_cost === 0
@@ -159,57 +185,47 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                       : typeof task.ticket_cost === 'number'
                       ? `${task.ticket_cost} Park Ticket${task.ticket_cost === 1 ? '' : 's'} to start. `
                       : 'Park Tickets start standard attempts. '}
-                    {task.ticket_cost !== 0 && 'Out of Tickets? A Shark Rescue Pass may be available at the ride.'}
+                    {task.ticket_cost !== 0 && `Out of Tickets? A Shark Rescue Pass may be available ${kind === 'ride' ? 'at the ride' : 'at this spot'}.`}
                   </Text>
                   {'energy_reward' in task && 'ride_parts_reward' in task &&
                     typeof task.coins === 'number' && typeof task.experience === 'number' &&
                     typeof task.energy_reward === 'number' && typeof task.ride_parts_reward === 'number' && (
                       <Text style={{ color: '#327395', fontFamily: 'Knockout', fontSize: 13, lineHeight: 18, marginTop: 8 }}>
                         Base win: +{task.coins} Shark Coins · +{task.experience} XP ·
-                        {' '}+{task.energy_reward} Energy · +{task.ride_parts_reward} Ride Parts
+                        {' '}+{task.energy_reward} Energy · +{task.ride_parts_reward} Ride Part{task.ride_parts_reward === 1 ? '' : 's'}
                       </Text>
                     )}
                 </View>
               )}
 
-              {onPlayInLine && !isSecret && !isArchived && <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Play LinePlay for ${task.name}`}
-                onPress={() => { setAfterClose('line'); setVisible(false); }}
-                style={{ alignSelf: 'stretch', alignItems: 'center', backgroundColor: '#DFF4FF',
-                  borderWidth: 2, borderColor: '#BCEAFF', borderRadius: 12,
-                  paddingVertical: 12, paddingHorizontal: 10, marginBottom: 10 }}>
-                <Text style={{ color: '#075b9b', fontFamily: 'Shark', fontSize: 16 }}>Waiting here? Play in Line ›</Text>
-              </Pressable>}
-
-              {onChooseGoal && !isSecret && !isArchived && <Pressable
-                accessibilityRole="button"
-                disabled={goalBusy}
-                onPress={() => void handleChooseGoal()}
-                style={{ alignSelf: 'stretch', alignItems: 'center', borderColor: '#fec90e',
-                  borderWidth: 2, borderRadius: 12, paddingVertical: 11, marginBottom: 10,
-                  opacity: goalBusy ? 0.6 : 1 }}>
-                <Text style={{ color: '#fec90e', fontFamily: 'Shark', fontSize: 17 }}>
-                  {goalBusy ? 'Saving…' : 'Make This My Goal'}
-                </Text>
-              </Pressable>}
-              {goalError && <Text style={{ color: '#fec90e', textAlign: 'center', marginBottom: 8 }}>
-                Could not save this ride goal. Try again when connected.
-              </Text>}
-              {onShowOnMap && !isSecret && !isArchived && <Pressable
+              {/* One primary gameplay action: play here in line, else go find it on the map. */}
+              {playable && (onPlayInLine || onShowOnMap) && <YellowButton
+                text={onPlayInLine ? 'Play in Line' : 'Show on Park Map'}
+                onPress={() => { setAfterClose(onPlayInLine ? 'line' : 'map'); setVisible(false); }} />}
+              {playable && onPlayInLine && onShowOnMap && <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Show ${task.name} on the park map`}
                 onPress={() => { setAfterClose('map'); setVisible(false); }}
-                style={{ alignSelf: 'stretch', alignItems: 'center', backgroundColor: '#ffca32',
-                  borderRadius: 12, paddingVertical: 12, marginBottom: 10 }}>
-                <Text style={{ color: '#073e79', fontFamily: 'Shark', fontSize: 17 }}>
-                  Show on Park Map
-                </Text>
+                style={styles.secondary}>
+                <GameIcon name="map" size={22} />
+                <Text style={styles.secondaryText}>Show on Park Map</Text>
               </Pressable>}
-              <YellowButton
-                text="Got It!"
-                onPress={() => setVisible(false)}
-              />
+              {playable && onChooseGoal && <Pressable
+                accessibilityRole="button"
+                disabled={goalBusy}
+                onPress={() => void handleChooseGoal()}
+                style={[styles.secondary, { opacity: goalBusy ? 0.6 : 1 }]}>
+                <GameIcon name="star" size={22} />
+                <Text style={styles.secondaryText}>{goalBusy ? 'Saving…' : 'Make This My Goal'}</Text>
+              </Pressable>}
+              {goalError && <Text style={styles.error}>
+                Could not save this goal. Try again when connected.
+              </Text>}
+              {playable && (onPlayInLine || onShowOnMap)
+                ? <Pressable accessibilityRole="button" onPress={() => setVisible(false)} style={styles.quiet}>
+                    <Text style={styles.quietText}>Not now</Text>
+                  </Pressable>
+                : <YellowButton text="Got It!" onPress={() => setVisible(false)} />}
             </View>
           </View>
         </ScrollView>
@@ -217,3 +233,13 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  secondary: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#e4f7ff', borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9',
+    borderRadius: 14, paddingVertical: 11, marginTop: 10 },
+  secondaryText: { color: '#05346e', fontFamily: 'Shark', fontSize: 17 },
+  error: { color: '#ffe07a', fontFamily: 'Knockout', fontSize: 15, textAlign: 'center', marginTop: 8 },
+  quiet: { minHeight: 44, justifyContent: 'center', alignItems: 'center', marginTop: 6 },
+  quietText: { color: '#e4f7ff', fontFamily: 'Shark', fontSize: 16 },
+});

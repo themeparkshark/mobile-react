@@ -7,14 +7,15 @@ import useCrumbs from '../hooks/useCrumbs';
 import { ParkType } from '../models/park-type';
 import { PlayerType } from '../models/player-type';
 import Progress from './Progress';
-import ProfileStatIcon from './ProfileStatIcon';
+import GameIcon from '../ui/GameIcon';
 
 function ParkArtwork({ uri }: { readonly uri?: string | null }) {
   const [unavailable, setUnavailable] = useState(!uri);
   useEffect(() => setUnavailable(!uri), [uri]);
   return <View accessible={false} style={{ width: 100, height: 100, borderRadius: 20,
     overflow: 'hidden', backgroundColor: '#E8F5FC', alignItems: 'center', justifyContent: 'center' }}>
-    {unavailable ? <ProfileStatIcon index={2} size={90} /> : <Image source={uri}
+    {/* Neutral park art (a ride car) when the park photo is missing, never a castle. */}
+    {unavailable ? <GameIcon name="ride" size={70} /> : <Image source={uri}
       onError={() => setUnavailable(true)} style={{ width: 100, height: 100 }} contentFit="cover" />}
   </View>;
 }
@@ -37,6 +38,7 @@ export default function VisitedParks({
             fontSize: 20,
             textAlign: 'center',
             paddingBottom: 32,
+            color: '#05346e',
           }}
         >
           {warnings.no_visited_parks || "You haven't visited any parks yet."}
@@ -102,8 +104,7 @@ export default function VisitedParks({
                       : vsprintf(labels.park_completion_rate || '%s%% complete', [park.completion_rate])}
                   </Text>
                 </View>
-                <Text accessible={false} style={{ color: '#174D76', fontFamily: 'Shark',
-                  fontSize: 24, marginLeft: 8 }}>›</Text>
+                <View style={{ marginLeft: 8 }}><GameIcon name="arrow" size={28} /></View>
               </TouchableOpacity>
             );
           })}

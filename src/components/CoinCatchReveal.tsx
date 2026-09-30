@@ -19,21 +19,30 @@ import { playSfx } from '../gamekit/SFX';
 
 /**
  * The ride-coin "catch" beat that plays before the rewards summary, shaped like a
- * Pokémon GO catch: anticipation (coin flips in and wobbles with rising haptics),
+ * classic catch game: anticipation (coin flips in and wobbles with rising haptics),
  * a hit-stop flash, a burst (pop, rays, confetti, success haptic), then the coin
- * lifts away toward the shelf. Tap anywhere to skip; reduced motion shortens it.
+ * flies into the summary's hero slot (`handoff`), one shared-element move, or
+ * lifts away when no slot is known. A tap during the anticipation jumps straight
+ * to the burst (the payoff is never skipped); a tap after it continues.
+ * Reduced motion shows the caught coin still, with the same feedback.
  *
  * Timings follow the reward-moment guidance: ~900 ms anticipation, ~80 ms
  * hit-stop, burst + settle ~700 ms. Sound, haptic and visual fire on one frame.
  */
+/** Where the summary's hero coin sits, in window coordinates. */
+export interface CatchHandoff { readonly x: number; readonly y: number; readonly size: number }
+
 export default function CoinCatchReveal({
   coinUrl,
   rideName,
   isNewCoin,
   ready = true,
+  handoff = null,
   onBurst,
   onDone,
 }: {
+  /** The summary hero slot the coin lands in (shared element). */
+  readonly handoff?: CatchHandoff | null;
   readonly coinUrl?: string;
   readonly rideName: string;
   readonly isNewCoin: boolean;
@@ -50,6 +59,14 @@ export default function CoinCatchReveal({
   const [artFailed, setArtFailed] = useState(false);
   const callbacks = useRef({ onDone, onBurst });
   callbacks.current = { onDone, onBurst };
+  const handoffRef = useRef<CatchHandoff | null>(handoff);
+  handoffRef.current = handoff;
+  const origin = useRef({ x: 0, y: 0 });
+  const rootRef = useRef<View>(null);
+  const phase = useRef<'idle' | 'anticipation' | 'burst' | 'exit'>('idle');
+  const fastForwardRef = useRef<(() => void) | null>(null);
+  const shiftX = useSharedValue(0);
+  const exitScale = useSharedValue(1);
 
   const flip = useSharedValue(0); // 0 edge-on → 1 face-on
   const scale = useSharedValue(0.35);
@@ -64,7 +81,7 @@ export default function CoinCatchReveal({
   const confetti = useSharedValue(0);
 
   const stopVisuals = () => {
-    [flip, scale, wobble, lift, flash, rays, raysSpin, title, backdrop, coinOpacity, confetti]
+    [flip, scale, wobble, lift, flash, rays, raysSpin, title, backdrop, coinOpacity, confetti, shiftX, exitScale]
       .forEach(value => cancelAnimation(value));
   };
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
@@ -115,6 +132,28 @@ export default function CoinCatchReveal({
         return;
       }
 
+      // 5. Exit: into the summary's hero slot when it is known, else up and away.
+      const exit = () => {
+        const target = handoffRef.current;
+        const coinSize = Math.min(width * 0.52, 240);
+        if (target) {
+          const centerX = width / 2, centerY = height * 0.42;
+          const tx = target.x - origin.current.x + target.size / 2;
+          const ty = target.y - origin.current.y + target.size / 2;
+          const duration = 420;
+          shiftX.value = withTiming(tx - centerX, { duration, easing: Easing.inOut(Easing.cubic) });
+          lift.value = withTiming(ty - centerY, { duration, easing: Easing.inOut(Easing.cubic) });
+          exitScale.value = withTiming(target.size / coinSize, { duration, easing: Easing.inOut(Easing.cubic) });
+          backdrop.value = withTiming(0, { duration: duration + 40 }, ok => { if (ok) runOnJS(finish)(); });
+          playSfx('whoosh', 0.5);
+          return;
+        }
+        lift.value = withTiming(-height * 0.34, { duration: 360, easing: Easing.in(Easing.cubic) });
+        coinOpacity.value = withDelay(180, withTiming(0, { duration: 180 }));
+        backdrop.value = withDelay(160, withTiming(0, { duration: 200 }, ok => { if (ok) runOnJS(finish)(); }));
+        playSfx('whoosh', 0.5);
+      };
+
       if (!isNewCoin) {
         // A repeat is a quick deposit: one lift, one tactile beat, no long wobble.
         backdrop.value = withTiming(1, { duration: 100 });
@@ -122,11 +161,8 @@ export default function CoinCatchReveal({
         scale.value = withSequence(withTiming(1.06, { duration: 160 }),
           withTiming(1, { duration: 140 }));
         at(160, () => { setBurst(true); success(); });
-        lift.value = withDelay(650, withTiming(-height * 0.18, { duration: 250 }));
-        coinOpacity.value = withDelay(650, withTiming(0, { duration: 250 }));
-        backdrop.value = withSequence(withTiming(1, { duration: 100 }),
-          withDelay(550, withTiming(0, { duration: 250 }, ok => { if (ok) runOnJS(finish)(); })));
-        at(1100, finish);
+        at(600, exit);
+        at(1300, finish);
         return;
       }
 
@@ -134,6 +170,7 @@ export default function CoinCatchReveal({
       // a busy JS thread can't stall or skip the animation. Haptics and sound
       // ride JS timers at the same offsets; finish is driven by the last beat.
       const T = { wobble: 540, stop: 1400, burst: 1480, lift: 2750, done: 3110 };
+      phase.current = 'anticipation';
 
       // 1. Anticipation: the coin spins in from edge-on, then wobbles three
       //    times with each wobble's haptic stronger than the last.
@@ -163,32 +200,38 @@ export default function CoinCatchReveal({
         playSfx('tick', 0.8);
       }));
 
-      // 2. Hit-stop flash, 3. burst: rays, title, confetti, success haptic.
-      flash.value = withDelay(T.stop, withSequence(withTiming(1, { duration: 40 }), withTiming(0, { duration: 260 })));
-      rays.value = withDelay(T.burst, withTiming(1, { duration: 260 }));
-      confetti.value = withDelay(T.burst, withTiming(1, { duration: 1300, easing: Easing.out(Easing.quad) }));
-      raysSpin.value = withDelay(T.burst, withRepeat(withTiming(360, { duration: 9000, easing: Easing.linear }), -1));
-      title.value = withDelay(T.burst + 120, withSequence(
-        withSpring(1, { damping: 10, stiffness: 160 }),
-        withDelay(T.lift - T.burst - 700, withTiming(0, { duration: 180 })),
-      ));
-      at(T.burst, () => {
-        setBurst(true);
-        success();
-        playSfx('coin', 0.9);
-      });
+      // 2. Hit-stop flash, 3. burst, 4. exit, scheduled relative to `burstAt`.
+      const scheduleBurst = (burstAt: number) => {
+        flash.value = withDelay(Math.max(0, burstAt - 80), withSequence(withTiming(1, { duration: 40 }), withTiming(0, { duration: 260 })));
+        rays.value = withDelay(burstAt, withTiming(1, { duration: 260 }));
+        confetti.value = withDelay(burstAt, withTiming(1, { duration: 1300, easing: Easing.out(Easing.quad) }));
+        raysSpin.value = withDelay(burstAt, withRepeat(withTiming(360, { duration: 9000, easing: Easing.linear }), -1));
+        const exitAt = burstAt + (T.lift - T.burst);
+        title.value = withDelay(burstAt + 120, withSequence(
+          withSpring(1, { damping: 10, stiffness: 160 }),
+          withDelay(exitAt - burstAt - 700, withTiming(0, { duration: 180 })),
+        ));
+        at(burstAt, () => {
+          phase.current = 'burst';
+          setBurst(true);
+          success();
+          playSfx('coin', 0.9);
+        });
+        at(exitAt, () => { phase.current = 'exit'; exit(); });
+        at(exitAt + (T.done - T.lift) + 400, finish); // safety net if the animation is interrupted
+      };
 
-      // 4. The coin lifts away toward the shelf and the stage fades out.
-      lift.value = withDelay(T.lift, withTiming(-height * 0.34, { duration: 360, easing: Easing.in(Easing.cubic) }));
-      coinOpacity.value = withDelay(T.lift + 180, withTiming(0, { duration: 180 }));
-      backdrop.value = withSequence(
-        withTiming(1, { duration: 180 }),
-        withDelay(T.lift - 180 + 160, withTiming(0, { duration: 200 }, (ok) => {
-          if (ok) runOnJS(finish)();
-        })),
-      );
-      at(T.lift, () => playSfx('whoosh', 0.5));
-      at(T.done + 400, finish); // safety net if the animation is interrupted
+      backdrop.value = withTiming(1, { duration: 180 });
+      scheduleBurst(T.burst);
+      fastForwardRef.current = () => {
+        // A first tap during the anticipation goes straight to the payoff.
+        clearTimers();
+        [flip, scale, wobble, flash, rays, raysSpin, title, confetti].forEach(value => cancelAnimation(value));
+        flip.value = 1; wobble.value = 0;
+        scale.value = withSequence(withTiming(1.28, { duration: 90, easing: Easing.out(Easing.quad) }),
+          withSpring(1, { damping: 7, stiffness: 180 }));
+        scheduleBurst(80);
+      };
     };
     const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', reduced => {
       preferenceChanged = true;
@@ -209,11 +252,12 @@ export default function CoinCatchReveal({
 
   const coinStyle = useAnimatedStyle(() => ({
     transform: [
+      { translateX: shiftX.value },
       { translateY: lift.value },
       { perspective: 800 },
       { rotateY: `${(1 - flip.value) * 540}deg` },
       { rotateZ: `${wobble.value}deg` },
-      { scale: scale.value },
+      { scale: scale.value * exitScale.value },
     ],
     opacity: coinOpacity.value,
   }));
@@ -233,7 +277,19 @@ export default function CoinCatchReveal({
   return (
     <Pressable
       style={StyleSheet.absoluteFill}
-      onPress={finish}
+      onPress={() => {
+        if (phase.current === 'anticipation' && fastForwardRef.current) {
+          const forward = fastForwardRef.current;
+          fastForwardRef.current = null;
+          forward();
+          return;
+        }
+        finish();
+      }}
+      ref={rootRef}
+      onLayout={() => rootRef.current?.measureInWindow?.((x, y) => {
+        if (Number.isFinite(x) && Number.isFinite(y)) origin.current = { x, y };
+      })}
       accessibilityRole="button"
       accessibilityLabel={`${isNewCoin ? 'New ride coin' : 'Ride coin'} collected: ${rideName}. Tap to continue.`}
     >
@@ -254,7 +310,7 @@ export default function CoinCatchReveal({
         <Animated.View style={[{ width: coinSize, height: coinSize }, coinStyle]}>
           {coinUrl && !artFailed
             ? <Image source={coinUrl} style={{ width: coinSize, height: coinSize }} contentFit="contain" onError={() => setArtFailed(true)} />
-            : <Image source={require('../../assets/images/coingold.png')} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
+            : <Image source={require('../../assets/icons/game/coin.png')} style={{ width: coinSize, height: coinSize }} contentFit="contain" />}
         </Animated.View>
       </View>
 
@@ -282,12 +338,12 @@ const styles = StyleSheet.create({
   },
   ride: {
     fontFamily: 'Shark', fontSize: 24, color: '#ffffff', textAlign: 'center', marginTop: 6,
-    textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1,
   },
   flash: { backgroundColor: '#ffffff' },
   skip: {
-    position: 'absolute', bottom: 60, alignSelf: 'center', fontFamily: 'Knockout',
-    fontSize: 16, color: 'rgba(255,255,255,0.7)',
+    position: 'absolute', bottom: 60, alignSelf: 'center', fontFamily: 'Shark',
+    fontSize: 17, color: '#ffffff', textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1,
   },
 });
 
