@@ -70,6 +70,7 @@ import {
   isLookAway,
   nextPairs,
   parFor,
+  raceConfig,
   rideSprintConfig,
   rideStars,
   step,
@@ -97,6 +98,23 @@ import {
   type MemoryGhost,
 } from './storage';
 import { useMemoryAutoplay } from './autoplay';
+import type { Layout } from './logic';
+import type { EmoteId } from '../../gamekit/net/partyTypes';
+import {
+  ATTACK_TELEGRAPH_MS,
+  RACE_GLIMPSE_MS,
+  createAttackGate,
+  crewFor,
+  frameAt,
+  offerAttack,
+  placements,
+  releaseStored,
+  simulateCrew,
+  type AttackGate,
+  type CrewRun,
+  type CrewSeat,
+} from './race/raceSim';
+import { RivalStrip, type Racer } from './race/RivalStrip';
 
 const CARD_BACK = require('../../assets/games/memory/card-back.png');
 const STAMP = require('../../assets/games/memory/studio/match_stamp.png');
@@ -105,7 +123,7 @@ const GULL = require('../../assets/games/memory/studio/seagull.png');
 const DIZZY = require('../../assets/games/memory/studio/fx_small_dizzy_star.png');
 const SHELF_DROP = require('../../assets/games/memory/sfx/mm_shelf_drop.wav');
 
-export type MemoryMode = 'ride' | 'timeAttack' | 'daily';
+export type MemoryMode = 'ride' | 'timeAttack' | 'daily' | 'race';
 
 export interface MemoryGameProps {
   visible: boolean;
@@ -216,6 +234,22 @@ interface Run {
   shelfNext: number;
   lastTurnPop: number;
   lastMovingAt: number;
+  stumbleUntil: number;
+  race: RaceState | null;
+}
+
+interface RaceState {
+  crew: CrewSeat[];
+  runs: CrewRun[];
+  delays: number[][];
+  sendIdx: number[];
+  gate: AttackGate;
+  telegraph: { until: number; blocked: boolean } | null;
+  winner: string | null;
+  myClearAt: number | null;
+  shows: boolean[];
+  emotes: Record<string, { id: EmoteId; at: number }>;
+  layout: Layout;
 }
 
 export default function MemoryGame({
@@ -290,6 +324,8 @@ export default function MemoryGame({
   const [unlock, setUnlock] = useState<string | null>(null);
   const [peeks, setPeeks] = useState({ n: 0, armed: false, show: false });
   const [runIndex, setRunIndex] = useState(0);
+  const [racers, setRacers] = useState<Racer[]>([]);
+  const [stumble, setStumble] = useState(false);
 
   const cards = useRef<(MemoryCardHandle | null)[]>([]);
   const fx = useRef<FxStageHandle>(null);
@@ -392,7 +428,7 @@ export default function MemoryGame({
       return h;
     });
     if (clock) {
-      const cap = r.mode === 'ride' ? (e.cfg.clockMs ?? 45000) : 30000;
+      const cap = r.mode === 'ride' || r.mode === 'race' ? (e.cfg.clockMs ?? 45000) : 30000;
       const frac = Math.max(0, Math.min(1, e.clockLeftMs / cap));
       rimFrac.value = withTiming(frac, { duration: TICK_MS + 10, easing: Easing.linear });
       rimDim.value = withTiming(isLookAway(e) ? 1 : 0, { duration: 200 });
@@ -436,6 +472,7 @@ export default function MemoryGame({
     const deckSize = deck.symbols.length;
     let src: BoardSource;
     let eng: MMState;
+    let race: RaceState | null = null;
     if (mode === 'ride') {
       const cfg = rideSprintConfig(45000);
       src = createSimReveal({ cfg, layout: { pairs: 8, deckSize, seed: s, golden: true }, deckSize, engineSeed: s ^ 0x5bd1e995, latencyMs: PREVIEW_LATENCY });
@@ -444,6 +481,25 @@ export default function MemoryGame({
       const cfg = dailyConfig();
       src = createSimReveal({ cfg, layout: { pairs: 8, deckSize, seed: s, golden: true }, deckSize, engineSeed: s ^ 0x5bd1e995 });
       eng = createEngine(cfg, { cols: 4, rows: 4, seed: s ^ 0x5bd1e995 });
+    } else if (mode === 'race') {
+      const cfg = raceConfig();
+      const local = createLocalBoard({ pairs: 8, deckSize, seed: s, golden: true }, deckSize);
+      src = local;
+      eng = createEngine(cfg, { cols: 4, rows: 4, seed: s ^ 0x5bd1e995 });
+      const crew = crewFor(s);
+      race = {
+        crew,
+        runs: crew.map((c, i) => simulateCrew(s, i + 1, c, local.layout)),
+        delays: crew.map(() => []),
+        sendIdx: crew.map(() => 0),
+        gate: createAttackGate(),
+        telegraph: null,
+        winner: null,
+        myClearAt: null,
+        shows: crew.map(() => false),
+        emotes: {},
+        layout: local.layout,
+      };
     } else {
       const cfg = timeAttackConfig();
       const sys = boardSystems(1);
@@ -456,6 +512,7 @@ export default function MemoryGame({
       sizeRepeats: {}, playing: false, busy: true, ended: false, t0: now(), pausedAt: null, pausedTotal: 0,
       pending: false, peekArmed: false, peeks: 0, moved: new Set(), cleared: 0,
       ghost: opts.keep?.ghost ?? null, ghostShown: 0, wasAhead: false, shelfNext: 0, lastTurnPop: 0, lastMovingAt: 0,
+      stumbleUntil: 0, race,
     };
     runRef.current = r;
     return r;
@@ -570,7 +627,7 @@ export default function MemoryGame({
     const n = g.cols * g.rows;
     const reps = r.sizeRepeats[r.pairs] ?? 0;
     r.sizeRepeats[r.pairs] = reps + 1;
-    const hold = glimpseMs(r.pairs, reps);
+    const hold = r.mode === 'race' ? RACE_GLIMPSE_MS : glimpseMs(r.pairs, reps);
     const faceMap: Record<number, number> = {};
     const slots: number[] = [];
     const fs: number[] = [];
@@ -587,10 +644,11 @@ export default function MemoryGame({
     GameAudio.play('mm_glimpse');
     const cx = (g.cols - 1) / 2;
     const cy = (g.rows - 1) / 2;
+    const stepOf = (s: number) => Math.round(Math.abs((s % g.cols) - cx) + Math.abs(Math.floor(s / g.cols) - cy));
     let maxStep = 0;
+    for (let s = 0; s < n; s++) maxStep = Math.max(maxStep, stepOf(s));
     for (let s = 0; s < n; s++) {
-      const d = Math.round(Math.abs((s % g.cols) - cx) + Math.abs(Math.floor(s / g.cols) - cy));
-      maxStep = Math.max(maxStep, d);
+      const d = stepOf(s);
       const id = r.eng.ids[s];
       later(60 + d * 18, () => cards.current[id]?.flipUp(FLIP_MS));
       later(60 + maxStep * 18 + FLIP_MS + hold + d * 18, () => cards.current[id]?.flipDown(FLIP_MS));
@@ -604,7 +662,7 @@ export default function MemoryGame({
   const onStart = useCallback(() => {
     const r = runRef.current;
     if (!r) return;
-    if (r.mode === 'timeAttack') {
+    if (r.mode === 'timeAttack' || r.mode === 'race') {
       beginPlay();
       r.busy = true;
       runGlimpse(() => {
@@ -818,6 +876,169 @@ export default function MemoryGame({
     });
   }, [dizzy, finishRide, later, rideChallenge, wash]);
 
+  // ---------------------------------------------------------------------------
+  // Memory Race (house crew seats on the same board, design 4.5)
+  // ---------------------------------------------------------------------------
+  const raceEntries = useCallback((r: Run, at: number) => {
+    const rc = r.race!;
+    const out = [{ key: 'me', pairs: r.eng.pairs, score: r.eng.score, clearAt: rc.myClearAt, chain: r.eng.chain, show: inShowtime(r.eng) }];
+    rc.runs.forEach((run, i) => {
+      const f = frameAt(run, at);
+      out.push({ key: rc.crew[i].id, pairs: f.pairs, score: f.score, clearAt: run.clearAt != null && run.clearAt <= at ? run.clearAt : null, chain: f.chain, show: f.showtime });
+    });
+    return out;
+  }, []);
+
+  const syncRacers = useCallback((r: Run, at: number) => {
+    const rc = r.race;
+    if (!rc) return;
+    const entries = raceEntries(r, at);
+    const place = placements(entries);
+    const next: Racer[] = entries.map((e, i) => ({
+      key: e.key,
+      name: i === 0 ? 'YOU' : rc.crew[i - 1].name,
+      shark: (i === 0 ? 'classic' : rc.crew[i - 1].shark) as Racer['shark'],
+      pairs: e.pairs,
+      chain: e.chain,
+      showtime: e.show,
+      me: i === 0,
+      placement: place[e.key],
+      emote: rc.emotes[e.key] ?? null,
+      incoming: i === 0 && !!rc.telegraph,
+    })).sort((a, b) => a.placement - b.placement);
+    setRacers((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+  }, [raceEntries]);
+
+  const endRace = useCallback((at: number) => {
+    const r = runRef.current;
+    if (!r || !r.race || r.ended) return;
+    r.ended = true;
+    r.playing = false;
+    r.busy = true;
+    const rc = r.race;
+    const entries = raceEntries(r, at);
+    const place = placements(entries);
+    const mine = place.me;
+    const e = r.eng;
+    const grades = gradesFor(e);
+    syncRacers(r, at);
+    GameAudio.music.stop(400);
+    if (mine === 1) {
+      GameAudio.play('fx.reward');
+      Haptic.success();
+      stage.current?.pose('coin');
+      stage.current?.say('1ST!', MM.gold, 'right');
+    } else {
+      GameAudio.play('mm_lose');
+      Haptic.tickSelection();
+      later(80, () => Haptic.tickSelection());
+      stage.current?.pose('dizzy');
+      dizzy.value = withTiming(1, { duration: 300 });
+      const w = entries.find((x) => place[x.key] === 1);
+      const wi = rc.crew.findIndex((c) => c.id === w?.key);
+      if (wi >= 0) stage.current?.say(`${rc.crew[wi].name.toUpperCase()} WINS`, '#ffffff', 'right');
+    }
+    const ord = ['1ST', '2ND', '3RD', '4TH'][mine - 1] ?? `${mine}TH`;
+    later(1400, () => {
+      setScore(e.score);
+      setResult({
+        score: e.score,
+        stars: mine === 1 ? 3 : mine === 2 ? 2 : 1,
+        maxCombo: e.maxChain,
+        message: mine === 1 ? '1ST PLACE!' : `${ord} PLACE`,
+        stats: [
+          { label: 'PLACE', value: ord },
+          { label: 'PAIRS', value: `${e.pairs}/${e.pairsTotal}` },
+          { label: 'MEMORY', value: grades.memory },
+          { label: 'SPEED', value: grades.speed },
+        ],
+        note: grades.tip,
+        meta: {
+          game: 'memory', engine: ENGINE_VERSION, mode: 'race', score: e.score, seed: baseSeed, runIndex: r.runIndex,
+          placement: mine, crew: rc.crew.map((c) => c.id), log: e.log.slice(), walking: walkingRef.current,
+        },
+      });
+    });
+  }, [baseSeed, dizzy, later, raceEntries, syncRacers]);
+
+  const incoming = useSharedValue(0);
+  const startTelegraph = useCallback((r: Run, at: number) => {
+    const rc = r.race!;
+    rc.telegraph = { until: at + ATTACK_TELEGRAPH_MS, blocked: false };
+    GameAudio.play('sh_seagull', { volume: 0.8 });
+    Haptic.warning();
+    incoming.value = 0;
+    incoming.value = withTiming(1, { duration: ATTACK_TELEGRAPH_MS, easing: Easing.linear });
+    stage.current?.say('INCOMING GULL', MM.urgent, 'left');
+  }, [incoming]);
+
+  /** Our chain 3 sends a Gull Swap to the leading crew seat (it loses time). */
+  const sendAttack = useCallback((r: Run, at: number) => {
+    const rc = r.race!;
+    const entries = raceEntries(r, at).slice(1);
+    if (!entries.length) return;
+    let best = 0;
+    entries.forEach((x, i) => { if (x.pairs > entries[best].pairs || (x.pairs === entries[best].pairs && x.score > entries[best].score)) best = i; });
+    const target = best;
+    stage.current?.say('GULL SENT!', MM.gold, 'left');
+    GameAudio.play('sh_seagull', { volume: 0.6 });
+    later(ATTACK_TELEGRAPH_MS, () => {
+      const rr = runRef.current;
+      if (rr !== r || !rr.race || rr.ended) return;
+      rc.delays[target].push(at + ATTACK_TELEGRAPH_MS);
+      rc.runs[target] = simulateCrew(rr.seed, target + 1, rc.crew[target], rc.layout, rc.delays[target]);
+      rc.emotes[rc.crew[target].id] = { id: 'fin', at: Date.now() };
+    });
+  }, [later, raceEntries]);
+
+  const raceTick = useCallback((r: Run, at: number) => {
+    const rc = r.race;
+    if (!rc || r.ended) return;
+    // Crew clears and emotes.
+    rc.runs.forEach((run, i) => {
+      const f = frameAt(run, at);
+      if (f.showtime && !rc.shows[i]) rc.emotes[rc.crew[i].id] = { id: 'sunglasses', at: Date.now() };
+      rc.shows[i] = f.showtime;
+      if (run.clearAt != null && run.clearAt <= at && !rc.winner) rc.winner = rc.crew[i].id;
+    });
+    if (rc.winner && rc.winner !== 'me') {
+      endRace(at);
+      return;
+    }
+    // Crew attacks: chain 3 sends a Gull Swap to the current leader.
+    rc.runs.forEach((run, i) => {
+      while (rc.sendIdx[i] < run.sends.length && run.sends[rc.sendIdx[i]] <= at) {
+        rc.sendIdx[i] += 1;
+        const entries = raceEntries(r, at);
+        const others = entries.filter((x) => x.key !== rc.crew[i].id);
+        const lead = others.reduce((a, b) => (b.pairs > a.pairs || (b.pairs === a.pairs && b.score > a.score) ? b : a));
+        if (lead.key === 'me') {
+          if (offerAttack(rc.gate, at) && !rc.telegraph) startTelegraph(r, at);
+        } else {
+          const ti = rc.crew.findIndex((c) => c.id === lead.key);
+          if (ti >= 0) {
+            rc.delays[ti].push(at + ATTACK_TELEGRAPH_MS);
+            rc.runs[ti] = simulateCrew(r.seed, ti + 1, rc.crew[ti], rc.layout, rc.delays[ti]);
+          }
+        }
+      }
+    });
+    if (!rc.telegraph && releaseStored(rc.gate, at)) startTelegraph(r, at);
+    if (rc.telegraph && at >= rc.telegraph.until) {
+      const blocked = rc.telegraph.blocked;
+      rc.telegraph = null;
+      incoming.value = withTiming(0, { duration: 160 });
+      if (blocked) {
+        stage.current?.say('BLOCKED', MM.gold, 'left');
+        GameAudio.play('sh_shield_pop');
+        Haptic.hitMedium();
+      } else {
+        applyEventsRef.current(send({ t: 'attack', at }));
+      }
+    }
+    syncRacers(r, at);
+  }, [endRace, incoming, raceEntries, send, startTelegraph, syncRacers]);
+
   const boardCleared = useCallback((bonus: number) => {
     const r = runRef.current;
     const g = geoRef.current;
@@ -881,6 +1102,7 @@ export default function MemoryGame({
         }
         case 'match': {
           const { a, b, recall, chain, parts } = ev;
+          if (r.race?.telegraph) r.race.telegraph.blocked = true;
           const ida = e.ids[a];
           const idb = e.ids[b];
           const show = parts.showHalves > 2;
@@ -935,6 +1157,7 @@ export default function MemoryGame({
               if (!calm) camera.kick((mx - g.W / 2) * 0.02, 0);
             } else if (ev.tierUp) stage.current?.say('SWEET RUN', MM.gold, 'right');
             if (ev.tierUp) { GameAudio.play('sh_tier_up'); Haptic.success(); }
+            if (r.race && ev.tierUp && !r.ended) sendAttack(r, gameNow());
             // Booth light warms with the chain.
             warmth.value = withTiming(Math.min(3, chain) * 0.06 + (show ? 0.12 : 0), { duration: 300 });
             chainPlate.current?.quick();
@@ -978,6 +1201,11 @@ export default function MemoryGame({
           break;
         }
         case 'slip': {
+          if (r.race) {
+            r.stumbleUntil = gameNow() + 1000;
+            setStumble(true);
+            later(1000, () => setStumble(false));
+          }
           later(flipMs, () => {
             cards.current[e.ids[ev.a]]?.slip(!calm);
             cards.current[e.ids[ev.b]]?.slip(!calm);
@@ -1146,12 +1374,21 @@ export default function MemoryGame({
           boardCleared(ev.bonus);
           break;
         case 'cleared': {
+          if (r.race) {
+            if (!r.race.winner) r.race.winner = 'me';
+            r.race.myClearAt = gameNow();
+            GameAudio.play('mm_board_clear');
+            fx.current?.burst('confetti', g.W / 2, g.grid.y, { count: reducedMotion ? 6 : 50 });
+            endRace(gameNow());
+            break;
+          }
           const m = lastMatch;
           if (m) finalPair(m.a, m.b, ev.bonus, ev.secondsLeft);
           else finishRide(true);
           break;
         }
         case 'timeout':
+          if (r.race) { endRace(gameNow()); break; }
           timeoutScene(false);
           break;
         case 'out':
@@ -1166,7 +1403,7 @@ export default function MemoryGame({
       r.moved.forEach((id) => cards.current[id]?.moved(false));
       r.moved.clear();
     }
-  }, [arc, boardCleared, calm, camera, finalPair, finishRide, flashWarm, flyScore, gameNow, glow, gull, later, rays, reducedMotion, send, stampV, syncHud, timeoutScene, warmth]);
+  }, [arc, boardCleared, calm, camera, endRace, finalPair, sendAttack, finishRide, flashWarm, flyScore, gameNow, glow, gull, later, rays, reducedMotion, send, stampV, syncHud, timeoutScene, warmth]);
   applyEventsRef.current = applyEvents;
 
   // ---------------------------------------------------------------------------
@@ -1177,12 +1414,14 @@ export default function MemoryGame({
     const id = setInterval(() => {
       const r = runRef.current;
       if (!r || !r.playing || r.pausedAt != null || r.ended) return;
-      const ev = send({ t: 'tick', at: gameNow() });
+      const at = gameNow();
+      const ev = send({ t: 'tick', at });
       if (ev.length) applyEvents(ev);
+      if (r.race && !r.ended) raceTick(r, at);
       syncHud();
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [visible, applyEvents, gameNow, send, syncHud]);
+  }, [visible, applyEvents, gameNow, raceTick, send, syncHud]);
 
   // ---------------------------------------------------------------------------
   // Input: one board tap, nearest card centre with forgiveness
@@ -1224,6 +1463,7 @@ export default function MemoryGame({
     if (!r || !r.playing || r.busy || r.ended || r.pending || r.pausedAt != null || slot < 0) return;
     const e = r.eng;
     const at = gameNow();
+    if (at < r.stumbleUntil) return;
     let ev = send({ t: 'tick', at });
     if (ev.length) applyEvents(ev);
     if (e.status !== 'play') return;
@@ -1381,6 +1621,12 @@ export default function MemoryGame({
     return { opacity: t > 0.01 && t < 1.99 ? 1 : 0, transform: [{ translateX: x - 36 }, { translateY: y - 36 }, { scaleX: out > 0 ? -1 : 1 }] };
   });
   const dizzyStyle = useAnimatedStyle(() => ({ opacity: dizzy.value }));
+  const incomingRimStyle = useAnimatedStyle(() => ({ opacity: incoming.value > 0 && incoming.value < 1 ? 0.6 + 0.4 * Math.abs(Math.sin(incoming.value * Math.PI * 4)) : 0 }));
+  const fieldW = field.w;
+  const gullShadowAnim = useAnimatedStyle(() => ({
+    opacity: incoming.value > 0.001 && incoming.value < 0.999 ? 1 : 0,
+    transform: [{ translateX: -100 + (fieldW + 200) * incoming.value }, { translateY: Math.sin(incoming.value * Math.PI * 2) * 18 }],
+  }));
 
   // ---------------------------------------------------------------------------
   // Render
@@ -1389,7 +1635,7 @@ export default function MemoryGame({
   const ids = useMemo(() => Array.from({ length: n }, (_, i) => i), [n]);
   const r = runRef.current;
   const g = geo;
-  const title = mode === 'ride' ? 'Ride Sprint' : mode === 'daily' ? 'Daily Deck' : 'Memory Match';
+  const title = mode === 'ride' ? 'Ride Sprint' : mode === 'daily' ? 'Daily Deck' : mode === 'race' ? 'Memory Race' : 'Memory Match';
   const subtitle = mode === 'ride'
     ? `${deck.label}${r && r.tryIndex > 0 ? ` · Try ${r.tryIndex + 1} of ${RIDE_TRIES}` : ''}`
     : mode === 'timeAttack' ? `${deck.label} · Board ${hud.board}` : deck.label;
@@ -1403,7 +1649,7 @@ export default function MemoryGame({
       multiplier={hud.chain >= 3 ? 2 : hud.chain === 2 ? 1.5 : 1}
       fever={hud.showtime}
       personalBest={personalBest}
-      objective={mode === 'ride' ? 'Clear the board' : mode === 'daily' ? 'Two slips and you are out' : 'Race the clock. Chain clean matches.'}
+      objective={mode === 'ride' ? 'Clear the board' : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : 'Race the clock. Chain clean matches.'}
       result={result}
       gameId="memory"
       onStart={onStart}
@@ -1427,7 +1673,9 @@ export default function MemoryGame({
             {/* HUD row: never inside the camera */}
             <View style={[styles.hud, { top: g.hudY }]} pointerEvents="none">
               <StopwatchPlate seconds={hud.seconds} urgent={hud.urgent} frozen={hud.frozen} delta={clockDelta} reducedMotion={reducedMotion} />
-              {mode === 'ride' ? (
+              {mode === 'race' ? (
+                <RivalStrip racers={racers} total={8} reducedMotion={reducedMotion} />
+              ) : mode === 'ride' ? (
                 <GhostLane label={ghostUi.label} ghostPairs={ghostUi.ghostPairs} myPairs={hud.pairs} total={hud.total}
                   delta={ghostUi.delta} ahead={ghostUi.ahead} passed={ghostUi.passed} />
               ) : <View style={{ flex: 1 }} />}
@@ -1493,6 +1741,13 @@ export default function MemoryGame({
               </View>
               <BoardFx width={g.W} height={g.H} inset={0} radius={14} rimFrac={rimFrac} rimUrgent={rimUrgent} rimDim={rimDim}
                 notchFrac={mode === 'ride' ? 15000 / 45000 : -1} arc={arc} showRim={false} />
+              {mode === 'race' ? (
+                <>
+                  <Animated.View pointerEvents="none" style={[styles.incomingRim, { left: g.panel.x - 4, top: g.panel.y - 4, width: g.panel.w + 8, height: g.panel.h + 8 }, incomingRimStyle]} />
+                  <Animated.View pointerEvents="none" style={[styles.gullShadow, { top: g.grid.y + g.grid.h * 0.45 }, gullShadowAnim]} />
+                  {stumble ? <View pointerEvents="none" style={[styles.stumble, { left: g.felt.x, top: g.felt.y, width: g.felt.w, height: g.felt.h }]} /> : null}
+                </>
+              ) : null}
               <Animated.View pointerEvents="none" style={[styles.wash, { left: g.felt.x, top: g.felt.y, width: g.felt.w, height: g.felt.h }, washStyle]} />
               <Animated.Image source={STAMP}
                 style={[styles.abs, { left: stampAt.x - stampAt.s / 2, top: stampAt.y - stampAt.s / 2, width: stampAt.s, height: stampAt.s }, stampStyle]} />
@@ -1653,6 +1908,9 @@ const styles = StyleSheet.create({
     shadowColor: '#064375', shadowOpacity: 0.35, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
   },
   wellGold: { backgroundColor: 'rgba(254,201,14,0.18)', borderColor: MM.gold, borderStyle: 'dashed', borderWidth: 2, shadowOpacity: 0 },
+  incomingRim: { position: 'absolute', borderRadius: 24, borderWidth: 5, borderColor: MM.urgent },
+  gullShadow: { position: 'absolute', left: 0, width: 90, height: 26, borderRadius: 45, backgroundColor: 'rgba(5,52,110,0.28)', borderWidth: 2, borderColor: MM.urgent },
+  stumble: { position: 'absolute', borderRadius: 14, backgroundColor: 'rgba(120,132,150,0.45)', borderWidth: 4, borderColor: MM.coral },
   tilt: { transform: [{ perspective: 900 }, { rotateX: '2deg' }] },
   wash: { position: 'absolute', backgroundColor: '#ffffff', borderRadius: 14 },
   warmFlash: { backgroundColor: '#FFF4D6' },

@@ -112,6 +112,11 @@ export function timeAttackConfig(): MMConfig {
   };
 }
 
+/** Memory Race: 45s round cap on a mirrored board; the Golden Coin pays x2 only. */
+export function raceConfig(): MMConfig {
+  return { ...BASE_CONFIG, mode: 'race', clockMs: 45000, clockCapMs: 45000, goldenBonusMs: 0, finalBonusPerSec: 0 };
+}
+
 /** Daily Deck: no clock, two slips and out, Showtime counts turns. */
 export function dailyConfig(): MMConfig {
   return {
@@ -168,7 +173,9 @@ export type MMAction =
   | { t: 'peek'; slot: number; face: number; at: number }
   | { t: 'walking'; on: boolean; at: number }
   | { t: 'freeze'; on: boolean; at: number }
-  | { t: 'deal'; cols: number; rows: number; at: number };
+  | { t: 'deal'; cols: number; rows: number; at: number }
+  /** Race attack (Gull Swap): two seen face-down cards swap. Queues while a card is up. */
+  | { t: 'attack'; at: number };
 
 export interface MMState {
   cfg: MMConfig;
@@ -188,6 +195,7 @@ export interface MMState {
   b: number;
   holdSince: number;
   pendingGull: boolean;
+  pendingAttack: number;
   turnStart: number;
   turns: number;
   boardTurns: number;
@@ -266,6 +274,7 @@ export function createEngine(cfg: MMConfig, init: EngineInit): MMState {
     b: -1,
     holdSince: 0,
     pendingGull: false,
+    pendingAttack: 0,
     turnStart: 0,
     turns: 0,
     boardTurns: 0,
@@ -463,6 +472,7 @@ function hide(s: MMState, ev: MMEvent[], quick: boolean, at: number): void {
     s.pendingGull = false;
     gullSwap(s, ev);
   }
+  flushAttacks(s, ev);
   maybeTide(s, ev, at);
 }
 
@@ -496,6 +506,24 @@ function gullSwap(s: MMState, ev: MMEvent[]): void {
   const s2 = pool[j];
   swapSlots(s, s1, s2);
   ev.push({ k: 'gullSwap', s1, s2 });
+}
+
+/** Race Gull Swap: applies even while walking (opt-in competitive), never mid-turn. */
+function attackSwap(s: MMState, ev: MMEvent[]): void {
+  const pool = faceDownSeen(s);
+  if (pool.length < 2) return;
+  const i = Math.floor(rand(s) * pool.length);
+  let j = Math.floor(rand(s) * (pool.length - 1));
+  if (j >= i) j += 1;
+  swapSlots(s, pool[i], pool[j]);
+  ev.push({ k: 'gullSwap', s1: pool[i], s2: pool[j] });
+}
+
+function flushAttacks(s: MMState, ev: MMEvent[]): void {
+  while (s.pendingAttack > 0 && s.phase === 0 && s.status === 'play') {
+    s.pendingAttack -= 1;
+    attackSwap(s, ev);
+  }
 }
 
 /** Stationary gate for twists: not walking, and off for 3s. */
@@ -622,6 +650,7 @@ function resolveTurn(s: MMState, at: number, ev: MMEvent[], knowB: number): void
       finishBoard(s, ev);
       return;
     }
+    flushAttacks(s, ev);
     maybeTide(s, ev, at);
     return;
   }
@@ -727,6 +756,12 @@ export function step(s: MMState, action: MMAction): MMEvent[] {
       s.walking = action.on;
       return ev;
     }
+    case 'attack': {
+      if (s.status !== 'play') return ev;
+      s.pendingAttack += 1;
+      flushAttacks(s, ev);
+      return ev;
+    }
     case 'freeze': {
       s.frozen = action.on;
       if (!action.on) s.turnStart = at;
@@ -809,6 +844,7 @@ export function dealBoard(s: MMState, cols: number, rows: number, at: number): v
   s.a = -1;
   s.b = -1;
   s.pendingGull = false;
+  s.pendingAttack = 0;
   s.pairs = 0;
   s.pairsTotal = n / 2;
   s.boardTurns = 0;
