@@ -35,7 +35,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, chapterC
           <Text style={styles.title}>{done === 3 ? chapter.completedTitle : chapter.title}</Text>
         </View>
         <Image source={chapter.navigationPanel
-          ? require('../../../../assets/images/screens/lineplay/space-navigation-shark-v1.png')
+          ? require('../../../../assets/images/screens/lineplay/space-navigation-shark-v2.png')
           : require('../../../../assets/images/screens/pin-collections/shark.png')}
           resizeMode="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
       </View>

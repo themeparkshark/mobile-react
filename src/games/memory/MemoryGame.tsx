@@ -404,7 +404,7 @@ export default function MemoryGame({
             <Text style={styles.bannerTitle} numberOfLines={1}>{deck.label}</Text>
           </View>
           <Image source={deck.id === 'space' && !navigatorArtFailed
-            ? require('../../../assets/images/screens/lineplay/space-navigation-shark-v1.png')
+            ? require('../../../assets/images/screens/lineplay/space-navigation-shark-v2.png')
             : require('../../../assets/images/screens/pin-collections/shark.png')}
             onError={() => setNavigatorArtFailed(true)} resizeMode="contain" style={styles.bannerShark}
             accessibilityLabel={deck.id === 'space' ? 'Your shark navigator' : 'Theme Park Shark mascot'} />

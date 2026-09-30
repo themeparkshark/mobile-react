@@ -78,7 +78,7 @@ function ActivityHero({ kicker, title, teacher = false, navigator = false }: { k
       <Text style={styles.heroKicker}>{kicker}</Text>
       <Text style={styles.heroTitle}>{title}</Text>
     </View>
-    <Image source={navigator && !artFailed ? require('../../../../assets/images/screens/lineplay/space-navigation-shark-v1.png') : teacher
+    <Image source={navigator && !artFailed ? require('../../../../assets/images/screens/lineplay/space-navigation-shark-v2.png') : teacher
       ? require('../../../../assets/images/tutorial/teacher-shark.png')
       : require('../../../../assets/images/screens/pin-collections/shark.png')}
       resizeMode="contain" onError={() => setArtFailed(true)} style={styles.shark}

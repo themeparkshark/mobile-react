@@ -18,7 +18,7 @@ interface Props {
   readonly onNewRound: () => void;
   readonly onNext: () => void;
 }
-const SHARK = require('../../../../assets/images/screens/lineplay/space-navigation-shark-v1.png');
+const SHARK = require('../../../../assets/images/screens/lineplay/space-navigation-shark-v2.png');
 const PORTS = [[1, 50, 0, 'north'], [2, 100, 50, 'east'],
   [4, 50, 100, 'south'], [8, 0, 50, 'west']] as const;
 

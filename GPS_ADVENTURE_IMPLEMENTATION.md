@@ -225,3 +225,24 @@ and upgrade fixes are being checkpointed and integrated into the original LOCAL
 checkout with baseline checks, preserving Claude's branch and its pre-existing
 untracked iOS workspace files. Backend initial checkpoint: abb33629.
 The goal remains active and is not complete.
+
+## Character-art correction after Dustin review
+
+Dustin rejected the space navigator's head/helmet in v1. It had competing fin
+shapes and an awkward compressed head silhouette; it should not have passed the
+initial visual review. One edit candidate was rejected for retaining the internal
+head spike. The second correction, space-navigation-shark-v2.png, gives the head
+a single continuous contour and the helmet a coherent surrounding dome. All four
+active image consumers now use v2; v1 remains an unused archive. Exact prompts,
+references and the rejected candidate reason are saved in the v2 prompt JSON.
+
+Art review must inspect anatomy, costume fit, silhouette, character identity,
+edge cleanup and actual phone-size rendering. An image is not accepted merely
+because it generated successfully, has polished shading or compiles. The reaction
+and magical-card atlases were also reinspected; no additional structural defect
+was identified in that bounded review. The broader asset review continues.
+
+Native artwork review checked the corrected version in the chapter, circuit,
+observation and finale cards, plus the Memory banner without countdown overlay.
+Practice was quit without completing the finale or claiming rewards. TypeScript
+and diff checks pass; the preceding 220-test gameplay result remains unchanged.
