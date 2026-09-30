@@ -1,13 +1,16 @@
 /**
  * LineParty: live multiplayer for the people in one ride's line.
  *
- *   lobby -> 3-2-1 on the server's clock -> 20 s Bonk Race on parallel boards
- *   with a live scoreboard and stickers -> server-verified results -> rematch
+ *   lobby -> 3-2-1 on the server's clock -> a micro-round on parallel boards
+ *   with a live scoreboard and stickers -> server-verified results -> the next
+ *   round, 5 to a Party Series (best 4 count, FINAL ROUND x2) -> the crown
  *
- * The line is always moving, so this screen never pauses and never reads line
- * movement. Backgrounding or pocketing the phone mid-round hands the seat to
- * the player's ghost; they are back for the next round. Leaving the line or
- * boarding ends the party with a wrap-up card.
+ * The line is always moving, so the room never pauses and movement never
+ * stops a board. A HOLD (the pause button, or the phone going to the
+ * background) freezes only your own board for up to 6 s, then a quick 3-2-1;
+ * past that your ghost finishes the round and you are back for the next one.
+ * A real advance of the line shows a small heads-up chip, nothing more.
+ * Leaving the line or boarding ends the party with a wrap-up card.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -21,7 +24,9 @@ import { playSfx } from '../SFX';
 import { botTaps, buildTimeline, resolve, type BotProfile } from '../../games/party/bonkRace';
 import type { PartyClient } from '../net/PartyClient';
 import { usePartyState } from '../net/useParty';
-import { placementOf } from '../net/roomState';
+import { displayName, placementOf } from '../net/roomState';
+import { useLineHeadsUp } from '../motion/QueueMotion';
+import GameIcon from '../../ui/GameIcon';
 import type { EmoteId } from '../net/partyTypes';
 import BonkBoard from './BonkBoard';
 import PartyLobby from './PartyLobby';
@@ -87,6 +92,7 @@ function LineParty({ client, rideId, onExit, autoplay }: LinePartyProps) {
         <View style={styles.tint} />
         <View style={styles.safe}>{body}</View>
         {state.room && state.phase !== 'left' ? <ConnectionChip connection={state.connection} /> : null}
+        <HeadsUp enabled={!!state.room && state.phase !== 'left'} />
       </ImageBackground>
     </GestureHandlerRootView>
   );
@@ -140,22 +146,41 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         ghost = !!rival?.ghost;
         away = member?.state === 'away';
       }
-      return { seat, score, me, ghost, away, emote: seat.user_id !== undefined ? emoteBy.get(seat.user_id) ?? null : null };
+      const key = seat.kind === 'bot' ? `b:${seat.name}` : `u:${seat.user_id}`;
+      const seriesPoints = state.room?.series?.standings.find((r) => r.key === key)?.points;
+      const name = seat.kind === 'bot' ? seat.name : displayName(state, seat.user_id, seat.name);
+      return { seat, name, seriesPoints, score, me, ghost, away, emote: seat.user_id !== undefined ? emoteBy.get(seat.user_id) ?? null : null };
     });
     const all = raw.map((r) => r.score);
     return raw.map((r) => ({ ...r, placement: placementOf(r.score, all) }));
-  }, [boardT, botLogs, myScore, round, spawns, state.emotes, state.ghostedRoundId, state.rivals, state.room?.members, state.userId]);
+  }, [boardT, botLogs, myScore, round, spawns, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
 
   const phase = state.phase;
   const playing = (phase === 'countdown' || phase === 'playing') && local && local.roundId === round?.id && !local.ended;
   const secondsLeft = local ? Math.max(0, Math.ceil((local.durationMs - boardT) / 1000)) : 0;
 
+  const boardClock = useCallback(() => client.boardTime(), [client]);
+  const canHold = phase === 'playing' && !!local && !local.ended && boardT >= 0 && !state.hold;
+
   return (
     <View style={styles.race}>
+      <SeriesPill round={round} />
       <RaceStrip lines={lines} />
       <View style={styles.hud}>
         <Text style={styles.myScore}>{myScore.toLocaleString('en-US')}</Text>
-        <Timer seconds={secondsLeft} urgent={secondsLeft <= 3 && boardT > 0} />
+        <View style={styles.hudRight}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Hold my board"
+            hitSlop={10}
+            disabled={!canHold}
+            onPress={() => { if (client.hold('manual')) haptic('tapLight'); }}
+            style={[styles.holdBtn, !canHold && { opacity: 0.35 }]}
+          >
+            <GameIcon name="pause" size={26} />
+          </Pressable>
+          <Timer seconds={secondsLeft} urgent={secondsLeft <= 3 && boardT > 0} />
+        </View>
       </View>
       <View style={styles.boardWrap}>
         {playing && local ? (
@@ -170,10 +195,12 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
             onProgress={onProgress}
             onTick={onTick}
             autoplay={autoplay}
+            boardClock={boardClock}
           />
         ) : null}
+        {state.hold && phase === 'playing' ? <HoldOverlay client={client} /> : null}
         {phase === 'countdown' && local ? <CountIn boardT={boardT} late={local.lateStart} /> : null}
-        {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round for you. You are back in for the next one." /> : null}
+        {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round for you. Only your best 4 rounds count, so this one is free." /> : null}
         {phase === 'spectating' ? <Banner title="NEXT ROUND IS YOURS" sub="This race started before you joined. Cheer them on." /> : null}
         {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Checking every board on the server..." big /> : null}
       </View>
@@ -181,6 +208,64 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         <MiniStickers onEmote={onEmote} />
       </View>
     </View>
+  );
+}
+
+/** ROUND 2 OF 5, or the gold FINAL ROUND x2 on round five. */
+function SeriesPill({ round }: { round: { series_round: number | null; final: boolean } | null }) {
+  if (!round?.series_round) return null;
+  return (
+    <Animated.View key={round.series_round} entering={ZoomIn.springify().damping(11)} style={[styles.pill, round.final && styles.pillFinal]}>
+      <Text style={[styles.pillText, round.final && styles.pillTextFinal]}>{round.final ? 'FINAL ROUND  x2 POINTS' : `ROUND ${round.series_round} OF 5`}</Text>
+    </Animated.View>
+  );
+}
+
+/**
+ * My board is on HOLD (nobody else's is). Tap to come back: a quick 3-2-1,
+ * then the board picks up exactly where it was. The budget ticks down on screen.
+ */
+function HoldOverlay({ client }: { client: PartyClient }) {
+  const state = usePartyState(client);
+  const [left, setLeft] = useState(client.holdBudgetLeft());
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const h = setInterval(() => { setLeft(client.holdBudgetLeft()); setNow(Date.now()); }, 100);
+    return () => clearInterval(h);
+  }, [client]);
+  const resumeAt = state.hold?.resumeAt ?? null;
+  const count = resumeAt ? Math.max(1, Math.ceil(((resumeAt - now) / 900) * 3)) : null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Resume my board"
+      disabled={!!resumeAt}
+      onPress={() => { client.release(); haptic('tickSelection'); }}
+      style={styles.holdWrap}
+    >
+      {count ? (
+        <Animated.Text key={count} entering={ZoomIn.duration(140)} style={styles.count}>{String(count)}</Animated.Text>
+      ) : (
+        <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.holdCard}>
+          <GameIcon name="play" size={56} />
+          <Text style={styles.holdTitle}>ON HOLD</Text>
+          <Text style={styles.holdSub}>{`Only your board is paused. ${Math.ceil(left / 1000)}s left, then your ghost plays it.`}</Text>
+          <Text style={styles.holdTap}>TAP TO PLAY</Text>
+        </Animated.View>
+      )}
+    </Pressable>
+  );
+}
+
+/** The line moved a lot: glance up. Never a pause, never a buzz. */
+function HeadsUp({ enabled }: { enabled: boolean }) {
+  const show = useLineHeadsUp(enabled);
+  if (!show) return null;
+  return (
+    <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(300)} style={styles.headsUp} pointerEvents="none">
+      <GameIcon name="queue" size={18} />
+      <Text style={styles.headsUpText}>Line's moving. Heads up!</Text>
+    </Animated.View>
   );
 }
 
@@ -285,6 +370,19 @@ const styles = StyleSheet.create({
   safe: { flex: 1, paddingTop: 54 },
   race: { flex: 1 },
   hud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, marginTop: 10 },
+  hudRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  holdBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  holdWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(8,56,128,0.30)' },
+  holdCard: { alignItems: 'center', backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: 4, borderRadius: 24, paddingHorizontal: 26, paddingVertical: 18, marginHorizontal: 30, gap: 6 },
+  holdTitle: { fontFamily: FONT.display, fontSize: 34, color: BRAND.navy },
+  holdSub: { fontFamily: FONT.body, fontSize: 15, color: BRAND.navy, textAlign: 'center' },
+  holdTap: { marginTop: 4, fontFamily: FONT.display, fontSize: 18, color: BRAND.blue, letterSpacing: 1 },
+  pill: { alignSelf: 'center', marginBottom: 18, backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 2 },
+  pillFinal: { backgroundColor: BRAND.gold },
+  pillText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, letterSpacing: 1 },
+  pillTextFinal: { fontSize: 15 },
+  headsUp: { position: 'absolute', top: 96, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: 2, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 4 },
+  headsUpText: { fontFamily: FONT.body, fontSize: 14, color: BRAND.navy },
   myScore: { fontFamily: FONT.display, fontSize: 44, color: BRAND.white, ...outline, fontVariant: ['tabular-nums'] },
   timer: { width: 62, height: 62, borderRadius: 31, backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: 4, alignItems: 'center', justifyContent: 'center' },
   timerUrgent: { backgroundColor: '#ff8a5c' },

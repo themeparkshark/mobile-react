@@ -298,7 +298,7 @@ test('a round that is long gone on arrival goes straight to the ghost without ho
   c.destroy();
 });
 
-test('backgrounding mid-round hands the seat to the ghost instead of pausing anyone', async () => {
+test('a short background is a personal HOLD: my board freezes, resumes after a quick 3-2-1, and the span is logged', async () => {
   const w = world();
   const http = fakeHttp(w);
   const socket = fakeSocket();
@@ -306,24 +306,121 @@ test('backgrounding mid-round hands the seat to the ghost instead of pausing any
   const round = roundAt(w.serverNow() + 1000);
   http.setRoom(snapshot({ version: 3, status: 'countdown', round_no: 1, round }));
   socket.emit('presence-party.11111111-1111-4111-8111-111111111111', 'round.scheduled', { round });
+  socket.emit('private-player.7', 'round.token', { round_id: round.id, round_token: 'tok-7' });
   await w.advance(1000 + 6000);
   c.recordTap(2);
   c.goInactive();
   await w.advance(50);
   assert.equal(c.getState().phase, 'playing', 'a Control Center peek keeps the board');
+  assert.equal(c.getState().hold, null);
   c.goBackground();
-  await w.advance(50);
+  const frozenAt = c.boardTime();
+  assert.equal(c.getState().hold.reason, 'background');
+  await w.advance(3000);
+  assert.equal(c.boardTime(), frozenAt, 'my board clock is frozen while held');
+  assert.equal(c.recordTap(4), null, 'taps while held do not count');
+  assert.equal(http.calls.filter(([, u]) => u.endsWith('/submit')).length, 0, 'nothing handed to the ghost inside the budget');
+  c.goActive();
+  await w.advance(400);
+  assert.ok(c.getState().hold.resumeAt, 'the quick 3-2-1 is running');
+  assert.equal(c.boardTime(), frozenAt);
+  await w.advance(600);
+  assert.equal(c.getState().hold, null);
+  assert.ok(c.boardTime() > frozenAt && c.boardTime() < frozenAt + 200, 'the board picks up exactly where it was');
+  // The round runs its full 20 s of board time, finishing later by the held time.
+  await w.advance(20000 - 6100 - 200);
+  assert.equal(http.calls.filter(([, u]) => u.endsWith('/submit')).length, 0);
+  await w.advance(600);
+  const submit = http.calls.find(([, u]) => u.endsWith('/submit'))[2];
+  assert.equal(submit.partial, false);
+  assert.equal(submit.round_token, 'tok-7');
+  assert.equal(submit.holds.length, 1);
+  assert.ok(Math.abs(submit.holds[0][0] - 6000) <= 60 && submit.holds[0][2] === 'h');
+  assert.ok(submit.holds[0][1] >= 3800 && submit.holds[0][1] <= 4100, `held ${submit.holds[0][1]}`);
+  const board = sim.buildTimeline(round.seed);
+  assert.equal(submit.client_score, sim.resolve(board, submit.taps).score);
+  assert.equal(submit.client_hash, sim.resultHash(sim.resolve(board, submit.taps)));
+  assert.equal(typeof c.pause, 'undefined', 'there is no room pause in multiplayer');
+  c.destroy();
+});
+
+test('over the 6 s HOLD budget my ghost takes the seat (a no contest), and nobody else ever waited', async () => {
+  const w = world();
+  const http = fakeHttp(w);
+  const socket = fakeSocket();
+  const c = await joined(w, http, socket);
+  const round = roundAt(w.serverNow() + 1000);
+  http.setRoom(snapshot({ version: 3, status: 'countdown', round_no: 1, round, you: { user_id: 7, round_id: round.id, round_token: 'tok-snap', submitted: false } }));
+  socket.emit('presence-party.11111111-1111-4111-8111-111111111111', 'round.scheduled', { round });
+  await w.advance(1000 + 5000);
+  c.recordTap(1);
+  c.goBackground();
+  await w.advance(7000);
   const submit = http.calls.find(([, u]) => u.endsWith('/submit'));
+  assert.ok(submit, 'handed to the ghost once the budget ran out');
   assert.equal(submit[2].partial, true);
-  assert.ok(Math.abs(submit[2].until_ms - 6100) <= 60);
+  assert.equal(submit[2].stop, 'hold');
+  assert.ok(Math.abs(submit[2].until_ms - 5000) <= 60);
+  assert.ok(submit[2].holds[0][1] >= 6000);
+  assert.equal(submit[2].round_token, 'tok-snap', 'token fetched from my own snapshot');
   assert.equal(c.getState().phase, 'ghosting');
-  const before = http.calls.length;
+  assert.ok(!http.calls.some(([m, u]) => m === 'POST' && /pause|hold/.test(u)), 'the room is never asked to pause');
   c.goActive();
   await w.advance(700);
-  assert.ok(http.calls.slice(before).some(([m, u]) => m === 'GET' && u.startsWith('/party/rooms/')), 'resync on return');
   assert.equal(c.getState().phase, 'ghosting', 'back for the next round, not this one');
-  assert.equal(typeof c.pause, 'undefined', 'there is no pause in multiplayer');
   c.destroy();
+});
+
+test('a manual HOLD past the budget hands over by itself; inside it, release resumes', async () => {
+  const w = world();
+  const http = fakeHttp(w);
+  const socket = fakeSocket();
+  const c = await joined(w, http, socket);
+  const round = roundAt(w.serverNow() + 1000);
+  http.setRoom(snapshot({ version: 3, status: 'countdown', round_no: 1, round }));
+  socket.emit('presence-party.11111111-1111-4111-8111-111111111111', 'round.scheduled', { round });
+  await w.advance(1000 + 2000);
+  assert.equal(c.hold('manual'), true);
+  assert.equal(c.hold('manual'), false, 'one hold at a time');
+  await w.advance(2000);
+  assert.ok(c.holdBudgetLeft() <= 4000 && c.holdBudgetLeft() >= 3900);
+  c.release();
+  await w.advance(1000);
+  assert.equal(c.getState().hold, null);
+  assert.equal(c.hold('manual'), true);
+  await w.advance(4000);
+  const submit = http.calls.find(([, u]) => u.endsWith('/submit'));
+  assert.ok(submit && submit[2].stop === 'hold', 'budget spent: the ghost has the seat');
+  const total = submit[2].holds.reduce((a, h) => a + h[1], 0);
+  assert.ok(total >= 6000 && total <= 6200, `held ${total}`);
+  c.destroy();
+});
+
+test('a round in a game this build cannot draw goes straight to the ghost', async () => {
+  const w = world();
+  const http = fakeHttp(w);
+  const socket = fakeSocket();
+  const c = await joined(w, http, socket);
+  const round = roundAt(w.serverNow() + 3000, { game: 'mystery_game' });
+  http.setRoom(snapshot({ version: 3, status: 'countdown', round_no: 1, round }));
+  socket.emit('presence-party.11111111-1111-4111-8111-111111111111', 'round.scheduled', { round });
+  await w.advance(100);
+  assert.equal(c.getState().phase, 'ghosting');
+  const submit = http.calls.find(([, u]) => u.endsWith('/submit'));
+  assert.equal(submit[2].partial, true);
+  assert.equal(submit[2].until_ms, 0);
+  const play = http.calls.find(([, u]) => u === '/party/play');
+  assert.deepEqual(plain(play[2].games), ['bonk_race'], 'the server only rotates in games this build can play');
+  c.destroy();
+});
+
+test('friends keep their screen names across broadcasts; strangers stay park aliases', () => {
+  let s = rs.initialPartyState(7);
+  s = rs.applySnapshot(s, snapshot({ version: 2, you: { user_id: 7, known: { 7: 'sam_real', 9: 'rae_friend' } } }));
+  // A broadcast snapshot (no private block) must not erase what this phone may show.
+  s = rs.applySnapshot(s, snapshot({ version: 3, you: undefined }));
+  assert.equal(rs.displayName(s, 9, 'Coral Fin 42'), 'rae_friend');
+  assert.equal(rs.displayName(s, 11, 'Sunny Wave 17'), 'Sunny Wave 17');
 });
 
 test('socket down: HTTP polling keeps the room moving, and a reconnect resyncs', async () => {
@@ -415,4 +512,22 @@ test('a rematch round is played, not ghosted, after the last round was submitted
   assert.equal(c.getState().phase, 'playing');
   assert.equal(c.getState().ghostedRoundId, null);
   c.destroy();
+});
+
+test('the line heads-up fires on a real advance only, and never more than once in 45 s', () => {
+  const qm = loadTs('src/gamekit/motion/QueueMotion.ts', { react: { useEffect() {}, useRef() { return {}; }, useState(v) { return [v, () => {}]; } } });
+  const d = new qm.AdvanceDetector();
+  let fired = 0;
+  // Shuffling: a step or two every few seconds is the queue, not an advance.
+  for (let t = 0, steps = 0; t < 60000; t += 3000) { steps += 2; if (d.push(t, steps)) fired++; }
+  assert.equal(fired, 0);
+  // A real advance: about 2 steps a second for 8 s.
+  let steps = 40;
+  for (let t = 60000; t < 68000; t += 500) { steps += 1; if (d.push(t, steps)) fired++; }
+  assert.equal(fired, 1);
+  // Walking on right away does not nag again inside the cool-down.
+  for (let t = 68000; t < 100000; t += 500) { steps += 1; if (d.push(t, steps)) fired++; }
+  assert.equal(fired, 1);
+  for (let t = 113000; t < 125000; t += 500) { steps += 1; if (d.push(t, steps)) fired++; }
+  assert.equal(fired, 2);
 });

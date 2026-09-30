@@ -5,8 +5,12 @@
  * Bonk Race sim the app ships. N scripted players:
  *   start a LinePlay session at the ride (real geofence), join the queue
  *   presence channel, PLAY, join the room presence channel, READY, receive
- *   round.scheduled over the socket, whisper live scores, play the round with
- *   a human-like autoplayer, submit, and receive round.finalized.
+ *   round.scheduled over the socket and the private round token on their own
+ *   player channel, whisper live scores, play the round with a human-like
+ *   autoplayer, submit with the {score, hash} claim, and receive
+ *   round.finalized with the Party Series standings. One player takes a 2 s
+ *   HOLD mid-round (only their board stops; the room never waits).
+ *   Queue presence must carry no identity (strangers are fin silhouettes).
  *
  *   PARTY_TOKENS=/path/tokens.json node tools/party/e2e-smoke.cjs [ride_id] [lat] [lng] [players]
  * tokens.json maps name -> {id, token}. Tokens are never printed.
@@ -23,7 +27,9 @@ const WS_HOST = process.env.PARTY_WS_HOST || '127.0.0.1';
 const WS_PORT = Number(process.env.PARTY_WS_PORT || 8480);
 const KEY = process.env.PARTY_WS_KEY || 'tps-mg-local-key';
 const [rideId, lat, lng, count] = [Number(process.argv[2] || 194), Number(process.argv[3] || 34.139487), Number(process.argv[4] || -118.353919), Number(process.argv[5] || 2)];
-const tokens = Object.entries(JSON.parse(fs.readFileSync(process.env.PARTY_TOKENS, 'utf8'))).slice(0, count);
+const tokenMap = JSON.parse(fs.readFileSync(process.env.PARTY_TOKENS, 'utf8'));
+const tokens = Object.entries(tokenMap).slice(0, count);
+const tokensFile = (name) => tokenMap[name];
 
 const log = (who, ...args) => console.log(`[${((Date.now() % 100000) / 1000).toFixed(3)}] ${who}:`, ...args);
 
@@ -65,19 +71,27 @@ async function player(name, token, index) {
 
   const queue = pusher.subscribe(`presence-queue.${rideId}`);
   await new Promise((resolve, reject) => { queue.bind('pusher:subscription_succeeded', resolve); queue.bind('pusher:subscription_error', reject); });
-  log(name, `in line with ${queue.members.count} player(s)`);
+  const infos = [];
+  queue.members.each((m) => infos.push(m.info));
+  if (infos.some((i) => JSON.stringify(i) !== '{"fin":true}')) throw new Error(`queue presence leaked identity: ${JSON.stringify(infos)}`);
+  log(name, `in line with ${queue.members.count} player(s), all fin silhouettes`);
 
-  const { room } = await api(token, 'POST', '/party/play', { ride_id: rideId });
+  const tokensByRound = {};
+  const me = pusher.subscribe(`private-player.${tokensFile(name).id}`);
+  await new Promise((resolve, reject) => { me.bind('pusher:subscription_succeeded', resolve); me.bind('pusher:subscription_error', reject); });
+  me.bind('round.token', (e) => { tokensByRound[e.round_id] = e.round_token; });
+
+  const { room } = await api(token, 'POST', '/party/play', { ride_id: rideId, games: ['bonk_race'] });
   log(name, `room ${room.id.slice(0, 8)} members=${room.members.length} status=${room.status}`);
   const channel = pusher.subscribe(`presence-party.${room.id}`);
   await new Promise((resolve, reject) => { channel.bind('pusher:subscription_succeeded', resolve); channel.bind('pusher:subscription_error', reject); });
 
-  const state = { name, token, pusher, channel, room, clock, rivals: {}, finalized: null };
+  const state = { name, token, pusher, channel, room, clock, rivals: {}, finalized: null, tokensByRound };
   channel.bind('room.updated', (e) => { if (e.room.version > state.room.version) state.room = e.room; });
   channel.bind('client-progress', (e) => { state.rivals[e.u] = e.s; });
   channel.bind('emote', (e) => log(name, `emote ${e.emote} from ${e.user_id}`));
   state.scheduled = new Promise((resolve) => channel.bind('round.scheduled', (e) => resolve(e.round)));
-  state.final = new Promise((resolve) => channel.bind('round.finalized', (e) => resolve(e.round)));
+  state.final = new Promise((resolve) => channel.bind('round.finalized', (e) => resolve(e)));
   return state;
 }
 
@@ -100,21 +114,31 @@ async function player(name, token, index) {
     const seat = round.seats.find((s) => s.user_id === undefined ? false : s.name && p.room.you && s.user_id === p.room.you.user_id) || round.seats[i];
     const taps = sim.botTaps(spawns, round.seed, 20 + i, i === 0 ? 'ace' : 'regular');
     const goLocal = round.start_at_ms - p.clock.offset;
+    // Player 2 pockets the phone for 2 s at board time 8000: a personal HOLD.
+    const hold = i === 1 ? [8000, 2000, 'h'] : null;
+    const boardAt = () => { const t = Date.now() - goLocal; return hold && t > hold[0] ? (t < hold[0] + hold[1] ? hold[0] : t - hold[1]) : t; };
     await new Promise((r) => setTimeout(r, Math.max(0, goLocal - Date.now())));
     const timer = setInterval(() => {
-      const t = Date.now() - goLocal;
+      const t = boardAt();
       const score = sim.resolve(spawns, taps.filter(([at]) => at <= t)).score;
       p.channel.trigger('client-progress', { u: seat.user_id, s: score, t });
     }, 250);
-    await new Promise((r) => setTimeout(r, round.duration_ms + 150));
+    await new Promise((r) => setTimeout(r, round.duration_ms + (hold ? hold[1] : 0) + 150));
     clearInterval(timer);
-    const clientScore = sim.resolve(spawns, taps).score;
-    const res = await api(p.token, 'POST', `/party/rounds/${round.id}/submit`, { taps, client_score: clientScore, sim_version: 1 });
-    log(p.name, `submitted: client ${clientScore} verified ${res.entry.verified_score} verdict ${res.entry.verdict}; saw rivals ${JSON.stringify(p.rivals)}`);
+    const result = sim.resolve(spawns, taps);
+    const token = p.tokensByRound[round.id];
+    if (!token) throw new Error(`${p.name} never got a private round token`);
+    const res = await api(p.token, 'POST', `/party/rounds/${round.id}/submit`, {
+      taps, client_score: result.score, client_hash: sim.resultHash(result), sim_version: 1, round_token: token, holds: hold ? [hold] : [],
+    });
+    log(p.name, `submitted: client ${result.score}/${sim.resultHash(result)} verified ${res.entry.verified_score} verdict ${res.entry.verdict}${hold ? ' (after a 2 s HOLD)' : ''}; saw rivals ${JSON.stringify(p.rivals)}`);
+    if (res.entry.verdict !== 'ok') throw new Error(`${p.name} verdict ${res.entry.verdict}`);
   }));
 
   const finals = await Promise.all(players.map((p) => Promise.race([p.final, new Promise((_, rej) => setTimeout(() => rej(new Error('no round.finalized push')), 8000))])));
-  for (const r of finals[0].results) log('result', `#${r.placement} ${r.kind === 'bot' ? 'bot ' : ''}${r.name} ${r.score} (+${r.points})${r.filled_by ? ' ghost' : ''}`);
+  for (const r of finals[0].round.results) log('result', `#${r.placement} ${r.kind === 'bot' ? 'bot ' : ''}${r.name} ${r.score} (+${r.points}) ${r.verdict}${r.filled_by ? ' ghost' : ''}`);
+  const series = finals[0].series;
+  log('series', `round ${series.rounds_played} of ${series.rounds_total}: ${series.standings.map((s) => `${s.name} ${s.points}`).join(', ')}`);
   for (const p of players) { await api(p.token, 'POST', `/party/rooms/${roomId}/leave`); p.pusher.disconnect(); }
   console.log('E2E OK');
   process.exit(0);

@@ -42,6 +42,17 @@ export interface MyEntry {
   partial: boolean;
 }
 
+/** A personal HOLD in progress: only this player's board clock is frozen. */
+export interface HoldState {
+  reason: 'background' | 'manual';
+  /** Wall ms (Date.now) when the hold started. */
+  since: number;
+  /** HOLD budget left for this micro-round when it started, ms. */
+  budgetLeftMs: number;
+  /** Wall ms when the resume count-in ends (null until the player is back). */
+  resumeAt: number | null;
+}
+
 export interface PartyState {
   phase: PartyPhase;
   connection: Connection;
@@ -55,6 +66,9 @@ export interface PartyState {
   error: { code: string; message: string } | null;
   leftReason: 'left_queue' | 'left' | 'closed' | null;
   clockOffsetMs: number;
+  /** Screen names this phone may show (self, friends). Everyone else is a park alias. */
+  known: Record<number, string>;
+  hold: HoldState | null;
 }
 
 export function initialPartyState(userId: number | null = null): PartyState {
@@ -70,7 +84,25 @@ export function initialPartyState(userId: number | null = null): PartyState {
     error: null,
     leftReason: null,
     clockOffsetMs: 0,
+    known: {},
+    hold: null,
   };
+}
+
+/** Friends see screen names; strangers only ever see the park alias. */
+export function displayName(state: Pick<PartyState, 'known'>, userId: number | null | undefined, fallback: string | null | undefined): string {
+  return (userId != null ? state.known[userId] : undefined) ?? fallback ?? 'Shark';
+}
+
+function mergeKnown(state: PartyState, snap: RoomSnapshot): Record<number, string> {
+  const k = snap.you?.known;
+  if (!k) return state.known;
+  const next = { ...state.known };
+  let changed = false;
+  for (const [id, name] of Object.entries(k)) {
+    if (next[Number(id)] !== name) { next[Number(id)] = name; changed = true; }
+  }
+  return changed ? next : state.known;
 }
 
 /**
@@ -89,7 +121,7 @@ export function applySnapshot(state: PartyState, snap: RoomSnapshot): PartyState
   if (!isNewerSnapshot(current, snap)) {
     // Same or older state; only our private `you` block may be fresher.
     if (current && snap.you && current.id === snap.id && snap.version === current.version) {
-      return { ...state, room: { ...current, you: snap.you } };
+      return { ...state, room: { ...current, you: snap.you }, known: mergeKnown(state, snap) };
     }
     return state;
   }
@@ -101,6 +133,7 @@ export function applySnapshot(state: PartyState, snap: RoomSnapshot): PartyState
   return {
     ...state,
     room: { ...snap, you },
+    known: mergeKnown(state, snap),
     rivals: roundChanged ? {} : state.rivals,
     entry: roundChanged && state.entry?.roundId !== nextRound ? null : state.entry,
   };

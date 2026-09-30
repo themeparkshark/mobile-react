@@ -1,8 +1,11 @@
 /**
- * PartyResults: the server's verdict for the round. Placements come only from
- * the server replay (VERIFIED), with medals, the crown dropping on the winner,
- * points, and a GHOST tag on any seat a ghost finished. REMATCH votes for the
- * next round; the room also starts it on its own so nobody waits.
+ * PartyResults: the server's verdict for the micro-round, then the Party
+ * Series table. Placements come only from the server replay (VERIFIED), with
+ * medals, the crown dropping on the winner, points (FINAL ROUND doubles), and
+ * a GHOST tag on any seat a ghost finished. A no-contest round (HOLD over
+ * budget, left, desync) reads as a skipped round that best-4-of-5 drops,
+ * never as a loss. After round five the series crown drops on the champion.
+ * NEXT ROUND votes to go now; the room also starts it on its own.
  */
 import { memo, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -21,8 +24,9 @@ import GameIcon from '../../ui/GameIcon';
 import { BRAND, FONT } from '../../ui/tokens';
 import { haptic } from '../Haptics';
 import { playSfx } from '../SFX';
-import type { EmoteId, SeatResult } from '../net/partyTypes';
-import type { PartyState } from '../net/roomState';
+import { isDq, isNoContest, type EmoteId, type SeatResult, type SeriesStanding, type SeriesSummary } from '../net/partyTypes';
+import { displayName, type PartyState } from '../net/roomState';
+import { BOT_SHARK } from './partyArt';
 import SeatAvatar from './SeatAvatar';
 import EmoteBar, { EmotePop } from './EmoteBar';
 
@@ -63,7 +67,16 @@ function Crown() {
   return <Animated.View style={[styles.crown, style]}><GameIcon name="crown" size={34} /></Animated.View>;
 }
 
-function Row({ r, index, me, emote }: { r: SeatResult; index: number; me: boolean; emote?: { id: EmoteId; key: string } }) {
+function detailFor(r: SeatResult): string {
+  if (isDq(r.verdict)) return 'NOT VERIFIED';
+  if (isNoContest(r.verdict)) return r.filled_by === 'ghost' ? 'GHOST FINISHED IT  ·  ROUND SKIPPED' : 'ROUND SKIPPED  ·  BEST 4 COUNT';
+  if (r.filled_by === 'ghost') return 'GHOST FINISHED IT';
+  if (r.kind === 'bot') return 'HOUSE CREW';
+  if (r.stats.hits === undefined) return `${r.stats.maxStreak ?? 0} IN A ROW`;
+  return `${r.stats.hits ?? 0} BONKS  ·  BEST STREAK ${r.stats.maxStreak ?? 0}`;
+}
+
+function Row({ r, index, me, emote, name }: { r: SeatResult; index: number; me: boolean; emote?: { id: EmoteId; key: string }; name: string }) {
   return (
     <Animated.View entering={FadeInDown.delay(120 * index).springify().damping(14)} style={[styles.row, me && styles.rowMe, r.placement === 1 && styles.rowWin]}>
       <View style={styles.place}>
@@ -75,15 +88,12 @@ function Row({ r, index, me, emote }: { r: SeatResult; index: number; me: boolea
         {emote ? <EmotePop key={emote.key} emote={emote.id} size={40} /> : null}
       </View>
       <View style={styles.who}>
-        <Text numberOfLines={1} style={[styles.name, me && styles.nameMe]}>{me ? 'YOU' : r.name}</Text>
-        <Text style={styles.detail}>
-          {r.verdict.startsWith('dq_') ? 'NOT VERIFIED' : r.filled_by === 'ghost' ? 'GHOST FINISHED IT' : r.kind === 'bot' ? 'HOUSE CREW'
-            : `${r.stats.hits ?? 0} BONKS  ·  BEST STREAK ${r.stats.maxStreak ?? 0}`}
-        </Text>
+        <Text numberOfLines={1} style={[styles.name, me && styles.nameMe]}>{me ? 'YOU' : name}</Text>
+        <Text style={styles.detail}>{detailFor(r)}</Text>
       </View>
       <View style={styles.right}>
         <CountUp to={r.score} delay={200 + 120 * index} />
-        <Text style={styles.points}>{`+${r.points} PTS`}</Text>
+        <Text style={[styles.points, isNoContest(r.verdict) && styles.pointsSkip]}>{isNoContest(r.verdict) ? 'SKIPPED' : `+${r.points} PTS`}</Text>
       </View>
     </Animated.View>
   );
@@ -107,21 +117,30 @@ function PartyResults({ state, serverNow, onRematch, onEmote, onLeave }: PartyRe
     return () => clearInterval(h);
   }, [room.autostart_at_ms, serverNow]);
 
-  const headline = !mine ? 'RESULTS' : mine.placement === 1 ? 'YOU WIN!' : mine.placement === 2 ? 'SO CLOSE!' : 'NICE RUN!';
+  const series = room.series ?? null;
+  const finished = series?.status === 'finished' && series.rounds_played === room.round?.series_round;
+  const crowned = finished && series?.crown_user_id === state.userId;
+  const headline = finished ? (crowned ? 'SERIES CROWN!' : 'SERIES OVER!')
+    : !mine ? 'RESULTS' : isNoContest(mine.verdict) ? 'ROUND SKIPPED' : mine.placement === 1 ? 'YOU WIN!' : mine.placement === 2 ? 'SO CLOSE!' : 'NICE RUN!';
+  const nameOf = (userId: number | null | undefined, fallback: string | null | undefined, kind: string) =>
+    kind === 'bot' ? fallback ?? 'Crew' : displayName(state, userId, fallback);
 
   return (
     <View style={styles.wrap}>
       <Animated.Text entering={FadeInDown.springify().damping(12)} style={styles.headline}>{headline}</Animated.Text>
       <View style={styles.verified}>
         <GameIcon name="sparkle" size={18} />
-        <Text style={styles.verifiedText}>VERIFIED BY THE SERVER REPLAY</Text>
+        <Text style={styles.verifiedText}>{room.round?.final ? 'FINAL ROUND  ·  DOUBLE POINTS  ·  VERIFIED' : 'VERIFIED BY THE SERVER REPLAY'}</Text>
       </View>
-      <View style={styles.list}>
-        {results.map((r, i) => <Row key={r.seat} r={r} index={i} me={r.user_id === state.userId} emote={r.user_id ? emoteBy.get(r.user_id) : undefined} />)}
-      </View>
+      {finished && series ? <SeriesCrown series={series} nameOf={nameOf} me={state.userId} /> : (
+        <View style={styles.list}>
+          {results.map((r, i) => <Row key={r.seat} r={r} index={i} me={r.user_id === state.userId} name={nameOf(r.user_id, r.name, r.kind)} emote={r.user_id ? emoteBy.get(r.user_id) : undefined} />)}
+        </View>
+      )}
+      {series ? <SeriesTable series={series} nameOf={nameOf} me={state.userId} /> : null}
       <View style={styles.buttons}>
-        <GameButton label={me?.ready ? 'READY FOR MORE!' : 'REMATCH'} icon="retry" onPress={onRematch} disabled={!!me?.ready} />
-        {secs !== null ? <Text style={styles.next}>{`Next race in ${secs}s`}</Text> : null}
+        <GameButton label={me?.ready ? 'READY!' : finished ? 'PLAY AGAIN' : 'NEXT ROUND'} icon="retry" onPress={onRematch} disabled={!!me?.ready} />
+        {secs !== null ? <Text style={styles.next}>{finished ? `New series in ${secs}s` : `Next round in ${secs}s`}</Text> : null}
       </View>
       <EmoteBar onSend={onEmote} />
       <GameButton label="Leave party" variant="ghost" tone="onBlue" onPress={onLeave} />
@@ -130,6 +149,62 @@ function PartyResults({ state, serverNow, onRematch, onEmote, onLeave }: PartyRe
 }
 
 export default memo(PartyResults);
+
+type NameOf = (userId: number | null | undefined, fallback: string | null | undefined, kind: string) => string;
+
+/** The Party Series so far: points per round (best 4 of 5 count; the dropped round fades). */
+function SeriesTable({ series, nameOf, me }: { series: SeriesSummary; nameOf: NameOf; me: number | null }) {
+  const rows = series.standings.slice(0, 4);
+  return (
+    <Animated.View entering={FadeInDown.delay(500).springify().damping(14)} style={styles.table}>
+      <Text style={styles.tableTitle}>{`PARTY SERIES  ·  ROUND ${series.rounds_played} OF ${series.rounds_total}  ·  BEST ${series.count_best} COUNT`}</Text>
+      {rows.map((r) => (
+        <View key={r.key} style={[styles.tRow, r.user_id === me && styles.tRowMe]}>
+          <Text style={styles.tRank}>{r.rank}</Text>
+          <Text numberOfLines={1} style={[styles.tName, r.user_id === me && styles.nameMe]}>{r.user_id === me ? 'YOU' : nameOf(r.user_id, r.name, r.kind)}</Text>
+          {r.rounds.map((p, i) => (
+            <Text key={i} style={[styles.tCell, i === r.dropped && styles.tDropped, r.no_contest[i] && styles.tSkip, i === series.rounds_total - 1 && styles.tFinal]}>
+              {p === null ? '-' : String(p)}
+            </Text>
+          ))}
+          <Text style={styles.tTotal}>{r.points}</Text>
+        </View>
+      ))}
+    </Animated.View>
+  );
+}
+
+/** Crown ceremony: the champion's shark takes the crown (Supercell-style anticipation, then the drop). */
+function SeriesCrown({ series, nameOf, me }: { series: SeriesSummary; nameOf: NameOf; me: number | null }) {
+  const champ: SeriesStanding | undefined = series.standings[0];
+  const glow = useSharedValue(0);
+  const y = useSharedValue(-140);
+  const squash = useSharedValue(1);
+  useEffect(() => {
+    glow.value = withTiming(1, { duration: 300 });
+    y.value = withDelay(700, withTiming(0, { duration: 500, easing: Easing.bounce }));
+    squash.value = withDelay(1200, withSequence(withTiming(0.86, { duration: 60 }), withSpring(1, { damping: 7, stiffness: 320 })));
+    const t = setTimeout(() => { haptic(champ?.user_id === me ? 'success' : 'tapLight'); playSfx(champ?.user_id === me ? 'win' : 'star', 0.9); }, 1200);
+    return () => clearTimeout(t);
+  }, [champ?.key]);
+  const crownStyle = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value * 0.9, transform: [{ scale: 0.8 + glow.value * 0.4 }] }));
+  const sharkStyle = useAnimatedStyle(() => ({ transform: [{ scaleY: squash.value }, { scaleX: 2 - squash.value }] }));
+  if (!champ) return null;
+  return (
+    <View style={styles.ceremony}>
+      <Animated.View style={[styles.ray, glowStyle]} />
+      <Animated.View style={sharkStyle}>
+        {champ.kind === 'bot'
+          ? <Animated.Image source={BOT_SHARK[champ.avatar_url ?? ''] ?? BOT_SHARK['bot:captain']} style={styles.champImg} />
+          : <SeatAvatar avatarUrl={champ.avatar_url} team={champ.team} size={96} me={champ.user_id === me} />}
+      </Animated.View>
+      <Animated.View style={[styles.bigCrown, crownStyle]}><GameIcon name="crown" size={64} /></Animated.View>
+      <Text style={styles.champName}>{champ.user_id === me ? 'YOU' : nameOf(champ.user_id, champ.name, champ.kind)}</Text>
+      <Text style={styles.champPts}>{`${champ.points} SERIES POINTS`}</Text>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, paddingHorizontal: 16, paddingBottom: 12, justifyContent: 'space-between' },
@@ -168,6 +243,24 @@ const styles = StyleSheet.create({
   right: { alignItems: 'flex-end' },
   score: { fontFamily: FONT.display, fontSize: 24, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1, fontVariant: ['tabular-nums'] },
   points: { fontFamily: FONT.body, fontSize: 12, color: BRAND.goldLight, letterSpacing: 0.8 },
+  pointsSkip: { color: BRAND.cream },
+  table: { marginTop: 10, backgroundColor: BRAND.cream, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 6, gap: 2 },
+  tableTitle: { fontFamily: FONT.body, fontSize: 11, color: BRAND.navy, letterSpacing: 0.8, textAlign: 'center', marginBottom: 2 },
+  tRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 1 },
+  tRowMe: { backgroundColor: 'rgba(255,207,59,0.35)', borderRadius: 8 },
+  tRank: { width: 16, fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, textAlign: 'center' },
+  tName: { flex: 1, fontFamily: FONT.display, fontSize: 14, color: BRAND.navy },
+  tCell: { width: 20, fontFamily: FONT.display, fontSize: 14, color: BRAND.navy, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  tDropped: { opacity: 0.35, textDecorationLine: 'line-through' },
+  tSkip: { color: '#5a88b8' },
+  tFinal: { color: '#c98a00' },
+  tTotal: { width: 30, fontFamily: FONT.display, fontSize: 16, color: BRAND.blue, textAlign: 'right' },
+  ceremony: { alignItems: 'center', justifyContent: 'center', marginTop: 16, height: 250 },
+  ray: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,207,59,0.55)' },
+  champImg: { width: 110, height: 110, resizeMode: 'contain' },
+  bigCrown: { position: 'absolute', top: 18 },
+  champName: { marginTop: 10, fontFamily: FONT.display, fontSize: 30, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
+  champPts: { fontFamily: FONT.body, fontSize: 14, color: BRAND.goldLight, letterSpacing: 1 },
   crown: { position: 'absolute', top: -24, left: 8 },
   buttons: { alignItems: 'center', gap: 4, marginTop: 10 },
   next: { fontFamily: FONT.body, fontSize: 14, color: BRAND.white },

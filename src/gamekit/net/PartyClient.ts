@@ -7,16 +7,28 @@
  * room snapshot over HTTP, and every snapshot is version-gated, so a reconnect
  * storm on park LTE can never move the room backwards.
  *
- * The line is always moving: nothing here pauses a round. If this phone is
- * backgrounded, pocketed or locked mid-round it hands its seat to its ghost
- * (partial submit) and the rest of the room plays on. The player is back for
- * the next round. A round that starts while this phone is late (slow network,
- * just unlocked) still gets its full length: boards are parallel, the server
- * replays each log against the shared seed, so a synced GO is presentation only.
+ * The line is always moving: nothing here pauses the room, and nothing reads
+ * steps, GPS or line movement to stop a board. A personal HOLD is the only
+ * pause, and it freezes only this phone's board clock: backgrounded, pocketed,
+ * locked or the pause button. Back within the 6 s HOLD budget, the board picks
+ * up exactly where it was after a quick 3-2-1. Over the budget, the seat goes
+ * to this player's ghost for the rest of the round (a no contest: 0 points,
+ * the dropped round of the series, never a loss) and they are back in for the
+ * next round. Every span is logged in the submit so the server replays the
+ * exact board time.
+ *
+ * A round that starts while this phone is late (slow network, just unlocked)
+ * still gets its full length: boards are parallel, the server replays each log
+ * against the shared seed, so a synced GO is presentation only.
+ *
+ * Scores the server trusts come from its replay of the app's own sim bundle;
+ * this phone sends its claim {client_score, client_hash} and a private round
+ * token, and any mismatch is a silent no contest (design 11.3-11.4).
  */
-import { buildTimeline, resolve, BONK_RACE_VERSION, type Spawn, type Tap } from '../../games/party/bonkRace';
+import { partySim, type PartySim, type SimTap } from '../../games-registry/partySims';
+import type { Spawn } from '../../games/party/bonkRace';
 import { ClockSync } from './ClockSync';
-import type { EmoteEvent, EmoteId, EntryResponse, PartyApiError, ProgressWhisper, RoomSnapshot, RoundSummary } from './partyTypes';
+import type { EmoteEvent, EmoteId, EntryResponse, PartyApiError, ProgressWhisper, RoomSnapshot, RoundSummary, SeriesSummary } from './partyTypes';
 import {
   applyEmote,
   applyProgress,
@@ -75,21 +87,37 @@ export interface PartyClientOptions {
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
   log?: (message: string, data?: unknown) => void;
+  /** Party games this build has a board for (the server's rotation only picks these). */
+  games?: string[];
 }
+
+export type HoldSpan = [boardMs: number, durMs: number, kind: 'h' | 'w'];
+export type StopReason = 'hold' | 'left' | 'left_queue' | 'background';
 
 export interface LocalRound {
   roundId: string;
   roundNo: number;
+  game: string;
+  simVersion: number;
   seed: number;
+  /** The shared board (Bonk Race spawns; other games keep their own board shape). */
   spawns: Spawn[];
+  board: unknown;
   durationMs: number;
   /** Monotonic ms (perfNow) of this board's GO. */
   goAt: number;
   /** True when this phone arrived late and started its own GO on arrival. */
   lateStart: boolean;
-  taps: Tap[];
+  taps: SimTap[];
   ended: boolean;
   submitted: boolean;
+  /** Logged HOLD spans (board time, duration). */
+  holds: HoldSpan[];
+  /** Total held ms so far (board clock = perfNow - goAt - heldMs). */
+  heldMs: number;
+  /** perfNow when the open hold started, and the board time it froze at. */
+  heldAt: number | null;
+  heldBoardMs: number;
 }
 
 export const HEARTBEAT_MS = 10000;
@@ -100,6 +128,12 @@ export const WHISPER_MS = 250;
 export const MAX_LATE_START_MS = 12000;
 /** Minimum on-screen count-in when a round arrives late. */
 export const LATE_COUNT_IN_MS = 900;
+/** Personal HOLD budget per micro-round (design 6.4). */
+export const HOLD_BUDGET_MS = 6000;
+/** The quick 3-2-1 before a held board resumes (part of the hold). */
+export const RESUME_COUNT_MS = 900;
+/** Games this build can render. */
+export const DEFAULT_GAMES = ['bonk_race'];
 
 const PENDING_KEY = 'party:pending-submit';
 
@@ -115,6 +149,9 @@ export class PartyClient {
   private wakeTimers: unknown[] = [];
   private local: LocalRound | null = null;
   private lastWhisperAt = 0;
+  private playerChannel: ChannelLike | null = null;
+  private tokens = new Map<string, string>();
+  private holdTimers: unknown[] = [];
   private appStateSub: { remove(): void } | null = null;
   private destroyed = false;
   private readonly now: () => number;
@@ -166,7 +203,7 @@ export class PartyClient {
       await this.clock.sync(5, 120);
       this.set({ ...this.state, clockOffsetMs: this.clock.offsetMs });
       await this.flushPendingSubmit();
-      const { data } = await this.opts.http.post<{ room: RoomSnapshot }>('/party/play', { ride_id: rideId });
+      const { data } = await this.opts.http.post<{ room: RoomSnapshot }>('/party/play', { ride_id: rideId, games: this.opts.games ?? DEFAULT_GAMES });
       this.applyRoom(data.room);
       this.connectSocket();
       this.startLoops();
@@ -204,7 +241,7 @@ export class PartyClient {
 
   async leave(): Promise<void> {
     const room = this.state.room;
-    if (this.local && !this.local.ended) await this.handToGhost();
+    if (this.local && !this.local.ended) await this.handToGhost('left');
     if (room) {
       try {
         await this.opts.http.post(`/party/rooms/${room.id}/leave`);
@@ -226,20 +263,76 @@ export class PartyClient {
 
   // ---------------------------------------------------------------- the round
 
-  /** Record a touch-down on a hole. Returns ms since this board's GO, or null outside play. */
-  recordTap(hole: number): number | null {
+  /** Record a touch-down on a hole or tile. Returns board ms since GO, or null outside play (or on HOLD). */
+  recordTap(choice: number): number | null {
     const r = this.local;
-    if (!r || r.ended || this.state.phase !== 'playing') return null;
-    const t = Math.round(this.perfNow() - r.goAt);
+    if (!r || r.ended || r.heldAt !== null || this.state.phase !== 'playing') return null;
+    const t = Math.round(this.perfNow() - r.goAt - r.heldMs);
     if (t < 0 || t > r.durationMs) return null;
     const last = r.taps.length ? r.taps[r.taps.length - 1][0] : 0;
-    r.taps.push([Math.max(t, last), hole]);
+    r.taps.push([Math.max(t, last), choice]);
     return t;
   }
 
-  /** Board time in ms since GO (negative during the count-in). */
+  /** Board time in ms since GO (negative during the count-in, frozen during a HOLD). */
   boardTime(): number | null {
-    return this.local ? this.perfNow() - this.local.goAt : null;
+    const r = this.local;
+    if (!r) return null;
+    return r.heldAt !== null ? r.heldBoardMs : this.perfNow() - r.goAt - r.heldMs;
+  }
+
+  /** HOLD budget left in this micro-round, ms. */
+  holdBudgetLeft(): number {
+    const r = this.local;
+    if (!r) return HOLD_BUDGET_MS;
+    const open = r.heldAt !== null ? this.perfNow() - r.heldAt : 0;
+    return Math.max(0, HOLD_BUDGET_MS - r.heldMs - open);
+  }
+
+  /**
+   * Personal HOLD: freeze only my board (the pause button, or the app going to
+   * the background). The room and every other board keep going.
+   */
+  hold(reason: 'background' | 'manual' = 'manual'): boolean {
+    const r = this.local;
+    if (!r || r.ended || r.heldAt !== null || this.state.phase !== 'playing') return false;
+    const t = this.perfNow() - r.goAt - r.heldMs;
+    if (t < 0 || t >= r.durationMs) return false;
+    r.heldAt = this.perfNow();
+    r.heldBoardMs = Math.round(t);
+    this.clearTimers(this.roundTimers);
+    const budgetLeftMs = this.holdBudgetLeft();
+    // A manual hold past the budget hands the seat over by itself; a background
+    // hold is settled on return (JS may be suspended until then).
+    this.holdTimers.push(this.setTimer(() => { if (this.local === r && r.heldAt !== null) void this.handToGhost('hold'); }, budgetLeftMs + 50));
+    this.set({ ...this.state, hold: { reason, since: this.now(), budgetLeftMs, resumeAt: null } });
+    this.log('hold', { reason, boardMs: r.heldBoardMs, budgetLeftMs });
+    return true;
+  }
+
+  /** Back from a HOLD: a quick 3-2-1 inside the budget, else the ghost has the seat. */
+  release(): void {
+    const r = this.local;
+    if (!r || r.heldAt === null || !this.state.hold || this.state.hold.resumeAt !== null) return;
+    const spent = r.heldMs + (this.perfNow() - r.heldAt) + RESUME_COUNT_MS;
+    if (spent > HOLD_BUDGET_MS) {
+      void this.handToGhost('hold');
+      return;
+    }
+    this.clearTimers(this.holdTimers);
+    this.set({ ...this.state, hold: { ...this.state.hold, resumeAt: this.now() + RESUME_COUNT_MS } });
+    this.holdTimers.push(this.setTimer(() => this.resumeNow(r), RESUME_COUNT_MS));
+  }
+
+  private resumeNow(r: LocalRound): void {
+    if (this.local !== r || r.heldAt === null || r.ended) return;
+    const dur = Math.round(this.perfNow() - r.heldAt);
+    r.holds.push([r.heldBoardMs, dur, 'h']);
+    r.heldMs += dur;
+    r.heldAt = null;
+    this.set({ ...this.state, hold: null });
+    this.scheduleRoundTimers();
+    this.log('resume', { heldMs: r.heldMs });
   }
 
   /** Whisper my live score to the room at 4 Hz (display only). */
@@ -250,7 +343,7 @@ export class PartyClient {
     const at = this.now();
     if (at - this.lastWhisperAt < WHISPER_MS) return;
     this.lastWhisperAt = at;
-    const w: ProgressWhisper = { u: this.opts.userId, s: score, k: streak, t: Math.round(this.perfNow() - r.goAt), r: r.roundNo };
+    const w: ProgressWhisper = { u: this.opts.userId, s: score, k: streak, t: Math.round(this.boardTime() ?? 0), r: r.roundNo };
     try {
       channel.trigger('client-progress', w);
     } catch {
@@ -274,14 +367,25 @@ export class PartyClient {
   private applyRoom(room: RoomSnapshot): void {
     if (this.channelName && this.channelName !== `presence-party.${room.id}`) this.unsubscribeRoom();
     const before = this.state.room;
+    if (room.you?.round_id && room.you.round_token) this.tokens.set(room.you.round_id, room.you.round_token);
     this.set(applySnapshot(this.state, room));
     if (this.socket && !this.roomChannel) this.subscribeRoom(room.id);
     if (!before || before.version !== this.state.room?.version || before.id !== room.id) this.scheduleWakeups(this.state.room!);
     this.syncRound();
   }
 
-  private applyRoundPush(round: RoundSummary): void {
+  private applySeries(series: SeriesSummary | null | undefined): void {
+    const room = this.state.room;
+    if (!room || !series) return;
+    const cur = room.series;
+    if (cur && cur.id === series.id && cur.rounds_played > series.rounds_played) return;
+    if (cur && cur.series_no > series.series_no) return;
+    this.set({ ...this.state, room: { ...room, series } });
+  }
+
+  private applyRoundPush(round: RoundSummary, series?: SeriesSummary | null): void {
     this.set(applyRound(this.state, round));
+    this.applySeries(series);
     if (this.state.room) this.scheduleWakeups(this.state.room);
     this.syncRound();
   }
@@ -301,10 +405,16 @@ export class PartyClient {
       let lateStart = false;
       const late = nowPerf - goAt;
       const alreadyIn = room.you?.round_id === round.id && room.you.submitted;
-      if (late > MAX_LATE_START_MS || alreadyIn) {
-        // Too late to play fairly inside the submit window: the ghost takes this one.
-        this.local = { roundId: round.id, roundNo: round.round_no, seed: round.seed, spawns: [], durationMs: round.duration_ms, goAt, lateStart: true, taps: [], ended: true, submitted: alreadyIn };
-        if (!alreadyIn) void this.submit(true, 0);
+      const sim = this.simFor(round.game);
+      const base = {
+        roundId: round.id, roundNo: round.round_no, game: round.game, simVersion: round.sim_version, seed: round.seed,
+        durationMs: round.duration_ms, taps: [] as SimTap[], holds: [] as HoldSpan[], heldMs: 0, heldAt: null, heldBoardMs: 0,
+      };
+      if (late > MAX_LATE_START_MS || alreadyIn || !sim) {
+        // Too late to play fairly inside the submit window, or a game this build
+        // has no board for: the ghost takes this one.
+        this.local = { ...base, spawns: [], board: null, goAt, lateStart: true, ended: true, submitted: alreadyIn };
+        if (!alreadyIn) void this.submit(true, 0, 'left');
         this.set({ ...this.state, ghostedRoundId: round.id });
         return;
       }
@@ -312,10 +422,13 @@ export class PartyClient {
         goAt = nowPerf + LATE_COUNT_IN_MS;
         lateStart = late > 0;
       }
+      const board = sim.build(round.seed);
       this.local = {
-        roundId: round.id, roundNo: round.round_no, seed: round.seed, spawns: buildTimeline(round.seed),
-        durationMs: round.duration_ms, goAt, lateStart, taps: [], ended: false, submitted: false,
+        ...base, board, spawns: round.game === 'bonk_race' ? (board as Spawn[]) : [],
+        goAt, lateStart, ended: false, submitted: false,
       };
+      this.clearTimers(this.holdTimers);
+      if (this.state.hold) this.set({ ...this.state, hold: null });
       this.log('round scheduled', { round: round.round_no, inMs: Math.round(goAt - nowPerf), lateStart });
       this.scheduleRoundTimers();
     }
@@ -333,37 +446,73 @@ export class PartyClient {
     if (!r) return;
     const nowPerf = this.perfNow();
     this.roundTimers.push(this.setTimer(() => this.set({ ...this.state }), Math.max(0, r.goAt - nowPerf)));
-    this.roundTimers.push(this.setTimer(() => void this.finishRound(), Math.max(0, r.goAt + r.durationMs - nowPerf + 60)));
+    this.roundTimers.push(this.setTimer(() => void this.finishRound(), Math.max(0, r.goAt + r.heldMs + r.durationMs - nowPerf + 60)));
   }
 
   private async finishRound(): Promise<void> {
     const r = this.local;
-    if (!r || r.ended) return;
+    if (!r || r.ended || r.heldAt !== null) return;
     r.ended = true;
     this.set({ ...this.state });
     await this.submit(false, r.durationMs);
   }
 
-  /** Backgrounded or leaving mid-round: my taps so far, then my ghost. */
-  private async handToGhost(): Promise<void> {
+  /** Over the HOLD budget or leaving mid-round: my taps so far, then my ghost. */
+  private async handToGhost(stop: StopReason): Promise<void> {
     const r = this.local;
     if (!r || r.ended) return;
     r.ended = true;
-    const until = Math.max(0, Math.min(r.durationMs, Math.round(this.perfNow() - r.goAt)));
-    this.set({ ...this.state, ghostedRoundId: r.roundId });
-    await this.submit(true, until);
+    let until: number;
+    if (r.heldAt !== null) {
+      until = r.heldBoardMs;
+      r.holds.push([r.heldBoardMs, Math.round(this.perfNow() - r.heldAt), 'h']);
+      r.heldAt = null;
+    } else {
+      until = Math.round(this.perfNow() - r.goAt - r.heldMs);
+    }
+    until = Math.max(0, Math.min(r.durationMs, until));
+    this.clearTimers(this.holdTimers);
+    this.clearTimers(this.roundTimers);
+    this.set({ ...this.state, ghostedRoundId: r.roundId, hold: null });
+    this.log('ghost takes the seat', { stop, until });
+    await this.submit(true, until, stop);
   }
 
-  private async submit(partial: boolean, untilMs: number): Promise<void> {
+  private simFor(game: string): PartySim<any, any> | null {
+    const games = this.opts.games ?? DEFAULT_GAMES;
+    return games.includes(game) ? partySim(game) : null;
+  }
+
+  /** The private round token: from my snapshot or my private channel, fetched if neither arrived yet. */
+  private async tokenFor(roundId: string): Promise<string | null> {
+    const have = this.tokens.get(roundId);
+    if (have) return have;
+    const room = this.state.room;
+    if (!room) return null;
+    try {
+      const { data } = await this.opts.http.get<{ room: RoomSnapshot }>(`/party/rooms/${room.id}`);
+      this.applyRoom(data.room);
+    } catch {
+      // The submit still goes; without a token it can't count, and the ghost covers the seat.
+    }
+    return this.tokens.get(roundId) ?? null;
+  }
+
+  private async submit(partial: boolean, untilMs: number, stop: StopReason | null = null): Promise<void> {
     const r = this.local;
     if (!r || r.submitted) return;
     const taps = partial ? r.taps.filter(([t]) => t < untilMs) : r.taps;
+    const sim = partySim(r.game);
+    const claim = !partial && sim ? sim.resolve(r.board ?? sim.build(r.seed), taps) : null;
     const body = {
       taps,
       partial,
-      ...(partial ? { until_ms: untilMs } : {}),
-      client_score: partial ? null : resolve(r.spawns.length ? r.spawns : buildTimeline(r.seed), taps).score,
-      sim_version: BONK_RACE_VERSION,
+      ...(partial ? { until_ms: untilMs, stop } : {}),
+      holds: r.holds,
+      client_score: claim ? claim.score : null,
+      client_hash: claim && sim ? sim.resultHash(claim) : null,
+      sim_version: r.simVersion,
+      round_token: await this.tokenFor(r.roundId),
     };
     await this.opts.storage?.setItem(PENDING_KEY, JSON.stringify({ roundId: r.roundId, body, at: this.now() })).catch(() => {});
     for (let attempt = 0; attempt < 6 && !this.destroyed; attempt++) {
@@ -410,9 +559,10 @@ export class PartyClient {
     // iOS may suspend JS any moment after that.
     if (next === 'inactive') return;
     if (next !== 'active') {
-      if (this.local && !this.local.ended) void this.handToGhost();
+      if (this.local && !this.local.ended) this.hold('background');
       return;
     }
+    if (this.local?.heldAt != null && this.state.hold?.reason === 'background') this.release();
     if (this.state.room) {
       void this.clock.sync(3, 100).then(() => this.set({ ...this.state, clockOffsetMs: this.clock.offsetMs }));
       this.refresh();
@@ -431,8 +581,10 @@ export class PartyClient {
   private heartbeat = (): void => {
     const room = this.state.room;
     if (!room || this.destroyed) return;
-    const liveScore = this.local && !this.local.ended && this.state.connection !== 'live'
-      ? resolve(this.local.spawns, this.local.taps).score : undefined;
+    const r = this.local;
+    const sim = r ? partySim(r.game) : null;
+    const liveScore = r && sim && r.board && !r.ended && this.state.connection !== 'live'
+      ? sim.resolve(r.board, r.taps).score : undefined;
     this.opts.http.post<{ room: RoomSnapshot }>(`/party/rooms/${room.id}/heartbeat`, liveScore !== undefined ? { live_score: liveScore } : {})
       .then(({ data }) => this.applyRoom(data.room))
       .catch((e) => this.handleError(e));
@@ -499,6 +651,9 @@ export class PartyClient {
       if (connection === 'live' && !wasLive) this.refresh();
     });
     if (this.state.room) this.subscribeRoom(this.state.room.id);
+    // Round tokens arrive privately, never on the room channel.
+    this.playerChannel = socket.subscribe(`private-player.${this.opts.userId}`);
+    this.playerChannel.bind('round.token', (e: { round_id: string; round_token: string }) => this.tokens.set(e.round_id, e.round_token));
   }
 
   private subscribeRoom(roomId: string): void {
@@ -509,7 +664,8 @@ export class PartyClient {
     this.channelName = name;
     channel.bind('room.updated', (e: { room: RoomSnapshot }) => this.applyRoom(e.room));
     channel.bind('round.scheduled', (e: { round: RoundSummary }) => this.applyRoundPush(e.round));
-    channel.bind('round.finalized', (e: { round: RoundSummary }) => this.applyRoundPush(e.round));
+    channel.bind('round.finalized', (e: { round: RoundSummary; series?: SeriesSummary | null }) => this.applyRoundPush(e.round, e.series));
+    channel.bind('series.finished', (e: { series: SeriesSummary }) => this.applySeries(e.series));
     channel.bind('round.entry', (e: { user_id: number; partial: boolean; verified_score: number | null }) => {
       if (e.user_id === this.opts.userId || !e.partial) return;
       const prev = this.state.rivals[e.user_id];
@@ -531,12 +687,20 @@ export class PartyClient {
     this.loopTimers.forEach((t) => this.clearTimer(t));
     this.roundTimers.forEach((t) => this.clearTimer(t));
     this.wakeTimers.forEach((t) => this.clearTimer(t));
+    this.clearTimers(this.holdTimers);
     this.loopTimers = [];
     this.roundTimers = [];
     this.wakeTimers = [];
     this.unsubscribeRoom();
+    if (this.socket && this.playerChannel) this.socket.unsubscribe(`private-player.${this.opts.userId}`);
+    this.playerChannel = null;
     this.socket?.disconnect();
     this.socket = null;
+  }
+
+  private clearTimers(list: unknown[]): void {
+    list.forEach((t) => this.clearTimer(t));
+    list.length = 0;
   }
 
   private handleError(e: unknown): void {

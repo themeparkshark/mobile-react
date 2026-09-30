@@ -11,7 +11,7 @@ import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withRepeat
 import GameButton from '../../ui/GameButton';
 import { BRAND, FONT } from '../../ui/tokens';
 import type { EmoteId, RoomSnapshot } from '../net/partyTypes';
-import type { PartyState } from '../net/roomState';
+import { displayName, type PartyState } from '../net/roomState';
 import SeatAvatar from './SeatAvatar';
 import EmoteBar, { EmotePop } from './EmoteBar';
 import { SHARKS } from './partyArt';
@@ -69,7 +69,7 @@ function PartyLobby({ state, serverNow, onReady, onStart, onEmote, onLeave, titl
                   <SeatAvatar avatarUrl={m.avatar_url} team={m.team} size={68} me={m.id === state.userId} away={m.state === 'away'} bumpKey={emoteBy.get(m.id)?.key} />
                   {emoteBy.get(m.id) ? <EmotePop key={emoteBy.get(m.id)!.key} emote={emoteBy.get(m.id)!.emote} size={46} /> : null}
                 </View>
-                <Text numberOfLines={1} style={[styles.name, m.id === state.userId && styles.nameMe]}>{m.id === state.userId ? 'YOU' : m.name}</Text>
+                <Text numberOfLines={1} style={[styles.name, m.id === state.userId && styles.nameMe]}>{m.id === state.userId ? 'YOU' : displayName(state, m.id, m.name)}</Text>
                 <View style={styles.readyRow}>
                   <ReadyDot ready={m.ready} />
                   <Text style={styles.readyText}>{m.state === 'away' ? 'AWAY' : m.ready ? 'READY' : 'JOINED'}</Text>
