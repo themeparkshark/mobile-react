@@ -78,8 +78,14 @@ export const ART = {
   golden: require('../../assets/games/whack/v2/golden_pop.png'),
   angler: require('../../assets/games/whack/v2/angler.png'),
   helmet: require('../../assets/games/whack/v2/helmet.png'),
-  bruiser: require('../../assets/games/whack/v2/shark_fist_pump.png'),
-  bruiserDazed: require('../../assets/games/whack/v2/shark_dizzy.png'),
+  // Pipeline art (gate-passed): Bruiser Finn with the gold belt, lure-only angler tell, angry chomp, golden dazed, splats.
+  bruiser: require('../../assets/games/whack/v2/bruiser_pop.png'),
+  bruiserDazed: require('../../assets/games/whack/v2/bruiser_dazed.png'),
+  anglerPeek: require('../../assets/games/whack/v2/angler_peek.png'),
+  anglerAngry: require('../../assets/games/whack/v2/angler_angry.png'),
+  goldenDazed: require('../../assets/games/whack/v2/golden_dazed.png'),
+  splatInk: require('../../assets/games/whack/v2/splat_ink.png'),
+  splatCandy: require('../../assets/games/whack/v2/splat_candy.png'),
   puffer: require('../../assets/games/whack/v2/pufferfish.png'),
   pufferPuffed: require('../../assets/games/whack/v2/pufferfish_puffed.png'),
   impactS: require('../../assets/games/whack/v2/fx_impact_s.png'),
@@ -109,12 +115,15 @@ export const THEME_BOX: Record<WhackThemeId, readonly [Box, Box, Box]> = {
   backlot: [[0.048, 0.176, 0.952, 0.864, 1.499], [0.042, 0.072, 0.972, 0.903, 0.915], [0.042, 0.07, 0.974, 0.879, 0.915]],
 };
 
-export const ART_BOX: Record<'golden' | 'angler' | 'helmet' | 'bruiser' | 'bruiserDazed' | 'puffer' | 'pufferPuffed' | 'foamFinger' | 'sunglasses', Box> = {
+export const ART_BOX: Record<'golden' | 'angler' | 'helmet' | 'bruiser' | 'bruiserDazed' | 'puffer' | 'pufferPuffed' | 'foamFinger' | 'sunglasses' | 'anglerPeek' | 'anglerAngry' | 'goldenDazed', Box> = {
   golden: [0.046, 0.036, 0.954, 0.964, 0.788],
   angler: [0.038, 0.04, 0.965, 0.96, 1.047],
   helmet: [0.038, 0.035, 0.962, 0.965, 0.91],
-  bruiser: [0.05, 0.036, 0.95, 0.964, 0.733],
-  bruiserDazed: [0.051, 0.036, 0.949, 0.964, 0.719],
+  bruiser: [0.038, 0.036, 0.96, 0.962, 0.955],
+  bruiserDazed: [0.042, 0.036, 0.958, 0.962, 0.873],
+  anglerPeek: [0.036, 0.065, 0.964, 0.935, 1.778],
+  anglerAngry: [0.036, 0.04, 0.964, 0.96, 1.088],
+  goldenDazed: [0.043, 0.036, 0.957, 0.964, 0.845],
   puffer: [0.035, 0.041, 0.965, 0.959, 1.176],
   pufferPuffed: [0.035, 0.036, 0.965, 0.961, 1.029],
   foamFinger: [0.043, 0.062, 0.928, 0.938, 0.871],

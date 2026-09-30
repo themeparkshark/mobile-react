@@ -22,7 +22,8 @@ import { ART, RIMS, THEMED_SHARK_FRAMES, type WhackTheme } from '../assets';
 import type { WhackSim } from '../sim';
 import type { BoardLayout } from './layout';
 import {
-  F_ANGLER, F_BRUISER, F_BRUISER_DAZED, F_DAZED, F_GOLDEN, F_PEEK, F_POP, F_PUFFED, F_PUFFER, PULSE_COLORS, type RenderState,
+  F_ANGLER, F_ANGLER_ANGRY, F_ANGLER_PEEK, F_BRUISER, F_BRUISER_DAZED, F_DAZED, F_GOLDEN, F_GOLDEN_DAZED, F_PEEK, F_POP, F_PUFFED, F_PUFFER,
+  PULSE_COLORS, type RenderState,
 } from './renderState';
 import { TIER_COLORS, TIER_MULT } from '../waves';
 
@@ -37,6 +38,7 @@ export interface BoardImages {
   bruiser: SkImage | null; bruiserDazed: SkImage | null; puffer: SkImage | null; puffed: SkImage | null;
   helmet: SkImage | null; glasses: SkImage | null; sweat: SkImage | null; star: SkImage | null; rim: SkImage | null;
   finger: SkImage | null; boss: SkImage | null; bg: SkImage | null;
+  anglerPeek: SkImage | null; anglerAngry: SkImage | null; goldenDazed: SkImage | null; splatInk: SkImage | null; splatCandy: SkImage | null;
 }
 
 export function useBoardImages(theme: WhackTheme, bossSrc: number | null): BoardImages {
@@ -47,6 +49,8 @@ export function useBoardImages(theme: WhackTheme, bossSrc: number | null): Board
     bruiserDazed: useImage(ART.bruiserDazed), puffer: useImage(ART.puffer), puffed: useImage(ART.pufferPuffed),
     helmet: useImage(ART.helmet), glasses: useImage(ART.sunglasses), sweat: useImage(ART.sweat), star: useImage(ART.dizzyStar),
     rim: useImage(RIMS[theme]), finger: useImage(ART.foamFinger), boss: useImage(bossSrc ?? ART.kraken), bg: useImage(ART.playfield),
+    anglerPeek: useImage(ART.anglerPeek), anglerAngry: useImage(ART.anglerAngry), goldenDazed: useImage(ART.goldenDazed),
+    splatInk: useImage(ART.splatInk), splatCandy: useImage(ART.splatCandy),
   };
 }
 
@@ -114,6 +118,9 @@ function pickFrame(code: number, im: BoardImages): SkImage | null {
     case F_BRUISER_DAZED: return im.bruiserDazed;
     case F_PUFFER: return im.puffer;
     case F_PUFFED: return im.puffed;
+    case F_ANGLER_PEEK: return im.anglerPeek;
+    case F_ANGLER_ANGRY: return im.anglerAngry;
+    case F_GOLDEN_DAZED: return im.goldenDazed;
     default: return null;
   }
 }
@@ -202,21 +209,10 @@ const Hole = React.memo(function Hole({ i, L, rs, tick, images }: { i: number; L
     const sc = rs.value.splat[i] >= 1 ? 1 : 0.2 + 0.7 * ((rs.value.tick % 40) / 40);
     return [{ translateX: cx }, { translateY: my - H * 0.25 }, { scale: sc }];
   });
-  const splatColor = useDerivedValue(() => (tick.value, rs.value.splatType[i] === 4 ? '#ff9ed2' : '#2f7fd0'));
-  const splatPath = useMemo(() => {
-    const p = Skia.Path.Make();
-    const R = L.rimW[i] * 0.62;
-    for (let k = 0; k <= 16; k++) {
-      const a = (k / 16) * Math.PI * 2;
-      const r = R * (k % 2 ? 0.78 : 1) * (1 + 0.08 * Math.sin(k * 2.3));
-      const px = Math.cos(a) * r;
-      const py = Math.sin(a) * r * 0.8;
-      if (k === 0) p.moveTo(px, py);
-      else p.lineTo(px, py);
-    }
-    p.close();
-    return p;
-  }, [L, i]);
+  // Splat art (pipeline, gate-passed): navy ink for the boss, cotton candy for duel sabotage.
+  const splatW = L.rimW[i] * 1.25;
+  const inkOp = useDerivedValue(() => (tick.value, rs.value.splatType[i] === 4 ? 0 : 1));
+  const candyOp = useDerivedValue(() => (tick.value, rs.value.splatType[i] === 4 ? 1 : 0));
 
   return (
     <Group transform={kick}>
@@ -252,10 +248,8 @@ const Hole = React.memo(function Hole({ i, L, rs, tick, images }: { i: number; L
         </Group>
       ) : null}
       <Group transform={splatT} opacity={splatOp}>
-        <Path path={splatPath} style="stroke" strokeWidth={8} color={NAVY} />
-        <Path path={splatPath} color={splatColor} />
-        <Circle cx={-L.rimW[i] * 0.16} cy={-L.rimW[i] * 0.14} r={L.rimW[i] * 0.07} color="#ffffff" opacity={0.7} />
-        <Circle cx={-L.rimW[i] * 0.03} cy={-L.rimW[i] * 0.2} r={L.rimW[i] * 0.035} color="#ffffff" opacity={0.7} />
+        {im.splatInk ? <Image image={im.splatInk} x={-splatW / 2} y={-splatW * 0.45} width={splatW} height={splatW * 0.9} fit="contain" opacity={inkOp} /> : null}
+        {im.splatCandy ? <Image image={im.splatCandy} x={-splatW / 2} y={-splatW * 0.45} width={splatW} height={splatW * 0.9} fit="contain" opacity={candyOp} /> : null}
       </Group>
     </Group>
   );

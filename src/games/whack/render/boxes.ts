@@ -5,7 +5,9 @@
  */
 
 import { ART_BOX, THEME_BOX, type WhackTheme } from '../assets';
-import { F_ANGLER, F_BRUISER, F_BRUISER_DAZED, F_DAZED, F_GOLDEN, F_PEEK, F_POP, F_PUFFED, F_PUFFER } from './renderState';
+import {
+  F_ANGLER, F_ANGLER_ANGRY, F_ANGLER_PEEK, F_BRUISER, F_BRUISER_DAZED, F_DAZED, F_GOLDEN, F_GOLDEN_DAZED, F_PEEK, F_POP, F_PUFFED, F_PUFFER,
+} from './renderState';
 
 export function boxesFor(theme: WhackTheme): number[][] {
   const t = THEME_BOX[theme];
@@ -19,5 +21,8 @@ export function boxesFor(theme: WhackTheme): number[][] {
   b[F_BRUISER_DAZED] = [...ART_BOX.bruiserDazed];
   b[F_PUFFER] = [...ART_BOX.puffer];
   b[F_PUFFED] = [...ART_BOX.pufferPuffed];
+  b[F_ANGLER_PEEK] = [...ART_BOX.anglerPeek];
+  b[F_ANGLER_ANGRY] = [...ART_BOX.anglerAngry];
+  b[F_GOLDEN_DAZED] = [...ART_BOX.goldenDazed];
   return b;
 }

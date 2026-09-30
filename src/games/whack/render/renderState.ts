@@ -21,6 +21,9 @@ export const F_GOLDEN = 3;
 export const F_ANGLER = 4;
 export const F_BRUISER = 5;
 export const F_BRUISER_DAZED = 6;
+export const F_ANGLER_PEEK = 9;
+export const F_ANGLER_ANGRY = 10;
+export const F_GOLDEN_DAZED = 11;
 export const F_PUFFER = 7;
 export const F_PUFFED = 8;
 
@@ -247,11 +250,12 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
         rs.pulse[i] = p < 0.5 ? p * 1.6 : (1 - p) * 1.6;
         rumble = wob * (k === K_BRUISER ? 4 : 2.5) * Math.sin(gt * 0.1257);
         if (k === K_ANGLER) {
-          // Only the lure bulb rises and pulses (4 Hz).
-          const r = 0.16 * outQuad(p);
-          rs.frame[i] = F_ANGLER;
-          placeImage(rs, i, boxes[F_ANGLER], cx, my + mry + (1 - r) * bigH, bigH);
-          rs.sy[i] = 1 + 0.04 * Math.sin(gt * 0.0251);
+          // Only the lure bulb and stalk rise (the lure-only frame) and pulse at 4 Hz.
+          const lh = bigH * 0.62;
+          const r = 0.7 * outQuad(p);
+          rs.frame[i] = F_ANGLER_PEEK;
+          placeImage(rs, i, boxes[F_ANGLER_PEEK], cx, my + mry + (1 - r) * lh, lh);
+          rs.sy[i] = 1 + 0.05 * Math.sin(gt * 0.0251);
         } else if (k === K_GOLDEN || k === K_BRUISER || k === K_PUFFER) {
           const r = 0.3 * outQuad(p);
           rs.frame[i] = k === K_GOLDEN ? F_GOLDEN : k === K_BRUISER ? F_BRUISER : F_PUFFER;
@@ -309,7 +313,7 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
       } else if (ph === P_BONKED) {
         const grade = s.hGrade[i];
         const isAngler = k === K_ANGLER || k === K_PUFFER;
-        let frame = k === K_GOLDEN ? F_GOLDEN : k === K_BRUISER ? F_BRUISER_DAZED : isAngler ? (k === K_PUFFER ? F_PUFFED : F_ANGLER) : F_DAZED;
+        let frame = k === K_GOLDEN ? F_GOLDEN_DAZED : k === K_BRUISER ? F_BRUISER_DAZED : isAngler ? (k === K_PUFFER ? F_PUFFED : F_ANGLER_ANGRY) : F_DAZED;
         // Coin bubble (angler in fever): pops upward and fades.
         let sink = 0;
         if (a < 160) {
