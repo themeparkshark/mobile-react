@@ -145,6 +145,8 @@ export default function WaitCard({
   const ringProgress = !rewardTrackingAvailable ? 0
     : atCap ? 1 : Math.max(0, Math.min(1, countdown.progressSeconds / interval));
   const earned = creditedParts ?? 0;
+  // Games still work everywhere; say plainly when this ride pays no Parts.
+  const noPartsHere = !completed && !rewardTrackingAvailable && (lineRewardsReady === false || rewardUnavailable);
   // One plain status line; the fine print lives behind the details toggle.
   const headline = completed ? 'Session complete' : paused
     ? 'Paused'
@@ -178,7 +180,8 @@ export default function WaitCard({
           <Image source={require('../../../../assets/images/water_background.png')}
             style={styles.art} resizeMode="cover" />
         )}
-        <LinearGradient colors={['rgba(8,121,202,0.3)', 'rgba(7,104,185,0.9)']} style={StyleSheet.absoluteFill} />
+        {/* Bright water, never a dark panel: the ride art only tints through. */}
+        <LinearGradient colors={['rgba(38,178,240,0.86)', 'rgba(16,142,222,0.92)']} style={StyleSheet.absoluteFill} />
       </View>
 
       <View style={[styles.content, compact && styles.compactContent]}>
@@ -197,9 +200,11 @@ export default function WaitCard({
         </View>
 
         {compact ? <View style={styles.compactMeter}>
-          <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />
+          {noPartsHere ? <GameIcon name="queue" size={34} />
+            : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
             <Text style={styles.compactHeadline}>{headline}{rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}</Text>
+            {noPartsHere && <Text style={styles.compactNote} numberOfLines={1}>No Parts at this ride</Text>}
             {partBurst > 0 && <Text style={styles.compactBurst}>+{partBurst} RIDE PART{partBurst === 1 ? '' : 'S'}!</Text>}
           </View>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
@@ -290,6 +295,7 @@ export default function WaitCard({
 }
 
 const styles = StyleSheet.create({
+  compactNote: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 13, lineHeight: 16, marginTop: 1 },
   compactContent: { paddingTop: 6 },
   compactRideName: { fontSize: 19, lineHeight: 22, marginRight: 7 },
   compactMeter: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2 },

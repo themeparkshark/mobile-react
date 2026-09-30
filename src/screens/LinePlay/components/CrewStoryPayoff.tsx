@@ -21,9 +21,23 @@ import { crewStoryBeats, type CrewStoryBeat } from '../../../services/lineplay/c
 import type { CrewRelayProgress } from '../../../services/lineplay/crewRelay';
 
 const BEAT_MS = 520;
+const SHARK = 64;
 const PROP: Record<CrewStoryBeat['role'], GameIconName> = {
   navigator: 'map', lookout: 'search', decoder: 'lock', captain: 'crown',
 };
+/**
+ * Where each prop sits on the classic shark (it faces left): the crown is worn
+ * on the head, the map and lock are held in the front fin, the spyglass is up
+ * at the eye. Fractions of the shark box; mirrored when a shark is flipped.
+ */
+const ANCHOR: Record<CrewStoryBeat['role'], { x: number; y: number; size: number; tilt: number }> = {
+  captain: { x: 0.38, y: -0.1, size: 30, tilt: -8 },
+  navigator: { x: 0.0, y: 0.5, size: 30, tilt: -14 },
+  lookout: { x: -0.06, y: 0.14, size: 30, tilt: 18 },
+  decoder: { x: 0.04, y: 0.52, size: 28, tilt: 10 },
+};
+/** Each player strikes a different pose: alternate facing and a small lean. */
+const POSE = [{ flip: false, lean: -6 }, { flip: true, lean: 5 }, { flip: false, lean: 8 }, { flip: true, lean: -4 }];
 
 function Beat({ beat, index, play, reducedMotion }: { beat: CrewStoryBeat; index: number; play: number; reducedMotion: boolean }) {
   const hop = useSharedValue(reducedMotion ? 1 : 0);
@@ -45,9 +59,20 @@ function Beat({ beat, index, play, reducedMotion }: { beat: CrewStoryBeat; index
     transform: [{ translateY: (1 - hop.value) * 36 }, { scaleY: hop.value < 0 ? 1 + hop.value : 1 }],
   }));
   const propStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, prop.value), transform: [{ scale: prop.value }] }));
+  const pose = POSE[index % POSE.length];
+  const anchor = ANCHOR[beat.role];
+  const x = pose.flip ? 1 - anchor.x - anchor.size / SHARK : anchor.x;
   return <View style={styles.beat} accessible accessibilityLabel={`${beat.who}: ${beat.action}`}>
-    <Animated.View style={[styles.prop, propStyle]}><GameIcon name={PROP[beat.role]} size={34} /></Animated.View>
-    <Animated.View style={sharkStyle}><GameIcon name="shark" size={60} /></Animated.View>
+    <Animated.View style={[styles.figure, sharkStyle]}>
+      <View style={{ transform: [{ scaleX: pose.flip ? -1 : 1 }, { rotate: `${pose.lean}deg` }] }}>
+        <GameIcon name="shark" size={SHARK} />
+      </View>
+      <Animated.View style={[styles.prop, { left: x * SHARK, top: anchor.y * SHARK }, propStyle]}>
+        <View style={{ transform: [{ rotate: `${pose.flip ? -anchor.tilt : anchor.tilt}deg` }] }}>
+          <GameIcon name={PROP[beat.role]} size={anchor.size} />
+        </View>
+      </Animated.View>
+    </Animated.View>
     <Text style={styles.who} numberOfLines={1}>{beat.who}</Text>
     <Text style={styles.action} numberOfLines={2}>{beat.action}</Text>
   </View>;
@@ -118,7 +143,8 @@ const styles = StyleSheet.create({
   kicker: { fontFamily: 'Knockout', fontSize: 13, letterSpacing: 0.8, color: BRAND.blue, textAlign: 'center' },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   beat: { flex: 1, alignItems: 'center' },
-  prop: { height: 36, justifyContent: 'flex-end', marginBottom: -6, zIndex: 1 },
+  figure: { width: SHARK, height: SHARK, marginTop: 10 },
+  prop: { position: 'absolute', zIndex: 1 },
   who: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, marginTop: 2 },
   action: { fontFamily: 'Knockout', fontSize: 13, lineHeight: 15, color: BRAND.navySoft, textAlign: 'center',
     paddingHorizontal: 2 },

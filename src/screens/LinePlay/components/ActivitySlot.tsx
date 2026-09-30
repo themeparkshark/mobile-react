@@ -28,6 +28,7 @@ import type { NavigationPanelProgress } from '../../../services/lineplay/navigat
 import type { CircuitTheme } from '../../../services/lineplay/circuitTheme';
 import { factSourceLine } from '../../../services/lineplay/labels';
 import { BRAND, GameButton, GameIcon, SharkLoader } from '../../../ui';
+import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 
 export interface ActivitySlotProps {
   readonly item: ActivityItem;
@@ -87,7 +88,7 @@ function ActivityHero({ kicker, title, teacher = false, navigator = false }: { k
       <Text style={styles.heroKicker}>{kicker}</Text>
       <Text style={styles.heroTitle}>{title}</Text>
     </View>
-    <Image source={navigator && !artFailed ? require('../../../../assets/images/screens/lineplay/space-navigation-shark-v2.png') : teacher
+    <Image source={navigator && !artFailed ? SPACE_NAVIGATOR_ART : teacher
       ? require('../../../../assets/images/tutorial/teacher-shark.png')
       : require('../../../../assets/images/screens/pin-collections/shark.png')}
       resizeMode="contain" onError={() => setArtFailed(true)} style={styles.shark}

@@ -27,6 +27,7 @@ import { BRAND, GameButton, GameIcon } from '../../../ui';
 import { createNavigationPanel, createNavigationPanelProgress, navigationPanelStars, nextNavigationRepair,
   traceNavigationPanel, type NavigationPanelProgress } from '../../../services/lineplay/navigationPanel';
 import { circuitThemeFor, type CircuitTheme } from '../../../services/lineplay/circuitTheme';
+import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
 
 interface Props {
   readonly seed: number;
@@ -43,7 +44,7 @@ interface Props {
   readonly nextLabel?: string;
 }
 
-const SPACE_SHARK = require('../../../../assets/images/screens/lineplay/space-navigation-shark-v2.png');
+const SPACE_SHARK = SPACE_NAVIGATOR_ART;
 const TEACHER_SHARK = require('../../../../assets/images/tutorial/teacher-shark.png');
 const PORTS = [[1, 50, 0, 'north'], [2, 100, 50, 'east'],
   [4, 50, 100, 'south'], [8, 0, 50, 'west']] as const;
@@ -125,6 +126,8 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   const [showHint, setShowHint] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
   const [boardWidth, setBoardWidth] = useState(0);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [headerHeight, setHeaderHeight] = useState(0);
   const reducedMotion = useReducedGameMotion();
   const reveal = useSharedValue(trace.solved ? 1 : 0);
   const shake = useSharedValue(0);
@@ -199,42 +202,56 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
     : trace.solved ? `3 / 3 ${look.relayNoun} linked · exit online`
       : hint != null ? 'Turn the gold-edged tile to reconnect the route.'
         : trace.signals === 3 ? `All ${look.relayNoun} linked! Now reach the exit.`
-          : `${trace.signals} / 3 ${look.relayNoun} linked · follow the glow`;
+          : trace.signals === 0 && progress.taps === 0
+            ? `Tap tiles to turn them. Link 3 ${look.relayNoun} to the exit.`
+            : `${trace.signals} / 3 ${look.relayNoun} linked · follow the glow`;
+
+  // One thumb, one glance: the whole board and both ports fit above the
+  // chapter rail. Size the tiles from the height this page really has.
+  const boardSide = boardSideFor(viewport, headerHeight);
 
   return <ScrollView ref={scroll} style={styles.scroll} contentContainerStyle={styles.card}
+    onLayout={event => {
+      const { width, height } = event.nativeEvent.layout;
+      if (width !== viewport.width || height !== viewport.height) setViewport({ width, height });
+    }}
     onContentSizeChange={() => {
       if (!scrollToPayoff.current || !scroll.current) return;
       scrollToPayoff.current = false;
       scroll.current.scrollToEnd({ animated: !reducedMotion });
     }}>
-    <LinearGradient colors={[BRAND.blueBright, BRAND.blue]} style={styles.hero}>
-      <View style={styles.heroCopy}>
-        <Text style={styles.kicker}>{kicker}</Text>
-        <Text style={styles.title}>{trace.solved ? look.solvedTitle : look.repairTitle}</Text>
-        <View style={styles.relayRow} accessible
-          accessibilityLabel={`${trace.signals} of 3 ${look.relayNoun} connected`}>
-          {[0, 1, 2].map(slot => <GameIcon key={slot} name="star" size={22}
-            mono={slot < trace.signals ? undefined : '#8fb9e0'} />)}
-          <Text style={styles.heroHint}>{panel.name} · {size}x{size}</Text>
+    <View onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
+      <LinearGradient colors={[BRAND.blueBright, BRAND.blue]}
+        style={[styles.hero, !trace.solved && styles.heroCompact]}>
+        <View style={styles.heroCopy}>
+          <Text style={styles.kicker} numberOfLines={1}>{kicker}</Text>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, !trace.solved && styles.titleCompact]} numberOfLines={1}>
+              {trace.solved ? look.solvedTitle : look.repairTitle}</Text>
+            <View style={styles.relayRow} accessible
+              accessibilityLabel={`${trace.signals} of 3 ${look.relayNoun} connected, ${panel.name}, ${size} by ${size}`}>
+              {[0, 1, 2].map(slot => <GameIcon key={slot} name="star" size={trace.solved ? 22 : 18}
+                mono={slot < trace.signals ? undefined : '#8fb9e0'} />)}
+            </View>
+          </View>
         </View>
-      </View>
-      <Image source={space && !artFailed ? SPACE_SHARK : TEACHER_SHARK}
-        onError={() => setArtFailed(true)} style={styles.shark} contentFit="contain"
-        accessibilityLabel="Your shark points toward the circuit puzzle" />
-    </LinearGradient>
-
-    <View style={styles.brief}>
-      <Pressable style={[styles.hintButton, showHint && styles.hintButtonOn]} disabled={locked}
-        onPress={() => setShowHint(value => !value)} accessibilityRole="button"
-        accessibilityLabel={showHint ? 'Hide the circuit clue' : 'Show a clue for this circuit'}
-        accessibilityState={{ disabled: locked, expanded: showHint }} hitSlop={6}>
-        <GameIcon name="search" size={26} />
-      </Pressable>
-      <Text style={styles.instruction}>Tap a tile to turn it. Link all three {look.relayNoun} to the exit.</Text>
+        {trace.solved ? <Image source={space && !artFailed ? SPACE_SHARK : TEACHER_SHARK}
+          onError={() => setArtFailed(true)} style={styles.shark} contentFit="contain"
+          accessibilityLabel="Your shark cheers the repaired circuit" /> : (
+          <Pressable style={[styles.hintButton, showHint && styles.hintButtonOn]} disabled={locked}
+            onPress={() => setShowHint(value => !value)} accessibilityRole="button"
+            accessibilityLabel={showHint ? 'Hide the circuit clue' : 'Show a clue for this circuit'}
+            accessibilityHint={`Tap a tile to turn it. Link all three ${look.relayNoun} to the exit.`}
+            accessibilityState={{ disabled: locked, expanded: showHint }} hitSlop={6}>
+            <GameIcon name="search" size={24} />
+          </Pressable>
+        )}
+      </LinearGradient>
     </View>
 
     <Animated.View style={[styles.panel, shakeStyle]}>
-      <View style={styles.boardFrame} onLayout={event => setBoardWidth(event.nativeEvent.layout.width)}>
+      <View style={[styles.boardFrame, boardSide != null && { width: boardSide, maxWidth: boardSide }]}
+        onLayout={event => setBoardWidth(event.nativeEvent.layout.width)}>
         <View style={[styles.port, styles.portIn, { top: `${(Math.floor(panel.entry / size) + 0.5) * (100 / size)}%` }]}
           accessible={false} />
         <View style={[styles.port, styles.portOut, trace.reachesExit && { backgroundColor: look.flow },
@@ -279,24 +296,38 @@ export default function NavigationPanelCard({ seed, progress: saved, completed, 
   </ScrollView>;
 }
 
+/** Room the card spends around the board: card and panel padding, borders, status line. */
+const BOARD_CHROME = 12 * 2 + 3 * 2 + 10 + 12 * 2 + 3 * 2 + 48;
+
+/**
+ * The widest board that fits both the page width (ports stick out 19pt each
+ * side) and the height left under the header, or null before layout.
+ */
+export function boardSideFor(viewport: { width: number; height: number }, headerHeight: number): number | null {
+  if (viewport.width <= 0 || viewport.height <= 0) return null;
+  const byWidth = viewport.width - (12 + 3) * 2 - (22 + 3) * 2;
+  const byHeight = viewport.height - headerHeight - BOARD_CHROME;
+  return Math.max(150, Math.min(300, byWidth, byHeight));
+}
+
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   card: { padding: 12, borderRadius: 22, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.cream },
   hero: { minHeight: 92, borderRadius: 16, flexDirection: 'row', alignItems: 'center', overflow: 'hidden',
     paddingLeft: 14, borderWidth: 3, borderColor: BRAND.navy },
-  heroCopy: { flex: 1, zIndex: 1, paddingVertical: 9 },
+  heroCompact: { minHeight: 0, paddingRight: 8 },
+  heroCopy: { flex: 1, zIndex: 1, paddingVertical: 8 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  titleCompact: { fontSize: 19, lineHeight: 23, flexShrink: 1 },
   kicker: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.goldLight, letterSpacing: 0.8 },
   title: { fontFamily: 'Shark', fontSize: 23, lineHeight: 27, color: BRAND.white, marginTop: 3,
     textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  relayRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 6 },
-  heroHint: { fontFamily: 'Knockout', fontSize: 12, color: '#d9f0ff', marginLeft: 6 },
+  relayRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 3 },
   shark: { width: 84, height: 92, marginRight: -6, alignSelf: 'flex-end' },
-  brief: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 10 },
-  hintButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: BRAND.gold, alignItems: 'center',
+  hintButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: BRAND.gold, alignItems: 'center',
     justifyContent: 'center', borderWidth: 3, borderColor: BRAND.navy, borderBottomWidth: 5 },
   hintButtonOn: { backgroundColor: BRAND.goldLight, borderBottomWidth: 3 },
-  instruction: { flex: 1, fontFamily: 'Knockout', fontSize: 16, lineHeight: 20, color: BRAND.navy },
-  panel: { backgroundColor: BRAND.blueBright, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy,
+  panel: { marginTop: 10, backgroundColor: BRAND.blueBright, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy,
     paddingVertical: 12, paddingHorizontal: 22 },
   boardFrame: { gap: 6, width: '100%', maxWidth: 300, alignSelf: 'center' },
   row: { flexDirection: 'row', gap: 6 },
