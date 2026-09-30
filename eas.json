@@ -1,49 +1,40 @@
 {
   "cli": {
-    "version": ">= 3.1.1"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
-      "developmentClient": true,
       "distribution": "internal",
+      "node": "20.18.0",
       "ios": {
         "simulator": true,
-        "resourceClass": "m-medium"
-      },
-      "env": {
-        "API_URL": "https://dev-app.themeparkshark.com/api"
+        "buildConfiguration": "Debug",
+        "resourceClass": "m-medium",
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "channel": "development"
     },
     "development-device": {
-      "developmentClient": true,
       "distribution": "internal",
+      "node": "20.18.0",
       "ios": {
-        "resourceClass": "m-medium"
-      },
-      "env": {
-        "API_URL": "https://dev-app.themeparkshark.com/api"
+        "buildConfiguration": "Debug",
+        "resourceClass": "m-medium",
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "channel": "development"
     },
-    "preview": {
-      "distribution": "store",
-      "env": {
-        "API_URL": "https://dev-app.themeparkshark.com/api"
-      },
-      "ios": {
-        "resourceClass": "m-medium"
-      },
-      "channel": "preview"
-    },
     "production": {
+      "distribution": "store",
+      "autoIncrement": true,
       "env": {
         "API_URL": "https://tps-api.on-forge.com/api"
       },
-      "node": "18.18.0",
+      "node": "20.18.0",
       "ios": {
         "resourceClass": "m-medium",
-        "image": "macos-sequoia-15.3-xcode-16.2"
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "channel": "production",
       "cache": {
@@ -53,14 +44,13 @@
     "testflight": {
       "extends": "production",
       "distribution": "store",
+      "autoIncrement": true,
       "env": {
-        "API_URL": "https://jackets-gap-families-country.trycloudflare.com/api",
-        "EXPO_PUBLIC_API_URL": "https://jackets-gap-families-country.trycloudflare.com/api"
+        "API_URL": "https://tps-api.on-forge.com/api"
       },
-      "node": "20.18.0",
       "ios": {
         "resourceClass": "m-medium",
-        "image": "latest"
+        "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "channel": "testflight"
     }

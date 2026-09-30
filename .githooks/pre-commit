@@ -1,0 +1,10 @@
+#!/bin/sh
+# Theme Park Shark app pre-commit gate. Enable once per clone:
+#   npm run hooks:install
+# Skip in an emergency with: git commit --no-verify
+set -e
+if ! git diff --cached --quiet -- '*.ts' '*.tsx' '*.js' '*.cjs' '*.json' 2>/dev/null; then
+  echo "pre-commit: typecheck + node tests"
+  npm run --silent typecheck
+  npm test --silent >/dev/null 2>&1 || npm test
+fi
