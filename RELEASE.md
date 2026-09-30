@@ -3,6 +3,25 @@
 Every build, OTA update and store upload goes through Dustin. Nothing in this
 file authorizes a prod deploy, TestFlight upload or App Store submission.
 
+## Release blockers (open until each is checked off)
+
+No TestFlight or App Store build ships while any of these is open.
+
+- [ ] **Prod core-loop deploy (Dustin).** `tools/check-api-target.cjs testflight`
+  fails until `https://tps-api.on-forge.com/api/me/trip-goal` and
+  `/me/task-attempts/0` answer 401 instead of 404.
+- [ ] **Dark navy launch frame (WS8, `src/screens/Auth/LoginScreen.tsx`).** The
+  login screen paints `#09268f` behind its video, so one or two dark frames
+  sit between the blue splash and the login loop (2650ms in
+  `screens/ws9/11-release-launch-sequence.png`). Fix: `#0768B9` background
+  and `assets/images/splash-bg.png` under the video as its poster. Then
+  re-shoot the 50ms frame sheet of a Release cold start and check it goes
+  blue straight into the loop.
+- [ ] **Sentry DSN (Dustin).** `EXPO_PUBLIC_SENTRY_DSN` as an EAS secret per
+  store profile, or release crashes report nothing.
+- [ ] **App Store Connect privacy label** matches `plugins/privacy-manifest.json`,
+  and Dustin has read the purpose strings below.
+
 ## Everyday gates
 
 - `npm run verify` runs `tsc --noEmit` and the node tests (`tools/tests`).
@@ -172,5 +191,10 @@ No Face ID string: the app never uses biometrics (`expo-secure-store` has
 `faceIDPermission: false`). The microphone string stays only because
 expo-camera links audio capture APIs, which App Store Connect's binary scan
 flags as ITMS-90683 when the key is missing; the app never asks for the
-microphone. If a TestFlight upload goes through without that warning after
+microphone. The camera string leads with AR (ARView), which exists whatever
+WS4 decides about the Snap the Ride game; if Snap the Ride leaves the pool,
+the "ride photo when a game asks" clause can go. Photos add-only access is
+real: iOS asks for it when a player taps Save Image in the share sheet on the
+park day or ride card (expo-sharing), and the app crashes there without the
+key. If a TestFlight upload goes through without that warning after
 expo-camera is configured with `microphonePermission: false`, drop the key.

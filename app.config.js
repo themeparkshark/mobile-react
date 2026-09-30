@@ -17,17 +17,17 @@ const PURPOSE_STRINGS = {
   NSLocationAlwaysAndWhenInUseUsageDescription: LOCATION_ALWAYS,
   NSLocationAlwaysUsageDescription: LOCATION_ALWAYS,
   NSCameraUsageDescription:
-    'Theme Park Shark uses the camera for ride photo challenges and to show your coins and pins in the world around you. Photos stay on your phone unless you share them.',
+    'Theme Park Shark uses the camera to show your coins and pins in the world around you, and for a ride photo when a game asks for one. Photos stay on your phone unless you share them.',
   // Kept only because expo-camera links AVCaptureDevice audio capture
   // (CameraPermissionsRequester.swift, CameraView.swift), which App Store
   // Connect's binary scan flags as ITMS-90683 when this key is missing. The app
   // never asks for the microphone, so players never see this string.
   NSMicrophoneUsageDescription:
-    'Theme Park Shark never records audio. Your microphone stays off during ride photos, games and everything else in the app.',
+    'Theme Park Shark never records audio and never turns on your microphone. The camera features take still photos only.',
   NSMotionUsageDescription:
     'Theme Park Shark uses motion so your 3D coins and pins tilt as you move your phone.',
   NSPhotoLibraryAddUsageDescription:
-    'Theme Park Shark saves the park day and ride cards you choose to keep to your Photos.',
+    'Theme Park Shark saves a park day or ride card to your Photos when you tap Save Image in the share sheet.',
 };
 
 export default {

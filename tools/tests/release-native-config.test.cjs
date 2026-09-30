@@ -55,8 +55,17 @@ test('no Face ID purpose string: the app never uses biometrics', () => {
   assert.doesNotMatch(appConfig, /NSFaceIDUsageDescription:/);
 });
 
-test('share sheets can save images: the add-to-Photos purpose string exists', () => {
-  assert.ok(info.NSPhotoLibraryAddUsageDescription);
+test('share sheets can save images: the add-to-Photos purpose string names the real path', () => {
+  // The only write to Photos is the system share sheet's Save Image on the
+  // captured park day and ride cards (expo-sharing). iOS asks with this string.
+  assert.match(info.NSPhotoLibraryAddUsageDescription, /Save Image in the share sheet/);
+  const src = read;
+  assert.match(src('src/screens/ParkDayRecapCard.tsx'), /Sharing\.shareAsync/);
+  assert.match(src('src/components/RideTracker/ShareableRideCard.tsx'), /from 'expo-sharing'/);
+});
+
+test('the camera string leads with AR, the camera use that exists regardless of the games pool', () => {
+  assert.match(info.NSCameraUsageDescription, /^Theme Park Shark uses the camera to show your coins and pins/);
 });
 
 test('OTA runtime is fingerprint based on both the native and config side', () => {
