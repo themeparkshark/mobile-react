@@ -3,12 +3,22 @@ import { View } from 'react-native';
 
 // Keep saved reaction codes compatible with existing memories and API responses.
 export const SHARK_REACTIONS = [
+  // ui-copy-allow(emoji): saved reaction code (storage key); the shark art is what renders
   { code: '🤯', label: 'Mind blown' },
+  // ui-copy-allow(emoji): saved reaction code (storage key); the shark art is what renders
   { code: '😂', label: 'Laughing' },
+  // ui-copy-allow(emoji): saved reaction code (storage key); the shark art is what renders
   { code: '😴', label: 'Sleepy' },
+  // ui-copy-allow(emoji): saved reaction code (storage key); the shark art is what renders
   { code: '🤢', label: 'Queasy' },
+  // ui-copy-allow(emoji): saved reaction code (storage key); the shark art is what renders
   { code: '🔥', label: 'Loved it' },
 ] as const;
+
+/** The spoken label for a saved reaction code. */
+export function reactionLabel(code: string | null | undefined): string | undefined {
+  return SHARK_REACTIONS.find(item => item.code === code)?.label;
+}
 
 export default function SharkReactionIcon({ reaction, size = 32 }: {
   readonly reaction: string;

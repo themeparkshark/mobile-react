@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Pressable, Animated, Dimensions,
-  ScrollView, ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,6 +12,7 @@ import * as Sharing from 'expo-sharing';
 import { getWrapped, WrappedData } from '../../api/endpoints/player-rides/wrapped';
 import { colors } from '../../design-system';
 import SharkReactionIcon from '../../components/RideTracker/SharkReactionIcon';
+import { GameIcon, SharkLoader } from '../../ui';
 
 const { width, height } = Dimensions.get('window');
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -91,7 +92,7 @@ const cardStyles = StyleSheet.create({
     overflow: 'hidden',
   },
   brand: { position: 'absolute', top: 20, left: 20 },
-  brandText: { color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: '800', letterSpacing: 2 },
+  brandText: { color: 'rgba(255,255,255,0.5)', fontSize: 11, fontFamily: 'Knockout', letterSpacing: 2 },
 });
 
 export default function RideWrappedScreen() {
@@ -141,13 +142,13 @@ export default function RideWrappedScreen() {
         <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.heroGradient}>
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-              <Text style={styles.backBtn}>{'<'}</Text>
+              <GameIcon name="back" size={32} accessibilityLabel="Back" />
             </Pressable>
             <Text style={styles.title}>Ride Wrapped</Text>
             <View style={{ width: 32 }} />
           </View>
         </LinearGradient>
-        <ActivityIndicator size="large" color={BRAND.skyDark} style={{ marginTop: 60 }} />
+        <SharkLoader />
       </SafeAreaView>
     );
   }
@@ -158,7 +159,7 @@ export default function RideWrappedScreen() {
         <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.heroGradient}>
           <View style={styles.header}>
             <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-              <Text style={styles.backBtn}>{'<'}</Text>
+              <GameIcon name="back" size={32} accessibilityLabel="Back" />
             </Pressable>
             <Text style={styles.title}>Ride Wrapped</Text>
             <View style={{ width: 32 }} />
@@ -274,7 +275,7 @@ export default function RideWrappedScreen() {
       <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.heroGradient}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-            <Text style={styles.backBtn}>{'<'}</Text>
+            <GameIcon name="back" size={32} accessibilityLabel="Back" />
           </Pressable>
           <Text style={styles.title}>Ride Wrapped</Text>
           <Pressable onPress={handleShare} hitSlop={12}>
@@ -328,9 +329,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
   },
-  backBtn: { color: '#FFFFFF', fontSize: 22, fontWeight: '600' },
-  title: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', fontFamily: 'Shark' },
-  shareBtn: { color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '600' },
+  backBtn: { color: '#FFFFFF', fontSize: 22, fontFamily: 'Knockout' },
+  title: { color: '#FFFFFF', fontSize: 20, fontFamily: 'Shark' },
+  shareBtn: { color: 'rgba(255,255,255,0.8)', fontSize: 14, fontFamily: 'Knockout' },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 16, marginBottom: 12 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#cbd5e1' },
   dotActive: { backgroundColor: BRAND.gold, width: 24 },
@@ -350,7 +351,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  navBtnText: { color: BRAND.textDark, fontSize: 14, fontWeight: '700' },
+  navBtnText: { color: BRAND.textDark, fontSize: 14, fontFamily: 'Knockout' },
   goldBtn: {
     backgroundColor: BRAND.gold,
     borderRadius: 16,
@@ -362,37 +363,37 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  goldBtnText: { color: BRAND.textDark, fontSize: 15, fontWeight: '700' },
-  cardCounter: { color: BRAND.textMid, fontSize: 13, fontWeight: '600' },
+  goldBtnText: { color: BRAND.textDark, fontSize: 15, fontFamily: 'Shark' },
+  cardCounter: { color: BRAND.textMid, fontSize: 13, fontFamily: 'Knockout' },
   // Card content styles
   cardLabel: {
-    color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '800',
+    color: 'rgba(255,255,255,0.6)', fontSize: 12, fontFamily: 'Knockout',
     letterSpacing: 2, marginBottom: 8,
   },
-  cardPeriod: { color: 'rgba(255,255,255,0.8)', fontSize: 16, fontWeight: '600', marginBottom: 20 },
-  bigNumber: { color: '#fff', fontSize: 72, fontWeight: '900', fontFamily: 'Knockout' },
-  cardBig: { color: '#fff', fontSize: 28, fontWeight: '900', fontFamily: 'Knockout', marginBottom: 16 },
-  cardSubLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 16, marginTop: 4 },
+  cardPeriod: { color: 'rgba(255,255,255,0.8)', fontSize: 16, fontFamily: 'Knockout', marginBottom: 20 },
+  bigNumber: { color: '#fff', fontSize: 72, fontFamily: 'Knockout' },
+  cardBig: { color: '#fff', fontSize: 28, fontFamily: 'Knockout', marginBottom: 16 },
+  cardSubLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 16, fontFamily: 'Knockout', marginTop: 4 },
   ratingRow: { flexDirection: 'row', gap: 4, marginTop: 12 },
-  ratingShark: { color: BRAND.gold, fontSize: 32, fontWeight: '900' },
+  ratingShark: { color: BRAND.gold, fontSize: 32, fontFamily: 'Shark' },
   miniStats: { flexDirection: 'row', gap: 30, marginTop: 20 },
   miniStat: { alignItems: 'center' },
-  miniStatNum: { color: '#fff', fontSize: 28, fontWeight: '800', fontFamily: 'Knockout' },
-  miniStatLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 13 },
+  miniStatNum: { color: '#fff', fontSize: 28, fontFamily: 'Knockout' },
+  miniStatLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontFamily: 'Knockout' },
   achievRow: { marginTop: 24 },
-  achievNum: { color: '#fff', fontSize: 36, fontWeight: '800', fontFamily: 'Knockout' },
-  achievLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 14 },
+  achievNum: { color: '#fff', fontSize: 36, fontFamily: 'Knockout' },
+  achievLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 14, fontFamily: 'Knockout' },
   reactionsGrid: { flexDirection: 'row', gap: 16, marginTop: 16, flexWrap: 'wrap' },
   reactionItem: { alignItems: 'center' },
-  reactionEmoji: { fontSize: 40 },
-  reactionCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 4 },
+  reactionEmoji: { fontSize: 40, fontFamily: 'Knockout' },
+  reactionCount: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontFamily: 'Knockout', marginTop: 4 },
   wrappedFooter: { marginTop: 30, alignItems: 'center' },
-  wrappedFooterText: { color: '#fff', fontSize: 22, fontWeight: '800', fontFamily: 'Knockout' },
-  wrappedFooterSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14, marginTop: 4 },
+  wrappedFooterText: { color: '#fff', fontSize: 22, fontFamily: 'Knockout' },
+  wrappedFooterSub: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontFamily: 'Knockout', marginTop: 4 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyTitle: { 
-    color: BRAND.textDark, fontSize: 22, fontWeight: '700', 
+    color: BRAND.textDark, fontSize: 22, 
     marginTop: 16, fontFamily: 'Shark' 
   },
-  emptySubtitle: { color: BRAND.textMid, fontSize: 15, marginTop: 8, textAlign: 'center' },
+  emptySubtitle: { color: BRAND.textMid, fontSize: 15, fontFamily: 'Knockout', marginTop: 8, textAlign: 'center' },
 });

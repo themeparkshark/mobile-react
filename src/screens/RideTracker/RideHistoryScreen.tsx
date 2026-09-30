@@ -5,7 +5,6 @@ import {
   FlatList,
   Pressable,
   StyleSheet,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +19,7 @@ import { PARK_DISPLAY_ORDER } from '../../constants/parkWaitTimes';
 import { Modal } from 'react-native';
 import { Image } from 'expo-image';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { GameIcon, SharkLoader } from '../../ui';
 
 // ─── Short park names for filter chips ───
 const SHORT_PARK_NAMES: Record<number, string> = {
@@ -187,7 +187,7 @@ export default function RideHistoryScreen() {
       <LinearGradient colors={['#38BDF8', '#0EA5E9', '#09268f']} style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backButton}
           accessibilityRole="button" accessibilityLabel="Return to Ride Tracker">
-          <Text style={styles.backChevron}>‹</Text>
+          <GameIcon name="back" size={36} accessibilityLabel="Back" />
         </Pressable>
         <Text style={styles.title}>RIDE HISTORY</Text>
         <View style={{ width: 40 }} />
@@ -217,7 +217,7 @@ export default function RideHistoryScreen() {
       />
 
       {loading ? (
-        <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 60 }} />
+        <SharkLoader />
       ) : loadUnavailable && rides.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
@@ -259,7 +259,7 @@ export default function RideHistoryScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
           onEndReached={() => void onEndReached()}
           onEndReachedThreshold={0.3}
-          ListFooterComponent={loadingMore ? <ActivityIndicator color="#0EA5E9" style={{ padding: 16 }} />
+          ListFooterComponent={loadingMore ? <SharkLoader compact />
             : loadUnavailable ? <Pressable onPress={() => void onEndReached(true)} accessibilityRole="button"
               style={styles.logBtn}><Text style={styles.logBtnText}>Retry Loading More</Text></Pressable> : null}
         />
@@ -334,14 +334,12 @@ const styles = StyleSheet.create({
   },
   backChevron: { 
     color: '#FFFFFF', 
-    fontSize: 24, 
-    fontWeight: '600',
+    fontSize: 24, fontFamily: 'Knockout',
     marginLeft: -2,
   },
   title: { 
     color: '#FFFFFF', 
     fontSize: 20, 
-    fontWeight: '700', 
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
@@ -369,19 +367,18 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  filterChipText: { color: '#475569', fontSize: 12, fontWeight: '600' },
+  filterChipText: { color: '#475569', fontSize: 12, fontFamily: 'Knockout' },
   filterChipTextSelected: { color: '#0EA5E9' },
   list: { paddingHorizontal: 16, paddingBottom: 40 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  emptyEmoji: { fontSize: 60 },
+  emptyEmoji: { fontSize: 60, fontFamily: 'Knockout' },
   emptyTitle: { 
     color: '#1a1a2e', 
     fontSize: 22, 
-    fontWeight: '700', 
     marginTop: 16, 
     fontFamily: 'Shark' 
   },
-  emptySubtitle: { color: '#475569', fontSize: 15, marginTop: 8, textAlign: 'center' },
+  emptySubtitle: { color: '#475569', fontSize: 15, fontFamily: 'Knockout', marginTop: 8, textAlign: 'center' },
   logBtn: {
     backgroundColor: '#fec90e',
     borderRadius: 16,
@@ -394,10 +391,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  logBtnText: { color: '#1a1a2e', fontSize: 16, fontWeight: '700' },
+  logBtnText: { color: '#1a1a2e', fontSize: 16, fontFamily: 'Shark' },
   // Share modal
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20,
+    flex: 1, backgroundColor: 'rgba(5,52,110,0.7)', justifyContent: 'center', padding: 20,
   },
   modalContent: { maxHeight: '80%' },
   modalClose: {
@@ -414,5 +411,5 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  modalCloseText: { color: '#1a1a2e', fontSize: 16, fontWeight: '600' },
+  modalCloseText: { color: '#1a1a2e', fontSize: 16, fontFamily: 'Knockout' },
 });

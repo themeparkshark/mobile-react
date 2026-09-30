@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, FlatList, Pressable, StyleSheet, Animated, ScrollView,
-  ActivityIndicator, ImageBackground,
+  ImageBackground,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -19,6 +19,7 @@ import Topbar from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import TopbarText from '../../components/Topbar/TopbarText';
 import { saveDetectedRideBatch } from '../../services/rideJournalBatch';
+import { GameIcon, SharkLoader } from '../../ui';
 
 function BatchShell({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
@@ -84,7 +85,7 @@ const DetectionRow: React.FC<DetectionRowProps> = React.memo(({ ride, onToggle }
       style={[batchStyles.row, !ride.selected && batchStyles.rowDeselected]}
     >
       <View style={[batchStyles.checkbox, ride.selected && batchStyles.checkboxSelected]}>
-        {ride.selected && <Text style={batchStyles.checkboxTick}>✓</Text>}
+        {ride.selected && <GameIcon name="check" size={22} />}
       </View>
       <View style={{ flex: 1 }}>
         <Text style={batchStyles.rideName}>{ride.rideName}</Text>
@@ -298,8 +299,7 @@ export default function RideBatchConfirmScreen() {
       return (
         <BatchShell onBack={() => navigation.goBack()}>
           <View style={batchStyles.submittingCenter}>
-          <ActivityIndicator size="large" color="#0B67A9" />
-          <Text style={batchStyles.submittingText}>Logging your rides...</Text>
+          <SharkLoader compact title="Logging your rides" />
           </View>
         </BatchShell>
       );
@@ -401,12 +401,12 @@ const batchStyles = StyleSheet.create({
     borderWidth: 2, borderColor: '#84CAEE', paddingLeft: 18, overflow: 'hidden',
   },
   selectShark: { width: 112, height: 112, alignSelf: 'flex-end', marginRight: -6 },
-  eyebrow: { color: '#126BAB', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  eyebrow: { color: '#126BAB', fontSize: 11, fontFamily: 'Knockout', letterSpacing: 1.2 },
   subtitle: {
     color: '#0B4B83', fontSize: 25, fontFamily: 'Shark', marginTop: 5,
   },
   description: {
-    color: '#315C7C', fontSize: 14,
+    color: '#315C7C', fontSize: 14, fontFamily: 'Knockout',
     paddingHorizontal: 24, marginTop: 14, marginBottom: 16, lineHeight: 20,
   },
   list: { paddingHorizontal: 16, paddingBottom: 100 },
@@ -421,18 +421,18 @@ const batchStyles = StyleSheet.create({
     borderColor: '#84CAEE', backgroundColor: '#FFFFFF',
     alignItems: 'center', justifyContent: 'center',
   },
-  rideName: { color: '#173A5B', fontSize: 16, fontWeight: '700' },
-  rideDetail: { color: '#426883', fontSize: 12, marginTop: 2 },
+  rideName: { color: '#173A5B', fontSize: 16, fontFamily: 'Shark' },
+  rideDetail: { color: '#426883', fontSize: 12, fontFamily: 'Knockout', marginTop: 2 },
   badge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontSize: 11, fontWeight: '700' },
+  badgeText: { fontSize: 11, fontFamily: 'Knockout' },
   footer: { padding: 16, paddingBottom: 80 },
   checkboxSelected: { backgroundColor: '#1179CB', borderColor: '#0B4B83' },
-  checkboxTick: { color: '#FFFFFF', fontSize: 19, fontWeight: '900', lineHeight: 22 },
+  checkboxTick: { color: '#FFFFFF', fontSize: 19, fontFamily: 'Shark', lineHeight: 22 },
   confirmBtn: {
     backgroundColor: '#F6C847', borderRadius: 14, paddingVertical: 16,
     alignItems: 'center', width: '100%', ...shadows.md,
   },
-  confirmBtnText: { color: '#174064', fontSize: 18, fontWeight: '800', fontFamily: 'Shark' },
+  confirmBtnText: { color: '#174064', fontSize: 18, fontFamily: 'Shark' },
   // Rate phase
   progressBar: {
     height: 8, backgroundColor: '#B7DBEF', marginHorizontal: 20, marginTop: 20,
@@ -443,45 +443,45 @@ const batchStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 24,
     borderWidth: 2, borderColor: '#84CAEE',
   },
-  rateCounter: { color: '#126BAB', fontSize: 13, textAlign: 'center', marginBottom: 8, fontWeight: '800' },
+  rateCounter: { color: '#126BAB', fontSize: 13, fontFamily: 'Knockout', textAlign: 'center', marginBottom: 8 },
   rateRideName: {
-    color: '#0B4B83', fontSize: 27, fontWeight: '800', fontFamily: 'Shark',
+    color: '#0B4B83', fontSize: 27, fontFamily: 'Shark',
     textAlign: 'center', marginBottom: 24,
   },
-  rateLabel: { color: '#315C7C', fontSize: 14, fontWeight: '700', marginBottom: 10, marginTop: 8 },
+  rateLabel: { color: '#315C7C', fontSize: 14, fontFamily: 'Knockout', marginBottom: 10, marginTop: 8 },
   rateActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
   skipBtn: {
     flex: 1, backgroundColor: '#E7F5FC', borderRadius: 12, paddingVertical: 14,
     alignItems: 'center', borderWidth: 1, borderColor: '#84CAEE',
   },
-  skipBtnText: { color: '#315C7C', fontSize: 16, fontWeight: '600' },
+  skipBtnText: { color: '#315C7C', fontSize: 16, fontFamily: 'Knockout' },
   confirmRateBtn: {
     flex: 2, backgroundColor: '#F6C847', borderRadius: 12, paddingVertical: 14,
     alignItems: 'center',
   },
-  confirmRateBtnText: { color: '#174064', fontSize: 16, fontWeight: '800', fontFamily: 'Shark' },
+  confirmRateBtnText: { color: '#174064', fontSize: 16, fontFamily: 'Shark' },
   submittingCenter: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  submittingText: { color: '#315C7C', fontSize: 16, marginTop: 16 },
+  submittingText: { color: '#315C7C', fontSize: 16, fontFamily: 'Knockout', marginTop: 16 },
   // Summary
   summaryContent: { alignItems: 'center', padding: 20, paddingTop: 25, paddingBottom: 55 },
   summaryShark: { width: 132, height: 132 },
-  summaryTitle: { color: '#0B4B83', fontSize: 29, fontWeight: '900', fontFamily: 'Shark', marginTop: 8, textAlign: 'center' },
-  summaryXp: { color: '#315C7C', fontSize: 16, fontWeight: '600', marginTop: 6, textAlign: 'center' },
+  summaryTitle: { color: '#0B4B83', fontSize: 29, fontFamily: 'Shark', marginTop: 8, textAlign: 'center' },
+  summaryXp: { color: '#315C7C', fontSize: 16, fontFamily: 'Knockout', marginTop: 6, textAlign: 'center' },
   summaryStats: { flexDirection: 'row', gap: 30, marginTop: 24, marginBottom: 24 },
   summaryStat: { alignItems: 'center' },
-  summaryStatVal: { color: '#0B4B83', fontSize: 32, fontWeight: '800', fontFamily: 'Shark' },
-  summaryStatLabel: { color: '#315C7C', fontSize: 13, marginTop: 2 },
+  summaryStatVal: { color: '#0B4B83', fontSize: 32, fontFamily: 'Shark' },
+  summaryStatLabel: { color: '#315C7C', fontSize: 13, fontFamily: 'Knockout', marginTop: 2 },
   summaryRide: {
     flexDirection: 'row', alignItems: 'center', gap: 8, width: '100%', flexWrap: 'wrap',
     backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 12, padding: 14, marginBottom: 8,
     borderWidth: 1, borderColor: '#84CAEE',
   },
-  summaryRideName: { color: '#173A5B', fontSize: 15, fontWeight: '700', flex: 1 },
-  summaryRideStatus: { color: '#126BAB', fontSize: 12, fontWeight: '800' },
+  summaryRideName: { color: '#173A5B', fontSize: 15, fontFamily: 'Shark', flex: 1 },
+  summaryRideStatus: { color: '#126BAB', fontSize: 12, fontFamily: 'Knockout' },
   summaryRideFailed: { color: '#A24130' },
   doneBtn: {
     backgroundColor: '#FFFFFF', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 40,
     marginTop: 14, borderWidth: 1, borderColor: '#84CAEE',
   },
-  doneBtnText: { color: '#174064', fontSize: 16, fontWeight: '600' },
+  doneBtnText: { color: '#174064', fontSize: 16, fontFamily: 'Knockout' },
 });

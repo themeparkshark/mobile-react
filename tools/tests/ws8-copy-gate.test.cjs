@@ -12,7 +12,11 @@ const test = require('node:test');
 const { scanSource } = require('./helpers/ui-copy-rules.cjs');
 
 const root = path.resolve(__dirname, '../..');
+const RIDE_TRACKER = fs.readdirSync(path.join(root, 'src/screens/RideTracker')).map(f => `src/screens/RideTracker/${f}`)
+  .concat(fs.readdirSync(path.join(root, 'src/components/RideTracker')).map(f => `src/components/RideTracker/${f}`))
+  .filter(f => /\.tsx?$/.test(f));
 const WS8_CLEAN = [
+  ...RIDE_TRACKER,
   'src/screens/WelcomeScreen.tsx',
   'src/screens/Auth/LoginScreen.tsx',
   'src/components/SignInButtons.tsx',
@@ -121,4 +125,27 @@ test('Community Center: bright blue cards, no black scrims or neon green, no sto
     assert.doesNotMatch(source, /#1a3a5c|#0a1628|#4ade80|rgba\(0,\s*0,\s*0/i, file);
     assert.doesNotMatch(source, /ActivityIndicator/, file);
   }
+});
+
+test('Ride Tracker: brand fonts instead of bold system text, art instead of stock spinners and alerts', () => {
+  for (const file of RIDE_TRACKER) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    assert.doesNotMatch(source, /fontWeight/, `${file} uses Shark or Knockout`);
+    assert.doesNotMatch(source, /ActivityIndicator|Alert\.alert/, file);
+    assert.doesNotMatch(source, /rgba\(0,\s*0,\s*0/, `${file} uses navy, not black`);
+  }
+});
+
+test('server icons for achievements and collections map to art and never render emoji', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const ui = loadTs('src/ui/iconTokens.ts');
+  const names = loadTs('src/ui/iconNames.ts');
+  const { serverIcon } = loadTs('src/components/RideTracker/rideIcons.ts', {
+    '../../ui': { iconForEmoji: ui.iconForEmoji, resolveIconName: names.resolveIconName },
+  });
+  assert.equal(serverIcon('crown', 'trophy'), 'crown');
+  assert.equal(serverIcon('[icon:streak]', 'trophy'), 'streak');
+  assert.equal(serverIcon('\u{1F525}', 'trophy'), 'streak');
+  assert.equal(serverIcon('\u{1F9A9}', 'trophy'), 'trophy');
+  assert.equal(serverIcon(null, 'trophy'), 'trophy');
 });

@@ -219,22 +219,20 @@ const styles = StyleSheet.create({
   shark: { width: 112, height: 112, marginBottom: 2 },
   title: {
     color: '#126BAB',
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 12, fontFamily: 'Knockout',
     letterSpacing: 1,
     marginBottom: 4,
   },
   rideName: {
     color: '#0B4B83',
     fontSize: 27,
-    fontWeight: '800',
     fontFamily: 'Shark',
     marginBottom: 6,
     textAlign: 'center',
   },
   detail: {
     color: '#315C7C',
-    fontSize: 13,
+    fontSize: 13, fontFamily: 'Knockout',
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -250,7 +248,6 @@ const styles = StyleSheet.create({
   confirmBtnText: {
     color: '#174064',
     fontSize: 17,
-    fontWeight: '800',
     fontFamily: 'Shark',
   },
   dismissBtn: {
@@ -259,13 +256,11 @@ const styles = StyleSheet.create({
   },
   dismissBtnText: {
     color: '#315C7C',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 14, fontFamily: 'Knockout',
   },
   queueHint: {
     color: '#126BAB',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 12, fontFamily: 'Knockout',
     marginTop: 8,
   },
 });
