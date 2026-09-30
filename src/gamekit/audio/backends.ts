@@ -428,13 +428,34 @@ export class AudioApiBackend implements AudioBackend {
     }
   }
 
+  /**
+   * Ramp an AudioParam without cancelScheduledValues: in react-native-audio-api
+   * 0.6 cancelling races the audio thread's event deque and aborts the app
+   * (seen on the boss simulator under frequent music ducks). New ramps are
+   * queued after the last scheduled one instead, and repeats are coalesced.
+   */
+  private paramEnd = new WeakMap<object, { end: number; target: number }>();
+
+  private rampParam(param: { value: number; setValueAtTime: (v: number, t: number) => void; linearRampToValueAtTime: (v: number, t: number) => void },
+    target: number, rampSec: number): void {
+    const now = this.ctx.currentTime;
+    const prev = this.paramEnd.get(param);
+    if (prev && prev.end > now && Math.abs(prev.target - target) < 1e-4) return;
+    const start = prev && prev.end > now ? prev.end : now;
+    const end = start + Math.max(0.005, rampSec);
+    if (start === now) param.setValueAtTime(param.value, now);
+    param.linearRampToValueAtTime(target, end);
+    this.paramEnd.set(param, { end, target });
+  }
+
   musicGain(deck: string, gain: number, rampMs: number): void {
     const d = this.decks.get(deck);
     if (!d) return;
-    const t = this.ctx.currentTime;
-    d.gain.gain.cancelScheduledValues(t);
-    d.gain.gain.setValueAtTime(d.gain.gain.value, t);
-    d.gain.gain.linearRampToValueAtTime(gain, t + Math.max(0.005, rampMs / 1000));
+    try {
+      this.rampParam(d.gain.gain, gain, rampMs / 1000);
+    } catch {
+      // Music gain is decoration.
+    }
   }
 
   musicStop(deck: string, fadeMs: number): void {
@@ -443,10 +464,9 @@ export class AudioApiBackend implements AudioBackend {
     this.decks.delete(deck);
     try {
       const t = this.ctx.currentTime;
-      d.gain.gain.cancelScheduledValues(t);
-      d.gain.gain.setValueAtTime(d.gain.gain.value, t);
-      d.gain.gain.linearRampToValueAtTime(0, t + Math.max(0.01, fadeMs / 1000));
-      d.src.stop(t + Math.max(0.02, fadeMs / 1000 + 0.01));
+      this.rampParam(d.gain.gain, 0, Math.max(0.01, fadeMs / 1000));
+      const end = this.paramEnd.get(d.gain.gain)?.end ?? t;
+      d.src.stop(Math.max(t + 0.02, end + 0.01));
     } catch {
       // Already stopped.
     }
@@ -461,11 +481,11 @@ export class AudioApiBackend implements AudioBackend {
 
   musicFilter(cutoffHz: number | null, rampMs: number): void {
     if (!this.musicLowpass) return;
-    const t = this.ctx.currentTime;
-    const f = this.musicLowpass.frequency;
-    f.cancelScheduledValues(t);
-    f.setValueAtTime(f.value, t);
-    f.exponentialRampToValueAtTime(cutoffHz ?? 20000, t + Math.max(0.01, rampMs / 1000));
+    try {
+      this.rampParam(this.musicLowpass.frequency, cutoffHz ?? 20000, rampMs / 1000);
+    } catch {
+      // Filter is decoration.
+    }
   }
 
   setMasterGain(gain: number): void {
