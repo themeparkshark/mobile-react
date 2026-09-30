@@ -23,6 +23,8 @@ import {
 } from '../../../services/lineplay/content';
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import HapticPatterns from '../../../helpers/hapticPatterns';
+import NavigationPanelCard from './NavigationPanelCard';
+import type { NavigationPanelProgress } from '../../../services/lineplay/navigationPanel';
 
 export interface ActivitySlotProps {
   readonly item: ActivityItem;
@@ -40,6 +42,11 @@ export interface ActivitySlotProps {
   readonly onPredict: (card: PredictionCard, guess: 'beat' | 'miss') => void;
   readonly onChooseLore?: (id: string, choice: number) => void;
   readonly onActivityCompleted: (id: string) => void;
+  readonly navigationPanel?: boolean;
+  readonly navigationProgress?: NavigationPanelProgress;
+  readonly onNavigationTurn?: (index: number) => void;
+  readonly onNavigationReplay?: () => void;
+  readonly onNavigationNext?: () => void;
 }
 
 const GAME_LABELS: Record<string, string> = {
@@ -64,16 +71,18 @@ const GAME_PREVIEWS: Record<string, string> = {
   showdown: 'Challenge Captain Fin to a three-question ride trivia duel. Play solo or take turns with your crew.',
 };
 
-function ActivityHero({ kicker, title, teacher = false }: { kicker: string; title: string; teacher?: boolean }) {
+function ActivityHero({ kicker, title, teacher = false, navigator = false }: { kicker: string; title: string; teacher?: boolean; navigator?: boolean }) {
+  const [artFailed, setArtFailed] = useState(false);
   return <View style={styles.hero}>
     <View style={styles.heroCopy}>
       <Text style={styles.heroKicker}>{kicker}</Text>
       <Text style={styles.heroTitle}>{title}</Text>
     </View>
-    <Image source={teacher
+    <Image source={navigator && !artFailed ? require('../../../../assets/images/screens/lineplay/space-navigation-shark-v1.png') : teacher
       ? require('../../../../assets/images/tutorial/teacher-shark.png')
       : require('../../../../assets/images/screens/pin-collections/shark.png')}
-      resizeMode="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
+      resizeMode="contain" onError={() => setArtFailed(true)} style={styles.shark}
+      accessibilityLabel={navigator ? 'Your shark navigator' : 'Theme Park Shark mascot'} />
   </View>;
 }
 
@@ -91,15 +100,23 @@ export default function ActivitySlot({
   onPredict,
   onChooseLore,
   onActivityCompleted,
+  navigationPanel = false,
+  navigationProgress,
+  onNavigationTurn,
+  onNavigationReplay,
+  onNavigationNext,
 }: ActivitySlotProps) {
   switch (item.kind) {
     case 'minigame':
-      return <MiniGameSlot item={item} completed={completed} paused={paused}
+      return <MiniGameSlot item={item} navigator={navigationPanel && item.id === `${chapterId}-star-chart`} completed={completed} paused={paused}
         currentQuestBonusStatus={currentQuestBonusStatus} onPlayGame={onPlayGame} />;
     case 'trivia':
+      if (navigationPanel && item.id === `${chapterId}-trivia` && onNavigationTurn && onNavigationReplay && onNavigationNext)
+        return <NavigationPanelCard seed={item.seed} progress={navigationProgress} completed={completed} paused={paused}
+          onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} />;
       return <TriviaSlot rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} onAnswered={() => onActivityCompleted(item.id)} />;
     case 'lore':
-      return <LoreSlot rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed}
+      return <LoreSlot navigator={navigationPanel && item.id === `${chapterId}-field-note`} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed}
         selectedClue={savedLoreChoice} completed={completed} paused={paused}
         onChoose={(choice) => onChooseLore?.(item.id, choice)}
         onCompleted={() => onActivityCompleted(item.id)} />;
@@ -114,12 +131,14 @@ export default function ActivitySlot({
 
 function MiniGameSlot({
   item,
+  navigator,
   completed,
   paused,
   currentQuestBonusStatus,
   onPlayGame,
 }: {
   item: Extract<ActivityItem, { kind: 'minigame' }>;
+  navigator: boolean;
   completed: boolean;
   paused: boolean;
   currentQuestBonusStatus: 'available' | 'pending' | 'verified' | null;
@@ -129,7 +148,7 @@ function MiniGameSlot({
   const label = item.title ?? (isStarChart ? 'Rebuild the Star Chart' : GAME_LABELS[item.gameId] ?? item.gameId);
   return (
     <View style={styles.card}>
-      <ActivityHero kicker="QUEUE ARCADE" title={label} />
+      <ActivityHero kicker={navigator ? 'STARPORT · MISSION 3 OF 3' : 'QUEUE ARCADE'} title={label} navigator={navigator} />
       <View style={styles.gamePlaceholder}>
         <Text style={styles.gamePlaceholderText}>
           {item.preview ?? (isStarChart
@@ -278,6 +297,7 @@ function TriviaSlot({
 // -- lore --------------------------------------------------------------------
 
 function LoreSlot({
+  navigator,
   rideId,
   parkId,
   chapterId,
@@ -288,6 +308,7 @@ function LoreSlot({
   onChoose,
   onCompleted,
 }: {
+  navigator: boolean;
   rideId?: number;
   parkId?: number;
   chapterId?: string;
@@ -314,7 +335,7 @@ function LoreSlot({
 
   return (
     <ScrollView style={styles.cardScroll} contentContainerStyle={styles.card}>
-      <ActivityHero kicker="QUEUE QUEST" title="Field Note" />
+      <ActivityHero kicker={navigator ? 'STARPORT · MISSION 2 OF 3' : 'QUEUE QUEST'} title={navigator ? 'Find the signal' : 'Field Note'} navigator={navigator} />
       <Text style={styles.loreTitle}>{lore.title}</Text>
       <Text style={styles.loreBody}>{lore.body}</Text>
       {lore.source ? <Text style={styles.loreSource}>— {lore.source}</Text> : null}

@@ -108,7 +108,8 @@ function playedActivityName(id: string, playlist: readonly ActivityItem[], chapt
   const item = playlist.find(entry => entry.id === id);
   if (item?.kind === 'minigame') return GAME_NAMES[item.gameId] ?? 'Mini-game';
   if (item?.kind === 'crew_grid') return 'Crew Bingo';
-  if (item?.kind === 'trivia') return 'Ride trivia';
+  if (item?.kind === 'trivia') return chapter?.navigationPanel && id === `${chapter.id}-trivia`
+    ? 'Starport navigation repair' : 'Ride trivia';
   if (item?.kind === 'lore') return chapter?.fieldNotes[item.seed % chapter.fieldNotes.length]?.title ?? 'Queue clue';
   if (item?.kind === 'prediction') return 'Wait prediction';
   if (id.startsWith('pred-')) return 'Wait prediction';
@@ -120,14 +121,14 @@ function playedActivityName(id: string, playlist: readonly ActivityItem[], chapt
   return 'Bonus round';
 }
 
-function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }): string {
+function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }, chapter?: LinePlayChapter | null): string {
   switch (item.kind) {
     case 'chapter_intro': return 'Ride chapter';
     case 'crew_grid': return 'Crew Bingo';
     case 'crew_relay': return 'Crew Relay';
     case 'signal': return 'Crew Route';
     case 'puzzle': return 'Codebreaker';
-    case 'trivia': return 'Shark Trivia';
+    case 'trivia': return chapter?.navigationPanel && item.id === `${chapter.id}-trivia` ? 'Signal repair' : 'Shark Trivia';
     case 'lore': return 'Field Note';
     case 'prediction': return 'Wait Prediction';
     case 'minigame': return item.title ?? GAME_NAMES[item.gameId] ?? 'Arcade round';
@@ -714,6 +715,7 @@ export default function LinePlayScreen() {
             <WaitCardSkeleton rideName={ride.rideName} />
           ) : (
             <WaitCard
+              compact={snapshot.state !== 'complete'}
               rideName={ride.rideName}
               postedWaitMinutes={snapshot.plannedWaitMinutes}
               waitSource={snapshot.waitSource}
@@ -878,6 +880,11 @@ export default function LinePlayScreen() {
                       rideId={ride.rideId}
                       parkId={ride.parkId}
                       chapterId={snapshot.chapter?.id}
+                      navigationPanel={snapshot.chapter?.navigationPanel}
+                      navigationProgress={snapshot.navigationPanels?.[item.id]}
+                      onNavigationTurn={(index) => session.rotateNavigationPanel(item.id, index)}
+                      onNavigationReplay={() => session.startNextNavigationRound(item.id)}
+                      onNavigationNext={() => jumpToPage(activityPages.findIndex(page => page.id === `${snapshot.chapter?.id}-field-note`))}
                       completed={completedActivityIds.has(item.id)}
                       paused={snapshot.state !== 'active'}
                       savedPrediction={item.kind === 'prediction' && prediction?.card.id === item.card.id ? prediction?.guess ?? null : null}
@@ -903,7 +910,7 @@ export default function LinePlayScreen() {
                 : activityPages[visiblePageIndex]?.kind === 'chapter_intro'
                   ? 'Ride story. Choose a clue to begin.'
                   : 'Optional queue activity. Explore at your own pace.'}
-              nextLabel={pageName(activityPages[nextPageIndex])}
+              nextLabel={pageName(activityPages[nextPageIndex], snapshot.chapter)}
               onFirst={() => jumpToPage(0)} onNext={() => jumpToPage(nextPageIndex)}
               moreAvailable={snapshot.playlist.length < MAX_SESSION_ACTIVITY_SLOTS}
               morePaused={snapshot.state !== 'active'}

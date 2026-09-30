@@ -21,6 +21,8 @@ const RING_C = 2 * Math.PI * RING_R;
 
 export interface WaitCardProps {
   readonly rideName: string;
+  /** Keep the current game in focus while its reward status stays visible. */
+  readonly compact?: boolean;
   readonly postedWaitMinutes: number;
   readonly waitSource: WaitSource;
   readonly entranceWaitMinutes: number | null;
@@ -60,6 +62,7 @@ function fmt(seconds: number): string {
 
 export default function WaitCard({
   rideName,
+  compact = false,
   postedWaitMinutes,
   waitSource,
   entranceWaitMinutes,
@@ -169,16 +172,33 @@ export default function WaitCard({
         <LinearGradient colors={['rgba(7,104,185,0.35)', 'rgba(5,52,110,0.92)']} style={StyleSheet.absoluteFill} />
       </View>
 
-      <View style={styles.content}>
+      <View style={[styles.content, compact && styles.compactContent]}>
         <View style={styles.topRow}>
-          <Text style={styles.rideName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{rideName}</Text>
+          <Text style={[styles.rideName, compact && styles.compactRideName]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{rideName}</Text>
+          {compact && !completed && onPlayBonus && <Pressable accessibilityRole="button"
+            accessibilityLabel={rewardTrackingAvailable ? 'Open queue games for bonus rewards' : 'Open queue games'}
+            onPress={onPlayBonus} disabled={paused}
+            style={({ pressed }) => [styles.compactArcade, paused && styles.playButtonDisabled, pressed && styles.playButtonPressed]}>
+            <Text style={styles.compactArcadeText}>ARCADE</Text>
+          </Pressable>}
           {!completed && <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Resume queue games' : 'Pause queue games'}
             onPress={onTogglePause} style={styles.pauseButton} hitSlop={8}>
             <Text style={styles.pauseButtonText}>{paused ? '▶' : 'II'}</Text>
           </Pressable>}
         </View>
 
-        <View style={styles.meterRow}>
+        {compact ? <View style={styles.compactMeter}>
+          <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />
+          <View style={styles.compactCopy} accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
+            <Text style={styles.compactHeadline}>{headline}{rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}</Text>
+            {partBurst > 0 && <Text style={styles.compactBurst}>+{partBurst} RIDE PART{partBurst === 1 ? '' : 'S'}!</Text>}
+          </View>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
+            accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
+            onPress={() => setExpanded(value => !value)} style={styles.compactDetails}>
+            <Text style={styles.detailsButtonText}>{expanded ? 'Hide ↑' : 'Details ↓'}</Text>
+          </Pressable>
+        </View> : <View style={styles.meterRow}>
           <View style={{ width: RING, height: RING }}
             accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
             <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
@@ -199,9 +219,9 @@ export default function WaitCard({
             <Text style={styles.meterSub}>{subline}</Text>
             {partBurst > 0 && <Text style={styles.partBurstText}>+{partBurst} RIDE PART{partBurst === 1 ? '' : 'S'}!</Text>}
           </View>
-        </View>
+        </View>}
 
-        {!completed && onPlayBonus && (
+        {!compact && !completed && onPlayBonus && (
           <Pressable accessibilityRole="button" accessibilityLabel={rewardTrackingAvailable ? "Open queue games for bonus rewards" : "Open queue games"}
             onPress={onPlayBonus} disabled={paused}
             style={({ pressed }) => [styles.playButton, paused && styles.playButtonDisabled, pressed && styles.playButtonPressed]}>
@@ -209,11 +229,15 @@ export default function WaitCard({
           </Pressable>
         )}
 
-        <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
-          onPress={() => setExpanded(value => !value)} style={styles.detailsButton} hitSlop={6}>
+        {!compact && <Pressable accessibilityRole="button" accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
+          onPress={() => setExpanded(value => !value)} style={[styles.detailsButton, compact && styles.compactDetails]} hitSlop={6}>
           <Text style={styles.detailsButtonText}>{expanded ? 'Hide details' : `${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m · details`}</Text>
-        </Pressable>
+        </Pressable>}
         {expanded && <>
+          {compact && <>
+            <Text style={styles.meterSub}>{subline}</Text>
+            <Text style={styles.waitSourceHint}>{`${completed ? 'Session' : rewardTrackingAvailable ? 'In line' : 'Playing'} ${fmt(elapsedSeconds)} · ${waitSource === 'estimate' ? 'game plan' : 'posted wait'} ${postedWaitMinutes}m`}</Text>
+          </>}
           <Text style={styles.waitSourceHint}>
             {waitSource === 'posted' ? 'Start plan based on the entrance wait when you started.' :
               waitSource === 'last_known' ? 'Start plan based on an older entrance wait.' :
@@ -257,6 +281,16 @@ export default function WaitCard({
 }
 
 const styles = StyleSheet.create({
+  compactContent: { paddingTop: 6 },
+  compactRideName: { fontSize: 19, lineHeight: 22, marginRight: 7 },
+  compactMeter: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2 },
+  compactGem: { width: 28, height: 28, resizeMode: 'contain' },
+  compactCopy: { flex: 1 },
+  compactHeadline: { fontFamily: 'Knockout', fontSize: 16, color: '#ffdf75' },
+  compactBurst: { fontFamily: 'Knockout', fontSize: 13, color: '#7dffb0' },
+  compactArcade: { minHeight: 44, paddingHorizontal: 10, marginRight: 7, borderRadius: 12, backgroundColor: '#ffcf3b', borderBottomWidth: 3, borderBottomColor: '#d99a00', justifyContent: 'center' },
+  compactArcadeText: { fontFamily: 'Knockout', fontSize: 15, color: '#075083' },
+  compactDetails: { minHeight: 44, minWidth: 58, justifyContent: 'center', alignItems: 'center' },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meterRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 14 },
   gemWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },

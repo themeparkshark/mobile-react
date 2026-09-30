@@ -5,6 +5,8 @@ export interface LinePlayChapter {
   readonly id: string;
   /** Adaptive chapters use original fiction and general trivia, not verified attraction facts. */
   readonly adaptive?: boolean;
+  /** Featured opening mission uses an original playable signal circuit. */
+  readonly navigationPanel?: boolean;
   readonly parkLabel: string;
   readonly title: string;
   readonly story: string;
@@ -240,13 +242,14 @@ export function adaptiveEpisodeCountForRide(rideName: string): number {
  */
 const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
   id: 'mk-space-mountain',
+  navigationPanel: true,
   parkLabel: 'MAGIC KINGDOM',
   title: 'The Lost Star Chart',
-  story: 'Your shark navigator lost three signals on the way to the stars. Decode the starport, find a clue in your surroundings, then rebuild the chart together.',
+  story: 'Your shark navigator lost three signals on the way to the stars. Repair the navigation panel, find a clue in your surroundings, then rebuild the chart together.',
   completedTitle: 'Star chart restored!',
   completedStory: 'Your shark has all three signals. Finish your wait with the crew challenge or another quick game; your ride Parts still come from eligible nearby time.',
   progressNoun: 'signals found',
-  missionNames: ['Decode the starport', 'Find the missing signal', 'Rebuild the star chart'],
+  missionNames: ['Repair the navigation panel', 'Find the missing signal', 'Rebuild the star chart'],
   finale: { idSuffix: 'star-chart', title: 'Rebuild the Star Chart',
     preview: 'Match space symbols to restore your shark’s missing chart. Take turns with your crew or race solo.',
     memoryDeckId: 'space' },

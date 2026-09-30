@@ -1,0 +1,11 @@
+{
+  "tool": "built-in imagegen",
+  "transparent_background": true,
+  "prompt": "Create one original production game mascot illustration, transparent background. Use the supplied two images solely as character and art-style references. Preserve the same friendly Theme Park Shark character: slate blue-purple shark, broad white muzzle and belly, tiny rosy cheek, large glossy black eyes, cheerful small teeth, bold dark clean outlines and simple polished painted cel shading. Advance the finish with careful luminous highlights and dimensional edges, still the same charming hand-drawn 2D art, never photorealistic or generic 3D. Full-body three-quarter view, facing left toward a player's navigation puzzle. The shark is an enthusiastic space navigator wearing the simple round glass astronaut helmet and small white/blue collar from the second reference. One flipper holds a small rolled blue star chart with three gold stars, the other flipper points invitingly left. Calm curious smile, focused and encouraging rather than shouting. Readable small silhouette, detailed enough for a game hero at phone size. Coral, navy, gold and cyan accents. No lettering, no logo, no text, no surrounding scenery or UI, no floor shadow, no scattered particles; generous transparent breathing room around the complete character, do not crop fins, tail, helmet or chart. Square canvas. Reference one provides face/body identity and thick-outline graphic style; reference two provides the astronaut costume only. Deliver one finished transparent character cutout.",
+  "references": [
+    "assets/images/screens/pin-collections/shark.png",
+    "src/assets/games/whack/themes/space/pop@3x.png"
+  ],
+  "source": "exec-591f20d6-683e-4d4e-b31b-3fd2ae8a8647.png",
+  "modelVersion": "not exposed"
+}

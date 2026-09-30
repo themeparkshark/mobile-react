@@ -98,6 +98,7 @@ export default function MemoryGame({
   onComplete,
 }: MemoryGameProps) {
   const reducedMotion = useReducedGameMotion();
+  const [navigatorArtFailed, setNavigatorArtFailed] = useState(false);
   // -- Round setup (rebuilt whenever the game (re)opens). --------------------
   const roundSeed = useMemo(
     () => (seed != null ? seed >>> 0 : (Math.random() * 0xffffffff) >>> 0),
@@ -402,9 +403,11 @@ export default function MemoryGame({
             <Text style={styles.bannerKicker}>THEME PARK SHARK · MEMORY MATCH</Text>
             <Text style={styles.bannerTitle} numberOfLines={1}>{deck.label}</Text>
           </View>
-          <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
-            resizeMode="contain" style={styles.bannerShark}
-            accessibilityLabel="Theme Park Shark mascot" />
+          <Image source={deck.id === 'space' && !navigatorArtFailed
+            ? require('../../../assets/images/screens/lineplay/space-navigation-shark-v1.png')
+            : require('../../../assets/images/screens/pin-collections/shark.png')}
+            onError={() => setNavigatorArtFailed(true)} resizeMode="contain" style={styles.bannerShark}
+            accessibilityLabel={deck.id === 'space' ? 'Your shark navigator' : 'Theme Park Shark mascot'} />
         </View>
         {difficulty !== 0 && <Text style={styles.progress} accessibilityLiveRegion="polite">
           {matchedPairs} / {shape.pairs} PAIRS MATCHED

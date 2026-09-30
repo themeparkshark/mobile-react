@@ -3,6 +3,7 @@ import type { ActivityItem, SessionRewards, WaitSource } from './LinePlaySession
 import type { PredictionCard } from './content';
 import type { CurrentQuestProof } from '../../api/endpoints/me/inline-timer/currentQuest';
 import { isCrewRelayProgress, type CrewRelayProgress } from './crewRelay';
+import { isNavigationPanelProgress, type NavigationPanelProgress } from './navigationPanel';
 
 const PREFIX = 'lineplay_checkpoint_v1_';
 const MAX_AGE_MS = 3 * 60 * 60 * 1000;
@@ -21,6 +22,7 @@ export interface LinePlayCheckpoint {
   playlist: ActivityItem[];
   completedActivityIds: string[];
   loreChoices?: Record<string, number>;
+  navigationPanels?: Record<string, NavigationPanelProgress>;
   crewGridMarks?: number[];
   prediction: { card: PredictionCard; guess: 'beat' | 'miss' } | null;
   boardingConfirmed?: boolean;
@@ -63,6 +65,11 @@ export function parseCheckpoint(raw: string | null, playerId: number, rideId: nu
         !Array.isArray(value.crewGridMarks) || value.crewGridMarks.length > 9 ||
         new Set(value.crewGridMarks).size !== value.crewGridMarks.length ||
         !value.crewGridMarks.every(index => Number.isInteger(index) && index >= 0 && index <= 8))) ||
+      (value.navigationPanels !== undefined && (
+        typeof value.navigationPanels !== 'object' || value.navigationPanels === null ||
+        Array.isArray(value.navigationPanels) || Object.keys(value.navigationPanels).length > 4 ||
+        !Object.entries(value.navigationPanels).every(([id, progress]) =>
+          id.length > 0 && id.length <= 100 && isNavigationPanelProgress(progress)))) ||
       (value.boardingConfirmed !== undefined && typeof value.boardingConfirmed !== 'boolean') ||
       (value.boardingAt !== undefined && value.boardingAt !== null &&
         (!Number.isFinite(value.boardingAt) || value.boardingAt < value.startedAt || value.boardingAt > nowMs + 60_000)) ||

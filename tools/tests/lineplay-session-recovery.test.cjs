@@ -66,6 +66,7 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     }, recordAdaptiveEpisode: async (...args) => { calls.recordedEpisodes.push(args); } },
     './crewRelay': crewModule.exports,
     './crewGrid': gridModule.exports,
+    './navigationPanel': require('./helpers/navigation-panel.cjs'),
     './checkpoint': {
       readCheckpoint: async () => saved,
       writeCheckpoint: async value => { calls.written.push(JSON.parse(JSON.stringify(value))); },
@@ -115,6 +116,48 @@ const saved = {
   state: 'active', verifiedEligibleSeconds: 90,
   rewards: null, rewardsPending: false,
 };
+
+test('navigation repair pauses instantly, keeps rotations through remount and counts once without currency', async () => {
+  const logic = require('./helpers/navigation-panel.cjs');
+  const chapter = { id: 'mk-space-mountain', navigationPanel: true };
+  const id = `${chapter.id}-trivia`, seed = 0;
+  const { Session, calls } = makeHarness({ ...saved, playlist: [{ kind: 'trivia', id, seed }],
+    completedActivityIds: [] }, server, chapter);
+  const session = new Session(); await session.start(ride, undefined, 12);
+  session.rotateNavigationPanel(id, 3); await session.checkpointWrites;
+  const first = JSON.stringify(session.snapshot().navigationPanels);
+  session.pause('lineMoving'); session.rotateNavigationPanel(id, 3); session.startNextNavigationRound(id);
+  assert.equal(JSON.stringify(session.snapshot().navigationPanels), first);
+  session.resume(); session.rotateNavigationPanel('another-ride-trivia', 0);
+  assert.equal(JSON.stringify(session.snapshot().navigationPanels), first);
+  const checkpoint = calls.written.at(-1); session.dispose();
+  const { Session: Restored, calls: restoredCalls } = makeHarness(checkpoint, server, chapter);
+  const restored = new Restored(); await restored.start(ride, undefined, 12);
+  assert.equal(JSON.stringify(restored.snapshot().navigationPanels), first);
+  const board = logic.createNavigationPanel(seed);
+  for (let step = 0; step < 24; step++) {
+    const progress = restored.snapshot().navigationPanels[id];
+    const index = logic.nextNavigationRepair(board, progress);
+    if (index == null) break;
+    restored.rotateNavigationPanel(id, index);
+  }
+  const solved = restored.snapshot().navigationPanels[id];
+  assert.equal(logic.traceNavigationPanel(board, solved.rotations).solved, true);
+  assert.equal(restored.snapshot().completedActivityIds.filter(value => value === id).length, 1);
+  assert.equal(restored.snapshot().rewards, null); assert.equal(restoredCalls.complete, 0);
+  restored.rotateNavigationPanel(id, 0);
+  assert.equal(restored.snapshot().navigationPanels[id].taps, solved.taps);
+  restored.startNextNavigationRound(id);
+  const replay = restored.snapshot().navigationPanels[id];
+  assert.equal(replay.round, 1); assert.equal(replay.taps, 0);
+  assert.equal(logic.traceNavigationPanel(logic.createNavigationPanel(seed, 1), replay.rotations).solved, false);
+  assert.equal(restored.snapshot().completedActivityIds.filter(value => value === id).length, 1);
+  const isolated = restored.snapshot().navigationPanels[id]; isolated.rotations[0] = 99;
+  assert.notEqual(restored.snapshot().navigationPanels[id].rotations[0], 99, 'published snapshots cannot change controller state');
+  await restored.checkpointWrites;
+  assert.equal(restoredCalls.written.at(-1).navigationPanels[id].round, 1);
+  restored.dispose();
+});
 const server = {
   success: true, session_id: 'server-123', status: 'active',
   started_at: new Date(startedAt).toISOString(), ended_at: null,

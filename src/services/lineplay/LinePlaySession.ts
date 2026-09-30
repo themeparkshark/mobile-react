@@ -52,6 +52,8 @@ import { createCrewRelay, isCrewRelayProgress, type CrewRelayProgress } from './
 import { crewGridHasLine } from './crewGrid';
 import { activateQueueBackgroundHeartbeat, deactivateQueueBackgroundHeartbeat } from './backgroundQueueHeartbeat';
 import { LINEPLAY_ROUND_QUESTIONS } from '../../games/trivia/config';
+import { createNavigationPanel, createNavigationPanelProgress, traceNavigationPanel,
+  turnNavigationTile, type NavigationPanelProgress } from './navigationPanel';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -202,6 +204,7 @@ export interface SessionSnapshot {
   readonly rewardsPending: boolean;
   readonly completedActivityIds: readonly string[];
   readonly loreChoices: Readonly<Record<string, number>>;
+  readonly navigationPanels?: Readonly<Record<string, NavigationPanelProgress>>;
   readonly crewGridMarks: readonly number[];
   readonly prediction: { card: PredictionCard; guess: 'beat' | 'miss' } | null;
   /** Guest explicitly said they reached boarding; never inferred from ending a session. */
@@ -489,6 +492,7 @@ export class LinePlaySession {
   private checkpointWrites: Promise<void> = Promise.resolve();
   private completedActivityIds = new Set<string>();
   private loreChoices: Record<string, number> = {};
+  private navigationPanels: Record<string, NavigationPanelProgress> = {};
   private crewGridMarks: number[] = [];
   private prediction: { card: PredictionCard; guess: 'beat' | 'miss' } | null = null;
   private boardingConfirmed = false;
@@ -616,6 +620,8 @@ export class LinePlaySession {
       accrual: this.computeAccrual(),
       completedActivityIds: Array.from(this.completedActivityIds),
       loreChoices: { ...this.loreChoices },
+      navigationPanels: Object.fromEntries(Object.entries(this.navigationPanels).map(([id, progress]) =>
+        [id, { ...progress, rotations: [...progress.rotations] }])),
       crewGridMarks: [...this.crewGridMarks],
       prediction: this.prediction,
       boardingConfirmed: this.boardingConfirmed,
@@ -640,6 +646,7 @@ export class LinePlaySession {
       playlist: this.playlist,
       completedActivityIds: Array.from(this.completedActivityIds),
       loreChoices: { ...this.loreChoices },
+      navigationPanels: this.navigationPanels,
       crewGridMarks: [...this.crewGridMarks],
       prediction: this.prediction,
       boardingConfirmed: this.boardingConfirmed,
@@ -720,6 +727,33 @@ export class LinePlaySession {
     else this.loreChoices[id] = choice;
     this.persistCheckpoint();
     this.emit();
+  }
+
+  /** Local story play only; the server's verified wait still owns every reward. */
+  rotateNavigationPanel(id: string, index: number): void {
+    if (this.state !== 'active' || !this.chapter?.navigationPanel || id !== `${this.chapter.id}-trivia`) return;
+    const item = this.playlist.find(item => item.id === id);
+    if (item?.kind !== 'trivia') return;
+    const current = this.navigationPanels[id] ?? createNavigationPanelProgress(item.seed, 0, this.completedActivityIds.has(id));
+    const next = turnNavigationTile(item.seed, current, index);
+    if (next === current) return;
+    this.navigationPanels = { ...this.navigationPanels, [id]: next };
+    if (traceNavigationPanel(createNavigationPanel(item.seed, next.round), next.rotations).solved) {
+      this.completedActivityIds.add(id);
+      this.recordPlayedAdaptiveEpisode(id);
+    }
+    this.persistCheckpoint(); this.emit();
+  }
+
+  startNextNavigationRound(id: string): void {
+    if (this.state !== 'active' || !this.chapter?.navigationPanel || id !== `${this.chapter.id}-trivia`) return;
+    const item = this.playlist.find(item => item.id === id);
+    if (item?.kind !== 'trivia') return;
+    const current = this.navigationPanels[id] ?? createNavigationPanelProgress(item.seed, 0, this.completedActivityIds.has(id));
+    if (!traceNavigationPanel(createNavigationPanel(item.seed, current.round), current.rotations).solved) return;
+    this.navigationPanels = { ...this.navigationPanels,
+      [id]: createNavigationPanelProgress(item.seed, (current.round + 1) % 1000) };
+    this.persistCheckpoint(); this.emit();
   }
 
   /** Self-reported play only: a row appears in the recap but never awards Parts. */
@@ -914,6 +948,7 @@ export class LinePlaySession {
       this.recordPlayedAdaptiveEpisode(saved.completedActivityIds.find(id =>
         id.startsWith(`${this.chapter?.id}-`))!);
     this.loreChoices = saved?.loreChoices ?? {};
+    this.navigationPanels = saved?.navigationPanels ?? {};
     this.crewGridMarks = saved?.crewGridMarks ?? [];
     const originalWaitStillFresh = ride.postedWaitMinutes === saved?.plannedWaitMinutes &&
       ride.postedWaitObservedAt != null &&
@@ -1450,6 +1485,7 @@ export class LinePlaySession {
     this.rewardsPending = false;
     this.completedActivityIds.clear();
     this.loreChoices = {};
+    this.navigationPanels = {};
     this.crewGridMarks = [];
     this.prediction = null;
     this.crewRelay = null;

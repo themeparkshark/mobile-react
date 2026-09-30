@@ -29,6 +29,7 @@ vm.runInNewContext(code, {
   require(name) {
     if (name === '@react-native-async-storage/async-storage') return { default: storage };
     if (name === './crewRelay') return crewModule.exports;
+    if (name === './navigationPanel') return require('./helpers/navigation-panel.cjs');
     throw new Error(`Unexpected dependency: ${name}`);
   },
 }, { filename: 'checkpoint.ts' });
@@ -84,6 +85,18 @@ test('old, malformed, and cross-account checkpoints are rejected', () => {
     seed: 1, score: 975, duration_seconds: 30, paths: [[0, 99], [0], [0]],
   } }), 12, 99), null);
   assert.equal(checkpointKey(12, 99) === checkpointKey(13, 99), false);
+});
+
+test('navigation repair rotations survive a checkpoint, while malformed boards are rejected', () => {
+  const progress = require('./helpers/navigation-panel.cjs').createNavigationPanelProgress(0);
+  const savedPanel = { ...checkpoint, navigationPanels: { 'mk-space-mountain-trivia': progress } };
+  const restored = parseCheckpoint(JSON.stringify(savedPanel), 12, 99);
+  assert.deepEqual(JSON.parse(JSON.stringify(restored.navigationPanels)), JSON.parse(JSON.stringify(savedPanel.navigationPanels)));
+  for (const panels of [[], null, { repair: { ...progress, rotations: [0] } },
+    { repair: { ...progress, rotations: Array(9).fill(10) } },
+    { repair: { ...progress, round: 1000 } }])
+    assert.equal(parseCheckpoint(JSON.stringify({ ...checkpoint, navigationPanels: panels }), 12, 99), null);
+  assert.ok(parseCheckpoint(JSON.stringify(checkpoint), 12, 99), 'old checkpoints keep working');
 });
 
 test('an unfinished Current Quest proof survives a queue remount', () => {

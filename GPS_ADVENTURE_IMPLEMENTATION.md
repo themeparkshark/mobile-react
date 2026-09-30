@@ -153,6 +153,42 @@ with isolated Metro 8096. No production rewards or player records were changed.
   ladder/day instead of an older preview. Switching to reduced motion during a
   pending claim cancels decorative movement and prevents delayed spring motion.
 
+## Native navigation-repair checkpoint
+
+The signed-in local simulator played Nebula weave through a hint, first tile,
+Pause, Resume and a completed three-star route. Replay changed to Starlight
+switchback; its second completed route automatically revealed the success and
+next-clue controls. Find the next signal opened mission two. After describing a
+visible detail and logging it, the original chapter showed 2/3 signals found and
+selected the star-chart finale. The finale launch and matching navigator art were
+inspected at phone size, then practice was quit. No server reward was granted.
+
+The dev-only flow fixture starts another session on source Fast Refresh; this is
+not evidence of player checkpoint recovery. Actual controller tests cover exact
+rotations after remount, pause guards, replay persistence and once-only mission
+completion. Native restart recovery and physical/small-phone QA remain pending.
+
+
+- Magic Kingdom Space Mountain now has a real navigation repair in the existing
+  first chapter activity. Rotate a 3x3 circuit through three star relays to the
+  exit. Four authored routes replay with deterministic scrambled orientations;
+  the hint points to the next actual broken tile. Other ride chapters and the
+  remaining trivia pool keep their existing activities. The original activity ID
+  remains compatible with older completed checkpoints.
+- The repair saves rotations and replay round in bounded local checkpoints, pauses
+  tile input immediately, completes the chapter mission once and preserves that
+  completion on replay. Local taps never award server Parts, Coins or Tickets.
+  Circuit glows, stars, precise entry/exit arrows, tactile taps and one win sound
+  accompany a short success reveal. A new win scrolls its next action into view;
+  restored completion stays quiet. Reduced motion gives a static reveal/scroll.
+- Active LinePlay uses a focused status card: ride, Pause, Arcade, confirmed Parts
+  status and an accessible Details disclosure remain reachable. Detailed verified
+  wait/reward rules stay available. The chapter and all three mission cards use a
+  new original astronaut shark, also used by the Star Chart Memory banner. Asset
+  decode failure falls back to existing mascot art. Original artwork is retained.
+  The new transparent asset and exact reference/prompt JSON are additive files;
+  generated with the built-in image tool, whose model-version selector is not exposed.
+
 ## Backend corrections
 
 Applied to the isolated backend and the original LOCAL backend serving the preview:
@@ -172,7 +208,7 @@ Applied to the isolated backend and the original LOCAL backend serving the previ
 
 ## Validation and remaining work
 
-TypeScript and git diff checks pass. Full app checks: 207 tests. Focused backend
+TypeScript and git diff checks pass. Full app checks: 220 tests. Focused backend
 checks: seven tests, 53 assertions. PHP 8.5 emits an existing PDO deprecation. The
 legacy full migration suite needs Doctrine DBAL; unrelated test-discovery warnings
 remain and are not claimed clean.
