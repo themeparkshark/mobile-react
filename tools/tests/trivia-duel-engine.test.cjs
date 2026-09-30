@@ -238,6 +238,14 @@ test('deck: generated formats are built only from the verified fact table', () =
   }
 });
 
+test('every planned question rebuilds from its id alone', () => {
+  for (let seed = 0; seed < 300; seed++) {
+    const plan = match.planMatch(seed % 7 === 0 ? 'ride' : 'queue', seed, POOL, { parkId: seed % 2 ? 8 : undefined });
+    const again = match.planFromIds(plan.mode, plan.seed, plan.rounds.map((r) => r.question.id), POOL);
+    assert.deepEqual(plain(again.rounds.map((r) => r.question)), plain(plan.rounds.map((r) => r.question)));
+  }
+});
+
 test('unlock jitter is close to uniform over 0-250ms', () => {
   const buckets = [0, 0, 0, 0, 0];
   for (let i = 0; i < 5000; i++) buckets[Math.min(4, Math.floor(match.unlockJitter(i * 7 + 3, i % 5) / 50.2))]++;
@@ -305,7 +313,9 @@ test('ghost: encode/decode round-trips under 1KB and regrades identically', () =
   assert.ok(wire.length < 1024, `ghost ${wire.length} bytes`);
   const back = match.decodeGhost(wire);
   assert.deepEqual(plain(back), plain(g));
-  const regraded = match.gradeRun(plan, back.rows);
+  const rebuilt = match.planFromIds('queue', back.seed, back.qids, POOL);
+  assert.deepEqual(plain(rebuilt.rounds.map((r) => r.question)), plain(plan.rounds.map((r) => r.question)));
+  const regraded = match.gradeRun(rebuilt, back.rows);
   assert.equal(regraded.me.score, t.me.score);
   assert.equal(match.decodeGhost('nope'), null);
 });

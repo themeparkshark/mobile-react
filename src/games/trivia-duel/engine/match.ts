@@ -10,7 +10,7 @@ import {
   BUZZ, DAILY_LADDER, POINTS, QUEUE_ROUNDS, RIDE_QUESTIONS, RIDE_ROUND, READ_LOCK, SUDDEN_DEATH, TEMPLATES,
   type DuelMode, type FinRank, type RoundSpec, type SpeedTier,
 } from './config';
-import { buildDeck, type DuelQuestion, type PoolQuestion } from './content';
+import { buildDeck, materializeQuestion, type DuelQuestion, type PoolQuestion } from './content';
 import { finAnswer, finClosestGuess, finStake, type FinAnswer } from './finAI';
 import {
   applyFinal, applyStreak, buzzOrder, buzzPoints, closestPoints, createStreak, creditedSpeed, graceMs, quickPoints,
@@ -80,6 +80,20 @@ export function planMatch(mode: DuelMode, seed: number, pool: readonly PoolQuest
     rank: opts.rank ?? 'deckhand',
     rounds: specs.map((spec, i) => planRound(spec, deck[i], i, seed, family)),
   };
+}
+
+/** Rebuild the exact plan of a recorded run (ghost duel, server replay). */
+export function planFromIds(mode: DuelMode, seed: number, qids: readonly string[], pool: readonly PoolQuestion[], rank: FinRank = 'deckhand'): MatchPlan | null {
+  const { specs, template } = roundSpecsFor(mode, seed);
+  if (qids.length < specs.length) return null;
+  const family = mode === 'ride' ? 'ride' : 'queue';
+  const rounds: PlannedRound[] = [];
+  for (let i = 0; i < specs.length; i++) {
+    const q = materializeQuestion(qids[i], pool, seed);
+    if (!q) return null;
+    rounds.push(planRound(specs[i], q, i, seed, family));
+  }
+  return { mode, seed: seed >>> 0, template, rank, rounds };
 }
 
 export function suddenDeathRound(plan: MatchPlan, pool: readonly PoolQuestion[], seen: readonly string[]): PlannedRound {

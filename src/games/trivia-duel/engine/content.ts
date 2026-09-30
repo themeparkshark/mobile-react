@@ -82,8 +82,17 @@ function categoryFor(q: PoolQuestion): string {
   return 'Queue Smarts';
 }
 
-function fromPool(r: Rng, q: PoolQuestion): DuelQuestion {
-  const s = shuffledChoices(r, q.choices, q.correctIndex);
+function idSeed(seed: number, id: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return mixSeed(seed >>> 0, h);
+}
+
+function fromPool(seed: number, q: PoolQuestion): DuelQuestion {
+  const s = shuffledChoices(createRng(idSeed(seed, q.id)), q.choices, q.correctIndex);
   return {
     id: q.id,
     format: 'choice4',
@@ -119,14 +128,17 @@ function pickFacts(r: Rng, facts: OpeningFact[], n: number, minGap: number): Ope
 export function genTrueTale(r: Rng, facts: OpeningFact[]): DuelQuestion {
   const f = facts[rngInt(r, 0, facts.length - 1)];
   const truthful = rngFloat(r) < 0.5;
-  const shift = (rngInt(r, 4, 12)) * (rngFloat(r) < 0.5 ? -1 : 1);
-  const year = truthful ? f.year : f.year + shift;
+  const shift = truthful ? 0 : rngInt(r, 4, 12) * (rngFloat(r) < 0.5 ? -1 : 1);
+  return trueTaleFrom(f, shift);
+}
+
+function trueTaleFrom(f: OpeningFact, shift: number): DuelQuestion {
   return {
-    id: `tt-${f.id}-${truthful ? 't' : `f${shift}`}`,
+    id: `tt~${f.id}~${shift}`,
     format: 'truetale',
-    prompt: `${f.name} opened in ${year}.`,
+    prompt: `${f.name} opened in ${f.year + shift}.`,
     choices: ['TRUE', 'TALL TALE'],
-    correctIndex: truthful ? 0 : 1,
+    correctIndex: shift === 0 ? 0 : 1,
     difficulty: 'easy',
     category: f.category,
     fact: `${f.name} opened in ${f.year}.`,
@@ -138,10 +150,12 @@ export function genTrueTale(r: Rng, facts: OpeningFact[]): DuelQuestion {
 export function genPair(r: Rng, facts: OpeningFact[]): DuelQuestion | null {
   const pick = pickFacts(r, facts, 2, 2);
   if (!pick) return null;
-  const [older, newer] = pick;
-  const flip = rngFloat(r) < 0.5;
+  return pairFrom(pick[0], pick[1], rngFloat(r) < 0.5);
+}
+
+function pairFrom(older: OpeningFact, newer: OpeningFact, flip: boolean): DuelQuestion {
   return {
-    id: `pair-${older.id}-${newer.id}`,
+    id: `pair~${older.id}~${newer.id}~${flip ? 1 : 0}`,
     format: 'pair',
     prompt: 'Which one opened first?',
     choices: flip ? [newer.name, older.name] : [older.name, newer.name],
@@ -157,13 +171,16 @@ export function genPair(r: Rng, facts: OpeningFact[]): DuelQuestion | null {
 export function genOpenedFirst(r: Rng, facts: OpeningFact[]): DuelQuestion | null {
   const pick = pickFacts(r, facts, 3, 2);
   if (!pick) return null;
-  const s = shuffledChoices(r, pick.map((f) => f.name), 0);
+  return openedFrom(pick, rngShuffle(r, [0, 1, 2]));
+}
+
+function openedFrom(pick: OpeningFact[], order: number[]): DuelQuestion {
   return {
-    id: `open3-${pick.map((f) => f.id).join('-')}`,
+    id: `open3~${pick.map((f) => f.id).join('~')}~${order.join('')}`,
     format: 'opened',
     prompt: 'Which of these opened first?',
-    choices: s.choices,
-    correctIndex: s.correctIndex,
+    choices: order.map((i) => pick[i].name),
+    correctIndex: order.indexOf(0),
     difficulty: 'medium',
     category: pick[0].category,
     fact: `${pick[0].name} opened in ${pick[0].year}.`,
@@ -174,13 +191,14 @@ export function genOpenedFirst(r: Rng, facts: OpeningFact[]): DuelQuestion | nul
 
 export function genClosest(r: Rng, facts: OpeningFact[]): DuelQuestion {
   const f = facts[rngInt(r, 0, facts.length - 1)];
+  return closestFrom(f, rngInt(r, -CLOSEST_TOL.year, CLOSEST_TOL.year));
+}
+
+function closestFrom(f: OpeningFact, offset: number): DuelQuestion {
   const tol = CLOSEST_TOL.year;
   const span = 3 * tol;
-  const offset = rngInt(r, -tol, tol);
-  const min = f.year - span + offset;
-  const max = f.year + span + offset;
   return {
-    id: `near-${f.id}`,
+    id: `near~${f.id}~${offset}`,
     format: 'closest',
     prompt: `What year did ${f.name} open?`,
     choices: [],
@@ -189,9 +207,35 @@ export function genClosest(r: Rng, facts: OpeningFact[]): DuelQuestion {
     category: f.category,
     fact: `${f.name} opened in ${f.year}.`,
     source: f.source,
-    slider: { min, max, step: 1, unit: '', truth: f.year, tol },
+    slider: { min: f.year - span + offset, max: f.year + span + offset, step: 1, unit: '', truth: f.year, tol },
     stats: priorStats('medium'),
   };
+}
+
+const FACT_BY_ID = new Map(OPENING_FACTS.map((f) => [f.id, f]));
+
+/**
+ * Rebuild a question from its id alone (ghost replays, server grading): every
+ * generated id carries its parameters, and authored choice order is keyed by
+ * (seed, id).
+ */
+export function materializeQuestion(id: string, pool: readonly PoolQuestion[], seed: number): DuelQuestion | null {
+  const parts = id.split('~');
+  const fact = (k: string) => FACT_BY_ID.get(k);
+  switch (parts[0]) {
+    case 'tt': { const f = fact(parts[1]); return f ? trueTaleFrom(f, Number(parts[2])) : null; }
+    case 'pair': { const a = fact(parts[1]); const b = fact(parts[2]); return a && b ? pairFrom(a, b, parts[3] === '1') : null; }
+    case 'open3': {
+      const fs = [fact(parts[1]), fact(parts[2]), fact(parts[3])];
+      if (fs.some((f) => !f)) return null;
+      return openedFrom(fs as OpeningFact[], parts[4].split('').map(Number));
+    }
+    case 'near': { const f = fact(parts[1]); return f ? closestFrom(f, Number(parts[2])) : null; }
+    default: {
+      const q = pool.find((p) => p.id === id);
+      return q ? fromPool(seed, q) : null;
+    }
+  }
 }
 
 export interface DeckOptions {
@@ -228,7 +272,7 @@ export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundS
         if (cand.length) {
           const q = cand[rngInt(r, 0, cand.length - 1)];
           used.add(q.id);
-          return fromPool(r, q);
+          return fromPool(opts.seed, q);
         }
       }
     }
