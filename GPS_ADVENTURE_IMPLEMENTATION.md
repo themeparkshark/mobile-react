@@ -143,6 +143,16 @@ with isolated Metro 8096. No production rewards or player records were changed.
   owned coins. Native reduce-motion preference and real planner-navigation QA
   remain pending.
 
+- Daily chest now offers Back to map before opening, plus backdrop/native-back
+  dismissal while idle. Claiming remains deliberate and cannot be interrupted
+  by these exits. Native signed-in decline returned to the original map with
+  180 Coins, seven Tickets and 185 Energy unchanged; day-two chest remains unclaimed.
+  The new day-two chest is valid: local backend uses UTC and crossed Sep 30 while
+  the simulator was still Sep 29 Pacific. The seven-day ladder rules are unchanged.
+  Header identifies today's reward; the reveal uses the confirmed response's
+  ladder/day instead of an older preview. Switching to reduced motion during a
+  pending claim cancels decorative movement and prevents delayed spring motion.
+
 ## Backend corrections
 
 Applied to the isolated backend and the original LOCAL backend serving the preview:
@@ -162,7 +172,7 @@ Applied to the isolated backend and the original LOCAL backend serving the previ
 
 ## Validation and remaining work
 
-TypeScript and git diff checks pass. Full app checks: 204 tests. Focused backend
+TypeScript and git diff checks pass. Full app checks: 207 tests. Focused backend
 checks: seven tests, 53 assertions. PHP 8.5 emits an existing PDO deprecation. The
 legacy full migration suite needs Doctrine DBAL; unrelated test-discovery warnings
 remain and are not claimed clean.

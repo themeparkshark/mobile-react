@@ -45,8 +45,11 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
   const { width } = useWindowDimensions();
   const [visible, setVisible] = useState(false);
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
+  const [confirmedGift, setConfirmedGift] = useState<DailyGiftType | null>(null);
   const { setDailyGift } = useContext(DailyGiftContext);
   const reducedMotion = useReducedGameMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
   const claiming = useRef(false);
   const acknowledgedGift = useRef<DailyGiftType | null>(null);
   const mounted = useRef(true);
@@ -59,8 +62,9 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
     };
   }, []);
 
-  const ladder = dailyGift.ladder?.length ? dailyGift.ladder : fallbackLadder(dailyGift);
-  const day = Math.min(ladder.length, Math.max(1, dailyGift.day ?? 1));
+  const displayedGift = confirmedGift ?? dailyGift;
+  const ladder = displayedGift.ladder?.length ? displayedGift.ladder : fallbackLadder(displayedGift);
+  const day = Math.min(ladder.length, Math.max(1, displayedGift.day ?? 1));
   const today = ladder[day - 1];
   const reward = mainReward(today);
 
@@ -90,6 +94,13 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
   useEffect(() => () => {
     [shake, pop, prize, stamp].forEach(cancelAnimation);
   }, [shake, pop, prize, stamp]);
+  useEffect(() => {
+    if (!reducedMotion) return;
+    [shake, pop, prize, stamp].forEach(cancelAnimation);
+    shake.value = 0; pop.value = 1;
+    prize.value = phase === 'open' ? 1 : 0;
+    stamp.value = phase === 'open' ? 1 : 0;
+  }, [reducedMotion, phase, shake, pop, prize, stamp]);
 
   const dismiss = () => {
     setVisible(false);
@@ -113,10 +124,11 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
       acknowledgedGift.current = confirmed;
       void refreshPlayer?.();
       if (!mounted.current) { setDailyGift(confirmed); return; }
+      setConfirmedGift(confirmed);
       revealTimer.current = setTimeout(() => {
         if (!mounted.current) return;
         setPhase('open');
-        if (reducedMotion) {
+        if (reducedMotionRef.current) {
           shake.value = 0; pop.value = 1; prize.value = 1; stamp.value = 1;
         } else {
           pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 }));
@@ -161,12 +173,12 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
     <Modal isVisible={visible} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
       animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
-      backdropOpacity={0.7} onBackdropPress={phase === 'open' ? dismiss : undefined}
-      onBackButtonPress={phase === 'open' ? dismiss : undefined}>
+      backdropOpacity={0.7} onBackdropPress={phase !== 'opening' ? dismiss : undefined}
+      onBackButtonPress={phase !== 'opening' ? dismiss : undefined}>
       <View style={styles.wrap}>
         <Ribbon text="Daily Chest" />
         <View style={styles.card}>
-          <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Day ${day} of 7 · come back tomorrow for more`}</Text>
+          <Text style={styles.subtitle}>{phase === 'open' ? `Day ${day} collected!` : `Today’s chest · Day ${day} of ${ladder.length}`}</Text>
 
           <View style={styles.ladder}>
             {ladder.map((r) => (
@@ -200,6 +212,10 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
               <Text style={styles.buttonText}>{day === 7 ? 'SEE YOU AT THE PARK!' : 'AWESOME!'}</Text>
             </Pressable>
           )}
+          {phase === 'closed' && <Pressable onPress={dismiss} accessibilityRole="button"
+            accessibilityLabel="Back to map without opening this chest" style={styles.laterButton}>
+            <Text style={styles.laterText}>BACK TO MAP ›</Text>
+          </Pressable>}
         </View>
       </View>
     </Modal>
@@ -229,7 +245,7 @@ const styles = StyleSheet.create({
   wrap: { alignItems: 'center' },
   card: { width: '94%', marginTop: -14, backgroundColor: '#0768b9', borderRadius: 24, borderWidth: 4, borderColor: '#fff',
     paddingTop: 22, paddingBottom: 18, paddingHorizontal: 12, alignItems: 'center' },
-  subtitle: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', marginBottom: 10 },
+  subtitle: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', marginBottom: 10, textAlign: 'center' },
   ladder: { flexDirection: 'row', gap: 4, alignSelf: 'stretch', justifyContent: 'center' },
   day: { flex: 1, maxWidth: 48, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 10,
     paddingVertical: 5 },
@@ -253,4 +269,7 @@ const styles = StyleSheet.create({
   button: { marginTop: 14, alignSelf: 'stretch', backgroundColor: '#ffcf3b', borderRadius: 16, paddingVertical: 12,
     alignItems: 'center', borderBottomWidth: 4, borderBottomColor: '#d99a00' },
   buttonText: { fontFamily: 'Shark', fontSize: 20, color: '#075083' },
+  laterButton: { minHeight: 44, alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center',
+    marginTop: 8, borderRadius: 12, borderWidth: 2, borderColor: '#8fcdff', backgroundColor: '#075395' },
+  laterText: { fontFamily: 'Knockout', fontSize: 17, color: '#fff' },
 });

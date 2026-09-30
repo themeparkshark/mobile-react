@@ -74,6 +74,10 @@ function chest({ reconciled = null, reduced = false } = {}) {
   }
   render();
   return { updates, acknowledged, sounds,
+    find: predicate => find(tree, predicate),
+    decline() { find(tree, node => node.type === 'Pressable' && node.props.accessibilityLabel === 'Back to map without opening this chest').props.onPress(); render(); },
+    get modal() { return tree; },
+    preference(value) { reduced = value; render(); },
     get refreshes() { return refreshes; }, get springs() { return springs; },
     open() { find(tree, node => node.type === 'Pressable' && node.props.accessibilityLabel?.startsWith('Open today')).props.onPress(); render(); },
     get disabled() { return find(tree, node => node.type === 'Pressable' && node.props.accessibilityLabel)?.props.disabled; },
@@ -114,4 +118,32 @@ test('reduced-motion chest reveals confirmed rewards without spring animations',
   const daily = chest({ reduced: true }); daily.open(); daily.updates[0].resolve({ ...gift, redeemed_at: '2026-09-29T22:00:00Z' });
   await daily.settle(); daily.reveal();
   assert.equal(daily.celebrated, true); assert.equal(daily.springs, 0);
+});
+test('a player can leave the unopened chest without claiming or inventing a reward', () => {
+  const daily = chest(); assert.equal(daily.visible, true);
+  assert.equal(typeof daily.modal.props.onBackdropPress, 'function');
+  assert.equal(typeof daily.modal.props.onBackButtonPress, 'function');
+  daily.decline();
+  assert.equal(daily.visible, false); assert.equal(daily.updates.length, 0);
+  assert.equal(daily.acknowledged.length, 0); assert.equal(daily.refreshes, 0);
+  assert.equal(daily.sounds.includes('win'), false);
+});
+test('claiming disables dismissal, and the reveal uses the confirmed ladder reward', async () => {
+  const daily = chest(); daily.open();
+  assert.equal(daily.modal.props.onBackdropPress, undefined);
+  assert.equal(daily.modal.props.onBackButtonPress, undefined);
+  assert.equal(daily.find(node => node.props?.accessibilityLabel === 'Back to map without opening this chest'), undefined);
+  daily.updates[0].resolve({ ...gift, redeemed_at: '2026-09-30T00:12:00Z', day: 2,
+    ladder: [{ day: 1, coins: 25, energy: 0, tickets: 0 }, { day: 2, coins: 0, energy: 20, tickets: 0 }] });
+  await daily.settle(); daily.reveal();
+  const text = node => Array.isArray(node.props.children) ? node.props.children.join('') : node.props.children;
+  assert.ok(daily.find(node => node.type === 'Text' && text(node) === '+20 Energy'));
+  assert.equal(daily.find(node => node.type === 'Text' && text(node) === '+25 Shark Coins'), undefined);
+});
+test('turning on reduced motion during a claim prevents delayed spring celebration', async () => {
+  const daily = chest(); daily.open();
+  daily.updates[0].resolve({ ...gift, redeemed_at: '2026-09-30T00:12:00Z' });
+  await daily.settle(); daily.preference(true); daily.reveal();
+  assert.equal(daily.celebrated, true); assert.equal(daily.springs, 0);
+  assert.equal(daily.updates.length, 1); assert.equal(daily.refreshes, 1);
 });
