@@ -84,6 +84,7 @@ const EV_BUZZ = 8;
 const EV_SUB_LOCK = 9;
 const EV_SUB_TIMEOUT = 10;
 const EV_FREEZE_END = 11;
+const EV_FIN_LEAN = 12;
 
 interface QClock {
   phase: number;
@@ -94,6 +95,7 @@ interface QClock {
   finFired: number;
   finBuzzMs: number;
   finBuzzFired: number;
+  leanFired: number;
   frozen: number;
   freezeLeft: number;
   sub: number;
@@ -109,7 +111,7 @@ interface QClock {
 }
 
 function freshClock(): QClock {
-  return { phase: PH_IDLE, t: 0, unlockAt: 0, windowMs: 1, finMs: -1, finFired: 0, finBuzzMs: -1, finBuzzFired: 0, frozen: 0, freezeLeft: 0, sub: 0, subLimit: 1, lastSec: 99, g: 400, h: 6000, kind: 0, chomp: 0, forfeit: 0, removed: 0, lastSim: -1 };
+  return { phase: PH_IDLE, t: 0, unlockAt: 0, windowMs: 1, finMs: -1, finFired: 0, finBuzzMs: -1, finBuzzFired: 0, leanFired: 0, frozen: 0, freezeLeft: 0, sub: 0, subLimit: 1, lastSec: 99, g: 400, h: 6000, kind: 0, chomp: 0, forfeit: 0, removed: 0, lastSim: -1 };
 }
 
 type SubMode = 'buzzAnswer' | 'steal' | 'open' | null;
@@ -398,6 +400,10 @@ export function TriviaDuel(props: TriviaDuelProps) {
           q.frozen += f;
           if (q.freezeLeft <= 0) runOnJS(dispatch)(EV_FREEZE_END, 0, 0);
         }
+        if (q.kind !== 2 && q.finMs >= 0 && q.leanFired === 0 && since >= q.finMs - 300) {
+          q.leanFired = 1;
+          runOnJS(dispatch)(EV_FIN_LEAN, 0, 0);
+        }
         if (q.finMs >= 0 && q.finFired === 0 && since >= q.finMs) {
           q.finFired = 1;
           runOnJS(dispatch)(EV_FIN, q.finMs, 0);
@@ -554,6 +560,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     let p: MatchPlan | null = null;
     if (ghost) p = planFromIds(ghost.mode === 'ride' ? 'queue' : ghost.mode, ghost.seed, ghost.qids, poolRef.current, rank);
     if (!p) p = planMatch(mode === 'ghost' ? 'queue' : mode, seed, poolRef.current, { parkId, seen: mem.seen, rank });
+    if (__DEV__) console.log('[trivia-duel] plan', { seed, seenIds: mem.seen.join(','), pool: poolRef.current.length, ids: p.rounds.map((r) => r.question.id) });
     const carry = mode === 'queue' || mode === 'practice' ? activeCarry(mem, Date.now()) : { streak: 0, shield: false };
     carryRef.current = carry;
     tally.current = createTally(carry.streak, carry.shield);
@@ -662,7 +669,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setClock({
       phase: PH_READ, t: 0, unlockAt: r.readLockMs + r.jitterMs, windowMs: r.windowMs,
       finMs: isBuzz ? -1 : o.lockMs, finFired: 0,
-      finBuzzMs: isBuzz ? (o.buzzMs ?? -1) : -1, finBuzzFired: 0,
+      finBuzzMs: isBuzz ? (o.buzzMs ?? -1) : -1, finBuzzFired: 0, leanFired: 0,
       frozen: 0, freezeLeft: 0, sub: 0, subLimit: 1, lastSec: 99, g: r.graceMs, h: r.horizonMs,
       kind: isRide ? 1 : isBuzz ? 2 : 0, chomp: 0, forfeit: 0, removed: 0, lastSim: -1,
     });
@@ -790,6 +797,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
         if (!ghost) {
           setFin('think');
           sfx(CUE.think, { volume: 0.5, pan: 0.6 });
+        }
+        return;
+      }
+      case EV_FIN_LEAN: {
+        // His only tell (Quick Draw): a 6pt lean, the hat lags on its spring.
+        if (!ghost && !reducedMotion) {
+          finRot.value = withSequence(withTiming(-0.06, { duration: 180 }), withDelay(260, withSpring(0, { damping: 9, stiffness: 200 })));
+          hatRot.value = withSequence(withDelay(40, withTiming(5, { duration: 160 })), withSpring(0, { damping: 6, stiffness: 180 }));
         }
         return;
       }
@@ -1552,7 +1567,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
                         bar={-1}
                         wiggleKey={wiggle[i] ?? 0}
                         reducedMotion={reducedMotion}
-                        fontSize={c.length > 26 ? 15 : c.length > 14 ? 17 : 20}
+                        fontSize={tileFont(c, tileGeom.w)}
                         chomped={chomped.includes(i)}
                         frost={frozen}
                         rim={flameT >= 5 ? 5 : flameT >= 3 ? 3 : flameT >= 2 ? 1 : 0}
@@ -1647,6 +1662,15 @@ function rideSpeedWorklet(t: number, g: number, chomp: number): number {
   let s = Math.round((150 * Math.min(1, Math.max(0, 1 - (t - g) / (h - g)))) / 5) * 5;
   if (chomp) s = Math.min(s, 50);
   return s;
+}
+
+/** Largest size (15-20) where the longest word fits on one line and the label fits in 3 lines. */
+function tileFont(label: string, tileW: number): number {
+  const avail = tileW - 62;
+  const longest = label.split(/\s+/).reduce((m, w) => Math.max(m, w.length), 1);
+  let size = label.length > 26 ? 15 : label.length > 14 ? 17 : 20;
+  while (size > 12 && longest * size * 0.6 > avail) size -= 1;
+  return size;
 }
 
 function sleep(ms: number): Promise<void> {

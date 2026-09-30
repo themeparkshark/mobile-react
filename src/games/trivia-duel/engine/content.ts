@@ -281,7 +281,9 @@ export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundS
   const freshFacts = (need = 1): OpeningFact[] | null => {
     const fresh = allFacts.filter((f) => !usedFacts.has(f.id) && !restedFacts.has(f.id));
     // Generated formats need spare facts to choose from; otherwise an authored item plays.
-    return fresh.length >= need + 1 ? fresh : null;
+    if (fresh.length >= need + 1) return fresh;
+    const wide = OPENING_FACTS.filter((f) => !usedFacts.has(f.id) && !restedFacts.has(f.id));
+    return wide.length >= need + 1 ? wide : null;
   };
   const anyFacts = () => {
     const open = allFacts.filter((f) => !usedFacts.has(f.id));
@@ -290,8 +292,8 @@ export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundS
   const clashes = (q: DuelQuestion | PoolQuestion) => factKeysOf(q).some((k) => usedFacts.has(k));
   const out: DuelQuestion[] = [];
 
-  const takeAuthored = (difficulty: Difficulty): DuelQuestion | null => {
-    for (const pass of [0, 1]) {
+  const takeAuthored = (difficulty: Difficulty, allowSeen: boolean): DuelQuestion | null => {
+    for (const pass of allowSeen ? [0, 1] : [0]) {
       for (const d of DIFF_ORDER[difficulty]) {
         const cand = usable.filter((q) => q.difficulty === d && !used.has(q.id) && !clashes(q) && (pass === 1 || !seen.has(q.id)));
         if (cand.length) {
@@ -313,7 +315,14 @@ export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundS
     else if (facts && fmt === 'opened') q = genOpenedFirst(r, facts);
     else if (facts && fmt === 'closest') q = genClosest(r, facts);
     if (q && (used.has(q.id) || clashes(q))) q = null;
-    if (!q) q = takeAuthored(spec.difficulty);
+    if (!q) q = takeAuthored(spec.difficulty, false);
+    if (!q && spec.type !== 'final') {
+      // Thin authored pool: a fresh generated fact beats repeating a seen question.
+      const f = freshFacts(2);
+      const alt = f ? (spec.formats.includes('opened') ? genOpenedFirst(r, f) : spec.formats.includes('choice4') && spec.difficulty !== 'easy' ? genPair(r, f) : genTrueTale(r, f)) : null;
+      if (alt && !used.has(alt.id) && !clashes(alt)) q = alt;
+    }
+    if (!q) q = takeAuthored(spec.difficulty, true);
     if (!q) q = genTrueTale(r, anyFacts());
     used.add(q.id);
     factKeysOf(q).forEach((k) => usedFacts.add(k));
