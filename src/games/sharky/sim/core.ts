@@ -2355,3 +2355,131 @@ export function setCourse(s: SimState, chunkIds: number[], lead: number): void {
   s.gateKind = G_TIDE;
   spawn(s, E_GATE, s.gateX, 500, G_TIDE, 0, 0);
 }
+
+// ---------------------------------------------------------------------------
+// Fast lookahead planner (bots): shark-only physics against predicted hazard
+// positions. No state cloning, so a house-crew racer plans a whole run in a
+// few ms. Conservative: puffers count as inflated, tracking torpedoes as
+// locked on their current lane.
+// ---------------------------------------------------------------------------
+
+function touchesAhead(s: SimState, cx: number, cy: number, tAdd: number, k: number): boolean {
+  'worklet';
+  for (let i = 0; i < ENT_CAP; i++) {
+    const t = s.et[i];
+    if (!isHazard(t) || (s.ef[i] & F_HIT)) continue;
+    let x = s.ex[i];
+    if (t === E_TORPEDO) {
+      const st = s.est[i];
+      if (st === 0 || st >= 4) continue;
+      const rest = st === 1 ? TORP_TRACK - s.etm[i] + TORP_LOCK : st === 2 ? TORP_LOCK - s.etm[i] : 0;
+      const fly = k - (rest > 0 ? rest : 0);
+      const du0 = s.dist >> 8;
+      const hover = du0 + aheadU(s) - 40 + (cx - du0);
+      x = st === 3 ? s.ex[i] - (fly * idiv(((s.speed >> 8) * 9), 10 * STEP_HZ)) : (fly > 0 ? hover - fly * idiv(((s.speed >> 8) * 9), 10 * STEP_HZ) : hover);
+      if (absi(x - cx) > 160) continue;
+      const hw = TORP_W >> 1;
+      const hh = TORP_H >> 1;
+      if (ellipseRect(cx, cy, SHARK_RX + 4, SHARK_RY + 4, x - hw + HIT_INSET, s.ey[i] - hh + HIT_INSET, x + hw - HIT_INSET, s.ey[i] + hh - HIT_INSET)) return true;
+      continue;
+    }
+    if (x - cx > 220 || x - cx < -220) continue;
+    if (t === E_PYLON) {
+      const half = s.ep1[i] >> 1;
+      const top = s.ey[i] - half;
+      const bot = s.ey[i] + half;
+      if (ellipseRect(cx, cy, SHARK_RX + 3, SHARK_RY + 3, x + HIT_INSET, SURFACE_Y - 200, x + PYLON_W - HIT_INSET, top - HIT_INSET)
+        || ellipseRect(cx, cy, SHARK_RX + 3, SHARK_RY + 3, x + HIT_INSET, bot + HIT_INSET, x + PYLON_W - HIT_INSET, FLOOR_Y + 200)) return true;
+    } else if (t === E_JELLY) {
+      const p = idiv((s.worldT + tAdd) * 1024, JELLY_PERIOD) + s.ep1[i];
+      const jy = s.ey[i] + ((JELLY_BOB * isin(p)) >> 8);
+      if (ellipseCircle(cx, cy, SHARK_RX + 3, SHARK_RY + 3, x, jy, JELLY_R - HIT_INSET)) return true;
+    } else if (t === E_PUFFER) {
+      if (s.est[i] >= 4) continue;
+      if (ellipseCircle(cx, cy, SHARK_RX + 3, SHARK_RY + 3, x, s.ey[i], PUFF_R1 - 8)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Choose hold (1) or release (0) for the next `every` steps so that some
+ * continuation of `horizon` decisions stays hit-free. -1 = none found in
+ * budget. Deterministic.
+ */
+export function planHold(s: SimState, every: number, horizon: number, budget: number, prefer: number): number {
+  'worklet';
+  const sf = speedFrac(s);
+  // Q8 advance per step; a running Dash holds vy and moves x1.8 until it ends.
+  const advNow = idiv(s.speedEff, STEP_HZ);
+  const advAfter = s.dash > 0 ? idiv(advNow * 256, 461) : advNow;
+  const dashLeft = s.dash;
+  const thrust = idiv(-(2600 + ((650 * sf) >> 8)) * Q, STEP_HZ);
+  const sink = idiv((1900 + ((285 * sf) >> 8)) * Q, STEP_HZ);
+  const minY = SHARK_MIN_Y * Q;
+  const maxY = SHARK_MAX_Y * Q;
+  // Explicit DFS stack: [y, vy, holding, k(steps so far), choiceIdx, firstChoice, rootChoice]
+  const sy: number[] = [];
+  const svy: number[] = [];
+  const sh: number[] = [];
+  const sk: number[] = [];
+  const sc: number[] = [];
+  let nodes = 0;
+  sy.push(s.y); svy.push(s.vy); sh.push(s.holding); sk.push(0); sc.push(0);
+  const rootFirst = prefer;
+  let rootChoice = -1;
+  while (sy.length > 0) {
+    const top = sy.length - 1;
+    if (sc[top] >= 2) {
+      sy.pop(); svy.pop(); sh.pop(); sk.pop(); sc.pop();
+      continue;
+    }
+    const choice = sc[top] === 0 ? prefer : 1 - prefer;
+    sc[top]++;
+    if (top === 0) rootChoice = sc[top] === 1 ? rootFirst : 1 - rootFirst;
+    if (++nodes > budget) return -1;
+    let y = sy[top];
+    let vy = svy[top];
+    let holding = sh[top];
+    const k0 = sk[top];
+    // Input edge kicks.
+    const dashing = k0 < dashLeft;
+    if (choice === 1 && !holding) {
+      if (vy > 0 && !dashing) vy -= 180 * Q + idiv(vy * 35, 100);
+      holding = 1;
+    } else if (choice === 0 && holding) {
+      if (vy < 0 && !dashing) vy += 120 * Q;
+      holding = 0;
+    }
+    let hit = false;
+    for (let j = 1; j <= every; j++) {
+      const kk = k0 + j;
+      if (kk <= dashLeft) {
+        y += idiv(vy, STEP_HZ);
+      } else {
+        const accel = holding ? thrust : sink;
+        if ((accel < 0 && vy > 0) || (accel > 0 && vy < 0)) vy -= idiv(vy * 3, 64);
+        vy = clampi(vy + accel, -720 * Q, 820 * Q);
+        y += idiv(vy, STEP_HZ);
+      }
+      if (y < minY) {
+        y = minY;
+        if (vy < 0) vy = 120 * Q;
+      } else if (y > maxY) {
+        y = maxY;
+        if (vy > 0) vy = -420 * Q;
+      }
+      const k = k0 + j;
+      const cx = (s.dist + (k <= dashLeft ? advNow * k : advNow * dashLeft + advAfter * (k - dashLeft))) >> 8;
+      if (touchesAhead(s, cx, y >> 8, k, k)) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit) continue;
+    const depth = idiv(k0 + every, every);
+    if (depth >= horizon) return top === 0 ? choice : rootChoice;
+    sy.push(y); svy.push(vy); sh.push(holding); sk.push(k0 + every); sc.push(0);
+  }
+  return -1;
+}

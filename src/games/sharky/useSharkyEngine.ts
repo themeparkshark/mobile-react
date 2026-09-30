@@ -1,402 +1,212 @@
 /**
- * useSharkyEngine.ts — the Sharky Swim simulation.
+ * useSharkyEngine: runs the Tide Run sim on the UI thread.
  *
- * Design (mirrors gamekit/Particles pooling philosophy):
- *   - Every piece of per-frame mutable state lives in Reanimated SharedValues so
- *     the whole simulation runs inside ONE fixed-timestep worklet (useGameLoop).
- *     No JS-thread animation loop, no per-frame allocation → 60fps bar.
- *   - Obstacles and rings are fixed-size POOLS of plain structs mutated in place
- *     on the UI thread; the renderer reads them via useDerivedValue.
- *   - Deterministic: physics uses a fixed dt and a seeded PRNG, so {score,seed}
- *     is replayable server-side (reward integrity, quality bar #6).
- *
- * Coyote time (spec: 120ms forgiveness): a crash is NOT registered the instant
- * the shark overlaps an obstacle. Instead an overlap starts a grace countdown
- * (COYOTE_MS). A swim tap that pulls the shark clear before the countdown
- * expires cancels the crash. Only if the shark is still overlapping when the
- * grace runs out does the run end. This makes tight gaps feel fair.
- *
- * Parallax: three ocean layers scroll at fractions of the world speed
- * (PARALLAX.back/mid/front). We keep a single `scrollX` accumulator and derive
- * each layer's phase from it, wrapping by the layer's tile width so it loops
- * seamlessly. The world speed itself ramps with time-survived (difficulty).
+ *   - fixed 60 Hz steps from the studio GameClock (hit-stop and slow-mo hold
+ *     the sim too, so juice never costs a racer steps or tide time);
+ *   - input from RNGH worklets goes into a UI-thread queue and is applied on
+ *     the next step; every applied input is mirrored to JS (the proof log);
+ *   - rival sims (house-crew bots, async ghosts) step in lockstep with their
+ *     own logs, so a ghost replays exactly;
+ *   - sim events leave the UI thread through the engine event ring, one
+ *     runOnJS per frame, prefixed by a camera record so JS can place FX.
  */
 
 import { useCallback, useMemo, useRef } from 'react';
+import { runOnUI, useSharedValue, type SharedValue } from 'react-native-reanimated';
+import { useGameClock } from '../../gamekit/useGameClock';
+import { useEventBridge } from '../../gamekit/fx/useEventBridge';
+import { forEachEvent, pushEvent } from '../../gamekit/core/eventRing';
 import {
-  useSharedValue,
-  runOnJS,
-  type SharedValue,
-} from 'react-native-reanimated';
-import { useGameLoop, type GameLoopControls } from '../../gamekit';
-import {
-  DIFFICULTY,
-  OBSTACLE,
-  PARALLAX,
-  POOL,
-  RING,
-  SCORING,
-  SHARK,
-  COYOTE_MS,
-  type Difficulty,
-} from './constants';
+  EV_STRIDE,
+  IN_EXT,
+  PH_DONE,
+  anchorX,
+  applyInput,
+  createSim,
+  step as simStep,
+  type InputEntry,
+  type SimConfig,
+  type SimState,
+} from './sim/core';
 
-// =============================================================================
-// Pool structs (plain, mutable, worklet-friendly)
-// =============================================================================
+/** Bridge-only kinds (outside the sim's event space). */
+export const BR_CAM = 90;
+export const BR_INPUT = 91;
+export const BR_RIVAL = 92;
 
-export interface Obstacle {
-  active: boolean;
-  /** World x of the pillar's left edge (px). */
-  x: number;
-  /** Vertical center of the gap (px). */
-  gapY: number;
-  /** Gap half-height (px). */
-  gapHalf: number;
-  /** Whether the shark has already scored this gap. */
-  scored: boolean;
+export const MAX_RIVALS = 3;
+
+export interface RivalSlot {
+  /** 0 empty, 1 sim-driven (bot/ghost log), 2 remote (live whispers). */
+  kind: number;
+  sim: SimState | null;
+  log: InputEntry[];
+  k: number;
+  /** Remote: last known distance/y (u) and velocity for extrapolation. */
+  rDist: number;
+  rY: number;
+  rVel: number;
+  rAt: number;
+  done: number;
 }
 
-export interface Ring {
-  active: boolean;
-  x: number;
-  y: number;
-  /** Collected this pass? (kept until it scrolls off, then recycled). */
-  taken: boolean;
+export interface EngineInput {
+  q: number[];
+  holding: boolean;
+  /** Slide tracking for Dash (UI thread). */
+  startX: number;
+  startY: number;
+  startT: number;
+  slideFired: boolean;
+  fingers: number;
 }
-
-function makeObstacle(): Obstacle {
-  'worklet';
-  return { active: false, x: 0, gapY: 0, gapHalf: 0, scored: false };
-}
-function makeRing(): Ring {
-  'worklet';
-  return { active: false, x: 0, y: 0, taken: false };
-}
-
-// =============================================================================
-// Seeded PRNG (mulberry32) — deterministic, worklet-safe (no closures over Math)
-// =============================================================================
-
-/** Returns [0,1). Advances `state` via the returned tuple pattern is awkward in
- *  a worklet, so we thread the state through a SharedValue instead (see below).
- */
-function nextRandom(seedState: SharedValue<number>): number {
-  'worklet';
-  let t = (seedState.value += 0x6d2b79f5) >>> 0;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-}
-
-// =============================================================================
-// Engine surface exposed to the component
-// =============================================================================
 
 export interface SharkyEngine {
-  loop: GameLoopControls;
-  /** Shark vertical position (px, canvas space). */
-  sharkY: SharedValue<number>;
-  /** Shark vertical velocity (px/s). Drives sprite tilt. */
-  sharkVY: SharedValue<number>;
-  /** Current swim flipbook frame index 0..2. */
-  sharkFrame: SharedValue<number>;
-  /** Monotonic world scroll accumulator (px). Renderer derives parallax phase. */
-  scrollX: SharedValue<number>;
-  /** Live world speed (px/s) — for trail intensity. */
-  worldSpeed: SharedValue<number>;
-  /** Obstacle + ring pools (read by the renderer). */
-  obstacles: SharedValue<Obstacle[]>;
-  rings: SharedValue<Ring[]>;
-  /** 1 while crash-grace is counting down (for a near-miss visual). */
-  inGrace: SharedValue<number>;
-  /** Start / reset a fresh run with the given seed. */
-  start: (seed: number) => void;
-  /** Apply a swim impulse (coyote-forgiving). Call from the tap handler. */
-  swim: () => void;
+  sim: SharedValue<SimState>;
+  rivals: SharedValue<RivalSlot[]>;
+  input: SharedValue<EngineInput>;
+  running: SharedValue<boolean>;
+  tick: SharedValue<number>;
+  alpha: SharedValue<number>;
+  clock: ReturnType<typeof useGameClock>;
+  /** JS: the applied input log (proof, ghosts, restore). */
+  log: React.MutableRefObject<InputEntry[]>;
+  reset: (cfg: SimConfig, rivals?: Array<{ cfg: SimConfig; log: InputEntry[] } | null>) => void;
+  setRunning: (on: boolean) => void;
+  /** Queue an ext input (revive, pause_resume, line boost, draft) for the next step. */
+  ext: (sub: number, arg: number) => void;
+  /** Push a remote rival position (live race whispers). */
+  remote: (slot: number, dist: number, y: number, vel: number) => void;
 }
 
-interface EngineCallbacks {
-  /** Fired when a gap is cleared (base points already known to caller). */
-  onGapCleared: (points: number) => void;
-  /** Fired when a ring is collected. */
-  onRingCollected: (points: number) => void;
-  /** Fired once when the run ends (crash or fall-out-of-bounds). */
-  onCrash: () => void;
+export function emptyRival(): RivalSlot {
+  'worklet';
+  return { kind: 0, sim: null, log: [], k: 0, rDist: 0, rY: 500, rVel: 0, rAt: 0, done: 0 };
 }
 
-interface EngineOptions extends EngineCallbacks {
-  difficulty: Difficulty;
-  /** Canvas dimensions in px (logical). */
-  width: number;
-  height: number;
+function emptyInput(): EngineInput {
+  'worklet';
+  return { q: [], holding: false, startX: 0, startY: 0, startT: 0, slideFired: false, fingers: 0 };
 }
 
-// =============================================================================
-// Hook
-// =============================================================================
+export function useSharkyEngine(
+  initial: SimConfig,
+  onEvents: (batch: number[]) => void,
+): SharkyEngine {
+  const sim = useSharedValue<SimState>(createSim(initial));
+  const rivals = useSharedValue<RivalSlot[]>([emptyRival(), emptyRival(), emptyRival()]);
+  const input = useSharedValue<EngineInput>(emptyInput());
+  const running = useSharedValue(false);
+  const tick = useSharedValue(0);
+  const alpha = useSharedValue(0);
+  const log = useRef<InputEntry[]>([]);
 
-export function useSharkyEngine(opts: EngineOptions): SharkyEngine {
-  const { difficulty, width, height, onGapCleared, onRingCollected, onCrash } = opts;
+  const handler = useRef(onEvents);
+  handler.current = onEvents;
+  const bridge = useEventBridge((batch) => {
+    // Mirror applied inputs into the JS log before anyone else reads the batch.
+    forEachEvent(batch, (kind, a, b, c, t) => {
+      if (kind === BR_INPUT) log.current.push({ step: t, kind: a, sub: b, arg: c });
+    });
+    handler.current(batch);
+  }, 512);
+  const ring = bridge.ring;
 
-  // Keep the latest callbacks addressable from the worklet without re-creating
-  // the loop when they change identity between renders.
-  const cbRef = useRef<EngineCallbacks>({ onGapCleared, onRingCollected, onCrash });
-  cbRef.current = { onGapCleared, onRingCollected, onCrash };
-  const emitGap = useCallback((p: number) => cbRef.current.onGapCleared(p), []);
-  const emitRing = useCallback((p: number) => cbRef.current.onRingCollected(p), []);
-  const emitCrash = useCallback(() => cbRef.current.onCrash(), []);
-
-  const cfg = DIFFICULTY[difficulty];
-  const sharkX = width * SHARK.xFrac;
-
-  // --- Simulation state -----------------------------------------------------
-  const sharkY = useSharedValue(height * 0.4);
-  const sharkVY = useSharedValue(0);
-  const sharkFrame = useSharedValue(0);
-  const frameClock = useSharedValue(0);
-  const scrollX = useSharedValue(0);
-  const worldSpeed = useSharedValue(cfg.baseSpeed);
-  const elapsed = useSharedValue(0);
-  const spawnCarry = useSharedValue(0); // px since last obstacle spawn
-  const inGrace = useSharedValue(0);
-  const graceLeft = useSharedValue(0); // ms of coyote grace remaining
-  const dead = useSharedValue(0);
-  const seedState = useSharedValue(1);
-
-  const obstacles = useSharedValue<Obstacle[]>(
-    Array.from({ length: POOL.obstacles }, makeObstacle),
-  );
-  const rings = useSharedValue<Ring[]>(
-    Array.from({ length: POOL.rings }, makeRing),
-  );
-
-  // --- Spawn one obstacle pair (+ maybe a ring) at world x = spawnX ----------
-  const spawnObstacle = useCallback(
-    (spawnX: number) => {
+  const clock = useGameClock({
+    config: { freezeBudget: 0.05, slots: 4 },
+    maxStepsPerFrame: 4,
+    onStep: () => {
       'worklet';
-      const list = obstacles.value;
-      let slot = -1;
-      for (let i = 0; i < list.length; i++) {
-        if (!list[i].active) {
-          slot = i;
-          break;
+      if (!running.value) return;
+      const s = sim.value;
+      if (s.phase === PH_DONE) return;
+      const inp = input.value;
+      const r = ring.value;
+      // Apply queued inputs (encoded as groups of 3: kind, sub, arg).
+      const q = inp.q;
+      for (let i = 0; i + 2 < q.length; i += 3) {
+        const kind = q[i];
+        applyInput(s, kind, q[i + 1], q[i + 2]);
+        pushEvent(r, BR_INPUT, kind, q[i + 1], q[i + 2], s.step);
+      }
+      if (q.length) inp.q = [];
+      // Lockstep rival sims.
+      const rv = rivals.value;
+      for (let j = 0; j < rv.length; j++) {
+        const g = rv[j];
+        if (g.kind !== 1 || !g.sim || g.done) continue;
+        const gs = g.sim;
+        while (g.k < g.log.length && g.log[g.k].step <= gs.step) {
+          const e = g.log[g.k];
+          applyInput(gs, e.kind, e.sub, e.arg);
+          g.k++;
+        }
+        simStep(gs);
+        if (gs.phase === PH_DONE) {
+          g.done = 1;
+          pushEvent(r, BR_RIVAL, j, gs.endReason, gs.finishStep, gs.score);
         }
       }
-      if (slot < 0) return;
-      const gapHalf = (height * cfg.gapFrac) / 2;
-      const minY = OBSTACLE.edgePad + gapHalf;
-      const maxY = height - OBSTACLE.edgePad - gapHalf;
-      const gapY = minY + nextRandom(seedState) * Math.max(1, maxY - minY);
-      const ob = list[slot];
-      ob.active = true;
-      ob.x = spawnX;
-      ob.gapY = gapY;
-      ob.gapHalf = gapHalf;
-      ob.scored = false;
-
-      // Maybe drop a collectible ring in the center of the gap.
-      if (nextRandom(seedState) < RING.spawnChance) {
-        const rlist = rings.value;
-        for (let i = 0; i < rlist.length; i++) {
-          if (!rlist[i].active) {
-            rlist[i].active = true;
-            rlist[i].taken = false;
-            rlist[i].x = spawnX + OBSTACLE.width / 2;
-            rlist[i].y = gapY;
-            break;
-          }
-        }
+      simStep(s);
+      // Camera record, then this step's sim events.
+      pushEvent(r, BR_CAM, s.dist >> 8, anchorX(s), s.y >> 8, s.step);
+      for (let e = 0; e < s.evN; e++) {
+        const o = e * EV_STRIDE;
+        pushEvent(r, s.ev[o], s.ev[o + 1], s.ev[o + 2], s.ev[o + 3], s.ev[o + 4]);
       }
     },
-    [obstacles, rings, height, cfg.gapFrac, seedState],
-  );
-
-  // --- Fixed-timestep update (UI thread worklet) ----------------------------
-  const update = useCallback(
-    (dt: number) => {
+    onFrame: (a) => {
       'worklet';
-      if (dead.value === 1) return;
-
-      elapsed.value += dt;
-
-      // Speed ramps with time survived, clamped.
-      const speed = Math.min(cfg.maxSpeed, cfg.baseSpeed + cfg.speedRamp * elapsed.value);
-      worldSpeed.value = speed;
-      const dx = speed * dt;
-      scrollX.value += dx;
-      spawnCarry.value += dx;
-
-      // Spawn cadence by horizontal spacing.
-      if (spawnCarry.value >= cfg.spacing) {
-        spawnCarry.value -= cfg.spacing;
-        spawnObstacle(width + OBSTACLE.width);
-      }
-      // Seed the very first pair so the field is never empty at t=0.
-      if (elapsed.value < dt * 1.5) {
-        spawnObstacle(width + OBSTACLE.width);
-      }
-
-      // Shark physics.
-      let vy = sharkVY.value + SHARK.gravity * dt;
-      if (vy > SHARK.maxFall) vy = SHARK.maxFall;
-      if (vy < SHARK.maxRise) vy = SHARK.maxRise;
-      sharkVY.value = vy;
-      sharkY.value += vy * dt;
-
-      // Swim flipbook — advance faster when swimming up.
-      frameClock.value += dt * SHARK.frameFps;
-      sharkFrame.value = Math.floor(frameClock.value) % 3;
-
-      // Ceiling clamp (soft); floor / ceiling exit = crash.
-      if (sharkY.value < SHARK.halfH) {
-        sharkY.value = SHARK.halfH;
-        if (sharkVY.value < 0) sharkVY.value = 0;
-      }
-      if (sharkY.value > height - SHARK.halfH) {
-        // Hit the sea floor — no coyote for the floor, immediate end.
-        sharkY.value = height - SHARK.halfH;
-        dead.value = 1;
-        runOnJS(emitCrash)();
-        return;
-      }
-
-      // Move obstacles, score gaps, run collision.
-      const list = obstacles.value;
-      let overlapping = false;
-      for (let i = 0; i < list.length; i++) {
-        const ob = list[i];
-        if (!ob.active) continue;
-        ob.x -= dx;
-        // Recycle once fully off the left edge.
-        if (ob.x + OBSTACLE.width < -OBSTACLE.width) {
-          ob.active = false;
-          continue;
-        }
-        // Score when the shark's x passes the pillar center.
-        const center = ob.x + OBSTACLE.width / 2;
-        if (!ob.scored && center < sharkX) {
-          ob.scored = true;
-          runOnJS(emitGap)(SCORING.gapPoints);
-        }
-        // Collision: horizontal overlap with the pillar, vertically OUTSIDE gap.
-        const hOverlap =
-          sharkX + SHARK.halfW > ob.x && sharkX - SHARK.halfW < ob.x + OBSTACLE.width;
-        if (hOverlap) {
-          const topEdge = ob.gapY - ob.gapHalf;
-          const botEdge = ob.gapY + ob.gapHalf;
-          if (sharkY.value - SHARK.halfH < topEdge || sharkY.value + SHARK.halfH > botEdge) {
-            overlapping = true;
-          }
-        }
-      }
-
-      // Coyote-time crash resolution.
-      if (overlapping) {
-        if (graceLeft.value <= 0 && inGrace.value === 0) {
-          // Start the grace window.
-          graceLeft.value = COYOTE_MS;
-          inGrace.value = 1;
-        } else {
-          graceLeft.value -= dt * 1000;
-          if (graceLeft.value <= 0) {
-            // Still overlapping after forgiveness → real crash.
-            dead.value = 1;
-            inGrace.value = 0;
-            runOnJS(emitCrash)();
-            return;
-          }
-        }
-      } else {
-        // Cleared the danger in time — cancel the crash.
-        graceLeft.value = 0;
-        inGrace.value = 0;
-      }
-
-      // Rings: scroll, collect on overlap, recycle off-screen.
-      const rlist = rings.value;
-      for (let i = 0; i < rlist.length; i++) {
-        const r = rlist[i];
-        if (!r.active) continue;
-        r.x -= dx;
-        if (r.x < -RING.drawSize) {
-          r.active = false;
-          continue;
-        }
-        if (!r.taken) {
-          const ddx = r.x - sharkX;
-          const ddy = r.y - sharkY.value;
-          if (ddx * ddx + ddy * ddy < RING.collectR * RING.collectR) {
-            r.taken = true;
-            r.active = false;
-            runOnJS(emitRing)(RING.points);
-          }
-        }
-      }
+      alpha.value = a;
+      tick.value = tick.value + 1;
+      bridge.flush();
     },
-    [
-      dead, elapsed, worldSpeed, scrollX, spawnCarry, sharkVY, sharkY, frameClock,
-      sharkFrame, obstacles, rings, inGrace, graceLeft, cfg.maxSpeed, cfg.baseSpeed,
-      cfg.speedRamp, cfg.spacing, height, width, sharkX, spawnObstacle, emitGap,
-      emitRing, emitCrash,
-    ],
-  );
+  });
 
-  const loop = useGameLoop({ update, autostart: false });
+  const reset = useCallback((cfg: SimConfig, rv: Array<{ cfg: SimConfig; log: InputEntry[] } | null> = []) => {
+    log.current = [];
+    const slots: RivalSlot[] = [];
+    for (let j = 0; j < MAX_RIVALS; j++) {
+      const g = rv[j];
+      if (g) slots.push({ kind: 1, sim: createSim(g.cfg), log: g.log, k: 0, rDist: 0, rY: 500, rVel: 0, rAt: 0, done: 0 });
+      else slots.push(emptyRival());
+    }
+    runOnUI((c: SimConfig, sl: RivalSlot[]) => {
+      'worklet';
+      sim.value = createSim(c);
+      rivals.value = sl;
+      input.value = emptyInput();
+      running.value = false;
+    })(cfg, slots);
+  }, [sim, rivals, input, running]);
 
-  // --- JS-thread controls ---------------------------------------------------
-  const start = useCallback(
-    (seed: number) => {
-      seedState.value = seed >>> 0 || 1;
-      elapsed.value = 0;
-      scrollX.value = 0;
-      spawnCarry.value = 0;
-      worldSpeed.value = cfg.baseSpeed;
-      sharkY.value = height * 0.4;
-      sharkVY.value = 0;
-      sharkFrame.value = 0;
-      frameClock.value = 0;
-      inGrace.value = 0;
-      graceLeft.value = 0;
-      dead.value = 0;
-      const ol = obstacles.value;
-      for (let i = 0; i < ol.length; i++) ol[i].active = false;
-      const rl = rings.value;
-      for (let i = 0; i < rl.length; i++) rl[i].active = false;
-      loop.resume();
-      loop.setActive(true);
-    },
-    [
-      seedState, elapsed, scrollX, spawnCarry, worldSpeed, sharkY, sharkVY,
-      sharkFrame, frameClock, inGrace, graceLeft, dead, obstacles, rings, loop,
-      cfg.baseSpeed, height,
-    ],
-  );
+  const setRunning = useCallback((on: boolean) => {
+    runOnUI((v: boolean) => {
+      'worklet';
+      running.value = v;
+    })(on);
+  }, [running]);
 
-  const swim = useCallback(() => {
-    if (dead.value === 1) return;
-    sharkVY.value = SHARK.swimImpulse;
-    // A swim resets the flipbook to the power stroke for snappier feedback.
-    frameClock.value = 0;
-  }, [dead, sharkVY, frameClock]);
+  const ext = useCallback((sub: number, arg: number) => {
+    runOnUI((sb: number, ag: number) => {
+      'worklet';
+      input.value.q.push(IN_EXT, sb, ag);
+    })(sub, arg);
+  }, [input]);
 
-  return useMemo<SharkyEngine>(
-    () => ({
-      loop,
-      sharkY,
-      sharkVY,
-      sharkFrame,
-      scrollX,
-      worldSpeed,
-      obstacles,
-      rings,
-      inGrace,
-      start,
-      swim,
-    }),
-    [
-      loop, sharkY, sharkVY, sharkFrame, scrollX, worldSpeed, obstacles, rings,
-      inGrace, start, swim,
-    ],
-  );
+  const remote = useCallback((slot: number, dist: number, y: number, vel: number) => {
+    runOnUI((j: number, d: number, yy: number, v: number) => {
+      'worklet';
+      const g = rivals.value[j];
+      if (!g) return;
+      g.kind = 2;
+      g.rDist = d;
+      g.rY = yy;
+      g.rVel = v;
+      g.rAt = sim.value.step;
+    })(slot, dist, y, vel);
+  }, [rivals, sim]);
+
+  return useMemo(() => ({ sim, rivals, input, running, tick, alpha, clock, log, reset, setRunning, ext, remote }),
+    [sim, rivals, input, running, tick, alpha, clock, reset, setRunning, ext, remote]);
 }
