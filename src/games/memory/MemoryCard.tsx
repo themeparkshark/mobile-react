@@ -73,19 +73,22 @@ interface Props {
   face: CardFace;
   goldBack?: boolean;
   reducedMotion: boolean;
+  /** Initial slot position (the parent moves the card afterwards). */
+  x0?: number;
+  y0?: number;
 }
 
 const INK = '#0B5CAD';
 
-function useCardValues() {
+function useCardValues(x0: number, y0: number) {
   return {
     flip: useSharedValue(0),
     lift: useSharedValue(1),
     press: useSharedValue(1),
     tiltX: useSharedValue(0),
     tiltY: useSharedValue(0),
-    x: useSharedValue(0),
-    y: useSharedValue(0),
+    x: useSharedValue(x0),
+    y: useSharedValue(y0),
     arcY: useSharedValue(0),
     scale: useSharedValue(1),
     rotZ: useSharedValue(0),
@@ -103,10 +106,10 @@ function useCardValues() {
 }
 
 export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function MemoryCard(
-  { w, h, back, face, goldBack, reducedMotion },
+  { w, h, back, face, goldBack, reducedMotion, x0 = 0, y0 = 0 },
   ref,
 ) {
-  const v = useCardValues();
+  const v = useCardValues(x0, y0);
   const [failed, setFailed] = useState(false);
   const rm = reducedMotion;
 
@@ -147,7 +150,7 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
       v.flip.value = withTiming(1, { duration: ms, easing: Easing.inOut(Easing.cubic) });
       v.lift.value = withSequence(
         withTiming(1.1, { duration: ms * 0.5, easing: Easing.out(Easing.quad) }),
-        withSpring(1, { damping: 14, stiffness: 320, mass: 0.6 }),
+        withSpring(1.04, { damping: 14, stiffness: 320, mass: 0.6 }),
       );
       v.squash.value = withDelay(ms, withSequence(withTiming(0.97, { duration: 45 }), withTiming(1, { duration: 45 })));
     },
@@ -196,7 +199,7 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
         withDelay(stopMs, withSpring(0, { damping: 12, stiffness: 260 })),
       );
       if (flash) {
-        v.flash.value = withDelay(90, withSequence(withTiming(1, { duration: 0 }), withDelay(16, withTiming(0, { duration: 60 }))));
+        v.flash.value = withDelay(90, withSequence(withTiming(0.9, { duration: 16 }), withTiming(0, { duration: 90 })));
       }
     },
     settle() {
@@ -464,7 +467,7 @@ const styles = StyleSheet.create({
   face: { position: 'absolute', left: 0, top: 0, backfaceVisibility: 'hidden', overflow: 'hidden' },
   clip: { overflow: 'hidden' },
   plate: { alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#ffffff' },
-  faceRim: { borderWidth: 2.5, borderColor: '#ffffff' },
+  faceRim: { borderWidth: 3.5, borderColor: '#ffffff' },
   goldBack: { borderWidth: 3, borderColor: MM.gold },
   shade: { backgroundColor: '#05346e' },
   edge: { position: 'absolute', top: 0, width: 3, backgroundColor: '#dfe9f5' },

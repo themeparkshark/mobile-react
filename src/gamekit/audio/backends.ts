@@ -308,7 +308,28 @@ export class AudioApiBackend implements AudioBackend {
   private musicLowpass: AnyNode = null;
   private buffers = new Map<string, AnyNode>();
   private voices = new Map<number, { src: AnyNode; gain: AnyNode }>();
-  private decks = new Map<string, { src: AnyNode; gain: AnyNode; startedAt: number; offset: number; loopMs: number }>();
+  private decks = new Map<string, { src: AnyNode; gain: AnyNode; startedAt: number; offset: number; loopMs: number; queueEnd: number }>();
+  private filterQueueEnd = 0;
+
+  /**
+   * react-native-audio-api 0.6.5 crashes in AudioParam::cancelScheduledValues
+   * (it dereferences rbegin() of an empty deque and advances an iterator it just
+   * popped), and ignores any ramp that ends before the queued end time. So we
+   * never cancel: every change is appended after the last queued event, which
+   * keeps ramps at most one ramp late and never touches freed memory.
+   */
+  private appendRamp(param: AnyNode, queueEnd: number, value: number, rampMs: number, exponential = false): number {
+    const t = this.ctx.currentTime;
+    const start = Math.max(t, queueEnd) + 0.001;
+    const end = start + Math.max(0.005, rampMs / 1000);
+    try {
+      if (exponential) param.exponentialRampToValueAtTime(Math.max(0.0001, value), end);
+      else param.linearRampToValueAtTime(value, end);
+    } catch {
+      // Decoration only.
+    }
+    return end;
+  }
   private nextToken = 1;
 
   constructor() {
@@ -417,12 +438,16 @@ export class AudioApiBackend implements AudioBackend {
       const gain = this.ctx.createGain();
       const t = this.ctx.currentTime;
       gain.gain.setValueAtTime(a.fadeMs > 0 ? 0 : a.gain, t);
-      if (a.fadeMs > 0) gain.gain.linearRampToValueAtTime(a.gain, t + a.fadeMs / 1000);
+      let queueEnd = t;
+      if (a.fadeMs > 0) {
+        queueEnd = t + a.fadeMs / 1000;
+        gain.gain.linearRampToValueAtTime(a.gain, queueEnd);
+      }
       src.connect(gain);
       gain.connect(this.musicBus);
       src.start(t, a.fromMs / 1000);
       const loopMs = (a.loopEndMs ?? buffer.duration * 1000) - (a.loopStartMs ?? 0);
-      this.decks.set(deck, { src, gain, startedAt: t, offset: a.fromMs, loopMs });
+      this.decks.set(deck, { src, gain, startedAt: t, offset: a.fromMs, loopMs, queueEnd });
     } catch {
       // Ignore: music is decoration.
     }
@@ -431,10 +456,7 @@ export class AudioApiBackend implements AudioBackend {
   musicGain(deck: string, gain: number, rampMs: number): void {
     const d = this.decks.get(deck);
     if (!d) return;
-    const t = this.ctx.currentTime;
-    d.gain.gain.cancelScheduledValues(t);
-    d.gain.gain.setValueAtTime(d.gain.gain.value, t);
-    d.gain.gain.linearRampToValueAtTime(gain, t + Math.max(0.005, rampMs / 1000));
+    d.queueEnd = this.appendRamp(d.gain.gain, d.queueEnd, gain, rampMs);
   }
 
   musicStop(deck: string, fadeMs: number): void {
@@ -442,11 +464,8 @@ export class AudioApiBackend implements AudioBackend {
     if (!d) return;
     this.decks.delete(deck);
     try {
-      const t = this.ctx.currentTime;
-      d.gain.gain.cancelScheduledValues(t);
-      d.gain.gain.setValueAtTime(d.gain.gain.value, t);
-      d.gain.gain.linearRampToValueAtTime(0, t + Math.max(0.01, fadeMs / 1000));
-      d.src.stop(t + Math.max(0.02, fadeMs / 1000 + 0.01));
+      const end = this.appendRamp(d.gain.gain, d.queueEnd, 0, Math.max(10, fadeMs));
+      d.src.stop(end + 0.01);
     } catch {
       // Already stopped.
     }
@@ -461,11 +480,7 @@ export class AudioApiBackend implements AudioBackend {
 
   musicFilter(cutoffHz: number | null, rampMs: number): void {
     if (!this.musicLowpass) return;
-    const t = this.ctx.currentTime;
-    const f = this.musicLowpass.frequency;
-    f.cancelScheduledValues(t);
-    f.setValueAtTime(f.value, t);
-    f.exponentialRampToValueAtTime(cutoffHz ?? 20000, t + Math.max(0.01, rampMs / 1000));
+    this.filterQueueEnd = this.appendRamp(this.musicLowpass.frequency, this.filterQueueEnd, cutoffHz ?? 20000, Math.max(10, rampMs), true);
   }
 
   setMasterGain(gain: number): void {

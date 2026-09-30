@@ -229,7 +229,8 @@ export default function MemoryGame({
   onQuit,
   onComplete,
 }: MemoryGameProps) {
-  const mode: MemoryMode = modeProp ?? (difficulty === 0 ? 'ride' : 'timeAttack');
+  const devMode = typeof __DEV__ !== 'undefined' && __DEV__ ? (process.env.EXPO_PUBLIC_MEMORY_MODE as MemoryMode | undefined) : undefined;
+  const mode: MemoryMode = devMode ?? modeProp ?? (difficulty === 0 ? 'ride' : 'timeAttack');
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const movement = useContext(LinePlayMovementContext);
@@ -492,8 +493,12 @@ export default function MemoryGame({
   const dealtKey = useRef(-1);
   useEffect(() => {
     if (!geo || !runRef.current || dealtKey.current === boardKey) return;
-    dealtKey.current = boardKey;
-    const t = setTimeout(() => dealCards(false), 30);
+    const key = boardKey;
+    const t = setTimeout(() => {
+      if (dealtKey.current === key) return;
+      dealtKey.current = key;
+      dealCards(false);
+    }, 30);
     return () => clearTimeout(t);
   }, [geo, boardKey, dealCards]);
 
@@ -754,6 +759,7 @@ export default function MemoryGame({
     later(mergeAt, () => {
       setScore(r.eng.score);
       if (bonus) fx.current?.flyUp(`TIME BONUS +${bonus}`, g.W / 2, g.grid.y + 20, { size: 'lg', color: '#ffcf3b' });
+      setWells((w) => [...w, a, b]);
       cards.current[r.eng.ids[a]]?.flyTo(mx - g.cw / 2, my - g.ch / 2, 0.4, 0);
       cards.current[r.eng.ids[b]]?.flyTo(mx - g.cw / 2, my - g.ch / 2, 0.4, 0);
       setStampAt({ x: mx, y: my, s: g.cw * 1.4 });
@@ -1466,8 +1472,12 @@ export default function MemoryGame({
                   ) : null}
                 </View>
                 <View key={`b${boardKey}`} style={[StyleSheet.absoluteFill, styles.tilt]}>
-                  {ids.map((id) => (
+                  {ids.map((id) => {
+                    const home = slotXY(g, Math.max(0, r ? r.eng.ids.indexOf(id) : id));
+                    return (
                     <MemoryCard
+                      x0={home.x}
+                      y0={home.y}
                       key={`c${boardKey}-${id}`}
                       ref={(h) => { cards.current[id] = h; }}
                       w={g.cw}
@@ -1477,7 +1487,8 @@ export default function MemoryGame({
                       goldBack={faces[id] === FACE_GOLD}
                       reducedMotion={reducedMotion}
                     />
-                  ))}
+                    );
+                  })}
                 </View>
               </View>
               <BoardFx width={g.W} height={g.H} inset={0} radius={14} rimFrac={rimFrac} rimUrgent={rimUrgent} rimDim={rimDim}
