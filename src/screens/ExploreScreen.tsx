@@ -72,6 +72,7 @@ import MapResourcePill from './ExploreScreen/MapResourcePill';
 import TooFarDialog from './ExploreScreen/TooFarDialog';
 import DwellCard from './ExploreScreen/DwellCard';
 import MapSuggestionStub from './ExploreScreen/MapSuggestionStub';
+import { withWs2Profiler } from './ExploreScreen/ws2Profiler';
 import useQueueDwell from './ExploreScreen/useQueueDwell';
 import { clusterMarkers, revealDelays } from './ExploreScreen/mapMarkerPresentation';
 import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
@@ -105,7 +106,7 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
 
-export default function ExploreScreen() {
+function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const mapFocused = useIsFocused();
   const route = useRoute();
@@ -1212,3 +1213,5 @@ export default function ExploreScreen() {
     </Wrapper>
   );
 }
+
+export default withWs2Profiler(ExploreScreen, 'ExploreScreen');
