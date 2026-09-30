@@ -16,14 +16,21 @@ test('only a settled personal participation receipt creates the map moment; MVP 
  assert.equal(m.createBossMapImpact(0,1,raid()),null);
  assert.equal(m.createBossMapImpact(5,1,{...raid(),mvp_is_you:true,ride_control:null}).claim,null);
  for(const change of [{park_id:2},{flipped:false},{previous_controller:'mouse'},{scores:{mouse:30,globe:30,shark:0}},
-  {confirmed_at:'wrong'},{asset_id:0},{controller:'globe'},{points:-1}])assert.equal(m.confirmedClaim({...claim(),...change},1),null);
+  {confirmed_at:'wrong'},{asset_id:0},{controller:'globe'},{points:-1},{flipped:'yes'}])assert.equal(m.confirmedClaim({...claim(),...change},1),null);
+ // A hold: the MVP's team already had the ride and the win added to it.
+ const held={...claim(),flipped:false,previous_controller:'mouse'};
+ assert.ok(m.confirmedClaim(held,1));assert.equal(m.claimKind(held),'held');assert.equal(m.claimKind(claim()),'raised');
+ assert.equal(m.claimKind(null),null);
 });
-test('flag requires the exact current flip and suppresses day rollover, carried control, later loss or same-second loss/reclaim',()=>{
+test('flag trusts the server claim while the team still holds the ride; day rollover, carried control and a loss hide it',()=>{
  const impact=m.createBossMapImpact(5,1,raid());assert.ok(m.verifiedBossFlag(impact,control()));
+ // Later points on the same side keep the moment.
+ assert.ok(m.verifiedBossFlag(impact,{...control(),rides:[{...control().rides[0],scores:{mouse:60,globe:39,shark:0},flipped_at:null}]}));
  for(const snapshot of [null,{...control(),park_day:'2026-09-30'}, {...control(),rides:[]},
-  ...[{carried_over:true},{controller:'globe'},{flipped_at:null},{flipped_at:'2026-09-29 21:00:05'},
-   {scores:{mouse:40,globe:39,shark:0}},{scores:{mouse:34,globe:30,shark:0}}].map(change=>({...control(),rides:[{...control().rides[0],...change}]}))])
+  ...[{carried_over:true},{controller:'globe'}].map(change=>({...control(),rides:[{...control().rides[0],...change}]}))])
   assert.equal(m.verifiedBossFlag(impact,snapshot),null);
+ const held=m.createBossMapImpact(5,1,{...raid(),ride_control:{...claim(),flipped:false,previous_controller:'mouse'}});
+ assert.equal(m.verifiedBossFlag(held,control()).flipped,false);
 });
 test('an older replica cannot roll map power or a confirmed flip backward, while newer ownership and park days advance',()=>{
  const current=control();
@@ -90,21 +97,56 @@ test('already seen receipts and late enqueue responses cannot animate in another
  const p=pending(),h=moment({refresh:()=>p.promise});const enqueue=h.view.tree.enqueue(raid());await new Promise(r=>setImmediate(r));
  h.view.change({parkId:2});p.resolve(control());await enqueue;await h.view.settle();assert.equal(h.view.tree.moment,null);
 });
-test('each departure finishes once; unmount cancels its handoff and reduced motion uses an intact static confirmation',()=>{
+const uiStub={BRAND:{gold:'#ffcf3b',white:'#fff',navy:'#05346e'},GameIcon:'GameIcon'};
+function departure(boss,reduced,extra={}){
+ const completed=[],sounds=[],haptics=[],bursts=[];
+ const view=runtime('src/components/boss/BossMapDeparture.tsx',{
+  '../../hooks/useReducedGameMotion':{default:()=>reduced},'./bossArt':{BOSS_ART:{[boss]:'approved-art'},BOSS_FX:{[boss]:{particles:['#fff']}}},
+  '../map/Marker':{Marker:'Marker'},'../map/RideTeamFlag':{default:'RideTeamFlag'},'../../ui':uiStub,
+  '../../gamekit/Particles':{ParticleField:'ParticleField'},'../../gamekit/SFX':{playSfx:v=>sounds.push(v)},'../../gamekit/Haptics':{haptic:v=>haptics.push(v)},
+  '../../constants/teams':{TEAMS:{mouse:{color:'#F59E0B'},globe:{color:'#22C55E'},shark:{color:'#3B82F6'}},teamName:t=>`Team ${t}`},
+ },{impact:{...m.createBossMapImpact(5,1,{...raid(),top:[{username:'finn',damage:900,you:true,team:'mouse'},{username:'ana',damage:500,you:false,team:'globe'}]}),boss},
+  onComplete:key=>completed.push(key),...extra});
+ return {view,completed,sounds,haptics,bursts};
+}
+test('each departure is one bounded signature beat: exit, flag and fighters, then hands back once; unmount cancels it',()=>{
  for(const boss of ['kraken','robo_shark','ghost_squid'])for(const reduced of [false,true]){
-  const completed=[],view=runtime('src/components/boss/BossMapDeparture.tsx',{
-   '../../hooks/useReducedGameMotion':{default:()=>reduced},'../../games/boss/BossBrawl':{BOSS_ART:{[boss]:'approved-art'}},'../map/Marker':{Marker:'Marker'},
-   '../../services/boss/mapImpact':m,
-  },{impact:{...m.createBossMapImpact(5,1,raid()),boss},onComplete:key=>completed.push(key)});
-  assert.equal(view.animations.length,reduced?0:1);assert.equal(view.find(n=>n.type==='Image').props.source,'approved-art');
-  const handoff=[...view.timers.values()][0];handoff();assert.equal(completed.length,1);view.unmount();handoff();assert.equal(completed.length,1);
+  const d=departure(boss,reduced);
+  assert.equal(d.view.find(n=>n.type==='Image').props.source,'approved-art');
+  assert.ok(d.view.find(n=>n.type==='RideTeamFlag'&&n.props.team==='mouse'));
+  assert.equal(d.view.find(n=>n.type==='ParticleField')!==undefined,!reduced);
+  assert.ok(d.view.find(n=>n.type==='Text'&&n.props.children==='You'));
+  assert.ok(d.view.find(n=>n.type==='Text'&&n.props.children==='ana'));
+  if(reduced)assert.ok(d.view.find(n=>n.type==='GameIcon'&&n.props.name==='check'));
+  const timers=[...d.view.timers.values()];timers.forEach(fn=>fn());timers.forEach(fn=>fn());
+  assert.equal(d.completed.length,1);
+  if(reduced){assert.equal(d.haptics.length,0);assert.equal(d.sounds.length,0);}
+  else{assert.ok(d.haptics.includes('success'));assert.ok(d.sounds.includes('win'));}
+  d.view.unmount();
  }
+ const cancelled=departure('kraken',false);cancelled.view.unmount();assert.equal(cancelled.view.timers.size,0);
+});
+test('a hold shows HELD! instead of a raise, and no claim means no flag or team sound',()=>{
+ const held=departure('kraken',false,{flag:{...claim(),flipped:false,previous_controller:'mouse'}});
+ assert.ok(held.view.find(n=>n.type==='Text'&&n.props.children==='HELD!'));
+ const none=departure('ghost_squid',false,{flag:null});assert.equal(none.view.find(n=>n.type==='RideTeamFlag'),undefined);
+ [...none.view.timers.values()].forEach(fn=>fn());assert.equal(none.sounds.includes('win'),false);
 });
 test('existing held flags remain static; a verified new raise is finite and reduced motion does not move it',()=>{
- const imports={'../../hooks/useReducedGameMotion':{default:()=>false},'../../constants/teams':{TEAMS:{mouse:{name:'Team Mouse',color:'#ff0',badge:1}}}};
- const view=runtime('src/components/map/RideTeamFlag.tsx',imports,{team:'mouse'});assert.equal(view.animations.length,0);
- view.change({raiseKey:'confirmed-77'});assert.equal(view.animations.length,1);view.change({raiseKey:undefined});assert.equal(view.animations[0].stopped,true);
- view.change({raiseKey:'confirmed-77'});assert.equal(view.animations.length,1);view.unmount();
+ const imports={'../../hooks/useReducedGameMotion':{default:()=>false},'../../ui':{GameIcon:'GameIcon'},
+  '../../constants/teams':{TEAMS:{mouse:{name:'Team Mouse',color:'#ff0',badge:1}},teamName:()=>'Team Mouse'}};
+ const view=runtime('src/components/map/RideTeamFlag.tsx',imports,{team:'mouse'});const before=view.motions.length;
+ view.change({raiseKey:'confirmed-77'});assert.ok(view.motions.length>before);const raisedMotions=view.motions.length;
+ view.change({raiseKey:undefined});view.change({raiseKey:'confirmed-77'});assert.equal(view.motions.length,raisedMotions);
+ view.change({contested:true});assert.ok(view.find(n=>n.type==='GameIcon'&&n.props.name==='swords'));view.unmount();
  const reduced=runtime('src/components/map/RideTeamFlag.tsx',{...imports,'../../hooks/useReducedGameMotion':{default:()=>true}},{team:'mouse',raiseKey:'confirmed-78'});
- assert.equal(reduced.animations.length,0);assert.ok(reduced.find(n=>n.props?.accessibilityLabel==='Team Mouse holds this ride.'));
+ assert.equal(reduced.motions.length,0);assert.ok(reduced.find(n=>n.props?.accessibilityLabel==='Team Mouse holds this ride.'));
+ const held=runtime('src/components/map/RideTeamFlag.tsx',imports,{team:'mouse',raiseKey:'held-1',held:true});
+ assert.ok(held.find(n=>n.type==='Text'&&n.props.children==='HELD!'));
+});
+test('map impact carries the top fighters for the signature beat, capped and cleaned',()=>{
+ const impact=m.createBossMapImpact(5,1,{...raid(),top:[{username:'a',team:'mouse',you:true},{username:'',team:'x'},{username:'b'.repeat(40),team:'bad'},
+  {username:'c',team:'shark'},{username:'d',team:'globe'}]});
+ assert.equal(impact.fighters.length,2);assert.equal(impact.fighters[0].you,true);assert.equal(impact.fighters[1].username.length,24);
+ assert.equal(impact.fighters[1].team,null);
 });
