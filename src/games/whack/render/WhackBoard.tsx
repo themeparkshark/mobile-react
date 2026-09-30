@@ -124,12 +124,16 @@ const Hole = React.memo(function Hole({ i, L, rs, tick, images }: { i: number; L
   const mrx = L.mrx[i];
   const mry = L.mry[i];
   const H = L.spriteH[i];
+  // Occupant clip: everything above the water line, plus a water-plane ellipse as wide as the
+  // character, so fins wider than the rim sink into the water on a curve instead of a hard cut.
   const clip = useMemo(() => {
     const p = Skia.Path.Make();
     p.addRect(rect(cx - L.w, -2000, L.w * 2, my + 2000));
     p.addOval(rect(cx - mrx, my - mry, mrx * 2, mry * 2));
+    const wide = Math.max(mrx, H * 0.48);
+    p.addOval(rect(cx - wide, my - mry * 0.55, wide * 2, mry * 1.1));
     return p;
-  }, [cx, my, mrx, mry, L.w]);
+  }, [cx, my, mrx, mry, L.w, H]);
   const frontClip = useMemo(() => rect(L.rimX[i] - 4, my, L.rimW[i] + 8, L.rimH[i] + 8), [L, i, my]);
   const waterStart = useMemo(() => vec(cx, my - mry), [cx, my, mry]);
   const waterEnd = useMemo(() => vec(cx, my + mry), [cx, my, mry]);

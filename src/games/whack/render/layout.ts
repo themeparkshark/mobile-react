@@ -41,10 +41,11 @@ export interface BoardLayout {
   cellW: number;
 }
 
-export function computeLayout(w: number, h: number, theme: WhackTheme): BoardLayout {
+export function computeLayout(w: number, h: number, theme: WhackTheme, opts: { topFrac?: number } = {}): BoardLayout {
   const geo = RIM_GEO[theme];
   const [mcx, mcy, mrxF, mryF] = geo.mouth;
-  const topH = Math.round(h * 0.27);
+  // Solo boards stage the boss, banners and prompts up top; a live party board only needs the combo badge and meter.
+  const topH = Math.round(h * (opts.topFrac ?? 0.27));
   const boardTop = topH;
   const boardBottom = h - 8;
   const boardH = boardBottom - boardTop;

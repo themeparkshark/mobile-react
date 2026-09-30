@@ -67,10 +67,10 @@ export default function WhackLiveBoard({
   const reducedMotion = useReducedGameMotion();
   const fx = useRef<FxStageHandle>(null);
   const [field, setField] = useState<{ w: number; h: number } | null>(null);
-  const L: BoardLayout | null = useMemo(() => (field ? computeLayout(field.w, field.h, theme) : null), [field, theme]);
+  const L: BoardLayout | null = useMemo(() => (field ? computeLayout(field.w, field.h, theme, { topFrac: 0.17 }) : null), [field, theme]);
   const Lref = useRef<BoardLayout | null>(null);
   Lref.current = L;
-  const geo = useSharedValue<BoardLayout>(computeLayout(390, 520, theme));
+  const geo = useSharedValue<BoardLayout>(computeLayout(390, 520, theme, { topFrac: 0.17 }));
   const boxes = useSharedValue<number[][]>(boxesFor(theme));
   useEffect(() => { if (L) geo.value = L; }, [L, geo]);
   useEffect(() => { boxes.value = boxesFor(theme); }, [theme, boxes]);
