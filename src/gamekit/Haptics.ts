@@ -11,6 +11,17 @@
  */
 
 import * as Haptics from 'expo-haptics';
+import {
+  HAPTIC_PATTERNS,
+  HP,
+  PRIMITIVE_STRENGTH,
+  admitHaptic,
+  createHapticScheduler,
+  patternStrength,
+  type HapticPatternName,
+  type HapticPrimitive,
+  type HapticStep,
+} from './core/hapticGrammar';
 
 export type HapticIntent =
   | 'tapLight'
@@ -19,7 +30,9 @@ export type HapticIntent =
   | 'failBuzz'
   | 'tickSelection'
   | 'success'
-  | 'warning';
+  | 'warning'
+  | 'hitSoft'
+  | 'hitRigid';
 
 /** Minimum ms between fires of the same intent. Tuned per intent below. */
 const DEBOUNCE_MS: Record<HapticIntent, number> = {
@@ -30,6 +43,8 @@ const DEBOUNCE_MS: Record<HapticIntent, number> = {
   tickSelection: 30,
   success: 250,
   warning: 250,
+  hitSoft: 45,
+  hitRigid: 45,
 };
 
 const lastFiredAt: Record<HapticIntent, number> = {
@@ -40,6 +55,8 @@ const lastFiredAt: Record<HapticIntent, number> = {
   tickSelection: 0,
   success: 0,
   warning: 0,
+  hitSoft: 0,
+  hitRigid: 0,
 };
 
 let enabled = true;
@@ -76,6 +93,12 @@ function run(intent: HapticIntent): void {
     case 'failBuzz':
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
+    case 'hitSoft':
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft ?? Haptics.ImpactFeedbackStyle.Light);
+      return;
+    case 'hitRigid':
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid ?? Haptics.ImpactFeedbackStyle.Heavy);
+      return;
   }
 }
 
@@ -104,4 +127,89 @@ export const Haptic: Record<HapticIntent, () => void> = {
   tickSelection: () => haptic('tickSelection'),
   success: () => haptic('success'),
   warning: () => haptic('warning'),
+  hitSoft: () => haptic('hitSoft'),
+  hitRigid: () => haptic('hitRigid'),
 };
+
+// =============================================================================
+// Haptic grammar: patterns + priority scheduling (studio engine)
+// =============================================================================
+
+const PRIMITIVE_INTENT: Record<HapticPrimitive, HapticIntent> = {
+  selection: 'tickSelection',
+  light: 'tapLight',
+  medium: 'hitMedium',
+  heavy: 'comboHeavy',
+  soft: 'hitSoft',
+  rigid: 'hitRigid',
+  success: 'success',
+  warning: 'warning',
+  error: 'failBuzz',
+};
+
+const scheduler = createHapticScheduler(60);
+let tellsEnabled = true;
+let offsetMs = 0;
+
+/** 'Feel the tells' toggle (telegraph haptics for eyes-off, muted players). */
+export function setTellHapticsEnabled(value: boolean): void {
+  tellsEnabled = value;
+}
+
+export function areTellHapticsEnabled(): boolean {
+  return tellsEnabled;
+}
+
+/**
+ * Delay pattern playback to land with the audio (measured per platform: the
+ * backend's output latency). 0 for audio-api, ~60-80 for expo-av.
+ */
+export function setHapticAudioOffsetMs(ms: number): void {
+  offsetMs = Math.max(0, ms);
+}
+
+/** Minimum gap between in-play haptics (the stronger wins a collision). */
+export function setHapticGapMs(ms: number): void {
+  scheduler.minGapMs = ms;
+}
+
+export function firePrimitive(p: HapticPrimitive): void {
+  if (!enabled) return;
+  try {
+    run(PRIMITIVE_INTENT[p]);
+  } catch {
+    // Simulator / no taptic engine.
+  }
+}
+
+export interface PatternOptions {
+  /** HP.telegraph for tells, HP.critical for P0 (never dropped), HP.rival drops. */
+  priority?: number;
+  /** Align with an audio cue that starts after its output latency. */
+  alignToAudio?: boolean;
+  /** Is this a telegraph/tell (respects the 'Feel the tells' toggle)? */
+  tell?: boolean;
+}
+
+/**
+ * Play a named pattern (or custom steps) under the grammar rules. Returns
+ * false when it was dropped (disabled, rival-caused, or out-ranked in the gap).
+ */
+export function playHaptic(pattern: HapticPatternName | HapticStep[], opts: PatternOptions = {}): boolean {
+  if (!enabled) return false;
+  if (opts.tell && !tellsEnabled) return false;
+  const steps: readonly HapticStep[] = typeof pattern === 'string' ? HAPTIC_PATTERNS[pattern] : pattern;
+  if (!steps || steps.length === 0) return false;
+  const priority = opts.priority ?? (opts.tell ? HP.telegraph : HP.own);
+  if (!admitHaptic(scheduler, Date.now(), patternStrength(steps), priority)) return false;
+  const lead = opts.alignToAudio ? offsetMs : 0;
+  for (const step of steps) {
+    const at = step.at + lead;
+    if (at <= 0) firePrimitive(step.p);
+    else setTimeout(() => firePrimitive(step.p), at);
+  }
+  return true;
+}
+
+export { HAPTIC_PATTERNS, HP, PRIMITIVE_STRENGTH };
+export type { HapticPatternName, HapticPrimitive, HapticStep };
