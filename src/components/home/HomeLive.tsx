@@ -52,8 +52,9 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
     return () => clearTimeout(id);
   }, [toast]);
 
+  useEffect(() => applyTeamNames(live?.team_names), [live?.team_names]);
   if (!live) return null;
-  applyTeamNames(live.team_names);
+  const names = live.team_names;
   const yours = live.your_team;
   const liveRaid = live.parks.find(p => p.raid && new Date(p.raid.ends_at).getTime() > now);
   const leader = live.leading_team;
@@ -71,8 +72,8 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
     if (result.ok && result.cheer) {
       const c = result.cheer;
       setToast(c.flipped
-        ? `${teamName(c.team)} took ${c.ride_name}!`
-        : `${c.ride_name} defended: +${c.points} for ${teamName(c.team)}!`);
+        ? `${teamName(c.team, names)} took ${c.ride_name}!`
+        : `${c.ride_name} defended: +${c.points} for ${teamName(c.team, names)}!`);
     } else if (!result.ok) {
       setToast(result.error === 'no_cheers_left' ? "You're out of defends today. Come back tomorrow!"
         : result.error === 'not_holding' ? 'That ride changed hands. Win it back at the park!'
@@ -103,7 +104,7 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
         ) : (
           <>
             <Text style={styles.barHeadline} numberOfLines={1}>
-              {leader ? `${teamName(leader).toUpperCase()} LEADS` : 'THE PARKS ARE UP FOR GRABS'}
+              {leader ? `${teamName(leader, names).toUpperCase()} LEADS` : 'THE PARKS ARE UP FOR GRABS'}
             </Text>
             <View style={styles.chips}>
               {ORDER.map(team => (
@@ -138,7 +139,7 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
               <View key={team} style={styles.standing}>
                 <Image source={TEAMS[team].badge} style={styles.standingBadge} contentFit="contain" />
                 <Text style={[styles.standingCount, { color: TEAMS[team].color }]}>{live.totals[team]}</Text>
-                <Text style={styles.standingLabel}>{teamShortName(team)}{yours === team ? ' (you)' : ''}</Text>
+                <Text style={styles.standingLabel}>{teamShortName(team, names)}{yours === team ? ' (you)' : ''}</Text>
               </View>
             ))}
           </View>

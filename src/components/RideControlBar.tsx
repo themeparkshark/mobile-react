@@ -50,13 +50,16 @@ export function TeamChip({ team, count, yours, leading }: {
  * Today's fight for the park: how many rides each team holds, who leads, and
  * (on tap) the rides that are up for grabs right now.
  */
-export default function RideControlBar({ control, tasks, onFocusTask }: {
+export default function RideControlBar({ control, tasks, onFocusTask, compact = false }: {
   readonly control: RideControlPark | null;
+  /** While a boss is live: just the team chips, tucked to the right, so the map stays clear. */
+  readonly compact?: boolean;
   readonly tasks: readonly TaskType[];
   readonly onFocusTask: (task: TaskType) => void;
 }) {
   const [open, setOpen] = useState(false);
-  applyTeamNames(control?.team_names);
+  const names = control?.team_names;
+  useEffect(() => applyTeamNames(names), [names]);
   const held = control?.rides_held ?? { mouse: 0, globe: 0, shark: 0 };
   const leader = control?.leading_team ?? null;
   const yours = control?.your_team ?? null;
@@ -70,15 +73,16 @@ export default function RideControlBar({ control, tasks, onFocusTask }: {
   const unclaimed = tasks.filter(t => !(control?.rides ?? []).some(r => r.asset_id === Number(t.asset_id))).length;
 
   const headline = !control ? 'RIDE CONTROL'
-    : leader ? `${teamName(leader).toUpperCase()} LEADS` : 'EVERY RIDE IS OPEN';
+    : leader ? `${teamName(leader, names).toUpperCase()} LEADS` : 'EVERY RIDE IS OPEN';
 
   return (
     <>
       <Pressable accessibilityRole="button"
-        accessibilityLabel={`${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team)} ${held[team]}`).join(', ')} rides. Show rides to take.`}
-        onPress={() => setOpen(true)} style={styles.barWrap}>
-        <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.bar}>
-          <Text style={styles.kicker} numberOfLines={1}>{headline}</Text>
+        accessibilityLabel={`${headline}. ${TEAM_ORDER.map(team => `${teamShortName(team, names)} ${held[team]}`).join(', ')} rides. Show rides to take.`}
+        onPress={() => setOpen(true)} style={[styles.barWrap, compact && styles.barWrapCompact]}>
+        <LinearGradient colors={[BRAND.blueBright, BRAND.blue, BRAND.blueLip]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+          style={[styles.bar, compact && styles.barCompact]}>
+          {!compact && <Text style={styles.kicker} numberOfLines={1}>{headline}</Text>}
           <View style={styles.chips}>
             {TEAM_ORDER.map(team => <TeamChip key={team} team={team} count={held[team]} yours={yours === team} leading={leader === team} />)}
           </View>
@@ -93,8 +97,8 @@ export default function RideControlBar({ control, tasks, onFocusTask }: {
           <Text style={styles.sheetSub}>
             {yours
               ? control?.your_team_is_underdog
-                ? `${teamName(yours)} is the underdog today: your points count 1.5x!`
-                : `Catch coins and earn Parts in line to win rides for ${teamName(yours)}.`
+                ? `${teamName(yours, names)} is the underdog today: your points count 1.5x!`
+                : `Catch coins and earn Parts in line to win rides for ${teamName(yours, names)}.`
               : 'Pick a team to start claiming rides.'}
           </Text>
           <View style={styles.standings}>
@@ -105,7 +109,7 @@ export default function RideControlBar({ control, tasks, onFocusTask }: {
                   {leader === team && <View style={styles.standingCrown}><GameIcon name="crown" size={26} /></View>}
                 </View>
                 <Text style={[styles.standingCount, { color: TEAMS[team].color }]}>{held[team]}</Text>
-                <Text style={styles.standingLabel}>{teamShortName(team)}{yours === team ? ' (you)' : ''}</Text>
+                <Text style={styles.standingLabel}>{teamShortName(team, names)}{yours === team ? ' (you)' : ''}</Text>
               </View>
             ))}
           </View>
@@ -128,8 +132,8 @@ export default function RideControlBar({ control, tasks, onFocusTask }: {
                       {r.contested && <GameIcon name="swords" size={16} accessibilityLabel="Contested" />}
                       <Text style={styles.rowDetail} numberOfLines={1}>
                         {r.controller === yours
-                          ? `Hold it! ${teamShortName(sorted[1])} is ${r.margin} behind`
-                          : `${teamShortName(r.controller)} leads ${teamShortName(sorted[1])} by ${r.margin}`}
+                          ? `Hold it! ${teamShortName(sorted[1], names)} is ${r.margin} behind`
+                          : `${teamShortName(r.controller, names)} leads ${teamShortName(sorted[1], names)} by ${r.margin}`}
                         {r.captain?.username ? `  ·  Captain ${r.captain.username}` : ''}
                       </Text>
                     </View>
@@ -148,6 +152,8 @@ export default function RideControlBar({ control, tasks, onFocusTask }: {
 const styles = StyleSheet.create({
   barWrap: { marginHorizontal: 12, borderRadius: 18, shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 } },
+  barWrapCompact: { alignSelf: 'flex-end' },
+  barCompact: { paddingVertical: 3, paddingLeft: 6, paddingRight: 4 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 18, borderWidth: 3, borderColor: BRAND.white,
     paddingVertical: 6, paddingLeft: 12, paddingRight: 6, overflow: 'visible' },
   kicker: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.gold, textShadowColor: BRAND.navy,

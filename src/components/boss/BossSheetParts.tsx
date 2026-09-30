@@ -66,7 +66,7 @@ export function TeamDamage({ raid }: { readonly raid: BossRaid }) {
           <Image source={TEAMS[team].badge} style={parts.teamBadge} contentFit="contain" />
           {leads && <View style={parts.teamCrown}><GameIcon name="crown" size={16} /></View>}
         </View>
-        <Text style={parts.teamName} numberOfLines={1}>{teamShortName(team)}</Text>
+        <Text style={parts.teamName} numberOfLines={1}>{teamShortName(team, raid.team_names)}</Text>
         <View style={parts.teamTrack}>
           <View style={[parts.teamFill, { width: `${(raid.teams[team] / total) * 100}%`, backgroundColor: TEAMS[team].color }]} />
         </View>

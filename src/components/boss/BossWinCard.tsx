@@ -15,7 +15,7 @@ import { BossHpBar } from './BossSheetParts';
 
 const CARD_W = 340, CARD_H = 520;
 
-type Loot = { key: string; icon: GameIconName; amount: number; label: string };
+type Loot = { key: string; icon: GameIconName; amount: number; label: string; detail?: string };
 
 export function lootFor(raid: BossRaid): Loot[] {
   const r = raid.you.reward;
@@ -24,7 +24,7 @@ export function lootFor(raid: BossRaid): Loot[] {
     { key: 'coins', icon: 'coins' as const, amount: r.coins, label: 'Shark Coins' },
     { key: 'xp', icon: 'xp' as const, amount: r.xp, label: 'XP' },
     { key: 'energy', icon: 'energy' as const, amount: r.energy, label: 'Energy' },
-    { key: 'parts', icon: 'parts' as const, amount: r.parts, label: `${raid.ride_name ?? 'Ride'} Parts` },
+    { key: 'parts', icon: 'parts' as const, amount: r.parts, label: 'Ride Parts', detail: raid.ride_name ?? undefined },
     { key: 'tickets', icon: 'ticket' as const, amount: r.tickets, label: r.tickets === 1 ? 'Park Ticket' : 'Park Tickets' },
   ].filter(item => item.amount > 0);
 }
@@ -71,12 +71,13 @@ function LootChip({ item, index, reduced, collecting }: { readonly item: Loot; r
   }));
   // Motion on the outer view only; the card's own fill stays on a plain view so a
   // count-up re-render never drops it.
-  return <Animated.View style={style} accessibilityLabel={`${item.amount} ${item.label}`}>
+  return <Animated.View style={style} accessibilityLabel={`${item.amount} ${item.label}${item.detail ? ` for ${item.detail}` : ''}`}>
     <View style={styles.loot}>
       <GameIcon name={item.icon} size={30} />
       <View>
         <CountUp to={item.amount} start={counting} reduced={reduced} />
         <Text style={styles.lootLabel} numberOfLines={1}>{item.label}</Text>
+        {item.detail ? <Text style={styles.lootDetail} numberOfLines={1}>{item.detail}</Text> : null}
       </View>
     </View>
   </Animated.View>;
@@ -209,6 +210,7 @@ const styles = StyleSheet.create({
     borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 6, minWidth: 130 },
   lootAmount: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy },
   lootLabel: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.navySoft, maxWidth: 110 },
+  lootDetail: { fontFamily: 'Knockout', fontSize: 10, color: BRAND.navySoft, opacity: 0.8, maxWidth: 110 },
   fine: { marginTop: 8, fontFamily: 'Knockout', fontSize: 13, color: '#dff4ff', textAlign: 'center' },
   particles: { position: 'absolute', left: 0, top: 0 },
 });

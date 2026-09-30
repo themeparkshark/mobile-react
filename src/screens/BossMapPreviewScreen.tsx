@@ -37,7 +37,7 @@ function fixtureRaid(boss: BossId, over: Partial<BossRaid> = {}): BossRaid {
     latitude: RIDE.latitude, longitude: RIDE.longitude, hp_max: 6100, hp_left: 3480, status: 'active', starts_at: stamp,
     ends_at: new Date(Date.now() + 18 * 60000).toISOString(), fighters: 6, teams: { mouse: 1240, globe: 860, shark: 520 },
     team_names: { mouse: 'Team Mouse', globe: 'Team Globe', shark: 'Team Shark' },
-    feed: [], top: [{ username: 'finnfan22', damage: 1480, you: false, team: 'mouse' }, { username: 'you', damage: 1144, you: true, team: 'shark' },
+    feed: [], top: [{ username: 'finnfan22', damage: 1480, you: false, team: 'mouse' }, { username: 'sharkbait_sam', damage: 1144, you: true, team: 'shark' },
       { username: 'coasterkid', damage: 640, you: false, team: 'globe' }],
     mvp_is_you: false, ride_control: null, energy_cost: 10, reach_meters: 90, max_attacks: 5,
     damage: { per_hit: 4, per_weak_hit: 40, weak_share: 3 },
@@ -102,7 +102,7 @@ export default function BossMapPreviewScreen() {
     <View style={{ flex: 1 }}>
       {section === 'map' && <>
         <View style={styles.receipt} pointerEvents="box-none">
-          <RideControlBar control={fixture.control} tasks={[fixture.task]} onFocusTask={() => undefined} />
+          <RideControlBar control={fixture.control} tasks={[fixture.task]} onFocusTask={() => undefined} compact={!map.moment} />
           <LiveEventsPill raid={map.moment ? null : fixtureRaid(boss)} rushes={rushes} onBoss={() => setSection('sheet')} onRush={() => undefined}
             mapMoment={map.moment} mapFlag={map.flag} onMapMoment={() => setSelected(true)} onDismissMoment={map.dismiss} />
         </View>

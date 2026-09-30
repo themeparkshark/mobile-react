@@ -24,20 +24,24 @@ export function isTeam(value: unknown): value is TeamId {
  */
 const overrides: Partial<Record<TeamId, string>> = {};
 
+type TeamNames = Partial<Record<TeamId, string>> | null | undefined;
+const clean = (value: unknown) => (typeof value === 'string' && value.trim() && value.trim().length <= 40 ? value.trim() : null);
+
+/** Remember the newest server names for surfaces without a payload of their own. Call from an effect, not render. */
 export function applyTeamNames(names: unknown): void {
   if (!names || typeof names !== 'object') return;
   for (const team of TEAM_ORDER) {
-    const value = (names as Record<string, unknown>)[team];
-    if (typeof value === 'string' && value.trim() && value.trim().length <= 40) overrides[team] = value.trim();
+    const value = clean((names as Record<string, unknown>)[team]);
+    if (value) overrides[team] = value;
   }
 }
 
-/** "Team Mouse" (or its server override). */
-export function teamName(team: TeamId): string {
-  return overrides[team] ?? TEAMS[team].name;
+/** "Team Mouse", or the name from this payload's team_names, or the newest server name seen. */
+export function teamName(team: TeamId, names?: TeamNames): string {
+  return clean(names?.[team]) ?? overrides[team] ?? TEAMS[team].name;
 }
 
 /** "Mouse": the name without its "Team " prefix, for tight chips. */
-export function teamShortName(team: TeamId): string {
-  return teamName(team).replace(/^Team\s+/i, '');
+export function teamShortName(team: TeamId, names?: TeamNames): string {
+  return teamName(team, names).replace(/^Team\s+/i, '');
 }
