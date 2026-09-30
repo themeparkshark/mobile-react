@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView from 'react-native-maps';
+import PreviewMap from '../../dev/PreviewMap';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { spacing } from '../../design-system';
 import type { TripGoalData } from '../../api/endpoints/me/trip-goal';
@@ -88,7 +88,7 @@ export default function TripGoalPreviewScreen() {
       </Text></Pressable>
     </View>
     <View style={styles.scene}>
-      <MapView style={StyleSheet.absoluteFill} initialRegion={{
+      <PreviewMap style={StyleSheet.absoluteFill} initialRegion={{
         latitude: 28.4194, longitude: -81.5812,
         latitudeDelta: 0.015, longitudeDelta: 0.015,
       }} />

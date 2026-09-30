@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "name": "Coins",
+    "singular_name": "Coin",
+    "icon_url": "https://assets.themeparkshark.com/mobile/production/assets/w9rcptfRvxgHXfI8t9nbSo8go4bgCSd6LM1Od3fq.png",
+    "map_url": "https://assets.themeparkshark.com/mobile/production/assets/16zGiCd9utgm2kRhG5h23Bm7hGs0b0I9mO9dFsQp.png"
+  },
+  {
+    "id": 2,
+    "name": "Keys",
+    "singular_name": "Key",
+    "icon_url": "https://assets.themeparkshark.com/mobile/production/assets/tj0LPPMRRF2qkprO3RpZu1vSFckCBaIYVe4Yokzv.png",
+    "map_url": "https://assets.themeparkshark.com/mobile/production/assets/5ywHmsqWF2aBdgnxXP66S3xojO7yXZTWTSzUdLOE.png"
+  },
+  {
+    "id": 3,
+    "name": "Scavenger Tokens",
+    "singular_name": "Scavenger Token",
+    "icon_url": null,
+    "map_url": null
+  },
+  {
+    "id": 4,
+    "name": "Holiday Tokens",
+    "singular_name": "Holiday Token",
+    "icon_url": null,
+    "map_url": null
+  }
+]

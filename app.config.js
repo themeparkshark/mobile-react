@@ -1,4 +1,34 @@
 import 'dotenv/config';
+import withTpsNativeInvariants, { assertPrebuildAllowed } from './plugins/withTpsNativeInvariants';
+import privacyManifest from './plugins/privacy-manifest.json';
+
+// `expo prebuild --clean` would delete the LinePlayWidget target. See RELEASE.md.
+assertPrebuildAllowed();
+
+// Purpose strings shown by iOS permission prompts. They must describe what
+// Theme Park Shark actually does; ios/ThemeParkShark/Info.plist mirrors them
+// (tools/tests/release-native-config.test.cjs keeps the two in sync).
+const LOCATION_WHEN_IN_USE =
+  'Theme Park Shark uses your location to show nearby collectibles at home, the rides around you in the park, and the queue games for the line you are in.';
+const LOCATION_ALWAYS =
+  'Theme Park Shark uses your location in the background to notice the rides you go on and keep your queue games in sync while your phone is locked.';
+const PURPOSE_STRINGS = {
+  NSLocationWhenInUseUsageDescription: LOCATION_WHEN_IN_USE,
+  NSLocationAlwaysAndWhenInUseUsageDescription: LOCATION_ALWAYS,
+  NSLocationAlwaysUsageDescription: LOCATION_ALWAYS,
+  NSCameraUsageDescription:
+    'Theme Park Shark uses the camera to show your coins and pins in the world around you, and for a ride photo when a game asks for one. Photos stay on your phone unless you share them.',
+  // Kept only because expo-camera links AVCaptureDevice audio capture
+  // (CameraPermissionsRequester.swift, CameraView.swift), which App Store
+  // Connect's binary scan flags as ITMS-90683 when this key is missing. The app
+  // never asks for the microphone, so players never see this string.
+  NSMicrophoneUsageDescription:
+    'Theme Park Shark never records audio and never turns on your microphone. The camera features take still photos only.',
+  NSMotionUsageDescription:
+    'Theme Park Shark uses motion so your 3D coins and pins tilt as you move your phone.',
+  NSPhotoLibraryAddUsageDescription:
+    'Theme Park Shark saves a park day or ride card to your Photos when you tap Save Image in the share sheet.',
+};
 
 export default {
   name: 'Theme Park Shark',
@@ -7,29 +37,34 @@ export default {
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
+  // Matches ios/Podfile.properties.json; without it prebuild turns Fabric off.
+  newArchEnabled: true,
   splash: {
-    image: './assets/splash.png',
+    image: './assets/images/splash-bg.png',
     resizeMode: 'cover',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#0768B9',
   },
-  runtimeVersion: '1.5.0',
+  // Fingerprint runtime: an OTA update only reaches binaries whose native
+  // code matches the JS it was built against. The native side reads the
+  // build-time fingerprint (Expo.plist EXUpdatesRuntimeVersion file:fingerprint).
+  runtimeVersion: { policy: 'fingerprint' },
   updates: {
     url: 'https://u.expo.dev/aaf6495c-456b-4fbd-afb5-d429c1472ddb',
+    // One check per cold start, downloaded in the background and applied on
+    // the next cold start. No in-session reloads.
+    checkAutomatically: 'ON_LOAD',
+    fallbackToCacheTimeout: 0,
   },
   assetBundlePatterns: ['**/*'],
   ios: {
-    buildNumber: '20260926.2',
-    bitcode: 'Debug',
+    // Build numbers are managed remotely by EAS (appVersionSource: remote).
     usesAppleSignIn: true,
     bundleIdentifier: 'com.themeparkshark.app',
+    // Same data as ios/ThemeParkShark/PrivacyInfo.xcprivacy, so prebuild keeps it.
+    privacyManifests: privacyManifest,
     infoPlist: {
       UIBackgroundModes: ['location'],
-      NSLocationWhenInUseUsageDescription:
-        'Theme Park Shark uses your location to show nearby home collectibles, park rides, and queue activities.',
-      NSLocationAlwaysAndWhenInUseUsageDescription:
-        'Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.',
-      NSLocationAlwaysUsageDescription:
-        'Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.',
+      ...PURPOSE_STRINGS,
     },
   },
   web: {
@@ -41,8 +76,11 @@ export default {
       projectId: 'aaf6495c-456b-4fbd-afb5-d429c1472ddb',
     },
   },
+  // withTpsNativeInvariants is first so its mods run last. The
+  // @maplibre/maplibre-react-native plugin is intentionally absent: it moves
+  // MapLibre to SPM, which breaks App Store archives (see the plugin file).
   plugins: [
-    '@maplibre/maplibre-react-native',
+    withTpsNativeInvariants,
     'expo-notifications',
     [
       'expo-build-properties',
@@ -52,14 +90,14 @@ export default {
         },
       },
     ],
-    'expo-secure-store',
+    // The app never uses biometrics, so no Face ID purpose string at all.
+    ['expo-secure-store', { faceIDPermission: false }],
     [
       'expo-location',
       {
-        locationAlwaysAndWhenInUsePermission:
-          'Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.',
-        locationAlwaysPermission:
-          'Theme Park Shark uses your location in the background to detect nearby rides and keep LinePlay queue progress accurate while your phone is locked.',
+        locationWhenInUsePermission: LOCATION_WHEN_IN_USE,
+        locationAlwaysAndWhenInUsePermission: LOCATION_ALWAYS,
+        locationAlwaysPermission: LOCATION_ALWAYS,
         isAndroidBackgroundLocationEnabled: true,
         isAndroidForegroundServiceEnabled: true,
       },

@@ -1,15 +1,10 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
-import { useContext, useCallback } from 'react';
+import { useContext, useCallback, useEffect } from 'react';
 import { View, StyleSheet as RNStyleSheet } from 'react-native';
 import { DevJoystick } from './components/DevJoystick';
 import { LocationContext } from './context/LocationProvider';
-import mobileAds, {
-  InterstitialAd,
-  MaxAdContentRating,
-  TestIds,
-} from './helpers/ads-stub';
 import { useAsyncEffect } from 'rooks';
 import { flushPendingNavigation, navigationRef } from './RootNavigation';
 import getCrumbs from './api/endpoints/crumbs/getCrumbs';
@@ -37,7 +32,6 @@ import PinSwapsScreen from './screens/PinSwapsScreen';
 import PlayerScreen from './screens/PlayerScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import QueueTimesScreen from './screens/QueueTimesScreen';
-import QueueTimesPreviewScreen from './screens/QueueTimesPreviewScreen';
 import RedeemCoinCodeScreen from './screens/RedeemCoinCodeScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import SocialScreen from './screens/SocialScreen';
@@ -49,33 +43,11 @@ import WelcomeScreen from './screens/WelcomeScreen';
 // V2 Screens
 import SetCollectionScreen from './screens/SetCollectionScreen';
 import StampBookScreen from './screens/StampBookScreen';
-import QueueStampPreviewScreen from './screens/LinePlay/QueueStampPreviewScreen';
 import CoinShelfScreen from './screens/CoinShelfScreen';
-import MiniGameTesterScreen from './screens/MiniGameTesterScreen';
-import GameKitGymScreen from './screens/GameKitGymScreen';
-import PostWinRewardsPreviewScreen from './screens/PostWinRewardsPreviewScreen';
-import ShelfArrivalPreviewScreen from './screens/ShelfArrivalPreviewScreen';
-import BossMechanicsPreviewScreen from './screens/BossMechanicsPreviewScreen';
-import BossMapPreviewScreen from './screens/BossMapPreviewScreen';
-import CoinLevelingPreviewScreen from './screens/CoinLevelingPreviewScreen';
-import RescuePassPreviewScreen from './screens/RescuePassPreviewScreen';
-import ParkChecklistPreviewScreen from './screens/ParkChecklistPreviewScreen';
-import ParkArrivalPreviewScreen from './screens/ParkArrivalPreviewScreen';
 import BananaBasketScreen from './screens/BananaBasketScreen';
 import CommunityCenterScreen from './screens/CommunityCenterScreen';
 import SharkParkScreen from './screens/SharkParkScreen';
 import LinePlayScreen from './screens/LinePlay/LinePlayScreen';
-import TriviaGamePreviewScreen from './screens/LinePlay/TriviaGamePreviewScreen';
-import CrewRelayPreviewScreen from './screens/LinePlay/CrewRelayPreviewScreen';
-import ParkProjectPreviewScreen from './screens/ExploreScreen/ParkProjectPreviewScreen';
-import TripGoalPreviewScreen from './screens/ExploreScreen/TripGoalPreviewScreen';
-import ParkDayRecapPreviewScreen from './screens/ParkDayRecapPreviewScreen';
-import CrewGridPreviewScreen from './screens/LinePlay/CrewGridPreviewScreen';
-import SetCollectionPreviewScreen from './screens/SetCollectionPreviewScreen';
-import HomeHuntPreviewScreen from './screens/ExploreScreen/HomeHuntPreviewScreen';
-import InventoryPreviewScreen from './screens/InventoryPreviewScreen';
-import ProfilePreviewScreen from './screens/ProfilePreviewScreen';
-import RideLogSuccessPreviewScreen from './screens/RideLogSuccessPreviewScreen';
 // Gym Battle Screens
 import { TeamSelectionScreen, GymBattleScreen } from './screens/GymBattle';
 // Ride Tracker Screens
@@ -92,117 +64,43 @@ import RideOnboardingScreen from './screens/RideTracker/RideOnboardingScreen';
 import RideBatchConfirmScreen from './screens/RideTracker/RideBatchConfirmScreen';
 import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay';
 import SharkDropHandler from './components/SharkDropHandler';
+import OfflineBanner from './components/OfflineBanner';
+import { GameDialogHost } from './ui';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
+import { DEV_SCREENS, devInitialRoute } from './devRoutes';
+import { releaseNativeSplash } from './nativeSplash';
+import { addBreadcrumb, setTelemetryUser } from './services/telemetry';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   const isLinePlayFlowPreview = __DEV__ && process.env.EXPO_PUBLIC_LINEPLAY_FLOW_PREVIEW === '1';
-  const isTriviaGamePreview = __DEV__ && process.env.EXPO_PUBLIC_TRIVIA_GAME_PREVIEW === '1';
   const linePlayPreviewBigThunder = __DEV__ &&
     process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE === 'big-thunder';
-  const isCrewRelayPreview = __DEV__ && process.env.EXPO_PUBLIC_CREW_RELAY_PREVIEW === '1';
-  const isParkProjectPreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_PROJECT_PREVIEW === '1';
-  const isTripGoalPreview = __DEV__ && process.env.EXPO_PUBLIC_TRIP_GOAL_PREVIEW === '1';
-  const isParkDayRecapPreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_DAY_RECAP_PREVIEW === '1';
-  const isCrewGridPreview = __DEV__ && process.env.EXPO_PUBLIC_CREW_GRID_PREVIEW === '1';
-  const isSetCollectionPreview = __DEV__ && process.env.EXPO_PUBLIC_SET_COLLECTION_PREVIEW === '1';
-  const isPostWinRewardsPreview = __DEV__ && (process.env.EXPO_PUBLIC_POST_WIN_REWARDS_PREVIEW === '1' ||
-    process.env.EXPO_PUBLIC_POST_WIN_FIRST_PREVIEW === '1');
-  const isCoinLevelingPreview = __DEV__ && process.env.EXPO_PUBLIC_COIN_LEVELING_PREVIEW === '1';
-  const isRescuePassPreview = __DEV__ && process.env.EXPO_PUBLIC_RESCUE_PASS_PREVIEW === '1';
-  const isStampBookPreview = __DEV__ && process.env.EXPO_PUBLIC_STAMP_BOOK_PREVIEW === '1';
-  const isQueueStampPreview = __DEV__ && process.env.EXPO_PUBLIC_QUEUE_STAMP_PREVIEW === '1';
-  const isParkChecklistPreview = __DEV__ && (process.env.EXPO_PUBLIC_PARK_CHECKLIST_PREVIEW === '1' ||
-    process.env.EXPO_PUBLIC_PARK_RESCUE_GOAL_PREVIEW === '1' ||
-    process.env.EXPO_PUBLIC_PARK_DOWN_PREVIEW === '1' ||
-    process.env.EXPO_PUBLIC_PARK_PASSPORT_PREVIEW === '1' ||
-    process.env.EXPO_PUBLIC_PARK_PASSPORT_COMPLETE_PREVIEW === '1');
-  const isParkArrivalPreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_ARRIVAL_PREVIEW === '1';
-  const isCoinShelfPreview = __DEV__ && process.env.EXPO_PUBLIC_COIN_SHELF_PREVIEW === '1';
-  const isRideTrackerPreview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_TRACKER_PREVIEW === '1';
-  const isRideGamePreview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW === '1';
-  const isHomeHuntPreview = __DEV__ && (
-    process.env.EXPO_PUBLIC_HOME_HUNT_PREVIEW === '1' ||
-    process.env.EXPO_PUBLIC_HOME_SAVED_PREVIEW === '1');
-  const isInventoryPreview = __DEV__ && process.env.EXPO_PUBLIC_INVENTORY_PREVIEW === '1';
-  const isProfilePreview = __DEV__ && process.env.EXPO_PUBLIC_PROFILE_PREVIEW === '1';
-  const isRideLogSuccessPreview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_LOG_SUCCESS_PREVIEW === '1';
-  const isRideLogPreview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_LOG_PREVIEW === '1';
   const isRideBatchPreview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_BATCH_PREVIEW === '1';
-  const isRideDetectionPreview = __DEV__ && process.env.EXPO_PUBLIC_RIDE_DETECTION_PREVIEW === '1';
-  const isTutorialPreview = __DEV__ && process.env.EXPO_PUBLIC_TUTORIAL_PREVIEW === '1';
-  const isQueueTimesPreview = __DEV__ && process.env.EXPO_PUBLIC_QUEUE_TIMES_PREVIEW === '1';
   const isStandalonePreview = isStandalonePreviewMode();
-  const initialRouteName = __DEV__ && process.env.EXPO_PUBLIC_BOSS_MAP_PREVIEW === '1' ? 'BossMapPreview'
-    : __DEV__ && process.env.EXPO_PUBLIC_BOSS_MECHANICS_PREVIEW === '1'
-    ? 'BossMechanicsPreview' : __DEV__ && process.env.EXPO_PUBLIC_SHELF_ARRIVAL_PREVIEW === '1'
-    ? 'ShelfArrivalPreview' : isTriviaGamePreview
-    ? 'TriviaGamePreview'
-    : isLinePlayFlowPreview
-    ? 'LinePlay'
-    : isQueueTimesPreview
-    ? 'QueueTimesPreview'
-    : isParkArrivalPreview
-    ? 'ParkArrivalPreview'
-    : isParkChecklistPreview
-    ? 'ParkChecklistPreview'
-    : isInventoryPreview
-    ? 'InventoryPreview'
-    : isProfilePreview
-    ? 'ProfilePreview'
-    : isRideLogSuccessPreview
-    ? 'RideLogSuccessPreview'
-    : isRideLogPreview
-    ? 'RideLog'
-    : isRideBatchPreview
-    ? 'RideBatchConfirm'
-    : isRideDetectionPreview
-    ? 'RideTracker'
-    : isRescuePassPreview
-    ? 'RescuePassPreview'
-    : isStampBookPreview
-    ? 'StampBook'
-    : isQueueStampPreview
-    ? 'QueueStampPreview'
-    : isRideGamePreview
-    ? 'MiniGameTester'
-    : isCoinShelfPreview
-    ? 'CoinShelf'
-    : isRideTrackerPreview
-    ? 'RideTracker'
-    : isCoinLevelingPreview
-    ? 'CoinLevelingPreview'
-    : isHomeHuntPreview || isTutorialPreview
-    ? 'HomeHuntPreview'
-    : isSetCollectionPreview
-    ? 'SetCollectionPreview'
-    : isCrewGridPreview
-    ? 'CrewGridPreview'
-    : isParkDayRecapPreview
-    ? 'ParkDayRecapPreview'
-    : isTripGoalPreview
-    ? 'TripGoalPreview'
-    : isParkProjectPreview
-      ? 'ParkProjectPreview'
-      : isCrewRelayPreview
-        ? 'CrewRelayPreview'
-        : isPostWinRewardsPreview
-          ? 'PostWinRewardsPreview'
-          : 'Splash';
+  const initialRouteName = devInitialRoute() ?? 'Splash';
   useAppUpdates();
   const { player } = useContext(AuthContext);
-  const { setCrumbs, crumbsLoaded } = useContext(CrumbContext);
-  const { retrieveCurrencies, currenciesLoaded } = useContext(CurrencyContext);
-  const { retrieveTheme, themeLoaded } = useContext(ThemeContext);
+  useEffect(() => {
+    setTelemetryUser(player?.id);
+  }, [player?.id]);
+  const { setCrumbs } = useContext(CrumbContext);
+  const { retrieveCurrencies } = useContext(CurrencyContext);
+  const { retrieveTheme } = useContext(ThemeContext);
   const { devMode, setDevMode, moveDevLocation, location: currentLocation, permissionGranted } = useContext(LocationContext);
   // Keep ride detection alive as the guest moves between map, queue, and profile.
   // The service itself never asks for Always permission during app startup.
   useRideDetection(!isStandalonePreview && !!player && permissionGranted);
-  const [fontsLoaded] = useFonts({
+  const [fontsReady, fontError] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),
   });
+  // A font failure falls back to system fonts instead of a blank app.
+  const fontsLoaded = fontsReady || !!fontError;
+  useEffect(() => {
+    if (fontsLoaded) releaseNativeSplash();
+  }, [fontsLoaded]);
   useAxiosSetup();
 
   const handleJoystickMove = useCallback((dx: number, dy: number, speed: number) => {
@@ -213,17 +111,6 @@ export default function App() {
 
   useAsyncEffect(async () => {
     if (isStandalonePreview) return;
-    await mobileAds().setRequestConfiguration({
-      maxAdContentRating: MaxAdContentRating.PG,
-      tagForChildDirectedTreatment: true,
-      tagForUnderAgeOfConsent: true,
-      testDeviceIdentifiers: ['EMULATOR'],
-    });
-
-    await mobileAds().initialize();
-
-    InterstitialAd.createForAdRequest(TestIds.INTERSTITIAL);
-
     // These resources do not depend on one another. Keep a slow theme request
     // from delaying currencies or the fallback copy needed to leave Splash.
     void Promise.allSettled([
@@ -236,15 +123,19 @@ export default function App() {
 
   // Wait for fonts to load - but let crumbs load in background
   // SplashScreen will wait for crumbs before navigating
-  if (!fontsLoaded) {
-    console.log('🦈 Waiting for fonts...');
-    return <></>;
-  }
-  console.log('🦈 App loading! Theme:', themeLoaded, 'Currencies:', currenciesLoaded);
+  // The native launch screen stays up until fonts are ready (nativeSplash.ts).
+  if (!fontsLoaded) return null;
 
   return (
     <View style={{ flex: 1 }}>
-    <NavigationContainer ref={navigationRef} onReady={flushPendingNavigation}>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={flushPendingNavigation}
+      onStateChange={() => {
+        const route = navigationRef.getCurrentRoute?.();
+        if (route?.name) addBreadcrumb('navigation', route.name);
+      }}
+    >
       <Stack.Navigator
         initialRouteName={initialRouteName}
         screenOptions={{
@@ -280,8 +171,6 @@ export default function App() {
         />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="QueueTimes" component={QueueTimesScreen} />
-        {__DEV__ && <Stack.Screen name="QueueTimesPreview" component={QueueTimesPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="TriviaGamePreview" component={TriviaGamePreviewScreen} />}
         <Stack.Screen
           name="LinePlay"
           component={LinePlayScreen}
@@ -379,7 +268,6 @@ export default function App() {
         {/* V2 Screens */}
         <Stack.Screen name="SetCollection" component={SetCollectionScreen} />
         <Stack.Screen name="StampBook" component={StampBookScreen} />
-        {__DEV__ && <Stack.Screen name="QueueStampPreview" component={QueueStampPreviewScreen} />}
         <Stack.Screen name="CoinShelf" component={CoinShelfScreen} />
         <Stack.Screen name="SharkPark" component={SharkParkScreen} />
         <Stack.Screen 
@@ -428,26 +316,9 @@ export default function App() {
               confidence: 'medium', isReRide: false, detectedAt: Date.now() },
           ] } : undefined}
           options={{ animation: 'slide_from_bottom' }} />
-        {__DEV__ && <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />}
-        {__DEV__ && <Stack.Screen name="GameKitGym" component={GameKitGymScreen} />}
-        {__DEV__ && <Stack.Screen name="ShelfArrivalPreview" component={ShelfArrivalPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="BossMechanicsPreview" component={BossMechanicsPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="BossMapPreview" component={BossMapPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="PostWinRewardsPreview" component={PostWinRewardsPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="CoinLevelingPreview" component={CoinLevelingPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="RescuePassPreview" component={RescuePassPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="ParkChecklistPreview" component={ParkChecklistPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="ParkArrivalPreview" component={ParkArrivalPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="CrewRelayPreview" component={CrewRelayPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="ParkProjectPreview" component={ParkProjectPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="TripGoalPreview" component={TripGoalPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="ParkDayRecapPreview" component={ParkDayRecapPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="CrewGridPreview" component={CrewGridPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="SetCollectionPreview" component={SetCollectionPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="HomeHuntPreview" component={HomeHuntPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="InventoryPreview" component={InventoryPreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="ProfilePreview" component={ProfilePreviewScreen} />}
-        {__DEV__ && <Stack.Screen name="RideLogSuccessPreview" component={RideLogSuccessPreviewScreen} />}
+        {DEV_SCREENS.map(screen => (
+          <Stack.Screen key={screen.name} name={screen.name} getComponent={screen.getComponent} />
+        ))}
         <Stack.Screen
           name="BananaBasket"
           component={BananaBasketScreen}
@@ -458,6 +329,9 @@ export default function App() {
       <RideDetectionOverlay />
       <SharkDropHandler />
     </NavigationContainer>
+    <OfflineBanner />
+    {/* The one app-wide host for gameAlert / confirmGame (WS0 kit). */}
+    <GameDialogHost />
     {__DEV__ && !isStandalonePreview && player && devMode && currentLocation && (
       <DevJoystick
         onMove={handleJoystickMove}

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView from 'react-native-maps';
+import PreviewMap from '../../dev/PreviewMap';
 import { spacing } from '../../design-system';
 import Topbar from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
@@ -110,7 +110,7 @@ export default function ParkProjectPreviewScreen() {
     <Wrapper previewMode>
       <Topbar><TopbarColumn><TopbarText>EXPLORE</TopbarText></TopbarColumn></Topbar>
       <View style={styles.scene}>
-        <MapView style={styles.map} initialRegion={{
+        <PreviewMap style={styles.map} initialRegion={{
           latitude: previewHome ? 34.1808 : 28.4194,
           longitude: previewHome ? -118.3090 : -81.5812,
           latitudeDelta: 0.008, longitudeDelta: 0.008,
@@ -119,7 +119,7 @@ export default function ParkProjectPreviewScreen() {
             play_chapter: stage >= 2 ? chapter : null,
             park_latitude: 28.4194, park_longitude: -81.5812, ended: false }}
             onPress={() => setOpened(value => value + 1)} />}
-        </MapView>
+        </PreviewMap>
         <ParkProjectWidget parkId={previewHome ? null : 1} refreshVersion={stage} openRequestVersion={opened}
           topOffset={12} loadProjects={loadProjects} />
         {previewHome && process.env.EXPO_PUBLIC_PARK_PROJECT_PILL_PREVIEW === '1' &&

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import Constants from 'expo-constants';
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import PreviewMap from '../../dev/PreviewMap';
+import { Marker } from '../../components/map/Marker';
 import type { TripGoalData } from '../../api/endpoints/me/trip-goal';
 import type { ParkProject } from '../../api/endpoints/me/park-projects';
 import type { PrepItemType } from '../../models/prep-item-type';
@@ -93,13 +94,13 @@ export default function HomeHuntPreviewScreen() {
       set_progress: { ...result.data.set_progress!, spare_count: showNew ? 3 : 4 } } };
   };
   return <Wrapper><View style={styles.root}>
-    <MapView style={StyleSheet.absoluteFillObject} initialRegion={{ ...center,
+    <PreviewMap style={StyleSheet.absoluteFillObject} initialRegion={{ ...center,
       latitudeDelta: 0.005, longitudeDelta: 0.005 }}>
       {(previewMode === 'hunt' || previewMode === 'saved') &&
         <Marker coordinate={{ latitude: sample.latitude!, longitude: sample.longitude! }}>
           <PrepItemMarker prepItem={previewItem} onExpire={() => {}} inRange={distance < 28 && previewMode !== 'saved'} />
         </Marker>}
-    </MapView>
+    </PreviewMap>
     <Topbar>
       {cleanPreview ? <>
         <TopbarColumn><View style={styles.headerCurrency}>

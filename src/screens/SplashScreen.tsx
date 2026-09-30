@@ -7,6 +7,8 @@ import { AuthContext } from '../context/AuthProvider';
 import { ThemeContext } from '../context/ThemeProvider';
 import { CrumbContext } from '../context/CrumbProvider';
 
+const SPLASH_ART = require('../../assets/images/splash-bg.png');
+
 export default function SplashScreen() {
   const { theme } = useContext(ThemeContext);
   const { isReady, player } = useContext(AuthContext);
@@ -18,8 +20,6 @@ export default function SplashScreen() {
     if (hasNavigated.current) return;
     hasNavigated.current = true;
     
-    console.log('🦈 Splash: ready, player:', player?.username || 'none');
-    
     if (player) {
       // User is authenticated - go to loading screen
       RootNavigation.navigate('Loading');
@@ -30,13 +30,14 @@ export default function SplashScreen() {
   }, Boolean(isReady && crumbsLoaded));
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#09268f' }}>
+    // Same art and blue as the native launch screen, so the handoff from the
+    // launch storyboard is seamless. A server theme splash fades in over it.
+    <View style={{ flex: 1, backgroundColor: '#0768B9' }}>
       <Image
-        source={
-          theme?.splash_screen_url
-            ? { uri: theme.splash_screen_url }
-            : require('../../assets/images/loading-screen.png')
-        }
+        source={theme?.splash_screen_url ? { uri: theme.splash_screen_url } : SPLASH_ART}
+        placeholder={SPLASH_ART}
+        placeholderContentFit="cover"
+        transition={theme?.splash_screen_url ? 250 : 0}
         contentFit="cover"
         style={{
           width: Dimensions.get('window').width,

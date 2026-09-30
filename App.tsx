@@ -1,52 +1,63 @@
-import { Image, ImageBackground, LogBox, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, ImageBackground, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts } from 'expo-font';
 import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
+import { holdNativeSplash } from './src/nativeSplash';
+import { captureException, captureMessage, initTelemetry } from './src/services/telemetry';
+import { BRAND, FONT, GameButton, OUTLINE, SHADOW } from './src/ui';
+
+// Must run at module scope, before the first render, or the native launch
+// screen may already be gone.
+holdNativeSplash();
+// Crash reporting starts before any provider can throw.
+if (initTelemetry() && __DEV__ && process.env.EXPO_PUBLIC_TELEMETRY_TEST === '1') {
+  captureMessage('Telemetry test event', 'info', { test: 'true' });
+}
+
+const reportBoundaryError = (error: Error) => {
+  captureException(error, { source: 'error-boundary', handled: true });
+};
 
 const ErrorFallback = ({ resetError }: { error: Error; resetError: () => void }) => {
+  // Registered fonts are shared app-wide; this only loads them when the crash
+  // happened before Root finished loading. The card waits for the bundled
+  // fonts (a few ms) so the brand type never flashes as system text; a font
+  // failure still shows the card.
+  const [fontsLoaded, fontError] = useFonts({
+    Shark: require('./assets/fonts/shark-random-funnyness-2.ttf'),
+    Knockout: require('./assets/fonts/knockout.otf'),
+  });
+  const fontsSettled = fontsLoaded || !!fontError;
   return (
     <ImageBackground source={require('./assets/images/water_background.png')}
       resizeMode="cover" style={errorStyles.background}>
-      <View style={errorStyles.card}>
+      {fontsSettled && <View style={errorStyles.card}>
         <Image source={require('./assets/images/screens/inventory/shark-colored-v2.png')}
           resizeMode="contain" style={errorStyles.shark} />
         <Text style={errorStyles.title}>A little rough water!</Text>
         <Text style={errorStyles.body}>The adventure paused. Let’s get your shark moving again.</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Try again"
-          onPress={resetError} style={errorStyles.button}>
-          <Text style={errorStyles.buttonText}>TRY AGAIN</Text>
-        </Pressable>
-      </View>
+        <GameButton label="Try again" onPress={resetError} style={errorStyles.button} />
+      </View>}
     </ImageBackground>
   );
 };
 
+// WS0 kit tokens: cream card, navy outline, his yellow button art.
 const errorStyles = StyleSheet.create({
   background: { flex: 1, justifyContent: 'center', paddingHorizontal: 22 },
-  card: { alignItems: 'center', backgroundColor: '#EAF8FF', borderColor: '#72C5EA',
-    borderWidth: 3, borderRadius: 24, paddingHorizontal: 22, paddingTop: 18,
-    paddingBottom: 24, shadowColor: '#06294E', shadowOpacity: 0.28,
-    shadowRadius: 18, shadowOffset: { width: 0, height: 10 }, elevation: 12 },
+  card: { alignItems: 'center', backgroundColor: BRAND.cream, borderColor: BRAND.navy,
+    borderWidth: OUTLINE.thick, borderRadius: 26, paddingHorizontal: 22, paddingTop: 18,
+    paddingBottom: 22, ...SHADOW.card },
   shark: { width: 185, height: 185, marginTop: -12, marginBottom: -8 },
-  title: { color: '#173E67', fontSize: 27, fontWeight: '900', textAlign: 'center',
-    letterSpacing: 0.2, marginTop: 2 },
-  body: { color: '#315D7A', fontSize: 16, lineHeight: 23, textAlign: 'center',
-    marginTop: 9, marginBottom: 23 },
-  button: { backgroundColor: '#F9B832', borderColor: '#8D5A0A', borderWidth: 2,
-    borderRadius: 15, paddingHorizontal: 35, paddingVertical: 13,
-    shadowColor: '#704507', shadowOpacity: 0.25, shadowRadius: 4,
-    shadowOffset: { width: 0, height: 3 }, elevation: 3 },
-  buttonText: { color: '#3D2D10', fontSize: 17, fontWeight: '900', letterSpacing: 1.2 },
+  title: { color: BRAND.navy, fontFamily: FONT.display, fontSize: 34, textAlign: 'center',
+    letterSpacing: 0.5, marginTop: 2 },
+  body: { color: BRAND.blue, fontFamily: FONT.body, fontSize: 19, lineHeight: 24,
+    textAlign: 'center', marginTop: 6, marginBottom: 18 },
+  button: { maxWidth: 260 },
 });
 import { ToastProvider } from './src/components/Toast';
 
-// Suppress common network error warnings in LogBox
-LogBox.ignoreLogs([
-  'Possible Unhandled Promise Rejection',
-  'Network Error',
-  'API error',
-  'AxiosError',
-]);
 import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { CrumbProvider } from './src/context/CrumbProvider';
@@ -69,7 +80,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     {/* @ts-ignore */}
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
+    <ErrorBoundary FallbackComponent={ErrorFallback} onError={reportBoundaryError}>
       <AuthProvider>
         <LinePlayRewardRecovery />
         <SoundEffectProvider>

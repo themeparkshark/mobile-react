@@ -1,0 +1,24 @@
+name: App CI
+
+on:
+  pull_request:
+  push:
+    branches: [master, main, 'claude/**', 'release/**']
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Node tests
+        run: npm test
+      - name: Store profiles only point at store-safe hosts
+        run: node -e "const g=require('./tools/check-api-target.cjs');const e=require('./eas.json').build;for(const n of Object.keys(e)){const p=g.resolveProfile(e,n);if(g.isStoreProfile(p)){const bad=g.storeUrlProblem(p.env.API_URL);if(bad){console.error(n+': '+bad);process.exit(1)}}}"

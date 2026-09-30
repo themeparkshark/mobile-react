@@ -1,22 +1,19 @@
-import { ApiResponseType } from '../../../models/api-response-type';
 import { CurrencyType } from '../../../models/currency-type';
 import client from '../../client';
+import { getWithLastGood } from '../../lastGood';
+import bundledCurrencies from '../../defaults/currencies.json';
+
+function unwrapCurrencies(body: unknown): CurrencyType[] | undefined {
+  const data = (body as { data?: unknown } | undefined)?.data;
+  return Array.isArray(data) && data.length > 0 ? (data as CurrencyType[]) : undefined;
+}
 
 export default async function getCurrencies(): Promise<CurrencyType[]> {
-  console.log('🦈 Fetching currencies...');
-  try {
-    const response = await client.get('/currencies', { timeout: 10000 });
-    let data = response.data;
-    
-    // Parse if string
-    if (typeof data === 'string') {
-      try { data = JSON.parse(data); } catch (e) { /* already parsed */ }
-    }
-    
-    console.log('🦈 Currencies fetched:', data?.data?.length || 0, 'items');
-    return data?.data ?? [];
-  } catch (error: any) {
-    console.error('🦈 Failed to fetch currencies:', error?.message || error);
-    return [];
-  }
+  const { data } = await getWithLastGood<CurrencyType[]>({
+    key: 'currencies',
+    request: () => client.get('/currencies', { timeout: 10000 }),
+    unwrap: unwrapCurrencies,
+    bundled: bundledCurrencies as unknown as CurrencyType[],
+  });
+  return data;
 }
