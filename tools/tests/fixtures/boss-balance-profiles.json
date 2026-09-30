@@ -1,0 +1,5 @@
+{
+  "spam": { "kraken": [69, 0], "robo_shark": [69, 0], "ghost_squid": [19, 3] },
+  "informed": { "kraken": [69, 21], "robo_shark": [65, 8], "ghost_squid": [32, 10] },
+  "median": { "kraken": [46, 9], "robo_shark": [41, 5], "ghost_squid": [15, 4] }
+}

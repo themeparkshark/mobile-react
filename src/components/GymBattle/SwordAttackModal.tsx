@@ -11,26 +11,15 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, BounceIn } from 'react-native-reanimated';
 import { attackGym } from '../../api/endpoints/gym-battle';
 import { battleHUDEvents } from './battleHUDEvents';
+import { Image } from 'expo-image';
+import { TEAMS, teamName, type TeamId } from '../../constants/teams';
+import { GameIcon, GameRichText } from '../../ui';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-const TEAM_COLORS = {
-  mouse: '#3B82F6',
-  globe: '#EF4444',
-  shark: '#F59E0B',
-};
+const TEAM_COLORS: Record<TeamId, string> = { mouse: TEAMS.mouse.color, globe: TEAMS.globe.color, shark: TEAMS.shark.color };
 
-const TEAM_EMOJIS = {
-  mouse: '🐭',
-  globe: '🌍',
-  shark: '🦈',
-};
-
-const TEAM_NAMES = {
-  mouse: 'Team Mouse',
-  globe: 'Team Globe',
-  shark: 'Team Shark',
-};
+const TEAM_NAMES = { get mouse() { return teamName('mouse'); }, get globe() { return teamName('globe'); }, get shark() { return teamName('shark'); } };
 
 interface Props {
   visible: boolean;
@@ -102,9 +91,9 @@ export default function SwordAttackModal({
           {/* Select Target */}
           {state === 'select' && (
             <Animated.View entering={FadeIn} style={styles.content}>
-              <Text style={styles.title}>⚔️ ATTACK! ⚔️</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}><GameIcon name="swords" size={30} /><Text style={styles.title}>ATTACK!</Text></View>
               <Text style={styles.subtitle}>Choose a team to attack!</Text>
-              <Text style={styles.cost}>Cost: ⚔️ 2 swords</Text>
+              <GameRichText tone="onBlue" style={styles.cost}>{'Cost: [icon:swords] 2 swords'}</GameRichText>
               <Text style={styles.damage}>-100 points to target</Text>
 
               <View style={styles.targets}>
@@ -115,7 +104,7 @@ export default function SwordAttackModal({
                     onPress={() => handleAttack(team)}
                     disabled={scores[team] <= 0}
                   >
-                    <Text style={styles.targetEmoji}>{TEAM_EMOJIS[team]}</Text>
+                    <Image source={TEAMS[team].badge} style={{ width: 40, height: 40, marginBottom: 4 }} contentFit="contain" />
                     <Text style={styles.targetName}>{TEAM_NAMES[team]}</Text>
                     <Text style={[styles.targetScore, { color: TEAM_COLORS[team] }]}>
                       {scores[team].toLocaleString()} pts
@@ -136,18 +125,18 @@ export default function SwordAttackModal({
           {/* Attacking */}
           {state === 'attacking' && (
             <View style={styles.content}>
-              <Text style={styles.attackingText}>⚔️ Attacking...</Text>
+              <Text style={styles.attackingText}>Attacking...</Text>
             </View>
           )}
 
           {/* Success */}
           {state === 'success' && result && (
             <Animated.View entering={BounceIn} style={styles.content}>
-              <Text style={styles.successEmoji}>💥</Text>
+              <GameIcon name="swords" size={64} />
               <Text style={styles.successTitle}>DIRECT HIT!</Text>
               <Text style={styles.resultMessage}>{result.message}</Text>
               <Text style={styles.swordsLeft}>
-                Swords remaining: ⚔️ {result.swordsLeft}
+                Swords remaining: {result.swordsLeft}
               </Text>
               <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
                 <Text style={styles.doneText}>NICE!</Text>
@@ -158,7 +147,7 @@ export default function SwordAttackModal({
           {/* Error */}
           {state === 'error' && (
             <View style={styles.content}>
-              <Text style={styles.errorEmoji}>😢</Text>
+              
               <Text style={styles.errorTitle}>Attack Failed!</Text>
               <Text style={styles.errorMessage}>{error}</Text>
               <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
@@ -185,7 +174,7 @@ const styles = StyleSheet.create({
   },
   gradient: {
     padding: 24,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0768b9',
   },
   content: {
     alignItems: 'center',
@@ -224,7 +213,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    backgroundColor: 'rgba(5, 70, 143, 0.5)',
   },
   targetEmoji: {
     fontSize: 36,

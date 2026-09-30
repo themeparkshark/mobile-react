@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   },
   timerBadge: {
     marginTop: 2,
-    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    backgroundColor: 'rgba(7, 104, 185, 0.95)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,

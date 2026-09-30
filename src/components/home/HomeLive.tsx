@@ -4,15 +4,16 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { cheerRide, getLiveParks, type HomeCheerTarget, type LiveParks, type LiveParkSummary } from '../../api/endpoints/me/livePark';
 import { BOSS_NAMES } from '../../api/endpoints/parks/raid';
-import { TEAMS, type TeamId } from '../../constants/teams';
+import { applyTeamNames, TEAM_ORDER, TEAMS, teamName, teamShortName } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
-import { BOSS_ART_SCALE, BOSS_ART } from '../../games/boss/BossBrawl';
 import { WhackAShark } from '../../games/whack';
 import * as RootNavigation from '../../RootNavigation';
 import BossRaidFlow, { useParkRaid } from '../boss/BossRaidFlow';
+import { BOSS_ART } from '../boss/bossArt';
+import { BRAND, GameButton, GameIcon } from '../../ui';
 import PushSoftAsk from '../PushSoftAsk';
 
-const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
+const ORDER = TEAM_ORDER;
 
 function clock(endsAt: string, now: number) {
   const s = Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000));
@@ -33,7 +34,7 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
   const [toast, setToast] = useState<string | null>(null);
   const pending = useRef<(() => void) | null>(null);
   const [now, setNow] = useState(Date.now());
-  const { raid, setState: setRaidState } = useParkRaid(raidPark);
+  const { raid, loaded: raidLoaded, setState: setRaidState } = useParkRaid(raidPark);
 
   const load = useCallback(() => { getLiveParks().then(setLive).catch(() => undefined); }, []);
   useEffect(() => {
@@ -51,7 +52,9 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
     return () => clearTimeout(id);
   }, [toast]);
 
+  useEffect(() => applyTeamNames(live?.team_names), [live?.team_names]);
   if (!live) return null;
+  const names = live.team_names;
   const yours = live.your_team;
   const liveRaid = live.parks.find(p => p.raid && new Date(p.raid.ends_at).getTime() > now);
   const leader = live.leading_team;
@@ -69,8 +72,8 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
     if (result.ok && result.cheer) {
       const c = result.cheer;
       setToast(c.flipped
-        ? `${TEAMS[c.team].name} took ${c.ride_name}! 🎉`
-        : `🛡 ${c.ride_name} defended: +${c.points} for ${TEAMS[c.team].name}!`);
+        ? `${teamName(c.team, names)} took ${c.ride_name}!`
+        : `${c.ride_name} defended: +${c.points} for ${teamName(c.team, names)}!`);
     } else if (!result.ok) {
       setToast(result.error === 'no_cheers_left' ? "You're out of defends today. Come back tomorrow!"
         : result.error === 'not_holding' ? 'That ride changed hands. Win it back at the park!'
@@ -91,17 +94,17 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
           : 'Open live parks'}>
         {liveRaid?.raid ? (
           <>
-            <Image source={BOSS_ART[liveRaid.raid.boss]} style={[styles.barBossArt, { transform: [{ scale: BOSS_ART_SCALE?.[liveRaid.raid.boss] ?? 1 }] }]} contentFit="contain" />
+            <Image source={BOSS_ART[liveRaid.raid.boss]} style={styles.barBossArt} contentFit="contain" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.barKicker} numberOfLines={1}>● LIVE · {liveRaid.name}</Text>
-              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} · {clock(liveRaid.raid.ends_at, now)} left</Text>
+              <View style={styles.liveRow}><View style={styles.liveDot} /><Text style={styles.barKicker} numberOfLines={1}>LIVE  ·  {liveRaid.name}</Text></View>
+              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]}  ·  {clock(liveRaid.raid.ends_at, now)} left</Text>
             </View>
-            <Text style={styles.barGo}>JOIN ›</Text>
+            <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
           </>
         ) : (
           <>
             <Text style={styles.barHeadline} numberOfLines={1}>
-              {leader ? `${TEAMS[leader].name.toUpperCase()} LEADS` : 'THE PARKS ARE UP FOR GRABS'}
+              {leader ? `${teamName(leader, names).toUpperCase()} LEADS` : 'THE PARKS ARE UP FOR GRABS'}
             </Text>
             <View style={styles.chips}>
               {ORDER.map(team => (
@@ -115,10 +118,12 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
         )}
       </Pressable>
 
-      {toast && <View style={[styles.toast, { top: top + 60 }]} pointerEvents="none"><Text style={styles.toastText}>{toast}</Text></View>}
+      {toast && <View style={[styles.toast, { top: top + 60 }]} pointerEvents="none">
+        <GameIcon name="check" size={22} /><Text style={styles.toastText}>{toast}</Text>
+      </View>}
 
       <Modal isVisible={open} onBackdropPress={() => setOpen(false)} onSwipeComplete={() => setOpen(false)}
-        swipeDirection="down" style={styles.sheetModal} backdropOpacity={0.5} propagateSwipe
+        swipeDirection="down" style={styles.sheetModal} backdropColor={BRAND.navy} backdropOpacity={0.35} propagateSwipe
         onModalHide={() => { const run = pending.current; pending.current = null; run?.(); }}>
         <View style={styles.sheet}>
           <View style={styles.grabber} />
@@ -134,21 +139,22 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
               <View key={team} style={styles.standing}>
                 <Image source={TEAMS[team].badge} style={styles.standingBadge} contentFit="contain" />
                 <Text style={[styles.standingCount, { color: TEAMS[team].color }]}>{live.totals[team]}</Text>
-                <Text style={styles.standingLabel}>{TEAMS[team].name.replace('Team ', '')}{yours === team ? ' (you)' : ''}</Text>
+                <Text style={styles.standingLabel}>{teamShortName(team, names)}{yours === team ? ' (you)' : ''}</Text>
               </View>
             ))}
           </View>
           {!yours ? (
-            <Pressable style={styles.cta} accessibilityRole="button"
-              onPress={() => { setOpen(false); RootNavigation.navigate('TeamSelection', {}); }}>
-              <Text style={styles.ctaText}>PICK YOUR TEAM</Text>
-            </Pressable>
+            <GameButton label="Pick your team" style={{ marginBottom: 10 }}
+              onPress={() => { setOpen(false); RootNavigation.navigate('TeamSelection', {}); }} />
           ) : (
-            <Text style={styles.cheerLine}>
-              {live.cheers_left > 0
-                ? `🛡 ${live.cheers_left} defend${live.cheers_left === 1 ? '' : 's'} left today · keep your team's rides from home`
-                : '🛡 Out of defends today · they reset tomorrow'}
-            </Text>
+            <View style={styles.cheerLineRow}>
+              <GameIcon name="swords" size={20} />
+              <Text style={styles.cheerLine}>
+                {live.cheers_left > 0
+                  ? `${live.cheers_left} defend${live.cheers_left === 1 ? '' : 's'} left today  ·  keep your team's rides from home`
+                  : 'Out of defends today  ·  they reset tomorrow'}
+              </Text>
+            </View>
           )}
           <PushSoftAsk />
           <ScrollView style={{ maxHeight: 380 }}>
@@ -164,23 +170,27 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
                   <Text style={styles.parkName} numberOfLines={1}>{park.name}</Text>
                   <View style={styles.miniChips}>
                     {ORDER.map(team => (
-                      <Text key={team} style={[styles.miniChip, { color: TEAMS[team].color }]}>● {park.rides_held[team]}</Text>
+                      <View key={team} style={styles.miniChipRow}>
+                        <Image source={TEAMS[team].badge} style={styles.miniBadge} contentFit="contain" />
+                        <Text style={[styles.miniChip, { color: TEAMS[team].color }]}>{park.rides_held[team]}</Text>
+                      </View>
                     ))}
                   </View>
                 </View>
-                {park.rushes > 0 && <Text style={styles.rush}>⚡ {park.rushes} ride{park.rushes === 1 ? '' : 's'} on Rush right now</Text>}
+                {park.rushes > 0 && <View style={styles.rushRow}><GameIcon name="rush" size={18} />
+                  <Text style={styles.rush}>{park.rushes} ride{park.rushes === 1 ? '' : 's'} on Rush right now</Text></View>}
                 {park.raid && new Date(park.raid.ends_at).getTime() > now && (
                   <Pressable style={styles.raidRow} accessibilityRole="button"
                     onPress={() => { pending.current = () => setRaidPark(park.park_id); setOpen(false); }}>
-                    <Image source={BOSS_ART[park.raid.boss]} style={[styles.raidArt, { transform: [{ scale: BOSS_ART_SCALE?.[park.raid.boss] ?? 1 }] }]} contentFit="contain" />
+                    <Image source={BOSS_ART[park.raid.boss]} style={styles.raidArt} contentFit="contain" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.raidName} numberOfLines={1}>{BOSS_NAMES[park.raid.boss]} at {park.raid.ride_name}</Text>
                       <View style={styles.hpTrack}>
                         <View style={[styles.hpFill, { width: `${Math.max(2, (park.raid.hp_left / Math.max(1, park.raid.hp_max)) * 100)}%` }]} />
                       </View>
-                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting · {clock(park.raid.ends_at, now)} left</Text>
+                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting  ·  {clock(park.raid.ends_at, now)} left</Text>
                     </View>
-                    <Text style={styles.join}>JOIN ›</Text>
+                    <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
                   </Pressable>
                 )}
                 {yours && park.cheers.map(target => (
@@ -193,10 +203,11 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cheerRide} numberOfLines={1}>{target.ride_name}</Text>
                       <Text style={styles.cheerMeta} numberOfLines={1}>
-                        {target.gap === 0 ? 'Tied: one cheer keeps it yours' : `Your team holds it · only ${target.gap} ahead`}
+                        {target.gap === 0 ? 'Tied: one cheer keeps it yours' : `Your team holds it  ·  only ${target.gap} ahead`}
                       </Text>
                     </View>
-                    <Text style={[styles.cheerGo, live.cheers_left <= 0 && { opacity: 0.4 }]}>DEFEND ›</Text>
+                    <Text style={[styles.cheerGo, live.cheers_left <= 0 && { opacity: 0.4 }]}>DEFEND</Text>
+                    <GameIcon name="arrow" size={18} />
                   </Pressable>
                 ))}
               </View>
@@ -205,7 +216,7 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
         </View>
       </Modal>
 
-      <BossRaidFlow parkId={raidPark} raid={raidPark ? raid : null} open={raidPark !== null}
+      <BossRaidFlow parkId={raidPark} raid={raidPark ? raid : null} open={raidPark !== null} loading={raidPark !== null && !raidLoaded}
         onClose={() => { setRaidPark(null); load(); }} onState={setRaidState} />
 
       {cheer && (
@@ -218,58 +229,68 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
 
 const styles = StyleSheet.create({
   bar: { position: 'absolute', left: 12, right: 12, zIndex: 25, flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(5, 52, 110, 0.9)', borderRadius: 18, borderWidth: 3, borderColor: '#fff',
-    paddingVertical: 6, paddingLeft: 12, paddingRight: 8, minHeight: 46 },
-  barBoss: { backgroundColor: '#3b1a5c' },
-  barBossArt: { width: 34, height: 34 },
-  barHeadline: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: '#ffcf3b' },
-  barKicker: { fontFamily: 'Knockout', fontSize: 12, color: '#ff8a8a', letterSpacing: 0.6 },
-  barTitle: { fontFamily: 'Shark', fontSize: 16, color: '#ffcf3b' },
-  barGo: { fontFamily: 'Shark', fontSize: 16, color: '#ff7a7a' },
+    backgroundColor: BRAND.blue, borderRadius: 18, borderWidth: 3, borderColor: BRAND.white,
+    paddingVertical: 6, paddingLeft: 12, paddingRight: 8, minHeight: 50,
+    shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  barBoss: { backgroundColor: BRAND.blueBright, paddingLeft: 6 },
+  barBossArt: { width: 40, height: 40 },
+  barHeadline: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.gold, textShadowColor: BRAND.navy,
+    textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
+  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND.red, borderWidth: 1.5, borderColor: BRAND.white },
+  barKicker: { fontFamily: 'Knockout', fontSize: 12, color: '#e4f7ff', letterSpacing: 0.6 },
+  barTitle: { fontFamily: 'Shark', fontSize: 16, color: BRAND.gold, textShadowColor: BRAND.navy,
+    textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },
+  joinTag: { backgroundColor: BRAND.red, borderRadius: 10, borderWidth: 2, borderColor: BRAND.white, borderBottomWidth: 4,
+    borderBottomColor: BRAND.redLip, paddingHorizontal: 9, paddingVertical: 3 },
+  joinTagText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.white },
   chips: { flexDirection: 'row', gap: 5 },
   chip: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingLeft: 3, paddingRight: 8, paddingVertical: 2,
     borderWidth: 2, borderColor: 'transparent' },
-  chipYours: { borderColor: '#fff' },
+  chipYours: { borderColor: BRAND.white },
   chipBadge: { width: 22, height: 22 },
-  chipCount: { fontFamily: 'Shark', fontSize: 16, color: '#fff', marginLeft: 2 },
-  toast: { position: 'absolute', left: 24, right: 24, zIndex: 30, backgroundColor: '#ffcf3b', borderRadius: 14,
-    borderWidth: 3, borderColor: '#fff', paddingVertical: 8, paddingHorizontal: 12 },
-  toastText: { fontFamily: 'Shark', fontSize: 15, color: '#6a3b00', textAlign: 'center' },
+  chipCount: { fontFamily: 'Shark', fontSize: 16, color: BRAND.white, marginLeft: 2 },
+  toast: { position: 'absolute', left: 24, right: 24, zIndex: 30, flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: BRAND.cream, borderRadius: 14, borderWidth: 3, borderColor: BRAND.gold, paddingVertical: 8, paddingHorizontal: 12,
+    shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  toastText: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy, textAlign: 'center' },
   sheetModal: { justifyContent: 'flex-end', margin: 0 },
-  sheet: { backgroundColor: '#0768b9', borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 4, borderColor: '#fff',
+  sheet: { backgroundColor: BRAND.blue, borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: 4, borderColor: BRAND.white,
     padding: 18, paddingBottom: 40 },
   grabber: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)', marginBottom: 10 },
-  title: { fontFamily: 'Shark', fontSize: 28, color: '#ffcf3b', textAlign: 'center' },
+  title: { fontFamily: 'Shark', fontSize: 28, color: BRAND.gold, textAlign: 'center', textShadowColor: BRAND.navy,
+    textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   sub: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff', textAlign: 'center', marginTop: 2 },
   standings: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 12 },
   standing: { alignItems: 'center' },
   standingBadge: { width: 48, height: 48 },
-  standingCount: { fontFamily: 'Shark', fontSize: 28, textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  standingLabel: { fontFamily: 'Knockout', fontSize: 13, color: '#fff' },
-  cta: { backgroundColor: '#ffcf3b', borderRadius: 16, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 4,
-    borderBottomColor: '#d99a00', marginBottom: 10 },
-  ctaText: { fontFamily: 'Shark', fontSize: 20, color: '#075083' },
-  cheerLine: { fontFamily: 'Knockout', fontSize: 14, color: '#fff', textAlign: 'center', marginBottom: 8 },
-  nextBoss: { fontFamily: 'Shark', fontSize: 15, color: '#ffcf3b', textAlign: 'center', marginTop: 4 },
+  standingCount: { fontFamily: 'Shark', fontSize: 28, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  standingLabel: { fontFamily: 'Knockout', fontSize: 13, color: BRAND.white },
+  cheerLineRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 8 },
+  cheerLine: { flexShrink: 1, fontFamily: 'Knockout', fontSize: 14, color: BRAND.white, textAlign: 'center' },
+  nextBoss: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold, textAlign: 'center', marginTop: 4 },
   hint: { fontFamily: 'Knockout', fontSize: 13, color: '#cdeaff', textAlign: 'center', marginBottom: 8 },
   empty: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff', textAlign: 'center', marginVertical: 20 },
-  park: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 10, marginBottom: 8, gap: 6 },
+  park: { backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16, padding: 10, marginBottom: 8, gap: 6 },
   parkHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  parkName: { flex: 1, fontFamily: 'Shark', fontSize: 18, color: '#fff' },
+  parkName: { flex: 1, fontFamily: 'Shark', fontSize: 18, color: BRAND.white },
   miniChips: { flexDirection: 'row', gap: 6 },
-  miniChip: { fontFamily: 'Shark', fontSize: 14 },
+  miniChipRow: { flexDirection: 'row', alignItems: 'center', gap: 1 },
+  miniBadge: { width: 16, height: 16 },
+  miniChip: { fontFamily: 'Shark', fontSize: 14, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
+  rushRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rush: { fontFamily: 'Knockout', fontSize: 13, color: '#ffe38a' },
-  raidRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#3b1a5c', borderRadius: 12, padding: 8 },
-  raidArt: { width: 44, height: 44 },
-  raidName: { fontFamily: 'Shark', fontSize: 15, color: '#ffcf3b' },
-  hpTrack: { marginTop: 3, height: 7, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.4)', overflow: 'hidden' },
-  hpFill: { height: '100%', backgroundColor: '#ef4444' },
-  raidMeta: { marginTop: 2, fontFamily: 'Knockout', fontSize: 12, color: '#e9d9ff' },
-  join: { fontFamily: 'Shark', fontSize: 16, color: '#ff7a7a' },
-  cheerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(0,0,0,0.12)', borderRadius: 12, padding: 7 },
-  flag: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  raidRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: BRAND.blueBright, borderWidth: 2, borderColor: BRAND.white,
+    borderRadius: 12, padding: 8 },
+  raidArt: { width: 46, height: 46 },
+  raidName: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
+  hpTrack: { marginTop: 3, height: 8, borderRadius: 4, backgroundColor: 'rgba(5,52,110,0.5)', overflow: 'hidden' },
+  hpFill: { height: '100%', backgroundColor: BRAND.red },
+  raidMeta: { marginTop: 2, fontFamily: 'Knockout', fontSize: 12, color: '#e4f7ff' },
+  cheerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(5,52,110,0.2)', borderRadius: 12, padding: 7, minHeight: 48 },
+  flag: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: BRAND.white },
   flagBadge: { width: 24, height: 24 },
-  cheerRide: { fontFamily: 'Shark', fontSize: 15, color: '#fff' },
+  cheerRide: { fontFamily: 'Shark', fontSize: 15, color: BRAND.white },
   cheerMeta: { fontFamily: 'Knockout', fontSize: 12, color: '#cdeaff' },
-  cheerGo: { fontFamily: 'Shark', fontSize: 15, color: '#ffcf3b' },
+  cheerGo: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
 });

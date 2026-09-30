@@ -89,68 +89,99 @@ test('a late reply from another account or unmounted screen cannot change the cu
 });
 test('the recovery receipt offers one clear retry and does not claim an unconfirmed spend was refunded',()=>{
  let retries=0;const snapshot={loaded:true,phase:'unconfirmed',pending:checkpoint,receipt:null};
- const view=runtime('src/components/boss/BossAttackStatus.tsx',{'../../games/boss/BossBrawl':{BOSS_ART:{kraken:1}},
+ const view=runtime('src/components/boss/BossAttackStatus.tsx',{'./bossArt':{BOSS_ART:{kraken:1}},
   '../../api/endpoints/parks/raid':{BOSS_NAMES:{kraken:'The Kraken'}}},{snapshot,onRetry(){retries++;}});
  assert.ok(view.find(n=>n.props?.children==='The reply didn’t arrive. Confirm this round before spending more Energy.'));
  view.find(n=>n.type==='Pressable').props.onPress();assert.equal(retries,1);
  view.change({snapshot:{...snapshot,phase:'sending'}});assert.equal(view.find(n=>n.type==='Pressable'),undefined);
 });
 
-function flow({reduced=false}={}){
- const captures=[],states=[],writes=[],reads=[],focus={value:true},auth={value:{player:{id:5,energy:185,tickets:7},refreshPlayer:async()=>{}}},location={value:{location:{latitude:34.13,longitude:-118.35}}};
+function flow({reduced=false,round}={}){
+ const captures=[],states=[],writes=[],reads=[],rounds=[],acks=[],focus={value:true},auth={value:{player:{id:5,energy:185,tickets:7},refreshPlayer:async()=>{}}},location={value:{location:{latitude:34.13,longitude:-118.35}}};
  const raid={id:77,boss:'kraken',ride_name:'Practice attraction',latitude:34.13,longitude:-118.35,hp_max:5000,hp_left:5000,
   status:'active',ends_at:new Date(Date.now()+600000).toISOString(),fighters:0,teams:{mouse:0,globe:0,shark:0},top:[],
   you:{attacks:0,attacks_left:5,damage:0,reward:null},energy_cost:10,reach_meters:200,
   remote:{joined:false,ticket_cost:1,damage_rate:.25,fighters:0}};
  const snapshot={loaded:true,phase:'ready',pending:null,receipt:null};
+ const answer=round??(body=>({ok:true,round:{token:'a'.repeat(32),remote:!!body.remote,reason:null,damage_rate:body.remote?.25:1,max_ms:21000,max_hits:140}}));
  const view=runtime('src/components/boss/BossRaidFlow.tsx',{
   '../../context/AuthProvider':{AuthContext:auth},'../../context/LocationProvider':{LocationContext:location},
   '../../hooks/useBossAttackRecovery':{default:()=>({snapshot,canStart:()=>snapshot.phase==='ready'&&!snapshot.pending,capture:async cp=>{captures.push(cp);},retry:async()=>{}})},
   '../../hooks/useReducedGameMotion':{default:()=>reduced},
   '@react-navigation/native':{useIsFocused:()=>focus.value},
-  '../../api/endpoints/parks/raid':{BOSS_NAMES:{kraken:'The Kraken'}},
-  '../../games/boss/BossBrawl':{BOSS_ART:{kraken:1},BossBrawl:'BossBrawl'},
+  '../../api/endpoints/parks/raid':{BOSS_NAMES:{kraken:'The Kraken'},DEFAULT_DAMAGE:{},fitToRound:m=>({hits:m.hits,weak_hits:m.weak_hits,duration_ms:m.duration_ms}),
+   startRaidRound:async(id,body)=>{rounds.push([id,body]);return answer(body);},acknowledgeRaid:async id=>{acks.push(id);return true;}},
+  './bossArt':{BOSS_ART:{kraken:1}},'../../games/boss/BossBrawl':{BossBrawl:'BossBrawl'},
+  '../../ui':{BRAND:{},GameButton:'GameButton',GameIcon:'GameIcon'},
+  './BossSheetParts':{AttackPips:'AttackPips',BossHpBar:'BossHpBar',BossSheetSkeleton:'BossSheetSkeleton',TeamDamage:'TeamDamage',TopFighters:'TopFighters'},
+  './BossWinCard':{default:'BossWinCard'},
   '@react-native-async-storage/async-storage':{default:{getItem:async key=>{reads.push(key);return null;},setItem:async(key,value)=>{writes.push([key,value]);}}},
-  '../../constants/teams':{TEAMS:{mouse:{badge:1,color:'gold'},globe:{badge:2,color:'green'},shark:{badge:3,color:'blue'}}},
+  '../../constants/teams':{applyTeamNames(){}},
  },{raid,parkId:1,open:true,onClose(){},onState:state=>states.push(state)},
  {setInterval(){return 1;},clearInterval(){}});
- return{view,captures,auth,location,snapshot,writes,reads,focus,start(){const button=view.find(n=>n.type==='Pressable'&&/^(FIGHT|JOIN FROM HOME)/.test(String(n.props.children?.props?.children)));button.props.onPress();view.render();return view.find(n=>n.type==='BossBrawl');}};
+ const fight=()=>view.find(n=>n.type==='GameButton'&&n.props.testID==='boss-fight');
+ return{view,captures,auth,location,snapshot,writes,reads,rounds,acks,focus,fight,
+  async start(){fight().props.onPress();await view.settle();return view.find(n=>n.type==='BossBrawl');}};
 }
-test('a finished brawl keeps the GPS and pass choice approved at entry; result taps consume one original round',async()=>{
- const h=flow(),first=h.start();assert.equal(first.props.visible,true);assert.equal(first.props.damageRate,1);
+test('FIGHT asks the server for a round first, then locks its token, GPS and remote choice into one saved attack',async()=>{
+ const h=flow(),first=await h.start();assert.equal(first.props.visible,true);assert.equal(first.props.damageRate,1);
+ assert.deepEqual(plain(h.rounds[0]),[77,{latitude:34.13,longitude:-118.35}]);
  h.location.value.location={latitude:40,longitude:-100};h.view.render();assert.equal(h.view.find(n=>n.type==='BossBrawl').props.damageRate,1);
  const result={hits:3,weak_hits:1,duration_ms:20000};first.props.onComplete(1,result);first.props.onComplete(1,result);h.view.render();
  assert.equal(h.captures.length,1);assert.equal(h.captures[0].body.latitude,34.13);assert.equal(h.captures[0].body.remote,undefined);
- const second=h.start();assert.equal(second.props.damageRate,.25);
+ assert.equal(h.captures[0].body.round_token,'a'.repeat(32));
+ // Now far from the ride: the label says so and the round is remote at the server's rate.
+ assert.equal(h.fight().props.label,'JOIN FROM HOME');
+ const second=await h.start();assert.equal(second.props.damageRate,.25);assert.equal(h.rounds[1][1].remote,true);
  first.props.onComplete(1,result);first.props.onClose();h.view.render();assert.equal(h.view.find(n=>n.type==='BossBrawl').props.visible,true);
  second.props.onComplete(1,result);h.view.render();assert.equal(h.captures.length,2);assert.equal(h.captures[1].body.remote,true);
 });
-test('missing GPS, zero hits, and a saved pending round cannot start a second paid attack',()=>{
+test('when the server says you are not at the ride, nothing starts and the sheet offers the remote join with the reason',async()=>{
+ let calls=0;const h=flow({round:body=>(++calls===1?{ok:false,error:'too_far',reason:'not_checked_in'}
+  :{ok:true,round:{token:'b'.repeat(32),remote:!!body.remote,reason:'not_checked_in',damage_rate:.6,max_ms:21000,max_hits:140}})});
+ const arena=await h.start();assert.equal(arena.props.visible,false);assert.equal(h.captures.length,0);
+ assert.ok(h.view.find(n=>n.type==='Text'&&String(n.props.children).startsWith('Check in at this park')));
+ assert.equal(h.fight().props.label,'JOIN FROM HOME');
+ const again=await h.start();assert.equal(again.props.visible,true);assert.equal(h.rounds[1][1].remote,true);assert.equal(again.props.damageRate,.6);
+});
+test('missing GPS at the park, zero hits, and a saved pending round cannot start a second paid attack',async()=>{
  const h=flow();h.location.value.location=null;h.view.render();
- assert.equal(h.view.find(n=>n.type==='Pressable'&&n.props.children?.props?.children==='Waiting for your location…').props.disabled,true);
- h.location.value.location={latitude:34.13,longitude:-118.35};h.view.render();const arena=h.start();
+ assert.equal(h.fight().props.disabled,true);assert.ok(h.view.find(n=>n.props?.children==='Waiting for your location…'));
+ h.location.value.location={latitude:34.13,longitude:-118.35};h.view.render();const arena=await h.start();
  arena.props.onComplete(0,{hits:0,weak_hits:0,duration_ms:20000});h.view.render();assert.equal(h.captures.length,0);
  h.snapshot.pending=checkpoint;h.snapshot.phase='unconfirmed';h.view.render();
- assert.equal(h.view.find(n=>n.type==='Pressable'&&String(n.props.children?.props?.children).startsWith('FIGHT')),undefined);
+ assert.equal(h.fight(),undefined);
  h.view.change({raid:null});assert.ok(h.view.find(n=>n.type==='./BossAttackStatus')); // still reachable after raid expiry
+});
+test('from home (no ride position shared) a player without a GPS fix can still join remotely',async()=>{
+ const h=flow();h.location.value.location=null;h.view.change({raid:{...h.view.props.raid,latitude:null,longitude:null}});
+ assert.equal(h.fight().props.disabled,false);assert.equal(h.fight().props.label,'JOIN FROM HOME');
+ const arena=await h.start();assert.equal(arena.props.visible,true);assert.deepEqual(plain(h.rounds[0][1]),{remote:true});
+ arena.props.onComplete(1,{hits:3,weak_hits:1,duration_ms:20000});h.view.render();
+ assert.equal(h.captures[0].body.latitude,undefined);assert.equal(h.captures[0].body.remote,true);
+});
+test('a loading raid shows the skeleton instead of "no boss"',()=>{
+ const h=flow();h.view.change({raid:null,loading:true});
+ assert.ok(h.view.find(n=>n.type==='BossSheetSkeleton'));
+ assert.equal(h.view.find(n=>n.props?.children==='No boss is fighting here right now.'),undefined);
 });
 test('a poll cannot resurrect stale raid HP after a confirmed hit or after changing park/player',async()=>{
  const requests=[],auth={value:{player:{id:5}}};
  const view=runtime('src/components/boss/BossRaidFlow.tsx',{
-  '../../context/AuthProvider':{AuthContext:auth},
+  '../../context/AuthProvider':{AuthContext:auth},'../../constants/teams':{applyTeamNames(){}},'../../ui':{BRAND:{}},
   '../../api/endpoints/parks/raid':{getParkRaid:id=>{const p=pending();requests.push({id,...p});return p.promise;}},
  },{parkId:1},{setInterval(){return 1;},clearInterval(){}},{exportName:'useParkRaid',arguments:props=>[props.parkId]});
- assert.equal(requests.length,1);
- const fresh={raid:{id:77,hp_left:4500},next_at:null};view.tree.setState(fresh);view.render();
+ assert.equal(requests.length,1);assert.equal(view.tree.loaded,false);
+ const fresh={raid:{id:77,hp_left:4500},next_at:null};view.tree.setState(fresh);view.render();assert.equal(view.tree.loaded,true);
  requests[0].resolve({raid:{id:77,hp_left:5000},next_at:null});await view.settle();assert.equal(view.tree.raid.hp_left,4500);
- view.tree.refresh();view.change({parkId:2});assert.equal(view.tree.raid,null);
+ view.tree.refresh();view.change({parkId:2});assert.equal(view.tree.raid,null);assert.equal(view.tree.loaded,false);
  requests[1].resolve({raid:{id:77,hp_left:4000},next_at:null});await view.settle();assert.equal(view.tree.raid,null);
  requests[2].resolve({raid:{id:88,hp_left:3000},next_at:null});await view.settle();assert.equal(view.tree.raid.id,88);
  view.tree.refresh();auth.value.player={id:8};view.render();assert.equal(view.tree.raid,null);
  requests[3].resolve(fresh);await view.settle();assert.equal(view.tree.raid,null);
  view.unmount();requests[4].resolve(fresh);await view.settle();assert.equal(view.tree.raid,null);
 });
-test('a confirmed celebration belongs to its player, waits for sheet dismissal, and is seen only after dismissal',async()=>{
+test('a confirmed celebration belongs to its player, waits for sheet dismissal, is seen only after dismissal and acknowledged',async()=>{
  const h=flow(),reward={outcome:'defeated',coins:50,xp:100,energy:20,parts:2,tickets:0};
  const sheet=h.view.find(n=>n.type==='react-native-modal');sheet.props.onModalWillShow();h.view.render();
  h.view.change({raid:{...h.view.props.raid,status:'defeated',hp_left:0,you:{attacks:1,attacks_left:4,damage:50,reward}}});
@@ -158,7 +189,8 @@ test('a confirmed celebration belongs to its player, waits for sheet dismissal, 
  assert.deepEqual(h.reads,['boss-celebrated-v2-5-77']);assert.equal(h.writes.length,0);
  h.view.change({open:false});assert.equal(h.view.find(n=>n.type==='react-native-modal'&&n.props.isVisible),undefined);
  sheet.props.onModalHide();h.view.render();const win=h.view.find(n=>n.type==='react-native-modal'&&n.props.isVisible);assert.ok(win);
- win.props.onBackdropPress();await h.view.settle();assert.deepEqual(h.writes,[['boss-celebrated-v2-5-77','1']]);
+ assert.equal(win.props.children.type,'BossWinCard');assert.equal(win.props.children.props.lastHp,5000);
+ win.props.onBackdropPress();await h.view.settle();assert.deepEqual(h.writes,[['boss-celebrated-v2-5-77','1']]);assert.deepEqual(h.acks,[77]);
 });
 test('map handoff carries the actual reward receipt and waits for both native presentations to finish hiding',async()=>{
  const h=flow(),busy=[],receipts=[];
@@ -169,7 +201,7 @@ test('map handoff carries the actual reward receipt and waits for both native pr
  h.view.change({raid:settled});for(const [id,fn]of [...h.view.timers]){h.view.timers.delete(id);fn();}await h.view.settle();
  h.view.change({open:false});sheet.props.onModalHide();h.view.render();
  const win=h.view.find(n=>n.type==='react-native-modal'&&n.props.isVisible);win.props.onModalWillShow();h.view.render();
- win.props.onBackdropPress();h.view.render();assert.equal(receipts[0],settled);assert.notEqual(busy.at(-1),false);
+ win.props.children.props.onDone();h.view.render();assert.equal(receipts[0],settled);assert.notEqual(busy.at(-1),false);
  win.props.onModalHide();h.view.render();assert.equal(busy.at(-1),false);
  assert.ok(h.view.find(n=>n.type==='react-native-modal'&&n.props.children));
 });
@@ -177,11 +209,40 @@ test('reduced motion keeps a readable boss sheet without slide or zoom presentat
  const h=flow({reduced:true}),sheet=h.view.find(n=>n.type==='react-native-modal');
  assert.equal(sheet.props.animationIn,'fadeIn');assert.equal(sheet.props.animationOut,'fadeOut');assert.equal(sheet.props.animationInTiming,100);
 });
-test('hidden screens and stale entry taps cannot start or finish a brawl behind another page',()=>{
- const h=flow(),button=h.view.find(n=>n.type==='Pressable'&&String(n.props.children?.props?.children).startsWith('FIGHT'));
- const arena=h.start();h.focus.value=false;h.view.render();
+test('hidden screens and stale entry taps cannot start or finish a brawl behind another page',async()=>{
+ const h=flow(),button=h.fight();
+ const arena=await h.start();h.focus.value=false;h.view.render();
  assert.equal(h.view.find(n=>n.type==='BossBrawl').props.visible,false);assert.equal(h.view.find(n=>n.type==='react-native-modal').props.isVisible,false);
- button.props.onPress();arena.props.onComplete(1,{hits:3,weak_hits:1,duration_ms:20000});h.view.render();assert.equal(h.captures.length,0);
+ button.props.onPress();await h.view.settle();arena.props.onComplete(1,{hits:3,weak_hits:1,duration_ms:20000});h.view.render();assert.equal(h.captures.length,0);
  h.focus.value=true;h.view.render();h.auth.value.player={id:8,energy:185,tickets:7};h.view.render();
- button.props.onPress();h.view.render();assert.equal(h.view.find(n=>n.type==='BossBrawl').props.visible,false);
+ button.props.onPress();await h.view.settle();assert.equal(h.view.find(n=>n.type==='BossBrawl').props.visible,false);
+});
+test('boss sheet copy has no emoji, glyph icons or em dashes',()=>{
+ const src=require('node:fs').readFileSync(require('node:path').join(__dirname,'../../src/components/boss/BossRaidFlow.tsx'),'utf8');
+ assert.doesNotMatch(src,/[\u{1F300}-\u{1FAFF}☀-➿—]/u);
+ assert.doesNotMatch(src,/#2a1245|#472462|#3b1a5c/i);
+});
+test('a confirmation that keeps failing asks the server whether the round counted instead of locking the player out',async()=>{
+ const lookups=[];const store=storage();
+ const found=new BossAttackRecovery(store,async()=>({ok:false,error:'network'}),async(id,rid)=>{lookups.push([id,rid]);
+  return {ok:true,found:true,damage:70,raidActive:true,state:{raid:null,next_at:null}};});
+ await found.load(5,1);await found.capture(checkpoint,()=>true);
+ assert.deepEqual(lookups,[[77,checkpoint.body.client_request_id]]);assert.equal(found.snapshot(5,1).receipt.result.damage,70);
+ assert.equal(found.snapshot(5,1).pending,null);
+ const gone=new BossAttackRecovery(storage(),async()=>({ok:false,error:'network'}),async()=>({ok:true,found:false,damage:null,raidActive:false,state:{raid:null,next_at:null}}));
+ await gone.load(5,1);await gone.capture(checkpoint,()=>true);assert.equal(gone.snapshot(5,1).receipt.result.error,'raid_over');assert.equal(gone.snapshot(5,1).pending,null);
+ // Still live and not found, or the lookup itself failing: stays saved and retryable.
+ for(const lookup of [async()=>({ok:true,found:false,damage:null,raidActive:true,state:{raid:null,next_at:null}}),async()=>({ok:false}),async()=>{throw Error('offline');}]){
+  const kept=new BossAttackRecovery(storage(),async()=>({ok:false,error:'network'}),lookup);await kept.load(5,1);await kept.capture(checkpoint,()=>true);
+  assert.equal(kept.snapshot(5,1).phase,'unconfirmed');assert.ok(kept.snapshot(5,1).pending);
+ }
+});
+test('saved rounds carry their server token, may lack GPS (remote without a fix), and old 26s rounds still load',()=>{
+ const withToken=parseBossAttack(JSON.stringify({...checkpoint,body:{...checkpoint.body,round_token:'c'.repeat(32)}}),5,1);
+ assert.equal(withToken.body.round_token,'c'.repeat(32));
+ const noGps={...checkpoint,body:{client_request_id:checkpoint.body.client_request_id,hits:3,weak_hits:1,duration_ms:20000,remote:true}};
+ assert.equal(parseBossAttack(JSON.stringify(noGps),5,1).body.latitude,undefined);
+ assert.equal(parseBossAttack(JSON.stringify({...checkpoint,body:{...checkpoint.body,duration_ms:26000}}),5,1).body.duration_ms,26000);
+ for(const body of [{...checkpoint.body,round_token:'NOT HEX'},{...checkpoint.body,latitude:undefined}])
+  assert.throws(()=>parseBossAttack(JSON.stringify({...checkpoint,body}),5,1));
 });

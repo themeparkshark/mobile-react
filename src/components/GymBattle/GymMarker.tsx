@@ -10,18 +10,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { getGym, GymData } from '../../api/endpoints/gym-battle';
+import { TEAMS, type TeamId } from '../../constants/teams';
 
-const TEAM_COLORS = {
-  mouse: '#F59E0B', // Gold/Orange
-  globe: '#22C55E', // Green
-  shark: '#3B82F6', // Blue
-};
-
-const TEAM_EMOJIS = {
-  mouse: '🐭',
-  globe: '🌍',
-  shark: '🦈',
-};
+const TEAM_COLORS: Record<TeamId, string> = { mouse: TEAMS.mouse.color, globe: TEAMS.globe.color, shark: TEAMS.shark.color };
 
 interface Props {
   parkId: number;
@@ -110,7 +101,7 @@ export default function GymMarker({ parkId, latitude, longitude, onPress }: Prop
         {/* Leader indicator badge */}
         {leader && (
           <View style={[styles.leaderBadge, { backgroundColor: leaderColor }]}>
-            <Text style={styles.leaderEmoji}>{TEAM_EMOJIS[leader]}</Text>
+            <Image source={TEAMS[leader].badge} style={{ width: 18, height: 18 }} contentFit="contain" />
           </View>
         )}
       </View>
@@ -146,14 +137,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#1E293B',
+    borderColor: '#05468f',
   },
   leaderEmoji: {
     fontSize: 13,
   },
   labelContainer: {
     marginTop: 2,
-    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+    backgroundColor: 'rgba(7, 104, 185, 0.9)',
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 6,

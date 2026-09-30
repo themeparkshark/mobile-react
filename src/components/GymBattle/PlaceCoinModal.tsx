@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Dimensions,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
@@ -14,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, BounceIn } from 'react-native-reanimated';
 import { placeCoin, getMyParkCoins, ParkCoin } from '../../api/endpoints/gym-battle';
 import { battleHUDEvents } from './battleHUDEvents';
+import { GameIcon, SharkLoader } from '../../ui';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -156,7 +156,7 @@ export default function PlaceCoinModal({
           {/* Loading */}
           {state === 'loading' && (
             <View style={styles.content}>
-              <ActivityIndicator size="large" color="#FBBF24" />
+              <SharkLoader compact />
               <Text style={styles.loadingText}>Loading your coins...</Text>
             </View>
           )}
@@ -164,7 +164,7 @@ export default function PlaceCoinModal({
           {/* Empty - No coins collected */}
           {state === 'empty' && (
             <View style={styles.content}>
-              <Text style={styles.emptyEmoji}>🪙</Text>
+              <GameIcon name="coin" size={64} />
               <Text style={styles.emptyTitle}>No Coins Yet!</Text>
               <Text style={styles.emptyMessage}>
                 Collect coins by completing tasks at attractions in this park first!
@@ -178,7 +178,7 @@ export default function PlaceCoinModal({
           {/* Select Coin */}
           {state === 'select' && (
             <Animated.View entering={FadeIn} style={styles.content}>
-              <Text style={styles.title}>🪙 PLACE YOUR COIN 🪙</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><GameIcon name="coin" size={28} /><Text style={styles.title}>PLACE YOUR COIN</Text></View>
               <Text style={styles.subtitle}>Select a coin from your collection:</Text>
 
               <ScrollView 
@@ -253,14 +253,14 @@ export default function PlaceCoinModal({
           {/* Placing */}
           {state === 'placing' && (
             <View style={styles.content}>
-              <Text style={styles.placingText}>🪙 Placing coin...</Text>
+              <Text style={styles.placingText}>Placing coin...</Text>
             </View>
           )}
 
           {/* Success */}
           {state === 'success' && result && (
             <Animated.View entering={BounceIn} style={styles.content}>
-              <Text style={styles.successEmoji}>🎉</Text>
+              <GameIcon name="trophy" size={64} />
               <Text style={styles.successTitle}>COIN PLACED!</Text>
               <Text style={styles.successPoints}>+{result.points} points!</Text>
               <Text style={styles.resultMessage}>
@@ -275,7 +275,7 @@ export default function PlaceCoinModal({
           {/* Error */}
           {state === 'error' && (
             <View style={styles.content}>
-              <Text style={styles.errorEmoji}>😢</Text>
+              
               <Text style={styles.errorTitle}>Oops!</Text>
               <Text style={styles.errorMessage}>{error}</Text>
               <TouchableOpacity style={styles.doneButton} onPress={handleClose}>
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
   },
   gradient: {
     padding: 24,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0768b9',
   },
   content: {
     alignItems: 'center',
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderRadius: 12,
     padding: 10,
-    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    backgroundColor: 'rgba(5, 70, 143, 0.5)',
   },
   coinRowSelected: {
     backgroundColor: 'rgba(251, 191, 36, 0.15)',
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   placeButtonDisabled: {
-    backgroundColor: '#374151',
+    backgroundColor: '#3d5f8c',
   },
   placeButtonText: {
     color: 'white',

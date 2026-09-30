@@ -32,6 +32,8 @@ export interface LiveParks {
   readonly leading_team: TeamId | null;
   readonly cheers_left: number;
   readonly cheer_points: number;
+  /** Team display names (server override for trademark review). */
+  readonly team_names?: Partial<Record<TeamId, string>>;
   readonly parks: readonly LiveParkSummary[];
 }
 

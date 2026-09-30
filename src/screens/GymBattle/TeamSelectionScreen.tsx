@@ -15,7 +15,8 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getLiveParks } from '../../api/endpoints/me/livePark';
 import { joinTeam } from '../../api/endpoints/gym-battle';
-import { TEAMS, type TeamId } from '../../constants/teams';
+import { TEAMS, teamName, type TeamId } from '../../constants/teams';
+import { GameIcon } from '../../ui';
 import { QUESTION_BANK } from './teamQuiz';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
@@ -112,7 +113,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
       <SafeAreaView style={s.safe}>
         {stage !== 'done' && (
           <Pressable style={s.close} onPress={() => navigation?.goBack()} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
-            <Text style={s.closeText}>✕</Text>
+            <GameIcon name="close" size={36} />
           </Pressable>
         )}
 
@@ -134,7 +135,8 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
               <Pressable style={s.helpBtn} accessibilityRole="button"
                 onPress={() => { setQuestions(drawQuestions()); setQIndex(0); setScores({ mouse: 0, globe: 0, shark: 0 }); setStage('quiz'); }}>
                 <Image source={FINN} style={s.helpFinn} contentFit="contain" />
-                <Text style={s.helpText}>Not sure? Let Finn help you choose ›</Text>
+                <Text style={s.helpText}>Not sure? Let Finn help you choose</Text>
+                <GameIcon name="arrow" size={18} />
               </Pressable>
             </Animated.View>
           </View>
@@ -167,7 +169,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
             <Animated.View entering={ZoomIn.springify().damping(11)}>
               <Image source={BIG_BADGE[team]} style={s.bigBadge} contentFit="contain" />
             </Animated.View>
-            <Text style={[s.teamName, { color: TEAMS[team].color }]}>{TEAMS[team].name.toUpperCase()}</Text>
+            <Text style={[s.teamName, { color: TEAMS[team].color }]}>{teamName(team).toUpperCase()}</Text>
             <Text style={s.tag}>{VIBE[team].tag}</Text>
             <Text style={s.line}>{VIBE[team].line}</Text>
             <View style={s.warn}>
@@ -177,7 +179,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
             <Pressable style={[s.join, { backgroundColor: TEAMS[team].color }]} onPress={() => void join()}
               disabled={stage === 'joining'} accessibilityRole="button">
               {stage === 'joining' ? <ActivityIndicator color="#fff" />
-                : <Text style={s.joinText}>JOIN {TEAMS[team].name.toUpperCase()}</Text>}
+                : <Text style={s.joinText}>JOIN {teamName(team).toUpperCase()}</Text>}
             </Pressable>
             <Pressable onPress={() => { setSuggested(null); setStage('pick'); }} hitSlop={8} disabled={stage === 'joining'}>
               <Text style={s.back}>‹ See all three teams</Text>
@@ -195,20 +197,20 @@ function TeamCard({ team, held, leader, underdog, onPress }: {
   team: TeamId; held?: number; leader: boolean; underdog: boolean; onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${TEAMS[team].name}. ${VIBE[team].line}`}
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${teamName(team)}. ${VIBE[team].line}`}
       style={({ pressed }) => [s.card, { borderColor: TEAMS[team].color }, pressed && s.cardPressed]}>
       <Image source={BIG_BADGE[team]} style={s.cardBadge} contentFit="contain" />
       <View style={{ flex: 1 }}>
-        <Text style={[s.cardName, { color: TEAMS[team].color }]}>{TEAMS[team].name}</Text>
+        <Text style={[s.cardName, { color: TEAMS[team].color }]}>{teamName(team)}</Text>
         <Text style={s.cardTag}>{VIBE[team].tag}</Text>
         <Text style={s.cardLine}>{VIBE[team].line}</Text>
         {held !== undefined && (
           <Text style={s.cardHeld}>
-            Holds {held} ride{held === 1 ? '' : 's'} today{leader ? ' · 👑 leading' : underdog ? ' · underdog bonus' : ''}
+            Holds {held} ride{held === 1 ? '' : 's'} today{leader ? '  ·  leading' : underdog ? '  ·  underdog bonus' : ''}
           </Text>
         )}
       </View>
-      <Text style={[s.cardGo, { color: TEAMS[team].color }]}>›</Text>
+      {leader ? <GameIcon name="crown" size={26} /> : <GameIcon name="arrow" size={22} />}
     </Pressable>
   );
 }
@@ -233,7 +235,7 @@ function Welcome({ team, onGo }: { team: TeamId; onGo: () => void }) {
         </Animated.View>
       </View>
       <Animated.Text entering={FadeInUp.delay(300)} style={[s.welcomeName, { color: TEAMS[team].color }]}>
-        {TEAMS[team].name.toUpperCase()}!
+        {teamName(team).toUpperCase()}!
       </Animated.Text>
       <Animated.Text entering={FadeInUp.delay(450)} style={s.line}>
         Every ride coin you catch at a park now wins power for your team. Beat bosses and hold rides together!
@@ -252,7 +254,7 @@ const s = StyleSheet.create({
   tint: { backgroundColor: 'rgba(3, 38, 92, 0.45)' },
   safe: { flex: 1 },
   close: { position: 'absolute', top: 54, right: 18, zIndex: 5, width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
+    backgroundColor: 'rgba(5,52,110,0.3)', alignItems: 'center', justifyContent: 'center' },
   closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
   page: { flex: 1, paddingHorizontal: 18, paddingTop: 28, alignItems: 'center', justifyContent: 'center' },
   title: { fontFamily: 'Shark', fontSize: 38, color: '#ffcf3b', textAlign: 'center',
@@ -286,7 +288,7 @@ const s = StyleSheet.create({
   teamName: { fontFamily: 'Shark', fontSize: 40, marginTop: 4, textShadowColor: '#021e45', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   tag: { fontFamily: 'Knockout', fontSize: 14, letterSpacing: 2, color: '#cdeaff' },
   line: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 8, lineHeight: 23, paddingHorizontal: 8 },
-  warn: { marginTop: 16, backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12 },
+  warn: { marginTop: 16, backgroundColor: 'rgba(5,52,110,0.3)', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12 },
   warnText: { fontFamily: 'Knockout', fontSize: 14, color: '#ffe08a', textAlign: 'center' },
   error: { fontFamily: 'Knockout', fontSize: 14, color: '#fecaca', marginTop: 10, textAlign: 'center' },
   join: { width: '100%', marginTop: 18, borderRadius: 20, paddingVertical: 16, alignItems: 'center', borderWidth: 3, borderColor: '#fff' },

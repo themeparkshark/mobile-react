@@ -13,6 +13,8 @@ import { Image } from 'expo-image';
 import { useNavigation } from '@react-navigation/native';
 import { getGym, GymData } from '../../api/endpoints/gym-battle';
 import { battleHUDEvents } from './battleHUDEvents';
+import { TEAMS, teamName, type TeamId } from '../../constants/teams';
+import { GameIcon, GameRichText } from '../../ui';
 
 // Format seconds into H:MM:SS or MM:SS
 function formatCountdown(totalSeconds: number): string {
@@ -26,23 +28,11 @@ function formatCountdown(totalSeconds: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-const TEAM_COLORS = {
-  mouse: '#F59E0B',  // Gold
-  globe: '#22C55E',  // Green
-  shark: '#3B82F6',  // Blue
-};
-
-const TEAM_EMOJIS = {
-  mouse: '🐭',
-  globe: '🌍',
-  shark: '🦈',
-};
-
-const TEAM_NAMES = {
-  mouse: 'Team Mouse',
-  globe: 'Team Globe',
-  shark: 'Team Shark',
-};
+// Team colours and names come from the one team table (constants/teams).
+const TEAM_COLORS: Record<TeamId, string> = { mouse: TEAMS.mouse.color, globe: TEAMS.globe.color, shark: TEAMS.shark.color };
+const TEAM_NAMES = { get mouse() { return teamName('mouse'); }, get globe() { return teamName('globe'); }, get shark() { return teamName('shark'); } };
+const TeamBadge = ({ team, size = 18 }: { team: TeamId; size?: number }) =>
+  <Image source={TEAMS[team].badge} style={{ width: size, height: size }} contentFit="contain" />;
 
 interface Props {
   parkId: number;
@@ -170,7 +160,7 @@ export default function BattleHUD({ parkId }: Props) {
       >
         <Animated.View style={[styles.container, { transform: [{ scale: pulseAnim }] }]}>
           {/* Translucent background */}
-          <BlurView intensity={40} tint="dark" style={styles.blur}>
+          <BlurView intensity={40} tint="light" style={styles.blur}>
             {/* Shimmer overlay */}
             <Animated.View 
               style={[
@@ -187,7 +177,7 @@ export default function BattleHUD({ parkId }: Props) {
               <View style={styles.leftSection}>
                 {player && (
                   <View style={[styles.myTeamBadge, { backgroundColor: TEAM_COLORS[player.team] }]}>
-                    <Text style={styles.myTeamText}>{TEAM_EMOJIS[player.team]} TEAM</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}><TeamBadge team={player.team} /><Text style={styles.myTeamText}>TEAM</Text></View>
                   </View>
                 )}
               </View>
@@ -196,13 +186,13 @@ export default function BattleHUD({ parkId }: Props) {
               <View style={styles.centerSection}>
                 <View style={styles.teamScores}>
                   <View style={[styles.scoreBadge, { backgroundColor: TEAM_COLORS.mouse }]}>
-                    <Text style={styles.teamScore}>{TEAM_EMOJIS.mouse} {scores.mouse}</Text>
+                    <TeamBadge team="mouse" /><Text style={styles.teamScore}>{scores.mouse}</Text>
                   </View>
                   <View style={[styles.scoreBadge, { backgroundColor: TEAM_COLORS.globe }]}>
-                    <Text style={styles.teamScore}>{TEAM_EMOJIS.globe} {scores.globe}</Text>
+                    <TeamBadge team="globe" /><Text style={styles.teamScore}>{scores.globe}</Text>
                   </View>
                   <View style={[styles.scoreBadge, { backgroundColor: TEAM_COLORS.shark }]}>
-                    <Text style={styles.teamScore}>{TEAM_EMOJIS.shark} {scores.shark}</Text>
+                    <TeamBadge team="shark" /><Text style={styles.teamScore}>{scores.shark}</Text>
                   </View>
                 </View>
               </View>
@@ -210,7 +200,7 @@ export default function BattleHUD({ parkId }: Props) {
               {/* Right: Countdown clock */}
               <View style={styles.rightSection}>
                 <View style={styles.clockBadge}>
-                  <Text style={styles.clockIcon}>⏱️</Text>
+                  <GameIcon name="timer" size={16} />
                   <Text style={styles.clockTime}>{battleActive ? countdown : 'Soon'}</Text>
                 </View>
                 <Text style={styles.tapHintText}>{battleActive ? 'Tap for info' : 'Starts soon'}</Text>
@@ -221,7 +211,7 @@ export default function BattleHUD({ parkId }: Props) {
           {/* Close battle alert */}
           {isClose && (
             <View style={styles.alertBadge}>
-              <Text style={styles.alertText}>⚡ CLOSE BATTLE!</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}><GameIcon name="swords" size={14} /><Text style={styles.alertText}>CLOSE BATTLE!</Text></View>
             </View>
           )}
         </Animated.View>
@@ -240,9 +230,9 @@ export default function BattleHUD({ parkId }: Props) {
           onPress={() => setShowInfo(false)}
         >
           <View style={styles.modalContent}>
-            <BlurView intensity={80} tint="dark" style={styles.modalBlur}>
+            <BlurView intensity={80} tint="light" style={styles.modalBlur}>
               <View>
-                <Text style={styles.modalTitle}>⚔️ ARENA BATTLE</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}><GameIcon name="swords" size={26} /><Text style={styles.modalTitle}>ARENA BATTLE</Text></View>
                 
                 {/* Timer */}
                 <View style={styles.timerSection}>
@@ -258,7 +248,7 @@ export default function BattleHUD({ parkId }: Props) {
                     .map((team, index) => (
                       <View key={team} style={styles.standingRow}>
                         <Text style={styles.standingRank}>#{index + 1}</Text>
-                        <Text style={styles.standingEmoji}>{TEAM_EMOJIS[team]}</Text>
+                        <TeamBadge team={team} size={22} />
                         <Text style={[styles.standingName, { color: TEAM_COLORS[team] }]}>
                           {TEAM_NAMES[team]}
                         </Text>
@@ -272,29 +262,24 @@ export default function BattleHUD({ parkId }: Props) {
                 {/* How it works */}
                 <View style={styles.infoSection}>
                   <Text style={styles.sectionTitle}>HOW IT WORKS</Text>
-                  <Text style={styles.infoText}>
-                    👆 <Text style={styles.infoBold}>Check in</Text> every 30 min · +20 pts{'\n'}
-                    🪙 <Text style={styles.infoBold}>Place a coin</Text> · bonus pts{'\n'}
-                    ⚔️ <Text style={styles.infoBold}>Find swords</Text> · attack enemies{'\n'}
-                    🏆 <Text style={styles.infoBold}>Win</Text> when timer hits 0 · get rewards!
-                  </Text>
+                  <GameRichText tone="onBlue" style={styles.infoText}>{'[icon:pin] Check in every 30 min: +20 pts\n[icon:coin] Place a coin: bonus pts\n[icon:swords] Find swords: attack other teams\n[icon:trophy] Win when the timer hits 0: get rewards!'}</GameRichText>
                 </View>
 
                 {/* Rewards + Status side by side */}
                 <View style={styles.bottomRow}>
                   <View style={styles.rewardsCol}>
-                    <Text style={styles.sectionTitle}>🏆 WIN REWARDS</Text>
-                    <Text style={styles.rewardItem}>🪙 1,000 Coins</Text>
-                    <Text style={styles.rewardItem}>⭐ 100 XP</Text>
-                    <Text style={styles.rewardItem}>⚡ 10 Energy</Text>
-                    <Text style={styles.rewardItem}>⚔️ 2 Swords</Text>
+                    <Text style={styles.sectionTitle}>WIN REWARDS</Text>
+                    <GameRichText tone="onBlue" style={styles.rewardItem}>{'[icon:coins] 1,000 Coins'}</GameRichText>
+                    <GameRichText tone="onBlue" style={styles.rewardItem}>{'[icon:xp] 100 XP'}</GameRichText>
+                    <GameRichText tone="onBlue" style={styles.rewardItem}>{'[icon:energy] 10 Energy'}</GameRichText>
+                    <GameRichText tone="onBlue" style={styles.rewardItem}>{'[icon:swords] 2 Swords'}</GameRichText>
                   </View>
                   {player && (
                     <View style={styles.statusCol}>
                       <Text style={styles.sectionTitle}>YOUR STATUS</Text>
-                      <Text style={styles.statusLine}>{TEAM_EMOJIS[player.team]} {TEAM_NAMES[player.team]}</Text>
-                      <Text style={styles.statusLine}>📊 {player.today_contribution} pts today</Text>
-                      <Text style={styles.statusLine}>⚔️ {player.swords} swords</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><TeamBadge team={player.team} /><Text style={styles.statusLine}>{TEAM_NAMES[player.team]}</Text></View>
+                      <Text style={styles.statusLine}>{player.today_contribution} pts today</Text>
+                      <GameRichText tone="onBlue" style={styles.statusLine}>{`[icon:swords] ${player.swords} swords`}</GameRichText>
                     </View>
                   )}
                 </View>
@@ -329,6 +314,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.1)',
   },
   blur: {
+    backgroundColor: 'rgba(7, 104, 185, 0.88)',
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
@@ -407,7 +393,7 @@ const styles = StyleSheet.create({
   clockBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(5, 52, 110, 0.4)',
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 8,
@@ -443,7 +429,7 @@ const styles = StyleSheet.create({
   // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(5, 52, 110, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -455,6 +441,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   modalBlur: {
+    backgroundColor: 'rgba(7, 104, 185, 0.94)',
     padding: 24,
   },
   modalTitle: {
