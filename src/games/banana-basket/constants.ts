@@ -187,12 +187,16 @@ export const CARD_SPLASH = 256;
 /** Set cards are 1000 + the set that just ended. */
 export const CARD_SET_BASE = 1000;
 
-// Stars (Ride table; queue x1.35). Index = difficulty 1..3.
+// Stars (Ride table; queue x1.35). Index = difficulty 1..3. Calibrated on the
+// bots (120 seeds each, 2026-09-30): 1 star sits near the Kid bot's 5-15th
+// percentile (the Ride Challenge win must stay kind to first-timers), 3 stars
+// near the Expert bot's median and above the Human bot's 90th percentile.
+// Humans have the final say (design A7b P2 gate).
 export const STARS_RIDE: readonly (readonly [number, number, number])[] = [
-  [400, 900, 1600],
-  [400, 900, 1600],
-  [500, 1050, 1850],
-  [600, 1250, 2200],
+  [5500, 8500, 11200],
+  [5500, 8500, 11200],
+  [6000, 9000, 11700],
+  [6300, 9300, 12000],
 ];
 export const QUEUE_STAR_Q8 = 346;
 

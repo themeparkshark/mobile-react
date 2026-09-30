@@ -60,7 +60,8 @@ export function request(bus: HapticBusState, now: number, pri: number, spanMs = 
     fireAt(bus, now, pri, spanMs);
     return { kind: 'now', at: now, token: 0 };
   }
-  const outranks = pri > bus.lastPri && pri > bus.pendPri;
+  // Tells and hits always queue behind the window (never dropped for a same-rank buzz).
+  const outranks = pri > bus.pendPri && (pri > bus.lastPri || pri >= HB_TELL);
   if (!outranks) {
     bus.dropped += 1;
     return { kind: 'drop', at: now, token: 0 };

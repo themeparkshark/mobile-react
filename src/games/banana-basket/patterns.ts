@@ -566,7 +566,7 @@ export function directorStep(s: SimState): void {
     const steps = fallSteps(fp[0], fp[1]);
     if (lt >= s.setLen - 36 - steps) {
       s.tl |= TL_FINALE;
-      addItem(s, c, kind, s.dLastX, 1, 1, phase);
+      if (addItem(s, c, kind, s.dLastX, 1, 1, phase) < 0) addItem(s, c, kind, s.bx >> 8, 0, 1, phase);
     }
   }
   if (c < s.dNext) return;

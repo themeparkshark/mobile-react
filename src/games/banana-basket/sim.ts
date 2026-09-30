@@ -543,7 +543,7 @@ function stepBall(s: SimState, dt: number): void {
   }
   // Ball Pop and BONK against falling items.
   for (let i = 0; i < MAX_ITEMS; i++) {
-    if (s.iSt[i] !== S_FALL) continue;
+    if (s.iSt[i] !== S_FALL || s.iFlag[i] === 1) continue;
     const kind = s.iKind[i];
     const r = BALL_R + (ITEM_SIZE[kind] >> 1) - 6;
     const dx = (s.iX[i] - s.bX) >> 8;
