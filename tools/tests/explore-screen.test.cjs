@@ -85,3 +85,17 @@ test('Find this coin selects the ride and lays a guide toward it', async () => {
   map.props.onPress(); app.render();
   assert.equal(app.find(named('Map')).props.guideTarget, null, 'tapping the map clears the guide');
 });
+
+test('the Park Project pill sits on the same row as the other suggestion slots, below Ride Control and Live Events', async () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+  assert.equal(q.suggestionSlotTop(false), 64);
+  assert.equal(q.suggestionSlotTop(true), 124);
+  // Header (70 + status bar) minus the map's 8pt tuck, then the in-map slot row.
+  assert.equal(q.suggestionSlotScreenTop(54, false), 54 + 62 + 64);
+  assert.equal(q.suggestionSlotScreenTop(54, true), 54 + 62 + 124);
+  const app = exploreScreen(); await app.settle();
+  const widget = app.find(named('ParkProjectWidget'));
+  assert.ok(widget, 'project widget renders at the park');
+  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0, false));
+});

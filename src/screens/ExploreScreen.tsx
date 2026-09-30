@@ -1,4 +1,5 @@
 import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
+import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
@@ -47,7 +48,7 @@ import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
 import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
 import GuestInvite from './ExploreScreen/GuestInvite';
-import { chestMayPresent, hasFirstCatch, mapSuggestionSlots } from './ExploreScreen/mapPresentationQueue';
+import { chestMayPresent, hasFirstCatch, mapSuggestionSlots, suggestionSlotScreenTop, suggestionSlotTop } from './ExploreScreen/mapPresentationQueue';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
 import { rideLook } from '../services/rideLandmark';
@@ -400,6 +401,7 @@ export default function ExploreScreen() {
     }).sort((a, b) => dist(a.task) - dist(b.task));
   }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
   const hasLiveEvents = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
+  const slotTop = suggestionSlotTop(hasLiveEvents);
 
   const mapContext = `${player?.id ?? ''}:${park?.id ?? ''}`;
   const latestMapContext = useRef(mapContext);
@@ -736,7 +738,8 @@ export default function ExploreScreen() {
       </Topbar>
       {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion}
-        pillHidden={!!park && suggestionSlots.right !== 'project'} />}
+        pillHidden={!!park && suggestionSlots.right !== 'project'}
+        topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0, hasLiveEvents) : undefined} />}
       {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
         presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
         onMapOcclusionChange={setBossOccluded} onCelebrationDismiss={result => { void bossMap.enqueue(result); }}
@@ -938,7 +941,7 @@ export default function ExploreScreen() {
           </View>
         )}
         {suggestionSlots.left === 'dwell' && queueDwell && <DwellCard key={`dwell-${queueDwell.rideId}`}
-          rideName={queueDwell.rideName} top={hasLiveEvents ? 124 : 64}
+          rideName={queueDwell.rideName} top={slotTop}
           onDismiss={() => setDismissedDwell(queueDwell.rideId)}
           onPlay={async () => {
             const ride = await resolveMapQueueContext(park.id, queueDwell.rideName);
@@ -946,7 +949,7 @@ export default function ExploreScreen() {
           }} />}
         {adventure && suggestionSlots.left === 'adventure' && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
-          closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={hasLiveEvents ? 124 : 64}
+          closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={slotTop}
           slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}
           onSelect={selectAdventureRide} onDismiss={dismissAdventure}
@@ -978,7 +981,7 @@ export default function ExploreScreen() {
               RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
             }
           }}
-          style={{ position: 'absolute', top: player ? (hasLiveEvents ? 124 : 64) : 12, left: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? slotTop : 12, left: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#ffffff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <Text style={{ color: '#ffdc61', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.6 }}>
@@ -1000,7 +1003,7 @@ export default function ExploreScreen() {
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
           onPress={() => navigation.navigate('LinePlay', { ride: queueRide })}
-          style={{ position: 'absolute', top: player ? (hasLiveEvents ? 124 : 64) : 12, right: 12, width: '43%', zIndex: 20,
+          style={{ position: 'absolute', top: player ? slotTop : 12, right: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
           <GameRichText style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} iconSize={16} numberOfLines={1}>

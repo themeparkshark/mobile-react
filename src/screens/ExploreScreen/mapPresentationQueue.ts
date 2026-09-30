@@ -22,6 +22,21 @@ export function chestMayPresent(state: MapOverlayState): boolean {
     !state.boss && !state.rideOpen && !state.adventureOpen && !state.otherModalOpen;
 }
 
+/**
+ * Where the suggestion slots sit. The map starts under his header (70 + status bar,
+ * minus the map's 8pt tuck), Ride Control rides at the top of the map, and the Live
+ * Events pill adds a row under it. Every slot, including the Park Project pill that
+ * renders outside the map, lines up on the same row so nothing overlaps.
+ */
+export const MAP_TOP_INSET = 62;
+export function suggestionSlotTop(hasLiveEvents: boolean): number {
+  return hasLiveEvents ? 124 : 64;
+}
+/** Screen-space top for a slot drawn outside the map container. */
+export function suggestionSlotScreenTop(statusBarHeight: number, hasLiveEvents: boolean): number {
+  return statusBarHeight + MAP_TOP_INSET + suggestionSlotTop(hasLiveEvents);
+}
+
 export type MapSuggestion = 'boss' | 'ride' | 'dwell' | 'adventure' | 'goal' | 'project' | null;
 
 /** Which suggestion chips may show. The left slot holds adventure or goal; the right slot ride or project. */
