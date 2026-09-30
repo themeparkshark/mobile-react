@@ -32,6 +32,12 @@ test('every iOS purpose string is written for players, not an Expo default', () 
   }
 });
 
+test('the microphone string does not promise a recording feature the app does not have', () => {
+  const mic = info.NSMicrophoneUsageDescription;
+  assert.match(mic, /never records audio/);
+  assert.doesNotMatch(mic, /record a video|if you choose/i);
+});
+
 test('share sheets can save images: the add-to-Photos purpose string exists', () => {
   assert.ok(info.NSPhotoLibraryAddUsageDescription);
 });

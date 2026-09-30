@@ -14,7 +14,7 @@ const PURPOSE_STRINGS = {
   NSCameraUsageDescription:
     'Theme Park Shark uses the camera for ride photo challenges and to show your coins and pins in the world around you. Photos stay on your phone unless you share them.',
   NSMicrophoneUsageDescription:
-    'Theme Park Shark does not record audio. The camera only uses the microphone if you choose to record a video with sound.',
+    'Theme Park Shark never records audio. Your microphone stays off during ride photos, games and everything else in the app.',
   NSMotionUsageDescription:
     'Theme Park Shark uses motion so your 3D coins and pins tilt as you move your phone.',
   NSPhotoLibraryAddUsageDescription:

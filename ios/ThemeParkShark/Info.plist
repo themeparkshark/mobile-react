@@ -61,7 +61,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Theme Park Shark uses your location to show nearby collectibles at home, the rides around you in the park, and the queue games for the line you are in.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Theme Park Shark does not record audio. The camera only uses the microphone if you choose to record a video with sound.</string>
+	<string>Theme Park Shark never records audio. Your microphone stays off during ride photos, games and everything else in the app.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Theme Park Shark uses motion so your 3D coins and pins tilt as you move your phone.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
