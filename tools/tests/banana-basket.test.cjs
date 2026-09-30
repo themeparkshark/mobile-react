@@ -422,3 +422,15 @@ test('audio ladder: climbs per catch, resolves on the tonic at a tier-up, octave
   audio.ladderReset(l);
   assert.equal(l.i, -1);
 });
+
+test('golden vectors (shared with the WS7 PHP replay) replay to their exact scores', () => {
+  const vectors = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/banana/golden-vectors.json'), 'utf8'));
+  assert.equal(vectors.length, 16);
+  for (const v of vectors) {
+    const r = proof.verifyProof(v.proof);
+    assert.equal(r.ok, true, `${v.name}: ${r.reason}`);
+    assert.equal(r.score, v.expect.score, v.name);
+    assert.equal(r.state.clock, v.expect.clock, v.name);
+  }
+  assert.ok(vectors.some((v) => v.expect.end === 'hearts'));
+});
