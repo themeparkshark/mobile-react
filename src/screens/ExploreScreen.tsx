@@ -942,7 +942,7 @@ export default function ExploreScreen() {
                 : 'Open Ride Guide for its coin'}
           </Text>
         </Pressable>}
-        {!adventure && selectedTask && queueRide && <Pressable
+        {selectedTask && queueRide && <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}

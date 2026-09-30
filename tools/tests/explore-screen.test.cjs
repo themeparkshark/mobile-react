@@ -1,0 +1,37 @@
+const assert = require('node:assert/strict'), test = require('node:test');
+const { exploreScreen } = require('./helpers/explore-screen.cjs');
+
+const task = { id: 11, name: 'Space Ride', latitude: 34.1382, longitude: -118.3533, asset_id: 13 };
+const redeemables = { tasks: [task], coins: [], keys: [], redeemables: [], items: [], pins: [], vaults: [] };
+const queueRide = { rideId: 8, taskId: 11, parkId: 1, name: 'Space Ride', lineRewardsReady: true };
+const ride = { task_id: 11, asset_id: 13, ride_id: 8, ride_name: 'Space Ride', coin_url: '', park_id: 1 };
+const adventureTrip = (phase = 'discover') => ({
+  adventure_enabled: true,
+  adventure_ticket: { id: 7, park_id: 1, park_day: '2026-09-30', started_at: '2026-09-30T17:00:00Z', ride,
+    ride_choices: [ride], phase, discover: null, play: null, celebrated_at: null, origin: 'arrival', play_hint: null },
+  rides: [ride], goal: null, goal_unavailable: false, goal_plan: null,
+  wallet: { tickets: 3, energy: 40, ticket_cost: 1, tickets_needed: 0 },
+});
+
+const named = name => node => typeof node.type === 'function' && node.type.name === name;
+const label = prefix => node => typeof node.props?.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith(prefix);
+
+async function selectRide(app) {
+  await app.settle(); await app.settle();
+  const marker = app.find(node => named('TaskMarker')(node) && node.props.task?.id === task.id);
+  assert.ok(marker, 'the ride marker is on the map');
+  marker.props.onPress(); app.render();
+  await app.settle(); await app.settle();
+}
+
+test('P0-7: an Adventure Ticket never hides "Play in line" for the selected queue ride', async () => {
+  const app = exploreScreen({ trip: adventureTrip('discover'), redeemables, queueRide });
+  await selectRide(app);
+  assert.ok(app.find(label('Play queue games for Space Ride')), 'Play in line shows during an adventure');
+});
+
+test('without an adventure the selected queue ride still offers Play in line', async () => {
+  const app = exploreScreen({ trip: null, redeemables, queueRide });
+  await selectRide(app);
+  assert.ok(app.find(label('Play queue games for Space Ride')));
+});
