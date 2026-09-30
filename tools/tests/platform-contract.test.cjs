@@ -78,8 +78,10 @@ test('feature flags are read with a bounded timeout and a malformed answer rejec
     '../../client': { async get(url, config) {
       assert.equal(url, '/feature-flags');
       assert.equal(config.timeout, 8000);
+      assert.deepEqual(plain(config.headers), { 'App-Version': '1.6.0' });
       return { data };
     } },
+    '../../platform': { appVersionHeaders: () => ({ 'App-Version': '1.6.0' }) },
   }).default;
 
   const flags = await getFeatureFlags();
