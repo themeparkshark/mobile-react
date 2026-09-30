@@ -48,8 +48,9 @@ export default function CoinShelfScreen({ route }: {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const reduced = useReducedGameMotion();
-  const preview = __DEV__ && process.env.EXPO_PUBLIC_COIN_SHELF_PREVIEW === '1';
   const { player } = useContext(AuthContext);
+  // Dev preview: fixture coins only when nobody is signed in; a QA session shows real data.
+  const preview = __DEV__ && process.env.EXPO_PUBLIC_COIN_SHELF_PREVIEW === '1' && !player?.id;
   const collection = useCoinCollection(preview ? null : player?.id, { autoload: false });
   const coins = preview ? PREVIEW_COINS : collection.coins;
   const [refreshing, setRefreshing] = useState(false);

@@ -101,7 +101,7 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
 
 const styles = StyleSheet.create({
   dim: { backgroundColor: '#05346e' },
-  chip: { position: 'absolute', bottom: 34, left: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 9,
+  chip: { position: 'absolute', bottom: 118, left: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 9,
     paddingVertical: 8, paddingLeft: 10, paddingRight: 8, borderRadius: 18, borderWidth: 3, borderColor: '#ffffff',
     backgroundColor: '#fff8e4', shadowColor: '#05346e', shadowOpacity: 0.28, shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 }, elevation: 8 },

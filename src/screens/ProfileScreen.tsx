@@ -210,7 +210,7 @@ export default function ProfileScreen() {
     }
   }, [stores, labels.pin_packs, player?.is_subscribed]);
 
-  // Redirect guests to login — must be in useEffect, not during render
+  // Redirect guests to login: must be in useEffect, not during render
   useEffect(() => {
     if (!player) {
       RootNavigation.navigate('Login');
@@ -339,7 +339,7 @@ export default function ProfileScreen() {
                 />
               </Pressable>
 
-              {/* Edit button tap zone — independent */}
+              {/* Edit button tap zone: independent */}
               <Pressable
                 onPressIn={() => {
                   Animated.spring(editScale, {

@@ -337,7 +337,7 @@ export default function CoinLevelingModal({
       statusBarTranslucent
       style={{ margin: 0, alignItems: 'center', justifyContent: 'center' }}
     >
-      {/* Confetti overlay — only render during success to avoid artifact */}
+      {/* Confetti overlay: only render during success to avoid artifact */}
       {state === 'success' && !reducedMotion && (
         <Lottie
           ref={confettiRef}

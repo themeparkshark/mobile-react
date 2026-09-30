@@ -97,7 +97,7 @@ const getChurroImage = (variantSlug: string) => {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ITEM_SIZE = (SCREEN_WIDTH - 56) / 4; // 4 items per row with padding
 
-// Rarity configuration — modern, softer palette
+// Rarity configuration: modern, softer palette
 const RARITY_CONFIG = {
   1: { name: 'common', label: 'Common', color: '#22c55e', bgColor: 'rgba(34, 197, 94, 0.08)', glowColor: 'rgba(34, 197, 94, 0.2)' },
   2: { name: 'uncommon', label: 'Uncommon', color: '#3b82f6', bgColor: 'rgba(59, 130, 246, 0.08)', glowColor: 'rgba(59, 130, 246, 0.2)' },

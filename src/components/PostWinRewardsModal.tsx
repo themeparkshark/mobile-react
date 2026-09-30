@@ -248,7 +248,8 @@ export default function PostWinRewardsModal({
     return { opacity: t, transform: [{ translateY: (1 - t) * 12 }] };
   });
   const partsStyle = useAnimatedStyle(() => ({ width: `${Math.round(partsFill.value * 100)}%` }));
-  const readyStyle = useAnimatedStyle(() => ({ opacity: readyPop.value, transform: [{ scale: 0.6 + 0.4 * readyPop.value }] }));
+  // Pop by rising and fading in (a scaled view can leave its lip border mis-drawn on iOS).
+  const readyStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, readyPop.value), transform: [{ translateY: (1 - readyPop.value) * 16 }] }));
   const footerStyle = useAnimatedStyle(() => {
     const t = Math.max(0, Math.min(1, (enter.value - 0.2) / 0.4));
     return { opacity: t, transform: [{ translateY: (1 - t) * 20 }] };
@@ -302,7 +303,7 @@ export default function PostWinRewardsModal({
             <View style={styles.heroStage}>
               <Animated.View style={[styles.rays, raysStyle]} pointerEvents="none">
                 <Image source={require('../../assets/images/screens/explore/starburst.png')} contentFit="contain"
-                  style={{ width: HERO * 2.1, height: HERO * 2.1, opacity: 0.5 }} tintColor="#fff3b0" />
+                  style={{ width: HERO * 2.1, height: HERO * 2.1, opacity: 0.3 }} tintColor="#ffe07a" />
               </Animated.View>
               <Animated.View style={[styles.burstRing, burstStyle]} pointerEvents="none" />
               <Animated.View style={heroStyle}>
@@ -370,9 +371,13 @@ export default function PostWinRewardsModal({
                   <Text style={styles.partsCount}>{parts.maxed ? '' : `${parts.have}/${parts.need}`}</Text>
                 </View>
                 {!parts.maxed && <View style={styles.partsTrack}><Animated.View style={[styles.partsFill, partsStyle]} /></View>}
-                {parts.ready && <Animated.View style={[styles.readyBadge, readyStyle]}>
-                  <GameIcon name="sparkle" size={20} />
-                  <Text style={styles.readyText}>READY TO POWER UP</Text>
+                {parts.ready && <Animated.View style={[{ alignSelf: 'stretch', alignItems: 'center', marginTop: 8 }, readyStyle]}>
+                  <View style={styles.readyLip}>
+                    <View style={styles.readyBadge}>
+                      <GameIcon name="sparkle" size={20} />
+                      <Text style={styles.readyText} numberOfLines={1}>READY TO POWER UP</Text>
+                    </View>
+                  </View>
                 </Animated.View>}
                 {!parts.ready && !parts.maxed && <Text style={styles.partsHint}>{parts.hint}</Text>}
               </View>}
@@ -477,8 +482,9 @@ const styles = StyleSheet.create({
   partsTrack: { height: 14, borderRadius: 8, backgroundColor: '#bfe5ff', borderWidth: 2, borderColor: '#ffffff', overflow: 'hidden', marginTop: 6 },
   partsFill: { height: '100%', borderRadius: 8, backgroundColor: '#ffcf3b' },
   partsHint: { fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c', marginTop: 5 },
-  readyBadge: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: '#ffcf3b',
-    borderRadius: 14, borderBottomWidth: 4, borderBottomColor: '#d99a00', paddingHorizontal: 12, paddingVertical: 5 },
+  readyLip: { backgroundColor: '#d99a00', borderRadius: 14, paddingBottom: 4 },
+  readyBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ffcf3b',
+    borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5 },
   readyText: { fontFamily: 'Shark', fontSize: 16, color: '#05346e' },
   rcBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'stretch', borderWidth: 3,
     borderRadius: 16, padding: 10, marginTop: 12, backgroundColor: '#fff8e4' },

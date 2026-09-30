@@ -30,8 +30,12 @@ function CoinSocket({ size, coinUrl, goal = false, onLight = false }: CoinSocket
       borderTopColor: onLight ? '#9ccbe9' : '#033566',
       alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }} pointerEvents="none">
       {coinUrl
-        ? <Image source={coinUrl} contentFit="contain" tintColor={onLight ? 'rgba(7,104,185,0.28)' : 'rgba(191,229,255,0.32)'}
-            style={{ width: size * 0.8, height: size * 0.8 }} />
+        ? <View style={{ width: size * 0.8, height: size * 0.8, borderRadius: size, overflow: 'hidden' }}>
+            {/* The real coin, faded into the socket like a pressed outline. */}
+            <Image source={coinUrl} contentFit="contain" style={{ width: '100%', height: '100%', opacity: onLight ? 0.35 : 0.3 }} />
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: onLight ? 'rgba(215,238,252,0.35)' : 'rgba(5,80,154,0.35)' }} />
+          </View>
         : <View style={{ opacity: 0.5 }}><MysteryCoinArtwork size={size * 0.8} /></View>}
       {goal && <View style={{ position: 'absolute', top: -inset, left: -inset, right: -inset, bottom: -inset,
         borderRadius: size, borderWidth: Math.max(2, inset), borderColor: '#ffcf3b', borderStyle: 'dashed' }} />}

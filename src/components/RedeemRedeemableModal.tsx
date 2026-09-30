@@ -113,7 +113,7 @@ export default function RedeemRedeemableModal({
   // Keep ref in sync so callbacks always have current flowState
   useEffect(() => { flowStateRef.current = flowState; }, [flowState]);
 
-  // Safe close — only allows closing during preview state
+  // Safe close: only allows closing during preview state
   const safeClose = useCallback(() => {
     if (flowStateRef.current === 'preview') {
       close();
