@@ -18,6 +18,8 @@ const MODULES = {
   './core': 'src/games/sharky/sim/core.ts',
   './version.generated': 'src/games/sharky/sim/version.generated.ts',
   './verify': 'src/games/sharky/sim/verify.ts',
+  './bots': 'src/games/sharky/sim/bots.ts',
+  './race': 'src/games/sharky/sim/race.ts',
 };
 
 function build(out) {
@@ -29,7 +31,7 @@ function build(out) {
     }).outputText;
     src += `__mods[${JSON.stringify(id)}] = function (module, exports, require) {\n${code}\n};\n`;
   }
-  src += `const api = __req('./verify');
+  src += `const api = Object.assign({}, __req('./verify'), __req('./race'), { core: __req('./core'), bots: __req('./bots') });
 module.exports = api;
 if (require.main === module) {
   let buf = '';
@@ -37,7 +39,11 @@ if (require.main === module) {
   process.stdin.on('data', (d) => { buf += d; });
   process.stdin.on('end', () => {
     let out;
-    try { out = api.verifySwimProof(JSON.parse(buf)); } catch (e) { out = { ok: false, reason: 'bad_json' }; }
+    try {
+      const req = JSON.parse(buf);
+      // {cmd:'race_bot', seed, seat, profile} plans a house-crew racer; anything else is a swim proof.
+      out = req && req.cmd === 'race_bot' ? { ok: true, ...api.raceBot(req.seed, req.seat, req.profile) } : api.verifySwimProof(req);
+    } catch (e) { out = { ok: false, reason: 'bad_json' }; }
     process.stdout.write(JSON.stringify(out));
     process.exit(out.ok ? 0 : 2);
   });

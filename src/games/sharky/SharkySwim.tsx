@@ -14,7 +14,8 @@
  * External contract (unchanged): onComplete(multiplier, meta), onClose().
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AuthContext } from '../../context/AuthProvider';
 import { StyleSheet, Text, TouchableOpacity, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnUI } from 'react-native-reanimated';
@@ -35,7 +36,10 @@ import {
 } from './sim/core';
 import { buildSwimProof } from './sim/verify';
 import { BOT_PROFILES, planRun } from './sim/bots';
-import { useSharkyEngine } from './useSharkyEngine';
+import { useSharkyEngine, type RivalSpec } from './useSharkyEngine';
+import { raceConfig } from './sim/race';
+import { useSprintRace } from './net/useSprintRace';
+import { RaceCountIn, RaceLobby, RacePodium } from './hud/RaceOverlays';
 import { SharkyCanvas } from './render/SharkyCanvas';
 import { SharkyHud } from './render/SharkyHud';
 import { sharkyLayout, type SharkyLayout } from './render/view';
@@ -60,6 +64,8 @@ export interface SharkySwimProps {
   mode?: SharkyMode;
   taskName?: string;
   rideId?: number;
+  /** Live Sprint Race server (lab: ws://localhost:8413). Without it, races run against the house crew offline. */
+  raceUrl?: string;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
   onQuit?: (resume: () => void) => void;
@@ -79,8 +85,9 @@ function rideStars(s: SimState): number {
 }
 
 export function SharkySwim({
-  visible, difficulty, seed, mode = 'queue', taskName, rideId, onComplete, onClose, onQuit,
+  visible, difficulty, seed, mode = 'queue', taskName, rideId, raceUrl, onComplete, onClose, onQuit,
 }: SharkySwimProps) {
+  const auth = useContext(AuthContext);
   const reducedMotion = useReducedGameMotion();
   const shell = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
@@ -88,7 +95,9 @@ export function SharkySwim({
   const layoutRef = useRef<SharkyLayout>(sharkyLayout(390, 700));
   const [progress, setProgress] = useState<SharkyProgress | null>(null);
   const [runIdx, setRunIdx] = useState(0);
-  const [runMode, setRunMode] = useState<SharkyMode>(mode);
+  // Dev lab: EXPO_PUBLIC_SHARKY_MODE=race|ghost|ride opens that mode directly.
+  const devMode = (__DEV__ ? process.env.EXPO_PUBLIC_SHARKY_MODE : undefined) as SharkyMode | undefined;
+  const [runMode, setRunMode] = useState<SharkyMode>(devMode ?? mode);
   const [ghost, setGhost] = useState<GhostRecord | null>(null);
   const [score, setScore] = useState(0);
   const [fever, setFever] = useState(false);
@@ -103,6 +112,17 @@ export function SharkySwim({
   const endedRef = useRef(false);
   const perf = usePerfProbe(visible && !result);
 
+  // --- live Sprint Race (Line Party semantics; lab transport in dev) ----------------
+  const liveUrl = raceUrl ?? (__DEV__ ? process.env.EXPO_PUBLIC_SHARKY_RACE_URL : undefined) ?? null;
+  const liveRace = runMode === 'race' && !!liveUrl;
+  const playerName = (__DEV__ && process.env.EXPO_PUBLIC_SHARKY_NAME) || auth?.player?.username || 'Shark';
+  const race = useSprintRace(liveRace ? liveUrl : null, rideId ?? 1, playerName);
+  const round = liveRace ? race.state.round : null;
+  const [raceGo, setRaceGo] = useState(false);
+  const [raceDone, setRaceDone] = useState(false);
+  const seatToSlot = useRef<Record<number, number>>({});
+  const slotNames = useRef<string[]>([]);
+
   useEffect(() => {
     let alive = true;
     void loadProgress().then((p) => alive && setProgress(p));
@@ -114,6 +134,7 @@ export function SharkySwim({
   // --- run config ---------------------------------------------------------------
   const prog = progress ?? EMPTY_PROGRESS;
   const cfg = useMemo<SimConfig>(() => {
+    if (round) return raceConfig(round.seed);
     const m = MODE_ID[runMode];
     const base = (seed ?? 20260930) >>> 0;
     const runSeed = ghost ? ghost.seed : runIdx === 0 ? base : hash2(base, runIdx) >>> 0;
@@ -124,12 +145,13 @@ export function SharkySwim({
       tier: ghost ? ghost.tier : unlockTier(prog.runs),
       runs: ghost ? ghost.runs : prog.runs,
     };
-  }, [runMode, seed, runIdx, ghost, difficulty, prog]);
+  }, [runMode, seed, runIdx, ghost, difficulty, prog, round]);
 
   // --- engine ---------------------------------------------------------------------
   const feelRef = useRef<ReturnType<typeof createSharkyFeel> | null>(null);
   const autoplay = __DEV__ && process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '1';
-  const engine = useSharkyEngine(cfg, (batch) => feelRef.current?.handle(batch), autoplay);
+  const autoSalt = autoplay ? ((process.env.EXPO_PUBLIC_SHARKY_NAME ?? '').length % 5) : 0;
+  const engine = useSharkyEngine(cfg, (batch) => feelRef.current?.handle(batch), autoplay, autoSalt);
   const walk = useWalkSense({ active: visible && !result });
   const L = layout ?? layoutRef.current;
   const camera = useCamera({ width: L.w, height: L.h, timeScale: engine.clock.fxScale, reducedMotion, walking: walk.walking });
@@ -168,6 +190,12 @@ export function SharkySwim({
         setNewCard(m === MODE_QUEUE ? unlockCard(before, before + 1) : null);
         setProgress(next);
         void saveProgress(next);
+        if (liveRace && round && race.transport) {
+          // Server-authoritative: the room replays this proof; the podium waits for it.
+          race.transport.submit(round.roundId, proof);
+          setRaceDone(true);
+          return;
+        }
         const res: GameResult = {
           score: s.score,
           stars,
@@ -189,7 +217,7 @@ export function SharkySwim({
         setResult(res);
       }
     }, reason === END_TIME || reason === END_GATE || reason === END_FINISH ? 900 : 300);
-  }, [engine.log, cfg, prog, runMode, rideId, walk.walking, perf]);
+  }, [engine.log, cfg, prog, runMode, rideId, walk.walking, perf, liveRace, round, race.transport]);
 
   feelRef.current = useMemo(() => createSharkyFeel({
     fx,
@@ -220,11 +248,32 @@ export function SharkySwim({
         finish(reason);
       },
       onRivalDone: () => undefined,
+      onCam: (du, y, step) => {
+        const t = Date.now();
+        if (liveRace && race.transport && raceGo && t - lastWhisper.current >= 100) {
+          lastWhisper.current = t;
+          race.transport.whisper(step, du, y, 0);
+        }
+        myDist.current = du;
+      },
+      onRivalPos: (slot, d, _y, step) => {
+        const ahead = myDist.current > d;
+        const was = rivalAhead.current[slot];
+        rivalAhead.current[slot] = ahead;
+        if (ahead && was === false && step > 90) {
+          const L = layoutRef.current;
+          GameAudio.play(GameAudio.hasCue('sk_pass_whoosh') ? 'sk_pass_whoosh' : 'fx.whoosh');
+          fx.current?.flyUp(`PASSED ${slotNames.current[slot] ?? ''}`.trim(), L.w / 2, L.skyH + 60, { size: 'lg', color: '#ffffff', key: 'pass' });
+        }
+      },
       onSprint: () => undefined,
       onGateNear: () => undefined,
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [camera, engine.clock, reducedMotion, cfg, finish]);
+  }), [camera, engine.clock, reducedMotion, cfg, finish, liveRace, race.transport, raceGo]);
+  const lastWhisper = useRef(0);
+  const myDist = useRef(0);
+  const rivalAhead = useRef<Record<number, boolean>>({});
 
   // Reset the sim for every run (rematch, ghost race, sprint race).
   const [rivalNames, setRivalNames] = useState<string[]>([]);
@@ -236,12 +285,23 @@ export function SharkySwim({
     setGates(0);
     setReviveOffer(false);
     setFrozen(false);
-    let rv: Array<{ cfg: SimConfig; log: InputEntry[] } | null> = [];
+    let rv: Array<RivalSpec | null> = [];
     const names: string[] = [];
-    if (ghost) {
+    rivalAhead.current = {};
+    if (round) {
+      // Live race: bots replay the room's planned logs; humans arrive as whispers.
+      seatToSlot.current = {};
+      round.seats.filter((st) => st.seat !== round.you).slice(0, 3).forEach((st, j) => {
+        seatToSlot.current[st.seat] = j;
+        names.push(st.name);
+        rv.push(st.kind === 'bot' && st.inputs ? { cfg: raceConfig(round.seed), log: decodeInputs(st.inputs) } : { remote: true });
+      });
+      setRaceGo(false);
+      setRaceDone(false);
+    } else if (ghost) {
       rv = [{ cfg: { seed: ghost.seed, mode: ghost.mode, difficulty: ghost.difficulty, tier: ghost.tier, runs: ghost.runs }, log: decodeInputs(ghost.inputs) }];
       names.push(ghost.name);
-    } else if (cfg.mode === MODE_RACE) {
+    } else if (cfg.mode === MODE_RACE && !liveRace) {
       // House-crew racers: planned once here, then replayed in lockstep.
       rv = RIVAL_PROFILES.map((p, j) => {
         const bc = { ...cfg };
@@ -251,9 +311,32 @@ export function SharkySwim({
       });
     }
     setRivalNames(names);
+    slotNames.current = names;
     engine.reset(cfg, rv);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg, progress == null]);
+  }, [cfg, progress == null, round?.roundId]);
+
+  // Live rivals: 10 Hz display whispers, interpolated on the UI thread.
+  useEffect(() => {
+    if (!race.transport) return undefined;
+    const last: Record<number, { d: number; at: number }> = {};
+    return race.transport.onWhisper((w) => {
+      const slot = seatToSlot.current[w.seat];
+      if (slot === undefined) return;
+      const prev = last[w.seat];
+      const t = Date.now();
+      const vel = prev && t > prev.at ? ((w.d - prev.d) * 1000) / (t - prev.at) : 0;
+      last[w.seat] = { d: w.d, at: t };
+      engine.remote(slot, w.d, w.y, Math.max(0, Math.min(1000, vel)));
+    });
+  }, [race.transport, engine]);
+
+  const onRaceGo = useCallback(() => {
+    setRaceGo(true);
+    startedAt.current = Date.now();
+    engine.clock.resume();
+    engine.setRunning(true);
+  }, [engine]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -298,7 +381,7 @@ export function SharkySwim({
         inp.startX = t.x;
         inp.startY = t.y;
         inp.startT = now;
-        if (inp.slideFired && now - inp.startT > 0) inp.slideFired = false;
+        inp.slideFired = false;
       }
       const dx = t.x - inp.startX;
       const dy = t.y - inp.startY;
@@ -332,14 +415,16 @@ export function SharkySwim({
 
   // --- shell hooks -------------------------------------------------------------------
   const onStart = useCallback(() => {
+    if (liveRace) return; // the server's synced GO starts a live race
     startedAt.current = Date.now();
     pausedMs.current = 0;
     engine.clock.resume();
     engine.setRunning(true);
-  }, [engine]);
+  }, [engine, liveRace]);
 
   const onPause = useCallback(() => {
     engine.clock.pause();
+    race.transport?.background(true);
     // A held finger is gone after a hold: release on the first step back.
     runOnUI(() => {
       'worklet';
@@ -348,12 +433,13 @@ export function SharkySwim({
       inp.holding = false;
       inp.fingers = 0;
     })();
-  }, [engine, input]);
+  }, [engine, input, race.transport]);
 
   const onResume = useCallback(() => {
+    race.transport?.background(false);
     engine.ext(EXT_PAUSE_RESUME, 0);
     engine.clock.resume();
-  }, [engine]);
+  }, [engine, race.transport]);
 
   const onRematch = useCallback(() => {
     setGhost(null);
@@ -505,6 +591,19 @@ export function SharkySwim({
                   </TouchableOpacity>
                 </View>
               </View>
+            ) : null}
+
+            {liveRace && !round && !race.state.results ? (
+              <RaceLobby state={race.state} crew={['Captain Fin', 'Bubbles', 'Coral']} onReady={() => race.transport?.ready()}
+                onLeave={onClose} toLocal={(ms) => race.transport?.toLocal(ms) ?? ms} />
+            ) : null}
+            {liveRace && round && !raceGo && !raceDone ? (
+              <RaceCountIn round={round} toLocal={(ms) => race.transport?.toLocal(ms) ?? ms} onGo={onRaceGo} />
+            ) : null}
+            {liveRace && (raceDone || race.state.results) ? (
+              <RacePodium results={race.state.results} you={round?.you ?? -1} verdict={race.state.entryVerdict}
+                nextAtMs={race.state.nextLobbyAtMs} toLocal={(ms) => race.transport?.toLocal(ms) ?? ms}
+                onAgain={() => { setRaceDone(false); race.transport?.ready(); }} onLeave={onClose} />
             ) : null}
 
             {result && newCard ? (

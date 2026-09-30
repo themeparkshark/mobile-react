@@ -18,7 +18,7 @@ import {
   EV_SCATTER, EV_SCORE, EV_SHIELD_GET, EV_SHIELD_POP, EV_SKIM, EV_SPEED_BOOST, EV_SPRINT, EV_TOKEN, EV_TOKEN_SET,
   EV_TORPEDO_LOCK, EV_TORPEDO_TRACK, EV_WIPEOUT, G_SPLIT, E_PUFFER,
 } from './sim/core';
-import { BR_CAM, BR_RIVAL } from './useSharkyEngine';
+import { BR_CAM, BR_RIVAL, BR_RIVALPOS } from './useSharkyEngine';
 import type { SharkyLayout } from './render/view';
 
 const GOLD = '#ffc233';
@@ -37,6 +37,10 @@ export interface FeelHooks {
   onRivalDone: (slot: number, reason: number, finishStep: number, score: number) => void;
   onSprint: (sprint: number) => void;
   onGateNear: () => void;
+  /** Every frame: the player's distance, y and step (whispers, overtakes). */
+  onCam?: (du: number, y: number, step: number) => void;
+  /** Rival position samples (slot, distance, y, step). */
+  onRivalPos?: (slot: number, d: number, y: number, step: number) => void;
 }
 
 export interface FeelDeps {
@@ -110,6 +114,10 @@ export function createSharkyFeel(deps: FeelDeps) {
           cam.anc = b;
           cam.y = c;
           cam.step = d;
+          hooks.onCam?.(a, c, d);
+          break;
+        case BR_RIVALPOS:
+          hooks.onRivalPos?.(a, b, c, d);
           break;
         case BR_RIVAL:
           hooks.onRivalDone(a, b, c, d);

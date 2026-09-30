@@ -29,6 +29,10 @@ import {
   IN_PRESS,
   IN_RELEASE,
   PH_PLAY,
+  MODE_RACE,
+  MODE_GHOST,
+  EXT_DRAFT_ON,
+  EXT_DRAFT_OFF,
   step as simStep,
   type InputEntry,
   type SimConfig,
@@ -39,6 +43,8 @@ import {
 export const BR_CAM = 90;
 export const BR_INPUT = 91;
 export const BR_RIVAL = 92;
+/** Rival position sample for overtakes / position tags: slot, dist, y, step. */
+export const BR_RIVALPOS = 93;
 
 export const MAX_RIVALS = 3;
 
@@ -65,6 +71,9 @@ export interface EngineInput {
   startT: number;
   slideFired: boolean;
   fingers: number;
+  /** Slipstream: steps spent in a rival's draft zone, and a re-arm latch. */
+  draftZone: number;
+  draftUsed: boolean;
 }
 
 /** Ambient/presentation particles (not part of the sim): bubble jet, rising bubbles, sand puffs. */
@@ -158,6 +167,9 @@ function ambStep(a: Ambient, s: SimState, dtMs: number): void {
   }
 }
 
+/** A rival for reset: a replayed sim (bot / ghost) or a live remote player. */
+export type RivalSpec = { cfg: SimConfig; log: InputEntry[] } | { remote: true };
+
 export interface SharkyEngine {
   sim: SharedValue<SimState>;
   rivals: SharedValue<RivalSlot[]>;
@@ -169,7 +181,7 @@ export interface SharkyEngine {
   clock: ReturnType<typeof useGameClock>;
   /** JS: the applied input log (proof, ghosts, restore). */
   log: React.MutableRefObject<InputEntry[]>;
-  reset: (cfg: SimConfig, rivals?: Array<{ cfg: SimConfig; log: InputEntry[] } | null>) => void;
+  reset: (cfg: SimConfig, rivals?: Array<RivalSpec | null>) => void;
   setRunning: (on: boolean) => void;
   /** Queue an ext input (revive, pause_resume, line boost, draft) for the next step. */
   ext: (sub: number, arg: number) => void;
@@ -184,13 +196,14 @@ export function emptyRival(): RivalSlot {
 
 function emptyInput(): EngineInput {
   'worklet';
-  return { q: [], holding: false, startX: 0, startY: 0, startT: 0, slideFired: false, fingers: 0 };
+  return { q: [], holding: false, startX: 0, startY: 0, startT: 0, slideFired: false, fingers: 0, draftZone: 0, draftUsed: false };
 }
 
 export function useSharkyEngine(
   initial: SimConfig,
   onEvents: (batch: number[]) => void,
   autoplay = false,
+  autoSalt = 0,
 ): SharkyEngine {
   const sim = useSharedValue<SimState>(createSim(initial));
   const rivals = useSharedValue<RivalSlot[]>([emptyRival(), emptyRival(), emptyRival()]);
@@ -226,11 +239,44 @@ export function useSharkyEngine(
       if (autoplay && s.phase === PH_PLAY && s.step % 6 === 0) {
         const ty = botTargetY(s, (s.speed >> 8) + 120);
         const prefer = (s.y >> 8) > ty ? 1 : 0;
-        let c = planHold(s, 6, 12, 400, prefer);
+        // Per-device salt so two lab phones don't play identical races.
+        const pref = autoSalt > 0 && ((s.step / 6) | 0) % 7 === autoSalt % 7 ? 1 - prefer : prefer;
+        let c = planHold(s, autoSalt > 0 ? 7 : 6, 12, 400, pref);
         if (c < 0) c = prefer;
         if (c === 1 && !s.holding) inp.q.push(IN_PRESS, 0, 0);
         if (c === 0 && s.holding) inp.q.push(IN_RELEASE, 0, 0);
         if (s.boost >= 200 && s.dash === 0 && s.step % 240 === 0) inp.q.push(IN_DASH, 0, 0);
+      }
+      // Slipstream (design 10.4): 40-160u behind a rival, |dy| <= 90, for 300ms.
+      const rvs = rivals.value;
+      if ((s.mode === MODE_RACE || s.mode === MODE_GHOST) && s.phase === PH_PLAY) {
+        const du = s.dist >> 8;
+        const sy = s.y >> 8;
+        let zone = -1;
+        for (let j = 0; j < rvs.length; j++) {
+          const g = rvs[j];
+          if (!g || g.kind === 0) continue;
+          let rd = 0;
+          let ry = 500;
+          if (g.kind === 1 && g.sim) {
+            rd = g.sim.dist >> 8;
+            ry = g.sim.y >> 8;
+          } else {
+            rd = g.rDist + (g.rVel * (s.step - g.rAt)) / 60;
+            ry = g.rY;
+          }
+          const dx = rd - du;
+          if (dx >= 40 && dx <= 160 && ry - sy <= 90 && sy - ry <= 90) zone = j;
+          if (s.step % 6 === 0) pushEvent(r, BR_RIVALPOS, j, rd, ry, s.step);
+        }
+        inp.draftZone = zone >= 0 ? inp.draftZone + 1 : 0;
+        if (zone < 0) inp.draftUsed = false;
+        if (!s.draft && zone >= 0 && inp.draftZone >= 18 && !inp.draftUsed) {
+          inp.q.push(IN_EXT, EXT_DRAFT_ON, zone);
+          inp.draftUsed = true;
+        } else if (s.draft && zone < 0) {
+          inp.q.push(IN_EXT, EXT_DRAFT_OFF, 0);
+        }
       }
       // Apply queued inputs (encoded as groups of 3: kind, sub, arg).
       const q = inp.q;
@@ -274,12 +320,13 @@ export function useSharkyEngine(
     },
   });
 
-  const reset = useCallback((cfg: SimConfig, rv: Array<{ cfg: SimConfig; log: InputEntry[] } | null> = []) => {
+  const reset = useCallback((cfg: SimConfig, rv: Array<RivalSpec | null> = []) => {
     log.current = [];
     const slots: RivalSlot[] = [];
     for (let j = 0; j < MAX_RIVALS; j++) {
       const g = rv[j];
-      if (g) slots.push({ kind: 1, sim: createSim(g.cfg), log: g.log, k: 0, rDist: 0, rY: 500, rVel: 0, rAt: 0, done: 0 });
+      if (g && 'remote' in g) slots.push({ ...emptyRival(), kind: 2 });
+      else if (g) slots.push({ kind: 1, sim: createSim(g.cfg), log: g.log, k: 0, rDist: 0, rY: 500, rVel: 0, rAt: 0, done: 0 });
       else slots.push(emptyRival());
     }
     runOnUI((c: SimConfig, sl: RivalSlot[]) => {
