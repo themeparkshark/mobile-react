@@ -115,6 +115,8 @@ import {
   type CrewSeat,
 } from './race/raceSim';
 import { RivalStrip, type Racer } from './race/RivalStrip';
+import type { MemoryPartyBinding } from './race/partyBinding';
+import { RACE_MS, RACE_PLAY_AT } from './race/raceSim';
 
 const CARD_BACK = require('../../assets/games/memory/card-back.png');
 const STAMP = require('../../assets/games/memory/studio/match_stamp.png');
@@ -138,6 +140,8 @@ export interface MemoryGameProps {
   onQuit?: (resume: () => void) => void;
   /** Preserved external contract: onComplete(multiplier, meta). */
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
+  /** Live Line Party round (Memory Race). The party owns timing and results. */
+  party?: MemoryPartyBinding;
 }
 
 export const RIDE_TRIES = 3;
@@ -262,16 +266,19 @@ export default function MemoryGame({
   onClose,
   onQuit,
   onComplete,
+  party,
 }: MemoryGameProps) {
+  const partyRef = useRef(party);
+  partyRef.current = party;
   const devMode = typeof __DEV__ !== 'undefined' && __DEV__ ? (process.env.EXPO_PUBLIC_MEMORY_MODE as MemoryMode | undefined) : undefined;
-  const mode: MemoryMode = devMode ?? modeProp ?? (difficulty === 0 ? 'ride' : 'timeAttack');
+  const mode: MemoryMode = party ? 'race' : devMode ?? modeProp ?? (difficulty === 0 ? 'ride' : 'timeAttack');
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const movement = useContext(LinePlayMovementContext);
   const rideChallenge = useContext(RideChallengeContext);
   const deck: Deck = useMemo(() => deckById(deckId ?? deckIdForRideName(taskName)) ?? deckById('park')!, [deckId, taskName]);
   const baseSeed = useMemo(
-    () => (seed != null ? seed >>> 0 : (Math.random() * 0xffffffff) >>> 0),
+    () => (party ? party.seed >>> 0 : seed != null ? seed >>> 0 : (Math.random() * 0xffffffff) >>> 0),
     // A fresh seed each time the game opens without a server seed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visible, seed],
@@ -390,6 +397,8 @@ export default function MemoryGame({
   const gameNow = useCallback(() => {
     const r = runRef.current;
     if (!r) return 0;
+    const p = partyRef.current;
+    if (p) return Math.max(0, p.boardTime() ?? 0);
     const paused = r.pausedAt != null ? now() - r.pausedAt : 0;
     return Math.max(0, now() - r.t0 - r.pausedTotal - paused);
   }, []);
@@ -468,7 +477,7 @@ export default function MemoryGame({
   }, [faces, deck]);
 
   const buildRun = useCallback((opts: { runIndex: number; tryIndex: number; keep?: Run | null }) => {
-    const s = boardSeed(baseSeed, opts.runIndex * 16 + opts.tryIndex);
+    const s = partyRef.current ? baseSeed : boardSeed(baseSeed, opts.runIndex * 16 + opts.tryIndex);
     const deckSize = deck.symbols.length;
     let src: BoardSource;
     let eng: MMState;
@@ -485,8 +494,8 @@ export default function MemoryGame({
       const cfg = raceConfig();
       const local = createLocalBoard({ pairs: 8, deckSize, seed: s, golden: true }, deckSize);
       src = local;
-      eng = createEngine(cfg, { cols: 4, rows: 4, seed: s ^ 0x5bd1e995 });
-      const crew = crewFor(s);
+      eng = createEngine(cfg, { cols: 4, rows: 4, seed: partyRef.current ? s : s ^ 0x5bd1e995 });
+      const crew = partyRef.current ? [] : crewFor(s);
       race = {
         crew,
         runs: crew.map((c, i) => simulateCrew(s, i + 1, c, local.layout)),
@@ -639,8 +648,9 @@ export default function MemoryGame({
       fs.push(f);
     }
     setFaces((m) => ({ ...m, ...faceMap }));
-    send({ t: 'freeze', on: true, at: gameNow() });
-    send({ t: 'reveal', slots, faces: fs, at: gameNow() });
+    const g0 = r.mode === 'race' ? 0 : gameNow();
+    send({ t: 'freeze', on: true, at: g0 });
+    send({ t: 'reveal', slots, faces: fs, at: g0 });
     GameAudio.play('mm_glimpse');
     const cx = (g.cols - 1) / 2;
     const cy = (g.rows - 1) / 2;
@@ -653,8 +663,9 @@ export default function MemoryGame({
       later(60 + d * 18, () => cards.current[id]?.flipUp(FLIP_MS));
       later(60 + maxStep * 18 + FLIP_MS + hold + d * 18, () => cards.current[id]?.flipDown(FLIP_MS));
     }
-    later(60 + maxStep * 36 + FLIP_MS * 2 + hold, () => {
-      send({ t: 'freeze', on: false, at: gameNow() });
+    const endIn = r.mode === 'race' ? Math.max(0, RACE_PLAY_AT - gameNow()) : 60 + maxStep * 36 + FLIP_MS * 2 + hold;
+    later(endIn, () => {
+      send({ t: 'freeze', on: false, at: r.mode === 'race' ? Math.max(RACE_PLAY_AT, gameNow()) : gameNow() });
       after();
     });
   }, [gameNow, later, send]);
@@ -665,12 +676,13 @@ export default function MemoryGame({
     if (r.mode === 'timeAttack' || r.mode === 'race') {
       beginPlay();
       r.busy = true;
-      runGlimpse(() => {
+      const wait = Math.max(0, -(partyRef.current?.boardTime() ?? 0));
+      later(wait, () => runGlimpse(() => {
         const rr = runRef.current;
         if (rr) rr.busy = false;
-      });
+      }));
     } else beginPlay();
-  }, [beginPlay, runGlimpse]);
+  }, [beginPlay, later, runGlimpse]);
 
   const onPause = useCallback(() => {
     const r = runRef.current;
@@ -915,6 +927,14 @@ export default function MemoryGame({
     r.ended = true;
     r.playing = false;
     r.busy = true;
+    const live = partyRef.current;
+    if (live) {
+      // The server replays every board and finalizes the round; LineParty shows results.
+      GameAudio.music.stop(400);
+      stage.current?.pose(r.eng.status === 'cleared' ? 'coin' : 'idle');
+      live.onBoardDone();
+      return;
+    }
     const rc = r.race;
     const entries = raceEntries(r, at);
     const place = placements(entries);
@@ -994,6 +1014,14 @@ export default function MemoryGame({
   const raceTick = useCallback((r: Run, at: number) => {
     const rc = r.race;
     if (!rc || r.ended) return;
+    const live = partyRef.current;
+    if (live) {
+      live.reportProgress(r.eng.score, r.eng.chain);
+      const next = live.racers();
+      setRacers((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+      if (at >= RACE_MS + RACE_PLAY_AT) endRace(at);
+      return;
+    }
     // Crew clears and emotes.
     rc.runs.forEach((run, i) => {
       const f = frameAt(run, at);
@@ -1462,8 +1490,16 @@ export default function MemoryGame({
     const r = runRef.current;
     if (!r || !r.playing || r.busy || r.ended || r.pending || r.pausedAt != null || slot < 0) return;
     const e = r.eng;
-    const at = gameNow();
+    let at = gameNow();
     if (at < r.stumbleUntil) return;
+    const p = partyRef.current;
+    if (p) {
+      // The tap log is the proof: the server replays exactly these entries.
+      const heldNow = e.phase === 2 && e.up.indexOf(slot) >= 0;
+      const t = p.recordFlip(heldNow ? -1 : slot);
+      if (t == null) return;
+      at = t;
+    }
     let ev = send({ t: 'tick', at });
     if (ev.length) applyEvents(ev);
     if (e.status !== 'play') return;

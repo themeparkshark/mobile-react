@@ -85,3 +85,24 @@ test('engine attack: swaps two seen face-down cards, queues while a card is up, 
   assert.equal(s.know[sw.s1], E.K_SEEN);
   assert.equal(s.moved[sw.s1], 1);
 });
+
+test('Line Party: memory_race registers with the PartyClient and scores a tap log by engine replay', () => {
+  const stubs = {};
+  const P = loadTs('src/games/memory/race/partyGame.ts', stubs);
+  const net = loadTs('src/gamekit/net/PartyClient.ts');
+  // partyGame.ts imports its own copy of PartyClient in its realm; check the def itself.
+  assert.equal(P.memoryRaceParty.key, 'memory_race');
+  assert.equal(P.MEMORY_RACE_ROUND_MS, 46600);
+  assert.equal(net.partyGame('nope').key, 'bonk_race', 'unknown games fall back to Bonk Race');
+  net.registerPartyGame(P.memoryRaceParty);
+  assert.equal(net.partyGame('memory_race').key, 'memory_race');
+  // A crew seat's engine log, converted to party taps, replays to the same result.
+  const seed = 31337;
+  const layout = R.raceLayout(seed);
+  const run = R.simulateCrew(seed, 2, R.HOUSE_CREW[1], layout);
+  const taps = [];
+  for (let i = 0; i + 1 < run.log.length; i += 2) taps.push([run.log[i + 1], run.log[i]]);
+  const replay = P.replayRaceTaps(seed, taps);
+  assert.equal(replay.pairs, run.final.pairs);
+  assert.equal(net.partyGame('memory_race').score(seed, taps, []), replay.score);
+});

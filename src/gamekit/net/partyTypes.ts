@@ -46,7 +46,7 @@ export interface SeatResult extends Seat {
 export interface RoundSummary {
   id: string;
   round_no: number;
-  game: 'bonk_race';
+  game: 'bonk_race' | 'memory_race';
   sim_version: number;
   seed: number;
   start_at_ms: number;

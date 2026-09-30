@@ -15,6 +15,36 @@
  * replays each log against the shared seed, so a synced GO is presentation only.
  */
 import { buildTimeline, resolve, BONK_RACE_VERSION, type Spawn, type Tap } from '../../games/party/bonkRace';
+
+/**
+ * Party game registry (client side of app/Domains/Party/Games/PartyGames).
+ * A game supplies its local timeline and the score its tap log resolves to;
+ * the server replays the same log with its own port. Unknown keys fall back
+ * to Bonk Race so an older app never breaks on a newer room.
+ */
+export interface PartyGameDef {
+  key: string;
+  version: number;
+  timeline: (seed: number) => Spawn[];
+  score: (seed: number, taps: Tap[], spawns: Spawn[]) => number;
+}
+
+const PARTY_GAMES = new Map<string, PartyGameDef>([
+  ['bonk_race', {
+    key: 'bonk_race',
+    version: BONK_RACE_VERSION,
+    timeline: buildTimeline,
+    score: (seed, taps, spawns) => resolve(spawns.length ? spawns : buildTimeline(seed), taps).score,
+  }],
+]);
+
+export function registerPartyGame(def: PartyGameDef): void {
+  PARTY_GAMES.set(def.key, def);
+}
+
+export function partyGame(key: string | undefined | null): PartyGameDef {
+  return PARTY_GAMES.get(key ?? '') ?? PARTY_GAMES.get('bonk_race')!;
+}
 import { ClockSync } from './ClockSync';
 import type { EmoteEvent, EmoteId, EntryResponse, PartyApiError, ProgressWhisper, RoomSnapshot, RoundSummary } from './partyTypes';
 import {
@@ -79,6 +109,8 @@ export interface PartyClientOptions {
 
 export interface LocalRound {
   roundId: string;
+  /** Party game key (round.game); defaults to bonk_race. */
+  game?: string;
   roundNo: number;
   seed: number;
   spawns: Spawn[];
@@ -303,7 +335,7 @@ export class PartyClient {
       const alreadyIn = room.you?.round_id === round.id && room.you.submitted;
       if (late > MAX_LATE_START_MS || alreadyIn) {
         // Too late to play fairly inside the submit window: the ghost takes this one.
-        this.local = { roundId: round.id, roundNo: round.round_no, seed: round.seed, spawns: [], durationMs: round.duration_ms, goAt, lateStart: true, taps: [], ended: true, submitted: alreadyIn };
+        this.local = { roundId: round.id, game: round.game, roundNo: round.round_no, seed: round.seed, spawns: [], durationMs: round.duration_ms, goAt, lateStart: true, taps: [], ended: true, submitted: alreadyIn };
         if (!alreadyIn) void this.submit(true, 0);
         this.set({ ...this.state, ghostedRoundId: round.id });
         return;
@@ -313,7 +345,7 @@ export class PartyClient {
         lateStart = late > 0;
       }
       this.local = {
-        roundId: round.id, roundNo: round.round_no, seed: round.seed, spawns: buildTimeline(round.seed),
+        roundId: round.id, game: round.game, roundNo: round.round_no, seed: round.seed, spawns: partyGame(round.game).timeline(round.seed),
         durationMs: round.duration_ms, goAt, lateStart, taps: [], ended: false, submitted: false,
       };
       this.log('round scheduled', { round: round.round_no, inMs: Math.round(goAt - nowPerf), lateStart });
@@ -362,8 +394,8 @@ export class PartyClient {
       taps,
       partial,
       ...(partial ? { until_ms: untilMs } : {}),
-      client_score: partial ? null : resolve(r.spawns.length ? r.spawns : buildTimeline(r.seed), taps).score,
-      sim_version: BONK_RACE_VERSION,
+      client_score: partial ? null : partyGame(r.game).score(r.seed, taps, r.spawns),
+      sim_version: partyGame(r.game).version,
     };
     await this.opts.storage?.setItem(PENDING_KEY, JSON.stringify({ roundId: r.roundId, body, at: this.now() })).catch(() => {});
     for (let attempt = 0; attempt < 6 && !this.destroyed; attempt++) {
@@ -432,7 +464,7 @@ export class PartyClient {
     const room = this.state.room;
     if (!room || this.destroyed) return;
     const liveScore = this.local && !this.local.ended && this.state.connection !== 'live'
-      ? resolve(this.local.spawns, this.local.taps).score : undefined;
+      ? partyGame(this.local.game).score(this.local.seed, this.local.taps, this.local.spawns) : undefined;
     this.opts.http.post<{ room: RoomSnapshot }>(`/party/rooms/${room.id}/heartbeat`, liveScore !== undefined ? { live_score: liveScore } : {})
       .then(({ data }) => this.applyRoom(data.room))
       .catch((e) => this.handleError(e));

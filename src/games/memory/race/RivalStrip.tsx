@@ -17,7 +17,9 @@ export interface Racer {
   key: string;
   name: string;
   shark: keyof typeof SHARKS;
+  /** Pairs matched, or -1 when only a whispered score is known (live rivals). */
   pairs: number;
+  score?: number;
   chain: number;
   showtime: boolean;
   me: boolean;
@@ -28,7 +30,7 @@ export interface Racer {
 
 export function RivalStrip({ racers, total, reducedMotion }: { racers: Racer[]; total: number; reducedMotion: boolean }) {
   return (
-    <View style={styles.strip} accessible accessibilityLabel={racers.map((r) => `${r.name} ${r.pairs} of ${total}`).join(', ')}>
+    <View style={styles.strip} accessible accessibilityLabel={racers.map((r) => (r.pairs >= 0 ? `${r.name} ${r.pairs} of ${total}` : `${r.name} ${r.score ?? 0} points`)).join(', ')}>
       {racers.map((r, i) => <Token key={r.key} r={r} total={total} index={i} reducedMotion={reducedMotion} />)}
     </View>
   );
@@ -59,7 +61,9 @@ function Token({ r, total, index, reducedMotion }: { r: Racer; total: number; in
       <Image source={SHARKS[r.shark]} style={styles.shark} resizeMode="contain" />
       <View style={styles.meta}>
         <Text style={styles.name} numberOfLines={1}>{r.me ? 'YOU' : r.name}</Text>
-        <Text style={[styles.pairs, r.showtime && { color: MM.goldDeep }]}>{`${r.pairs}/${total}${r.chain >= 3 ? ' x2' : ''}`}</Text>
+        <Text style={[styles.pairs, r.showtime && { color: MM.goldDeep }]}>
+          {r.pairs >= 0 ? `${r.pairs}/${total}${r.chain >= 3 ? ' x2' : ''}` : `${r.score ?? 0}`}
+        </Text>
       </View>
       {r.emote ? (
         <Animated.View style={[styles.bubble, bst]}>

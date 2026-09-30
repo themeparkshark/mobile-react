@@ -22,6 +22,11 @@ import { buildLayout, makeRng, type Layout } from '../logic';
 
 export const RACE_MS = 45000;
 export const RACE_GLIMPSE_MS = 1000;
+/**
+ * Board time when play starts: the 1000ms glimpse plus its wave flips. Fixed so
+ * every phone, crew seat and the server replay freeze and unfreeze together.
+ */
+export const RACE_PLAY_AT = 1600;
 export const ATTACK_TELEGRAPH_MS = 1000;
 export const ATTACK_GAP_MS = 3000;
 export const ATTACK_SHIELD_MS = 5000;
@@ -90,7 +95,9 @@ function frameOf(s: MMState, at: number): RaceFrame {
 /** Everyone gets the same glimpse at the start of the round. */
 export function glimpseAll(s: MMState, layout: Layout): void {
   const slots = layout.faces.map((_, i) => i);
+  step(s, { t: 'freeze', on: true, at: 0 });
   step(s, { t: 'reveal', slots, faces: layout.faces.slice(), at: 0 });
+  step(s, { t: 'freeze', on: false, at: RACE_PLAY_AT });
 }
 
 /** Play a crew seat through the round with the engine. `delays` push the timeline back (attacks received). */
@@ -103,7 +110,7 @@ export function simulateCrew(seed: number, seatIndex: number, seat: CrewSeat, la
   for (let i = 0; i < s.n; i++) if (rng() > p.recall * 0.35) s.know[i] = 0;
   const frames: RaceFrame[] = [frameOf(s, 0)];
   const sends: number[] = [];
-  let t = RACE_GLIMPSE_MS;
+  let t = RACE_PLAY_AT;
   const pending = delays.slice().sort((a, b) => a - b);
   for (let guard = 0; guard < 400 && s.status === 'play'; guard++) {
     let half = Math.max(260, (p.turnMs + (rng() * 2 - 1) * p.jitterMs) / 2);
@@ -112,7 +119,7 @@ export function simulateCrew(seed: number, seatIndex: number, seat: CrewSeat, la
       half += GHOST_PUSHBACK_MS;
     }
     t += half;
-    if (t >= RACE_MS + RACE_GLIMPSE_MS) break;
+    if (t >= RACE_MS + RACE_PLAY_AT) break;
     step(s, { t: 'tick', at: t });
     if (s.status !== 'play') break;
     if (s.phase === 2) step(s, { t: 'dismiss', slot: -1, at: t });

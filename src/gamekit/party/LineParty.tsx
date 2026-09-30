@@ -24,6 +24,7 @@ import { usePartyState } from '../net/useParty';
 import { placementOf } from '../net/roomState';
 import type { EmoteId } from '../net/partyTypes';
 import BonkBoard from './BonkBoard';
+import MemoryRaceRound from '../../games/memory/race/MemoryRaceRound';
 import PartyLobby from './PartyLobby';
 import PartyResults from './PartyResults';
 import RaceStrip, { type RacerLine } from './RaceStrip';
@@ -78,7 +79,9 @@ function LineParty({ client, rideId, onExit, autoplay }: LinePartyProps) {
       body = <WrapUp reason={state.leftReason} onClose={onExit} />;
       break;
     default:
-      body = <Race client={client} autoplay={autoplay} onEmote={onEmote} />;
+      body = state.room?.round?.game === 'memory_race' && state.phase !== 'ghosting' && state.phase !== 'spectating'
+        ? <MemoryRaceRound client={client} state={state} />
+        : <Race client={client} autoplay={autoplay} onEmote={onEmote} />;
   }
 
   return (
