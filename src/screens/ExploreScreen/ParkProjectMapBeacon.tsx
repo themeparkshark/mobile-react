@@ -9,6 +9,45 @@ interface Props {
   readonly project: Pick<ParkProject,
     'id' | 'slug' | 'title' | 'stage' | 'play_chapter' | 'park_latitude' | 'park_longitude' | 'ended'>;
   readonly onPress: () => void;
+  /** Ride islands on the map; the beacon settles clear of them so no ride is hidden. */
+  readonly avoid?: readonly { readonly latitude: number; readonly longitude: number }[];
+}
+
+type Point = { latitude: number; longitude: number };
+const EARTH_M = 6_371_000;
+function metersBetween(a: Point, b: Point) {
+  const toRad = Math.PI / 180, dLat = (b.latitude - a.latitude) * toRad, dLng = (b.longitude - a.longitude) * toRad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.latitude * toRad) * Math.cos(b.latitude * toRad) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_M * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function offset(from: Point, meters: number, bearingDeg: number): Point {
+  const b = bearingDeg * Math.PI / 180;
+  return {
+    latitude: from.latitude + (meters * Math.cos(b)) / EARTH_M * (180 / Math.PI),
+    longitude: from.longitude + (meters * Math.sin(b)) / (EARTH_M * Math.cos(from.latitude * Math.PI / 180)) * (180 / Math.PI),
+  };
+}
+
+/**
+ * The beacon marks the park's story, not a ride, so it can move a little. When
+ * a ride island sits within `clear` meters (about one island width at park
+ * zoom), try rings of 8 bearings out to 3x that distance and take the first
+ * spot clear of every island; if none is clear, take the spot farthest from
+ * the nearest island.
+ */
+export function placeBeacon(center: Point, avoid: readonly Point[], clear = 70): Point {
+  const nearest = (point: Point) => avoid.reduce((min, ride) => Math.min(min, metersBetween(point, ride)), Infinity);
+  if (nearest(center) >= clear) return center;
+  let best = center, bestGap = nearest(center);
+  for (const ring of [1, 1.5, 2, 3]) {
+    for (let step = 0; step < 8; step += 1) {
+      const candidate = offset(center, clear * ring, step * 45);
+      const gap = nearest(candidate);
+      if (gap >= clear) return candidate;
+      if (gap > bestGap) { best = candidate; bestGap = gap; }
+    }
+  }
+  return best;
 }
 
 const PHASES = [
@@ -37,7 +76,7 @@ const STORY_APPEARANCES = {
 } as const;
 
 /** Decorative community-state beacon at the park's stored center, never a queue or pickup target. */
-export default function ParkProjectMapBeacon({ project, onPress }: Props) {
+export default function ParkProjectMapBeacon({ project, onPress, avoid = [] }: Props) {
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
   useEffect(() => {
     setTracksViewChanges(true);
@@ -58,7 +97,8 @@ export default function ParkProjectMapBeacon({ project, onPress }: Props) {
   const appearance = story ?? (stage >= 2 && project.play_chapter === 'b'
     ? OMEGA_PHASE : phase);
   const branch = project.stage >= 2 ? project.play_chapter : null;
-  const coordinate = { latitude, longitude };
+  const coordinate = placeBeacon({ latitude, longitude },
+    avoid.filter(ride => Number.isFinite(ride.latitude) && Number.isFinite(ride.longitude)));
   const size = 72 + stage * 5;
 
   return <>
@@ -72,6 +112,9 @@ export default function ParkProjectMapBeacon({ project, onPress }: Props) {
       <View style={[styles.beacon, { borderColor: appearance.color,
         backgroundColor: appearance.background, width: size, height: size, borderRadius: size / 2 }]}>
         <GameIcon name={branch === 'b' ? 'sparkle' : story?.symbol ?? phase.symbol} size={32} style={styles.symbol} />
+      </View>
+      {/* The label rides on its own white tag so map glyphs never print across it. */}
+      <View style={[styles.labelTag, { borderColor: appearance.background }]}>
         <Text style={styles.label}>{story?.label ?? phase.label}</Text>
       </View>
     </Marker>
@@ -83,5 +126,7 @@ const styles = StyleSheet.create({
     shadowColor: '#003b74', shadowOpacity: 0.35, shadowOffset: { width: 0, height: 4 },
     shadowRadius: 4, elevation: 5 },
   symbol: { marginBottom: 1 },
-  label: { color: '#ffdf4b', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8 },
+  labelTag: { alignSelf: 'center', marginTop: -12, backgroundColor: '#ffffff', borderWidth: 2, borderRadius: 9,
+    paddingHorizontal: 7, paddingVertical: 1 },
+  label: { color: '#0b3d70', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8 },
 });
