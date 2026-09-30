@@ -4,7 +4,7 @@ import config from '../config';
 import { classifyCoreLoopRequest } from '../services/telemetry/coreLoopEvents';
 import { addBreadcrumb, captureMessage } from '../services/telemetry';
 import { reportReachable, reportUnreachable } from '../services/connectivity';
-import { nextGetRetryDelay } from './getRetry';
+import { httpStatus, nextGetRetryDelay } from './getRetry';
 
 const client = axios.create({
   baseURL: config.apiUrl,
@@ -51,7 +51,9 @@ client.interceptors.response.use(
   },
   async (error: AxiosError) => {
     if (axios.isCancel(error)) return Promise.reject(error);
-    if (error.response) reportReachable();
+    // A status of 0 is React Native's "no response" (refused, dropped, offline).
+    const status = httpStatus(error);
+    if (status !== undefined) reportReachable();
     const config = error.config as RetryableConfig | undefined;
     const delay = nextGetRetryDelay(config, error);
     if (config && delay !== null) {
@@ -59,8 +61,8 @@ client.interceptors.response.use(
       await wait(delay);
       return client.request(config);
     }
-    if (!error.response) reportUnreachable();
-    recordCoreLoopResponse(config?.method, config?.url, error.response?.status);
+    if (status === undefined) reportUnreachable();
+    recordCoreLoopResponse(config?.method, config?.url, status);
     return Promise.reject(error);
   },
 );

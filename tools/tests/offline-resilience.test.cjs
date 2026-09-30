@@ -129,7 +129,8 @@ test('useAxiosSetup registers once, reads fresh callbacks and has no em dash toa
 test('the client reports reachability from real responses and retries GETs', () => {
   const source = read('src/api/client.ts');
   assert.match(source, /reportReachable\(\)/);
-  assert.match(source, /if \(!error\.response\) reportUnreachable\(\)/);
+  assert.match(source, /if \(status === undefined\) reportUnreachable\(\)/);
+  assert.doesNotMatch(source, /if \(!?error\.response\)/, "RN network errors carry a status-0 response");
   assert.match(source, /nextGetRetryDelay\(config, error\)/);
 });
 
@@ -172,4 +173,34 @@ test('client interceptor: a dropped GET is retried then succeeds; a dropped POST
   await assert.rejects(handlers.bad({ code: 'ERR_NETWORK', config: { method: 'post', url: '/me/task-attempts' } }));
   await assert.rejects(handlers.bad({ response: { status: 422 }, config: { method: 'post', url: '/x' } }));
   assert.deepEqual(JSON.parse(JSON.stringify(events)), [['request', 1], ['unreachable'], ['reachable']]);
+});
+
+test('React Native network errors (response with status 0) count as no response', async () => {
+  const { httpStatus } = loadTs('src/api/getRetry.ts');
+  const rnDropped = { code: 'ERR_NETWORK', response: { status: 0, data: undefined } };
+  assert.equal(httpStatus(rnDropped), undefined);
+  assert.equal(httpStatus({ response: { status: 422 } }), 422);
+  assert.equal(httpStatus(undefined), undefined);
+  assert.equal(nextGetRetryDelay({ method: 'get' }, rnDropped), GET_RETRY_DELAYS_MS[0], 'a dropped GET is retried');
+
+  const events = [];
+  let handlers = null;
+  const instance = {
+    defaults: { headers: { common: {} } },
+    interceptors: { response: { use: (ok, bad) => { handlers = { ok, bad }; } } },
+    request: async () => { throw new Error('unused'); },
+  };
+  const statuses = [];
+  loadTs('src/api/client.ts', {
+    axios: { create: () => instance, isCancel: () => false },
+    'expo-device': {},
+    '../config': { apiUrl: 'http://api.test/api' },
+    '../services/telemetry/coreLoopEvents': { classifyCoreLoopRequest: () => 'queue_play.complete' },
+    '../services/telemetry': { addBreadcrumb() {}, captureMessage: (_m, _l, extra) => statuses.push(extra.status) },
+    '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable') },
+    './getRetry': loadTs('src/api/getRetry.ts'),
+  }, { setTimeout: (fn) => { fn(); return 0; } });
+  await assert.rejects(handlers.bad({ ...rnDropped, config: { method: 'post', url: '/me/line-sessions/1/complete' } }));
+  assert.deepEqual(events, ['unreachable'], 'status 0 shows the offline banner instead of marking the API reachable');
+  assert.deepEqual(statuses, ['network']);
 });

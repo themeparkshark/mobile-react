@@ -9,6 +9,17 @@ export const GET_RETRY_DELAYS_MS = [700, 1800] as const;
 type RetryConfig = { method?: string; tpsRetryCount?: number; tpsNoRetry?: boolean };
 type RetryError = { code?: string; response?: { status?: number } };
 
+/**
+ * The HTTP status of a failed request, or undefined when no server answered.
+ * On React Native, axios reports a dropped or refused connection with a
+ * response object whose status is 0, so `error.response` alone does not mean
+ * the server replied.
+ */
+export function httpStatus(error: RetryError | undefined): number | undefined {
+  const status = error?.response?.status;
+  return typeof status === 'number' && status > 0 ? status : undefined;
+}
+
 export function nextGetRetryDelay(config: RetryConfig | undefined, error: RetryError): number | null {
   if (!config || config.tpsNoRetry) return null;
   const method = (config.method || 'get').toLowerCase();
@@ -17,7 +28,7 @@ export function nextGetRetryDelay(config: RetryConfig | undefined, error: RetryE
   if (attempt >= GET_RETRY_DELAYS_MS.length) return null;
   // A timeout already cost the player the full timeout; do not multiply it.
   if (error.code === 'ERR_CANCELED' || error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') return null;
-  const status = error.response?.status;
+  const status = httpStatus(error);
   const transient = status === undefined || status === 502 || status === 503 || status === 504;
   return transient ? GET_RETRY_DELAYS_MS[attempt] : null;
 }
