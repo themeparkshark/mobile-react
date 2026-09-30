@@ -24,8 +24,6 @@ import { deckIdForRideName } from '../../services/rideTheme';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { useCamera } from '../../gamekit/fx/useCamera';
-import { useFeel, type FeelDef } from '../../gamekit/feel';
-import { createFxGovernor, govHitStop } from '../../gamekit/core/fxGovernor';
 import { TIER_NAMES, TIER_SCALES } from '../../gamekit/core/perfTier';
 import { usePerfTier } from '../../gamekit/perf/usePerfTier';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
@@ -33,22 +31,20 @@ import { registerStudioAudio } from '../../gamekit/audio/studioLibrary';
 import { useGameMusic } from '../../gamekit/audio/useGameMusic';
 import { playHaptic } from '../../gamekit/Haptics';
 import { forEachEvent } from '../../gamekit/core/eventRing';
-import { createFlurry, flurryHit, flurryResolve, FLURRY_GROW, FLURRY_START, starsFor, nextStarGoal } from '../../gamekit/core/scoring';
+import { starsFor, nextStarGoal } from '../../gamekit/core/scoring';
 import { deriveRunSeed, mixSeed } from '../../gamekit/core/rng';
+import { useWhackCues, useWhackJuice, pickCue as pick } from './useWhackJuice';
 import { useWalkSense } from '../../gamekit/motion/useWalkSense';
 import { usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { ART_BOX, BOSS_ART, THEMED_SHARK_FRAMES, THEME_BOX, type WhackTheme } from './assets';
 import { buildBurst, walkOk, type Timeline, type WalkBoost } from './timeline';
 import {
-  E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_BREAK, E_BRUISER, E_BUTTER, E_COIN_BUBBLE, E_DECOY, E_DOUBLE, E_END,
-  E_ESCAPE, E_FEVER, E_FREEZE, E_HELMET, E_HIT, E_PUFF, E_RESUME, E_SPLAT, E_SPLAT_CLEAR, E_TELL, E_TIER, E_WHIFF, E_WIN,
-  NO_CARRY, createSim, type BurstCarry, type BurstResult,
+  E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_END, E_SPLAT, E_SPLAT_CLEAR, NO_CARRY, createSim, type BurstCarry, type BurstResult,
 } from './sim';
 import { buildProof, type WhackProofV2 } from './proof';
 import {
-  G_CRIT, G_GOOD, G_QUICK, K_ANGLER, K_BRUISER, K_GOLDEN,
-  RIDE_WIN_NOTCHES, RUN_STARS, TIER_AT, WALK_PCT_PER_M, burstCount, type Difficulty, type WhackFormat,
+  RIDE_WIN_NOTCHES, RUN_STARS, WALK_PCT_PER_M, burstCount, type Difficulty, type WhackFormat,
 } from './waves';
 import { A_CANDY, A_FADE, A_INK, A_SCAN, BOSS_NAMES } from './timeline';
 import { computeLayout, type BoardLayout } from './render/layout';
@@ -106,14 +102,9 @@ const LIFETIME_KEY = '@whack/lifetime_bursts';
 const PB_KEY = '@whack_a_shark/best';
 const pbKeyFor = (f: WhackFormat) => (f === 'ride' ? '@whack_a_shark/ride_best' : f === 'queue' ? PB_KEY : `@whack_a_shark/best_${f}`);
 const GOLD = '#ffcf3b';
-const CORAL = '#ff6b5c';
 
 type Phase = 'play' | 'finish' | 'breather' | 'done';
 
-function pick(...names: string[]): string {
-  for (const n of names) if (GameAudio.hasCue(n)) return n;
-  return names[names.length - 1];
-}
 
 function boxesFor(theme: WhackTheme): number[][] {
   const t = THEME_BOX[theme];
@@ -197,10 +188,6 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const runSeedRef = useRef(0);
   const bankedRef = useRef<BurstBanked[]>([]);
   const carryRef = useRef<BurstCarry>(NO_CARRY);
-  const liveScoreRef = useRef(0);
-  const streakRef = useRef(0);
-  const tierRef = useRef(0);
-  const flurry = useRef(createFlurry(900, 3));
   const interrupts = useRef<[number, number, string][]>([]);
   const pauseAt = useRef<{ wall: number; gt: number; reason: string } | null>(null);
   const tlRef = useRef<Timeline | null>(null);
@@ -243,31 +230,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   }, [format, duel, difficulty, theme, lifetime, baseSeed, ride, raid]);
 
   // ---------------------------------------------------------------- audio
-  const cues = useMemo(() => ({
-    bonk: pick('wh_bonk', 'fx.hit'), crit: pick('wh_crit', 'fx.hit'), whiff: pick('wh_whiff', 'ui.tap'), duck: pick('wh_duck', 'fx.whoosh'),
-    golden: pick('wh_golden_hit', 'fx.coin'), coinLayer: 'fx.coin', chomp: pick('sh_chomp', 'fx.nopeShort'), nope: 'fx.nopeShort',
-    helmet: pick('wh_helmet_clank', 'ui.confirm'), double: pick('wh_double', 'fx.reveal'), puff: pick('sh_puff_inflate', 'fx.whoosh'),
-    tier: pick('wh_tier', 'fx.reveal'), breakCue: pick('sh_combo_break', 'fx.nopeShort'), tally: pick('sh_tally', 'fx.coin'),
-    feverStart: pick('sh_fever_start', 'fx.reveal'), feverEnd: pick('sh_fever_end', 'fx.whoosh'), lookup: pick('sh_slide_up', 'ui.select'),
-    resume: pick('resume_tick', 'ui.select'), whistle: pick('sh_whistle', 'fx.whoosh'), tick: pick('ui_tick', 'ui.select'),
-    start: 'fx.reveal', pip: 'ui.select', coinTick: pick('coin_tick', 'fx.coin'), splat: pick('wh_ink_splat', 'fx.hit'),
-    inkWhistle: pick('wh_ink_whistle', 'fx.whoosh'), squeegee: pick('wh_squeegee', 'fx.whoosh'), fade: pick('wh_poof', 'fx.whoosh'),
-    scan: pick('wh_scan', 'ui.select'), bossHit: pick('bo_hit', 'fx.hit'), stingWin: pick('sting_whack_win', 'fx.reward'),
-    stingLose: pick('sting_whack_lose', 'fx.nope'), stingBoss: pick('sting_whack_boss_win', 'fx.reward'), blocked: pick('sh_shield_pop', 'fx.reveal'),
-    tells: [pick('wh_tell_finn', 'ui.select'), pick('wh_tell_golden', 'fx.reveal'), pick('wh_tell_angler', 'ui.select'), pick('wh_tell_helmet', 'ui.select'),
-      pick('wh_tell_twins', 'ui.select'), pick('wh_tell_sprinter', 'fx.whoosh'), pick('wh_tell_finn', 'ui.select'), pick('wh_tell_tentacle', 'ui.select'),
-      pick('wh_tell_bruiser', 'fx.hit')],
-    bossRoar: [pick('bo_enter_kraken', 'fx.reveal'), pick('bo_enter_ghost', 'fx.reveal'), pick('bo_enter_robo', 'fx.reveal')],
-    bossKo: [pick('bo_ko_kraken', 'fx.reward'), pick('bo_ko_ghost', 'fx.reward'), pick('bo_ko_robo', 'fx.reward')],
-  }), []);
-  useEffect(() => {
-    if (!visible) return;
-    if (__DEV__) GameAudio.setSfxEnabled(true);
-    void GameAudio.init().then(() => GameAudio.preload([
-      cues.bonk, cues.crit, cues.whiff, cues.duck, cues.golden, cues.chomp, cues.tier, ...cues.tells, cues.helmet, cues.double, cues.tally,
-      cues.feverStart, cues.lookup, cues.splat, cues.squeegee, cues.bossHit,
-    ])).catch(() => undefined);
-  }, [visible, cues]);
+  const cues = useWhackCues(visible);
 
   const shape = tl?.shape ?? 'b1';
   const bed = !visible || result ? null
@@ -289,186 +252,28 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   }, [walkMeters, walk.state]);
   const camera = useCamera({ width: field?.w ?? 390, height: field?.h ?? 700, timeScale: undefined, reducedMotion, walking: walk.walking });
 
-  // ---------------------------------------------------------------- feel table
-  const table = useMemo<Record<string, FeelDef>>(() => ({
-    late: { sfx: cues.bonk, ladder: true, spatial: true, haptic: 'lateHit', localStop: 45, burst: [{ emitter: 'bubbles', count: 3 }],
-      ring: { from: 8, to: 40, ms: 150 }, flyUp: { size: 'sm' } },
-    good: { sfx: cues.bonk, ladder: true, spatial: true, haptic: 'goodHit', localStop: 45, burst: [{ emitter: 'stars', count: 6 }],
-      ring: { from: 10, to: 70, ms: 180 }, flyUp: { size: 'md' } },
-    quick: { prio: 1, sfx: cues.bonk, ladder: true, spatial: true, haptic: 'quickHit', localStop: 65,
-      burst: [{ emitter: 'impact' }, { emitter: 'splash', count: 10 }], ring: { color: GOLD, from: 12, to: 80, ms: 200 },
-      bloom: { radius: 80, peak: 0.6, ms: 160 }, flyUp: { size: 'lg', color: GOLD } },
-    crit: { prio: 2, sfx: cues.crit, spatial: true, haptic: 'crit', localStop: 90,
-      burst: [{ emitter: 'impact', size: 1.4 }, { emitter: 'sparks' }, { emitter: 'splash', count: 8 }],
-      ring: { color: GOLD, from: 14, to: 110, ms: 240 }, bloom: { radius: 110, peak: 0.85, ms: 220 }, flyUp: { size: 'lg', color: '#ffe07a' } },
-    golden: { prio: 5, sfx: cues.golden, haptic: 'golden', hitStop: 110, hitStopSim: true, forceStop: true, slowMo: [0.35, 280, 120], punch: 0.03,
-      burst: [{ emitter: 'speedLines', count: 12 }, { emitter: 'coins', count: 16, magnet: true }, { emitter: 'sparkles' }],
-      vignette: { color: GOLD, peak: 0.35, inMs: 40, holdMs: 60, outMs: 260 }, flyUp: { size: 'xl', color: GOLD }, duckDb: 6 },
-    angler: { sfx: cues.chomp, haptic: 'punish', localStop: 90, shake: 0.25, burst: [{ emitter: 'bubbles', count: 8, color: 0xffff6b5c }],
-      vignette: { color: CORAL, peak: 0.3, inMs: 20, holdMs: 0, outMs: 200 }, flyUp: { size: 'md', color: CORAL } },
-    helmet: { sfx: cues.helmet, haptic: 'quickHit', localStop: 60, burst: [{ emitter: 'sparks', count: 4 }], flyUp: { size: 'sm' } },
-    double: { sfx: cues.double, haptic: 'crit', localStop: 80, burst: [{ emitter: 'bubbles', count: 8 }, { emitter: 'stars', count: 6 }],
-      flyUp: { size: 'lg', color: '#7fd6ff' } },
-    whiff: { sfx: cues.whiff, volume: 0.35, burst: [{ emitter: 'puff', count: 4 }] },
-    butter: { sfx: cues.breakCue, haptic: 'comboBreak', flyUp: { size: 'md', color: CORAL } },
-    escape: { sfx: cues.duck, volume: 0.55, spatial: true, burst: [{ emitter: 'bubbles', count: 4 }] },
-    tierUp: { sfx: cues.tier, ladder: true, haptic: 'tierUp', burst: [{ emitter: 'confetti', count: 16 }] },
-    comboBreak: { sfx: cues.breakCue, haptic: 'comboBreak' },
-    fever: { prio: 4, sfx: cues.feverStart, haptic: 'feverStart', hitStop: 80, hitStopSim: true, forceStop: true, flash: { color: '#ffffff', peak: 0.4, ms: 160 },
-      burst: [{ emitter: 'speedLines', count: 16 }, { emitter: 'confetti', count: 26 }],
-      vignette: { color: GOLD, peak: 0.28, inMs: 120, holdMs: 6600, outMs: 300 }, flyUp: { size: 'xl', color: GOLD } },
-    feverEnd: { sfx: cues.feverEnd },
-    bossHit: { sfx: cues.bossHit, haptic: 'quickHit', shake: 0.3 },
-    bossDown: { prio: 6, force: true, haptic: 'ko', hitStop: 160, hitStopSim: true, forceStop: true, slowMo: [0.3, 500, 200], shake: 0.8, punch: 0.05,
-      burst: [{ emitter: 'confetti', count: 60 }, { emitter: 'coins', count: 24, magnet: true }], flash: { color: '#ffffff', peak: 0.35, ms: 200 },
-      flyUp: { size: 'xl', color: GOLD } },
-    splat: { sfx: cues.splat, haptic: 'lateHit', burst: [{ emitter: 'ink', count: 8 }] },
-    squeegee: { sfx: cues.squeegee, haptic: 'tick', burst: [{ emitter: 'splash', count: 6 }] },
-    coinBubble: { sfx: cues.coinLayer, haptic: 'tick', burst: [{ emitter: 'coins', count: 4, magnet: true }], flyUp: { size: 'sm', color: GOLD } },
-    tellGolden: { sfx: cues.tells[1], volume: 0.8, spatial: true, haptic: 'goldenTell', tell: true, burst: [{ emitter: 'sparkles', count: 6 }] },
-    tellAngler: { sfx: cues.tells[2], volume: 0.8, spatial: true, haptic: 'anglerTell', tell: true },
-  }), [cues]);
-  const clockRef = useRef<ReturnType<typeof useWhackRuntime>['clock'] | null>(null);
-  // One governor per game: stacked goldens, fever and boss beats read as one big moment, never a strobe.
-  const governor = useMemo(() => createFxGovernor({ calm: reducedMotion || walk.walking }), [reducedMotion, walk.walking]);
-  const feel = useFeel(table, { fx, camera, clock: null, width: field?.w ?? 390, calm: reducedMotion || walk.walking, governor });
-
   // ---------------------------------------------------------------- sim events (JS)
   const onEventsRef = useRef<(batch: number[]) => void>(() => undefined);
   const onEvents = useCallback((batch: number[]) => onEventsRef.current(batch), []);
   const runtime = useWhackRuntime({ geo, boxes, onEvents });
-  clockRef.current = runtime.clock;
   const bossFx = useSharedValue({ rise: 0, flinch: 0, flash: 0, ghost: 1, sink: 0 });
   const pace = useSharedValue(0);
-
-  const holeXY = (h: number) => {
-    const G = Lref.current;
-    if (!G) return { x: 0, y: 0 };
-    return { x: G.cx[h], y: G.my[h] - G.spriteH[h] * 0.7 };
-  };
-  const HUD = useMemo(() => ({ x: (field?.w ?? 390) - 50, y: 40 }), [field?.w]);
-
-  const fireHitFeel = (name: string, h: number, text: string | undefined, step: number, extra: Record<string, unknown> = {}) => {
-    const p = holeXY(h);
-    const clock = clockRef.current;
-    const def = table[name];
-    feel(name, { ...p, slot: h, step, text, magnetTo: HUD, dx: 0, dy: -1, ...extra });
-    // Local hit-stop and global freezes go straight to the Bonk Rush clock.
-    if (clock && def) {
-      if (def.localStop) clock.localStop(h, reducedMotion ? Math.min(40, def.localStop) : def.localStop);
-      if (def.hitStop) {
-        const want = reducedMotion ? Math.min(60, def.hitStop) : def.hitStop;
-        const ms = govHitStop(governor, Date.now(), want, def.prio ?? 0, !!def.forceStop);
-        if (ms > 0) clock.hitStop(ms, { holdSim: def.hitStopSim, force: def.forceStop });
-      }
-      if (def.slowMo && !reducedMotion) clock.slowMo(def.slowMo[0], def.slowMo[1], def.slowMo[2]);
-    }
-  };
+  // The shared Bonk Rush feel layer (tells, grades, crits, goldens, flurry, tiers, fever).
+  const juice = useWhackJuice({
+    fx, camera, cues, runtime, layout: Lref, width: field?.w ?? 390, reducedMotion, walking: walk.walking, onFever: setFever,
+  });
+  const feel = juice.fire;
+  const HUD = juice.hud;
+  const holeXY = juice.holeXY;
+  const liveScoreRef = juice.liveScore;
 
   const bumpShellScore = useRef(0);
   onEventsRef.current = (batch) => {
     const G = Lref.current;
     const now = Date.now();
     forEachEvent(batch, (kind, a, b, c) => {
+      if (juice.handle(kind, a, b, c, now)) return;
       switch (kind) {
-        case E_TELL: {
-          const h = a;
-          const k = b;
-          const col = h % 3;
-          const row = Math.floor(h / 3);
-          const pan = (col - 1) * 0.6;
-          const pitch = row === 0 ? 4 : row === 2 ? -3 : 0;
-          if (k === K_GOLDEN) feel('tellGolden', { ...holeXY(h) });
-          else if (k === K_ANGLER) feel('tellAngler', { ...holeXY(h) });
-          else GameAudio.play(cues.tells[k] ?? cues.tells[0], { pan, pitch, volume: 0.55 });
-          if (k === K_BRUISER) playHaptic('lateHit', { tell: true });
-          break;
-        }
-        case E_HIT: {
-          const h = a;
-          const grade = b % 10;
-          const k = Math.floor(b / 10);
-          const pts = c;
-          liveScoreRef.current += pts;
-          streakRef.current += 1;
-          const step = Math.max(0, streakRef.current - TIER_AT[tierRef.current]) % 8;
-          const fl = flurryHit(flurry.current, now, pts);
-          const quiet = fl === FLURRY_GROW || (fl === FLURRY_START && flurry.current.hits > 2);
-          if (k === K_GOLDEN) {
-            fireHitFeel('golden', h, `GOLDEN! +${pts}`, step);
-            GameAudio.play(cues.coinLayer, { volume: 0.8 });
-          } else if (grade === G_CRIT) {
-            fireHitFeel('crit', h, quiet ? undefined : `CRIT! +${pts}`, step);
-            GameAudio.play(cues.bonk, { volume: 0.7 });
-          } else if (grade === G_QUICK) fireHitFeel('quick', h, quiet ? undefined : `QUICK +${pts}`, step);
-          else if (grade === G_GOOD) fireHitFeel('good', h, quiet ? undefined : `+${pts}`, step);
-          else fireHitFeel('late', h, quiet ? undefined : `+${pts}`, step);
-          if (quiet && G) fx.current?.flyUp(`${flurry.current.hits} HITS +${flurry.current.points}`, G.w / 2, G.topH * 0.62, { size: 'md', color: '#ffe07a', key: 'flurry' });
-          break;
-        }
-        case E_BRUISER: {
-          liveScoreRef.current += c;
-          streakRef.current += 1;
-          fireHitFeel(b <= 0 ? 'crit' : 'good', a, b <= 0 ? `KNOCKOUT! +${c}` : `+${c}`, streakRef.current % 8);
-          break;
-        }
-        case E_WHIFF:
-          feel('whiff', { ...holeXY(a) });
-          break;
-        case E_BUTTER:
-          feel('butter', { ...holeXY(a), text: 'BUTTERFINGERS!' });
-          break;
-        case E_DECOY:
-          liveScoreRef.current += c;
-          fireHitFeel('angler', a, `${c}`, 0);
-          GameAudio.play(cues.nope, { volume: 0.7 });
-          break;
-        case E_COIN_BUBBLE:
-          liveScoreRef.current += b;
-          fireHitFeel('coinBubble', a, `+${b}`, 0);
-          break;
-        case E_ESCAPE:
-          feel('escape', { ...holeXY(a) });
-          if (c === 1 && streakRef.current >= 3) fx.current?.flyUp('MISS', holeXY(a).x, holeXY(a).y, { size: 'sm', color: '#dbe6f0' });
-          break;
-        case E_HELMET:
-          liveScoreRef.current += b;
-          fireHitFeel('helmet', a, `+${b}`, 0);
-          break;
-        case E_DOUBLE: {
-          liveScoreRef.current += c;
-          const p1 = holeXY(a);
-          const p2 = holeXY(b);
-          feel('double', { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2, text: 'DOUBLE BONK!' });
-          break;
-        }
-        case E_TIER:
-          tierRef.current = a;
-          if (G) feel('tierUp', { x: G.w / 2, y: 48, step: a - 1 });
-          break;
-        case E_BREAK:
-          if (a >= 5) feel('comboBreak');
-          streakRef.current = 0;
-          tierRef.current = 0;
-          break;
-        case E_FEVER:
-          if (a === 1) {
-            setFever(true);
-            if (G) feel('fever', { x: G.w / 2, y: G.topH + (G.h - G.topH) * 0.35, text: 'FEVER!' });
-          } else {
-            setFever(false);
-            feel('feverEnd');
-          }
-          break;
-        case E_FREEZE:
-          GameAudio.play(cues.lookup, { volume: 0.5 });
-          GameAudio.music.setState('muffled', 200);
-          break;
-        case E_RESUME:
-          playHaptic('tick');
-          GameAudio.play(cues.resume, { volume: 0.6 });
-          GameAudio.music.setState('open', 300);
-          break;
         case E_ATTACK: {
           if (a === A_INK || a === A_CANDY) {
             GameAudio.play(cues.inkWhistle, { pan: ((b % 3) - 1) * 0.6, volume: 0.8 });
@@ -524,14 +329,6 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           flash('BOSS BONKED!', 'VICTORY LAP!', GOLD, 1600);
           break;
         }
-        case E_PUFF:
-          feel('whiff', { ...holeXY(a) });
-          GameAudio.play(cues.puff, { volume: 0.7 });
-          playHaptic('lateHit');
-          break;
-        case E_WIN:
-          GameAudio.play('fx.reward');
-          break;
         case E_END:
           void onBurstEnd(a === 1);
           break;
@@ -553,7 +350,6 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     let lastPip = -1;
     const iv = setInterval(() => {
       const now = Date.now();
-      if (flurryResolve(flurry.current, now)) GameAudio.play(cues.tally, { volume: 0.8 });
       if (phase !== 'play') return;
       void runtime.mirror().then((m) => {
         const t = tlRef.current;
@@ -582,11 +378,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     tlRef.current = t;
     setTl(t);
     setBurstIdx(bi);
-    liveScoreRef.current = 0;
-    flurry.current = createFlurry(900, 3);
     splatHint.current = false;
     const sim = createSim(t, carryRef.current);
-    streakRef.current = carryRef.current.streak;
+    juice.reset(carryRef.current.streak);
     setFever(carryRef.current.feverLeft > 0 && t.fever);
     bossFx.value = { rise: 0, flinch: 0, flash: 0, ghost: 1, sink: 0 };
     setPhase('play');
