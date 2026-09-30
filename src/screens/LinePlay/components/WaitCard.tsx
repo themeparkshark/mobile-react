@@ -178,7 +178,7 @@ export default function WaitCard({
           <Image source={require('../../../../assets/images/water_background.png')}
             style={styles.art} resizeMode="cover" />
         )}
-        <LinearGradient colors={['rgba(7,104,185,0.35)', 'rgba(5,52,110,0.92)']} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={['rgba(8,121,202,0.3)', 'rgba(7,104,185,0.9)']} style={StyleSheet.absoluteFill} />
       </View>
 
       <View style={[styles.content, compact && styles.compactContent]}>

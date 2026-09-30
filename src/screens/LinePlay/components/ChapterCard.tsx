@@ -9,7 +9,8 @@
  */
 import { useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown, ReduceMotion } from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import useUiReducedMotion from '../../../ui/useUiReducedMotion';
 import type { LinePlayChapter } from '../../../services/lineplay/chapters';
 import { crewRelayEpilogue, type CrewRelayProgress } from '../../../services/lineplay/crewRelay';
 import type { ChapterClue } from '../../../services/lineplay/chapterClue';
@@ -27,11 +28,15 @@ interface Props {
   readonly onChooseMission: (id: string) => void;
 }
 
-const rise = (index: number) => FadeInDown.delay(60 + index * 70).springify().damping(15)
-  .reduceMotion(ReduceMotion.System);
+// Reduced motion: no entering animation at all. (A springified entering
+// with the System reduce-motion mode left the blocks invisible on iOS with Reduce
+// Motion on.)
+const riseFor = (reduced: boolean) => (index: number) => reduced ? undefined
+  : FadeInDown.delay(60 + index * 70).springify().damping(15);
 
 export default function ChapterCard({ chapter, completedIds, crewRelay, chapterClue = null, paused, signalAvailable = false, onChooseMission }: Props) {
   const [storyOpen, setStoryOpen] = useState(false);
+  const rise = riseFor(useUiReducedMotion());
   const epilogue = crewRelay ? crewRelayEpilogue(crewRelay, chapter.relay.epilogues) : null;
   const epilogueDone = epilogue ? completedIds.has(`${chapter.id}-route-${epilogue.route}`) : false;
   const missionIds = [

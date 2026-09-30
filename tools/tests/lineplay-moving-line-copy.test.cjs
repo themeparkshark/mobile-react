@@ -76,3 +76,15 @@ test('memory finales never promise turns the game does not have', () => {
   }
   assert.ok(memoryFinales >= 8);
 });
+
+// Regression (sim, Reduce Motion on): a springified entering animation with
+// ReduceMotion.System left the chapter page blank. LinePlay entering
+// animations are skipped outright under reduced motion instead.
+test('LinePlay entering animations never rely on ReduceMotion.System', () => {
+  const offenders = walk('src/screens/LinePlay').filter(file =>
+    /ReduceMotion\.System/.test(fs.readFileSync(path.join(root, file), 'utf8')));
+  assert.deepEqual(offenders, []);
+  const chapterCard = fs.readFileSync(path.join(root, 'src/screens/LinePlay/components/ChapterCard.tsx'), 'utf8');
+  assert.match(chapterCard, /useUiReducedMotion\(\)/);
+  assert.match(chapterCard, /reduced \? undefined/);
+});
