@@ -73,6 +73,12 @@ export interface LayoutOptions {
   seed: number;
   golden?: boolean;
   gull?: boolean;
+  /**
+   * Daily Deck: picks which deck faces appear from this seed instead of `seed`
+   * (the same faces for everyone that day), while `seed` still shuffles the
+   * positions per player.
+   */
+  faceSeed?: number;
 }
 
 export interface Layout {
@@ -94,7 +100,7 @@ export function buildLayout(opts: LayoutOptions): Layout {
   const need = Math.max(0, opts.pairs - specials.length);
   const pool: number[] = [];
   for (let i = 0; i < opts.deckSize; i++) pool.push(i);
-  shuffleInPlace(pool, rng);
+  shuffleInPlace(pool, opts.faceSeed != null ? makeRng(opts.faceSeed) : rng);
   const deckFaces = pool.slice(0, Math.min(need, pool.length));
   const pairsFaces = [...deckFaces, ...specials];
   const faces = shuffleInPlace([...pairsFaces, ...pairsFaces], rng);
