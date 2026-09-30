@@ -19,7 +19,7 @@
 
 import { mulberry32 } from '../core/generate';
 import { decodeTouches } from '../core/proof';
-import { createJudge, finishJudge, judgeDown, judgeMove, judgeTick, judgeUp, type JudgeConfig, type JudgeState } from '../core/judge';
+import { accuracyPct, createJudge, finishJudge, judgeDown, judgeMove, judgeTick, judgeUp, type JudgeConfig, type JudgeState } from '../core/judge';
 import { scriptHuman, type TouchEv } from '../core/sim';
 import { J_GOOD, J_SHARP, type Chart } from '../core/types';
 import type { GhostRun } from '../meta/progress';
@@ -34,6 +34,8 @@ export interface Rival {
   /** Cumulative score at the end of each playable bar. */
   barScores: number[];
   finalScore: number;
+  /** Layer-normalised accuracy (0-100): what a Drum-Off is decided on (design 11.2). */
+  accuracy: number;
 }
 
 export const CREW = [
@@ -81,20 +83,25 @@ export function ghostRival(chart: Chart, ghost: GhostRun, id: string, color: str
   if (ghost.seed !== chart.seed) return null;
   const touches = decodeTouches(ghost.touches).map((x) => ({ t: x.t, type: x.type, zone: x.zone, pid: x.pid, y: x.y }));
   const { s, barScores } = playRival(chart, touches, { autoFever: ghost.autoFever ?? autoFever, marchBars: ghost.marchBars });
-  return { id, name: ghost.name, color, isGhost: true, hitT: hitsOf(s), barScores, finalScore: s.score };
+  return { id, name: ghost.name, color, isGhost: true, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s) };
 }
 
 export function botRival(chart: Chart, bot: (typeof CREW)[number], seed: number, autoFever: boolean): Rival {
   const script = scriptHuman(chart, { sigmaMs: bot.sigma, lapse: bot.lapse, zoneSlip: 0.02 }, seed);
   const { s, barScores } = playRival(chart, script, { autoFever: true, forceMarch: 0 });
   void autoFever;
-  return { id: bot.id, name: bot.name, color: bot.color, isGhost: false, hitT: hitsOf(s), barScores, finalScore: s.score };
+  return { id: bot.id, name: bot.name, color: bot.color, isGhost: false, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s) };
 }
 
 /**
  * The round's drumline: the challenge ghost first, then your PB ghost when it
  * was set on this exact seed, then house crew up to 3 rivals.
  */
+/** Drum-Off place: decided on layer-normalised accuracy, so marching never loses a duel. */
+export function drumOffPlace(myAccuracy: number, rivals: Rival[]): number {
+  return 1 + rivals.filter((r) => r.accuracy > myAccuracy).length;
+}
+
 export function crewForRound(
   chart: Chart,
   plan: { seed: number; autoFever: boolean },

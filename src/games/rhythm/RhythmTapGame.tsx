@@ -71,13 +71,13 @@ import {
   judgeMove,
   judgeTick,
   judgeUp,
+  noteActive,
   voidAround,
   type JudgeState,
 } from './core/judge';
 import { buildProof } from './core/proof';
 import { autoTuneOffset, summarize, type RoundSummary } from './core/score';
-import { scriptHuman } from './core/sim';
-import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP, K_BIG, K_CYMBAL, K_RIM, L_MARCH, STAR_ACCURACY, type Chart, type Difficulty, type RoundFormat } from './core/types';
+import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP, K_BIG, K_CYMBAL, K_FREEZE, K_POPPER, K_RIM, K_ROLL, L_MARCH, STAR_ACCURACY, type Chart, type Difficulty, type RoundFormat } from './core/types';
 import { createDrawList, layoutFrame, beatAt } from './field/layout';
 import { ParadeField, fieldGeom, zoneOfX } from './field/ParadeField';
 import { applyEventsUI, createView, showRibbon, stepView, RB_MARCH, RB_READY, type ParadeView } from './field/view';
@@ -94,7 +94,7 @@ import {
   type ParadeProgress,
 } from './meta/progress';
 import { RIDE_STAGES, STAGES, type StageId } from './stages';
-import { crewForRound, type Rival } from './multiplayer/drumline';
+import { crewForRound, drumOffPlace, type Rival } from './multiplayer/drumline';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const HEADER_H = 113;
@@ -243,7 +243,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const rivalHitT = useSharedValue<number[][]>([]);
   const rivalHitK = useSharedValue<number[]>([]);
   const lastBarSv = useSharedValue(-1);
-  const auto = useSharedValue<{ t: number[]; type: number[]; zone: number[]; pid: number[]; i: number }>({ t: [], type: [], zone: [], pid: [], i: 0 });
+  const auto = useSharedValue<{ err: number[]; skip: number[]; i: number; relT: number[]; relP: number[]; popLast: number }>({ err: [], skip: [], i: 0, relT: [], relP: [], popLast: 0 });
 
   // -- Audio ------------------------------------------------------------------------
   const song = useRef<SongPlayer | null>(null);
@@ -322,10 +322,22 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     railFlash.value = [-1e9, -1e9, -1e9];
 
     if (AUTOPLAY_SIGMA > 0) {
-      const sc = scriptHuman(chart, { sigmaMs: AUTOPLAY_SIGMA, lapse: 0.015 }, plan.seed);
-      auto.value = { t: sc.map((x) => x.t), type: sc.map((x) => x.type), zone: sc.map((x) => x.zone), pid: sc.map((x) => x.pid), i: 0 };
+      // Per-note timing error (Gaussian) and lapses; the drummer reads whichever layer is live.
+      const err: number[] = [];
+      const skip: number[] = [];
+      let r = plan.seed || 1;
+      const rnd = () => {
+        r = (Math.imul(r, 1103515245) + 12345) >>> 0;
+        return (r >>> 8) / 16777216;
+      };
+      for (let i = 0; i < chart.t.length; i++) {
+        const g = Math.sqrt(-2 * Math.log(Math.max(1e-6, rnd()))) * Math.cos(2 * Math.PI * rnd());
+        err.push(g * AUTOPLAY_SIGMA);
+        skip.push(rnd() < 0.015 ? 1 : 0);
+      }
+      auto.value = { err, skip, i: 0, relT: [], relP: [], popLast: 0 };
     } else {
-      auto.value = { t: [], type: [], zone: [], pid: [], i: 0 };
+      auto.value = { err: [], skip: [], i: 0, relT: [], relP: [], popLast: 0 };
     }
     const player = new SongPlayer(plan.songSrc, plan.feverSrc);
     song.current = player;
@@ -528,20 +540,43 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       v.now = vnow;
       s.walking = walkingSv.value;
       if (FAKE_WALK) s.walking = Math.floor(beatAt(beatsSv.value, vnow + 3000) / 16) % 2;
-      // Dev autoplay: feed the scripted drummer's touches.
+      // Dev autoplay: a scripted drummer plays whichever layer is live.
       const ap = auto.value;
-      while (ap.i < ap.t.length && ap.t[ap.i] <= vnow) {
-        const k = ap.i++;
-        if (ap.type[k] === 0) {
-          const z = ap.zone[k];
+      if (ap.err.length) {
+        while (ap.i < s.n && s.t[ap.i] + ap.err[ap.i] <= vnow) {
+          const i = ap.i++;
+          const k = s.kind[i];
+          if (ap.skip[i] || k === K_FREEZE || k === K_POPPER || !noteActive(s, i)) continue;
+          const t = s.t[i] + ap.err[i];
+          const z = k === K_RIM ? (i % 2 ? 1 : 2) : 0;
           v.touchZone = z;
           v.touchX = z === 1 ? SCREEN_W * 0.15 : z === 2 ? SCREEN_W * 0.85 : SCREEN_W * 0.5;
           v.touchY = geom.touchTop + 80;
           const hadArmed = s.armed;
-          judgeDown(s, ap.t[k], z, ap.pid[k], 700);
-          if (hadArmed) judgeDown(s, ap.t[k] + 14, 0, 90000 + k, 700);
-        } else if (ap.type[k] === 1) judgeUp(s, ap.t[k], ap.pid[k]);
-        else judgeMove(s, ap.t[k], ap.pid[k], 660);
+          judgeDown(s, t, z, 1000 + i, 700);
+          if (k === K_BIG || hadArmed) judgeDown(s, t + 14, 0, 50000 + i, 700);
+          if (k === K_CYMBAL) judgeMove(s, t + 50, 1000 + i, 650);
+          ap.relT.push(k === K_ROLL ? s.end[i] + 5 : t + 70);
+          ap.relP.push(1000 + i);
+          if (k === K_BIG || hadArmed) {
+            ap.relT.push(t + 80);
+            ap.relP.push(50000 + i);
+          }
+        }
+        for (let q = ap.relT.length - 1; q >= 0; q--) {
+          if (ap.relT[q] <= vnow) {
+            judgeUp(s, ap.relT[q], ap.relP[q]);
+            ap.relT.splice(q, 1);
+            ap.relP.splice(q, 1);
+          }
+        }
+        for (let i = s.cursor; i < s.n && s.t[i] <= vnow; i++) {
+          if (s.kind[i] === K_POPPER && s.res[i] === 0 && vnow <= s.end[i] && vnow - ap.popLast > 105) {
+            ap.popLast = vnow;
+            judgeDown(s, vnow, 0, 70000 + Math.floor(vnow), 700);
+            judgeUp(s, vnow + 1, 70000 + Math.floor(vnow));
+          }
+        }
       }
       judgeTick(s, vnow);
       // March visuals switch on the bar line of a March bar.
@@ -714,7 +749,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         { label: sum.steadinessLabel, value: String(sum.steadiness) },
         { label: 'Timing', value: sum.timingWords.replace("You're ", '') },
         ...(sum.marchBars.length ? [{ label: 'Marching', value: `${sum.marchBars.length} bars` }] : []),
-        ...(rivals.current.length ? [{ label: 'Drum-Off', value: placeText(sum.score, rivals.current) }] : []),
+        ...(rivals.current.length ? [{ label: 'Drum-Off', value: placeText(sum.accuracy, rivals.current) }] : []),
       ],
       meta: {
         // Legacy proof fields (TaskGameProofService today).
@@ -867,7 +902,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
               {rivals.current.map((r, i) => (
                 <View key={r.id} style={[styles.rivalChip, { borderColor: r.color }]}>
                   <Text style={styles.rivalName} numberOfLines={1}>{r.name}</Text>
-                  <Text style={styles.rivalScore}>{r.finalScore.toLocaleString()}</Text>
+                  <Text style={styles.rivalScore}>{`${Math.round(r.accuracy)}%`}</Text>
                   {void i}
                 </View>
               ))}
@@ -908,8 +943,8 @@ function DeltaChip({ bar, myScore, ghost }: { bar: number; myScore: number; ghos
   );
 }
 
-function placeText(score: number, rivals: Rival[]): string {
-  const place = 1 + rivals.filter((r) => r.finalScore > score).length;
+function placeText(accuracy: number, rivals: Rival[]): string {
+  const place = drumOffPlace(accuracy, rivals);
   return ['1ST', '2ND', '3RD', '4TH'][place - 1] ?? `${place}TH`;
 }
 
