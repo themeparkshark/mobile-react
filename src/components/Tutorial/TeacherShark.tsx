@@ -185,7 +185,9 @@ export default function TeacherShark({
       exiting={reducedMotion ? undefined : FadeOut.duration(160)}
     >
       {/* Speech bubble: tap to finish Finn's line. */}
-      <Animated.View style={[styles.speechBubble, bubbleStyle]}>
+      {/* The pop animates this wrapper only; the card inside keeps its own background and shadow layers. */}
+      <Animated.View style={[styles.bubbleWrap, bubbleStyle]}>
+      <View style={styles.speechBubble}>
         <Pressable
           onPress={finishLine}
           accessible
@@ -235,6 +237,7 @@ export default function TeacherShark({
         {/* Speech bubble tail */}
         <View style={styles.bubbleTailBorder} />
         <View style={styles.bubbleTail} />
+      </View>
       </Animated.View>
 
       {/* Shark Character: Teacher Finn */}
@@ -256,13 +259,15 @@ const styles = StyleSheet.create({
     zIndex: 9999,
     maxWidth: SCREEN_WIDTH - 32,
   },
+  bubbleWrap: {
+    marginBottom: 12,
+    marginHorizontal: 16,
+  },
   speechBubble: {
     backgroundColor: BRAND.white,
     borderRadius: 22,
     padding: 18,
     paddingBottom: 12,
-    marginBottom: 12,
-    marginHorizontal: 16,
     shadowColor: BRAND.shadow,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
