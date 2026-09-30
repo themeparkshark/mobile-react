@@ -52,5 +52,6 @@ export function nearMiss(plan: MatchPlan, tally: MatchTally, results: readonly R
   if (results.some((r) => !r.me.correct) && POINTS.base * 1.5 >= need) {
     return { gap, kind: 'miss', line: `Lost by ${gap}. One more right answer wins it.` };
   }
+  if (gap > 300) return { gap, kind: 'miss', line: 'Fin brought his A game. Rematch and take him down!' };
   return { gap, kind: 'miss', line: `Lost by ${gap}. So close! Rematch?` };
 }

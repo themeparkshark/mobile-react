@@ -237,7 +237,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
 
   const opponentLook: SharkLook | 'fin' = ghost ? ((ghost.look as SharkLook) || 'blue') : 'fin';
   const oppName = ghost ? ghost.name : 'Fin';
-  const graded = mode !== 'practice';
+  // Only the ride challenge is graded today (local queue duels have no server window yet): a pocketed phone never burns a queue question.
+  const graded = mode === 'ride';
 
   const later = useCallback((ms: number, fn: () => void) => {
     const t = setTimeout(fn, ms);

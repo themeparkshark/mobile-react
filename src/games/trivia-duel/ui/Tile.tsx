@@ -157,19 +157,33 @@ export const Tile = React.memo(function Tile({
             ) : null}
           </View>
           {state === 'wrong' ? <Image source={ART.xBadge} style={styles.x} /> : null}
-          {heads.length ? (
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.white, whiteStyle]} />
+        </Animated.View>
+        {heads.length ? (
             <View style={styles.heads} pointerEvents="none">
               {heads.map((h, i) => (
-                <Image key={`${h}${i}`} source={SHARKS[h]} style={[styles.head, { marginLeft: i ? -8 : 0 }]} />
+                <DropHead key={`${h}${i}`} look={h} i={i} reducedMotion={reducedMotion} />
               ))}
             </View>
           ) : null}
-          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.white, whiteStyle]} />
-        </Animated.View>
+
       </Animated.View>
     </GestureDetector>
   );
 });
+
+function DropHead({ look, i, reducedMotion }: { look: SharkLook; i: number; reducedMotion: boolean }) {
+  const y = useSharedValue(reducedMotion ? 0 : -40);
+  useEffect(() => {
+    if (!reducedMotion) y.value = withDelay(i * 60, withSpring(0, { damping: 8, stiffness: 320, mass: 0.6 }));
+  }, [y, i, reducedMotion]);
+  const st = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }], opacity: y.value < -30 ? 0 : 1 }));
+  return (
+    <Animated.View style={[{ marginLeft: i ? -8 : 0 }, st]}>
+      <Image source={SHARKS[look]} style={styles.head} />
+    </Animated.View>
+  );
+}
 
 function CardBack() {
   return (
@@ -216,8 +230,8 @@ const styles = StyleSheet.create({
   back: { backgroundColor: '#fff1cc', overflow: 'hidden' },
   stripe: { position: 'absolute', top: -20, bottom: -20, width: 10, backgroundColor: 'rgba(0,165,245,0.16)', transform: [{ rotate: '24deg' }] },
   x: { position: 'absolute', right: 8, top: 8, width: 26, height: 26 },
-  heads: { position: 'absolute', right: 6, bottom: 4, flexDirection: 'row' },
-  head: { width: 30, height: 30 },
+  heads: { position: 'absolute', right: 4, top: -16, flexDirection: 'row' },
+  head: { width: 34, height: 34 },
   bar: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,165,245,0.18)' },
   white: { backgroundColor: '#ffffff', borderRadius: 16 },
 });
