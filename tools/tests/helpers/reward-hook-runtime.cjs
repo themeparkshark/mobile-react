@@ -22,6 +22,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
     useMemo(fn, deps) { const i = index++; if (!slots[i] || !same(slots[i].deps, deps)) slots[i] = { deps, value: fn() }; return slots[i].value; },
     useContext(context) { return context.value; },
     forwardRef(fn) { return props => fn(props, props.forwardedRef); },
+    memo(component) { return component; },
     useImperativeHandle(ref, create, deps) { react.useEffect(() => {
       if (ref) ref.current = create();
       return () => { if (ref) ref.current = null; };

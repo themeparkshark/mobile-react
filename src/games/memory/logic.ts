@@ -1,20 +1,15 @@
 /**
- * logic.ts — pure Memory Match+ game logic (no React, no worklets).
+ * logic.ts: Memory Match boards (pure, no React).
  *
- * Kept framework-free so it can be reasoned about and unit-tested in isolation
- * (mirrors gamekit/Combo.ts). The React component owns animation + timing; this
- * owns the board, the match rule, and the score formula.
+ * Seeds, grid presets and special placement. The rules live in engine.ts.
  *
- * Match rule (from legacy MemoryMatchMiniGame): flip two cards; they match iff
- * their symbolId is equal. Match → both locked as matched. Mismatch → both flip
- * back. Round ends when every pair is matched.
+ *   boardSeed(seed, runIndex)   PLAY AGAIN deals a new board, same inputs same board
+ *   buildLayout({...})          faces by card id (deck faces 0..n, FACE_GOLD, FACE_GULL)
+ *   buildBoard(difficulty, ...) legacy shape (tests, older callers)
  */
 
 import type { Deck } from './decks';
-
-// -----------------------------------------------------------------------------
-// Difficulty → board shape
-// -----------------------------------------------------------------------------
+import { FACE_GOLD, FACE_GULL, GRID_FOR_PAIRS } from './engine';
 
 export interface BoardShape {
   cols: number;
@@ -22,15 +17,19 @@ export interface BoardShape {
   pairs: number;
 }
 
-/** Ride sprint: 4 pairs. Queue modes: 8 or 10 pairs. */
+/** Ride Sprint (difficulty 0) is 8 pairs on 4x4. Queue boards 8 or 10 pairs. */
 export function boardShapeFor(difficulty: number): BoardShape {
-  if (difficulty <= 0) return { cols: 4, rows: 2, pairs: 4 };
   if (difficulty >= 3) return { cols: 4, rows: 5, pairs: 10 };
   return { cols: 4, rows: 4, pairs: 8 };
 }
 
+export function shapeForPairs(pairs: number): BoardShape {
+  const g = GRID_FOR_PAIRS[pairs] ?? [4, Math.ceil((pairs * 2) / 4)];
+  return { cols: g[0], rows: g[1], pairs };
+}
+
 // -----------------------------------------------------------------------------
-// Seeded RNG (mulberry32) — deterministic boards for replay/telemetry.
+// Seeds
 // -----------------------------------------------------------------------------
 
 export function makeRng(seed: number): () => number {
@@ -44,106 +43,83 @@ export function makeRng(seed: number): () => number {
   };
 }
 
+/** A different board for every run index, stable for the same inputs. */
+export function boardSeed(seed: number, runIndex: number): number {
+  let h = (seed >>> 0) ^ Math.imul((runIndex + 1) >>> 0, 0x9e3779b1);
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
 function shuffleInPlace<T>(arr: T[], rng: () => number): T[] {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const t = arr[i];
+    arr[i] = arr[j];
+    arr[j] = t;
   }
   return arr;
 }
 
 // -----------------------------------------------------------------------------
-// Board
+// Layouts
+// -----------------------------------------------------------------------------
+
+export interface LayoutOptions {
+  pairs: number;
+  /** Number of faces in the deck (10 for every authored deck). */
+  deckSize: number;
+  seed: number;
+  golden?: boolean;
+  gull?: boolean;
+}
+
+export interface Layout {
+  cols: number;
+  rows: number;
+  pairs: number;
+  /** faces[cardId]. A card starts at slot == cardId. */
+  faces: number[];
+  /** Deck faces used on this board (preload + prize shelf). */
+  deckFaces: number[];
+}
+
+export function buildLayout(opts: LayoutOptions): Layout {
+  const shape = shapeForPairs(opts.pairs);
+  const rng = makeRng(opts.seed);
+  const specials: number[] = [];
+  if (opts.golden) specials.push(FACE_GOLD);
+  if (opts.gull) specials.push(FACE_GULL);
+  const need = Math.max(0, opts.pairs - specials.length);
+  const pool: number[] = [];
+  for (let i = 0; i < opts.deckSize; i++) pool.push(i);
+  shuffleInPlace(pool, rng);
+  const deckFaces = pool.slice(0, Math.min(need, pool.length));
+  const pairsFaces = [...deckFaces, ...specials];
+  const faces = shuffleInPlace([...pairsFaces, ...pairsFaces], rng);
+  return { cols: shape.cols, rows: shape.rows, pairs: pairsFaces.length, faces, deckFaces };
+}
+
+// -----------------------------------------------------------------------------
+// Legacy board shape (kept for older callers and tests)
 // -----------------------------------------------------------------------------
 
 export interface Card {
-  /** Grid slot index (stable; identifies the card's position + animation). */
   slot: number;
-  /** Which deck symbol this card shows. Two cards match iff symbolIndex equal. */
   symbolIndex: number;
 }
 
 export interface Board {
   shape: BoardShape;
   cards: Card[];
-  /** Deck-symbol indices used this round (length = pairs). */
   symbolIndices: number[];
   seed: number;
 }
 
-/**
- * Build a shuffled board for the given difficulty + deck from a seed. Picks the
- * first `pairs` distinct symbols from the deck, duplicates each, shuffles.
- */
-export function buildBoard(difficulty: number, deck: Deck, seed: number): Board {
+export function buildBoard(difficulty: number, deck: Pick<Deck, 'symbols'>, seed: number): Board {
   const shape = boardShapeFor(difficulty);
-  const rng = makeRng(seed);
-
-  // Choose distinct symbols. Shuffle the deck's symbol pool first so different
-  // seeds surface different faces, then take the first `pairs`.
-  const pool = shuffleInPlace(
-    deck.symbols.map((_, i) => i),
-    rng,
-  ).slice(0, shape.pairs);
-
-  const doubled = [...pool, ...pool];
-  shuffleInPlace(doubled, rng);
-
-  const cards: Card[] = doubled.map((symbolIndex, slot) => ({ slot, symbolIndex }));
-  return { shape, cards, symbolIndices: pool, seed };
-}
-
-// -----------------------------------------------------------------------------
-// Scoring
-// -----------------------------------------------------------------------------
-
-export interface ScoreConfig {
-  /** Points for any match, before combo multiplier. */
-  matchBase: number;
-  /** Points per whole second remaining under the target time. */
-  timeBonusPerSec: number;
-  /** Soft target completion time in seconds (drives the time bonus + stars). */
-  targetSeconds: number;
-}
-
-export function scoreConfigFor(difficulty: number): ScoreConfig {
-  const shape = boardShapeFor(difficulty);
-  return {
-    matchBase: 100,
-    timeBonusPerSec: 20,
-    // Roughly ~7s of budget per pair; harder boards get proportionally more.
-    targetSeconds: shape.pairs * 7,
-  };
-}
-
-/**
- * Points awarded for a single match. `multiplier` comes from the combo state
- * machine (gamekit Combo.ts): consecutive matches within the combo window
- * escalate x2/x3/x5.
- */
-export function matchPoints(cfg: ScoreConfig, multiplier: number): number {
-  return Math.round(cfg.matchBase * multiplier);
-}
-
-/** End-of-round time bonus: reward finishing under the soft target. */
-export function timeBonus(cfg: ScoreConfig, elapsedSeconds: number): number {
-  const remaining = cfg.targetSeconds - elapsedSeconds;
-  if (remaining <= 0) return 0;
-  return Math.round(remaining * cfg.timeBonusPerSec);
-}
-
-/**
- * Stars for the results screen. 3 = fast + high combo, 2 = solid, 1 = cleared.
- * The board is always winnable, so a completed board is at least 1 star.
- */
-export function starsFor(
-  cfg: ScoreConfig,
-  elapsedSeconds: number,
-  maxCombo: number,
-): number {
-  const fast = elapsedSeconds <= cfg.targetSeconds * 0.6;
-  const okay = elapsedSeconds <= cfg.targetSeconds;
-  if (fast && maxCombo >= 3) return 3;
-  if (okay) return 2;
-  return 1;
+  const layout = buildLayout({ pairs: shape.pairs, deckSize: deck.symbols.length, seed });
+  const cards: Card[] = layout.faces.map((symbolIndex, slot) => ({ slot, symbolIndex }));
+  return { shape, cards, symbolIndices: layout.deckFaces, seed };
 }

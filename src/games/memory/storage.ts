@@ -48,3 +48,54 @@ export async function savePersonalBest(
     return { best: score, isNewBest: false };
   }
 }
+
+// -----------------------------------------------------------------------------
+// Ride Sprint personal-best ghost (design 4.1, 6.8)
+// -----------------------------------------------------------------------------
+
+const GHOST_PREFIX = 'tps.memorymatch.ghost.v1';
+
+export interface MemoryGhost {
+  /** Elapsed ms at each pair of the best clear. */
+  pairTimes: number[];
+  clearMs: number;
+  /** true when this is the ride's median stand-in, not a real run. */
+  median?: boolean;
+}
+
+/** The stand-in when a player has no clear on this ride yet (a typical 34s clear). */
+export function medianGhost(pairs = 8, clearMs = 34000): MemoryGhost {
+  const pairTimes: number[] = [];
+  for (let i = 1; i <= pairs; i++) pairTimes.push(Math.round((clearMs * Math.pow(i / pairs, 0.9))));
+  return { pairTimes, clearMs, median: true };
+}
+
+export async function loadGhost(key: string): Promise<MemoryGhost | null> {
+  try {
+    const raw = await AsyncStorage.getItem(`${GHOST_PREFIX}.${key}`);
+    if (!raw) return null;
+    const g = JSON.parse(raw) as MemoryGhost;
+    return Array.isArray(g.pairTimes) && Number.isFinite(g.clearMs) ? g : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Save when faster than the stored ghost. Returns true on a new PB. */
+export async function saveGhostIfBest(key: string, ghost: MemoryGhost): Promise<boolean> {
+  try {
+    const prev = await loadGhost(key);
+    if (prev && !prev.median && prev.clearMs <= ghost.clearMs) return false;
+    await AsyncStorage.setItem(`${GHOST_PREFIX}.${key}`, JSON.stringify(ghost));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Ghost pairs at an elapsed time. */
+export function ghostPairsAt(ghost: MemoryGhost, elapsedMs: number): number {
+  let n = 0;
+  while (n < ghost.pairTimes.length && ghost.pairTimes[n] <= elapsedMs) n++;
+  return n;
+}

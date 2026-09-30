@@ -98,6 +98,8 @@ export interface GameResult {
    * reward path. Never compute rewards on the client.
    */
   meta?: Record<string, unknown>;
+  /** One line under the card (a coaching tip). A wrap-up note wins over it. */
+  note?: string;
 }
 
 export interface GameShellV2Handle {
@@ -324,6 +326,22 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       countdownTimers.current.push(done);
       return clearCountdown;
     }, [phase, visible, beginPlay, clearCountdown, punchCount]);
+
+    // -- Rematch: the game cleared its result, so run a fresh countdown. ------
+    const prevResultRef = useRef(result);
+    useEffect(() => {
+      const had = prevResultRef.current;
+      prevResultRef.current = result;
+      if (!visible || !had || result || wrap || phase !== 'results') return;
+      startedRef.current = false;
+      claimedRef.current = false;
+      clearCelebration();
+      resultsScale.value = 0.7;
+      resultsOpacity.value = 0;
+      setCountText('3');
+      setPhase('countdown');
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [result]);
 
     // -- Transition to results when the game (or a wrap-up) reports one. ----
     useEffect(() => {
@@ -682,7 +700,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                   personalBest={personalBest}
                   maxCombo={effectiveResult?.maxCombo}
                   stats={effectiveResult?.stats}
-                  note={wrap ? WRAP_UP_COPY[wrap.reason].body : undefined}
+                  note={wrap ? WRAP_UP_COPY[wrap.reason].body : effectiveResult?.note}
                   reducedMotion={reducedMotion}
                 />
                 <View style={styles.actions}>

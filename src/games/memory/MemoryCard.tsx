@@ -1,302 +1,481 @@
 /**
- * MemoryCard.tsx — a single flippable card.
+ * MemoryCard.tsx: one physical card (design 6.2, 6.3, 6.4).
  *
- * FLIP IMPLEMENTATION (the physical-feeling 3D flip the spec asks for):
- *   - Two absolutely-stacked faces (back + front), each with
- *     `backfaceVisibility: 'hidden'`. The container carries a shared `flip`
- *     SharedValue in [0..1]; the back rotates 0deg→180deg and the front
- *     180deg→360deg, so exactly one face is ever camera-facing. A `perspective`
- *     transform sits FIRST in each face's transform list so the rotation reads
- *     as depth, not a flat squash.
- *   - `flip` is animated with withTiming (a snappy 260ms ease) — the rotation
- *     itself is linear-ish, but a SEPARATE `lift` SharedValue drives a slight
- *     scale-up (1→~1.08) that peaks mid-flip and SETTLES on a spring, so the
- *     card feels like it pops toward you and lands with weight rather than
- *     snapping. Mismatch flip-backs reuse the same path in reverse.
- *   - A shake SharedValue (translateX) gives the mismatch wiggle; a matched
- *     card gets a Skia paired glow (rendered by the parent) plus a spring pop.
+ * Real 3D flip: perspective 800, back hides and face shows at exactly 90deg
+ * (backfaceVisibility plus an opacity switch on the UI thread), lift to 1.10
+ * that settles on a spring, a thickness strip between 70 and 110deg, a shade
+ * that darkens the turning side, a specular band that tracks the angle and a
+ * contact shadow that stretches with lift and narrows edge-on.
  *
- * All animation is Reanimated on the UI thread. No JS-thread animation loop.
+ * Everything is driven by shared values through an imperative handle, so a
+ * match never re-renders the other cards. Position is absolute inside the
+ * board; the parent moves cards (deal, Tide Shift, gull swaps, shelf flights).
  */
 
-import React, { useEffect, useImperativeHandle, forwardRef, useCallback, useState, useRef } from 'react';
-import { StyleSheet, Image, View, Text, Pressable, type ImageSourcePropType } from 'react-native';
+import React, { forwardRef, memo, useImperativeHandle, useMemo, useState } from 'react';
+import { Image, StyleSheet, View, type ImageSourcePropType } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withSequence,
-  interpolate,
   Easing,
   cancelAnimation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
-import { GAME_COLORS, JUICE } from '../../gamekit';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { MM } from './theme';
+
+export interface CardFace {
+  sheet?: ImageSourcePropType;
+  slot?: number;
+  cols?: number;
+  rows?: number;
+  /** Special card art drawn on a plate (Golden Coin, Seagull). */
+  art?: ImageSourcePropType;
+  plate?: string;
+}
 
 export interface MemoryCardHandle {
-  /** Flip face-up (or back down). Returns immediately; animates on UI thread. */
-  setFaceUp: (up: boolean) => void;
-  /** Mismatch wiggle. */
-  shake: () => void;
-  /** Matched celebration: spring pop + settle. */
-  celebrate: () => void;
+  place: (x: number, y: number) => void;
+  deal: (fromX: number, fromY: number, delay: number, fast: boolean) => void;
+  flipUp: (ms: number) => void;
+  flipDown: (ms: number, delay?: number) => void;
+  /** Server-revealed tap: rotate to 60deg and wait (network hold pose). */
+  hold: () => void;
+  press: (nx: number, ny: number) => void;
+  release: () => void;
+  /** Match pop: 1 -> 1.18 with a pair-only hit-stop hold, then settle. */
+  pop: (lean: number, stopMs: number, flash: boolean) => void;
+  settle: () => void;
+  slip: (shake: boolean) => void;
+  ghost: () => void;
+  moved: (on: boolean) => void;
+  moveTo: (x: number, y: number, ms: number, arc: number, delay?: number) => void;
+  lift: (on: boolean) => void;
+  flyTo: (x: number, y: number, scale: number, delay: number, onLand?: () => void) => void;
+  hide: () => void;
+  /** Fade out, jump, fade in (Tide Shift wrap-around). */
+  teleport: (x: number, y: number, delay: number) => void;
+  peek: (ms: number) => void;
+  slowFlip: (ms: number) => void;
+  timeoutReveal: (delay: number) => void;
 }
 
-interface MemoryCardProps {
-  size: number;
-  faceSource?: ImageSourcePropType;
-  faceSheet?: ImageSourcePropType;
-  sheetSlot?: number;
-  sheetColumns?: number;
-  sheetRows?: number;
-  frameSource?: ImageSourcePropType;
-  backSource?: ImageSourcePropType;
-  /** Procedural fallback face (used when faceSource is missing/undecodable). */
-  tint: string;
-  glyph: string;
-  matched: boolean;
-  disabled: boolean;
-  slot: number;
-  symbolName: string;
-  onPress: () => void;
-  /** Staggered entrance delay (ms). */
-  entranceDelay: number;
-  reducedMotion?: boolean;
+interface Props {
+  w: number;
+  h: number;
+  back: ImageSourcePropType;
+  face: CardFace;
+  goldBack?: boolean;
+  reducedMotion: boolean;
 }
 
-export const MemoryCard = forwardRef<MemoryCardHandle, MemoryCardProps>(
-  function MemoryCard(
-    { size, faceSource, faceSheet, sheetSlot, sheetColumns = 4, sheetRows = 2, frameSource, backSource, tint, glyph, matched, disabled, slot, symbolName, onPress, entranceDelay, reducedMotion = true },
-    ref,
-  ) {
-    // 0 = face down, 1 = face up.
-    const flip = useSharedValue(0);
-    const [faceUp, setFaceUpState] = useState(false);
-    const faceUpRef = useRef(false);
-    const enteredRef = useRef(false);
-    const [failedSheet, setFailedSheet] = useState<ImageSourcePropType>();
-    const [failedFace, setFailedFace] = useState<ImageSourcePropType>();
-    const [failedBack, setFailedBack] = useState<ImageSourcePropType>();
-    const [failedFrame, setFailedFrame] = useState<ImageSourcePropType>();
-    // Mid-flip lift (scale toward camera) that springs back to rest.
-    const lift = useSharedValue(1);
-    // Mismatch shake.
-    const shakeX = useSharedValue(0);
-    // Matched pop.
-    const pop = useSharedValue(1);
-    // Entrance.
-    const enter = useSharedValue(0);
+const INK = '#0B5CAD';
 
-    useEffect(() => {
-      if (reducedMotion) {
-        [flip, lift, shakeX, pop, enter].forEach(cancelAnimation);
-        flip.value = faceUpRef.current ? 1 : 0;
-        lift.value = 1;
-        shakeX.value = 0;
-        pop.value = 1;
-        enter.value = 1;
+function useCardValues() {
+  return {
+    flip: useSharedValue(0),
+    lift: useSharedValue(1),
+    press: useSharedValue(1),
+    tiltX: useSharedValue(0),
+    tiltY: useSharedValue(0),
+    x: useSharedValue(0),
+    y: useSharedValue(0),
+    arcY: useSharedValue(0),
+    scale: useSharedValue(1),
+    rotZ: useSharedValue(0),
+    opacity: useSharedValue(0),
+    shakeX: useSharedValue(0),
+    pop: useSharedValue(1),
+    lean: useSharedValue(0),
+    slipRim: useSharedValue(0),
+    ghost: useSharedValue(0),
+    flash: useSharedValue(0),
+    movedRim: useSharedValue(0),
+    wobble: useSharedValue(0),
+    squash: useSharedValue(1),
+  };
+}
+
+export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function MemoryCard(
+  { w, h, back, face, goldBack, reducedMotion },
+  ref,
+) {
+  const v = useCardValues();
+  const [failed, setFailed] = useState(false);
+  const rm = reducedMotion;
+
+  useImperativeHandle(ref, (): MemoryCardHandle => ({
+    place(x, y) {
+      cancelAnimation(v.x);
+      cancelAnimation(v.y);
+      v.x.value = x;
+      v.y.value = y;
+    },
+    deal(fromX, fromY, delay, fast) {
+      const toX = v.x.value;
+      const toY = v.y.value;
+      if (rm || fast) {
+        v.opacity.value = withDelay(fast ? 0 : delay, withTiming(1, { duration: 120 }));
+        v.scale.value = 1;
+        v.rotZ.value = 0;
+        return;
       }
-      return () => [flip, lift, shakeX, pop, enter].forEach(cancelAnimation);
-    }, [reducedMotion, flip, lift, shakeX, pop, enter]);
-
-    // Staggered entrance pop-in. A JS timeout defers the start so cards cascade
-    // in row-major order; the animation itself runs on the UI thread.
-    useEffect(() => {
-      if (reducedMotion) { enteredRef.current = true; enter.value = 1; return; }
-      if (enteredRef.current) { enter.value = 1; return; }
-      enter.value = 0;
-      const t = setTimeout(() => {
-        enteredRef.current = true;
-        enter.value = withTiming(1, {
-          duration: 320,
-          easing: Easing.out(Easing.back(1.6)),
-        });
-      }, entranceDelay);
-      return () => { clearTimeout(t); cancelAnimation(enter); };
-    }, [entranceDelay, enter, reducedMotion]);
-
-    const setFaceUp = useCallback(
-      (up: boolean) => {
-        faceUpRef.current = up;
-        setFaceUpState(up);
-        if (reducedMotion) { flip.value = up ? 1 : 0; lift.value = 1; return; }
-        // Rotation: snappy ease.
-        flip.value = withTiming(up ? 1 : 0, {
-          duration: 260,
-          easing: Easing.inOut(Easing.cubic),
-        });
-        // Lift: pop toward camera mid-flip, settle on a spring for weight.
-        lift.value = withSequence(
-          withTiming(1.08, { duration: 130, easing: Easing.out(Easing.quad) }),
-          withSpring(1, JUICE.settleSpring),
-        );
-      },
-      [flip, lift, reducedMotion],
-    );
-
-    const shake = useCallback(() => {
-      if (reducedMotion) { shakeX.value = 0; return; }
-      const amp = 9;
-      shakeX.value = withSequence(
-        withTiming(amp, { duration: 45, easing: Easing.linear }),
-        withTiming(-amp, { duration: 45, easing: Easing.linear }),
-        withTiming(amp * 0.6, { duration: 45, easing: Easing.linear }),
-        withTiming(-amp * 0.6, { duration: 45, easing: Easing.linear }),
-        withTiming(0, { duration: 45, easing: Easing.linear }),
+      v.x.value = fromX;
+      v.y.value = fromY;
+      v.scale.value = 0.6;
+      v.rotZ.value = -12;
+      v.opacity.value = withDelay(delay, withTiming(1, { duration: 60 }));
+      const e = { duration: 260, easing: Easing.out(Easing.back(1.2)) };
+      v.x.value = withDelay(delay, withTiming(toX, e));
+      v.y.value = withDelay(delay, withTiming(toY, e));
+      v.scale.value = withDelay(delay, withTiming(1, e));
+      v.rotZ.value = withDelay(delay, withTiming(0, e));
+    },
+    flipUp(ms) {
+      cancelAnimation(v.wobble);
+      v.wobble.value = 0;
+      if (rm) {
+        v.flip.value = withTiming(1, { duration: 120 });
+        return;
+      }
+      v.flip.value = withTiming(1, { duration: ms, easing: Easing.inOut(Easing.cubic) });
+      v.lift.value = withSequence(
+        withTiming(1.1, { duration: ms * 0.5, easing: Easing.out(Easing.quad) }),
+        withSpring(1, { damping: 14, stiffness: 320, mass: 0.6 }),
       );
-    }, [shakeX, reducedMotion]);
-
-    const celebrate = useCallback(() => {
-      if (reducedMotion) { pop.value = 1; return; }
-      pop.value = withSequence(
-        withTiming(1.22, { duration: 140, easing: Easing.out(Easing.back(2)) }),
-        withSpring(1, JUICE.popSpring),
+      v.squash.value = withDelay(ms, withSequence(withTiming(0.97, { duration: 45 }), withTiming(1, { duration: 45 })));
+    },
+    flipDown(ms, delay = 0) {
+      cancelAnimation(v.wobble);
+      v.wobble.value = 0;
+      v.slipRim.value = withDelay(delay, withTiming(0, { duration: 120 }));
+      if (rm) {
+        v.flip.value = withDelay(delay, withTiming(0, { duration: 120 }));
+        return;
+      }
+      v.flip.value = withDelay(delay, withTiming(0, { duration: ms, easing: Easing.inOut(Easing.cubic) }));
+      v.lift.value = withDelay(delay, withSequence(
+        withTiming(1.06, { duration: ms * 0.5 }),
+        withSpring(1, { damping: 14, stiffness: 320, mass: 0.6 }),
+      ));
+    },
+    hold() {
+      if (rm) return;
+      v.flip.value = withTiming(60 / 180, { duration: 110, easing: Easing.out(Easing.quad) });
+      v.lift.value = withTiming(1.1, { duration: 110 });
+      v.wobble.value = withDelay(180, withSequence(
+        withTiming(1, { duration: 40 }), withTiming(-1, { duration: 80 }), withTiming(1, { duration: 80 }),
+        withTiming(-1, { duration: 80 }), withTiming(0, { duration: 40 }),
+      ));
+    },
+    press(nx, ny) {
+      if (rm) return;
+      v.press.value = withTiming(0.94, { duration: 60, easing: Easing.out(Easing.quad) });
+      v.tiltX.value = withTiming(-ny * 6, { duration: 60 });
+      v.tiltY.value = withTiming(nx * 6, { duration: 60 });
+    },
+    release() {
+      v.press.value = withSpring(1, { damping: 12, stiffness: 400 });
+      v.tiltX.value = withSpring(0, { damping: 12, stiffness: 300 });
+      v.tiltY.value = withSpring(0, { damping: 12, stiffness: 300 });
+    },
+    pop(lean, stopMs, flash) {
+      if (rm) return;
+      v.pop.value = withSequence(
+        withTiming(1.18, { duration: 90, easing: Easing.out(Easing.back(2)) }),
+        withDelay(stopMs, withSpring(1, { damping: 9, stiffness: 320, mass: 0.6 })),
       );
-    }, [pop, reducedMotion]);
+      v.lean.value = withSequence(
+        withTiming(lean, { duration: 90 }),
+        withDelay(stopMs, withSpring(0, { damping: 12, stiffness: 260 })),
+      );
+      if (flash) {
+        v.flash.value = withDelay(90, withSequence(withTiming(1, { duration: 0 }), withDelay(16, withTiming(0, { duration: 60 }))));
+      }
+    },
+    settle() {
+      if (rm) return;
+      v.squash.value = withSequence(withTiming(0.99, { duration: 60 }), withTiming(1, { duration: 60 }));
+    },
+    slip(shake) {
+      v.slipRim.value = withTiming(1, { duration: 120 });
+      if (rm || !shake) return;
+      v.shakeX.value = withDelay(240, withSequence(
+        withTiming(7, { duration: 40 }), withTiming(-6, { duration: 40 }), withTiming(4, { duration: 40 }),
+        withTiming(-2, { duration: 40 }), withTiming(0, { duration: 40 }),
+      ));
+    },
+    ghost() {
+      v.ghost.value = withSequence(withTiming(1, { duration: 90 }), withDelay(310, withTiming(0, { duration: 160 })));
+    },
+    moved(on) {
+      v.movedRim.value = withTiming(on ? 1 : 0, { duration: on ? 160 : 260 });
+    },
+    moveTo(x, y, ms, arc, delay = 0) {
+      if (rm) {
+        v.x.value = withDelay(delay, withTiming(x, { duration: 160 }));
+        v.y.value = withDelay(delay, withTiming(y, { duration: 160 }));
+        return;
+      }
+      const e = { duration: ms, easing: Easing.inOut(Easing.cubic) };
+      v.x.value = withDelay(delay, withTiming(x, e));
+      v.y.value = withDelay(delay, withTiming(y, e));
+      if (arc) {
+        v.arcY.value = withDelay(delay, withSequence(
+          withTiming(-arc, { duration: ms / 2, easing: Easing.out(Easing.sin) }),
+          withTiming(0, { duration: ms / 2, easing: Easing.in(Easing.sin) }),
+        ));
+      }
+    },
+    lift(on) {
+      v.lift.value = withSpring(on ? 1.08 : 1, { damping: 12, stiffness: 260 });
+      v.arcY.value = withTiming(on ? -10 : 0, { duration: 140 });
+    },
+    flyTo(x, y, scale, delay, onLand) {
+      const e = { duration: rm ? 1 : 280, easing: Easing.inOut(Easing.cubic) };
+      const arc = rm ? 0 : Math.max(24, w * 0.6);
+      v.x.value = withDelay(delay, withTiming(x, e));
+      v.y.value = withDelay(delay, withTiming(y, e));
+      v.scale.value = withDelay(delay, withTiming(scale, e));
+      v.arcY.value = withDelay(delay, withSequence(
+        withTiming(-arc, { duration: 140, easing: Easing.out(Easing.sin) }),
+        withTiming(0, { duration: 140, easing: Easing.in(Easing.sin) }),
+      ));
+      v.opacity.value = withDelay(delay + 280, withTiming(0, { duration: rm ? 120 : 90 }, (done) => {
+        if (done && onLand) runOnJS(onLand)();
+      }));
+    },
+    hide() {
+      v.opacity.value = 0;
+    },
+    teleport(x, y, delay) {
+      v.opacity.value = withDelay(delay, withSequence(
+        withTiming(0, { duration: 150 }),
+        withTiming(0, { duration: 60 }),
+        withTiming(1, { duration: 180 }),
+      ));
+      v.x.value = withDelay(delay + 180, withTiming(x, { duration: 1 }));
+      v.y.value = withDelay(delay + 180, withTiming(y, { duration: 1 }));
+    },
+    peek(ms) {
+      v.flip.value = withSequence(
+        withTiming(70 / 180, { duration: 90 }),
+        withDelay(ms, withTiming(0, { duration: 120 })),
+      );
+      v.arcY.value = withSequence(withTiming(-8, { duration: 90 }), withDelay(ms, withTiming(0, { duration: 120 })));
+    },
+    slowFlip(ms) {
+      // Final Pair: 0.35x through the middle 250ms around the 90deg swap.
+      if (rm) {
+        v.flip.value = withTiming(1, { duration: 120 });
+        return;
+      }
+      v.flip.value = withSequence(
+        withTiming(0.36, { duration: ms * 0.3 }),
+        withTiming(0.64, { duration: 250 / 0.35 * 0.4 }),
+        withTiming(1, { duration: ms * 0.3 }),
+      );
+      v.lift.value = withSequence(withTiming(1.14, { duration: 300 }), withSpring(1, { damping: 14, stiffness: 320, mass: 0.6 }));
+    },
+    timeoutReveal(delay) {
+      v.flip.value = withDelay(delay, withTiming(1, { duration: rm ? 120 : 220 }));
+    },
+  }), [v, rm, w]);
 
-    useImperativeHandle(ref, () => ({ setFaceUp, shake, celebrate }), [
-      setFaceUp,
-      shake,
-      celebrate,
-    ]);
+  const outer = useAnimatedStyle(() => ({
+    opacity: v.opacity.value,
+    transform: [
+      { translateX: v.x.value + v.shakeX.value },
+      { translateY: v.y.value + v.arcY.value },
+      { rotateZ: `${v.rotZ.value + v.lean.value + v.wobble.value * 2}deg` },
+      { scale: v.scale.value * v.pop.value * v.press.value },
+    ],
+  }));
 
-    // -- Animated styles. ----------------------------------------------------
-    const containerStyle = useAnimatedStyle(() => ({
-      opacity: enter.value,
+  const shadow = useAnimatedStyle(() => {
+    const deg = v.flip.value * 180;
+    const edge = Math.abs(Math.cos((deg * Math.PI) / 180));
+    const liftAmt = Math.max(0, (v.lift.value - 1) * 10);
+    return {
+      opacity: 0.35 - liftAmt * 0.12,
       transform: [
-        { translateY: interpolate(enter.value, [0, 1], [-24, 0]) },
-        { translateX: shakeX.value },
-        { scale: lift.value * pop.value * (0.85 + enter.value * 0.15) },
+        { translateY: 2 + liftAmt * 6 },
+        { scaleX: 0.15 + 0.85 * edge },
+        { scale: 1 + liftAmt * 0.08 },
       ],
-    }));
+    };
+  });
 
-    const backStyle = useAnimatedStyle(() => ({
-      transform: [
-        { perspective: 800 },
-        { rotateY: `${interpolate(flip.value, [0, 1], [0, 180])}deg` },
-      ],
-    }));
+  const body = useAnimatedStyle(() => ({
+    transform: [
+      { perspective: 800 },
+      { rotateX: `${v.tiltX.value}deg` },
+      { rotateY: `${v.tiltY.value}deg` },
+      { scaleY: v.squash.value },
+      { scale: v.lift.value },
+    ],
+  }));
 
-    const frontStyle = useAnimatedStyle(() => ({
-      transform: [
-        { perspective: 800 },
-        { rotateY: `${interpolate(flip.value, [0, 1], [180, 360])}deg` },
-      ],
-    }));
+  const backStyle = useAnimatedStyle(() => {
+    const deg = v.flip.value * 180;
+    return {
+      opacity: deg <= 90 ? 1 : 0,
+      transform: [{ perspective: 800 }, { rotateY: `${deg}deg` }],
+    };
+  });
+  const frontStyle = useAnimatedStyle(() => {
+    const deg = v.flip.value * 180;
+    return {
+      opacity: deg > 90 ? 1 : 0,
+      transform: [{ perspective: 800 }, { rotateY: `${deg + 180}deg` }],
+    };
+  });
+  // Turning-side shade (multiply stand-in) and the thickness strip.
+  const shadeStyle = useAnimatedStyle(() => {
+    const deg = v.flip.value * 180;
+    return { opacity: Math.abs(Math.sin((deg * Math.PI) / 180)) * 0.35 };
+  });
+  const edgeStyle = useAnimatedStyle(() => {
+    const deg = v.flip.value * 180;
+    const on = deg > 70 && deg < 110;
+    return {
+      opacity: on ? 1 : 0,
+      transform: [{ scaleX: on ? 1 : 0 }],
+    };
+  });
+  // Specular band tracks the flip angle, peaking as the face lands.
+  const specStyle = useAnimatedStyle(() => {
+    const p = v.flip.value;
+    const lit = Math.sin(p * Math.PI) * 0.6 + (p > 0.85 ? (1 - Math.abs(p - 1) * 6) * 0.4 : 0);
+    return {
+      opacity: Math.max(0, Math.min(0.35, lit * 0.35 + 0.02)),
+      transform: [{ translateX: interpolate(p, [0, 1], [-w * 0.9, w * 0.9]) }, { rotateZ: '20deg' }],
+    };
+  });
+  const rimStyle = useAnimatedStyle(() => ({ opacity: v.slipRim.value }));
+  const ghostStyle = useAnimatedStyle(() => ({ opacity: v.ghost.value * 0.6 }));
+  const flashStyle = useAnimatedStyle(() => ({ opacity: v.flash.value }));
+  const movedStyle = useAnimatedStyle(() => ({ opacity: v.movedRim.value }));
 
-    const radius = Math.round(size * 0.14);
-    const faceStyle = { width: size, height: size * 1.28, borderRadius: radius };
+  const r = Math.round(Math.min(w, h) * 0.12);
+  const size = { width: w, height: h, borderRadius: r };
 
-    return (
-      <Pressable
-        onPress={onPress}
-        disabled={disabled || matched}
-        style={styles.pressable}
-        accessible
-        accessibilityRole="button"
-        accessibilityState={{ disabled: disabled || matched }}
-        accessibilityLabel={`Card ${slot + 1}, ${matched ? `matched ${symbolName}` : faceUp ? symbolName : 'face down'}`}
-      >
-        <Animated.View style={[faceStyle, containerStyle]}>
-          {/* Back face (shown when face down). */}
-          <Animated.View style={[styles.face, faceStyle, backStyle]}>
-            {backSource && failedBack !== backSource ? (
-              <Image source={backSource} style={[styles.img, faceStyle]} resizeMode="contain"
-                onError={() => setFailedBack(backSource)} />
-            ) : (
-              <View style={[styles.proceduralBack, faceStyle]}>
-                <Text style={styles.backGlyph}>🦈</Text>
-              </View>
-            )}
-          </Animated.View>
+  const faceNode = useMemo(() => {
+    if (face.art) {
+      return (
+        <View style={[styles.plate, size, { backgroundColor: face.plate ?? MM.cream }]}>
+          <Image source={face.art} resizeMode="contain" style={{ width: w * 0.8, height: h * 0.72 }} />
+        </View>
+      );
+    }
+    if (face.sheet != null && face.slot != null && !failed) {
+      const cols = face.cols ?? 4;
+      const rows = face.rows ?? 2;
+      return (
+        <View style={[size, styles.clip]}>
+          <Image
+            source={face.sheet}
+            resizeMode="stretch"
+            onError={() => setFailed(true)}
+            style={{
+              position: 'absolute',
+              width: w * cols,
+              height: h * rows,
+              left: -(face.slot % cols) * w,
+              top: -Math.floor(face.slot / cols) * h,
+            }}
+          />
+        </View>
+      );
+    }
+    return <View style={[size, styles.plate, { backgroundColor: MM.cream }]} />;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [face, failed, w, h]);
 
-          {/* Front face (shown when face up). */}
-          <Animated.View style={[styles.face, styles.frontAbs, faceStyle, frontStyle]}>
-            {faceSheet && failedSheet !== faceSheet && sheetSlot != null ? (
-              <View style={[faceStyle, { overflow: 'hidden' }]}>
-                <Image source={faceSheet} resizeMode="stretch" onError={() => setFailedSheet(faceSheet)} style={{
-                  position: 'absolute',
-                  width: size * sheetColumns,
-                  height: size * 1.28 * sheetRows,
-                  left: -(sheetSlot % sheetColumns) * size,
-                  top: -Math.floor(sheetSlot / sheetColumns) * size * 1.28,
-                }} />
-              </View>
-            ) : faceSource && failedFace !== faceSource ? (
-              <Image source={faceSource} style={[styles.img, faceStyle]} resizeMode="contain"
-                onError={() => setFailedFace(faceSource)} />
-            ) : frameSource && failedFrame !== frameSource ? (
-              <View style={[styles.framedFront, faceStyle]}>
-                <Image source={frameSource} style={[styles.img, StyleSheet.absoluteFill]}
-                  onError={() => setFailedFrame(frameSource)}
-                  resizeMode="stretch" />
-                <Text style={styles.framedGlyph}>{glyph}</Text>
-              </View>
-            ) : (
-              <View
-                style={[
-                  styles.proceduralFront,
-                  faceStyle,
-                  { backgroundColor: tint, borderColor: GAME_COLORS.navy },
-                ]}
-              >
-                <Text style={styles.frontGlyph}>{glyph}</Text>
-              </View>
-            )}
-            {matched ? (
-              <View style={styles.matchedBadge}>
-                <Text style={styles.matchedCheck}>✓</Text>
-              </View>
-            ) : null}
+  return (
+    <Animated.View pointerEvents="none" style={[styles.abs, { width: w, height: h }, outer]}>
+      <Animated.View style={[styles.shadow, size, shadow]} />
+      <Animated.View style={[styles.abs, { width: w, height: h }, body]}>
+        <Animated.View style={[styles.face, size, backStyle]}>
+          <Image source={back} resizeMode="stretch" style={size} />
+          {goldBack ? <View style={[StyleSheet.absoluteFill, styles.goldBack, { borderRadius: r }]} /> : null}
+          <Animated.View style={[StyleSheet.absoluteFill, ghostStyle]}>
+            {faceNode}
+            <View style={[StyleSheet.absoluteFill, styles.ghostRim, { borderRadius: r }]} />
           </Animated.View>
         </Animated.View>
-      </Pressable>
-    );
-  },
-);
+        <Animated.View style={[styles.face, size, frontStyle]}>
+          {faceNode}
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.faceRim, { borderRadius: r }]} />
+        </Animated.View>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.shade, { borderRadius: r }, shadeStyle]} />
+        <Animated.View pointerEvents="none" style={[styles.edge, { height: h, left: w / 2 - 1 }, edgeStyle]} />
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip, { borderRadius: r }]}>
+          <Animated.View style={[styles.spec, { width: w * 0.28, height: h * 1.6, top: -h * 0.3, left: w * 0.36 }, specStyle]} />
+        </View>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, rimStyle]}>
+          <View style={[StyleSheet.absoluteFill, styles.slipRim, { borderRadius: r }]} />
+          <View style={[StyleSheet.absoluteFill, styles.slipInner, { borderRadius: r - 3, margin: 4 }]} />
+          <Crack size={Math.min(w, h) * 0.42} />
+        </Animated.View>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, movedStyle]}>
+          <View style={[StyleSheet.absoluteFill, styles.movedRim, { borderRadius: r }]} />
+          <MovedArrow size={Math.min(w, h) * 0.26} />
+        </Animated.View>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, { borderRadius: r }, flashStyle]} />
+      </Animated.View>
+    </Animated.View>
+  );
+}));
+
+/** Hand-inked crack glyph (slip). */
+function Crack({ size }: { size: number }) {
+  return (
+    <View style={styles.center} pointerEvents="none">
+      <Svg width={size} height={size} viewBox="0 0 40 40">
+        <Path d="M20 2 L16 14 L23 19 L14 28 L19 31 L15 38" stroke="#ffffff" strokeWidth={7} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        <Path d="M20 2 L16 14 L23 19 L14 28 L19 31 L15 38" stroke={MM.coral} strokeWidth={3.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+      </Svg>
+    </View>
+  );
+}
+
+function MovedArrow({ size }: { size: number }) {
+  return (
+    <View style={styles.cornerTR} pointerEvents="none">
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Circle cx={12} cy={12} r={11} fill="#ffffff" stroke={INK} strokeWidth={2} />
+        <Line x1={6} y1={12} x2={17} y2={12} stroke={INK} strokeWidth={2.6} strokeLinecap="round" />
+        <Path d="M13 7 L18 12 L13 17" stroke={INK} strokeWidth={2.6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
-  pressable: { margin: 5 },
-  face: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    backfaceVisibility: 'hidden',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: GAME_COLORS.bgPanel,
-  },
-  frontAbs: { position: 'absolute', top: 0, left: 0 },
-  img: { width: '100%', height: '100%' },
-  proceduralBack: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: GAME_COLORS.navy,
-    borderWidth: 3,
-    borderColor: GAME_COLORS.blue,
-  },
-  proceduralFront: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-  },
-  framedFront: { alignItems: 'center', justifyContent: 'center' },
-  framedGlyph: { fontSize: 38, textAlign: 'center',
-    textShadowColor: '#fff', textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2 },
-  backGlyph: { fontSize: 34 },
-  frontGlyph: { fontSize: 40 },
-  matchedBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: GAME_COLORS.success,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  matchedCheck: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  abs: { position: 'absolute', left: 0, top: 0 },
+  shadow: { position: 'absolute', left: 0, top: 0, backgroundColor: '#064375' },
+  face: { position: 'absolute', left: 0, top: 0, backfaceVisibility: 'hidden', overflow: 'hidden' },
+  clip: { overflow: 'hidden' },
+  plate: { alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#ffffff' },
+  faceRim: { borderWidth: 2.5, borderColor: '#ffffff' },
+  goldBack: { borderWidth: 3, borderColor: MM.gold },
+  shade: { backgroundColor: '#05346e' },
+  edge: { position: 'absolute', top: 0, width: 3, backgroundColor: '#dfe9f5' },
+  spec: { position: 'absolute', backgroundColor: '#ffffff' },
+  slipRim: { borderWidth: 4, borderColor: MM.coral },
+  slipInner: { borderWidth: 1.5, borderColor: '#ffffff' },
+  ghostRim: { borderWidth: 2.5, borderColor: MM.coral, borderStyle: 'dashed' },
+  movedRim: { borderWidth: 2, borderColor: '#ffffff', borderStyle: 'dashed' },
+  flash: { backgroundColor: '#ffffff' },
+  center: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  cornerTR: { position: 'absolute', top: -6, right: -6 },
 });
+
+export type { SharedValue };
