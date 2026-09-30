@@ -1,8 +1,9 @@
 /**
  * GuestInvite (WS8): what a signed-out player sees on the map.
  *
- * Replaces the grey "sign in" wall with a bright, branded invitation that sits
- * over the live map, so a guest can see the game world they are about to join.
+ * Replaces the grey "sign in" wall with a bright, branded invitation. Guests
+ * have no map (the map needs a player), so his login art fills the space above
+ * the card: the game world they are about to join, not an empty panel.
  * The entry point ("Continue as guest" on Login) is unchanged.
  *
  * Motion: the card springs up from the bottom (overshoot, settle), the shark
@@ -25,6 +26,7 @@ import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 const SHARK = require('../../assets/images/screens/welcome/shark.png');
 const LOGO = require('../../assets/images/screens/login/logo.png');
+const WORLD = require('../../assets/images/screens/login/login-bg.png');
 
 export const GUEST_PROMISES: readonly { icon: GameIconName; text: string }[] = [
   { icon: 'coin', text: 'Win a coin for every ride you conquer' },
@@ -72,7 +74,9 @@ export default function GuestInvite() {
 
   return (
     <View style={styles.root} pointerEvents="box-none">
-      {/* A light blue wash keeps the live map visible behind the card. */}
+      {/* His login art fills the top half; a light wash keeps it bright behind the card. */}
+      <Image source={WORLD} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="bottom"
+        pointerEvents="none" accessibilityIgnoresInvertColors />
       <View style={styles.wash} pointerEvents="none" />
       <Animated.View style={[styles.card, { paddingBottom: 16 + insets.bottom }, cardStyle]}>
         <Animated.View style={[styles.sharkWrap, sharkStyle]} pointerEvents="none">
@@ -99,7 +103,7 @@ export default function GuestInvite() {
 
 const styles = StyleSheet.create({
   root: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end' },
-  wash: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(124,198,245,0.5)' },
+  wash: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(124,198,245,0.12)' },
   card: {
     backgroundColor: BRAND.cream,
     borderTopLeftRadius: RADIUS.xl,
