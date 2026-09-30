@@ -37,6 +37,11 @@ const WS8_CLEAN = [
   'src/components/CreateThreadModal.tsx',
   'src/components/SocialPost.tsx',
   'src/components/Comment.tsx',
+  'src/hooks/useFriends.tsx',
+  'src/components/PushSoftAsk.tsx',
+  'src/components/Toast.tsx',
+  'src/screens/NewsScreen/Entry.tsx',
+  'src/screens/ArticleScreen.tsx',
 ];
 
 /** Files WS8 moved off the FontAwesome icon font onto hand-drawn art. */
@@ -78,4 +83,17 @@ test('WS8 social and settings surfaces use hand-drawn art, not an icon font, and
   const social = fs.readFileSync(path.join(root, 'src/screens/SocialScreen.tsx'), 'utf8');
   assert.match(social, /Tap \+ below/);
   assert.doesNotMatch(social, /pencil icon above/);
+});
+
+test('toasts show art for their type, map legacy emoji to art, and never use a dark or purple fill', () => {
+  const source = fs.readFileSync(path.join(root, 'src/components/Toast.tsx'), 'utf8');
+  assert.doesNotMatch(source, /156, 39, 176|#9C27B0|<Text style=\{styles\.icon\}>/);
+  assert.match(source, /GameIcon name=\{toastIcon\(toast\.type, toast\.icon\)\}/);
+  assert.match(source, /GameRichText/);
+});
+
+test('friend actions confirm with the game dialog and report failures', () => {
+  const source = fs.readFileSync(path.join(root, 'src/hooks/useFriends.tsx'), 'utf8');
+  assert.doesNotMatch(source, /Alert\.alert/);
+  assert.equal((source.match(/catch \{/g) || []).length, 3);
 });

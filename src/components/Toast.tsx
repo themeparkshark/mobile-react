@@ -3,6 +3,7 @@ import { Animated, StyleSheet, Text, View, TouchableOpacity, Dimensions } from '
 import * as Haptics from '../helpers/haptics';
 import { colors, shadows, borderRadius, spacing, typography } from '../design-system';
 import { onToast } from '../utils/toast';
+import { BRAND, GameIcon, GameRichText, iconForEmoji, resolveIconName, type GameIconName } from '../ui';
 
 // Toast types
 type ToastType = 'success' | 'error' | 'warning' | 'info' | 'reward';
@@ -11,6 +12,7 @@ interface Toast {
   id: string;
   type: ToastType;
   message: string;
+  /** A GameIcon name. Legacy emoji are mapped to art (or ignored); they are never rendered. */
   icon?: string;
   duration?: number;
   action?: {
@@ -181,12 +183,12 @@ function ToastItem({
         activeOpacity={0.9}
       >
         {/* Icon */}
-        <Text style={styles.icon}>{toast.icon || config.icon}</Text>
+        <GameIcon name={toastIcon(toast.type, toast.icon)} size={28} />
 
-        {/* Message */}
-        <Text style={styles.message} numberOfLines={2}>
+        {/* Message (server text may carry [icon:name] tokens or legacy emoji; emoji never render) */}
+        <GameRichText preset="bodySmall" style={styles.message} numberOfLines={2}>
           {toast.message}
-        </Text>
+        </GameRichText>
 
         {/* Action button */}
         {toast.action && (
@@ -205,34 +207,23 @@ function ToastItem({
   );
 }
 
-// Toast type configurations
-const toastConfig = {
-  success: {
-    icon: '✅',
-    backgroundColor: 'rgba(76, 175, 80, 0.95)',
-    borderColor: '#4CAF50',
-  },
-  error: {
-    icon: '❌',
-    backgroundColor: 'rgba(244, 67, 54, 0.95)',
-    borderColor: '#F44336',
-  },
-  warning: {
-    icon: '⚠️',
-    backgroundColor: 'rgba(255, 193, 7, 0.95)',
-    borderColor: '#FFC107',
-  },
-  info: {
-    icon: 'ℹ️',
-    backgroundColor: 'rgba(33, 150, 243, 0.95)',
-    borderColor: '#2196F3',
-  },
-  reward: {
-    icon: '🎁',
-    backgroundColor: 'rgba(156, 39, 176, 0.95)',
-    borderColor: '#9C27B0',
-  },
+// Toast type configurations: a white card with a coloured frame, never a dark or purple fill.
+export const toastConfig: Record<ToastType, { icon: GameIconName; backgroundColor: string; borderColor: string }> = {
+  success: { icon: 'check', backgroundColor: BRAND.white, borderColor: BRAND.green },
+  error: { icon: 'close', backgroundColor: BRAND.white, borderColor: BRAND.red },
+  warning: { icon: 'info', backgroundColor: BRAND.cream, borderColor: BRAND.goldLip },
+  info: { icon: 'info', backgroundColor: BRAND.white, borderColor: BRAND.blueBright },
+  reward: { icon: 'gift', backgroundColor: BRAND.cream, borderColor: BRAND.gold },
 };
+
+/** The art for a toast: an explicit icon name, a mapped legacy emoji, or the type's icon. */
+export function toastIcon(type: ToastType, icon?: string): GameIconName {
+  if (icon) {
+    const named = resolveIconName(icon) ?? iconForEmoji(icon);
+    if (named) return named;
+  }
+  return toastConfig[type].icon;
+}
 
 // Convenience hooks
 export function useSuccessToast() {
@@ -273,7 +264,8 @@ const styles = StyleSheet.create({
   toast: {
     width: width - 32,
     borderRadius: borderRadius.lg,
-    borderWidth: 2,
+    borderWidth: 3,
+    borderBottomWidth: 5,
     ...shadows.lg,
     overflow: 'hidden',
   },
@@ -283,14 +275,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
-  icon: {
-    fontSize: 20,
-  },
   message: {
     flex: 1,
-    fontFamily: 'Knockout',
-    fontSize: 14,
-    color: 'white',
+    color: BRAND.navy,
   },
   actionButton: {
     paddingHorizontal: spacing.md,
