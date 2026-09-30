@@ -1,7 +1,10 @@
-import { createContext, FC, ReactNode, useContext, useState } from 'react';
+import { createContext, FC, ReactNode, useContext, useEffect, useState } from 'react';
 import { useTimeoutWhen } from 'rooks';
 import getDailyGift from '../api/endpoints/daily-gifts/create';
+import DailyGiftModal from '../components/DailyGiftModal';
+import { ws7Preview } from '../dev/ws7Preview';
 import { DailyGiftType } from '../models/daily-gift-type';
+import * as RootNavigation from '../RootNavigation';
 import { AuthContext } from './AuthProvider';
 
 export interface DailyGiftContextType {
@@ -18,14 +21,26 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
 }) => {
   const [dailyGift, setDailyGift] = useState<DailyGiftType | null>(null);
   const { player, isReady } = useContext(AuthContext);
+  const preview = ws7Preview();
 
   useTimeoutWhen(
     async () => {
+      // The request carries the device timezone, so the chest is per local day.
       setDailyGift(await getDailyGift());
     },
     5000,
     Boolean(isReady && player && player.username)
   );
+
+  // Dev-only visual QA: jump straight to a WS7 screen once signed in.
+  useEffect(() => {
+    if (!isReady || !player) return;
+    const timer = setTimeout(() => {
+      if (preview === 'store' || preview === 'store-poor') RootNavigation.navigate('Store', { store: 'shark-shop' });
+      if (preview === 'vip') RootNavigation.navigate('Membership');
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [isReady, player?.id, preview]);
 
   return (
     <DailyGiftContext.Provider
@@ -35,6 +50,7 @@ export const DailyGiftProvider: FC<{ children: ReactNode }> = ({
       }}
     >
       {children}
+      {preview === 'chest' && dailyGift && !dailyGift.redeemed_at && <DailyGiftModal dailyGift={dailyGift} autoOpen />}
     </DailyGiftContext.Provider>
   );
 };

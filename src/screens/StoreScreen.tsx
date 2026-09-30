@@ -25,6 +25,7 @@ import { CurrencyContext } from '../context/CurrencyProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import usePurchaseItem, { currencyLabel } from '../hooks/usePurchaseItem';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { ws7Preview } from '../dev/ws7Preview';
 import { BRAND, SharkLoader } from '../ui';
 import currencyBalance from '../helpers/currency-balance';
 import { CatalogType } from '../models/catalog-type';
@@ -288,6 +289,16 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
     })().catch(() => { if (live) setStatus('error'); });
     return () => { live = false; };
   }, [store, attempt]);
+
+  // Dev visual QA: show the not-enough sheet for the first item the player can't afford.
+  useEffect(() => {
+    if (ws7Preview() !== 'store-poor' || status !== 'ready' || !player) return;
+    const item = items.find(i => !i.has_purchased && currencyBalance(player, i.currency.name) < i.cost);
+    if (!item) return;
+    const timer = setTimeout(() => { void purchaseItem(item); }, 1500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   const loadMore = async () => {
     if (!catalog || !hasMore || status !== 'ready') return;

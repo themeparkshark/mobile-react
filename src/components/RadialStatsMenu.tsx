@@ -6,6 +6,7 @@ import Button from './Button';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, GameIcon, type GameIconName } from '../ui';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { ws7Preview } from '../dev/ws7Preview';
 
 /** The one Energy sentence (docs/economy-glossary.md, GET /api/economy). */
 export const ENERGY_RULE = 'Energy powers boss raids and coin upgrades. It never runs out on a timer.';
@@ -69,6 +70,13 @@ function StatItem({ icon, label, value, index, visible, onPress }: StatItemProps
 export default function RadialStatsMenu() {
   const { player } = useContext(AuthContext);
   const [isOpen, setIsOpen] = useState(false);
+  // Dev visual QA only.
+  useEffect(() => {
+    if (ws7Preview() !== 'hud') return;
+    const timer = setTimeout(() => { setIsOpen(true); backdropAnim.setValue(1); }, 2000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [tooltip, setTooltip] = useState<string | null>(null);
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const backdropAnim = useRef(new Animated.Value(0)).current;

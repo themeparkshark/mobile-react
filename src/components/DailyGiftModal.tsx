@@ -59,9 +59,11 @@ export function chestAmounts(gift: DailyGiftType, today: DailyGiftRewardType): D
  * lands on the ladder. Day 7 punches a Park Ticket. Closing flies the reward
  * into its HUD counter. An Energy or Ticket day never shows a chest of coins.
  */
-export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
+export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOpen = false }: {
   readonly dailyGift: DailyGiftType;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
+  /** Dev visual QA only: open the chest without a tap. */
+  readonly autoOpen?: boolean;
 }) {
   const occlusion = useRef(onMapOcclusionChange); occlusion.current = onMapOcclusionChange;
   useEffect(() => () => { occlusion.current?.(false); }, []);
@@ -258,6 +260,12 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
   };
 
   const onChestPress = () => { void open(); };
+  useEffect(() => {
+    if (!autoOpen || !visible || phase !== 'closed') return;
+    const timer = setTimeout(() => { void open(); }, 2500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen, visible, phase]);
 
   const chestStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: phase === 'closed' ? bob.value : 0 }, { rotate: `${shake.value}deg` }, { scale: pop.value }],
