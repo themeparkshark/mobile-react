@@ -52,8 +52,6 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Theme Park Shark uses the camera for ride photo challenges and to show your coins and pins in the world around you. Photos stay on your phone unless you share them.</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Theme Park Shark keeps your sign-in in the iOS Keychain and does not use Face ID to unlock it.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Theme Park Shark uses your location in the background to notice the rides you go on and keep your queue games in sync while your phone is locked.</string>
 	<key>NSLocationAlwaysUsageDescription</key>

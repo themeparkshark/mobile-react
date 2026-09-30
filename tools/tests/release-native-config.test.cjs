@@ -30,7 +30,6 @@ const PURPOSE_KEYS = [
   'NSMicrophoneUsageDescription',
   'NSMotionUsageDescription',
   'NSPhotoLibraryAddUsageDescription',
-  'NSFaceIDUsageDescription',
 ];
 
 test('every iOS purpose string is written for players, not an Expo default', () => {
@@ -48,6 +47,12 @@ test('the microphone string does not promise a recording feature the app does no
   const mic = info.NSMicrophoneUsageDescription;
   assert.match(mic, /never records audio/);
   assert.doesNotMatch(mic, /record a video|if you choose/i);
+});
+
+test('no Face ID purpose string: the app never uses biometrics', () => {
+  assert.equal(info.NSFaceIDUsageDescription, undefined);
+  assert.match(appConfig, /\['expo-secure-store', \{ faceIDPermission: false \}\]/);
+  assert.doesNotMatch(appConfig, /NSFaceIDUsageDescription:/);
 });
 
 test('share sheets can save images: the add-to-Photos purpose string exists', () => {

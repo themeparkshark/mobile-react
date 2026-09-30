@@ -18,14 +18,16 @@ const PURPOSE_STRINGS = {
   NSLocationAlwaysUsageDescription: LOCATION_ALWAYS,
   NSCameraUsageDescription:
     'Theme Park Shark uses the camera for ride photo challenges and to show your coins and pins in the world around you. Photos stay on your phone unless you share them.',
+  // Kept only because expo-camera links AVCaptureDevice audio capture
+  // (CameraPermissionsRequester.swift, CameraView.swift), which App Store
+  // Connect's binary scan flags as ITMS-90683 when this key is missing. The app
+  // never asks for the microphone, so players never see this string.
   NSMicrophoneUsageDescription:
     'Theme Park Shark never records audio. Your microphone stays off during ride photos, games and everything else in the app.',
   NSMotionUsageDescription:
     'Theme Park Shark uses motion so your 3D coins and pins tilt as you move your phone.',
   NSPhotoLibraryAddUsageDescription:
     'Theme Park Shark saves the park day and ride cards you choose to keep to your Photos.',
-  NSFaceIDUsageDescription:
-    'Theme Park Shark keeps your sign-in in the iOS Keychain and does not use Face ID to unlock it.',
 };
 
 export default {
@@ -88,7 +90,8 @@ export default {
         },
       },
     ],
-    ['expo-secure-store', { faceIDPermission: PURPOSE_STRINGS.NSFaceIDUsageDescription }],
+    // The app never uses biometrics, so no Face ID purpose string at all.
+    ['expo-secure-store', { faceIDPermission: false }],
     [
       'expo-location',
       {
