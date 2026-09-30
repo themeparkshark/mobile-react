@@ -1349,7 +1349,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
       title="Current Quest"
       subtitle={themeSubtitle(themeId)}
       score={shellsNow}
-      objective="3 voyages. Beat par. Find the gold."
+      objective={showdown ? 'Showdown: 2 voyages vs the crew. Most shells wins.' : trial ? `3 voyages, ${knobs.rings} life rings. Beat par. Find the gold.` : '3 voyages. Beat par. Find the gold.'}
       result={result}
       thresholds={{ one: 3, two: 6, three: 8 }}
       resumeStyle="instant"

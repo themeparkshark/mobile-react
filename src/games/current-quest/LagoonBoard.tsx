@@ -586,7 +586,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
   });
   const hintAlpha = useDerivedValue(() => {
     if (!sv.hint.value.length) return 0;
-    const e = (sv.fxT.value - sv.hintT0.value) / 2500;
+    const e = Math.max(0, (sv.fxT.value - sv.hintT0.value) / 2500);
     return e > 1 ? 0 : 0.85 * (1 - e * e) * (0.75 + 0.25 * Math.sin(sv.fxT.value / 120));
   });
 
