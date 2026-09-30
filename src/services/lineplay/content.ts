@@ -202,11 +202,6 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     difficulty: 'easy', fact: 'The three-mark beat repeats from its first triangle.',
   },
   {
-    id: 'gen-16', question: 'A beacon flashes at 2, 4, and 6 seconds. When is its next flash?',
-    choices: ['8 seconds', '7 seconds', '9 seconds', '12 seconds'], correctIndex: 0,
-    difficulty: 'easy', fact: 'The beacon flashes every two seconds.',
-  },
-  {
     id: 'gen-17', question: 'The code says A = wave, B = star, C = shell. What is C-A-B?',
     choices: ['Shell, wave, star', 'Star, wave, shell', 'Wave, shell, star', 'Shell, star, wave'],
     correctIndex: 0, difficulty: 'medium', fact: 'Read C, then A, then B from the code key.',
@@ -217,34 +212,9 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     difficulty: 'medium', fact: 'Shell, then fin, then star puts the star last.',
   },
   {
-    id: 'gen-19', question: 'Six lanterns glow. Two go dark and one relights. How many glow now?',
-    choices: ['Five', 'Four', 'Six', 'Three'], correctIndex: 0,
-    difficulty: 'easy', fact: 'Six minus two plus one leaves five glowing lanterns.',
-  },
-  {
-    id: 'gen-20', question: 'One chest holds 3 coins. A second holds twice as many. How many in the second?',
-    choices: ['Six', 'Five', 'Nine', 'Three'], correctIndex: 0,
-    difficulty: 'easy', fact: 'Twice three coins is six.',
-  },
-  {
-    id: 'gen-21', question: 'Route A takes 3 steps and then 2 more. Route B takes 4. Which is shorter?',
-    choices: ['Route B', 'Route A', 'They match', 'Neither has an end'], correctIndex: 0,
-    difficulty: 'medium', fact: 'Route A totals five steps; Route B takes four.',
-  },
-  {
     id: 'gen-22', question: 'Your shark faces north and turns left twice. Which way now?',
     choices: ['South', 'East', 'North', 'West'], correctIndex: 0,
     difficulty: 'medium', fact: 'Two left turns go north, then west, then south.',
-  },
-  {
-    id: 'gen-23', question: 'One bell rings every 2 beats, another every 3. When do they next ring together?',
-    choices: ['Beat 6', 'Beat 4', 'Beat 5', 'Beat 9'], correctIndex: 0,
-    difficulty: 'hard', fact: 'Six is the first beat divisible by both two and three.',
-  },
-  {
-    id: 'gen-24', question: 'A star chart has 4 rows of 3 stars. How many stars fill it?',
-    choices: ['12', '7', '9', '16'], correctIndex: 0,
-    difficulty: 'medium', fact: 'Four groups of three stars make twelve.',
   },
   {
     id: 'gen-25', question: 'A note says the safe door is neither red nor blue. The doors are red, blue, and gold. Which one?',
@@ -257,34 +227,9 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     difficulty: 'easy', fact: 'The sequence is map, then key, then chest.',
   },
   {
-    id: 'gen-27', question: 'Captain Shark has 5 tickets, uses 2, then finds 1. How many tickets remain?',
-    choices: ['Four', 'Three', 'Five', 'Six'], correctIndex: 0,
-    difficulty: 'easy', fact: 'Five minus two plus one leaves four tickets.',
-  },
-  {
-    id: 'gen-28', question: 'The shell lock accepts an even number. Which count opens it?',
-    choices: ['4 shells', '3 shells', '5 shells', '7 shells'], correctIndex: 0,
-    difficulty: 'easy', fact: 'Four is the only even shell count shown.',
-  },
-  {
-    id: 'gen-29', question: 'On this map, a star is worth 2 and a shell is worth 3. What is one of each worth?',
-    choices: ['Five', 'Six', 'Four', 'Three'], correctIndex: 0,
-    difficulty: 'easy', fact: 'Two plus three equals five.',
-  },
-  {
-    id: 'gen-30', question: 'Every other tile glows, beginning with tile 1. Which tile glows?',
-    choices: ['Tile 3', 'Tile 2', 'Tile 4', 'Tile 6'], correctIndex: 0,
-    difficulty: 'medium', fact: 'Tiles 1, 3, and 5 glow in that pattern.',
-  },
-  {
     id: 'gen-31', question: 'Gold is left of blue; red is right of blue. Which mask is in the middle?',
     choices: ['Blue', 'Gold', 'Red', 'None'], correctIndex: 0,
     difficulty: 'medium', fact: 'The only order is gold, blue, red.',
-  },
-  {
-    id: 'gen-32', question: 'Your shark swims 5 steps east, then 5 steps west. Where is it?',
-    choices: ['Back at the start', 'Five steps east', 'Five steps west', 'Ten steps east'],
-    correctIndex: 0, difficulty: 'easy', fact: 'Equal trips in opposite directions return to the start.',
   },
   {
     id: 'gen-33', question: 'Your shark faces east and turns left. Which way does it face?',
@@ -295,16 +240,6 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     id: 'gen-34', question: 'A = 1, B = 2, C = 3. What letters does 3-1-2 spell?',
     choices: ['CAB', 'ABC', 'CBA', 'BAC'], correctIndex: 0,
     difficulty: 'medium', fact: 'Three is C, one is A, and two is B.',
-  },
-  {
-    id: 'gen-35', question: 'Two sharks find 3 clues each, but they both found the same shell. How many different clues?',
-    choices: ['Five', 'Six', 'Four', 'Three'], correctIndex: 0,
-    difficulty: 'hard', fact: 'Six finds with one shared clue make five different clues.',
-  },
-  {
-    id: 'gen-36', question: 'A bell rings after every 3 steps. How many rings after 9 steps?',
-    choices: ['Three', 'Two', 'Four', 'Nine'], correctIndex: 0,
-    difficulty: 'easy', fact: 'The bell rings at steps three, six, and nine.',
   },
   {
     id: 'gen-37', parkId: 8, question: 'What year did Disneyland first open?',
@@ -325,16 +260,6 @@ const BUNDLED_TRIVIA: readonly TriviaQuestion[] = [
     id: 'gen-40', parkId: 8, question: 'Before it became a boat ride, what was Pirates of the Caribbean first planned as?',
     choices: ['A walk-through wax museum', 'A spinning coaster', 'A live animal show', 'A train ride'], correctIndex: 0,
     difficulty: 'hard', fact: 'The early Disneyland concept was a walk-through wax museum.', source: 'Disney Parks Blog',
-  },
-  {
-    id: 'gen-41', parkId: 8, question: 'What year did Disneyland’s Haunted Mansion open?',
-    choices: ['1969', '1955', '1977', '1989'], correctIndex: 0,
-    difficulty: 'medium', fact: 'Disneyland’s Haunted Mansion opened on August 9, 1969.', source: 'Disney Parks Blog',
-  },
-  {
-    id: 'gen-42', parkId: 8, question: 'Which Space Mountain opened first?',
-    choices: ['Magic Kingdom', 'Disneyland', 'Tokyo Disneyland', 'Disneyland Paris'], correctIndex: 0,
-    difficulty: 'medium', fact: 'Magic Kingdom opened Space Mountain in 1975; Disneyland followed in 1977.', source: 'Disney Parks Blog',
   },
   {
     id: 'gen-43', parkId: 8, question: 'Which year did Disneyland open its Space Mountain?',
@@ -452,8 +377,10 @@ export async function fetchRideTrivia(
   const parkMatches = parkId == null ? [] : bundled.filter((q) => q.parkId === parkId && q.rideId == null);
   const local = [...server.filter(q => q.rideId != null), ...rideMatches,
     ...server.filter(q => q.rideId == null), ...parkMatches];
-  // Once a park has a real sourced deck, the general puzzle and glossary
-  // filler steps aside; until then it keeps a long wait from repeating.
+  // Fact-checked ride, park and chapter questions lead. Arithmetic filler is
+  // gone; the ride-flavored glossary and crew code puzzles remain only to
+  // keep a long wait from repeating, and step aside once a park has a real
+  // sourced deck (SOURCED_DECK_TARGET).
   const general = local.length >= SOURCED_DECK_TARGET ? []
     : BUNDLED_TRIVIA.filter((q) => q.parkId == null && q.rideId == null);
   const eligible = parkId == null ? BUNDLED_TRIVIA : [...local, ...general];

@@ -103,10 +103,17 @@ test('one-card and five-card general trivia consume different questions', async 
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test('the offline quickfire pool stays distinct and valid for nine full rounds', async () => {
-  const questions = await Promise.all(Array.from({ length: 48 }, (_, seed) =>
+test('the offline quickfire pool stays distinct and valid for six full rounds, with no arithmetic filler', async () => {
+  const questions = await Promise.all(Array.from({ length: 33 }, (_, seed) =>
     content.fetchRideTrivia(undefined, undefined, seed)));
-  assert.equal(new Set(questions.map(question => question.id)).size, 48);
+  assert.equal(new Set(questions.map(question => question.id)).size, 33);
+  // Arithmetic filler ("Captain Shark has 5 tickets") and the duplicated
+  // Haunted Mansion / Space Mountain year questions are retired.
+  const ids = new Set(questions.map(question => question.id));
+  for (const retired of ['gen-19', 'gen-20', 'gen-27', 'gen-29', 'gen-35', 'gen-41', 'gen-42'])
+    assert.equal(ids.has(retired), false, retired);
+  for (const question of questions)
+    assert.doesNotMatch(question.question, /How many|twice as many|worth\?/);
   for (const question of questions) {
     assert.equal(question.choices.length, 4);
     assert.equal(new Set(question.choices).size, 4);
@@ -127,11 +134,11 @@ test('a park queue sees its own fan facts before general play and no other park 
     assert.deepEqual(questions.slice(0, localIds.length).map(question => question.id), localIds);
     assert.equal(questions.slice(localIds.length).every(question => Number(question.id.slice(4)) <= 36), true);
   };
-  await checkPark(8, Array.from({ length: 9 }, (_, index) => `gen-${37 + index}`), 45);
-  await checkPark(1, ['gen-48'], 37);
-  await checkPark(6, ['gen-46'], 37);
-  await checkPark(13, ['gen-47'], 37);
-  await checkPark(2, [], 36);
+  await checkPark(8, ['gen-37', 'gen-38', 'gen-39', 'gen-40', 'gen-43', 'gen-44', 'gen-45'], 30);
+  await checkPark(1, ['gen-48'], 24);
+  await checkPark(6, ['gen-46'], 24);
+  await checkPark(13, ['gen-47'], 24);
+  await checkPark(2, [], 23);
 });
 
 test('five-question LinePlay trivia carries the fan-fact reveal without changing its answer key', async () => {

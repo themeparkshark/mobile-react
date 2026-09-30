@@ -24,9 +24,14 @@ export function resolveProjectMission(project: ParkProject): ProjectMission | nu
   if (!mission || !mission.title?.trim() || !mission.prompt?.trim() || !gameId ||
       !Object.prototype.hasOwnProperty.call(GAME_NAMES, gameId)) return null;
   const branch = project.play_chapter ?? 'opening';
+  // The server prompt was written for Rhythm Tap ("keep the beat"). When the
+  // mission is remapped, say what the guest will actually play.
+  const remapped = mission.game_id === 'timing';
   return {
     title: mission.title,
-    prompt: mission.prompt,
+    prompt: remapped
+      ? 'Bop every shark that pops up to keep your crew’s project moving.'
+      : mission.prompt,
     gameName: GAME_NAMES[gameId]!,
     game: {
       kind: 'minigame',
