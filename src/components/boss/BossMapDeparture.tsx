@@ -17,9 +17,9 @@ import { Marker } from '../map/Marker';
 import RideTeamFlag from '../map/RideTeamFlag';
 import { BOSS_ART, BOSS_FX } from './bossArt';
 
-const W = 240, H = 230;
+const W = 320, H = 300;
 /** The ride sits here inside the moment (anchor), the boss hovers up and right of it. */
-const RIDE = { x: W / 2, y: H * 0.78 };
+const RIDE = { x: W / 2, y: H * 0.8 };
 
 /** Beat timings (ms). One animation language: anticipation, overshoot, settle. */
 export const MAP_BEAT = {
@@ -98,7 +98,7 @@ export default function BossMapDeparture({ impact, flag, onComplete }: {
       if (team) {
         flagGrow.value = withSpring(1, { damping: 9, stiffness: 180, mass: 0.9 });
         glow.value = withSequence(withTiming(1, { duration: 220 }), withTiming(0.35, { duration: 900 }));
-        particles.current?.burst({ x: RIDE.x, y: RIDE.y - 60, preset: 'confetti', count: 48,
+        particles.current?.burst({ x: RIDE.x + 30, y: RIDE.y - 160, preset: 'confetti', count: 48,
           colors: [TEAMS[team].color, BRAND.gold, BRAND.white, TEAMS[team].color] });
         haptic('success');
         playSfx('win', 0.8);
@@ -141,11 +141,12 @@ export default function BossMapDeparture({ impact, flag, onComplete }: {
   });
   const ringA = ringStyle(0), ringB = ringStyle(0.25);
   const flagStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, flagGrow.value * 3),
-    transform: [{ translateY: 12 * (1 - flagGrow.value) }, { scale: 0.2 + 1.3 * flagGrow.value }] }));
+    transform: [{ translateY: 18 * (1 - flagGrow.value) }, { scale: 0.3 + 0.7 * flagGrow.value }] }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 0.8 + 0.5 * glow.value }] }));
   const popStyles = pops.map(p => useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 2),
     transform: [{ translateY: 16 * (1 - p.value) }, { scale: p.value }] })));
-  const spots = [{ x: RIDE.x - 78, y: RIDE.y - 26 }, { x: RIDE.x + 50, y: RIDE.y - 18 }, { x: RIDE.x - 20, y: RIDE.y + 6 }];
+  // Around the landmark, never on it: left, right, and up high on the left.
+  const spots = [{ x: RIDE.x - 104, y: RIDE.y - 78 }, { x: RIDE.x + 104, y: RIDE.y - 70 }, { x: RIDE.x - 92, y: RIDE.y - 160 }];
 
   return <Marker coordinate={impact.coordinate} anchor={{ x: 0.5, y: RIDE.y / H }}>
     <View style={styles.wrap} accessibilityLabel={`Boss cleared at ${impact.rideName}. Your ${impact.yourDamage} damage helped.${team
@@ -160,11 +161,11 @@ export default function BossMapDeparture({ impact, flag, onComplete }: {
       </Animated.View>
       {reduced && <View style={styles.stamp}><GameIcon name="check" size={26} accessibilityLabel="Defeated" /></View>}
       {team && <Animated.View style={[styles.flag, flagStyle]}>
-        <View style={styles.flagScale}><RideTeamFlag team={team} /></View>
+        <RideTeamFlag team={team} size={2.2} />
         {held && <View style={styles.heldTag}><Text style={styles.heldText}>HELD!</Text></View>}
       </Animated.View>}
       {impact.fighters.map((fighter, i) => (
-        <Animated.View key={`${fighter.username}-${i}`} style={[styles.fighter, { left: spots[i].x - 26, top: spots[i].y - 30 }, popStyles[i]]}>
+        <Animated.View key={`${fighter.username}-${i}`} style={[styles.fighter, { left: spots[i].x - 38, top: spots[i].y - 30 }, popStyles[i]]}>
           <View style={[styles.fighterRing, { borderColor: fighter.team ? TEAMS[fighter.team].color : BRAND.gold }]}>
             <GameIcon name="shark" size={34} />
           </View>
@@ -185,16 +186,16 @@ const styles = StyleSheet.create({
   stamp: { position: 'absolute', left: RIDE.x + 34 + 10, top: RIDE.y - 92 + 8, zIndex: 4 },
   ring: { position: 'absolute', left: RIDE.x + 34 - 40, top: RIDE.y - 46, width: 80, height: 26, borderRadius: 40,
     borderWidth: 3, borderColor: '#bfe5ff' },
-  glow: { position: 'absolute', left: RIDE.x - 46, top: RIDE.y - 96, width: 92, height: 92, borderRadius: 46 },
-  flag: { position: 'absolute', left: RIDE.x - 22, top: RIDE.y - 84, width: 60, height: 76, alignItems: 'flex-start', zIndex: 5 },
-  flagScale: { transform: [{ scale: 1.8 }], marginLeft: 12, marginTop: 16 },
-  heldTag: { position: 'absolute', top: 58, left: -8, backgroundColor: BRAND.gold, borderRadius: 8, borderWidth: 2,
+  glow: { position: 'absolute', left: RIDE.x - 40, top: RIDE.y - 200, width: 110, height: 110, borderRadius: 55 },
+  // Above the landmark's roof so the ride art never covers it.
+  flag: { position: 'absolute', left: RIDE.x - 4, top: RIDE.y - 196, width: 70, height: 90, alignItems: 'flex-start', zIndex: 5 },
+  heldTag: { position: 'absolute', top: -14, left: 44, backgroundColor: BRAND.gold, borderRadius: 8, borderWidth: 2,
     borderColor: BRAND.white, paddingHorizontal: 6, paddingVertical: 1, transform: [{ rotate: '-8deg' }] },
   heldText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy },
-  fighter: { position: 'absolute', width: 52, alignItems: 'center', zIndex: 6 },
-  fighterRing: { width: 44, height: 44, borderRadius: 22, backgroundColor: BRAND.white, borderWidth: 3,
+  fighter: { position: 'absolute', width: 76, alignItems: 'center', zIndex: 6 },
+  fighterRing: { width: 46, height: 46, borderRadius: 23, backgroundColor: BRAND.white, borderWidth: 3,
     alignItems: 'center', justifyContent: 'center' },
-  fighterCrown: { position: 'absolute', top: -10, right: 2, transform: [{ rotate: '14deg' }] },
-  fighterName: { marginTop: 1, maxWidth: 70, fontFamily: 'Shark', fontSize: 11, color: BRAND.white, textShadowColor: BRAND.navy,
+  fighterCrown: { position: 'absolute', top: -10, right: 10, transform: [{ rotate: '14deg' }] },
+  fighterName: { marginTop: 1, maxWidth: 76, fontFamily: 'Shark', fontSize: 12, color: BRAND.white, textShadowColor: BRAND.navy,
     textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 1 },
 });

@@ -47,12 +47,14 @@ function CountUp({ to, start, reduced }: { readonly to: number; readonly start: 
 }
 
 function LootChip({ item, index, reduced, collecting }: { readonly item: Loot; readonly index: number; readonly reduced: boolean; readonly collecting: boolean }) {
-  const pop = useSharedValue(reduced ? 1 : 0);
+  const pop = useSharedValue(0);
   const fly = useSharedValue(0);
   const [counting, setCounting] = useState(reduced);
   const delay = 950 + index * 170;
   useEffect(() => {
-    if (reduced) return;
+    if (reduced) { pop.value = 1; setCounting(true); return; }
+    pop.value = 0;
+    setCounting(false);
     pop.value = withDelay(delay, withSequence(withSpring(1.15, { damping: 8, stiffness: 360 }), withSpring(1, { damping: 12, stiffness: 240 })));
     const id = setTimeout(() => { setCounting(true); haptic('tickSelection'); playSfx('coin', 0.5); }, delay);
     return () => { clearTimeout(id); cancelAnimation(pop); };
@@ -67,11 +69,15 @@ function LootChip({ item, index, reduced, collecting }: { readonly item: Loot; r
     transform: [{ translateY: -420 * fly.value }, { translateX: (index % 2 ? 1 : -1) * 40 * fly.value },
       { scale: pop.value * (1 - 0.5 * fly.value) }],
   }));
-  return <Animated.View style={[styles.loot, style]} accessibilityLabel={`${item.amount} ${item.label}`}>
-    <GameIcon name={item.icon} size={30} />
-    <View>
-      <CountUp to={item.amount} start={counting} reduced={reduced} />
-      <Text style={styles.lootLabel} numberOfLines={1}>{item.label}</Text>
+  // Motion on the outer view only; the card's own fill stays on a plain view so a
+  // count-up re-render never drops it.
+  return <Animated.View style={style} accessibilityLabel={`${item.amount} ${item.label}`}>
+    <View style={styles.loot}>
+      <GameIcon name={item.icon} size={30} />
+      <View>
+        <CountUp to={item.amount} start={counting} reduced={reduced} />
+        <Text style={styles.lootLabel} numberOfLines={1}>{item.label}</Text>
+      </View>
     </View>
   </Animated.View>;
 }
@@ -93,15 +99,17 @@ export default function BossWinCard({ raid, lastHp, onDone }: {
   const won = reward.outcome === 'defeated';
   const loot = lootFor(raid);
   const particles = useRef<ParticleHandle>(null);
-  const [hp, setHp] = useState(reduced || !won ? raid.hp_left : Math.max(raid.hp_left, lastHp ?? Math.round(raid.hp_max * 0.12)));
+  // Start where the player's eyes were; the motion preference is only known after mount.
+  const [hp, setHp] = useState(!won ? raid.hp_left : Math.max(raid.hp_left, lastHp ?? Math.round(raid.hp_max * 0.12)));
   const [collecting, setCollecting] = useState(false);
-  const ko = useSharedValue(reduced ? 1 : 0);
+  const ko = useSharedValue(0);
   const wobble = useSharedValue(0);
-  const title = useSharedValue(reduced ? 1 : 0);
-  const crown = useSharedValue(reduced ? 1 : 0);
+  const title = useSharedValue(0);
+  const crown = useSharedValue(0);
 
   useEffect(() => {
-    if (reduced) return;
+    if (reduced) { ko.value = 1; title.value = 1; crown.value = 1; wobble.value = 0; setHp(raid.hp_left); return; }
+    ko.value = 0; title.value = 0; crown.value = 0;
     const timers: ReturnType<typeof setTimeout>[] = [];
     // Beat 1 (0ms): the last of the HP drains.
     timers.push(setTimeout(() => setHp(raid.hp_left), 80));
@@ -133,8 +141,8 @@ export default function BossWinCard({ raid, lastHp, onDone }: {
     opacity: 1 - 0.15 * ko.value,
     transform: [{ rotate: `${wobble.value * 12 - 18 * ko.value}deg` }, { translateY: 14 * ko.value }, { scale: 1 - 0.08 * ko.value }],
   } : {
-    opacity: 1 - 0.7 * ko.value,
-    transform: [{ translateX: 170 * ko.value }, { translateY: -20 * Math.sin(ko.value * Math.PI) }, { scale: 1 - 0.4 * ko.value }],
+    opacity: 1 - ko.value,
+    transform: [{ translateX: 190 * ko.value }, { translateY: -20 * Math.sin(ko.value * Math.PI) }, { scale: 1 - 0.4 * ko.value }],
   });
   const titleStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, title.value * 1.5), transform: [{ scale: 0.6 + 0.4 * title.value }] }));
   const crownStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, crown.value * 2), transform: [{ translateY: -30 * (1 - crown.value) }, { scale: crown.value }] }));

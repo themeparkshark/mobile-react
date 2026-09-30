@@ -11,12 +11,14 @@ import { GameIcon } from '../../ui';
  * raise (the cloth climbs the pole with an overshoot and a flutter); a confirmed
  * hold gets a "Held!" tag instead. Reduced motion shows the final state.
  */
-export default function RideTeamFlag({ team, contested = false, raiseKey, held = false }: {
+export default function RideTeamFlag({ team, contested = false, raiseKey, held = false, size = 1 }: {
   readonly team: TeamId;
   readonly contested?: boolean;
   readonly raiseKey?: string;
   /** The team kept this ride (a boss win on a ride it already held). */
   readonly held?: boolean;
+  /** Draws the flag this many times larger, natively (crisp art, not a scaled bitmap). */
+  readonly size?: number;
 }) {
   const reduced = useReducedGameMotion();
   const lift = useSharedValue(1);
@@ -42,14 +44,18 @@ export default function RideTeamFlag({ team, contested = false, raiseKey, held =
     return () => { cancelAnimation(lift); cancelAnimation(flutter); };
   }, [lift, flutter, raiseKey, reduced, team, held]);
   const cloth = useAnimatedStyle(() => ({
-    transform: [{ translateY: 17 * (1 - lift.value) }, { skewY: `${4 * flutter.value}deg` }, { scaleX: 1 - 0.06 * Math.abs(flutter.value) }],
+    transform: [{ translateY: 17 * size * (1 - lift.value) }, { skewY: `${4 * flutter.value}deg` }, { scaleX: 1 - 0.06 * Math.abs(flutter.value) }],
   }));
-  return <View style={styles.flag} accessibilityLabel={`${teamName(team)} holds this ride${contested ? '. Contested.' : '.'}`}>
-    <View style={styles.finial} /><View style={styles.pole} /><View style={styles.foot} />
-    <Animated.View style={[styles.cloth, { backgroundColor: TEAMS[team].color }, cloth]}>
-      <Image source={TEAMS[team].badge} style={styles.badge} contentFit="contain" />
+  const k = (value: number) => value * size;
+  return <View style={[styles.flag, { width: k(30), height: k(38) }]} accessibilityLabel={`${teamName(team)} holds this ride${contested ? '. Contested.' : '.'}`}>
+    <View style={[styles.finial, { width: k(7), height: k(7), borderRadius: k(3.5) }]} />
+    <View style={[styles.pole, { top: k(4), bottom: k(3), left: k(2), width: k(3), borderRadius: k(1.5) }]} />
+    <View style={[styles.foot, { width: k(9), height: k(4), borderRadius: k(2) }]} />
+    <Animated.View style={[styles.cloth, { top: k(5), left: k(5), width: k(25), height: k(22), borderTopRightRadius: k(7),
+      borderBottomRightRadius: k(7), borderWidth: Math.max(1.5, k(1.2)), backgroundColor: TEAMS[team].color }, cloth]}>
+      <Image source={TEAMS[team].badge} style={{ width: k(21), height: k(19) }} contentFit="contain" />
     </Animated.View>
-    {contested && <View style={styles.contested}><GameIcon name="swords" size={15} /></View>}
+    {contested && <View style={styles.contested}><GameIcon name="swords" size={k(15)} /></View>}
     {held && raiseKey && <View style={styles.held}><Text style={styles.heldText}>HELD!</Text></View>}
   </View>;
 }
