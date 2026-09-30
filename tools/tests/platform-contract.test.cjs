@@ -115,31 +115,43 @@ test('VIP sync posts once and trusts only a well-formed server answer', async ()
   await assert.rejects(syncVip(), error => error === failure);
 });
 
-test('account deletion sends the Apple code when present, surfaces the VIP notice, and rejects anything unconfirmed', async () => {
+test('immediate deletion opts in explicitly, sends App-Version and the Apple code, and rejects anything unconfirmed', async () => {
   const calls = [];
-  let data = { data: { deleted: true, apple_access_revoked: true, subscription_notice: ' Cancel in Settings. ' } };
+  let data = { data: { deleted: true, apple_revoke_queued: true, subscription_notice: ' Cancel in Settings. ' } };
   let failure;
-  const forceDelete = load('src/api/endpoints/me/force-delete.ts', {
+  const deleteNow = load('src/api/endpoints/me/delete-account.ts', {
     '../../client': { async delete(url, config) {
-      calls.push([url, config.data, config.timeout]);
+      calls.push([url, config.data, config.headers, config.timeout]);
       if (failure) throw failure;
       return { data };
     } },
+    '../../platform': { appVersionHeaders: () => ({ 'App-Version': '1.6.0' }) },
   }).default;
 
-  assert.deepEqual(plain(await forceDelete('apple-code')), { deleted: true, appleAccessRevoked: true, subscriptionNotice: 'Cancel in Settings.' });
-  data = { data: { deleted: true, apple_access_revoked: false, subscription_notice: null } };
-  assert.deepEqual(plain(await forceDelete()), { deleted: true, appleAccessRevoked: false, subscriptionNotice: null });
+  assert.deepEqual(plain(await deleteNow('apple-code')), { deleted: true, appleRevokeQueued: true, subscriptionNotice: 'Cancel in Settings.' });
+  data = { data: { deleted: true, apple_revoke_queued: false, subscription_notice: null } };
+  assert.deepEqual(plain(await deleteNow()), { deleted: true, appleRevokeQueued: false, subscriptionNotice: null });
   assert.deepEqual(plain(calls), [
-    ['/me/force-delete', { authorization_code: 'apple-code' }, 20000],
-    ['/me/force-delete', null, 20000],
+    ['/me/force-delete', { mode: 'immediate', authorization_code: 'apple-code' }, { 'App-Version': '1.6.0' }, 15000],
+    ['/me/force-delete', { mode: 'immediate' }, { 'App-Version': '1.6.0' }, 15000],
   ]);
 
-  for (data of [{}, { data: { deleted: false } }, '<html>']) {
-    await assert.rejects(forceDelete(), /not confirmed/);
+  // A 204 (the email flow) or anything else is not a deletion.
+  for (data of ['', {}, { data: { deleted: false } }, '<html>']) {
+    await assert.rejects(deleteNow(), /not confirmed/);
   }
   failure = Object.assign(new Error('rate limited'), { response: { status: 429 } });
-  await assert.rejects(forceDelete(), error => error === failure);
+  await assert.rejects(deleteNow(), error => error === failure);
+});
+
+test('the shipped email-confirm client is unchanged: no body, no mode, resolves on 204', async () => {
+  const calls = [];
+  const forceDelete = load('src/api/endpoints/me/force-delete.ts', {
+    '../../client': { async delete(...args) { calls.push(args); return { status: 204, data: '' }; } },
+  }).default;
+
+  assert.equal(await forceDelete(), undefined);
+  assert.deepEqual(calls, [['/me/force-delete']]);
 });
 
 test('login forwards the Apple authorization code only when it exists', async () => {
