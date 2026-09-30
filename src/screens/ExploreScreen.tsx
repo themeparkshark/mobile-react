@@ -3,8 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
-import { Text, TouchableOpacity, View, Pressable, StyleSheet } from 'react-native';
-import Modal from 'react-native-modal';
+import { Text, View, Pressable } from 'react-native';
 import { Marker } from '../components/map/Marker';
 import useMapOpportunityClock from '../hooks/useMapOpportunityClock';
 import { opportunityIsActive } from './ExploreScreen/mapOpportunityTiming';
@@ -67,6 +66,8 @@ import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
 import TaskMarker from './ExploreScreen/TaskMarker';
+import MapResourcePill from './ExploreScreen/MapResourcePill';
+import TooFarDialog from './ExploreScreen/TooFarDialog';
 import { clusterMarkers, revealDelays } from './ExploreScreen/mapMarkerPresentation';
 import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
 import VaultMarker from './ExploreScreen/VaultMarker';
@@ -78,6 +79,7 @@ import { GymMarker, SwordMarker } from '../components/GymBattle';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
+import { GameRichText } from '../ui';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -166,7 +168,8 @@ export default function ExploreScreen() {
   const [communityCenter, setCommunityCenter] = useState<CommunityCenter | null>(null);
   const [showCommunityCenterModal, setShowCommunityCenterModal] = useState(false);
   const [showTooFarModal, setShowTooFarModal] = useState(false);
-  const [tooFarDistance, setTooFarDistance] = useState<string>('');
+  // null while the player's location is unknown.
+  const [tooFarMeters, setTooFarMeters] = useState<number | null>(null);
   const [tooFarRequiredMeters, setTooFarRequiredMeters] = useState(COMMUNITY_CENTER_RANGE_METERS);
   const [tooFarIsHomeItem, setTooFarIsHomeItem] = useState(false);
   
@@ -274,16 +277,13 @@ export default function ExploreScreen() {
       );
 
       if (distance > HOME_PREP_PICKUP_RADIUS_METERS) {
-        const distanceText = distance > 1000
-          ? `${(distance / 1000).toFixed(1)}km`
-          : `${Math.round(distance)}m`;
-        setTooFarDistance(distanceText);
+        setTooFarMeters(distance);
         setShowTooFarModal(true);
         return;
       }
     } else {
       // No location available — show too far modal with unknown distance
-      setTooFarDistance('unknown');
+      setTooFarMeters(null);
       setShowTooFarModal(true);
       return;
     }
@@ -309,7 +309,7 @@ export default function ExploreScreen() {
     setTooFarRequiredMeters(COMMUNITY_CENTER_RANGE_METERS);
     setTooFarIsHomeItem(false);
     if (!communityCenter || !location?.latitude || !location?.longitude) {
-      setTooFarDistance('unknown');
+      setTooFarMeters(null);
       setShowTooFarModal(true);
       return;
     }
@@ -322,10 +322,7 @@ export default function ExploreScreen() {
     );
     
     if (distance > COMMUNITY_CENTER_RANGE_METERS) {
-      const distanceText = distance > 1000 
-        ? `${(distance / 1000).toFixed(1)}km` 
-        : `${Math.round(distance)}m`;
-      setTooFarDistance(distanceText);
+      setTooFarMeters(distance);
       setShowTooFarModal(true);
       return;
     }
@@ -578,7 +575,7 @@ export default function ExploreScreen() {
     
     // Check distance to gym
     if (!gymData || !location?.latitude || !location?.longitude) {
-      setTooFarDistance('unknown');
+      setTooFarMeters(null);
       setShowTooFarModal(true);
       return;
     }
@@ -591,10 +588,7 @@ export default function ExploreScreen() {
     );
     
     if (distance > GYM_RANGE_METERS) {
-      const distanceText = distance > 1000 
-        ? `${(distance / 1000).toFixed(1)}km` 
-        : `${Math.round(distance)}m`;
-      setTooFarDistance(distanceText);
+      setTooFarMeters(distance);
       setShowTooFarModal(true);
       return;
     }
@@ -875,61 +869,10 @@ export default function ExploreScreen() {
               alignItems: 'center',
             }}
           >
-            {/* Energy & Swords Display - Vertical Stack */}
-            <View
-              style={{
-                marginBottom: 12,
-                backgroundColor: '#1a1a2e',
-                borderRadius: 16,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                borderWidth: 3,
-                borderColor: '#FBBF24',
-                shadowColor: '#FBBF24',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.4,
-                shadowRadius: 12,
-                elevation: 8,
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              {/* Energy */}
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{
-                  backgroundColor: '#FBBF24',
-                  borderRadius: 8,
-                  padding: 4,
-                  marginRight: 6,
-                }}>
-                  <Text style={{ fontSize: 14 }}>⚡</Text>
-                </View>
-                <Text style={{ 
-                  fontSize: 20, 
-                  color: '#FBBF24', 
-                  fontFamily: 'Shark',
-                  textShadowColor: 'rgba(251, 191, 36, 0.6)',
-                  textShadowOffset: { width: 0, height: 2 },
-                  textShadowRadius: 10,
-                }}>{player?.energy ?? 0}</Text>
-              </View>
-              {/* Swords */}
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Image
-                  source={require('../../assets/images/sword-icon.png')}
-                  style={{ width: 20, height: 20, marginRight: 6 }}
-                  contentFit="contain"
-                />
-                <Text style={{ 
-                  fontSize: 20, 
-                  color: playerSwordCount > 0 ? '#FBBF24' : '#64748B', 
-                  fontFamily: 'Shark',
-                  textShadowColor: 'rgba(251, 191, 36, 0.6)',
-                  textShadowOffset: { width: 0, height: 2 },
-                  textShadowRadius: 10,
-                }}>{playerSwordCount}</Text>
-              </View>
+            {/* Energy and Swords: bright pills in the header's Currency language. */}
+            <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
+              <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0} />
+              <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0} />
             </View>
             {/* Profile Avatar - navigates to Park Profile */}
             {player && (
@@ -1026,9 +969,9 @@ export default function ExploreScreen() {
           style={{ position: 'absolute', top: player ? (hasLiveEvents ? 124 : 64) : 12, right: 12, width: '43%', zIndex: 20,
             backgroundColor: '#0879ca', borderColor: '#fff', borderWidth: 3,
             borderRadius: 14, padding: 8 }}>
-          <Text style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} numberOfLines={1}>
-            {queueRide.lineRewardsReady === false ? 'QUEUE GAMES  ›' : 'PLAY IN LINE  ›'}
-          </Text>
+          <GameRichText style={{ color: '#ffdc61', fontFamily: 'Shark', fontSize: 15 }} iconSize={16} numberOfLines={1}>
+            {queueRide.lineRewardsReady === false ? 'QUEUE GAMES [icon:arrow]' : 'PLAY IN LINE [icon:arrow]'}
+          </GameRichText>
           <Text style={{ color: '#fff', fontFamily: 'Knockout', fontSize: 11 }} numberOfLines={1}>
             {selectedTask.name}
           </Text>
@@ -1205,146 +1148,9 @@ export default function ExploreScreen() {
         onAction={refreshCommunityCenter}
       />
       
-      {/* Too Far Away Modal */}
-      <Modal
-        isVisible={showTooFarModal}
-        onBackdropPress={() => setShowTooFarModal(false)}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
-      >
-        <View style={tooFarStyles.container}>
-          <View style={tooFarStyles.iconContainer}>
-            <Text style={tooFarStyles.icon}>📍</Text>
-          </View>
-          <View style={tooFarStyles.content}>
-            <Text style={tooFarStyles.title}>{tooFarDistance === 'unknown' ? 'Location Needed' : 'Almost There!'}</Text>
-            <Text style={tooFarStyles.message}>
-              {tooFarDistance === 'unknown' ? 'Finding your location. Try again when it is available.'
-                : tooFarIsHomeItem ? 'Stay on public paths. You can collect from nearby without entering private or restricted areas.'
-                  : 'Walk closer to interact with this location.'}
-            </Text>
-            {tooFarDistance !== 'unknown' && <View style={tooFarStyles.distanceBox}>
-              <View style={tooFarStyles.distanceRow}>
-                <Text style={tooFarStyles.distanceLabel}>You are</Text>
-                <Text style={tooFarStyles.distanceValue}>{tooFarDistance}</Text>
-              </View>
-              <View style={tooFarStyles.distanceDivider} />
-              <View style={tooFarStyles.distanceRow}>
-                <Text style={tooFarStyles.distanceLabel}>Need to be within</Text>
-                <Text style={tooFarStyles.distanceValueGreen}>{tooFarRequiredMeters}m</Text>
-              </View>
-            </View>}
-            <TouchableOpacity
-              style={tooFarStyles.button}
-              onPress={() => setShowTooFarModal(false)}
-            >
-              <Text style={tooFarStyles.buttonText}>Got it!</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Too Far Away: ribbon + blue card with a distance meter */}
+      <TooFarDialog visible={showTooFarModal} distanceMeters={tooFarMeters} requiredMeters={tooFarRequiredMeters}
+        homeItem={tooFarIsHomeItem} onClose={() => setShowTooFarModal(false)} />
     </Wrapper>
   );
 }
-
-const tooFarStyles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-  },
-  iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#1a3a5c',
-    borderWidth: 4,
-    borderColor: '#f59e0b',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    marginBottom: -40,
-    shadowColor: '#f59e0b',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  icon: {
-    fontSize: 36,
-  },
-  content: {
-    backgroundColor: '#1a3a5c',
-    borderRadius: 20,
-    width: '90%',
-    paddingTop: 50,
-    paddingBottom: 24,
-    paddingHorizontal: 24,
-    borderWidth: 3,
-    borderColor: '#3b82f6',
-    alignItems: 'center',
-  },
-  title: {
-    fontFamily: 'Shark',
-    fontSize: 26,
-    color: '#f59e0b',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  message: {
-    fontFamily: 'Knockout',
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 22,
-  },
-  distanceBox: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 12,
-    padding: 16,
-    width: '100%',
-    marginBottom: 24,
-  },
-  distanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  distanceDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    marginVertical: 4,
-  },
-  distanceLabel: {
-    fontFamily: 'Knockout',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  distanceValue: {
-    fontFamily: 'Shark',
-    fontSize: 20,
-    color: '#ef4444',
-  },
-  distanceValueGreen: {
-    fontFamily: 'Shark',
-    fontSize: 20,
-    color: '#4ade80',
-  },
-  button: {
-    backgroundColor: '#4ade80',
-    borderRadius: 14,
-    paddingHorizontal: 40,
-    paddingVertical: 14,
-    shadowColor: '#4ade80',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  buttonText: {
-    fontFamily: 'Shark',
-    fontSize: 18,
-    color: 'white',
-    textAlign: 'center',
-  },
-});
