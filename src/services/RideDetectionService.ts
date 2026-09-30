@@ -456,7 +456,9 @@ const rideDetectionService = new RideDetectionService();
 // Background location task — must be defined at top level
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   if (error) {
-    console.error('Background location error:', error);
+    // Code 0 is CoreLocation's kCLErrorLocationUnknown: transient, the next fix
+    // follows on its own. Anything else is worth a warning, never a red box.
+    if ((error as { code?: number }).code !== 0) console.warn('Background location error:', error);
     return;
   }
 
