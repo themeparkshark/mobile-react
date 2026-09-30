@@ -99,7 +99,7 @@ export default function GuestInvite() {
 
 const styles = StyleSheet.create({
   root: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end' },
-  wash: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,104,185,0.18)' },
+  wash: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(124,198,245,0.5)' },
   card: {
     backgroundColor: BRAND.cream,
     borderTopLeftRadius: RADIUS.xl,
