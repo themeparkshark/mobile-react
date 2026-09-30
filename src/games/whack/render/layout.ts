@@ -53,11 +53,11 @@ export function computeLayout(w: number, h: number, theme: WhackTheme): BoardLay
     w, h, topH, cx: [], my: [], mrx: [], mry: [], rimX: [], rimY: [], rimW: [], rimH: [], sc: [], spriteH: [],
     hx0: [], hx1: [], hyIdle: [], hyUp: [], hyBot: [], cellW,
   };
-  const rimWOf = (r: number) => cellW * 0.98 * ROW_SCALE[r];
+  const rimWOf = (r: number) => cellW * 0.9 * ROW_SCALE[r];
   const rimHOf = (r: number) => rimWOf(r) / geo.aspect;
   // Front row: rim bottom sits on the board bottom.
   const frontMouth = boardBottom - rimHOf(2) * (1 - mcy) - 2;
-  const sprite = (r: number) => rimWOf(r) * 0.95;
+  const sprite = (r: number) => rimWOf(r) * 1.3;
   // Back row mouth leaves room for its character to rise into the top zone edge.
   const backMouth = Math.max(boardTop + sprite(0) * 0.62, frontMouth - boardH * 0.66);
   const midMouth = backMouth + (frontMouth - backMouth) * 0.49;

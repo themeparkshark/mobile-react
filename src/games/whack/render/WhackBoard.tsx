@@ -196,7 +196,7 @@ const Hole = React.memo(function Hole({ i, L, rs, tick, images }: { i: number; L
     const sc = rs.value.splat[i] >= 1 ? 1 : 0.2 + 0.7 * ((rs.value.tick % 40) / 40);
     return [{ translateX: cx }, { translateY: my - H * 0.25 }, { scale: sc }];
   });
-  const splatColor = useDerivedValue(() => (tick.value, rs.value.splatType[i] === 4 ? '#ff9ed2' : '#1d5fa8'));
+  const splatColor = useDerivedValue(() => (tick.value, rs.value.splatType[i] === 4 ? '#ff9ed2' : '#2f7fd0'));
   const splatPath = useMemo(() => {
     const p = Skia.Path.Make();
     const R = L.rimW[i] * 0.62;
@@ -389,9 +389,6 @@ function TopZone({ L, sim, rs, tick, hud, fontS, fontM, fontL, boss, bossFx, pac
     for (let k = 1; k < hud.notches; k++) out.push(cX + (cW * k) / hud.notches);
     return out;
   }, [hud.notches, cW]);
-  // Score for this Burst.
-  const scoreText = useDerivedValue(() => (tick.value, `${sim.value.score}`));
-  const scoreX = useDerivedValue(() => (tick.value, W - 16 - (fontL ? fontL.measureText(scoreText.value).width : 30)));
   // Boss.
   const bossW = Math.min(W * 0.34, top * 0.9);
   const bossT = useDerivedValue(() => {
@@ -440,8 +437,6 @@ function TopZone({ L, sim, rs, tick, hud, fontS, fontM, fontL, boss, bossFx, pac
         {fontL ? <Text x={streakX} y={by + 6} text={streakText} font={fontL} color={badgeTextColor} /> : null}
         {fontS ? <Text x={multX} y={by + 24} text={multText} font={fontS} color={badgeTextColor} /> : null}
       </Group>
-      {/* Burst score */}
-      {fontL ? <Text x={scoreX} y={mY + 58} text={scoreText} font={fontL} color="#ffffff" /> : null}
       {/* Bonk Meter */}
       {hud.feverOn ? (
         <Group>

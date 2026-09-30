@@ -35,7 +35,7 @@ export function Banner({ text, sub, color = '#ffffff', stamp, top }: { text: str
   const style = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ scale: s.value }] }));
   return (
     <Animated.View pointerEvents="none" style={[styles.banner, { top }, style]}>
-      {text ? <Text style={[styles.bannerText, { color }]}>{text}</Text> : null}
+      {text ? <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.bannerText, { color }]}>{text}</Text> : null}
       {sub ? <Text style={styles.bannerSub}>{sub}</Text> : null}
     </Animated.View>
   );
@@ -186,7 +186,7 @@ export function DuelCard({ me, rival, rivalName, winner, wins, onEmote }: {
 const styles = StyleSheet.create({
   banner: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   bannerText: {
-    fontFamily: 'Shark', fontSize: 44, textAlign: 'center', paddingHorizontal: 16,
+    fontFamily: 'Shark', fontSize: 40, textAlign: 'center', paddingHorizontal: 24, alignSelf: 'stretch',
     textShadowColor: NAVY, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 1,
   },
   bannerSub: {

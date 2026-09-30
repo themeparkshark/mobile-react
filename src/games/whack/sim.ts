@@ -339,6 +339,7 @@ function addCoin(s: WhackSim, pct: number): void {
     s.winAt = s.t;
     s.ended = true;
     push(s, E_WIN, 0, 0, 0);
+    push(s, E_END, 2, 0, 0);
   }
 }
 
