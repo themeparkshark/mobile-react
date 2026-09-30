@@ -74,6 +74,7 @@ import { circuitThemeFor } from '../../services/lineplay/circuitTheme';
 import SessionRecap from './components/SessionRecap';
 import QueueToast, { type QueueToastMessage } from './components/QueueToast';
 import ResumeCountdown from './components/ResumeCountdown';
+import { LINEPLAY_TOUR_STEP_MS, linePlayTourEnabled, linePlayTourSteps } from './devTour';
 import WaitCard from './components/WaitCard';
 import NewRoundsBanner from './components/NewRoundsBanner';
 import ActivitySlot from './components/ActivitySlot';
@@ -625,6 +626,29 @@ export default function LinePlayScreen() {
     activityListRef.current?.scrollToOffset({ offset: index * SCREEN_W, animated: true });
   }, [snapshot.playlist.length, snapshot.signal, snapshot.crewRelay]);
 
+  // Dev-only visual QA tour (never in release builds).
+  const tourRef = useRef<{ activityPages: ReadonlyArray<{ id: string; kind: string }>; jumpToPage: (index: number) => void }>(
+    { activityPages: [], jumpToPage: () => undefined });
+  const tourStarted = useRef(false);
+  useEffect(() => {
+    if (!linePlayTourEnabled() || tourStarted.current || snapshot.playlist.length === 0) return;
+    tourStarted.current = true;
+    const find = (predicate: (page: { id: string; kind: string }) => boolean) =>
+      tourRef.current.activityPages.findIndex(predicate);
+    const steps = linePlayTourSteps({
+      session,
+      jumpToId: id => tourRef.current.jumpToPage(find(page => page.id === id)),
+      jumpToKind: kind => tourRef.current.jumpToPage(find(page => kind === 'minigame-free'
+        ? page.kind === 'minigame' && page.id.startsWith('mg-') : page.kind === kind)),
+      openArcade: open => setArcadeOpen(open),
+      openEndSheet: open => setWaitEndPrompt(open ? { tab: null } : null),
+      showAdvanceToast: () => showToast({ icon: 'ride', title: 'The line is moving!', body: 'Keep playing as you walk. Your round is safe.' }),
+      startResume: () => setResuming(true),
+    });
+    steps.forEach((step, index) => setTimeout(step, 4000 + index * LINEPLAY_TOUR_STEP_MS));
+  }, [snapshot.playlist.length]);
+
+
   if (!ride) {
     return (
       <SafeAreaView style={styles.centered}>
@@ -663,6 +687,8 @@ export default function LinePlayScreen() {
       animated: Math.abs(index - visiblePageIndex) <= 1,
     });
   };
+  tourRef.current = { activityPages, jumpToPage };
+
   const newRoundIndex = newRoundNotice
     ? activityPages.findIndex(page => page.id === newRoundNotice.id) : -1;
   const projectMission = snapshot.parkProject ? resolveProjectMission(snapshot.parkProject) : null;
