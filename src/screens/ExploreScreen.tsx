@@ -50,7 +50,11 @@ import NotSignedIn from './ExploreScreen/NotSignedIn';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
 import { rideLook } from '../services/rideLandmark';
-import { getRideControl, type RideControlPark, type RideControlRide } from '../api/endpoints/parks/rideControl';
+import type { RideControlRide } from '../api/endpoints/parks/rideControl';
+import useRideControlMap from '../hooks/useRideControlMap';
+import useBossMapMoment from '../hooks/useBossMapMoment';
+import BossMapDeparture from '../components/boss/BossMapDeparture';
+import { Circle } from '../components/map/Circle';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
 import type { RushPick } from '../components/RushCallout';
 import LiveEventsPill from '../components/LiveEventsPill';
@@ -185,6 +189,7 @@ export default function ExploreScreen() {
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
   const { dailyGift } = useContext(DailyGiftContext);
+  const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const { data: tripGoalData, stale: tripGoalStale } = useTripGoal(tripGoalVersion, !!player);
   const tripGoal = tripGoalData?.goal;
   const tripGoalTask = tripGoal?.park_id === park?.id
@@ -321,20 +326,15 @@ export default function ExploreScreen() {
   }, [communityCenter, location]);
 
   // Ride Control: poll the park's team map while at a park, and after wins.
-  const [rideControl, setRideControl] = useState<RideControlPark | null>(null);
-  const refreshRideControl = useCallback(() => {
-    if (!park?.id) { setRideControl(null); return; }
-    getRideControl(park.id).then(setRideControl).catch(() => undefined);
-  }, [park?.id]);
-  useEffect(() => {
-    refreshRideControl();
-    if (!park?.id) return;
-    const id = setInterval(refreshRideControl, 20000);
-    return () => clearInterval(id);
-  }, [park?.id, refreshRideControl]);
+  const { control: rideControl, refresh: refreshRideControl } = useRideControlMap({ playerId: player?.id ?? null, parkId: park?.id ?? null });
   // Boss raids: a co-op boss surfaces at a ride at set times each park day.
   const { raid, setState: setRaidState } = useParkRaid(park?.id);
   const [bossOpen, setBossOpen] = useState(false);
+  const [bossOccluded, setBossOccluded] = useState(false);
+  const bossMap = useBossMapMoment({ playerId: player?.id ?? null, parkId: park?.id ?? null, control: rideControl,
+    refreshControl: refreshRideControl,
+    available: mapFocused && permissionGranted && !arMode && !bossOpen && !bossOccluded && !isActive && !activeRedeemable &&
+      !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !dailyGiftOccluded });
   const raidActive = raid?.status === 'active';
   const { snapshot: bossRecovery } = useBossAttackRecovery({ playerId: player?.id ?? null, parkId: park?.id ?? null, onResult: () => undefined });
   const receiptNeedsCheck = !!bossRecovery?.pending || bossRecovery?.phase === 'storage_error';
@@ -380,7 +380,7 @@ export default function ExploreScreen() {
       return live?.rush && live.status === 'OPERATING' ? [{ task, rush: live.rush, wait: live.wait ?? live.rush.wait }] : [];
     }).sort((a, b) => dist(a.task) - dist(b.task));
   }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
-  const hasLiveEvents = !!rushes.length || raidActive || receiptNeedsCheck;
+  const hasLiveEvents = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
 
   const mapContext = `${player?.id ?? ''}:${park?.id ?? ''}`;
   const latestMapContext = useRef(mapContext);
@@ -625,11 +625,14 @@ export default function ExploreScreen() {
       </Topbar>
       {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion} />}
-      {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)} onState={setRaidState} />}
+      {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
+        presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
+        onMapOcclusionChange={setBossOccluded} onCelebrationDismiss={result => { void bossMap.enqueue(result); }}
+        onState={state => { setRaidState(state); void refreshRideControl(); }} />}
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
       {/* One overlay at a time: the daily gift waits for the first-run tutorial. */}
       {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && !isActive && hasCompleted('onboarding') &&
-        <DailyGiftModal dailyGift={dailyGift} />}
+        <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} />}
       {/* Home Mode: Show prep items map instead of "Not at Park" message */}
       {player && parkLoaded && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
@@ -884,6 +887,11 @@ export default function ExploreScreen() {
             <RideControlBar control={rideControl} tasks={visibleTasks}
               onFocusTask={(task) => setSelectedTask(task)} />
             <LiveEventsPill raid={raid} rushes={rushes} onBoss={() => setBossOpen(true)}
+              mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
+              onMapMoment={() => {
+                const task = visibleTasks.find(task => task.id === bossMap.moment?.impact.taskId);
+                if (task) setSelectedTask(task);
+              }}
               pendingAttack={bossRecovery?.pending} receiptNeedsCheck={receiptNeedsCheck}
               onRush={(task) => setSelectedTask(task)} />
           </View>
@@ -939,7 +947,8 @@ export default function ExploreScreen() {
           </Text>
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); }}
-          controlsTop={(queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={selectedTask ? {
+          controlsTop={(queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+            ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : null}>
           {activeParkProject?.park_id === park.id && (
@@ -963,12 +972,17 @@ export default function ExploreScreen() {
               isSelected={selectedTask?.id === task.id}
               isTripGoal={tripGoal?.task_id === task.id && !tripGoal.coin_owned}
               control={rideControlByAsset.get(Number(task.asset_id))}
+              flagRaiseKey={bossMap.flag?.asset_id === Number(task.asset_id) &&
+                (bossMap.moment?.phase === 'flag' || bossMap.moment?.phase === 'settled') ? bossMap.moment.impact.key : undefined}
               ambient={ambientTaskIds.has(task.id)}
               live={liveByTask.get(task.id)}
               onPress={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}
             />
           ))}
-          {raid && raidActive && <BossMarker raid={raid} onPress={() => setBossOpen(true)} />}
+          {bossMap.moment && (bossMap.moment.phase === 'exit' || bossMap.moment.phase === 'flag') &&
+            <Circle center={bossMap.moment.impact.coordinate} radius={65} fillColor="rgba(255,207,59,0.12)" strokeColor="#ffcf3b" strokeWidth={2} />}
+          {bossMap.moment?.phase === 'exit' && <BossMapDeparture impact={bossMap.moment.impact} onComplete={bossMap.finishExit} />}
+          {raid && raidActive && <BossMarker raid={raid} animate={mapFocused && !bossOccluded && !isActive} onPress={() => setBossOpen(true)} />}
           {focusedFromChecklist && selectedTask?.id === focusedFromChecklist.id &&
             !visibleTasks.some(task => task.id === focusedFromChecklist.id) && (
               <TaskMarker task={focusedFromChecklist} isSelected isTripGoal={false}

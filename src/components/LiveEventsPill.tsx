@@ -2,10 +2,13 @@ import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BOSS_NAMES, type BossRaid } from '../api/endpoints/parks/raid';
-import { BOSS_ART } from '../games/boss/BossBrawl';
+import { BOSS_ART_SCALE, BOSS_ART } from '../games/boss/BossBrawl';
 import type { TaskType } from '../models/task-type';
 import type { BossAttackCheckpoint } from '../services/boss/attackRecovery';
 import type { RushPick } from './RushCallout';
+import type { BossMapMoment } from '../hooks/useBossMapMoment';
+import type { RideControlClaim } from '../api/endpoints/parks/rideControl';
+import { TEAMS } from '../constants/teams';
 
 function clock(endsAt: string, now: number): string {
   const s = Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000));
@@ -17,13 +20,17 @@ function clock(endsAt: string, now: number): string {
  * boss raid takes the slot (with a small Rush chip when a ride is also on Rush),
  * otherwise the nearest Rush does. Nothing rotates under your finger.
  */
-export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAttack, receiptNeedsCheck }: {
+export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAttack, receiptNeedsCheck, mapMoment, mapFlag, onMapMoment, onDismissMoment }: {
   readonly raid: BossRaid | null;
   readonly rushes: readonly RushPick[];
   readonly onBoss: () => void;
   readonly onRush: (task: TaskType) => void;
   readonly pendingAttack?: BossAttackCheckpoint | null;
   readonly receiptNeedsCheck?: boolean;
+  readonly mapMoment?: BossMapMoment | null;
+  readonly mapFlag?: RideControlClaim | null;
+  readonly onMapMoment?: () => void;
+  readonly onDismissMoment?: () => void;
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -32,10 +39,28 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
   }, []);
   const liveRushes = rushes.filter(r => new Date(r.rush.ends_at).getTime() > now);
   const boss = raid && raid.status === 'active' && new Date(raid.ends_at).getTime() > now ? raid : null;
+  if (mapMoment) {
+    const raised = !!mapFlag && (mapMoment.phase === 'flag' || mapMoment.phase === 'settled');
+    return <View style={[styles.pill, styles.victoryPill]}>
+      <Pressable accessibilityRole="button" onPress={onMapMoment} style={styles.victoryAction}
+        accessibilityLabel={`Boss cleared at ${mapMoment.impact.rideName}. Your ${mapMoment.impact.yourDamage} damage helped.${raised ? ` ${TEAMS[mapFlag!.team].name} raised its flag.` : ''} Show ride.`}>
+        <Image source={raised ? TEAMS[mapFlag!.team].badge : BOSS_ART[mapMoment.impact.boss]} style={[styles.bossIcon, { transform: [{ scale: raised ? 1 : BOSS_ART_SCALE?.[mapMoment.impact.boss] ?? 1 }] }]} contentFit="contain" />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, styles.victoryTitle]} numberOfLines={1}>{raised ? 'FLAG RAISED!' : 'YOU HELPED CLEAR THE BOSS!'}</Text>
+          <Text style={[styles.sub, styles.victorySub]} numberOfLines={1}>{raised ? `${TEAMS[mapFlag!.team].name} · ${mapMoment.impact.rideName}`
+            : `${mapMoment.impact.yourDamage.toLocaleString()} damage counted · ${mapMoment.impact.rideName}`}</Text>
+        </View>
+        <Text style={[styles.go, styles.victoryTitle]}>SEE ›</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Dismiss boss map receipt" onPress={onDismissMoment} style={styles.dismiss}>
+        <Text style={styles.dismissText}>×</Text>
+      </Pressable>
+    </View>;
+  }
   if (pendingAttack || receiptNeedsCheck) return <Pressable accessibilityRole="button" onPress={onBoss}
     accessibilityLabel="Your boss brawl receipt needs confirmation. Open saved round."
     style={[styles.pill, styles.bossPill]}>
-    {pendingAttack && <Image source={BOSS_ART[pendingAttack.boss]} style={styles.bossIcon} contentFit="contain" />}
+    {pendingAttack && <Image source={BOSS_ART[pendingAttack.boss]} style={[styles.bossIcon, { transform: [{ scale: BOSS_ART_SCALE?.[pendingAttack.boss] ?? 1 }] }]} contentFit="contain" />}
     <View style={{ flex: 1 }}>
       <Text style={[styles.title, styles.bossTitle]} numberOfLines={1}>YOUR SAVED BRAWL</Text>
       <Text style={[styles.sub, styles.bossSub]} numberOfLines={1}>Confirm your round before another attack</Text>
@@ -49,7 +74,7 @@ export default function LiveEventsPill({ raid, rushes, onBoss, onRush, pendingAt
     return (
       <Pressable accessibilityRole="button" onPress={onBoss} style={[styles.pill, styles.bossPill]}
         accessibilityLabel={`Boss raid: ${BOSS_NAMES[boss.boss]} at ${boss.ride_name}. ${pct} percent health, ${boss.fighters} fighting, ${clock(boss.ends_at, now)} left. Open.`}>
-        <Image source={BOSS_ART[boss.boss]} style={styles.bossIcon} contentFit="contain" />
+        <Image source={BOSS_ART[boss.boss]} style={[styles.bossIcon, { transform: [{ scale: BOSS_ART_SCALE?.[boss.boss] ?? 1 }] }]} contentFit="contain" />
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, styles.bossTitle]} numberOfLines={1}>BOSS · {BOSS_NAMES[boss.boss]} at {boss.ride_name}</Text>
           <Text style={[styles.sub, styles.bossSub]} numberOfLines={1}>
@@ -98,6 +123,12 @@ const styles = StyleSheet.create({
   bossSub: { color: '#e9d9ff' },
   bossGo: { color: '#ff7a7a' },
   bossIcon: { width: 34, height: 34 },
+  victoryPill: { backgroundColor: '#fff3bf', shadowColor: '#e5ae2f', paddingRight: 0 },
+  victoryAction: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  victoryTitle: { color: '#143b56', fontSize: 14 },
+  victorySub: { color: '#53606b' },
+  dismiss: { minHeight: 44, width: 44, alignItems: 'center', justifyContent: 'center' },
+  dismissText: { fontSize: 26, color: '#53606b' },
   boltWrap: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#075083', alignItems: 'center', justifyContent: 'center' },
   bolt: { fontSize: 18 },
   rushChip: { backgroundColor: '#ffcf3b', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 2, borderColor: '#fff' },

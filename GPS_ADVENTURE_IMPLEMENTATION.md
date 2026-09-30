@@ -478,3 +478,22 @@ Further work remains on confirmed team takeover/featured-district celebration,
 boss exit choreography, Adventure Ticket progression, crew payoff, physical
 GPS/accessibility/performance and the unresolved native reload crash. The six-part
 goal remains active.
+
+
+## Confirmed boss map impact and art review
+
+Boss settlement now saves the actual Ride Control contribution result in the MVP's existing atomic reward receipt and exposes it to every participant. The result includes park, asset, park day and a UTC timestamp captured at the control write. A capped MVP contributes no additional power; an already-held ride returns no flip. No prices, damage rates, payouts or schema changed.
+
+The player dismisses the win with Back to the park. Both native presentations finish hiding before the map focuses the attraction and starts its finite exit: Kraken dives into a small pool, Robo-Shark powers down and retreats, Ghost Squid drifts away. The approved character remains intact; no fake limb animation or generated motion frames were introduced. Valid map anchors and a small geographic display offset keep the character beside the landmark rather than obscured by it. The boss's actual battle GPS coordinate and reach remain unchanged.
+
+The featured district gets a temporary gold outline. A real pole and team pennant replace the floating team badge. Only a server-confirmed flip with matching current park day, asset, controller, flip time and exact scores triggers its raise. Exact scores conservatively suppress animation after any intervening contribution, including a loss/reclaim within timestamp precision. Existing held rides display their flags without an arrival animation. Stale map responses cannot lower same-day power or overwrite another player's/park's map. Malformed control frames fail closed.
+
+One existing event slot carries the illustrated contribution/flag receipt, a See action and a 44-point dismiss control. It stays readable until dismissed rather than rotating or disappearing. Navigation/background interruptions skip decorative replay while retaining the receipt; late callbacks cannot affect a new owner/park. Reduced motion gives a static confirmed character stamp and stationary flag with an instant focus move. A single preference-aware star cue resolves with confirmation; reduced motion suppresses the haptic burst. Real audio and device haptics still require physical-device review. Daily-chest occlusion follows actual modal visibility, including declining the unclaimed chest.
+
+Native read-only practice used actual MapLibre, TaskMarker, BossMapDeparture and event receipt components on TPS LinePlay QA Sep25 / iOS 18.6. Kraken, Robo-Shark and Ghost Squid were each observed beside the landmark during exit, then the stable confirmed flag receipt was read back. This is native fixture UI evidence, not a real raid charge or multiplayer/physical-GPS test. An already-running Simulator recording was left untouched; no complete normal-speed playback artifact or OS Reduce Motion walkthrough is claimed here.
+
+Full-size art inspection found a detached edge fragment in the existing Robo-Shark reference. The first imagegen cleanup was rejected for tight cropping and archived outside app assets. The second retained a coherent metal head/visor, attached side fins and lower tail, the established palette and outlines, and comfortable visible transparent padding. It was reviewed full-size and at native map/receipt size before use. The versioned cleanup is shared by all runtime boss art consumers, with its visible character size preserved; the reference is retained unchanged. The previously rejected astronaut remains outside runtime assets and all four astronaut consumers still use reviewed v2. Generated candidates never pass automatically.
+
+Validation: 285 app checks pass; TypeScript and diff checks are clean. Backend BossRaidTest and RideControlServiceTest pass 19 tests / 126 assertions using isolated source, in-memory SQLite and null Scout. PHP 8.5 reports the pre-existing PDO constant deprecation. No live search indexing, account boss attack or account reward claim was performed.
+
+The six-part goal remains active. Adventure Ticket progression/substitution, complementary crew payoff, voluntary replay evidence, physical GPS/audio/haptics/accessibility/performance and the previously observed Reanimated/Fabric reload crash remain unfinished. This checkpoint is concrete progress on requirement 4 and continuity in requirement 5; it does not close the overall goal.

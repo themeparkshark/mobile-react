@@ -160,6 +160,19 @@ test('a confirmed celebration belongs to its player, waits for sheet dismissal, 
  sheet.props.onModalHide();h.view.render();const win=h.view.find(n=>n.type==='react-native-modal'&&n.props.isVisible);assert.ok(win);
  win.props.onBackdropPress();await h.view.settle();assert.deepEqual(h.writes,[['boss-celebrated-v2-5-77','1']]);
 });
+test('map handoff carries the actual reward receipt and waits for both native presentations to finish hiding',async()=>{
+ const h=flow(),busy=[],receipts=[];
+ h.view.change({onMapOcclusionChange:value=>busy.push(value),onCelebrationDismiss:value=>receipts.push(value)});
+ const sheet=h.view.find(n=>n.type==='react-native-modal');sheet.props.onModalWillShow();h.view.render();
+ const settled={...h.view.props.raid,status:'defeated',hp_left:0,you:{attacks:1,attacks_left:4,damage:50,
+  reward:{outcome:'defeated',coins:50,xp:100,energy:20,parts:2,tickets:0}}};
+ h.view.change({raid:settled});for(const [id,fn]of [...h.view.timers]){h.view.timers.delete(id);fn();}await h.view.settle();
+ h.view.change({open:false});sheet.props.onModalHide();h.view.render();
+ const win=h.view.find(n=>n.type==='react-native-modal'&&n.props.isVisible);win.props.onModalWillShow();h.view.render();
+ win.props.onBackdropPress();h.view.render();assert.equal(receipts[0],settled);assert.notEqual(busy.at(-1),false);
+ win.props.onModalHide();h.view.render();assert.equal(busy.at(-1),false);
+ assert.ok(h.view.find(n=>n.type==='react-native-modal'&&n.props.children));
+});
 test('reduced motion keeps a readable boss sheet without slide or zoom presentation',()=>{
  const h=flow({reduced:true}),sheet=h.view.find(n=>n.type==='react-native-modal');
  assert.equal(sheet.props.animationIn,'fadeIn');assert.equal(sheet.props.animationOut,'fadeOut');assert.equal(sheet.props.animationInTiming,100);

@@ -1,6 +1,21 @@
 import client from '../../client';
 import type { TeamId } from '../../../constants/teams';
 
+/** The exact server contribution result; a team/MVP label alone is not a takeover. */
+export interface RideControlClaim {
+  readonly park_id: number;
+  readonly asset_id: number;
+  readonly park_day: string;
+  readonly confirmed_at: string;
+  readonly ride_name: string;
+  readonly team: TeamId;
+  readonly points: number;
+  readonly controller: TeamId | null;
+  readonly previous_controller: TeamId | null;
+  readonly flipped: boolean;
+  readonly scores: Record<TeamId, number>;
+}
+
 export interface RideControlRide {
   readonly asset_id: number;
   readonly controller: TeamId;

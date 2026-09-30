@@ -3,6 +3,7 @@ import { useContext, useEffect, useMemo, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { Marker } from '../../components/map/Marker';
+import RideTeamFlag from '../../components/map/RideTeamFlag';
 import Countdown, { zeroPad } from 'react-countdown';
 import { TaskType } from '../../models/task-type';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
@@ -92,6 +93,7 @@ export default function TaskMarker({
   isSelected,
   isTripGoal = false,
   control,
+  flagRaiseKey,
   ambient = false,
   live,
   onPress,
@@ -102,6 +104,7 @@ export default function TaskMarker({
   readonly ambient?: boolean;
   /** Today's Ride Control state for this ride, if any team holds it. */
   readonly control?: RideControlRide;
+  readonly flagRaiseKey?: string;
   readonly task: TaskType;
   readonly isSelected: boolean;
   readonly isTripGoal?: boolean;
@@ -217,9 +220,8 @@ export default function TaskMarker({
         />
 
         {control && (
-          <View style={styles.teamFlag} accessibilityLabel={`${TEAMS[control.controller].name} holds this ride`}>
-            <Image source={TEAMS[control.controller].badge} style={styles.teamBadge} contentFit="contain" />
-            {control.contested && <Text style={styles.contested}>⚔</Text>}
+          <View style={styles.teamFlag}>
+            <RideTeamFlag team={control.controller} contested={control.contested} raiseKey={flagRaiseKey} />
           </View>
         )}
 
@@ -241,9 +243,7 @@ export default function TaskMarker({
 }
 
 const styles = StyleSheet.create({
-  teamFlag: { position: 'absolute', top: 24, right: 0, zIndex: 21, alignItems: 'center' },
-  teamBadge: { width: 24, height: 24 },
-  contested: { position: 'absolute', bottom: -6, right: -8, fontSize: 16 },
+  teamFlag: { position: 'absolute', top: 25, right: -3, zIndex: 21 },
   container: {
     width: 72,
     height: 96,

@@ -12,6 +12,7 @@ import { Marker } from './map/Marker';
 import { buildDecorations, DECO_ICONS, decorationBand } from './map/decorations';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -35,6 +36,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
 }) {
   const { location, heading, headingEnabled, setHeadingEnabled } = useContext(LocationContext);
   const { player } = useContext(AuthContext);
+  const reducedMotion = useReducedGameMotion();
 
   // Shark marker animations
   const bobAnim = useRef(new Animated.Value(0)).current;
@@ -206,8 +208,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     setFocusedOnPlayer(false);
     followRef.current = false;
     cameraRef.current?.setCamera({ centerCoordinate: [focusCoordinate.longitude, focusCoordinate.latitude],
-      heading: 0, zoomLevel: 17.9, animationDuration: 450, animationMode: 'easeTo' });
-  }, [focusCoordinate?.latitude, focusCoordinate?.longitude, focusCoordinate?.requestId]);
+      heading: 0, zoomLevel: 17.9, animationDuration: reducedMotion ? 0 : 450, animationMode: reducedMotion ? 'moveTo' : 'easeTo' });
+  }, [focusCoordinate?.latitude, focusCoordinate?.longitude, focusCoordinate?.requestId, reducedMotion]);
   // Animated value for user location heading indicator
   const userHeadingRotation = useRef(new Animated.Value(0)).current;
   const lastUserHeadingRef = useRef<number>(0);

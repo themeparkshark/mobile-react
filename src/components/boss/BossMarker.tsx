@@ -3,31 +3,36 @@ import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import type { BossRaid } from '../../api/endpoints/parks/raid';
-import { BOSS_ART } from '../../games/boss/BossBrawl';
+import { BOSS_ART_SCALE, BOSS_ART } from '../../games/boss/BossBrawl';
 import { Marker } from '../map/Marker';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { bossDisplayCoordinate } from '../../services/boss/mapImpact';
 
 /** The raid boss hovering over its ride: small, bobbing, with its shared HP bar. */
-export default function BossMarker({ raid, onPress }: { readonly raid: BossRaid; readonly onPress: () => void }) {
+export default function BossMarker({ raid, onPress, animate = true }: { readonly raid: BossRaid; readonly onPress: () => void; readonly animate?: boolean }) {
   const p = useSharedValue(0);
+  const reduced = useReducedGameMotion();
   useEffect(() => {
-    p.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.linear }), -1, false);
+    p.value = 0;
+    if (!reduced && animate) p.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.linear }), -1, false);
     return () => cancelAnimation(p);
-  }, [p]);
+  }, [p, reduced, animate]);
   const bob = useAnimatedStyle(() => ({
     transform: [{ translateY: Math.sin(p.value * Math.PI * 2) * 4 }, { rotate: `${Math.sin(p.value * Math.PI * 4) * 6}deg` }],
   }));
   const ring = useAnimatedStyle(() => ({ opacity: 0.6 - p.value * 0.6, transform: [{ scale: 0.6 + p.value * 0.8 }] }));
   if (raid.latitude === null || raid.longitude === null) return null;
-  const hp = Math.max(0.03, raid.hp_left / Math.max(1, raid.hp_max));
+  const hp = Math.min(1, Math.max(0, raid.hp_left / Math.max(1, raid.hp_max)));
   return (
     // Anchored so the boss hovers beside its ride's landmark instead of covering it.
-    <Marker coordinate={{ latitude: raid.latitude, longitude: raid.longitude }} anchor={{ x: -0.2, y: 1.15 }} onPress={onPress}
+    <Marker coordinate={bossDisplayCoordinate({ latitude: raid.latitude, longitude: raid.longitude })} anchor={{ x: 0.5, y: 0.9 }} onPress={onPress}
       accessibilityLabel={`Boss raid at ${raid.ride_name ?? 'this ride'}. Open.`}>
       <View style={styles.wrap}>
-        <Animated.View style={[styles.ring, ring]} />
+        <Animated.View style={[styles.ring, reduced || !animate ? { opacity: 0.4 } : ring]} />
         <View style={styles.hpTrack}><View style={[styles.hpFill, { width: `${hp * 100}%` }]} /></View>
         <Animated.View style={bob}>
-          <Image source={BOSS_ART[raid.boss]} style={styles.boss} contentFit="contain" />
+          <Image source={BOSS_ART[raid.boss]} allowDownscaling={raid.boss !== 'robo_shark'}
+            style={[styles.boss, { transform: [{ scale: BOSS_ART_SCALE?.[raid.boss] ?? 1 }] }]} contentFit="contain" />
         </Animated.View>
       </View>
     </Marker>

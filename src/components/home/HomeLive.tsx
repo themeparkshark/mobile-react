@@ -6,7 +6,7 @@ import { cheerRide, getLiveParks, type HomeCheerTarget, type LiveParks, type Liv
 import { BOSS_NAMES } from '../../api/endpoints/parks/raid';
 import { TEAMS, type TeamId } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
-import { BOSS_ART } from '../../games/boss/BossBrawl';
+import { BOSS_ART_SCALE, BOSS_ART } from '../../games/boss/BossBrawl';
 import { WhackAShark } from '../../games/whack';
 import * as RootNavigation from '../../RootNavigation';
 import BossRaidFlow, { useParkRaid } from '../boss/BossRaidFlow';
@@ -91,7 +91,7 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
           : 'Open live parks'}>
         {liveRaid?.raid ? (
           <>
-            <Image source={BOSS_ART[liveRaid.raid.boss]} style={styles.barBossArt} contentFit="contain" />
+            <Image source={BOSS_ART[liveRaid.raid.boss]} style={[styles.barBossArt, { transform: [{ scale: BOSS_ART_SCALE?.[liveRaid.raid.boss] ?? 1 }] }]} contentFit="contain" />
             <View style={{ flex: 1 }}>
               <Text style={styles.barKicker} numberOfLines={1}>● LIVE · {liveRaid.name}</Text>
               <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} · {clock(liveRaid.raid.ends_at, now)} left</Text>
@@ -172,7 +172,7 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
                 {park.raid && new Date(park.raid.ends_at).getTime() > now && (
                   <Pressable style={styles.raidRow} accessibilityRole="button"
                     onPress={() => { pending.current = () => setRaidPark(park.park_id); setOpen(false); }}>
-                    <Image source={BOSS_ART[park.raid.boss]} style={styles.raidArt} contentFit="contain" />
+                    <Image source={BOSS_ART[park.raid.boss]} style={[styles.raidArt, { transform: [{ scale: BOSS_ART_SCALE?.[park.raid.boss] ?? 1 }] }]} contentFit="contain" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.raidName} numberOfLines={1}>{BOSS_NAMES[park.raid.boss]} at {park.raid.ride_name}</Text>
                       <View style={styles.hpTrack}>

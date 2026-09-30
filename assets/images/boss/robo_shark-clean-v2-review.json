@@ -1,0 +1,23 @@
+{
+  "reference": "robo_shark@3x.png",
+  "candidate_1": "exec-ad8eacad-5e13-4d61-9ccf-6d8590d62c32.png",
+  "candidate_1_result": "Rejected: character touches canvas edges; not used by the app.",
+  "candidate_2": "exec-bbe8e81b-ef2d-477c-83aa-e90d636c7d8d.png",
+  "review": "Single coherent metal head and visor, attached fins and tail, complete outline, reference-matched style. Surgical cleanup of detached left-edge fragment. Reviewed full-size; native-size review required before integration.",
+  "dimensions": [
+    1254,
+    1254
+  ],
+  "alpha_extrema": [
+    0,
+    255
+  ],
+  "sha256": "ce06dbba14de492066d200e262cbdaf4102b568efbe8af5e5f189ee142e2bd56",
+  "native_review": "Phone-size map exit and receipt inspected in TPS LinePlay QA Sep25 iOS 18.6. Full head, connected fins and tail, readable silhouette, visible size matches original using 1.4 UI scale. First cropped candidate remains rejected and unreferenced.",
+  "alpha_visible_bounds_threshold_8": [
+    216,
+    195,
+    1059,
+    1084
+  ]
+}

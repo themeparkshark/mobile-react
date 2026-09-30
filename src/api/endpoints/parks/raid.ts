@@ -1,4 +1,5 @@
 import client from '../../client';
+import type { RideControlClaim } from './rideControl';
 
 export type BossId = 'kraken' | 'robo_shark' | 'ghost_squid';
 
@@ -28,6 +29,7 @@ export interface BossRaid {
   readonly feed: readonly { username: string; damage: number; team: string | null }[];
   readonly top: readonly { username: string; damage: number; you: boolean }[];
   readonly mvp_is_you: boolean;
+  readonly ride_control?: RideControlClaim | null;
   readonly you: { attacks: number; attacks_left: number; damage: number; reward: RaidReward | null };
   readonly energy_cost: number;
   readonly reach_meters: number;

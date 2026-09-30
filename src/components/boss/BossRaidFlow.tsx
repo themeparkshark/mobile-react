@@ -8,7 +8,7 @@ import { BOSS_NAMES, getParkRaid, type AttackResult, type BossRaid, type RaidSta
 import { TEAMS, type TeamId } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
 import { LocationContext } from '../../context/LocationProvider';
-import { BOSS_ART, BossBrawl } from '../../games/boss/BossBrawl';
+import { BOSS_ART_SCALE, BOSS_ART, BossBrawl } from '../../games/boss/BossBrawl';
 import useBossAttackRecovery from '../../hooks/useBossAttackRecovery';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import type { BossAttackCheckpoint, BossAttackRecovery } from '../../services/boss/attackRecovery';
@@ -74,7 +74,7 @@ const ERRORS: Record<Exclude<AttackResult, { ok: true }>['error'], string> = {
 };
 
 /** Boss sheet (who's fighting, HP, your attacks), the Boss Brawl, and the victory/escape moment. */
-export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService }: {
+export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService, onCelebrationDismiss, onMapOcclusionChange, presentationAvailable = true }: {
   readonly raid: BossRaid | null;
   readonly parkId: number | null;
   readonly open: boolean;
@@ -82,6 +82,9 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   readonly onState: (state: RaidState) => void;
   /** Local fixture injection; normal screens always use the shared durable service. */
   readonly recoveryService?: BossAttackRecovery;
+  readonly onCelebrationDismiss?: (raid: BossRaid) => void;
+  readonly onMapOcclusionChange?: (busy: boolean) => void;
+  readonly presentationAvailable?: boolean;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
@@ -90,11 +93,14 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   const [note, setNote] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState<BossRaid | null>(null);
   const [sheetSettled, setSheetSettled] = useState(true);
+  const [winSettled, setWinSettled] = useState(true);
   const reduced = useReducedGameMotion();
-  const focused = useIsFocused();
+  const focused = useIsFocused() && presentationAvailable;
   const [now, setNow] = useState(Date.now());
   const playerId = player?.id ?? null;
   const contextKey = `${playerId}:${parkId}:${raid?.id}`;
+  const ownerKey = `${playerId}:${parkId}`;
+  const owner = useRef(ownerKey); owner.current = ownerKey;
   const currentView = useRef({ contextKey, open, focused });
   currentView.current = { contextKey, open, focused };
   const presented = useRef(new Set<string>());
@@ -109,6 +115,10 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     void refreshPlayer?.().catch(() => undefined);
   }, recovery: recoveryService });
   const receiptBlocked = !recovery.snapshot?.loaded || recovery.snapshot.phase !== 'ready' || !!recovery.snapshot.pending;
+  const occluded = open || fighting || !!celebrate || !sheetSettled || !winSettled;
+  const occlusionCallback = useRef(onMapOcclusionChange); occlusionCallback.current = onMapOcclusionChange;
+  useEffect(() => { occlusionCallback.current?.(occluded); }, [occluded, onMapOcclusionChange]);
+  useEffect(() => () => { occlusionCallback.current?.(false); }, []);
 
   useEffect(() => {
     round.current = null;
@@ -145,10 +155,13 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   }, [raid?.id, raid?.status, !!raid?.you.reward, focused, fighting, playerId]);
 
   const dismissCelebration = () => {
+    if (owner.current !== ownerKey) return;
     if (celebrate && playerId) void AsyncStorage.setItem(`boss-celebrated-v2-${playerId}-${celebrate.id}`, '1').catch(() => undefined);
+    if (celebrate) onCelebrationDismiss?.(celebrate);
     setCelebrate(null);
+    onClose();
   };
-  const closeSheet = () => { round.current = null; setFighting(false); if (celebrate) dismissCelebration(); onClose(); };
+  const closeSheet = () => { round.current = null; setFighting(false); if (celebrate) dismissCelebration(); else onClose(); };
   const submit = (expectedRound: typeof round.current, meta?: Record<string, unknown>) => {
     const finished = round.current;
     if (!finished || finished !== expectedRound) return;
@@ -199,7 +212,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   const winView = celebrate?.you.reward ? (
     <View style={styles.win}>
       <Text style={styles.winKicker}>{celebrate.you.reward.outcome === 'defeated' ? 'BOSS DEFEATED!' : 'IT GOT AWAY…'}</Text>
-      <Image source={BOSS_ART[celebrate.boss]} style={[styles.winArt, celebrate.you.reward.outcome === 'defeated' && styles.winArtKo]} contentFit="contain" />
+      <Image source={BOSS_ART[celebrate.boss]} style={[styles.winArt, { transform: [{ scale: BOSS_ART_SCALE?.[celebrate.boss] ?? 1 }, { rotate: celebrate.you.reward.outcome === 'defeated' ? '-18deg' : '0deg' }] }]} contentFit="contain" />
       <Text style={styles.winTitle}>
         {celebrate.you.reward.outcome === 'defeated'
           ? `The park beat ${BOSS_NAMES[celebrate.boss]}!`
@@ -214,7 +227,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
         {celebrate.you.reward.tickets > 0 && <Text style={styles.lootChip}>+{celebrate.you.reward.tickets} Park Ticket</Text>}
       </View>
       <Pressable accessibilityRole="button" style={styles.fight} onPress={dismissCelebration}>
-        <Text style={styles.fightText}>AWESOME</Text>
+        <Text style={styles.fightText}>BACK TO THE PARK</Text>
       </Pressable>
     </View>
   ) : null;
@@ -252,7 +265,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
               <Text style={styles.closeText}>✕</Text>
             </Pressable>
             <View style={styles.head}>
-              <Image source={BOSS_ART[raid.boss]} style={styles.bossArt} contentFit="contain" />
+              <Image source={BOSS_ART[raid.boss]} style={[styles.bossArt, { transform: [{ scale: BOSS_ART_SCALE?.[raid.boss] ?? 1 }] }]} contentFit="contain" />
               <View style={{ flex: 1 }}>
                 <Text style={styles.kicker}>BOSS RAID · {active ? `${clock(raid.ends_at, now)} left` : raid.status === 'defeated' ? 'DEFEATED' : 'ESCAPED'}</Text>
                 <Text style={styles.name}>{BOSS_NAMES[raid.boss]}</Text>
@@ -305,10 +318,11 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
           </ScrollView> : emptyView)}
       </Modal>
 
-      {celebrate?.you.reward && !open && focused && sheetSettled && <Modal isVisible onBackdropPress={dismissCelebration} onBackButtonPress={dismissCelebration} backdropOpacity={0.65}
+      <Modal isVisible={!!celebrate?.you.reward && !open && focused && sheetSettled} onBackdropPress={dismissCelebration} onBackButtonPress={dismissCelebration} backdropOpacity={0.65}
+        onModalWillShow={() => setWinSettled(false)} onModalHide={() => setWinSettled(true)}
         animationIn={reduced ? 'fadeIn' : 'zoomIn'} animationOut="fadeOut" animationInTiming={reduced ? 100 : 300}>
-        {winView}
-      </Modal>}
+        {winView ?? <View />}
+      </Modal>
     </>
   );
 }

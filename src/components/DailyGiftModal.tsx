@@ -40,7 +40,12 @@ function mainReward(r: DailyGiftRewardType): { icon: number; amount: number; lab
  * the chest to shake it open; the lid pops, rewards burst out and the day's
  * stamp lands on the ladder. Day 7 holds a Park Ticket for your next visit.
  */
-export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: DailyGiftType }) {
+export default function DailyGiftModal({ dailyGift, onMapOcclusionChange }: {
+  readonly dailyGift: DailyGiftType;
+  readonly onMapOcclusionChange?: (busy: boolean) => void;
+}) {
+  const occlusion = useRef(onMapOcclusionChange); occlusion.current = onMapOcclusionChange;
+  useEffect(() => () => { occlusion.current?.(false); }, []);
   const { player, refreshPlayer } = useContext(AuthContext);
   const { width } = useWindowDimensions();
   const [visible, setVisible] = useState(false);
@@ -171,6 +176,7 @@ export default function DailyGiftModal({ dailyGift }: { readonly dailyGift: Dail
 
   return (
     <Modal isVisible={visible} animationIn={reducedMotion ? 'fadeIn' : 'zoomIn'}
+      onModalWillShow={() => occlusion.current?.(true)} onModalHide={() => occlusion.current?.(false)}
       animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
       animationInTiming={reducedMotion ? 120 : 260} animationOutTiming={reducedMotion ? 120 : 180}
       backdropOpacity={0.7} onBackdropPress={phase !== 'opening' ? dismiss : undefined}

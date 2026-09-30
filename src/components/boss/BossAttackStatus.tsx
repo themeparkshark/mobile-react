@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BOSS_NAMES } from '../../api/endpoints/parks/raid';
-import { BOSS_ART } from '../../games/boss/BossBrawl';
+import { BOSS_ART_SCALE, BOSS_ART } from '../../games/boss/BossBrawl';
 import type { BossAttackSnapshot } from '../../services/boss/attackRecovery';
 
 /** One compact receipt replaces the fight button until the original round is resolved. */
@@ -25,7 +25,7 @@ export default function BossAttackStatus({ snapshot, onRetry }: {
             : 'The reply didn’t arrive. Confirm this round before spending more Energy.';
   return <View style={styles.card} accessibilityLiveRegion="polite">
     <View style={styles.head}>
-      {snapshot.pending && <Image source={BOSS_ART[snapshot.pending.boss]} contentFit="contain" style={styles.art} />}
+      {snapshot.pending && <Image source={BOSS_ART[snapshot.pending.boss]} contentFit="contain" style={[styles.art, { transform: [{ scale: BOSS_ART_SCALE?.[snapshot.pending.boss] ?? 1 }] }]} />}
       <View style={styles.copy}>
         <Text style={styles.kicker}>BRAWL RECEIPT</Text>
         <Text style={styles.title}>{title}</Text>

@@ -19,9 +19,11 @@ import {
 
 export const BOSS_ART: Record<BossId, number> = {
   kraken: require('../../../assets/images/boss/kraken.png'),
-  robo_shark: require('../../../assets/images/boss/robo_shark.png'),
+  robo_shark: require('../../../assets/images/boss/robo_shark-clean-v2.png'),
   ghost_squid: require('../../../assets/images/boss/ghost_squid.png'),
 };
+// The cleanup keeps transparent safety padding; match the original visible character size in UI.
+export const BOSS_ART_SCALE: Record<BossId, number> = { kraken: 1, robo_shark: 1.4, ghost_squid: 1 };
 
 const BOSS_SIZE = 210;
 const WEAK_SPOTS = { kraken: [0, -0.18], robo_shark: [0, 0.1], ghost_squid: [0, 0] } as const;
@@ -253,9 +255,9 @@ export function BossBrawl({ visible, boss, bossName, hpLeft, hpMax, damageRate =
           onAccessibilityTap={() => onTap(0, 0, true)} onPressIn={e => onTap(e.nativeEvent.locationX, e.nativeEvent.locationY)}>
           <View style={styles.center} pointerEvents="none">
             <Animated.View style={[{ width: BOSS_SIZE, height: BOSS_SIZE }, bossStyle]}>
-              <Image source={BOSS_ART[boss]} style={StyleSheet.absoluteFill} contentFit="contain" />
+              <Image source={BOSS_ART[boss]} style={[StyleSheet.absoluteFill, { transform: [{ scale: BOSS_ART_SCALE[boss] }] }]} contentFit="contain" />
               {!reduced && <Animated.View style={[StyleSheet.absoluteFill, flashStyle]}>
-                <Image source={BOSS_ART[boss]} style={StyleSheet.absoluteFill} contentFit="contain" tintColor="#ffffff" />
+                <Image source={BOSS_ART[boss]} style={[StyleSheet.absoluteFill, { transform: [{ scale: BOSS_ART_SCALE[boss] }] }]} contentFit="contain" tintColor="#ffffff" />
               </Animated.View>}
               {weakOn && (
                 <View style={[styles.weak, { left: BOSS_SIZE / 2 + spot[0] * BOSS_SIZE - 26, top: BOSS_SIZE / 2 + spot[1] * BOSS_SIZE - 26 }]} />

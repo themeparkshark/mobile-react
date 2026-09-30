@@ -2,6 +2,7 @@
 export function isStandalonePreviewMode(): boolean {
   return __DEV__ && (
     process.env.EXPO_PUBLIC_BOSS_MECHANICS_PREVIEW === '1' ||
+    process.env.EXPO_PUBLIC_BOSS_MAP_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_SHELF_ARRIVAL_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_LINEPLAY_FLOW_PREVIEW === '1' ||
     process.env.EXPO_PUBLIC_TRIVIA_GAME_PREVIEW === '1' ||
