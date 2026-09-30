@@ -265,8 +265,8 @@ export default function RideTrackerScreen() {
                   <Text style={s.statLabel}>Unique</Text>
                 </View>
                 <View style={s.statPill}>
-                  <Text style={s.statVal}>{stats.current_streak > 0 ? `${stats.current_streak}d` : '0'}</Text>
-                  <Text style={s.statLabel}>Streak</Text>
+                  <Text style={s.statVal}>{stats.current_streak}</Text>
+                  <Text style={s.statLabel}>Day streak</Text>
                 </View>
               </View>
             </FadeIn>
@@ -281,7 +281,8 @@ export default function RideTrackerScreen() {
               onPress={() => nav.navigate('RideHistory')} delay={420}
             />
             <MenuRow
-              icon={require('../../../assets/images/toolbar/leaderboard.png')}
+              // His star, not the podium: the podium is the STANDINGS tab right below.
+              icon={require('../../../assets/images/screens/pin-collections/star.png')}
               title="Stats & Insights" sub="Patterns, favorites, milestones"
               onPress={() => nav.navigate('RideStats')} delay={450}
             />
