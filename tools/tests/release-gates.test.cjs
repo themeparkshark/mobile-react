@@ -47,3 +47,15 @@ test('AdMob is gone from JS and unlinked from the native binary', () => {
   assert.equal(rnConfig.dependencies['react-native-google-mobile-ads'].platforms.ios, null);
   assert.equal(rnConfig.dependencies['react-native-worklets-core'].platforms.ios, null);
 });
+
+test('the committed native project matches the unlinked modules (no ads SDK, maps or worklets pods)', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const lock = fs.readFileSync(path.join(__dirname, '..', '..', 'ios/Podfile.lock'), 'utf8');
+  const pbx = fs.readFileSync(path.join(__dirname, '..', '..', 'ios/ThemeParkShark.xcodeproj/project.pbxproj'), 'utf8');
+  for (const pod of ['Google-Mobile-Ads-SDK', 'GoogleAppMeasurement', 'react-native-google-mobile-ads', 'react-native-maps', 'react-native-worklets-core', 'ExpoGL', 'ExpoImagePicker']) {
+    assert.doesNotMatch(lock, new RegExp(`^  - ${pod.replace(/[-]/g, '\\-')} `, 'm'), `${pod} is still in Podfile.lock`);
+  }
+  assert.doesNotMatch(pbx, /RNGoogleMobileAds/, 'the ads Info.plist script phase would fail the build without app.json');
+  assert.doesNotMatch(pbx, /ReactNativeMapsPrivacy\.bundle/);
+});
