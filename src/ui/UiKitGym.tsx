@@ -9,13 +9,14 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import YellowButton from '../components/YellowButton';
 import GameButton from './GameButton';
 import { GameDialog, GameDialogHost, confirmGame, gameAlert } from './GameDialog';
 import GameIcon from './GameIcon';
 import GameRichText from './GameRichText';
 import GameText from './GameText';
 import SharkLoader from './SharkLoader';
-import { GAME_ICON_NAMES } from './iconNames';
+import { GENERATED_ICON_NAMES, ORIGINAL_ICON_NAMES, type GameIconName } from './iconNames';
 import { TEXT_PRESET_NAMES } from './TextPresets';
 import { BRAND, OUTLINE, RADIUS, SPACE } from './tokens';
 
@@ -34,9 +35,9 @@ function Panel({ title, children, blue = false }: { title: string; children: Rea
   </View>;
 }
 
-function IconSheet({ blue }: { blue: boolean }) {
+function IconSheet({ blue, names }: { blue: boolean; names: readonly GameIconName[] }) {
   return <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 6 }}>
-    {GAME_ICON_NAMES.map(name => <View key={name} style={{ width: '25%', alignItems: 'center' }}>
+    {names.map(name => <View key={name} style={{ width: '25%', alignItems: 'center' }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 50 }}>
         <GameIcon name={name} size={16} />
         <GameIcon name={name} size={24} />
@@ -72,47 +73,58 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
     </View>
     <ScrollView contentContainerStyle={{ padding: SPACE.lg, paddingBottom: insets.bottom + 120 }}>
       {section === 'icons' && <>
-        <Panel title="GameIcon at 16, 24, 48"><IconSheet blue={false} /></Panel>
-        <Panel title="On house blue" blue><IconSheet blue /></Panel>
+        <Panel title="Originals, reused as drawn"><IconSheet blue={false} names={ORIGINAL_ICON_NAMES} /></Panel>
+        <Panel title="New, drawn from Alex's references"><IconSheet blue={false} names={GENERATED_ICON_NAMES} /></Panel>
+        <Panel title="On house blue" blue><IconSheet blue names={[...ORIGINAL_ICON_NAMES, ...GENERATED_ICON_NAMES]} /></Panel>
       </>}
 
       {section === 'buttons' && <>
-        <Panel title="Primary, secondary, danger">
-          <GameButton label="Spend 1 Ticket" icon="ticket" onPress={() => undefined} />
-          <GameButton label="Show me the line" variant="secondary" icon="map" onPress={() => undefined} />
-          <GameButton label="Leave the line" variant="danger" onPress={() => undefined} />
+        <Panel title="YellowButton, full width">
+          {['Close', 'Collect', 'Awesome!', 'Spend 1 Ticket to Play!', 'Not Enough Resources'].map(label =>
+            <YellowButton key={label} text={label} onPress={() => undefined} />)}
+          <YellowButton text="Walk closer" disabled />
         </Panel>
-        <Panel title="Compact, ghost, states">
-          <GameButton label="Try again" size="compact" icon="retry" onPress={() => undefined} />
-          <GameButton label="Not now" variant="ghost" size="compact" onPress={() => undefined} />
+        <Panel title="YellowButton in a modal column">
+          <View style={{ width: 230, alignSelf: 'center', gap: SPACE.sm }}>
+            {['OK', 'Nice!', 'Leave Gift', 'Turn On Location'].map(label =>
+              <YellowButton key={label} text={label} onPress={() => undefined} />)}
+          </View>
+        </Panel>
+        <Panel title="GameButton: primary, secondary, danger">
+          <GameButton label="Spend 1 Ticket" icon="ticket" onPress={() => undefined} />
+          <GameButton label="Show me the line" variant="secondary" onPress={() => undefined} />
+          <GameButton label="Leave the line" variant="danger" onPress={() => undefined} />
+          <GameButton label="Not now" variant="ghost" onPress={() => undefined} />
+        </Panel>
+        <Panel title="GameButton states">
           <GameButton label="Saving" loading={busy} onPress={() => undefined} />
-          <GameButton label={busy ? 'Stop loading' : 'Start loading'} variant="secondary" size="compact"
+          <GameButton label={busy ? 'Stop loading' : 'Start loading'} variant="secondary"
             onPress={() => setBusy(value => !value)} />
           <GameButton label="Walk closer to play" disabled onPress={() => undefined} />
         </Panel>
         <Panel title="On house blue" blue>
           <GameButton label="Play in line" icon="play" onPress={() => undefined} />
-          <GameButton label="Maybe later" variant="ghost" tone="onBlue" size="compact" onPress={() => undefined} />
+          <GameButton label="Maybe later" variant="ghost" tone="onBlue" onPress={() => undefined} />
         </Panel>
       </>}
 
       {section === 'dialogs' && <Panel title="GameDialog">
-        <GameButton label="Simple alert" size="compact" onPress={() => gameAlert('Coin saved!', 'It is waiting on your park shelf.')} />
-        <GameButton label="Confirm, destructive" size="compact" variant="secondary" onPress={async () => {
+        <GameButton label="Simple alert" variant="secondary" onPress={() => gameAlert('Coin saved!', 'It is waiting on your park shelf.')} />
+        <GameButton label="Confirm, destructive" variant="secondary" onPress={async () => {
           const leave = await confirmGame({ title: 'Leave the line?', message: 'Your queue progress is saved for today.', confirmLabel: 'Leave', cancelLabel: 'Keep playing', destructive: true });
           if (leave) gameAlert('You left the line', undefined, undefined, { icon: 'check' });
         }} />
-        <GameButton label="Three choices with icon" size="compact" variant="secondary" onPress={() => gameAlert(
+        <GameButton label="Three choices with icon" variant="secondary" onPress={() => gameAlert(
           'How did your wait end?', 'You keep any eligible rewards either way.', [
             { text: 'I reached boarding' },
             { text: 'I left the line' },
             { text: 'Keep playing', style: 'cancel' },
           ], { icon: 'timer' })} />
-        <GameButton label="Two queued" size="compact" variant="secondary" onPress={() => {
+        <GameButton label="Two queued" variant="secondary" onPress={() => {
           gameAlert('First', 'Dialogs queue, one at a time.');
-          gameAlert('Second', 'This one waited its turn.', undefined, { icon: 'sparkle' });
+          gameAlert('Second', 'This one waited its turn.', undefined, { icon: 'gift' });
         }} />
-        <GameButton label="Controlled dialog" size="compact" variant="secondary" onPress={() => setControlled(true)} />
+        <GameButton label="Controlled dialog" variant="secondary" onPress={() => setControlled(true)} />
         <GameDialog visible={controlled} title="Out of Tickets" icon="ticket"
           message="Start a queue adventure to earn your next Ticket."
           buttons={[{ text: 'Got it' }]} onAnswer={() => setControlled(false)} />
@@ -120,8 +132,9 @@ export default function UiKitGym({ route }: { route?: { params?: { section?: Sec
 
       {section === 'loaders' && <>
         <View style={{ flexDirection: 'row', gap: 6, marginBottom: SPACE.md, justifyContent: 'center' }}>
-          {(['loading', 'empty', 'error'] as const).map(state => <GameButton key={state} label={state} size="compact"
-            fullWidth={false} variant={loaderState === state ? 'primary' : 'secondary'} onPress={() => setLoaderState(state)} />)}
+          {(['loading', 'empty', 'error'] as const).map(state => <View key={state} style={{ width: 110 }}>
+            <GameButton label={state} variant={loaderState === state ? 'secondary' : 'ghost'} onPress={() => setLoaderState(state)} />
+          </View>)}
         </View>
         <Panel title="SharkLoader">
           <View style={{ height: 300 }}>
