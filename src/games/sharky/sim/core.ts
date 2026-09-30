@@ -231,8 +231,9 @@ export function isin(p: number): number {
   const x = t * 180; // scaled by 512
   const a = x * (92160 - x); // (x)(180*512 - x), scaled by 512^2
   const num = 4 * a;
-  const den = 40500 * 262144 - 4 * a;
-  return sign * idiv(num * 256, den);
+  const den = 40500 * 262144 - a;
+  const r = sign * idiv(num * 256, den);
+  return r === 0 ? 0 : r;
 }
 
 /** mulberry32 on a one-number state object. Returns uint32. */
@@ -697,6 +698,8 @@ export interface SimState {
   // events
   ev: number[];
   evN: number;
+  /** Events of the last step were drained: the next input or step starts a fresh batch. */
+  evStale: number;
   // integrity
   hash: number;
   // stats (plausibility + results)
@@ -714,6 +717,7 @@ export interface SimState {
   stReactN: number;
   stReactSum: number;
   stReactFast: number;
+  reactS: number[];
   lastTele: number;
   holdStart: number;
   holdHist: number[];
@@ -737,6 +741,11 @@ function zeros(n: number): number[] {
 
 function emit(s: SimState, kind: number, a: number, b: number, c: number, d: number): void {
   'worklet';
+  if (s.evStale) {
+    // Inputs applied before a step emit into that step's batch.
+    s.evN = 0;
+    s.evStale = 0;
+  }
   if (s.evN >= EV_CAP) return;
   const o = s.evN * EV_STRIDE;
   s.ev[o] = kind;
@@ -788,7 +797,7 @@ function allocEntity(s: SimState): number {
   return -1;
 }
 
-function spawn(s: SimState, t: number, x: number, y: number, p1: number, p2: number, line: number): number {
+export function spawn(s: SimState, t: number, x: number, y: number, p1: number, p2: number, line: number): number {
   'worklet';
   const i = allocEntity(s);
   if (i < 0) return -1;
@@ -812,13 +821,15 @@ function spawn(s: SimState, t: number, x: number, y: number, p1: number, p2: num
  * Start sprint `idx`: materialize its descriptor into the chunk queue. `desc`
  * may be a server-streamed descriptor; null regenerates locally.
  */
-export function startSprint(s: SimState, idx: number, desc: SprintDescriptor | null): void {
+export function startSprint(s: SimState, idx: number, desc: SprintDescriptor | null, extraLead = 0): void {
   'worklet';
   const d = desc || generateSprint(s.seed, idx, s.mode, s.tier, s.speed >> 8);
   s.sprint = idx;
   const du = distU(s);
   // Lead-in: no hazard hitbox within ~1.5s of the pocket exit.
-  const lead = idx === 0 ? 260 : idiv((s.speed >> 8) * 3, 2);
+  // Every hazard must get its full edge badge (600ms before the view), so the
+  // lead covers the view ahead plus 600ms (races have no warm-up chunk).
+  const lead = extraLead + (idx === 0 ? (s.mode === MODE_RACE ? aheadU(s) + 320 : 260) : idiv((s.speed >> 8) * 3, 2));
   let x = du + lead;
   s.sprintStart = x;
   s.cqN = 0;
@@ -997,6 +1008,7 @@ export function createSim(cfg: SimConfig): SimState {
     rs: hash2(cfg.seed | 0, 0x5eed) | 0,
     ev: zeros(EV_CAP * EV_STRIDE),
     evN: 0,
+    evStale: 0,
     hash: 2166136261,
     stSkims: 0,
     stPerfects: 0,
@@ -1012,6 +1024,7 @@ export function createSim(cfg: SimConfig): SimState {
     stReactN: 0,
     stReactSum: 0,
     stReactFast: 0,
+    reactS: zeros(64),
     lastTele: -1,
     holdStart: 0,
     holdHist: zeros(32),
@@ -1221,6 +1234,7 @@ export function applyInput(s: SimState, kind: number, sub: number, arg: number):
     s.holdStart = s.step;
     if (s.lastTele >= 0) {
       const r = s.step - s.lastTele;
+      if (s.stReactN < 64) s.reactS[s.stReactN] = r;
       s.stReactN++;
       s.stReactSum += r;
       if (r < 4) s.stReactFast++;
@@ -1245,6 +1259,7 @@ export function applyInput(s: SimState, kind: number, sub: number, arg: number):
     s.holdHist[b]++;
     if (s.lastTele >= 0) {
       const r = s.step - s.lastTele;
+      if (s.stReactN < 64) s.reactS[s.stReactN] = r;
       s.stReactN++;
       s.stReactSum += r;
       if (r < 4) s.stReactFast++;
@@ -1338,7 +1353,6 @@ function sharkHit(s: SimState, i: number): void {
     if (j < 0) break;
     s.evx[j] = (rngRange(r, 60, 260)) * Q; // forward (world-relative)
     s.evy[j] = (rngRange(r, 0, 520) - 360) * Q;
-    s.etm[j] = SCATTER_STEPS;
   }
   s.rs = r.s;
   if (s.score > 0 && n > 0) {
@@ -1391,7 +1405,6 @@ function chomp(s: SimState, i: number, pts: number, kind: number): void {
       if (j < 0) break;
       s.evx[j] = rngRange(r, 80, 300) * Q;
       s.evy[j] = (rngRange(r, 0, 500) - 330) * Q;
-      s.etm[j] = SCATTER_STEPS;
     }
     s.rs = r.s;
   }
@@ -1510,7 +1523,9 @@ function updateEntities(s: SimState, du: number, pdu: number): void {
   'worklet';
   const ahead = aheadU(s);
   const spd = s.speedEff >> 8;
-  const badgeLead = idiv(spd * 6, 10); // 600ms of travel
+  // 600ms of travel at full speed (a Float's slow drift must not shorten it).
+  const sb = s.speed >> 8;
+  const badgeLead = idiv((spd > sb ? spd : sb) * 6, 10);
   for (let i = 0; i < ENT_CAP; i++) {
     const t = s.et[i];
     if (t === E_NONE) continue;
@@ -1677,6 +1692,9 @@ function gate(s: SimState, i: number): void {
   s.phase = PH_POCKET;
   s.phaseSteps = 0;
   s.pocketY = s.y;
+  // The next sprint streams in now, placed after the pocket's cruise (the
+  // speed is constant in a pocket, so this is exact) and its lead-in.
+  startSprint(s, s.sprint + 1, null, idiv(idiv(s.speed, STEP_HZ) * s.pocketLen, Q));
   s.float = 0;
   s.dash = 0;
   s.dashBuf = 0;
@@ -1842,9 +1860,8 @@ export function stateHash(s: SimState): number {
  * Advance one fixed 1/60s step. Inputs for this step must already be applied.
  * Events for the step are in s.ev[0 .. s.evN*EV_STRIDE).
  */
-export function step(s: SimState): void {
+function stepInner(s: SimState): void {
   'worklet';
-  s.evN = 0;
   s.step++;
   if (s.phase === PH_DONE) return;
   s.pdist = s.dist;
@@ -1878,6 +1895,10 @@ export function step(s: SimState): void {
     s.vy = 0;
     s.dist += idiv(s.speed, STEP_HZ);
     const du = s.dist >> 8;
+    while (s.cqNext < s.cqN && s.cqX[s.cqNext] <= du + 1500) {
+      spawnChunk(s, s.cqNext);
+      s.cqNext++;
+    }
     updateEntities(s, du, pdu);
     const left = s.pocketLen - s.phaseSteps;
     if (left === 72 || left === 36 || left === 0) emit(s, EV_PIP, left === 72 ? 1 : left === 36 ? 2 : 3, 0, 0, 0);
@@ -1885,8 +1906,7 @@ export function step(s: SimState): void {
       s.phase = PH_PLAY;
       s.phaseSteps = 0;
       s.vy = 0;
-      emit(s, EV_POCKET_END, s.sprint + 1, 0, 0, 0);
-      startSprint(s, s.sprint + 1, null);
+      emit(s, EV_POCKET_END, s.sprint, 0, 0, 0);
     }
     return;
   }
@@ -2013,6 +2033,18 @@ export function step(s: SimState): void {
 
   if (s.phaseSteps % 6 === 0) emit(s, EV_SCORE, s.score, s.pot, 0, 0);
   if (s.step % 600 === 0) s.hash = stateHash(s);
+}
+
+/**
+ * Advance one fixed 1/60s step. Inputs for this step must already be applied
+ * (their events join this step's batch). Events: s.ev[0 .. s.evN*EV_STRIDE).
+ */
+export function step(s: SimState): void {
+  'worklet';
+  if (s.evStale) s.evN = 0;
+  s.evStale = 0;
+  stepInner(s);
+  s.evStale = 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -2158,7 +2190,10 @@ export function plausibility(s: SimState): Plausibility {
   'worklet';
   const reasons: string[] = [];
   const mean = s.stReactN > 0 ? s.stReactSum / s.stReactN : 99;
-  if (s.stReactN >= 6 && mean < 9) reasons.push('reaction_median');
+  const n = s.stReactN < 64 ? s.stReactN : 64;
+  const sorted = s.reactS.slice(0, n).sort((a, b) => a - b);
+  const median = n > 0 ? sorted[n >> 1] : 99;
+  if (n >= 6 && median < 9) reasons.push('reaction_median');
   if (s.stReactFast >= 3 && s.stReactN >= 6 && s.stReactFast * 2 > s.stReactN) reasons.push('reaction_floor');
   let total = 0;
   for (let i = 0; i < 32; i++) total += s.holdHist[i];

@@ -354,7 +354,8 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     tick.value;
     const s = sim.value;
     let z = s.sprint < 0 ? 0 : s.sprint;
-    if (s.phase === PH_POCKET) z += Math.min(1, s.phaseSteps / 48);
+    // The next sprint is already queued in a pocket: grade across it.
+    if (s.phase === PH_POCKET) z = Math.max(0, s.sprint - 1) + Math.min(1, s.phaseSteps / 48);
     return Math.min(3, z);
   });
   const waterColors = useDerivedValue(() => {
