@@ -115,7 +115,7 @@ const QUEUE_STAMP_PREVIEW: StampData[] = [
 function rewardText(rewards: StampRewards): string {
   return [
     rewards.energy > 0 && `+${rewards.energy} Energy`,
-    rewards.tickets > 0 && `+${rewards.tickets} Tickets`,
+    rewards.tickets > 0 && `+${rewards.tickets} Ticket${rewards.tickets === 1 ? '' : 's'}`,
     rewards.xp > 0 && `+${rewards.xp} XP`,
     rewards.coins > 0 && `+${rewards.coins} Coins`,
     rewards.title && `“${rewards.title}” title`,

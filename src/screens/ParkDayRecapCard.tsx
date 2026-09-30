@@ -100,7 +100,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         <View style={styles.stat}><Text style={styles.statValue}>{recap.coin_upgrades}</Text><Text style={styles.statLabel}>UPGRADES</Text></View>
       </View>
       {recap.line_play_sessions > 0 && <Text style={styles.copy}>
-        {recap.eligible_line_minutes} verified queue minutes · {recap.ride_parts_earned} Ride Parts
+        {recap.eligible_line_minutes} verified queue minutes · {recap.ride_parts_earned} Ride Part{recap.ride_parts_earned === 1 ? '' : 's'}
       </Text>}
       {recap.park_project_points > 0 && <Text style={styles.copy}>
         +{recap.park_project_points} points toward the shared Park Project

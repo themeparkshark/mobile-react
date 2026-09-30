@@ -958,9 +958,9 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             <Text style={styles.tripPrepExplanation}>
               {set.is_in_rotation === false
                 ? progress.starter_milestone.is_unlocked
-                  ? `You earned this trip-prep milestone before the hunt rotated out. Claim ${progress.starter_milestone.rewards.tickets} Tickets, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP.`
+                  ? `You earned this trip-prep milestone before the hunt rotated out. Claim ${progress.starter_milestone.rewards.tickets} Ticket${progress.starter_milestone.rewards.tickets === 1 ? '' : 's'}, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP.`
                   : `Your ${progress.starter_milestone.collected} unique finds toward this reward are saved. The set is off the map for now.`
-                : `Find eight different items to bring ${progress.starter_milestone.rewards.tickets} Tickets, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP toward your next park day${progress.starter_milestone.rewards.title ? `, and earn the ${progress.starter_milestone.rewards.title} profile title` : ''}. Keep collecting for the full set reward.`}
+                : `Find eight different items to bring ${progress.starter_milestone.rewards.tickets} Ticket${progress.starter_milestone.rewards.tickets === 1 ? '' : 's'}, ${progress.starter_milestone.rewards.energy} Energy, and ${progress.starter_milestone.rewards.experience} XP toward your next park day${progress.starter_milestone.rewards.title ? `, and earn the ${progress.starter_milestone.rewards.title} profile title` : ''}. Keep collecting for the full set reward.`}
             </Text>
             {!!progress.starter_milestone.wearable_choices?.length && !progress.starter_milestone.rewards_claimed && (
               <View style={{ marginBottom: 12 }}>
