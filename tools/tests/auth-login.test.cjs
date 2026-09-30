@@ -205,3 +205,10 @@ test('Apple cancellation is silent and missing crumb/error data still gets fallb
   await unavailable.press();
   assert.deepEqual(unavailable.alerts, [["Couldn't sign in", 'Please try again.']]);
 });
+test('the Apple authorization code reaches the login request so deletion can revoke the grant', async () => {
+  const seen = [];
+  const { auth } = provider({ login: async (...args) => { seen.push(args); return { token: 'test-session' }; } });
+  await auth.login({ ...credential, authorizationCode: 'apple-code' });
+  await auth.login(credential);
+  assert.deepEqual(seen.map(args => args[2]), ['apple-code', undefined]);
+});

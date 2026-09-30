@@ -110,7 +110,9 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
       throw new Error('Theme Park Shark sign-in service is unavailable.');
     }
 
-    const response = await login(credential.user, credential.identityToken);
+    // The authorization code lets the server keep an Apple refresh token, so a
+    // later account deletion can revoke this app's Sign in with Apple grant.
+    const response = await login(credential.user, credential.identityToken, credential.authorizationCode);
     // Validate the session before saving it. A server outage must leave the
     // sign-in screen with an actionable error, not an unusable saved token.
     const signedInPlayer = await getMe({ token: response.token, throwOnError: true });
