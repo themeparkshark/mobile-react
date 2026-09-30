@@ -280,7 +280,7 @@ export default function PrepItemRedeemModal({
   const outerColors = {
     1: '#0788e4',   // Common - task blue
     2: '#e8a000',   // Uncommon - gold
-    3: '#9C27B0',   // Rare - purple
+    3: '#0a9a78',   // Rare - lagoon green (never purple)
     4: '#E91E63',   // Epic - pink
     5: '#FF6F00',   // Legendary - orange
   };
@@ -289,7 +289,7 @@ export default function PrepItemRedeemModal({
   const innerColors = {
     1: '#4cdcff',   // Common - cyan (matches task)
     2: '#ffe7a2',   // Uncommon - light gold (matches coin)
-    3: '#e5d4ff',   // Rare - light purple (matches item)
+    3: '#c8f3e3',   // Rare - light lagoon
     4: '#ffccdd',   // Epic - light pink
     5: '#fff4cc',   // Legendary - light gold
   };
@@ -298,15 +298,15 @@ export default function PrepItemRedeemModal({
   const borderColors = {
     1: '#0d3249',   // Common
     2: '#3d4a24',   // Uncommon
-    3: '#4a2a66',   // Rare
+    3: '#0d4d3d',   // Rare
     4: '#6a2a3a',   // Epic
     5: '#5a4a1a',   // Legendary
   };
 
   const rarityConfig = {
     label: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'][prepItem.rarity - 1] || 'Common',
-    color: [null, '#4CAF50', config.secondary, '#9C27B0', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
-    glowColor: [null, '#4CAF50', config.secondary, '#9C27B0', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
+    color: [null, '#4CAF50', config.secondary, '#0a9a78', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
+    glowColor: [null, '#4CAF50', config.secondary, '#0a9a78', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
     outerBg: outerColors[prepItem.rarity as keyof typeof outerColors] || '#0788e4',
     innerBg: innerColors[prepItem.rarity as keyof typeof innerColors] || '#4cdcff',
     borderColor: borderColors[prepItem.rarity as keyof typeof borderColors] || '#0d3249',
@@ -587,7 +587,7 @@ export default function PrepItemRedeemModal({
                         {rewards.energy > 0 && (
                           <FloatingNumber
                             value={rewards.energy}
-                            emoji="⚡"
+                            label="Energy"
                             color="#4CAF50"
                             delay={0}
                           />
@@ -595,7 +595,7 @@ export default function PrepItemRedeemModal({
                         {rewards.tickets > 0 && (
                           <FloatingNumber
                             value={rewards.tickets}
-                            emoji="🎟️"
+                            label={rewards.tickets === 1 ? 'Ticket' : 'Tickets'}
                             color="#FF9800"
                             delay={200}
                           />
@@ -618,7 +618,7 @@ export default function PrepItemRedeemModal({
                         color: config.tertiary,
                         textAlign: 'center',
                         textTransform: 'uppercase',
-                        textShadowColor: 'rgba(0, 0, 0, 0.5)',
+                        textShadowColor: '#05346e',
                         textShadowOffset: { width: 2, height: 2 },
                         textShadowRadius: 0,
                         marginBottom: 8,
@@ -626,8 +626,8 @@ export default function PrepItemRedeemModal({
                       }}
                     >
                       {pickupOutcome?.replayed ? 'Already in your book'
-                        : prepItem.rarity >= 4 ? '🔥 EPIC!'
-                        : prepItem.rarity >= 3 ? '✨ Nice!' : '🎉 Got it!'}
+                        : prepItem.rarity >= 4 ? 'Epic find!'
+                        : prepItem.rarity >= 3 ? 'Rare find!' : 'Got it!'}
                     </Text>
 
                     <Text
