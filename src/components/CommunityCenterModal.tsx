@@ -6,13 +6,14 @@ import {
 } from 'react-native';
 import Modal from 'react-native-modal';
 import { AuthContext } from '../context/AuthProvider';
-import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import api from '../api/client';
 import config from '../config';
 import * as Haptics from '../helpers/haptics';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import { GameButton, GameIcon, GameRichText, SharkLoader } from '../ui';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { formatCooldown, ticketsEarnedFrom } from '../screens/CommunityCenter/communityCenterRewards';
 
 interface CenterData {
   id: number;
@@ -47,7 +48,7 @@ export default function CommunityCenterModal({
   } | null>(null);
   
   const { player, refreshPlayer } = useContext(AuthContext);
-  const { triggerFly } = useCurrencyFly();
+  const reduced = useUiReducedMotion();
 
   const handleGive = async () => {
     if (!center) return;
@@ -58,14 +59,11 @@ export default function CommunityCenterModal({
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      // Fly tickets animation (would need ticket icon URL)
-      // triggerFly({ ... })
-      
       setResult({
         type: 'give',
         success: true,
         message: response.data.message,
-        ticketsEarned: 2,
+        ticketsEarned: ticketsEarnedFrom(response.data, 'give'),
       });
       
       refreshPlayer?.();
@@ -95,7 +93,7 @@ export default function CommunityCenterModal({
         type: 'claim',
         success: true,
         message: response.data.message,
-        ticketsEarned: 1,
+        ticketsEarned: ticketsEarnedFrom(response.data, 'claim'),
         giverName: response.data.giver_name,
       });
       
@@ -126,8 +124,8 @@ export default function CommunityCenterModal({
     <Modal
       isVisible={visible}
       onBackdropPress={handleClose}
-      animationIn="zoomIn"
-      animationOut="zoomOut"
+      animationIn={reduced ? 'fadeIn' : 'zoomIn'}
+      animationOut={reduced ? 'fadeOut' : 'zoomOut'}
     >
       <View style={styles.container}>
         <Ribbon text="Community Center" />
@@ -146,7 +144,7 @@ export default function CommunityCenterModal({
               </Text>
               <GameRichText preset="body" tone="onBlue" style={styles.resultMessage}>{result.message}</GameRichText>
               
-              {result.success && result.ticketsEarned && (
+              {result.success && !!result.ticketsEarned && (
                 <View style={[styles.rewardBadge, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
                   <Text style={styles.rewardText}>+{result.ticketsEarned}</Text>
                   <GameIcon name="ticket" size={30} />
@@ -194,7 +192,7 @@ export default function CommunityCenterModal({
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <GameIcon name="timer" size={20} />
-                      <Text style={styles.cooldownText}>Wait {center.give_cooldown_remaining}m</Text>
+                      <Text style={styles.cooldownText}>Wait {formatCooldown(center.give_cooldown_remaining)}</Text>
                     </View>
                   )}
                 </View>
@@ -219,7 +217,7 @@ export default function CommunityCenterModal({
                     ) : (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                         <GameIcon name="timer" size={20} />
-                        <Text style={styles.cooldownText}>Wait {center.claim_cooldown_remaining}m</Text>
+                        <Text style={styles.cooldownText}>Wait {formatCooldown(center.claim_cooldown_remaining)}</Text>
                       </View>
                     )
                   ) : (

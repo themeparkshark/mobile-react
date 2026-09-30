@@ -32,6 +32,7 @@ import api from '../api/client';
 import * as Haptics from '../helpers/haptics';
 import { GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { ticketLabel, ticketsEarnedFrom } from './CommunityCenter/communityCenterRewards';
 
 /** A small busy mark for buttons and slots: his fin bobbing, still under reduced motion. */
 function SharkLoaderDot({ style }: { readonly style?: object }) {
@@ -109,6 +110,7 @@ export default function CommunityCenterScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successType, setSuccessType] = useState<'claim' | 'give'>('claim');
   const [successGiverName, setSuccessGiverName] = useState('');
+  const [successTickets, setSuccessTickets] = useState(1);
   const [showNotEnoughCoinsModal, setShowNotEnoughCoinsModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -118,6 +120,10 @@ export default function CommunityCenterScreen() {
   
   const { player, refreshPlayer } = useContext(AuthContext);
   const { triggerFly } = useCurrencyFly();
+  // Reduce Motion: no loops, no flights, no pops. State changes land at once.
+  const reduced = useUiReducedMotion();
+  const modalIn = reduced ? 'fadeIn' : 'zoomIn';
+  const modalOut = reduced ? 'fadeOut' : 'zoomOut';
   
   // Sound player helper
   const playSound = async (soundKey: keyof typeof SOUNDS) => {
@@ -194,16 +200,18 @@ export default function CommunityCenterScreen() {
   
   // Entrance animation on mount
   useEffect(() => {
+    if (reduced) { entranceAnim.setValue(1); return; }
     Animated.spring(entranceAnim, {
       toValue: 1,
       friction: 8,
       tension: 40,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [reduced]);
   
   // Floating animation for bags
   useEffect(() => {
+    if (reduced) { floatAnim.setValue(0); return; }
     const float = Animated.loop(
       Animated.sequence([
         Animated.timing(floatAnim, {
@@ -222,12 +230,15 @@ export default function CommunityCenterScreen() {
     );
     float.start();
     return () => float.stop();
-  }, []);
+  }, [reduced]);
   
   // Bouncing question marks when gifts are available
   useEffect(() => {
-    if (!center?.gifts) return;
-    
+    if (!center?.gifts || reduced) {
+      bounceAnims.forEach(anim => anim.setValue(0));
+      return;
+    }
+    const loops: Animated.CompositeAnimation[] = [];
     center.gifts.forEach((gift, index) => {
       if (gift && index < 3 && !revealedSlots.has(index)) {
         // Staggered bounce animation
@@ -251,12 +262,15 @@ export default function CommunityCenterScreen() {
           ])
         );
         bounce.start();
+        loops.push(bounce);
       }
     });
-  }, [center?.gifts, revealedSlots]);
+    return () => loops.forEach(loop => loop.stop());
+  }, [center?.gifts, revealedSlots, reduced]);
   
   // Wiggle animation for question marks
   useEffect(() => {
+    if (reduced) { wiggleAnim.setValue(0); return; }
     const wiggle = Animated.loop(
       Animated.sequence([
         Animated.timing(wiggleAnim, {
@@ -279,11 +293,11 @@ export default function CommunityCenterScreen() {
     );
     wiggle.start();
     return () => wiggle.stop();
-  }, []);
+  }, [reduced]);
   
   // Pulse animation for Leave Gift button when available
   useEffect(() => {
-    if (center?.can_give && (player?.coins ?? 0) >= 350) {
+    if (!reduced && center?.can_give && (player?.coins ?? 0) >= 350) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -305,7 +319,7 @@ export default function CommunityCenterScreen() {
     } else {
       pulseAnim.setValue(1);
     }
-  }, [center?.can_give, player?.coins]);
+  }, [center?.can_give, player?.coins, reduced]);
   
   const fetchCenter = useCallback(async () => {
     console.log('🏠 Fetching community center for park:', parkId);
@@ -377,6 +391,7 @@ export default function CommunityCenterScreen() {
   
   // Animate button press
   const animatePress = (scaleAnim: Animated.Value) => {
+    if (reduced) return;
     Animated.sequence([
       Animated.timing(scaleAnim, {
         toValue: 0.9,
@@ -394,6 +409,8 @@ export default function CommunityCenterScreen() {
   
   // Trigger flying ticket animation
   const triggerTicketFly = (slotIndex: number | 'give', ticketCount: number, onComplete: () => void) => {
+    // Reduce Motion: no flight, the result card says what landed.
+    if (reduced) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onComplete(); return; }
     let startX: number, startY: number;
     
     if (slotIndex === 'give') {
@@ -442,7 +459,8 @@ export default function CommunityCenterScreen() {
     playSound('reveal');
     
     // Animate the reveal
-    Animated.spring(slotAnims[slotIndex], {
+    if (reduced) slotAnims[slotIndex].setValue(1);
+    else Animated.spring(slotAnims[slotIndex], {
       toValue: 1,
       friction: 6,
       tension: 100,
@@ -478,7 +496,8 @@ export default function CommunityCenterScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
       // Animate bag flying away
-      Animated.timing(slotAnims[slotIndex], {
+      if (reduced) slotAnims[slotIndex].setValue(2);
+      else Animated.timing(slotAnims[slotIndex], {
         toValue: 2,
         duration: 300,
         useNativeDriver: true,
@@ -486,6 +505,7 @@ export default function CommunityCenterScreen() {
       
       // Store giver name for success modal
       const giverName = response.data?.giver_name || gift.giver_name || 'A friendly shark';
+      const ticketsEarned = ticketsEarnedFrom(response.data, 'claim');
       
       await refreshPlayer?.();
       await fetchCenter();
@@ -502,9 +522,10 @@ export default function CommunityCenterScreen() {
       
       // Trigger flying ticket animation, then show success modal
       playSound('coin'); // Play coin sound as ticket flies
-      triggerTicketFly(slotIndex, 1, () => {
+      triggerTicketFly(slotIndex, ticketsEarned, () => {
         playSound('success'); // Play success when it lands
         setSuccessType('claim');
+        setSuccessTickets(ticketsEarned);
         setSuccessGiverName(giverName);
         setShowSuccessModal(true);
         // Double haptic for celebration effect
@@ -600,7 +621,8 @@ export default function CommunityCenterScreen() {
     setGiving(true);
     
     try {
-      await api.post(`/community-centers/${center.id}/give`);
+      const response = await api.post(`/community-centers/${center.id}/give`);
+      const ticketsEarned = ticketsEarnedFrom(response.data, 'give');
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
@@ -611,6 +633,10 @@ export default function CommunityCenterScreen() {
       const emptySlotIndex = [0, 1, 2].find(i => !center.gifts?.[i]);
       if (emptySlotIndex !== undefined) {
         setJustGiftedSlot(emptySlotIndex);
+        if (reduced) {
+          giftPlacedAnim.setValue(1);
+          setTimeout(() => { giftPlacedAnim.setValue(0); setJustGiftedSlot(null); }, 2100);
+        } else {
         giftPlacedAnim.setValue(0);
         Animated.sequence([
           Animated.timing(giftPlacedAnim, {
@@ -625,6 +651,7 @@ export default function CommunityCenterScreen() {
             useNativeDriver: true,
           }),
         ]).start(() => setJustGiftedSlot(null));
+        }
       }
       
       // Play whoosh as gift is placed
@@ -632,9 +659,10 @@ export default function CommunityCenterScreen() {
       
       // Trigger flying ticket animation, then show success modal
       playSound('coin'); // Play coin sound as tickets fly
-      triggerTicketFly('give', 2, () => {
+      triggerTicketFly('give', ticketsEarned, () => {
         playSound('success'); // Play success when it lands
         setSuccessType('give');
+        setSuccessTickets(ticketsEarned);
         setShowSuccessModal(true);
         // Double haptic for celebration effect
         setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100);
@@ -841,7 +869,7 @@ export default function CommunityCenterScreen() {
           <TouchableOpacity
             onPress={() => {
               // Animate press
-              Animated.sequence([
+              if (!reduced) Animated.sequence([
                 Animated.timing(goBackScale, {
                   toValue: 0.9,
                   duration: 50,
@@ -1005,8 +1033,8 @@ export default function CommunityCenterScreen() {
       <Modal
         isVisible={showCooldownModal}
         onBackdropPress={() => setShowCooldownModal(false)}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
+        animationIn={modalIn}
+        animationOut={modalOut}
       >
         <View style={styles.cooldownModalContainer}>
           <View style={styles.cooldownModalIcon}>
@@ -1041,8 +1069,8 @@ export default function CommunityCenterScreen() {
       <Modal
         isVisible={showConfirmGiveModal}
         onBackdropPress={() => setShowConfirmGiveModal(false)}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
+        animationIn={modalIn}
+        animationOut={modalOut}
       >
         <View style={styles.confirmModalContainer}>
           <View style={styles.confirmModalIcon}>
@@ -1096,8 +1124,8 @@ export default function CommunityCenterScreen() {
       <Modal
         isVisible={showSuccessModal}
         onBackdropPress={() => setShowSuccessModal(false)}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
+        animationIn={modalIn}
+        animationOut={modalOut}
       >
         <View style={styles.successModalContainer}>
           <View style={styles.successModalIcon}>
@@ -1118,8 +1146,8 @@ export default function CommunityCenterScreen() {
                 style={styles.rewardIcon}
                 contentFit="contain"
               />
-              <Text style={styles.rewardAmount}>+{successType === 'claim' ? '1' : '2'}</Text>
-              <Text style={styles.rewardLabel}>Ticket{successType === 'give' ? 's' : ''} earned!</Text>
+              <Text style={styles.rewardAmount}>+{successTickets}</Text>
+              <Text style={styles.rewardLabel}>{ticketLabel(successTickets)} earned!</Text>
             </View>
             <TouchableOpacity
               style={styles.successButton}
@@ -1135,8 +1163,8 @@ export default function CommunityCenterScreen() {
       <Modal
         isVisible={showNotEnoughCoinsModal}
         onBackdropPress={() => setShowNotEnoughCoinsModal(false)}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
+        animationIn={modalIn}
+        animationOut={modalOut}
       >
         <View style={styles.notEnoughModalContainer}>
           <View style={styles.notEnoughModalIcon}>
@@ -1189,8 +1217,8 @@ export default function CommunityCenterScreen() {
       <Modal
         isVisible={showErrorModal}
         onBackdropPress={() => setShowErrorModal(false)}
-        animationIn="zoomIn"
-        animationOut="zoomOut"
+        animationIn={modalIn}
+        animationOut={modalOut}
       >
         <View style={styles.errorModalContainer}>
           <View style={styles.errorModalIcon}>
