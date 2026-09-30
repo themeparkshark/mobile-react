@@ -57,7 +57,8 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === '../context/CurrencyFlyProvider') return { useCurrencyFly: () => ({ triggerFly(value) { flights.push(value); } }) };
       if (name === '../dev/ws7Preview') return { ws7Preview: () => '' };
       if (name === '../ui') return { BRAND: { navy: '#05346e', blue: '#0768b9', white: '#fff', gold: '#ffcf3b', goldLip: '#d99a00' },
-        GameIcon: 'GameIcon', gameAlert(title) { alerts.push(title); } };
+        GameIcon: 'GameIcon', ICON_SOURCES: { coins: 'icon:coins', energy: 'icon:energy', ticket: 'icon:ticket' },
+        gameAlert(title) { alerts.push(title); } };
       if (name === './RewardBurst') return { default: 'RewardBurst' };
       if (name === '../hooks/useReducedGameMotion') return { default: () => reduced };
       if (name === '../gamekit/SFX') return { playSfx: name => sounds.push(name) };
@@ -79,7 +80,7 @@ function chest({ reconciled = null, reduced = false } = {}) {
     return find(node.props?.children, predicate);
   }
   render();
-  return { updates, acknowledged, sounds, flights, alerts,
+  return { updates, acknowledged, sounds, flights, alerts, get exports() { return module.exports; },
     find: predicate => find(tree, predicate),
     decline() { find(tree, node => node.type === 'Pressable' && node.props.accessibilityLabel === 'Back to map without opening this chest').props.onPress(); render(); },
     get modal() { return tree; },
@@ -189,4 +190,31 @@ test('chest errors use the game dialog, never a system alert', async () => {
   await daily.settle();
   assert.deepEqual(daily.alerts, ['Could not open your chest']);
   assert.doesNotMatch(require('node:fs').readFileSync(require('node:path').join(root, file), 'utf8'), /Alert\.alert|[\u{1F300}-\u{1FAFF}\u2713\u203A]/u);
+});
+
+test('the count-up never shows +0 and the prize reserves its own height', () => {
+  const daily = chest();
+  const { countStart, prizeBlockHeight } = daily.exports;
+  assert.equal(countStart(20), 1);
+  assert.equal(countStart(1), 1);
+  assert.equal(countStart(0), 0);
+  assert.ok(prizeBlockHeight(1, true, false) > prizeBlockHeight(0, false, false));
+  const source = fs.readFileSync(path.join(root, file), 'utf8');
+  assert.match(source, /\+\{Math\.max\(shown, countStart\(amount\)\)\}/, 'the first open frame already shows at least 1');
+  assert.match(source, /prizeSlot, \{ height: prizeBlockHeight\(/);
+});
+test('the day 7 punch is motion and GameIcon art only, and its timer is cleared on unmount', () => {
+  const source = fs.readFileSync(path.join(root, file), 'utf8');
+  assert.doesNotMatch(source, /punchHole|borderRadius: 11/, 'no vector hole drawn over the ticket art');
+  assert.match(source, /<GameIcon name="sparkle"/);
+  assert.match(source, /if \(punchTimer\.current\) clearTimeout\(punchTimer\.current\);\n    \};/);
+  assert.doesNotMatch(source, /coingold\.png|ticket-icon\.png|energy\.png/, 'the fly uses the same GameIcon art as the prize');
+});
+test('flights carry the GameIcon art of each prize', async () => {
+  const daily = chest(); daily.open();
+  daily.updates[0].resolve({ ...gift, redeemed_at: '2026-09-30T00:12:00Z', day: 7, ladder,
+    granted: { coins: 100, energy: 0, tickets: 1 } });
+  await daily.settle(); daily.reveal(); daily.dismiss();
+  const byTarget = Object.fromEntries(daily.flights.map(f => [f.targetPosition, f.imageSource]));
+  assert.deepEqual(byTarget, { coins: 'icon:coins', tickets: 'icon:ticket' });
 });

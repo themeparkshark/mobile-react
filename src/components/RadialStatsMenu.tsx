@@ -1,6 +1,7 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, Text, View, StyleSheet } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
+import { useCurrencyFly } from '../context/CurrencyFlyProvider';
 import Avatar from './Avatar';
 import Button from './Button';
 import * as RootNavigation from '../RootNavigation';
@@ -82,6 +83,15 @@ export default function RadialStatsMenu() {
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const reducedMotion = useReducedGameMotion();
+  // Energy lives in this menu on the home map, so rewards (the daily chest)
+  // fly their Energy into the avatar that opens it.
+  const { registerTarget } = useCurrencyFly();
+  const avatarRef = useRef<View>(null);
+  const registerEnergyTarget = useCallback(() => {
+    avatarRef.current?.measureInWindow((x, y, w, h) => {
+      if (Number.isFinite(x) && Number.isFinite(y) && w > 0) registerTarget('energy', x + w / 2, y + h / 2);
+    });
+  }, [registerTarget]);
 
   const showTooltip = (text: string) => {
     if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
@@ -186,7 +196,8 @@ export default function RadialStatsMenu() {
       {/* Avatar button */}
       <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
         <Button onPress={toggleMenu}>
-          <View style={[styles.avatarWrapper, isOpen && styles.avatarWrapperActive]}>
+          <View ref={avatarRef} onLayout={registerEnergyTarget} collapsable={false}
+            style={[styles.avatarWrapper, isOpen && styles.avatarWrapperActive]}>
             <Avatar player={player} size="lg" />
           </View>
         </Button>

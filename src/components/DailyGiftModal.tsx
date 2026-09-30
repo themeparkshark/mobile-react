@@ -15,7 +15,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
 import type { DailyGiftAmountsType, DailyGiftRewardType, DailyGiftType } from '../models/daily-gift-type';
-import { BRAND, GameIcon, gameAlert } from '../ui';
+import { BRAND, GameIcon, ICON_SOURCES, gameAlert } from '../ui';
 import { ws7Preview } from '../dev/ws7Preview';
 import Ribbon from './Ribbon';
 import RewardBurst from './RewardBurst';
@@ -57,9 +57,22 @@ export function chestAmounts(gift: DailyGiftType, today: DailyGiftRewardType): D
  * Daily chest: a 7-day ladder you climb by coming back, looping weekly with
  * streak milestones. Tap the chest to shake it open; the lid pops, the real
  * granted reward bursts out with confetti and counts up, and the day's stamp
- * lands on the ladder. Day 7 punches a Park Ticket. Closing flies the reward
- * into its HUD counter. An Energy or Ticket day never shows a chest of coins.
+ * lands on the ladder. Day 7 slams a Park Ticket down (motion and a sparkle,
+ * no shapes drawn over the art). Closing flies the reward, in the same
+ * GameIcon art as the prize, into its counter: coins and Tickets to the
+ * header, Energy to the home avatar menu. An Energy or Ticket day never
+ * shows a chest of coins.
  */
+
+/** The count-up never shows "+0": it starts at 1 (or the whole prize when it is 0 or 1). */
+export function countStart(amount: number): number {
+  return Math.min(1, Math.max(0, amount));
+}
+
+/** Height the prize block reserves, so nothing below it ever moves or overlaps. */
+export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, ticketDay: boolean): number {
+  return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
+}
 export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOpen = ws7Preview() === 'chest' }: {
   readonly dailyGift: DailyGiftType;
   readonly onMapOcclusionChange?: (busy: boolean) => void;
@@ -86,12 +99,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
   const mounted = useRef(true);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const punchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       if (revealTimer.current) clearTimeout(revealTimer.current);
       if (countTimer.current) clearTimeout(countTimer.current);
+      if (punchTimer.current) clearTimeout(punchTimer.current);
     };
   }, []);
 
@@ -117,6 +132,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
   const burst = useSharedValue(0);
   const punch = useSharedValue(0);
   const cardShake = useSharedValue(0);
+  const spark = useSharedValue(0);
 
   useEffect(() => {
     if (!dailyGift.redeemed_at && player?.username) setVisible(true);
@@ -135,20 +151,21 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
     return () => { cancelAnimation(bob); cancelAnimation(glow); };
   }, [visible, phase, reducedMotion, bob, glow]);
   useEffect(() => () => {
-    [shake, pop, prize, stamp, burst, punch, cardShake].forEach(cancelAnimation);
-  }, [shake, pop, prize, stamp, burst, punch, cardShake]);
+    [shake, pop, prize, stamp, burst, punch, cardShake, spark].forEach(cancelAnimation);
+  }, [shake, pop, prize, stamp, burst, punch, cardShake, spark]);
   useEffect(() => {
     if (!reducedMotion) return;
-    [shake, pop, prize, stamp, burst, punch, cardShake].forEach(cancelAnimation);
-    shake.value = 0; pop.value = 1; burst.value = 0; cardShake.value = 0;
+    [shake, pop, prize, stamp, burst, punch, cardShake, spark].forEach(cancelAnimation);
+    shake.value = 0; pop.value = 1; burst.value = 0; cardShake.value = 0; spark.value = 0;
     prize.value = phase === 'open' ? 1 : 0;
     stamp.value = phase === 'open' ? 1 : 0;
     punch.value = phase === 'open' ? 1 : 0;
-  }, [reducedMotion, phase, shake, pop, prize, stamp, burst, punch, cardShake]);
+  }, [reducedMotion, phase, shake, pop, prize, stamp, burst, punch, cardShake, spark]);
 
-  // Count the prize up from zero once the chest is open (instant when reduced).
+  // Count the prize up from 1 once the chest is open (instant when reduced).
   useEffect(() => {
     if (phase !== 'open') { setShown(0); return; }
+    setShown(countStart(amount));
     if (reducedMotion || amount <= 1) { setShown(amount); return; }
     // ~650 ms in 20 frames; frame-counted so a stalled JS thread never skips the end.
     const frames = 20;
@@ -169,13 +186,12 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
   const dismiss = () => {
     setVisible(false);
     if (acknowledgedGift.current) {
-      // The reward lands in its real HUD counter.
+      // The reward lands in its counter, drawn with the same art as the prize.
       const paid = chestAmounts(acknowledgedGift.current, today);
       (['coins', 'tickets', 'energy'] as PrizeKind[]).forEach(k => {
         if (paid[k] > 0) {
-          triggerFly({ imageSource: k === 'coins' ? require('../../assets/images/coingold.png')
-            : k === 'tickets' ? require('../../assets/images/ticket-icon.png') : require('../../assets/images/energy.png'),
-          amount: Math.min(8, paid[k]), startX: width / 2, startY: height * 0.55, targetPosition: PRIZE[k].fly });
+          triggerFly({ imageSource: ICON_SOURCES[PRIZE[k].icon],
+            amount: Math.min(8, paid[k]), startX: width / 2, startY: height * 0.55, targetPosition: PRIZE[k].fly });
         }
       });
       setDailyGift(acknowledgedGift.current);
@@ -205,7 +221,16 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
       cardShake.value = withDelay(650, withSequence(
         ...[9, -8, 6, -4, 2, 0].map(v => withTiming(v, { duration: 45 })),
       ));
-      setTimeout(() => {
+      // A GameIcon sparkle flares on the impact frame and fades.
+      spark.value = 0;
+      spark.value = withDelay(640, withSequence(
+        withTiming(1, { duration: 110, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 420, easing: Easing.in(Easing.quad) }),
+      ));
+      if (punchTimer.current) clearTimeout(punchTimer.current);
+      punchTimer.current = setTimeout(() => {
+        punchTimer.current = null;
+        if (!mounted.current) return;
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
         playSfx('hit');
       }, 650);
@@ -272,8 +297,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
     transform: [{ translateY: phase === 'closed' ? bob.value : 0 }, { rotate: `${shake.value}deg` }, { scale: pop.value }],
   }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + glow.value * 0.4, transform: [{ scale: 0.9 + glow.value * 0.15 }] }));
+  // The prize rises out of the chest (from above), so it never slides into the lines below it.
   const prizeStyle = useAnimatedStyle(() => ({
-    opacity: prize.value, transform: [{ translateY: (1 - prize.value) * 40 }, { scale: 0.5 + prize.value * 0.5 }],
+    opacity: prize.value, transform: [{ translateY: (1 - prize.value) * -36 }, { scale: 0.5 + prize.value * 0.5 }],
   }));
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: cardShake.value }] }));
   // The Ticket falls from above tilted, squashes on impact, then settles.
@@ -288,9 +314,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
       ],
     };
   });
-  const holeStyle = useAnimatedStyle(() => ({
-    opacity: punch.value >= 0.6 ? 1 : 0,
-    transform: [{ scale: punch.value >= 0.6 ? 0.4 + punch.value * 0.6 : 0 }],
+  const sparkStyle = useAnimatedStyle(() => ({
+    opacity: spark.value,
+    transform: [{ scale: 0.6 + spark.value * 0.7 }, { rotate: `${spark.value * 25}deg` }],
   }));
 
   const chestSize = Math.min(width * 0.52, 230);
@@ -326,7 +352,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
           <Pressable onPress={onChestPress} disabled={phase !== 'closed'} accessibilityRole="button"
             accessibilityState={{ disabled: phase !== 'closed', busy: phase === 'opening' }}
             accessibilityLabel={phase === 'open' ? `Opened: ${amount} ${prizeLabel(kind, amount)}` : 'Open today’s chest'}
-            style={[styles.stage, { height: chestSize + 40 }]}>
+            style={[styles.stage, { height: chestSize + 12 }]}>
             <Animated.View style={[styles.glow, { width: chestSize * 1.3, height: chestSize * 1.3, borderRadius: chestSize }, glowStyle]} />
             <Animated.View style={chestStyle}>
               <Image source={phase === 'open' ? openArt : CHEST_CLOSED} style={{ width: chestSize, height: chestSize }} contentFit="contain" />
@@ -334,15 +360,18 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
             {phase === 'open' && ticketDay && (
               <Animated.View style={[styles.ticketPunch, ticketStyle]} pointerEvents="none">
                 <GameIcon name="ticket" size={chestSize * 0.62} />
-                <Animated.View style={[styles.punchHole, holeStyle]} />
+                <Animated.View style={[styles.spark, sparkStyle]}>
+                  <GameIcon name="sparkle" size={chestSize * 0.3} />
+                </Animated.View>
               </Animated.View>
             )}
           </Pressable>
 
+          <View style={[styles.prizeSlot, { height: prizeBlockHeight(extras.length, !!milestone, ticketDay) }]}>
           {phase === 'open' ? (
             <Animated.View style={[styles.prize, prizeStyle]}>
               {!ticketDay && <GameIcon name={PRIZE[kind].icon} size={56} />}
-              <Text style={styles.prizeText}>+{shown} {prizeLabel(kind, amount)}</Text>
+              <Text style={styles.prizeText}>+{Math.max(shown, countStart(amount))} {prizeLabel(kind, amount)}</Text>
               {extras.map(k => (
                 <Text key={k} style={styles.prizeExtra}>+{amounts[k]} {prizeLabel(k, amounts[k])}</Text>
               ))}
@@ -351,6 +380,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, autoOp
           ) : (
             <Text style={styles.hint}>{phase === 'opening' ? 'Opening your chest…' : 'Tap the chest to open it!'}</Text>
           )}
+          </View>
 
           {phase === 'open' && next && (
             <Text style={styles.next}>{`${next.days_away} more day${next.days_away === 1 ? '' : 's'} to your ${next.label}`}</Text>
@@ -416,8 +446,8 @@ const styles = StyleSheet.create({
   stage: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', marginTop: 6 },
   glow: { position: 'absolute', backgroundColor: 'rgba(255, 226, 92, 0.35)' },
   ticketPunch: { position: 'absolute', alignItems: 'center', justifyContent: 'center', top: 0 },
-  punchHole: { position: 'absolute', right: '22%', top: '38%', width: 22, height: 22, borderRadius: 11,
-    backgroundColor: BRAND.blue, borderWidth: 3, borderColor: BRAND.navy },
+  spark: { position: 'absolute', right: '8%', top: '10%' },
+  prizeSlot: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
   hint: { fontFamily: 'Shark', fontSize: 20, color: BRAND.gold },
   prize: { alignItems: 'center' },
   prizeText: { fontFamily: 'Shark', fontSize: 28, color: BRAND.gold,
