@@ -458,11 +458,12 @@ export default function ExploreScreen() {
   const rideClusters = useMemo(() => clusterMarkers([...visibleTasks, ...restingTasks].map(task => ({
     id: task.id, task, latitude: Number(task.latitude), longitude: Number(task.longitude),
     pinned: task.id === selectedTask?.id,
-    priority: (task.id === adventureTaskId ? 50 : 0) + (task.id === goalTaskId ? 40 : 0) +
+    // A ride whose team flag is being raised (boss map moment) always leads its island.
+    priority: (bossMap.flag?.asset_id === Number(task.asset_id) ? 80 : 0) + (task.id === adventureTaskId ? 50 : 0) + (task.id === goalTaskId ? 40 : 0) +
       (liveByTask.get(task.id)?.rush ? 30 : 0) + (task.id === playableTaskId ? 20 : 0) +
       ((taskDistance.get(task.id) ?? Infinity) <= 60 ? 10 : 0) + (restingTasks.includes(task) ? -5 : 0),
   })).filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude)), mapZoom),
-  [visibleTasks, restingTasks, selectedTask?.id, adventureTaskId, goalTaskId, liveByTask, playableTaskId, taskDistance, mapZoom]);
+  [visibleTasks, restingTasks, selectedTask?.id, adventureTaskId, goalTaskId, liveByTask, playableTaskId, taskDistance, mapZoom, bossMap.flag?.asset_id]);
   // First reveal of a park's islands: nearest drop in first.
   const revealRef = useRef<{ context: string; delays: globalThis.Map<number, number> } | null>(null);
   if (redeemables && visibleTasks.length && revealRef.current?.context !== mapContext) {
@@ -705,7 +706,7 @@ export default function ExploreScreen() {
                     fontFamily: 'Shark',
                     textTransform: 'uppercase',
                     letterSpacing: 2,
-                    textShadowColor: 'rgba(0, 0, 0, .5)',
+                    textShadowColor: '#05346e',
                     textShadowOffset: { width: 2, height: 2 },
                     textShadowRadius: 0,
                     textAlign: 'center',
@@ -725,7 +726,7 @@ export default function ExploreScreen() {
               fontFamily: 'Shark',
               textTransform: 'uppercase',
               letterSpacing: 2,
-              textShadowColor: 'rgba(0, 0, 0, .5)',
+              textShadowColor: '#05346e',
               textShadowOffset: { width: 2, height: 2 },
               textShadowRadius: 0,
               textAlign: 'center',
