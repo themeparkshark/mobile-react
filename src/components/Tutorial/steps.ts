@@ -7,14 +7,6 @@ import { TutorialStep, TutorialSequence } from './types';
  * ONBOARDING — First time entering the app after username/team/membership
  * This is the main tutorial that runs on first ExploreScreen visit
  */
-const openingStep: TutorialStep = {
-  id: 'welcome', sequence: 'onboarding',
-  text: "Hey, new shark! I'm Finn. Let's start your collection.",
-  subtitle: 'Your adventure starts wherever you are.',
-  sharkPosition: 'bottom-center', sharkMood: 'waving',
-  showSkip: true, nextText: "Let's go!", delay: 500,
-};
-
 /**
  * Home: teach by doing. Finn says hi, then the first find (always spawned
  * within reach) opens right after, and one line after the first catch says
@@ -39,49 +31,27 @@ const homeFirstFindSteps: TutorialStep[] = [
   },
 ];
 
+/** Play first. Costs and mastery belong beside the actual ride challenge/coin. */
 const parkOnboardingSteps: TutorialStep[] = [
-  openingStep,
   {
-    id: 'park_ride', sequence: 'onboarding',
-    text: 'Pick a ride coin from your park guide and head toward the attraction.',
-    subtitle: 'Near the ride, use a Ticket or available Shark Rescue Pass and win its challenge to add the coin to your shelf.',
-    sharkPosition: 'bottom-center', sharkMood: 'pointing', showSkip: true,
+    id: 'welcome', sequence: 'onboarding', title: 'Your first adventure',
+    text: "I'm Finn. Let's match four pairs together!",
+    subtitle: 'A free warm-up. Then choose your first ride coin on the map.',
+    activity: 'memory_warmup', sharkPosition: 'bottom-center', sharkMood: 'waving',
+    showSkip: true, nextText: 'Play a quick round', delay: 200,
   },
   {
-    id: 'park_queue', sequence: 'onboarding',
-    text: 'Waiting in line? Open LinePlay for short games and a shared crew challenge.',
-    subtitle: 'Eligible time near a linked ride can earn its Ride Parts. Solo games are there when the crew is quiet.',
-    sharkPosition: 'bottom-center', sharkMood: 'excited', showSkip: true,
-  },
-  {
-    id: 'park_mastery', sequence: 'onboarding',
-    text: 'Your coin is just the beginning. Use its Ride Parts and Energy to level it up.',
-    subtitle: 'Every ride has its own coin to collect and master. Keep your favorite on your shelf.',
-    sharkPosition: 'bottom-center', sharkMood: 'happy', showSkip: true,
-  },
-  {
-    id: 'explore_done', sequence: 'onboarding',
-    text: 'First mission: earn one ride coin. I’ll help you from there!',
-    subtitle: 'Your park guide points to a reachable ride. Have fun out there!',
-    sharkPosition: 'bottom-center', sharkMood: 'celebrating', nextText: 'Explore the park!',
+    id: 'park_ride', sequence: 'onboarding', title: 'Start your collection',
+    text: 'Choose a missing ride coin on the map. Visit its attraction and win the challenge to earn it.',
+    subtitle: 'Your souvenirs live in Profile. Scroll to your parks and tap a park to see every coin.',
+    sharkPosition: 'bottom-center', sharkMood: 'pointing', nextText: 'Find a ride coin',
   },
 ];
 
-/** One brief handoff for players who learned the game at home first. */
-const parkArrivalSteps: TutorialStep[] = [
-  {
-    id: 'park_arrival_coin', sequence: 'park_arrival',
-    text: 'Your home finds prepared this park day. Choose a missing ride coin and visit its attraction.',
-    subtitle: 'Use a Ticket for the challenge. If you run out, Finn may have a Shark Rescue Pass for your first coin.',
-    sharkPosition: 'bottom-center', sharkMood: 'pointing', showSkip: true,
-  },
-  {
-    id: 'park_arrival_line', sequence: 'park_arrival',
-    text: 'In line, open LinePlay for a solo story or a one-phone crew game.',
-    subtitle: 'Eligible nearby time earns that ride’s Parts. Pair them with home Energy to upgrade your coin.',
-    sharkPosition: 'bottom-center', sharkMood: 'excited', nextText: 'Start exploring!',
-  },
-];
+/** Home-first players get the same hands-on introduction when they reach a park. */
+const parkArrivalSteps: TutorialStep[] = parkOnboardingSteps.map((step, index) => ({
+  ...step, sequence: 'park_arrival', id: index === 0 ? 'park_arrival_coin' : 'park_arrival_line',
+}));
 
 /**
  * PARK — First time entering ParkScreen

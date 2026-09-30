@@ -11,6 +11,7 @@ import { TutorialContextType, TutorialSequence, TutorialStep, SpotlightTarget } 
 import { getStepsForSequence } from './steps';
 import SpotlightOverlay from './SpotlightOverlay';
 import TeacherShark from './TeacherShark';
+import MemoryGame from '../../games/memory/MemoryGame';
 import { AuthContext } from '../../context/AuthProvider';
 // Sounds disabled temporarily — will re-enable once tutorial flow is stable
 // import { SoundEffectContext } from '../../context/SoundEffectProvider';
@@ -49,6 +50,13 @@ interface TutorialProviderProps {
 export default function TutorialProvider({ children }: TutorialProviderProps) {
   // const { playSound } = useContext(SoundEffectContext);
   const { player } = useContext(AuthContext);
+  // A local, in-memory new-player preview; never writes real tutorial progress.
+  const firstPlayPreview = __DEV__ && process.env.EXPO_PUBLIC_PARK_FIRST_PLAY_PREVIEW === '1';
+  const [firstPlayOpen, setFirstPlayOpen] = useState(false);
+  const firstPlayRef = useRef(false);
+  const firstPlayAttemptRef = useRef(0);
+  const [firstPlayAttempt, setFirstPlayAttempt] = useState(0);
+  const firstPlayOrigin = useRef<string | null>(null);
   const [completedSequences, setCompletedSequences] = useState<Set<TutorialSequence>>(new Set());
   const [currentSequence, setCurrentSequence] = useState<TutorialSequence | null>(null);
   const [currentSteps, setCurrentSteps] = useState<TutorialStep[]>([]);
@@ -61,6 +69,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
 
   // Load completed sequences from storage
   useEffect(() => {
+    if (firstPlayPreview) { setLoaded(true); return; }
     AsyncStorage.getItem(STORAGE_KEY).then((data) => {
       if (data) {
         try {
@@ -78,7 +87,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
 
   // Auto-complete all tutorials for existing players (handles Expo Go reinstall / cache wipe)
   useEffect(() => {
-    if (!loaded || !player) return;
+    if (!loaded || !player || firstPlayPreview) return;
     if (completedSequences.size > 0) return; // Already has data — not a fresh wipe
 
     const isExistingPlayer =
@@ -95,13 +104,14 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
 
   // Persist completed sequences
   const persistCompleted = useCallback(async (sequences: Set<TutorialSequence>) => {
+    if (firstPlayPreview) return;
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(sequences)));
     } catch {}
-  }, []);
+  }, [firstPlayPreview]);
 
   // Resolve spotlight target from ref
-  const resolveSpotlight = useCallback((step: TutorialStep) => {
+  const resolveSpotlight = useCallback((step: TutorialStep, isCurrent: () => boolean) => {
     if (!step.spotlightRef) {
       setSpotlightTarget(step.spotlight ?? null);
       return;
@@ -110,6 +120,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     const ref = refs.current.get(step.spotlightRef);
     if (ref?.current) {
       ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+        if (!isCurrent()) return;
         if (width > 0 && height > 0) {
           setSpotlightTarget({
             x, y, width, height,
@@ -142,18 +153,11 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     setCurrentIndex(0);
     setIsActive(true);
 
-    // Resolve first step spotlight with delay
-    const firstStep = steps[0];
-    const delay = firstStep.delay ?? 0;
-    setTimeout(() => {
-      resolveSpotlight(firstStep);
-      firstStep.onShow?.();
-    }, delay);
-
-  }, [loaded, isActive, completedSequences, resolveSpotlight]);
+  }, [loaded, isActive, completedSequences]);
 
   // Advance to next step
   const nextStep = useCallback(() => {
+    if (firstPlayRef.current) return;
     const nextIdx = currentIndex + 1;
     
     // Complete current step callback
@@ -181,18 +185,12 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     }
 
     setCurrentIndex(nextIdx);
-    const step = currentSteps[nextIdx];
-    
-    // Small delay for transition feel
-    setTimeout(() => {
-      resolveSpotlight(step);
-      step.onShow?.();
-    }, step.delay ?? 100);
 
-  }, [currentIndex, currentSteps, currentSequence, completedSequences, resolveSpotlight, persistCompleted]);
+  }, [currentIndex, currentSteps, currentSequence, completedSequences, persistCompleted]);
 
   // Skip the current tutorial
   const skipTutorial = useCallback(() => {
+    if (firstPlayRef.current) return;
     const newCompleted = new Set(completedSequences);
     if (currentSequence) {
       newCompleted.add(currentSequence);
@@ -222,17 +220,46 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
 
   // Reset all tutorial progress
   const resetAll = useCallback(async () => {
+    firstPlayRef.current = false; firstPlayOrigin.current = null; setFirstPlayOpen(false);
     inParkOnboardingRef.current = false;
     setCompletedSequences(new Set());
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    if (!firstPlayPreview) await AsyncStorage.removeItem(STORAGE_KEY);
     setIsActive(false);
     setCurrentSequence(null);
     setCurrentSteps([]);
     setCurrentIndex(0);
     setSpotlightTarget(null);
-  }, []);
+  }, [firstPlayPreview]);
 
   const currentStep = isActive && currentSteps.length > 0 ? currentSteps[currentIndex] : null;
+
+  // Step transitions and late measurements cannot revive a closed guide.
+  useEffect(() => {
+    if (!currentStep || firstPlayOpen) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      if (!current) return;
+      resolveSpotlight(currentStep, () => current);
+      currentStep.onShow?.();
+    }, currentStep.delay ?? 100);
+    return () => { current = false; clearTimeout(timer); };
+  }, [currentStep, firstPlayOpen, resolveSpotlight]);
+
+
+  const startFirstPlay = () => {
+    if (!isActive || currentStep?.activity !== 'memory_warmup' || firstPlayRef.current) return;
+    firstPlayRef.current = true;
+    firstPlayAttemptRef.current += 1; setFirstPlayAttempt(firstPlayAttemptRef.current);
+    firstPlayOrigin.current = `${currentSequence}:${currentIndex}`;
+    setFirstPlayOpen(true);
+  };
+  const finishFirstPlay = (won: boolean, attempt: number) => {
+    if (!firstPlayRef.current || attempt !== firstPlayAttemptRef.current) return;
+    const origin = firstPlayOrigin.current;
+    firstPlayRef.current = false; firstPlayOrigin.current = null; setFirstPlayOpen(false);
+    if (won && origin === `${currentSequence}:${currentIndex}`) nextStep();
+  };
+  useEffect(() => () => { firstPlayRef.current = false; firstPlayOrigin.current = null; }, []);
 
   const contextValue: TutorialContextType = {
     isReady: loaded,
@@ -253,16 +280,17 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
       {children}
 
       {/* Tutorial Overlay — renders above everything */}
-      {isActive && currentStep && (
+      {isActive && currentStep && !firstPlayOpen && (
         <>
           <SpotlightOverlay
             target={spotlightTarget}
             opacity={0.62}
-            onPress={nextStep}
+            onPress={currentStep.activity ? undefined : nextStep}
             onSpotlightPress={currentStep.interactive ? nextStep : undefined}
             spotlightTappable={currentStep.interactive}
           />
           <TeacherShark
+            title={currentStep.title}
             text={currentStep.text}
             subtitle={currentStep.subtitle}
             mood={currentStep.sharkMood}
@@ -272,12 +300,14 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
             showNext={!currentStep.interactive}
             stepIndex={currentIndex}
             totalSteps={currentSteps.length}
-            onNext={nextStep}
+            onNext={currentStep.activity ? startFirstPlay : nextStep}
             onSkip={skipTutorial}
-            bottomOffset={currentSequence === 'park_arrival' ? 120 : undefined}
+            bottomOffset={currentSequence === 'park_arrival' || inParkOnboardingRef.current ? 120 : undefined}
           />
         </>
       )}
+      {firstPlayOpen && <MemoryGame key={firstPlayAttempt} visible difficulty={0} deckId="park" taskName="Finn’s free warm-up"
+        onClose={() => finishFirstPlay(false, firstPlayAttempt)} onComplete={() => finishFirstPlay(true, firstPlayAttempt)} />}
     </TutorialContext.Provider>
   );
 }

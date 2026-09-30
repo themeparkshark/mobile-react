@@ -52,6 +52,10 @@ export interface TutorialStep {
   id: TutorialStepId;
   /** Which tutorial sequence this belongs to */
   sequence: TutorialSequence;
+  /** Optional illustrated guide heading. */
+  title?: string;
+  /** A free hands-on round; never grants collection or currency rewards. */
+  activity?: 'memory_warmup';
   /** Teacher shark's speech text */
   text: string;
   /** Optional secondary/subtitle text */

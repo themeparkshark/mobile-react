@@ -221,22 +221,22 @@ export default function ExploreScreen() {
 
   // Trigger onboarding tutorial on first visit
   useEffect(() => {
-    if (player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding')) {
+    if (mapFocused && player && isReady && parkLoaded && permissionGranted && !isActive && !hasCompleted('onboarding')) {
       const timer = setTimeout(() => {
         startTutorial('onboarding', { inPark: !!park });
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial]);
+  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial]);
 
   // A player who learned the home hunt should meet the park loop when they
   // actually arrive. Park-first players already saw these steps in onboarding.
   useEffect(() => {
-    if (!player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
+    if (!mapFocused || !player || !isReady || !parkLoaded || !permissionGranted || !park || isActive ||
       !hasCompleted('onboarding') || hasCompleted('park_arrival')) return;
     const timer = setTimeout(() => startTutorial('park_arrival'), 1500);
     return () => clearTimeout(timer);
-  }, [player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial]);
+  }, [mapFocused, player, isReady, parkLoaded, permissionGranted, park?.id, isActive, hasCompleted, startTutorial]);
   
   // One overlay at a time: a find that shows up during a tutorial waits for it.
   const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);

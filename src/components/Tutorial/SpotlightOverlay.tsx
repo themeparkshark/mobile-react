@@ -6,8 +6,10 @@
  * attention to the highlighted UI element.
  */
 import React from 'react';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { Dimensions, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
 import Animated, {
+  cancelAnimation,
   FadeIn,
   FadeOut,
   useSharedValue,
@@ -42,6 +44,7 @@ export default function SpotlightOverlay({
   opacity = 0.75,
   spotlightTappable = false,
 }: SpotlightOverlayProps) {
+  const reducedMotion = useReducedGameMotion();
   const padding = target?.padding ?? 8;
 
   // No spotlight — just a dark overlay
@@ -49,8 +52,8 @@ export default function SpotlightOverlay({
     return (
       <Animated.View
         style={[styles.overlay, { backgroundColor: `rgba(0,0,0,${opacity})` }]}
-        entering={FadeIn.duration(300)}
-        exiting={FadeOut.duration(200)}
+        entering={reducedMotion ? undefined : FadeIn.duration(180)}
+        exiting={reducedMotion ? undefined : FadeOut.duration(160)}
         pointerEvents="box-only"
       >
         <TouchableWithoutFeedback onPress={onPress}>
@@ -69,8 +72,8 @@ export default function SpotlightOverlay({
   return (
     <Animated.View
       style={styles.overlay}
-      entering={FadeIn.duration(300)}
-      exiting={FadeOut.duration(200)}
+      entering={reducedMotion ? undefined : FadeIn.duration(180)}
+      exiting={reducedMotion ? undefined : FadeOut.duration(160)}
       pointerEvents="box-none"
     >
       {/* SVG mask overlay */}
@@ -146,14 +149,18 @@ export default function SpotlightOverlay({
  */
 function PulsingRing({ target, padding }: { target: SpotlightTarget; padding: number }) {
   const pulseValue = useSharedValue(0);
+  const reducedMotion = useReducedGameMotion();
 
   React.useEffect(() => {
+    cancelAnimation(pulseValue); pulseValue.value = 0;
+    if (reducedMotion) return;
     pulseValue.value = withRepeat(
       withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.sin) }),
       -1,
       true,
     );
-  }, []);
+    return () => cancelAnimation(pulseValue);
+  }, [pulseValue, reducedMotion]);
 
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: interpolate(pulseValue.value, [0, 1], [0.6, 0]),

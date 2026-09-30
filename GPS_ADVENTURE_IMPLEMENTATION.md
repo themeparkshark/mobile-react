@@ -208,7 +208,7 @@ Applied to the isolated backend and the original LOCAL backend serving the previ
 
 ## Validation and remaining work
 
-TypeScript and git diff checks pass. Full app checks: 220 tests. Focused backend
+TypeScript and git diff checks pass. Full app checks: 227 tests. Focused backend
 checks: seven tests, 53 assertions. PHP 8.5 emits an existing PDO deprecation. The
 legacy full migration suite needs Doctrine DBAL; unrelated test-discovery warnings
 remain and are not claimed clean.
@@ -246,3 +246,32 @@ Native artwork review checked the corrected version in the chapter, circuit,
 observation and finale cards, plus the Memory banner without countdown overlay.
 Practice was quit without completing the finale or claiming rewards. TypeScript
 and diff checks pass; the preceding 220-test gameplay result remains unchanged.
+
+
+## Hands-on first park welcome
+
+Park-first onboarding and first park arrival now offer a free four-pair Memory
+warm-up followed by one collection handoff. The home first-find flow is unchanged.
+The final guide names the original Profile -> scroll parks -> tap park -> all coins
+path. Warm-up play never calls a reward API; only a verified ride challenge earns
+real coins. Quitting returns to the welcome. Attempt tokens reject late callbacks.
+
+Guides now start only while the map is focused. Ride suggestions remain queued
+while a guide is active. Delayed step transitions and spotlight measurements are
+canceled/ignored after closing or unmounting. Finn keeps the original teacher art
+with restrained bob/sway and one greeting accent; reduced motion cancels the loops
+and uses static transitions. Tutorial buttons have a 48-point minimum target.
+
+Native iOS 18.6 local-player review verified welcome layout, pause/quit/restart,
+four matched pairs, the settled winning screen, Continue -> collection guide,
+and the final map return. The optional day-two chest was declined; the visible
+wallet stayed 180 Coins / seven Tickets / 185 Energy. The preview resets tutorial
+state in memory only and never overwrites veteran progress. Automated validation:
+227 passing checks, clean TypeScript and diff checks.
+
+The native QA also exposed an existing GPS quality issue: nearby dining, shops
+and overlapping attractions can become multiple possible-ride suggestions while
+the player stays in one area. No suggested ride was confirmed in this pass. This
+must be repaired before claiming ride-journal accuracy or physical GPS readiness.
+Small-phone/native reduced-motion and real first-earned-souvenir finishing remain
+pending. The broader goal stays active.

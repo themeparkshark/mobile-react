@@ -5,26 +5,23 @@
  * through the app. Slides in from bottom, has different moods/poses,
  * and displays tutorial text in a styled speech bubble.
  * 
- * When Dustin provides the teacher shark asset, replace the placeholder
- * with the real image. For now uses a fun styled placeholder.
+ * Uses the existing approved teacher-shark artwork.
  */
 import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Image } from 'react-native';
 import Animated, {
+  cancelAnimation,
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
-  withDelay,
   withTiming,
   withSequence,
   withRepeat,
   Easing,
-  interpolate,
   FadeIn,
   FadeOut,
-  SlideOutDown,
 } from 'react-native-reanimated';
 import { SharkMood, SharkPosition } from './types';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import config from '../../config';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -32,6 +29,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TEACHER_SHARK_IMAGE = require('../../../assets/images/tutorial/teacher-shark.png');
 
 interface TeacherSharkProps {
+  title?: string;
   text: string;
   subtitle?: string;
   mood: SharkMood;
@@ -50,6 +48,7 @@ interface TeacherSharkProps {
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 export default function TeacherShark({
+  title,
   text,
   subtitle,
   mood,
@@ -63,84 +62,31 @@ export default function TeacherShark({
   onSkip,
   bottomOffset = 20,
 }: TeacherSharkProps) {
-  // === Polished Finn animation — perfect symmetric loops ===
-  
-  // Bob: center → up → center → down → center (sine easing, perfectly symmetric)
+  const reducedMotion = useReducedGameMotion();
   const bobValue = useSharedValue(0);
-  // Tilt: gentle sway synced but offset from bob
   const tiltValue = useSharedValue(0);
-  // Breathe: subtle scale pulse
-  const breatheValue = useSharedValue(0);
-  // Diploma wiggle: tiny periodic wiggle
-  const wiggleValue = useSharedValue(0);
-  
+  const greetingValue = useSharedValue(0);
   useEffect(() => {
-    // Bob — 3s full cycle, perfectly symmetric
-    bobValue.value = withRepeat(
-      withSequence(
-        // center → up
-        withTiming(1, { duration: 750, easing: Easing.inOut(Easing.sin) }),
-        // up → center
-        withTiming(0, { duration: 750, easing: Easing.inOut(Easing.sin) }),
-        // center → down
-        withTiming(-1, { duration: 750, easing: Easing.inOut(Easing.sin) }),
-        // down → center
-        withTiming(0, { duration: 750, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1,
-      false,
-    );
-    
-    // Tilt — 4s cycle, slightly slower than bob for organic feel
-    tiltValue.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-        withTiming(-1, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1,
-      false,
-    );
-    
-    // Breathe — 3.5s cycle, subtle scale
-    breatheValue.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 1750, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 1750, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1,
-      false,
-    );
-    
-    // Diploma wiggle — quick little wiggle every ~5s
-    wiggleValue.value = withRepeat(
-      withSequence(
-        withTiming(0, { duration: 3500, easing: Easing.linear }), // pause
-        withTiming(1, { duration: 100, easing: Easing.inOut(Easing.sin) }),
-        withTiming(-1, { duration: 200, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0.5, { duration: 150, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 150, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1,
-      false,
-    );
-  }, []);
-
-  const sharkAnimStyle = useAnimatedStyle(() => {
-    // Combine tilt sway + diploma wiggle into one rotation
-    const totalRotation = (tiltValue.value * 2) + (wiggleValue.value * 1.5);
-    return {
-      transform: [
-        // Bob: ±6px vertical float
-        { translateY: bobValue.value * 6 },
-        // Combined rotation: gentle sway + periodic wiggle
-        { rotate: `${totalRotation}deg` },
-        // Breathe: subtle 1.0 → 1.03 scale pulse
-        { scale: 1 + breatheValue.value * 0.03 },
-      ],
-    };
-  });
+    [bobValue, tiltValue, greetingValue].forEach(value => { cancelAnimation(value); value.value = 0; });
+    if (!reducedMotion) {
+      bobValue.value = withRepeat(withSequence(
+        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.sin) }),
+      ), -1, false);
+      tiltValue.value = withRepeat(withSequence(
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
+        withTiming(-1, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
+      ), -1, false);
+      if (mood === 'celebrating' || mood === 'waving') greetingValue.value = withSequence(
+        withTiming(1, { duration: 180 }), withTiming(0, { duration: 220 }));
+    }
+    return () => [bobValue, tiltValue, greetingValue].forEach(value => cancelAnimation(value));
+  }, [reducedMotion, mood, bobValue, tiltValue, greetingValue]);
+  const sharkAnimStyle = useAnimatedStyle(() => ({ transform: [
+    { translateY: reducedMotion ? 0 : bobValue.value * -3 },
+    { rotate: `${reducedMotion ? 0 : tiltValue.value}deg` },
+    { scale: reducedMotion ? 1 : 1 + greetingValue.value * 0.025 },
+  ] }));
 
   // Position the shark
   const getSharkContainerStyle = () => {
@@ -160,29 +106,16 @@ export default function TeacherShark({
     }
   };
 
-  // Get mood emoji (placeholder until real asset)
-  const getMoodEmoji = () => {
-    switch (mood) {
-      case 'happy': return '😊';
-      case 'excited': return '🤩';
-      case 'pointing': return '👉';
-      case 'thinking': return '🤔';
-      case 'waving': return '👋';
-      case 'celebrating': return '🎉';
-      default: return '😊';
-    }
-  };
-
   return (
     <Animated.View
       style={[styles.container, getSharkContainerStyle()]}
-      entering={FadeIn.duration(280)}
-      exiting={SlideOutDown.duration(300)}
+      entering={reducedMotion ? undefined : FadeIn.duration(180)}
+      exiting={reducedMotion ? undefined : FadeOut.duration(160)}
     >
       {/* Speech Bubble */}
       <Animated.View
         style={styles.speechBubble}
-        entering={FadeIn.delay(200).duration(300)}
+        entering={reducedMotion ? undefined : FadeIn.duration(180)}
       >
         {/* Progress dots */}
         {totalSteps > 1 && (
@@ -200,6 +133,8 @@ export default function TeacherShark({
           </View>
         )}
 
+        {title && <Text style={styles.title}>{title}</Text>}
+
         {/* Main text */}
         <Text style={styles.mainText}>{text}</Text>
         
@@ -211,12 +146,12 @@ export default function TeacherShark({
         {/* Buttons */}
         <View style={styles.buttonRow}>
           {showSkip && onSkip && (
-            <TouchableOpacity onPress={onSkip} style={styles.skipButton}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Skip this guide" onPress={onSkip} style={styles.skipButton}>
               <Text style={styles.skipText}>Skip</Text>
             </TouchableOpacity>
           )}
           {showNext && (
-            <TouchableOpacity onPress={onNext} style={styles.nextButton}>
+            <TouchableOpacity accessibilityRole="button" onPress={onNext} style={styles.nextButton}>
               <Text style={styles.nextText}>{nextText}</Text>
             </TouchableOpacity>
           )}
@@ -239,6 +174,7 @@ export default function TeacherShark({
 }
 
 const styles = StyleSheet.create({
+  title: { fontFamily: 'Shark', fontSize: 23, lineHeight: 28, textAlign: 'center', color: '#075083', marginBottom: 9 },
   container: {
     position: 'absolute',
     zIndex: 9999,
@@ -302,21 +238,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 16,
-    gap: 12,
+    gap: 8,
   },
   skipButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    minHeight: 48, justifyContent: 'center',
+    paddingHorizontal: 12,
   },
   skipText: {
     fontFamily: 'Knockout',
     fontSize: 16,
-    color: '#999',
+    color: '#537082',
   },
   nextButton: {
+    flex: 1, minHeight: 48, justifyContent: 'center', alignItems: 'center',
     backgroundColor: config.secondary,
     paddingVertical: 12,
-    paddingHorizontal: 32,
+    paddingHorizontal: 12,
     borderRadius: 25,
     shadowColor: config.secondary,
     shadowOffset: { width: 0, height: 2 },
@@ -325,11 +262,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   nextText: {
+    textAlign: 'center',
     fontFamily: 'Knockout',
     fontSize: 18,
     color: 'white',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.3,
   },
   bubbleTail: {
     position: 'absolute',

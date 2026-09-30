@@ -4,13 +4,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 const root = path.resolve(__dirname, '../../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
-exports.runtime = function(file, imports = {}, initialProps = {}) {
+exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}) {
   const slots = [], animations = [], timers = new Map(), sounds = [], cancelled = [], motions = [];
   let index = 0, dirty = true, effects = [], tree, timerId = 0, preferenceListener;
   let Component;
   const props = { ...initialProps };
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => value === b[i]);
   const react = {
+    createContext: value => ({ value, Provider: 'ContextProvider' }),
     useRef(value) { const i = index++; return slots[i] ||= { current: value }; },
     useState(initial) { const i = index++; slots[i] ||= { value: typeof initial === 'function' ? initial() : initial };
       return [slots[i].value, update => { const value = typeof update === 'function' ? update(slots[i].value) : update;
@@ -47,7 +48,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
   const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  vm.runInNewContext(code, { module, exports: module.exports, Date, Math, console,
+  vm.runInNewContext(code, { module, exports: module.exports, Date, Math, console, __DEV__: false, process: { env: {} }, ...globals,
     setTimeout(fn) { const id = ++timerId; timers.set(id, fn); return id; }, clearTimeout(id) { timers.delete(id); },
     require(name) {
       if (Object.hasOwn(imports, name)) return imports[name];
@@ -55,12 +56,12 @@ exports.runtime = function(file, imports = {}, initialProps = {}) {
       if (name === '@react-navigation/native') return { useFocusEffect: fn => react.useEffect(fn, [fn]) };
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'react-native') return native;
-      if (name === 'react-native-reanimated') return { default: { View: 'ReanimatedView' },
+      if (name === 'react-native-reanimated') { const transition = { duration() { return this; }, delay() { return this; } }; return { default: { View: 'ReanimatedView', createAnimatedComponent: type => type }, FadeIn: transition, FadeOut: transition, SlideOutDown: transition,
         useSharedValue: value => react.useRef({ value }).current, useAnimatedStyle: fn => fn(),
         Easing: native.Easing, cancelAnimation: value => cancelled.push(value), runOnJS: fn => fn,
         withTiming: value => { motions.push('timing'); return value; }, withSpring: value => { motions.push('spring'); return value; }, withDelay: (ms, value) => value,
         interpolate: (value, inputs, outputs) => outputs[0] + value * (outputs[1] - outputs[0]),
-        withRepeat: value => value, withSequence: (...values) => values.at(-1) };
+        withRepeat: value => value, withSequence: (...values) => values.at(-1) }; }
       if (name === 'expo-haptics') return { notificationAsync: async () => {}, impactAsync: async () => {},
         NotificationFeedbackType: { Success: 1 }, ImpactFeedbackStyle: { Light: 1, Medium: 2, Heavy: 3 } };
       if (name === 'expo-image') return { Image: 'Image' };

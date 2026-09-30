@@ -20,8 +20,10 @@ import { DetectedRide } from '../../services/RideDetectionService';
 import { removePendingDetection } from '../../services/RideDetectionService';
 import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { navigationRef, navigate } from '../../RootNavigation';
+import { useTutorial } from '../Tutorial';
 
 const RideDetectionOverlay: React.FC = () => {
+  const { isActive: tutorialActive } = useTutorial();
   const [currentDetection, setCurrentDetection] = useState<DetectedRide | null>(null);
   const [queue, setQueue] = useState<DetectedRide[]>([]);
   const slideAnim = useRef(new Animated.Value(300)).current;
@@ -78,7 +80,7 @@ const RideDetectionOverlay: React.FC = () => {
 
   // Show next detection from queue
   useEffect(() => {
-    if (!currentDetection && queue.length > 0) {
+    if (!tutorialActive && !currentDetection && queue.length > 0) {
       const next = queue[0];
       setQueue(prev => prev.slice(1));
       setCurrentDetection(next);
@@ -92,7 +94,7 @@ const RideDetectionOverlay: React.FC = () => {
         Animated.timing(opacityAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
       ]).start();
     }
-  }, [currentDetection, queue]);
+  }, [tutorialActive, currentDetection, queue]);
 
   const animateOut = useCallback((callback: () => void) => {
     // Disable buttons immediately to prevent double-tap (BUG 13 fix)
@@ -138,7 +140,7 @@ const RideDetectionOverlay: React.FC = () => {
     });
   }, [currentDetection, buttonsDisabled, animateOut]);
 
-  if (!currentDetection) return null;
+  if (tutorialActive || !currentDetection) return null;
 
   const dwellMin = Math.round(currentDetection.dwellTimeMs / 60_000);
   const timeStr = new Date(currentDetection.enteredAt).toLocaleTimeString('en-US', {
