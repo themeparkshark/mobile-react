@@ -394,7 +394,7 @@ test('"Still in line" after the wrap-up settled starts a fresh session that keep
   assert.equal(next.serverSessionId, 'server-2', 'a new server session, the settled one keeps its rewards');
   assert.deepEqual(next.playlist.map(item => item.id), first.playlist.map(item => item.id));
   assert.ok(next.completedActivityIds.includes(first.playlist[0].id));
-  assert.equal(next.startedAt, first.startedAt, 'the wait clock keeps running');
+  assert.equal(next.startedAt, first.startedAt, 'the clock runs on until the new server session reports its start');
   session.dispose();
 });
 

@@ -289,7 +289,8 @@ export default function App() {
             // Dev only: a real local-backend ride, so verified Parts and the
             // Lock Screen Live Activity run end to end.
             rideId: Number(process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE_ID),
-            rideName: process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE_NAME ?? 'Ride',
+            rideName: (process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE_NAME ?? 'Ride').replace(/_/g, ' '),
+            rideSlug: process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_RIDE_SLUG,
             parkId: Number(process.env.EXPO_PUBLIC_LINEPLAY_PREVIEW_PARK_ID ?? 1),
             postedWaitMinutes: 35, postedWaitObservedAt: Date.now(), lineRewardsReady: true,
           } : {

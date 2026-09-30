@@ -156,12 +156,15 @@ export default function SessionRecap({
 
       {leftQueue && onStillInLine && (
         <Animated.View entering={enter(0)} style={styles.stillInLineCard}>
-          <GameIcon name="queue" size={34} />
-          <View style={styles.stillInLineCopy}>
-            <Text style={styles.stillInLineTitle}>Still in line?</Text>
-            <Text style={styles.stillInLineBody}>Pick up where you left off. This recap keeps its rewards.</Text>
+          <View style={styles.stillInLineRow}>
+            <GameIcon name="queue" size={34} />
+            <View style={styles.stillInLineCopy}>
+              <Text style={styles.stillInLineTitle}>Still in line?</Text>
+              <Text style={styles.stillInLineBody}>Pick up where you left off. This recap keeps its rewards.</Text>
+            </View>
           </View>
-          <GameButton label="Keep playing" variant="secondary" onPress={onStillInLine} />
+          <GameButton label="Keep playing" icon="arrow" onPress={onStillInLine} fullWidth
+            accessibilityLabel="Still in line. Keep playing this wait." />
         </Animated.View>
       )}
 
@@ -378,9 +381,10 @@ const styles = StyleSheet.create({
   queueStampTitle: { color: '#083d73', fontFamily: 'Shark', fontSize: 17, marginTop: 1 },
   queueStampAction: { color: '#205570', fontFamily: 'Knockout', fontSize: 14, marginTop: 3 },
   bonusLine: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.sm },
-  stillInLineCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md,
+  stillInLineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stillInLineCard: { gap: spacing.sm, marginTop: spacing.md,
     padding: spacing.md, borderRadius: borderRadius.lg, backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#ffd443' },
-  stillInLineCopy: { flex: 1 },
+  stillInLineCopy: { flex: 1, minWidth: 0 },
   stillInLineTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 17 },
   stillInLineBody: { color: '#315d77', fontFamily: 'Knockout', fontSize: 13, lineHeight: 17, marginTop: 2 },
   recapPrediction: { marginTop: spacing.md, padding: spacing.md, borderRadius: borderRadius.lg,
