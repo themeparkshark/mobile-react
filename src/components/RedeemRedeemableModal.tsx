@@ -28,6 +28,7 @@ import { getStamps, type StampData } from '../api/endpoints/me/stamps';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
+import { createEarnedShelfArrival } from '../services/collection/earnedShelf';
 import { RideChallengeContext } from '../gamekit/RideChallengeContext';
 import {
   TaskAttempt,
@@ -520,14 +521,19 @@ export default function RedeemRedeemableModal({
 
   const handleViewCoin = useCallback(async () => {
     const focusCoinAssetId = attemptRef.current?.rewards?.coin_asset_id;
+    const earnedCoin = createEarnedShelfArrival(attemptRef.current);
+    const ownerId = player?.id;
     await clearAttemptCheckpoint().catch(error =>
       console.warn('Could not clear confirmed ride win:', error));
     onPress();
-    afterRewardsHidden.current = () => RootNavigation.navigate('CoinShelf', {
-      focusCoin: focusCoinAssetId ? { assetId: focusCoinAssetId } : undefined,
-    });
+    afterRewardsHidden.current = () => {
+      if (earnedCoin && ownerId) RootNavigation.navigate('Park', { park: park.id, player: ownerId, earnedCoin });
+      else RootNavigation.navigate('CoinShelf', {
+        focusCoin: focusCoinAssetId ? { assetId: focusCoinAssetId } : undefined,
+      });
+    };
     close();
-  }, [onPress, close, clearAttemptCheckpoint]);
+  }, [onPress, close, clearAttemptCheckpoint, player?.id, park.id]);
 
   const handleViewStampBook = useCallback(async () => {
     await clearAttemptCheckpoint().catch(error =>

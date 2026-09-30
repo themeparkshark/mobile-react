@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { chunk } from 'lodash';
 import { useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
 import { ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
 import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
@@ -15,6 +15,9 @@ import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
 import ParkTrophyModal from '../components/ParkTrophyModal';
 import ParkShelfArtwork from '../components/ParkShelfArtwork';
+import CoinShelfArrival from '../components/CoinShelfArrival';
+import useEarnedShelfArrival from '../hooks/useEarnedShelfArrival';
+import { isEarnedShelfArrival, resolveEarnedShelfSlot, type EarnedShelfArrival, type ShelfSection } from '../services/collection/earnedShelf';
 import TaskCoinModal from '../components/TaskCoinModal';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -46,7 +49,17 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const { width } = useWindowDimensions();
   // Keep the familiar five-coin rows inside their shelves on smaller phones.
   const shelfCoinSize = Math.max(40, Math.min(62, (width - 88) / 5));
-  const { park, player } = route.params as { park: number; player: number };
+  const { park, player, earnedCoin } = route.params as { park: number; player: number; earnedCoin?: EarnedShelfArrival };
+  const navigation = useNavigation<NavigationProp<ParamListBase>>();
+  const isFocused = useIsFocused();
+  const receivedArrival = useRef(false);
+  if (isEarnedShelfArrival(earnedCoin)) receivedArrival.current = true;
+  const slotRef = useRef<View>(null), contentRef = useRef<View>(null), frameRef = useRef<View>(null);
+  const arrivalFrameSize = useRef<{ width: number; height: number } | null>(null);
+  const wasFocused = useRef(isFocused);
+  const [landedKey, setLandedKey] = useState<string | null>(null);
+  const [closedKey, setClosedKey] = useState<string | null>(null);
+  const [inspection, setInspection] = useState<{ section: ShelfSection; taskId: number; key: number } | null>(null);
   const [currentPark, setCurrentPark] = useState<ParkType>();
   const [archivedTasks, setArchivedTasks] = useState<TaskType[]>([]);
   const [tasks, setTasks] = useState<TaskType[]>([]);
@@ -77,6 +90,33 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const { labels } = useCrumbs();
   const { data: tripGoalData, stale: tripGoalStale, choose: chooseTripGoal } = useTripGoal();
   const canChooseGoal = viewer?.id === Number(player);
+  const requestKey = canChooseGoal && isEarnedShelfArrival(earnedCoin)
+    ? `${player}:${park}:${earnedCoin.attemptId}` : null;
+  const arrivalSlot = requestKey && !loading && !progressStale ? resolveEarnedShelfSlot(earnedCoin, {
+    normal: tasks, normalCompleted: completedTasks, secret: secretTasks, secretCompleted: completedSecretTasks,
+    archived: archivedTasks, archivedCompleted: completedArchivedTasks,
+  }) : null;
+  const arrival = useEarnedShelfArrival({ requestKey,
+    enabled: isFocused && !!arrivalSlot && closedKey !== requestKey,
+    slotRef, contentRef, frameRef, scrollRef });
+  const matchesArrival = (section: ShelfSection, taskId: number) =>
+    arrivalSlot?.section === section && arrivalSlot.task.id === taskId;
+  const inspectionKey = (section: ShelfSection, taskId: number) =>
+    inspection?.section === section && inspection.taskId === taskId ? inspection.key : undefined;
+  const closeArrival = () => { setClosedKey(requestKey); navigation.setParams({ earnedCoin: undefined }); };
+  const inspectArrival = () => {
+    if (arrivalSlot && earnedCoin) setInspection({ section: arrivalSlot.section, taskId: arrivalSlot.task.id, key: earnedCoin.attemptId });
+    closeArrival();
+  };
+  useEffect(() => {
+    if (wasFocused.current && !isFocused && requestKey) {
+      setClosedKey(requestKey);
+      navigation.setParams({ earnedCoin: undefined });
+    }
+    wasFocused.current = isFocused;
+  }, [isFocused, requestKey, navigation]);
+  useEffect(() => { setInspection(null); }, [park, player]);
+  useEffect(() => { if (!isFocused) setInspection(null); }, [isFocused]);
   const parkTripGoal = canChooseGoal && tripGoalData?.goal?.park_id === Number(park)
     ? tripGoalData.goal : null;
   const goalPlan = parkTripGoal?.coin_owned ? tripGoalData?.goal_plan : null;
@@ -109,15 +149,15 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const alternateRide = goalReportedDown && freshWaitEntries
     ? nearbyUncollectedRide(tasks, completedTasks, location,
       task => reportedRideStatus(freshWaitEntries, Number(park), task.name) === 'OPERATING') : null;
-  const { startTutorial, hasCompleted } = useTutorial();
+  const { startTutorial, hasCompleted, isReady: tutorialReady, isActive: tutorialActive } = useTutorial();
   
   // Trigger park tutorial on first visit
   useEffect(() => {
-    if (!hasCompleted('park')) {
+    if (isFocused && tutorialReady && !loading && !tutorialActive && !receivedArrival.current && !hasCompleted('park')) {
       const timer = setTimeout(() => startTutorial('park'), 1000);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [isFocused, tutorialReady, loading, tutorialActive, hasCompleted, startTutorial]);
 
   const hasCompletedTask = (task: number) => {
     return completedTasks.find((completedTask) => completedTask.id === task);
@@ -234,7 +274,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
       </Topbar>
       {loading && <Loading />}
       {!loading && (
-        <View
+        <View ref={frameRef} collapsable={false} onLayout={event => {
+          const { width: frameWidth, height: frameHeight } = event.nativeEvent.layout;
+          const previous = arrivalFrameSize.current;
+          arrivalFrameSize.current = { width: frameWidth, height: frameHeight };
+          if (arrival.target && previous &&
+              (previous.width !== frameWidth || previous.height !== frameHeight)) closeArrival();
+          arrival.notifyLayout();
+        }}
           style={{
             flex: 1,
             marginTop: -8,
@@ -257,7 +304,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
               </Text>
             </Pressable>}
             {currentPark && tasks && secretTasks && (
-              <ScrollView ref={scrollRef}>
+              <ScrollView ref={scrollRef} scrollEnabled={!arrival.target} onContentSizeChange={arrival.notifyLayout}>
+                <View ref={contentRef} collapsable={false}>
                 <View
                   style={{
                     paddingTop: 24,
@@ -387,7 +435,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                     }}
                                   >
                                     {hasCompletedTask(task.id) ? (
+                                      <View collapsable={false}
+                                        ref={matchesArrival('normal', task.id) ? slotRef : undefined}
+                                        onLayout={matchesArrival('normal', task.id) ? arrival.notifyLayout : undefined}
+                                        pointerEvents={matchesArrival('normal', task.id) && arrival.target && landedKey !== requestKey ? 'none' : 'auto'}
+                                        style={{ width: Math.min(60, shelfCoinSize), height: Math.min(60, shelfCoinSize),
+                                          opacity: matchesArrival('normal', task.id) && arrival.target && landedKey !== requestKey ? 0 : 1 }}>
                                       <TaskCoinModal
+                                        openRequestKey={inspectionKey('normal', task.id)}
                                         size={Math.min(60, shelfCoinSize)}
                                         task={task}
                                         onPlayInLine={canChooseGoal && inThisPark &&
@@ -401,6 +456,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                         }
                                         readOnly={!canChooseGoal}
                                       />
+                                      </View>
                                     ) : (
                                       <UnfoundCoinModal task={task} size={shelfCoinSize}
                                         onPlayInLine={canChooseGoal && inThisPark &&
@@ -469,7 +525,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                     }}
                                   >
                                     {hasCompletedSecretTask(secretTask.id) ? (
+                                      <View collapsable={false}
+                                        ref={matchesArrival('secret', secretTask.id) ? slotRef : undefined}
+                                        onLayout={matchesArrival('secret', secretTask.id) ? arrival.notifyLayout : undefined}
+                                        pointerEvents={matchesArrival('secret', secretTask.id) && arrival.target && landedKey !== requestKey ? 'none' : 'auto'}
+                                        style={{ width: Math.min(60, shelfCoinSize), height: Math.min(60, shelfCoinSize),
+                                          opacity: matchesArrival('secret', secretTask.id) && arrival.target && landedKey !== requestKey ? 0 : 1 }}>
                                       <TaskCoinModal
+                                        openRequestKey={inspectionKey('secret', secretTask.id)}
                                         size={Math.min(60, shelfCoinSize)}
                                         task={secretTask}
                                         isSecretTask
@@ -478,6 +541,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                           completed => completed.id === secretTask.id
                                         )?.times_completed}
                                       />
+                                      </View>
                                     ) : (
                                       <UnfoundCoinModal task={secretTask} isSecret size={shelfCoinSize} />
                                     )}
@@ -648,7 +712,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                     {hasCompletedArchivedTask(
                                       archivedTask.id
                                     ) ? (
+                                      <View collapsable={false}
+                                        ref={matchesArrival('archived', archivedTask.id) ? slotRef : undefined}
+                                        onLayout={matchesArrival('archived', archivedTask.id) ? arrival.notifyLayout : undefined}
+                                        pointerEvents={matchesArrival('archived', archivedTask.id) && arrival.target && landedKey !== requestKey ? 'none' : 'auto'}
+                                        style={{ width: Math.min(60, shelfCoinSize), height: Math.min(60, shelfCoinSize),
+                                          opacity: matchesArrival('archived', archivedTask.id) && arrival.target && landedKey !== requestKey ? 0 : 1 }}>
                                       <TaskCoinModal
+                                        openRequestKey={inspectionKey('archived', archivedTask.id)}
                                         size={Math.min(60, shelfCoinSize)}
                                         task={archivedTask}
                                         readOnly={!canChooseGoal}
@@ -660,6 +731,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                                           )?.times_completed ?? 0
                                         }
                                       />
+                                      </View>
                                     ) : (
                                       <UnfoundCoinModal task={archivedTask} isArchived size={shelfCoinSize} />
                                     )}
@@ -673,9 +745,27 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     </View>
                   )}
                 </View>
+                </View>
               </ScrollView>
             )}
           </ImageBackground>
+          {isFocused && arrival.target && arrivalSlot && earnedCoin && requestKey && closedKey !== requestKey && (
+            <CoinShelfArrival key={requestKey} target={arrival.target} coinUrl={arrivalSlot.task.coin_url}
+              rideName={arrivalSlot.task.name} firstCollection={earnedCoin.firstCollection}
+              onLand={() => setLandedKey(requestKey)} onInspect={inspectArrival} onClose={closeArrival} />
+          )}
+          {isFocused && requestKey && closedKey !== requestKey && !loading &&
+            (!arrivalSlot || arrival.failed) && <View style={{ position: 'absolute', bottom: 52, left: 20, right: 20,
+              backgroundColor: '#075083', borderColor: '#A6DFF5', borderWidth: 2, borderRadius: 18, padding: 16 }}>
+              <Text style={{ fontFamily: 'Shark', color: '#fff', textAlign: 'center', fontSize: 19 }}>Refresh your park to show this coin</Text>
+              <Pressable accessibilityRole="button" onPress={() => { setRefreshVersion(value => value + 1); arrival.notifyLayout(); }}
+                style={{ minHeight: 48, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFD34B', borderRadius: 12, marginTop: 12 }}>
+                <Text style={{ fontFamily: 'Shark', color: '#075083', fontSize: 17 }}>Retry shelf view</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={closeArrival} style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontFamily: 'Knockout', color: '#DFF6FF', fontSize: 15 }}>Keep exploring this park</Text>
+              </Pressable>
+            </View>}
         </View>
       )}
     </Wrapper>

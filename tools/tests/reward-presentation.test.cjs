@@ -17,6 +17,7 @@ function recoveredWin() {
     '../api/endpoints/me/stamps': { getStamps: async () => ({ stamps: {}, newly_earned: [] }) },
     '../api/endpoints/me/ride-coins': { default: async () => ({ data: [] }) },
     '../RootNavigation': { navigate: (...args) => navigation.push(args) },
+    '../services/collection/earnedShelf': require('./helpers/earned-shelf.cjs'),
   }, { open: true, park: { id: 1 }, redeemable: { type: 'task', model: { id: 104, name: 'Forbidden Journey' } },
     close() { view.props.open = false; }, onPress() {} });
   return { view, navigation, game: () => view.find(node => node.type === 'react-native-modal'),
@@ -36,7 +37,9 @@ test('earned coin navigation waits for reward dismissal and keeps its confirmed 
   await flow.rewards().props.onViewCoin(); flow.view.render();
   assert.equal(flow.rewards().props.visible, false); assert.equal(flow.navigation.length, 0);
   flow.rewards().props.onHidden();
-  assert.equal(flow.navigation[0][0], 'CoinShelf'); assert.equal(flow.navigation[0][1].focusCoin.assetId, 300);
+  assert.equal(flow.navigation[0][0], 'Park');
+  assert.equal(flow.navigation[0][1].park,1); assert.equal(flow.navigation[0][1].player,5);
+  assert.equal(flow.navigation[0][1].earnedCoin.assetId,300); assert.equal(flow.navigation[0][1].earnedCoin.taskId,104);
   flow.rewards().props.onHidden(); assert.equal(flow.navigation.length, 1);
 });
 test('skipping a catch before the accessibility promise resolves cannot start late effects', async () => {

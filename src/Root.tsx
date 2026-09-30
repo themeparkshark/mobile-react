@@ -54,6 +54,7 @@ import CoinShelfScreen from './screens/CoinShelfScreen';
 import MiniGameTesterScreen from './screens/MiniGameTesterScreen';
 import GameKitGymScreen from './screens/GameKitGymScreen';
 import PostWinRewardsPreviewScreen from './screens/PostWinRewardsPreviewScreen';
+import ShelfArrivalPreviewScreen from './screens/ShelfArrivalPreviewScreen';
 import CoinLevelingPreviewScreen from './screens/CoinLevelingPreviewScreen';
 import RescuePassPreviewScreen from './screens/RescuePassPreviewScreen';
 import ParkChecklistPreviewScreen from './screens/ParkChecklistPreviewScreen';
@@ -131,7 +132,8 @@ export default function App() {
   const isTutorialPreview = __DEV__ && process.env.EXPO_PUBLIC_TUTORIAL_PREVIEW === '1';
   const isQueueTimesPreview = __DEV__ && process.env.EXPO_PUBLIC_QUEUE_TIMES_PREVIEW === '1';
   const isStandalonePreview = isStandalonePreviewMode();
-  const initialRouteName = isTriviaGamePreview
+  const initialRouteName = __DEV__ && process.env.EXPO_PUBLIC_SHELF_ARRIVAL_PREVIEW === '1'
+    ? 'ShelfArrivalPreview' : isTriviaGamePreview
     ? 'TriviaGamePreview'
     : isLinePlayFlowPreview
     ? 'LinePlay'
@@ -424,6 +426,7 @@ export default function App() {
           options={{ animation: 'slide_from_bottom' }} />
         {__DEV__ && <Stack.Screen name="MiniGameTester" component={MiniGameTesterScreen} />}
         {__DEV__ && <Stack.Screen name="GameKitGym" component={GameKitGymScreen} />}
+        {__DEV__ && <Stack.Screen name="ShelfArrivalPreview" component={ShelfArrivalPreviewScreen} />}
         {__DEV__ && <Stack.Screen name="PostWinRewardsPreview" component={PostWinRewardsPreviewScreen} />}
         {__DEV__ && <Stack.Screen name="CoinLevelingPreview" component={CoinLevelingPreviewScreen} />}
         {__DEV__ && <Stack.Screen name="RescuePassPreview" component={RescuePassPreviewScreen} />}

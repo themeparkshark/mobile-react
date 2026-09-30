@@ -330,3 +330,44 @@ the earned collectible into the original Profile park's exact shelf slot. Physic
 small-phone and native reduced-motion review, full Adventure Ticket progression,
 crew contribution payoff, boss personality and longer play remain pending. The
 full six-part goal remains active.
+
+## Confirmed coin arrival in the original park shelf
+
+The reward action now hands the server's won attempt, task namespace and asset
+identity to the player's original Park screen, after the native rewards modal
+finishes closing. Profile -> park -> all available coins is preserved. The real
+catalog order resolves normal, secret and archived slots. A slot must also be
+owned in refreshed park progress before the scene can begin; stale or unavailable
+progress offers a retry without granting, moving or duplicating a reward.
+
+The screen scrolls to that exact row and measures the real slot in the current
+window. It rejects offscreen and delayed measurements. The same existing coin
+art shrinks into the measured slot on the native animation thread: 720 ms for a
+first collection, 360 ms for a repeat. One sound and light haptic resolve at
+landing; both actions remain responsive from the start. Reduced motion presents
+the finished slot immediately. The original coin stays visible after the scene,
+and the explicit mastery action loads that exact coin's current server balance
+and next unlock. Missing artwork completes the scene rather than substituting
+an invented collectible.
+
+Scrolling stays still until the arrival card is dismissed, keeping its gold ring
+attached to the actual coin. The caption clears the compass navigation button.
+Leaving the screen consumes the arrival; returning cannot reuse stale coordinates
+or replay it. A frame-size change closes the scene and releases the real shelf.
+
+Native iOS 18.6 review used existing confirmed local-player attempt 6, Snowball
+asset 24/task 109. It verified row four, slot two in the current 26-coin catalog,
+beside Secret Life of Pets; the anchored landing, compass clearance, dismiss
+action and exact Snowball mastery screen (Level 1, one Part, 185 Energy) were
+visible. No new reward, spend or upgrade was submitted. Automated validation:
+246 passing checks, TypeScript and diff checks clean. An explicit mastery request
+opens once; cancelling it or unmounting rejects late fetch results. Native review captured the
+landed state; full normal-speed trajectory, physical small-phone and native
+reduced-motion review remain pending. Adventure Ticket progression, crew payoff,
+boss personality and the rest of the six-part goal remain active.
+
+The ordinary nonstaff player session was restored with the shelf preview disabled
+and the optional daily chest declined. Its wallet remained 180 Coins, seven
+Tickets and 185 Energy. The normal Profile park card still opens all 26 available
+coins with three owned coins and no arrival replay. No deployment or outgoing
+message occurred. Legacy development-runtime warnings remain unresolved.

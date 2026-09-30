@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { type ReactNode, useContext, useState } from 'react';
+import { type ReactNode, useContext, useState, useEffect, useRef } from 'react';
 import { Alert, Platform, Pressable, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import * as Haptics from '../helpers/haptics';
@@ -22,6 +22,7 @@ export default function TaskCoinModal({
   timesCompleted,
   onPlayInLine,
   size = 60,
+  openRequestKey,
 }: {
   readonly isSecretTask?: boolean;
   readonly task: TaskType | SecretTaskType;
@@ -30,13 +31,16 @@ export default function TaskCoinModal({
   readonly readOnly?: boolean;
   readonly onPlayInLine?: () => void;
   readonly size?: number;
+  /** An explicit action from this coin’s shelf-arrival card. */
+  readonly openRequestKey?: number;
 }) {
   const [visible, setVisible] = useState(false);
   const [rideCoin, setRideCoin] = useState<RideCoinLevelType | null>(null);
-  const [loading, setLoading] = useState(false);
   const [coinUnavailable, setCoinUnavailable] = useState(false);
   const [playAfterClose, setPlayAfterClose] = useState(false);
   const { player, refreshPlayer } = useContext(AuthContext);
+  const mounted = useRef(true), opening = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const fetchCoin = async () => {
     const response = await getRideCoins(5_000);
@@ -45,8 +49,8 @@ export default function TaskCoinModal({
     ) ?? null;
   };
 
-  const handleOpen = async () => {
-    if (loading) return;
+  const handleOpen = async (stillRequested: () => boolean = () => true) => {
+    if (opening.current || !mounted.current || !stillRequested()) return;
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -55,9 +59,10 @@ export default function TaskCoinModal({
       setVisible(true);
       return;
     }
-    setLoading(true);
+    opening.current = true;
     try {
       const coin = await fetchCoin();
+      if (!mounted.current || !stillRequested()) return;
       if (!coin) {
         if (onPlayInLine) {
           setCoinUnavailable(true);
@@ -71,6 +76,7 @@ export default function TaskCoinModal({
       setRideCoin(coin);
       setVisible(true);
     } catch {
+      if (!mounted.current || !stillRequested()) return;
       if (onPlayInLine) {
         setCoinUnavailable(true);
         setVisible(true);
@@ -78,9 +84,20 @@ export default function TaskCoinModal({
         Alert.alert('Coin unavailable', 'Your coin could not be loaded. Try again when your connection returns.');
       }
     } finally {
-      setLoading(false);
+      opening.current = false;
     }
   };
+
+  const openedRequest = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!openRequestKey || openedRequest.current === openRequestKey) return;
+    openedRequest.current = openRequestKey;
+    let active = true;
+    void handleOpen(() => active);
+    return () => { active = false; };
+    // One explicit request opens this exact task; data changes never replay it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequestKey]);
 
   const level = rideCoin?.current_level ?? 1;
   const publicLevel = 'coin_level' in task && typeof task.coin_level === 'number'
@@ -90,7 +107,7 @@ export default function TaskCoinModal({
 
   return (
     <>
-      <Button onPress={handleOpen} accessibilityLabel={readOnly
+      <Button onPress={() => handleOpen()} accessibilityLabel={readOnly
         ? `${task.name} ride coin, collected${publicLevel ? ` at level ${viewedLevel}` : ''}. View collection details`
         : `${task.name} ride coin, collected. View mastery and upgrades`}>
         {trigger ?? <Image
