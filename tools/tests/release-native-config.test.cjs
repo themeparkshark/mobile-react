@@ -1,10 +1,22 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const { loadTs, read, root } = require('./helpers/load-ts.cjs');
 
-const plist = file => JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', path.join(root, file)], { encoding: 'utf8' }));
+const { readPlist: plist } = require('./helpers/plist.cjs');
+
+/** Width from the first JPEG start-of-frame marker (portable, no sips). */
+function jpegWidth(file) {
+  const buf = require('node:fs').readFileSync(path.join(root, file));
+  let offset = 2;
+  while (offset < buf.length) {
+    const marker = buf[offset + 1];
+    const length = buf.readUInt16BE(offset + 2);
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return buf.readUInt16BE(offset + 7);
+    offset += 2 + length;
+  }
+  throw new Error(`${file}: no JPEG frame header`);
+}
 const info = plist('ios/ThemeParkShark/Info.plist');
 const expoPlist = plist('ios/ThemeParkShark/Supporting/Expo.plist');
 const privacy = plist('ios/ThemeParkShark/PrivacyInfo.xcprivacy');
@@ -70,8 +82,7 @@ test('the launch screen is the brand splash art on brand blue, never a black fra
   const catalog = JSON.parse(read('ios/ThemeParkShark/Images.xcassets/SplashScreenLogo.imageset/Contents.json'));
   assert.deepEqual(catalog.images.map(i => i.filename), ['splash.jpg']);
   // The old launch image was a 1000x2164 solid black PNG; the art is 1080 wide.
-  const stats = execFileSync('sips', ['-g', 'pixelWidth', path.join(root, 'ios/ThemeParkShark/Images.xcassets/SplashScreenLogo.imageset/splash.jpg')], { encoding: 'utf8' });
-  assert.match(stats, /pixelWidth: 1080/);
+  assert.equal(jpegWidth('ios/ThemeParkShark/Images.xcassets/SplashScreenLogo.imageset/splash.jpg'), 1080);
   assert.match(appConfig, /backgroundColor: '#0768B9'/);
 });
 

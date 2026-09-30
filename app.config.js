@@ -1,4 +1,9 @@
 import 'dotenv/config';
+import withTpsNativeInvariants, { assertPrebuildAllowed } from './plugins/withTpsNativeInvariants';
+import privacyManifest from './plugins/privacy-manifest.json';
+
+// `expo prebuild --clean` would delete the LinePlayWidget target. See RELEASE.md.
+assertPrebuildAllowed();
 
 // Purpose strings shown by iOS permission prompts. They must describe what
 // Theme Park Shark actually does; ios/ThemeParkShark/Info.plist mirrors them
@@ -30,6 +35,8 @@ export default {
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
+  // Matches ios/Podfile.properties.json; without it prebuild turns Fabric off.
+  newArchEnabled: true,
   splash: {
     image: './assets/images/splash-bg.png',
     resizeMode: 'cover',
@@ -51,6 +58,8 @@ export default {
     // Build numbers are managed remotely by EAS (appVersionSource: remote).
     usesAppleSignIn: true,
     bundleIdentifier: 'com.themeparkshark.app',
+    // Same data as ios/ThemeParkShark/PrivacyInfo.xcprivacy, so prebuild keeps it.
+    privacyManifests: privacyManifest,
     infoPlist: {
       UIBackgroundModes: ['location'],
       ...PURPOSE_STRINGS,
@@ -65,8 +74,11 @@ export default {
       projectId: 'aaf6495c-456b-4fbd-afb5-d429c1472ddb',
     },
   },
+  // withTpsNativeInvariants is first so its mods run last. The
+  // @maplibre/maplibre-react-native plugin is intentionally absent: it moves
+  // MapLibre to SPM, which breaks App Store archives (see the plugin file).
   plugins: [
-    '@maplibre/maplibre-react-native',
+    withTpsNativeInvariants,
     'expo-notifications',
     [
       'expo-build-properties',
