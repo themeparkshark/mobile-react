@@ -12,11 +12,14 @@
     "build-dev-device": "npm run check:api -- development-device && eas build --profile development-device --platform ios",
     "build-prod": "npm run check:api -- production && eas build --profile production --platform ios",
     "build-testflight": "npm run check:api -- testflight && eas build --profile testflight --platform ios",
+    "update-testflight": "node tools/publish-update.cjs testflight",
+    "update-prod": "node tools/publish-update.cjs production",
     "typecheck": "tsc --noEmit",
     "test": "node --test tools/tests/*.test.cjs",
     "verify": "npm run typecheck && npm test",
     "hooks:install": "git config core.hooksPath .githooks",
-    "eas-build-pre-install": "node tools/check-api-target.cjs \"$EAS_BUILD_PROFILE\""
+    "eas-build-pre-install": "node tools/check-api-target.cjs \"$EAS_BUILD_PROFILE\"",
+    "eas-build-on-success": "node tools/upload-sourcemaps.cjs build"
   },
   "dependencies": {
     "@expo/ngrok": "^4.1.3",

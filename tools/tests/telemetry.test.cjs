@@ -15,9 +15,10 @@ function loadTelemetry({ storage = new Map(), channel = 'testflight', globals = 
     },
     'expo-application': { nativeApplicationVersion: '1.6.0', nativeBuildVersion: '42' },
     'expo-device': { osVersion: '18.6', modelName: 'iPhone 16 Pro', isDevice: false },
-    'expo-updates': { channel, updateId: 'update-1' },
+    'expo-updates': { channel, updateId: 'update-1', runtimeVersion: 'fp1', isEmbeddedLaunch: false },
     'react-native': { Platform: { OS: 'ios' } },
     './sentryEnvelope': envelopeModule,
+    './releaseName': loadTs('src/services/telemetry/releaseName.ts'),
   }, { process: { env: {} }, ...globals });
   return { mod, storage };
 }
@@ -44,7 +45,8 @@ test('Hermes stacks become oldest-first Sentry frames with file names only', () 
   assert.deepEqual([...frames.map(f => f.function)], ['onPress', 'throwIt']);
   assert.equal(frames[0].filename, 'app:///main.jsbundle');
   assert.equal(frames[1].lineno, 1);
-  assert.equal(frames[1].colno, 2345);
+  assert.equal(frames[1].colno, 2346, 'Hermes offsets become 1-based Sentry columns');
+  assert.equal(frames[0].colno, 20, 'JSC-style columns are already 1-based');
 });
 
 test('core-loop routes are classified from the API client, ids and queries stripped', () => {
@@ -92,7 +94,7 @@ test('an error event carries release, channel, opaque user id and core-loop brea
   const [header, item, event] = parseEnvelope(bodies[0][1]);
   assert.equal(header.event_id, id);
   assert.equal(item.type, 'event');
-  assert.equal(event.release, 'com.themeparkshark.app@1.6.0+42');
+  assert.equal(event.release, 'com.themeparkshark.app@ota-fp1', 'an OTA launch is keyed by runtime and update id');
   assert.equal(event.environment, 'testflight');
   assert.equal(event.dist, 'update-1');
   assert.equal(event.user.id, '77');

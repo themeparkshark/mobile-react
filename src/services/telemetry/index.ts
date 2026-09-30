@@ -12,6 +12,7 @@ import {
   type ParsedDsn,
   type TelemetryEvent,
 } from './sentryEnvelope';
+import { sentryReleaseAndDist } from './releaseName';
 
 /**
  * Crash and error reporting plus core-loop breadcrumbs.
@@ -74,10 +75,15 @@ export function initTelemetry(options: TelemetryOptions = {}): boolean {
   if (options.transport) state.transport = options.transport;
   if (options.now) state.now = options.now;
   state.environment = Updates.channel || (__DEV__ ? 'development' : 'local');
-  const version = Application.nativeApplicationVersion;
-  const build = Application.nativeBuildVersion;
-  state.release = version ? `com.themeparkshark.app@${version}+${build ?? '0'}` : undefined;
-  state.dist = Updates.updateId ?? build ?? undefined;
+  const { release, dist } = sentryReleaseAndDist({
+    version: Application.nativeApplicationVersion,
+    build: Application.nativeBuildVersion,
+    updateId: Updates.updateId,
+    runtimeVersion: Updates.runtimeVersion,
+    isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+  });
+  state.release = release;
+  state.dist = dist;
   if (!state.dsn) return false;
   if (options.installGlobalHandlers !== false) installGlobalHandlers();
   void flushOutbox();

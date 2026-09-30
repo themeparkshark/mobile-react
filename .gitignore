@@ -24,3 +24,4 @@ build-*.ipa
 .env*.local
 .env.local.backup
 .env*.backup
+ios/main.jsbundle.map

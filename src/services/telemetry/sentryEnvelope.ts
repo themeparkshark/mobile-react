@@ -1,8 +1,9 @@
 /**
  * Minimal Sentry wire format (envelope endpoint), dependency free.
  * Enough for JS crash and error reporting from a React Native release build
- * without the native SDK. Swap for @sentry/react-native when it is installed
- * (native crash capture); telemetry/index.ts is the only caller.
+ * without the native SDK. JS only: native crashes (a Swift/ObjC module, an
+ * OOM kill, a watchdog kill) are not captured. Swap for @sentry/react-native
+ * with the SDK 54 upgrade; telemetry/index.ts is the only caller.
  */
 export type ParsedDsn = {
   readonly publicKey: string;
@@ -70,9 +71,13 @@ export function parseStack(stack: string | undefined): StackFrame[] {
   const frames: StackFrame[] = [];
   for (const raw of stack.split('\n')) {
     const line = raw.trim();
-    let match = /^at (?:(.+?) )?\(?(?:address at )?([^()]+?):(\d+):(\d+)\)?$/.exec(line);
+    let match = /^at (?:(.+?) )?\(?(address at )?([^()]+?):(\d+):(\d+)\)?$/.exec(line);
     if (match) {
-      frames.push(frame(match[1], match[2], match[3], match[4]));
+      // Hermes bytecode frames ("address at") give a 0-based bytecode offset,
+      // which is the 0-based column in the composed Hermes source map. Sentry
+      // columns are 1-based, so add one (checked with hermes + hermesc).
+      const col = match[2] ? String(Number(match[5]) + 1) : match[5];
+      frames.push(frame(match[1], match[3], match[4], col));
       continue;
     }
     match = /^(?:(.*?)@)?(.+?):(\d+):(\d+)$/.exec(line);
@@ -81,8 +86,17 @@ export function parseStack(stack: string | undefined): StackFrame[] {
   return frames.slice(0, 50).reverse();
 }
 
+/**
+ * The one name every release bundle frame gets. A store build runs
+ * .../ThemeParkShark.app/main.jsbundle, an OTA update runs a hashed file under
+ * .expo-internal; both map through the source map uploaded as
+ * app:///main.jsbundle.map for that release and dist. Metro URLs (dev) keep
+ * their own name.
+ */
+export const BUNDLE_FRAME_FILENAME = 'app:///main.jsbundle';
+
 function frame(fn: string | undefined, file: string, line: string, col: string): StackFrame {
-  const filename = file.replace(/^.*\/(?=[^/]+$)/, 'app:///');
+  const filename = /^https?:\/\//.test(file) ? file.replace(/^.*\/(?=[^/]+$)/, 'app:///') : BUNDLE_FRAME_FILENAME;
   return {
     function: fn || '?',
     filename,
