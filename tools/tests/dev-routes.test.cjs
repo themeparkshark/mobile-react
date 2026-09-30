@@ -14,7 +14,7 @@ test('release builds register no dev screens and never start on a preview', () =
 test('development keeps every preview route and the original flag priority', () => {
   const dev = load(true);
   const names = dev.DEV_SCREENS.map(screen => screen.name);
-  for (const name of ['GameKitGym', 'MiniGameTester', 'BossMapPreview', 'ParkChecklistPreview', 'HomeHuntPreview', 'RideLogSuccessPreview']) {
+  for (const name of ['GameKitGym', 'UiKitGym', 'MiniGameTester', 'BossMapPreview', 'ParkChecklistPreview', 'HomeHuntPreview', 'RideLogSuccessPreview']) {
     assert.ok(names.includes(name), name);
   }
   assert.equal(new Set(names).size, names.length, 'no duplicate route names');
@@ -24,6 +24,7 @@ test('development keeps every preview route and the original flag priority', () 
   assert.equal(load(true, { EXPO_PUBLIC_TUTORIAL_PREVIEW: '1' }).devInitialRoute(), 'HomeHuntPreview');
   assert.equal(load(true, { EXPO_PUBLIC_RIDE_GAME_PREVIEW: '1' }).devInitialRoute(), 'MiniGameTester');
   assert.equal(load(true, { EXPO_PUBLIC_POST_WIN_FIRST_PREVIEW: '1' }).devInitialRoute(), 'PostWinRewardsPreview');
+  assert.equal(load(true, { EXPO_PUBLIC_UI_KIT_PREVIEW: '1' }).devInitialRoute(), 'UiKitGym');
 });
 
 test('Root imports no preview or tester screen directly', () => {
@@ -35,8 +36,9 @@ test('Root imports no preview or tester screen directly', () => {
 
 test('every dev screen module exists', () => {
   const source = read('src/devRoutes.tsx');
-  const files = [...source.matchAll(/require\('\.\/(screens\/[\w/]+)'\)/g)].map(match => `src/${match[1]}.tsx`);
+  const files = [...source.matchAll(/require\('\.\/((?:screens|ui)\/[\w/]+)'\)/g)].map(match => `src/${match[1]}.tsx`);
   assert.ok(files.length >= 20);
+  assert.ok(files.includes('src/ui/UiKitGym.tsx'), 'the WS0 kit gym is registered');
   const listed = execFileSync('git', ['ls-files', ...files], { cwd: root, encoding: 'utf8' }).trim().split('\n');
   assert.equal(listed.length, files.length);
 });
@@ -63,4 +65,10 @@ test('preview screens and dev routes carry no emoji or em dashes in their fixtur
     });
   }
   assert.deepEqual(offenders, []);
+});
+
+test('Root mounts exactly one GameDialogHost for the whole app', () => {
+  const source = read('src/Root.tsx');
+  assert.equal(source.match(/<GameDialogHost\s*\/>/g)?.length, 1);
+  assert.match(source, /import \{ GameDialogHost \} from '\.\/ui'/);
 });

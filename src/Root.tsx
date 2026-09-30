@@ -65,6 +65,7 @@ import RideBatchConfirmScreen from './screens/RideTracker/RideBatchConfirmScreen
 import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay';
 import SharkDropHandler from './components/SharkDropHandler';
 import OfflineBanner from './components/OfflineBanner';
+import { GameDialogHost } from './ui';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { DEV_SCREENS, devInitialRoute } from './devRoutes';
 import { releaseNativeSplash } from './nativeSplash';
@@ -329,6 +330,8 @@ export default function App() {
       <SharkDropHandler />
     </NavigationContainer>
     <OfflineBanner />
+    {/* The one app-wide host for gameAlert / confirmGame (WS0 kit). */}
+    <GameDialogHost />
     {__DEV__ && !isStandalonePreview && player && devMode && currentLocation && (
       <DevJoystick
         onMove={handleJoystickMove}
