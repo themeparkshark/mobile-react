@@ -42,6 +42,7 @@ const WS8_CLEAN = [
   'src/components/Toast.tsx',
   'src/screens/NewsScreen/Entry.tsx',
   'src/screens/ArticleScreen.tsx',
+  'src/screens/NotificationsScreen.tsx',
 ];
 
 /** Files WS8 moved off the FontAwesome icon font onto hand-drawn art. */
@@ -96,4 +97,18 @@ test('friend actions confirm with the game dialog and report failures', () => {
   const source = fs.readFileSync(path.join(root, 'src/hooks/useFriends.tsx'), 'utf8');
   assert.doesNotMatch(source, /Alert\.alert/);
   assert.equal((source.match(/catch \{/g) || []).length, 3);
+});
+
+test('Notifications: mark-all-read hides when nothing is unread, a failed load can retry, the empty state is art', () => {
+  const source = fs.readFileSync(path.join(root, 'src/screens/NotificationsScreen.tsx'), 'utf8');
+  const fn = source.slice(source.indexOf('export function showMarkAllRead'), source.indexOf('/** "All caught up"'));
+  const js = require(path.join(root, 'node_modules/typescript')).transpileModule(fn, { compilerOptions: { module: 1 } }).outputText;
+  const mod = { exports: {} };
+  new Function('module', 'exports', js)(mod, mod.exports);
+  assert.equal(mod.exports.showMarkAllRead([]), false);
+  assert.equal(mod.exports.showMarkAllRead([{ read_at: '2026-09-29' }]), false);
+  assert.equal(mod.exports.showMarkAllRead([{ read_at: '2026-09-29' }, { read_at: null }]), true);
+  assert.match(source, /\{showMarkAllRead\(notifications\) && <Button/);
+  assert.match(source, /state="error"/);
+  assert.match(source, /GameIcon name="bell"/);
 });
