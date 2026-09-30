@@ -55,6 +55,7 @@ function chest({ reconciled = null, reduced = false } = {}) {
       if (name === '../context/AuthProvider') return { AuthContext };
       if (name === '../context/DailyGiftProvider') return { DailyGiftContext };
       if (name === '../context/CurrencyFlyProvider') return { useCurrencyFly: () => ({ triggerFly(value) { flights.push(value); } }) };
+      if (name === '../dev/ws7Preview') return { ws7Preview: () => '' };
       if (name === '../ui') return { BRAND: { navy: '#05346e', blue: '#0768b9', white: '#fff', gold: '#ffcf3b', goldLip: '#d99a00' },
         GameIcon: 'GameIcon', gameAlert(title) { alerts.push(title); } };
       if (name === './RewardBurst') return { default: 'RewardBurst' };
