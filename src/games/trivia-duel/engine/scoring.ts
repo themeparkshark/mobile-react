@@ -10,6 +10,17 @@ import {
   type SpeedTier,
 } from './config';
 
+// Worklet-safe copies: worklets capture module-level values, not imported bindings.
+const W_BASE: number = POINTS.base;
+const W_SPEED_MAX: number = POINTS.speedMax;
+const W_CHOMP_CAP: number = POINTS.chompSpeedCap;
+const W_RIDE_WINDOW: number = POINTS.rideWindowMs;
+const W_RIDE_SPEED_MAX: number = POINTS.rideSpeedMax;
+const W_MULT: number[][] = STREAK_MULT.map((m) => [m[0], m[1]]);
+const W_TIERS: { tier: SpeedTier; min: number }[] = TIERS.map((t) => ({ tier: t.tier, min: t.min }));
+const W_HOT: number = HOT_STREAK;
+const W_BLAZING: number = BLAZING;
+
 export function clamp(v: number, lo: number, hi: number): number {
   'worklet';
   return v < lo ? lo : v > hi ? hi : v;
@@ -41,22 +52,23 @@ export function readLockMs(questionChars: number, family: 'ride' | 'queue'): num
 }
 
 /** Speed points 0..max with a horizon H: after H a correct answer still scores its base. */
-export function speedPoints(t: number, g: number, h: number, max: number = POINTS.speedMax): number {
+export function speedPoints(t: number, g: number, h: number, max?: number): number {
   'worklet';
-  if (h <= g) return t <= g ? max : 0;
-  return round5(max * clamp(1 - (t - g) / (h - g), 0, 1));
+  const m = max === undefined ? W_SPEED_MAX : max;
+  if (h <= g) return t <= g ? m : 0;
+  return round5(m * clamp(1 - (t - g) / (h - g), 0, 1));
 }
 
 export function streakMult(streakAfter: number): number {
   'worklet';
-  for (let i = 0; i < STREAK_MULT.length; i++) if (streakAfter >= STREAK_MULT[i][0]) return STREAK_MULT[i][1];
+  for (let i = 0; i < W_MULT.length; i++) if (streakAfter >= W_MULT[i][0]) return W_MULT[i][1];
   return 1;
 }
 
 export function flameTier(streak: number): 0 | 1 | 2 | 3 | 5 {
   'worklet';
-  if (streak >= BLAZING) return 5;
-  if (streak >= HOT_STREAK) return 3;
+  if (streak >= W_BLAZING) return 5;
+  if (streak >= W_HOT) return 3;
   if (streak >= 2) return 2;
   if (streak >= 1) return 1;
   return 0;
@@ -64,7 +76,7 @@ export function flameTier(streak: number): 0 | 1 | 2 | 3 | 5 {
 
 export function speedTier(speed: number): SpeedTier {
   'worklet';
-  for (let i = 0; i < TIERS.length; i++) if (speed >= TIERS[i].min) return TIERS[i].tier;
+  for (let i = 0; i < W_TIERS.length; i++) if (speed >= W_TIERS[i].min) return W_TIERS[i].tier;
   return 'none';
 }
 
@@ -80,13 +92,13 @@ export function creditedSpeed(t: number, g: number, h: number, mods: SpeedMods =
   'worklet';
   if (mods.holdForfeit) return 0;
   const s = speedPoints(t, g, h);
-  return mods.chomp ? Math.min(s, POINTS.chompSpeedCap) : s;
+  return mods.chomp ? Math.min(s, W_CHOMP_CAP) : s;
 }
 
 /** The ticker value shown at `t`: `+{100 + speed}` (before the streak multiplier). */
 export function tickerValue(t: number, g: number, h: number, mods: SpeedMods = {}): number {
   'worklet';
-  return POINTS.base + creditedSpeed(t, g, h, mods);
+  return W_BASE + creditedSpeed(t, g, h, mods);
 }
 
 /** Quick Draw / Final question points (before any wager stake). */
@@ -100,10 +112,10 @@ export function quickPoints(correct: boolean, t: number, g: number, h: number, s
 export function ridePoints(correct: boolean, t: number, g: number, mods: SpeedMods = {}): number {
   'worklet';
   if (!correct) return 0;
-  if (mods.holdForfeit) return POINTS.base;
-  let s = speedPoints(t, g, POINTS.rideWindowMs, POINTS.rideSpeedMax);
-  if (mods.chomp) s = Math.min(s, POINTS.chompSpeedCap);
-  return POINTS.base + s;
+  if (mods.holdForfeit) return W_BASE;
+  let s = speedPoints(t, g, W_RIDE_WINDOW, W_RIDE_SPEED_MAX);
+  if (mods.chomp) s = Math.min(s, W_CHOMP_CAP);
+  return W_BASE + s;
 }
 
 export function rideWon(correctCount: number): boolean {

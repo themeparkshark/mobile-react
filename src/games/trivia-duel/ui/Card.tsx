@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 26 },
   round: { fontFamily: 'Knockout', fontSize: 15, color: C.blue, letterSpacing: 0.5 },
   ticker: { fontFamily: 'Knockout', fontSize: 22, padding: 0, margin: 0, minWidth: 60, textAlign: 'right' },
-  body: { flexDirection: 'row', alignItems: 'center', minHeight: 76 },
+  body: { flexDirection: 'row', alignItems: 'center', minHeight: 72 },
   q: { flex: 1, fontSize: 19, lineHeight: 24, fontWeight: '800', color: C.navy, paddingRight: 8 },
   ringWrap: { width: RING, height: RING },
   readTrack: { height: 5, borderRadius: 3, backgroundColor: '#f1ead6', marginTop: 4, overflow: 'hidden' },

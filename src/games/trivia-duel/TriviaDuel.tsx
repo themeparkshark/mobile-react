@@ -41,7 +41,7 @@ import {
   BUZZ, CEREMONY, FIN_RANKS, FIN_RESOLVE_AFTER_MS, HOLD, POINTS, READ_LOCK, RIDE_QUESTIONS, UNLOCK_GUARD_MS, WAGER,
   type DuelMode, type SpeedTier,
 } from './engine/config';
-import type { PoolQuestion } from './engine/content';
+import { factKeysOf, type PoolQuestion } from './engine/content';
 import { applyMatchToRank, pickBark, BARKS } from './engine/finAI';
 import {
   createTally, finInput, ghostInput, makeGhost, NO_INPUT, planFromIds, planMatch, resolveRound, suddenDeathRound,
@@ -65,6 +65,7 @@ import { DuelResults, type ResultsModel } from './ui/DuelResults';
 
 // -- Question clock (UI thread) ------------------------------------------------------
 
+const GUARD_MS: number = UNLOCK_GUARD_MS;
 const PH_IDLE = 0;
 const PH_READ = 1;
 const PH_LIVE = 2;
@@ -162,10 +163,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const W = field.w;
   const H = field.h;
   const RAIL_H = 84;
-  const STAGE_H = Math.round(Math.max(150, Math.min(210, H * 0.27)));
-  const CARD_TOP = RAIL_H + STAGE_H - 18;
-  const ZONE_TOP = Math.max(CARD_TOP + 150, H * 0.5);
-  const ZONE_H = H - ZONE_TOP - 12;
+  // Thumb zone first: answers sit in the bottom of the screen, the card right
+  // above them, and the stage takes everything between the rail and the card.
+  const ZONE_H = 226;
+  const ZONE_TOP = H - ZONE_H - 20;
+  const CARD_H = 142;
+  const CARD_TOP = ZONE_TOP - CARD_H - 10;
+  const STAGE_H = Math.max(140, CARD_TOP + 22 - (RAIL_H - 4));
   const scoreAnchor = { x: 70, y: 46 };
 
   // -- Match state ------------------------------------------------------------------
@@ -208,6 +212,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const [runKey, setRunKey] = useState(0);
   const [ghost, setGhost] = useState<GhostRecord | null>(props.ghost ?? null);
 
+  // Flow functions are called from timers and UI-thread events: always go through the latest render.
+  const F = useRef<Record<string, (...args: any[]) => any>>({});
   const tally = useRef<MatchTally>(createTally());
   const resultsLog = useRef<RoundResult[]>([]);
   const oppIn = useRef<SideInput>({ ...NO_INPUT });
@@ -455,7 +461,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if ((q.removed >> i) & 1) return;
     if (q.phase === PH_LIVE && q.kind !== 2) {
       const my = q.t - q.unlockAt - q.frozen;
-      if (my < UNLOCK_GUARD_MS) {
+      if (my < GUARD_MS) {
         runOnJS(dispatch)(EV_EARLY, i, 0);
         return;
       }
@@ -476,7 +482,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       const q = qc.value;
       if (q.phase !== PH_LIVE || q.kind !== 2) return;
       const my = q.t - q.unlockAt - q.frozen;
-      if (my < UNLOCK_GUARD_MS) return;
+      if (my < GUARD_MS) return;
       q.phase = PH_WAIT;
       runOnJS(dispatch)(EV_BUZZ, my, 0);
     })();
@@ -488,7 +494,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       const q = qc.value;
       if (q.phase !== PH_LIVE) return;
       const my = q.t - q.unlockAt - q.frozen;
-      if (my < UNLOCK_GUARD_MS) return;
+      if (my < GUARD_MS) return;
       q.phase = PH_LOCKED;
       elapsed.value = my;
       runOnJS(dispatch)(EV_LOCK, -1, my);
@@ -589,14 +595,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
       });
       later(Math.round(vsMs * 0.8), () => say('intro'));
     } else {
-      startRound(p, 0);
+      F.current.startRound(p, 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseSeed, mode, rideId, parkId, chapterId, ghost, isRide, props.pool, W, H]);
 
   const onVsDone = useCallback(() => {
     setVs(null);
-    if (plan && phase === 'intro') startRound(plan, 0);
+    if (plan && phase === 'intro') F.current.startRound(plan, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, phase]);
 
@@ -619,15 +625,22 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setLocks({ me: null, opp: null });
     setHeads((r.question.choices.length ? r.question.choices : [0]).map(() => []));
     setTiles(r.question.choices.map(() => 'down'));
-    if (r.question.slider) setSliderVal(Math.round((r.question.slider.min + r.question.slider.max) / 2));
+    if (r.question.slider) {
+      // Start the thumb well away from the answer (never on it).
+      const sl = r.question.slider;
+      const span = sl.max - sl.min;
+      let v = sl.min + Math.round(span * (0.15 + ((mixSeed(p.seed, 0x51d + i) % 70) / 100)));
+      if (Math.abs(v - sl.truth) < sl.tol * 1.5) v = v <= sl.truth ? Math.max(sl.min, sl.truth - Math.round(sl.tol * 1.8)) : Math.min(sl.max, sl.truth + Math.round(sl.tol * 1.8));
+      setSliderVal(v);
+    }
     // Opponent's input for this round.
     if (ghost) oppIn.current = ghostInput(ghost, i);
     else oppIn.current = finInput(p, r, tally.current).input;
     if (r.spec.type === 'final' && !isRide) {
-      runFinalIntro(p, r);
+      F.current.runFinalIntro(p, r);
       return;
     }
-    presentQuestion(p, r);
+    F.current.presentQuestion(p, r);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ghost, isRide]);
 
@@ -687,7 +700,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       const tick = () => {
         left -= 1;
         if (left <= 0) {
-          lockWager(p, r);
+          F.current.lockWager(p, r);
           return;
         }
         setWager((w) => (w ? { ...w, left } : w));
@@ -710,7 +723,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     Haptic.hitMedium();
     later(250, () => {
       wagerLocked.current = false;
-      presentQuestion(p, r);
+      F.current.presentQuestion(p, r);
     });
   }, [presentQuestion, later]);
 
@@ -719,7 +732,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setWager((w) => (w ? { ...w, picked: i } : w));
     sfx(CUE.chip);
     Haptic.tapLight();
-    if (plan && round) later(220, () => lockWager(plan, round));
+    if (plan && round) later(220, () => F.current.lockWager(plan, round));
   }, [plan, round, lockWager, later]);
 
   // -- Events from the UI thread ------------------------------------------------------------------
@@ -745,7 +758,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const maybeReveal = useCallback(() => {
     if (!resolved.current.me || !resolved.current.opp || resolved.current.revealing) return;
     resolved.current.revealing = true;
-    void reveal();
+    void F.current.reveal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -954,6 +967,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
     }
   };
 
+  const tilesRef = useRef<TileState[]>([]);
+  tilesRef.current = tiles;
   const sliderValRef = useRef(0);
   sliderValRef.current = sliderVal;
 
@@ -1088,7 +1103,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       nextTap.current = null;
       clearTimers();
       push.value = withTiming(1, { duration: 300 });
-      advance();
+      F.current.advance();
     };
     nextTap.current = next;
     later((res.decisive ? 1500 : CEREMONY.nextQuestionMs) + (tension ? 400 : 250), next);
@@ -1100,7 +1115,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (!p) return;
     const next = roundIdx + 1;
     if (next < p.rounds.length) {
-      startRound(p, next);
+      F.current.startRound(p, next);
       return;
     }
     const t = tally.current;
@@ -1111,10 +1126,10 @@ export function TriviaDuel(props: TriviaDuelProps) {
       setPlan(np);
       setPips((ps) => [...ps, 'pending']);
       stamp('SUDDEN DEATH!', C.coral, 40, W / 2, H * 0.4);
-      later(900, () => startRound(np, next));
+      later(900, () => F.current.startRound(np, next));
       return;
     }
-    finishMatch();
+    F.current.finishMatch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, roundIdx, isRide, W, H]);
 
@@ -1149,7 +1164,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       const stars = rideStars(t.me.correct, p.rounds.length, t.me.score);
       setMusicBed(null);
       sfx(rideWon(t.me.correct) ? CUE.win : CUE.lose);
-      void updateMemory((m) => { rememberSeen(m, p.rounds.map((r) => r.question.id)); addFactCards(m, facts); });
+      void updateMemory((m) => { rememberSeen(m, p.rounds.map((r) => r.question.id), p.rounds.flatMap((r) => factKeysOf(r.question))); addFactCards(m, facts); });
       setShellResult({
         score: t.me.score,
         stars,
@@ -1172,7 +1187,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const prevBest = mem.best;
     const newCards: (FactCard & { isNew: boolean })[] = facts.map((f) => ({ ...f, isNew: !mem.album.some((a) => a.id === f.id) }));
     mem = await updateMemory((m) => {
-      rememberSeen(m, p.rounds.map((r) => r.question.id));
+      rememberSeen(m, p.rounds.map((r) => r.question.id), p.rounds.flatMap((r) => factKeysOf(r.question)));
       addFactCards(m, facts);
       if (!ghost && mode === 'queue') {
         const rk = applyMatchToRank(m.rank, won);
@@ -1266,7 +1281,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const k = (autoN.current += 1);
     const skill = (mixSeed(seedRef.current, k) % 100) / 100;
     const pick = skill < 0.78 ? q.correctIndex : (q.correctIndex + 1) % Math.max(2, q.choices.length);
-    const tapAt = (i: number, ms: number) => later(ms, () => runOnUI((x: number) => { 'worklet'; onTapUI(x); })(i));
+    const tapAt = (i: number, ms: number) => later(ms, () => {
+      const alive = tilesRef.current.map((t, k) => (t !== 'removed' ? k : -1)).filter((k) => k >= 0);
+      const x = alive.includes(i) ? i : alive.includes(q.correctIndex) ? q.correctIndex : alive[0] ?? i;
+      runOnUI((y: number) => { 'worklet'; onTapUI(y); })(x);
+    });
     if (ev === EV_UNLOCK) {
       const ms = 900 + skill * 2200;
       if (r.spec.type === 'buzz') later(ms * 0.7, onBuzzUI);
@@ -1288,6 +1307,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (phase === 'results' && results) later(7000, () => (playsRef.current < 2 ? onRematch() : onContinue()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, results]);
+
+  F.current = { startRound, presentQuestion, runFinalIntro, reveal, advance, finishMatch, lockWager };
 
   // -- Lifelines (6) -------------------------------------------------------------------------------------
   const canLifeline = phase === 'question' && !usedThisQ && round != null && (subMode === null || subMode === 'buzzAnswer');
@@ -1473,7 +1494,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
               onTickCoin={() => sfxLadder(CUE.coinTick, Math.min(5, Math.floor(Math.random() * 6)), { volume: 0.7 })}
             />
           </View>
-          <Bark text={bark.text} barkKey={bark.key} side="right" onTalk={onTalk} />
+          <View style={{ position: 'absolute', top: RAIL_H + 4, left: 0, right: 0 }} pointerEvents="none"><Bark text={bark.text} barkKey={bark.key} side="right" onTalk={onTalk} /></View>
 
           {showCard && q ? (
             <View style={[styles.cardWrap, { top: CARD_TOP }]}>
@@ -1492,7 +1513,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
                 width={Math.min(W - 24, 390)}
               />
               {lifelineButtons.length && phase === 'question' ? (
-                <View style={styles.lifeRow}>
+                <View style={[styles.lifeRow, { top: -62 }]}>
                   {lifelineButtons.map((k) => (
                     <LifelineButton key={k} kind={k} onPress={k === 'chomp' ? useChomp : k === 'freeze' ? useFreeze : usePeek} />
                   ))}
@@ -1505,6 +1526,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
             <View style={[styles.zone, { top: ZONE_TOP, height: ZONE_H, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2 }]}>
               {q.format === 'closest' && q.slider ? (
                 <ClosestSlider
+                  key={q.id}
                   min={q.slider.min}
                   max={q.slider.max}
                   value={sliderVal}
@@ -1566,7 +1588,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
             </View>
           ) : null}
 
-          {ribbon && phase === 'question' ? <Ribbon text={ribbon.text} holdMs={ribbon.hold} ribbonKey={ribbon.key} reducedMotion={reducedMotion} /> : null}
+          {ribbon && phase === 'question' ? <View style={{ position: 'absolute', top: RAIL_H + 6, left: 0, right: 0 }} pointerEvents="none"><Ribbon text={ribbon.text} holdMs={ribbon.hold} ribbonKey={ribbon.key} reducedMotion={reducedMotion} /></View> : null}
           {polaroid ? <Polaroid k={polaroid} /> : null}
           {stamps.map((s) => <Stamp key={s.key} spec={s} reducedMotion={reducedMotion} />)}
 
@@ -1621,7 +1643,7 @@ function speedWorklet(t: number, g: number, h: number, chomp: number): number {
 
 function rideSpeedWorklet(t: number, g: number, chomp: number): number {
   'worklet';
-  const h = POINTS.rideWindowMs;
+  const h = 8000;
   let s = Math.round((150 * Math.min(1, Math.max(0, 1 - (t - g) / (h - g)))) / 5) * 5;
   if (chomp) s = Math.min(s, 50);
   return s;
@@ -1637,9 +1659,9 @@ const styles = StyleSheet.create({
   stageWrap: { position: 'absolute', left: 0, right: 0 },
   railWrap: { position: 'absolute', left: 0, right: 0, top: 0 },
   cardWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  lifeRow: { position: 'absolute', right: 18, bottom: -30, flexDirection: 'row' },
+  lifeRow: { position: 'absolute', left: 22, flexDirection: 'row', gap: 8 },
   zone: { position: 'absolute' },
-  tiles: { flexWrap: 'wrap', justifyContent: 'center' },
+  tiles: { flexWrap: 'wrap', justifyContent: 'center', position: 'absolute', left: 0, right: 0, bottom: 0 },
   subChip: { position: 'absolute', alignSelf: 'center', backgroundColor: C.gold, borderRadius: 14, borderWidth: 3, borderColor: C.ink, paddingHorizontal: 14, paddingVertical: 4 },
   subChipText: { fontFamily: 'Shark', fontSize: 18, color: C.navy },
   finalCard: { position: 'absolute', alignSelf: 'center', backgroundColor: C.cream, borderRadius: 20, borderWidth: 3, borderColor: C.ink, borderBottomWidth: 8, paddingHorizontal: 28, paddingVertical: 14, alignItems: 'center' },

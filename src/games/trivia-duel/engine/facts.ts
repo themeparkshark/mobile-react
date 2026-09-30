@@ -18,25 +18,27 @@ export interface OpeningFact {
   sourceUrl: string;
   /** Category shown on the Final card. */
   category: 'Park History' | 'Ride History';
+  /** Phrases that mean an authored question already covers this fact. */
+  keys: readonly string[];
 }
 
 export const OPENING_FACTS: readonly OpeningFact[] = [
-  { id: 'dl-park', name: 'Disneyland', year: 1955, parkId: 8, category: 'Park History', source: 'Disney Parks Blog',
+  { id: 'dl-park', keys: ['Disneyland first open', 'Disneyland open', '1955'], name: 'Disneyland', year: 1955, parkId: 8, category: 'Park History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/dlr/today-in-disney-history-disneyland-opens-1955/' },
-  { id: 'dl-matterhorn', name: 'Matterhorn Bobsleds', year: 1959, parkId: 8, category: 'Ride History', source: 'Disney Parks Blog',
+  { id: 'dl-matterhorn', keys: ['Matterhorn'], name: 'Matterhorn Bobsleds', year: 1959, parkId: 8, category: 'Ride History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/dlr/things-you-might-not-know-about-the-matterhorn-at-disneyland-resort/' },
-  { id: 'ush-tour', name: 'the Universal Studio Tour', year: 1964, parkId: 1, category: 'Park History', source: 'Universal Studios Hollywood',
+  { id: 'ush-tour', keys: ['Studio Tour'], name: 'the Universal Studio Tour', year: 1964, parkId: 1, category: 'Park History', source: 'Universal Studios Hollywood',
     sourceUrl: 'https://www.universalstudioshollywood.com/auditions' },
-  { id: 'dl-pirates', name: 'Pirates of the Caribbean', year: 1967, parkId: 8, category: 'Ride History', source: 'Disney Parks Blog',
+  { id: 'dl-pirates', keys: ['Pirates of the Caribbean'], name: 'Pirates of the Caribbean', year: 1967, parkId: 8, category: 'Ride History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/disney-experiences/yo-ho-yo-ho-the-pirates-conquest-from-disneyland-to-the-big-screen/' },
-  { id: 'dl-mansion', name: 'Disneyland’s Haunted Mansion', year: 1969, parkId: 8, category: 'Ride History', source: 'Disney Parks Blog',
+  { id: 'dl-mansion', keys: ['Haunted Mansion'], name: 'Disneyland’s Haunted Mansion', year: 1969, parkId: 8, category: 'Ride History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/dlr/today-in-disney-history-haunted-mansion-opening-date-at-disneyland-in-1969/' },
-  { id: 'mk-space', name: 'Magic Kingdom’s Space Mountain', year: 1975, category: 'Ride History', source: 'Disney Parks Blog',
+  { id: 'mk-space', keys: ['Space Mountain'], name: 'Magic Kingdom’s Space Mountain', year: 1975, category: 'Ride History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/wdw/peak-perfection-space-mountain-at-walt-disney-world-celebrates-50-years/' },
-  { id: 'dl-space', name: 'Disneyland’s Space Mountain', year: 1977, parkId: 8, category: 'Ride History', source: 'Disney Parks Blog',
+  { id: 'dl-space', keys: ['Space Mountain'], name: 'Disneyland’s Space Mountain', year: 1977, parkId: 8, category: 'Ride History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/wdw/peak-perfection-space-mountain-at-walt-disney-world-celebrates-50-years/' },
-  { id: 'ak-park', name: 'Disney’s Animal Kingdom', year: 1998, parkId: 6, category: 'Park History', source: 'Disney Parks Blog',
+  { id: 'ak-park', keys: ['Animal Kingdom'], name: 'Disney’s Animal Kingdom', year: 1998, parkId: 6, category: 'Park History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/wdw/disney-world-facts-to-quiz-your-friends-on/' },
-  { id: 'dca-park', name: 'Disney California Adventure', year: 2001, parkId: 13, category: 'Park History', source: 'Disney Parks Blog',
+  { id: 'dca-park', keys: ['California Adventure'], name: 'Disney California Adventure', year: 2001, parkId: 13, category: 'Park History', source: 'Disney Parks Blog',
     sourceUrl: 'https://disneyparksblog.com/dlr/california-adventure-25th-anniversary-offerings/' },
 ];

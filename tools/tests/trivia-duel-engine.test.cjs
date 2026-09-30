@@ -246,6 +246,25 @@ test('every planned question rebuilds from its id alone', () => {
   }
 });
 
+test('no two questions in a match share a verified fact (no giveaways), rested facts rotate', () => {
+  const pool = POOL.concat([
+    { id: 'a1', question: 'Which Disneyland mountain ride opened in 1959?', choices: ['Matterhorn Bobsleds', 'Space Mountain', 'Splash', 'Big'], correctIndex: 0, difficulty: 'medium', source: 'x' },
+    { id: 'a2', question: 'What year did Disneyland\u2019s Haunted Mansion open?', choices: ['1969', '1955', '1977', '1989'], correctIndex: 0, difficulty: 'medium', source: 'x' },
+  ]);
+  for (let seed = 0; seed < 300; seed++) {
+    const plan = match.planMatch('queue', seed, pool, { parkId: 8 });
+    const keys = plan.rounds.flatMap((r) => content.factKeysOf(r.question));
+    assert.equal(new Set(keys).size, keys.length, `seed ${seed}: ${keys}`);
+  }
+  const seen = ['fact:dl-park', 'fact:dl-matterhorn', 'fact:dl-space', 'fact:mk-space'];
+  let rested = 0;
+  for (let seed = 0; seed < 100; seed++) {
+    const plan = match.planMatch('queue', seed, POOL, { seen });
+    rested += plan.rounds.flatMap((r) => content.factKeysOf(r.question)).filter((k) => seen.includes(`fact:${k}`)).length;
+  }
+  assert.ok(rested <= 25, `rested facts reused ${rested} times in 500 rounds`);
+});
+
 test('unlock jitter is close to uniform over 0-250ms', () => {
   const buckets = [0, 0, 0, 0, 0];
   for (let i = 0; i < 5000; i++) buckets[Math.min(4, Math.floor(match.unlockJitter(i * 7 + 3, i % 5) / 50.2))]++;

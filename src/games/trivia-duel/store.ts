@@ -74,9 +74,10 @@ export async function updateMemory(fn: (m: DuelMemory) => void): Promise<DuelMem
   return m;
 }
 
-export function rememberSeen(m: DuelMemory, ids: readonly string[]): void {
-  const set = m.seen.filter((id) => !ids.includes(id));
-  m.seen = [...set, ...ids].slice(-SEEN_MAX);
+export function rememberSeen(m: DuelMemory, ids: readonly string[], factKeys: readonly string[] = []): void {
+  const add = [...ids, ...factKeys.map((k) => `fact:${k}`)];
+  const set = m.seen.filter((id) => !add.includes(id));
+  m.seen = [...set, ...add].slice(-SEEN_MAX);
 }
 
 export function activeCarry(m: DuelMemory, now: number): { streak: number; shield: boolean } {

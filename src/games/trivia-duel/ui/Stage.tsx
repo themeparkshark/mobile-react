@@ -266,7 +266,7 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
   const dim = useDerivedValue(() => a.spot.value * 0.1);
 
   const crowdN = CROWD_LOOKS.length;
-  const crowdSize = Math.min(W / (crowdN - 1.5), 64);
+  const crowdSize = Math.min(W / (crowdN + 0.5), 46);
 
   return (
     <Canvas style={{ width: W, height: H }} pointerEvents="none">
@@ -379,7 +379,7 @@ const CrowdShark = React.memo(function CrowdShark({ i, n, W, H, size, img, finge
   i: number; n: number; W: number; H: number; size: number; img: SkImageType | null; finger: SkImageType | null; a: StageActors;
 }) {
   const x = (i / (n - 1)) * W;
-  const baseY = H - size * 0.46 + (i % 2) * 6;
+  const baseY = H - 30 - size * 0.12 + (i % 2) * 5;
   const flip = i < n / 2 ? -1 : 1;
   const tr = useDerivedValue(() => {
     const bob = Math.abs(Math.sin((a.beat.value + i * 0.25) * Math.PI)) * 2;

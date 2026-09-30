@@ -51,6 +51,18 @@ export interface DuelQuestion {
   stats: QuestionStats;
 }
 
+/** Verified facts a question uses or gives away (no two questions in a match share one). */
+export function factKeysOf(q: DuelQuestion | PoolQuestion): string[] {
+  const id = q.id;
+  if (id.includes('~')) {
+    const parts = id.split('~').slice(1);
+    return OPENING_FACTS.filter((f) => parts.includes(f.id)).map((f) => f.id);
+  }
+  const text = 'prompt' in q ? `${q.prompt} ${q.choices.join(' ')} ${q.fact ?? ''}` : `${q.question} ${q.choices.join(' ')} ${q.fact ?? ''}`;
+  const low = text.toLowerCase();
+  return OPENING_FACTS.filter((f) => f.keys.some((k) => low.includes(k.toLowerCase()))).map((f) => f.id);
+}
+
 /** Pattern and math filler from the old pool (design 9.1: dropped). */
 const FILLER_ID = /^gen-(1[3-9]|2\d|3[0-6])$/;
 export function isFiller(q: PoolQuestion): boolean {
@@ -262,13 +274,26 @@ export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundS
   const usable = usablePool(pool, opts.ride ? TEXT_LIMITS.ride : TEXT_LIMITS.queue);
   const seen = new Set(opts.seen ?? []);
   const used = new Set<string>();
-  const facts = factsFor(opts.parkId);
+  const allFacts = factsFor(opts.parkId);
+  const usedFacts = new Set<string>();
+  // Facts seen in recent matches are rested while enough others remain.
+  const restedFacts = new Set((opts.seen ?? []).filter((s) => s.startsWith('fact:')).map((s) => s.slice(5)));
+  const freshFacts = (need = 1): OpeningFact[] | null => {
+    const fresh = allFacts.filter((f) => !usedFacts.has(f.id) && !restedFacts.has(f.id));
+    // Generated formats need spare facts to choose from; otherwise an authored item plays.
+    return fresh.length >= need + 1 ? fresh : null;
+  };
+  const anyFacts = () => {
+    const open = allFacts.filter((f) => !usedFacts.has(f.id));
+    return open.length ? open : allFacts.slice();
+  };
+  const clashes = (q: DuelQuestion | PoolQuestion) => factKeysOf(q).some((k) => usedFacts.has(k));
   const out: DuelQuestion[] = [];
 
   const takeAuthored = (difficulty: Difficulty): DuelQuestion | null => {
     for (const pass of [0, 1]) {
       for (const d of DIFF_ORDER[difficulty]) {
-        const cand = usable.filter((q) => q.difficulty === d && !used.has(q.id) && (pass === 1 || !seen.has(q.id)));
+        const cand = usable.filter((q) => q.difficulty === d && !used.has(q.id) && !clashes(q) && (pass === 1 || !seen.has(q.id)));
         if (cand.length) {
           const q = cand[rngInt(r, 0, cand.length - 1)];
           used.add(q.id);
@@ -282,14 +307,16 @@ export function buildDeck(pool: readonly PoolQuestion[], rounds: readonly RoundS
   for (const spec of rounds) {
     const fmt = spec.formats[rngInt(r, 0, spec.formats.length - 1)];
     let q: DuelQuestion | null = null;
-    if (fmt === 'truetale') q = genTrueTale(r, facts);
-    else if (fmt === 'pair') q = genPair(r, facts);
-    else if (fmt === 'opened') q = genOpenedFirst(r, facts);
-    else if (fmt === 'closest') q = genClosest(r, facts);
-    if (q && used.has(q.id)) q = null;
+    const facts = freshFacts(fmt === 'opened' ? 3 : fmt === 'pair' ? 2 : 1);
+    if (facts && fmt === 'truetale') q = genTrueTale(r, facts);
+    else if (facts && fmt === 'pair') q = genPair(r, facts);
+    else if (facts && fmt === 'opened') q = genOpenedFirst(r, facts);
+    else if (facts && fmt === 'closest') q = genClosest(r, facts);
+    if (q && (used.has(q.id) || clashes(q))) q = null;
     if (!q) q = takeAuthored(spec.difficulty);
-    if (!q) q = genTrueTale(r, facts);
+    if (!q) q = genTrueTale(r, anyFacts());
     used.add(q.id);
+    factKeysOf(q).forEach((k) => usedFacts.add(k));
     out.push(q);
   }
   return out;
