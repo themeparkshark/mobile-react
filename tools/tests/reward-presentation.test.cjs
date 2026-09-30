@@ -237,3 +237,12 @@ test('post-win model: milestone headline, next unlock and parts meter use only c
   for (const text of [parts.hint, postWinModel.nextUnlockLine({milestones:[],progress,next:{percent:25,coins_needed:2}})])
     assert.ok(!/[\u2014]/.test(text));
 });
+
+test('ride challenge status cards sit on a brand navy scrim, and a free miss says no Ticket was spent', () => {
+  const src = require('node:fs').readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
+  assert.match(src, /backdropColor="#05346e"/);
+  assert.ok(!/backdropOpacity=\{flowState === 'preview' \? 0\.5 : 0\.95\}/.test(src), 'status states must not use a near-black backdrop');
+  assert.match(src, /'This one got away\. No Ticket was spent\.'/);
+  // The dev-only status preview can never reach a release build or a live modal.
+  assert.match(src, /__DEV__ && previewOnly \? process\.env\.EXPO_PUBLIC_CHALLENGE_FLOW_PREVIEW/);
+});

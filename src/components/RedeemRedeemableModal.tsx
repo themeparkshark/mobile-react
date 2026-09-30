@@ -102,7 +102,11 @@ export default function RedeemRedeemableModal({
   const { triggerFly } = useCurrencyFly();
 
   // Flow state
-  const [flowState, setFlowState] = useState<FlowState>('preview');
+  // Dev preview only: open a sample-only modal straight on a status card.
+  const devFlowEnv = __DEV__ && previewOnly ? process.env.EXPO_PUBLIC_CHALLENGE_FLOW_PREVIEW as FlowState | undefined : undefined;
+  const devFlow = devFlowEnv && ['lost', 'expired', 'claim-error', 'spend-error', 'save-error'].includes(devFlowEnv)
+    ? devFlowEnv : undefined;
+  const [flowState, setFlowState] = useState<FlowState>(devFlow ?? 'preview');
   // iOS must finish dismissing the game presentation before showing rewards.
   const [challengeModalHidden, setChallengeModalHidden] = useState(true);
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
@@ -185,7 +189,7 @@ export default function RedeemRedeemableModal({
   useEffect(() => {
     if (open) {
       setChallengeModalHidden(false);
-      setFlowState(isTaskType ? 'recovering' : 'preview');
+      setFlowState(devFlow ?? (isTaskType ? 'recovering' : 'preview'));
       setSelectedGame(null);
       setSelectedGameData(null);
       selectedIndexRef.current = null;
@@ -302,7 +306,7 @@ export default function RedeemRedeemableModal({
   // ID, or replay the original request ID and coordinates if its response was
   // lost. The server returns the same attempt without charging again.
   useEffect(() => {
-    if (!open || !taskType || !taskId) return;
+    if (!open || !taskType || !taskId || devFlow) return;
     if (!player?.id) {
       setFlowState('auth-required');
       return;
@@ -578,7 +582,8 @@ export default function RedeemRedeemableModal({
         onSwipeComplete={safeClose}
         onBackdropPress={safeClose}
         onBackButtonPress={safeClose}
-        backdropOpacity={flowState === 'preview' ? 0.5 : 0.95}
+        backdropColor="#05346e"
+        backdropOpacity={flowState === 'preview' ? 0.5 : 0.88}
         useNativeDriverForBackdrop
         statusBarTranslucent={flowState === 'minigame'}
         style={flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' ? { margin: 0 } : undefined}
@@ -790,7 +795,8 @@ export default function RedeemRedeemableModal({
                 : 'Your Rescue Pass tries are used up. No Ticket was spent.'
               : firstCoinTicketReturned
               ? 'This coin is still out there, and your Ticket came back. Give it another go.'
-              : `This one got away. ${lostTicketCost} Ticket${lostTicketCost === 1 ? '' : 's'} spent.`}
+              : lostTicketCost > 0 ? `This one got away. ${lostTicketCost} Ticket${lostTicketCost === 1 ? '' : 's'} spent.`
+              : 'This one got away. No Ticket was spent.'}
             primary={firstCoinTicketReturned || rescueRetryAvailable
               ? { label: location ? 'Try Again' : 'Finding You', onPress: handleProtectedRetry, disabled: !location }
               : { label: 'Continue', onPress: handleLostClose }}
