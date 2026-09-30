@@ -232,13 +232,32 @@ test('SharkLoader: loading turns slow and offers retry; error and empty never sp
   assert.equal(empty.timers.size, 0, 'empty state starts no slow timer');
 });
 
-test('Loading and YellowButton are thin wrappers over the kit', () => {
+test('Loading is a thin wrapper over SharkLoader', () => {
   const loading = runtime('src/components/Loading.tsx', { '../ui/SharkLoader': { default: 'SharkLoader' } }, { state: 'error', onRetry: 'r' });
   assert.equal(loading.tree.type, 'SharkLoader');
   assert.equal(loading.tree.props.state, 'error');
   assert.equal(loading.tree.props.onRetry, 'r');
-  const yellow = runtime('src/components/YellowButton.tsx', { '../ui/GameButton': { default: 'GameButton' } }, { text: 'Close', disabled: true, onPress: 'p' });
-  assert.equal(yellow.tree.type, 'GameButton');
-  assert.deepEqual(plain({ label: yellow.tree.props.label, disabled: yellow.tree.props.disabled, onPress: yellow.tree.props.onPress }),
-    { label: 'Close', disabled: true, onPress: 'p' });
+});
+
+const artText = loadTs('src/ui/artButtonText.ts');
+
+test('image button labels: one size per button height instead of shrink-from-72', () => {
+  assert.equal(artText.artButtonFontSize(0), 72, 'unmeasured keeps the original start size (label hidden until measured)');
+  assert.equal(artText.artButtonFontSize(80), 37);
+  assert.equal(artText.artButtonFontSize(52), 24);
+  assert.equal(artText.artButtonFontSize(10), artText.ART_BUTTON_MIN_FONT);
+  assert.equal(artText.artButtonFontSize(400), 72);
+  assert.equal(artText.artButtonFontSize(Number.NaN), 72);
+});
+
+test("YellowButton keeps Dustin's original art and label style; only the size rule changed", () => {
+  const source = fs.readFileSync(path.join(root, 'src/components/YellowButton.tsx'), 'utf8');
+  for (const needle of [
+    "require('../../assets/images/yellow_button.png')", 'aspectRatio: 3.8', 'aspectRatio: 4.4', "resizeMode=\"contain\"",
+    "color: 'white'", "fontFamily: 'Shark'", "textTransform: 'uppercase'", "textShadowColor: 'rgba(0, 0, 0, .5)'",
+    'textShadowRadius: 0', 'paddingLeft: 24', 'paddingRight: 24', 'toValue: 0.97', 'opacity: disabled ? 0.5 : 1',
+    'adjustsFontSizeToFit={true}', 'fontSize: artButtonFontSize(labelAreaHeight)',
+  ]) assert.ok(source.includes(needle), `YellowButton lost: ${needle}`);
+  assert.ok(!source.includes('fontSize: 72'), 'the fixed 72pt start size is gone');
+  assert.ok(!/GameButton|react-native-svg/.test(source), 'YellowButton does not render a new button style');
 });

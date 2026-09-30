@@ -1,6 +1,7 @@
 import { Animated, ImageBackground, Pressable, Text, View } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { artButtonFontSize } from '../ui/artButtonText';
 
 export default function YellowButton({
   disabled = false,
@@ -13,6 +14,8 @@ export default function YellowButton({
 }) {
   const animated = useRef(new Animated.Value(1)).current;
   const reducedMotion = useReducedGameMotion();
+  // Label size follows the button's height so every label on this button matches (was a fixed 72pt shrink-to-fit).
+  const [labelAreaHeight, setLabelAreaHeight] = useState(0);
   useEffect(() => {
     if (disabled || reducedMotion) { animated.stopAnimation(); animated.setValue(1); }
     return () => animated.stopAnimation();
@@ -75,6 +78,7 @@ export default function YellowButton({
           resizeMode="contain"
         >
           <View
+            onLayout={event => setLabelAreaHeight(event.nativeEvent.layout.height)}
             style={{
               justifyContent: 'center',
               aspectRatio: 4.4,
@@ -83,9 +87,11 @@ export default function YellowButton({
             <Text
               numberOfLines={1}
               adjustsFontSizeToFit={true}
+              maxFontSizeMultiplier={1.2}
               style={{
+                opacity: labelAreaHeight > 0 ? 1 : 0,
                 textAlign: 'center',
-                fontSize: 72,
+                fontSize: artButtonFontSize(labelAreaHeight),
                 color: 'white',
                 fontFamily: 'Shark',
                 textTransform: 'uppercase',
