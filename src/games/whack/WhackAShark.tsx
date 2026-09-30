@@ -207,6 +207,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const startWall = useRef(Date.now());
   const ghostRef = useRef<WhackGhost | null>(ghostProp ?? null);
   const finishing = useRef(false);
+  const raidRef = useRef<{ hpNow: number; hpMax: number; defeated: boolean } | null>(null);
 
   // Lifetime Bursts (unlock ladder), personal best.
   useEffect(() => {
@@ -628,6 +629,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     if (ride) {
       stars = last?.result.stars ?? 0;
       message = last?.result.win ? 'COIN CAUGHT!' : `SO CLOSE! ${Math.max(1, 100 - (last?.result.coin ?? 0))}% TO GO`;
+    } else if (format === 'raid') {
+      const r = raidRef.current;
+      const dmg = last?.result.bossDamage ?? 0;
+      stars = r?.defeated || last?.result.bossDown ? 3 : dmg >= (last ? tlRef.current?.bossHp ?? 20 : 20) * 0.5 ? 2 : dmg > 0 ? 1 : 0;
+      message = r?.defeated ? 'RAID BOSS DOWN!' : r ? `RAID HP ${r.hpNow}/${r.hpMax}` : `${dmg} DAMAGE`;
     } else if (format === 'duel') {
       const [w0, w1] = duelWinsRef.current;
       stars = w0 > w1 ? 3 : w0 === w1 ? 2 : 1;
@@ -664,12 +670,14 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       stars,
       message,
       maxCombo: maxStreak,
-      thresholds: ride ? undefined : thresholds,
+      thresholds: ride || format === 'raid' || format === 'duel' ? undefined : thresholds,
       stats: [
         { label: 'QUICK', value: `${judged ? Math.round((100 * quick) / judged) : 0}%` },
         { label: 'BEST STREAK', value: `${maxStreak}` },
-        ...(ride ? [{ label: 'COIN', value: `${last?.result.coin ?? 0}%` }] : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}` }]),
-        ...(goal && goal.remaining > 0 ? [{ label: 'NEXT STAR', value: `+${goal.remaining}` }] : []),
+        ...(ride ? [{ label: 'COIN', value: `${last?.result.coin ?? 0}%` }]
+          : format === 'raid' ? [{ label: 'BOSS DAMAGE', value: `${last?.result.bossDamage ?? 0}` }]
+            : [{ label: 'BURSTS', value: `${banked.length}/${totalBursts}` }]),
+        ...(goal && goal.remaining > 0 && format !== 'raid' ? [{ label: 'NEXT STAR', value: `+${goal.remaining}` }] : []),
       ],
       meta,
     });
@@ -741,6 +749,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           return;
         }
       }
+      if (v && v.ok && v.raid) raidRef.current = { hpNow: v.raid.hpNow, hpMax: v.raid.hpMax, defeated: v.raid.defeated };
       if (v && v.ok && v.raid) duelLine = v.raid.defeated ? 'RAID BOSS DOWN!' : `RAID HP ${v.raid.hpNow}/${v.raid.hpMax}${v.raid.tagTeam ? '  TAG TEAM!' : ''}`;
     }
     const next = t.input.burstIndex + 1;
@@ -781,7 +790,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       setReadyOn(false);
       setPhase('breather');
       setTimeout(() => setReadyOn(true), 1200);
-      if (autoplay) setTimeout(() => onReadyRef.current(), 1800);
+      if (autoplay) setTimeout(() => onReadyRef.current(), 3500);
     }, 800);
   }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay]);
 
@@ -909,7 +918,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       fever={fever}
       personalBest={best}
       result={result}
-      thresholds={ride ? undefined : RUN_STARS[difficulty]}
+      thresholds={ride || format === 'raid' || format === 'duel' ? undefined : RUN_STARS[difficulty]}
       resumeStyle="instant"
       pauseOnLineMove={false}
       gameId="whack"

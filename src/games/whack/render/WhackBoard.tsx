@@ -395,7 +395,7 @@ function TopZone({ L, sim, rs, tick, hud, fontS, fontM, fontL, boss, bossFx, pac
     tick.value;
     const b = bossFx.value;
     const bob = Math.sin(rs.value.tick * 0.083) * 6;
-    return [{ translateX: W * 0.72 - bossW / 2 + b.flinch }, { translateY: top - bossW * 0.92 + (1 - b.rise) * bossW * 0.6 + b.sink * bossW + bob }];
+    return [{ translateX: W * 0.72 - bossW / 2 + b.flinch }, { translateY: top - bossW * 1.08 + (1 - b.rise) * bossW * 0.6 + b.sink * bossW + bob }];
   });
   const bossOp = useDerivedValue(() => (tick.value, hud.boss ? Math.min(1, bossFx.value.rise * 1.5) * (1 - bossFx.value.sink) : 0));
   const hpW = W * 0.42;

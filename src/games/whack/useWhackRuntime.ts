@@ -193,7 +193,7 @@ export function useWhackRuntime(opts: {
       if (k === K_ANGLER || k === K_PUFFER) continue;
       if (r.botEv[h] !== e) {
         r.botEv[h] = e;
-        r.botAt[h] = s.evEmerge[e] + 330 + (mixSeed(e + 1, s.seed) % 230);
+        r.botAt[h] = s.evEmerge[e] + 240 + (mixSeed(e + 1, s.seed) % 260);
         r.botHits[h] = 0;
       }
       if (s.t >= r.botAt[h]) {
