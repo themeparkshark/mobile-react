@@ -4,11 +4,11 @@ const g = loadTs('src/components/map/guide.ts');
 const size = { width: 400, height: 800 };
 
 test('edge arrow: hidden on screen, pinned to the inset edge and pointing at an off-screen target', () => {
-  assert.equal(g.edgeArrow({ x: 200, y: 400 }, size), null);
+  assert.equal(g.edgeArrow({ x: 200, y: 420 }, size), null);
   const right = g.edgeArrow({ x: 900, y: 430 }, size);
   assert.equal(right.x, 360); assert.ok(Math.abs(right.angle) < 10);
   const above = g.edgeArrow({ x: 200, y: -500 }, size);
-  assert.equal(above.y, 150); assert.ok(Math.abs(above.angle + 90) < 1);
+  assert.equal(above.y, 250); assert.ok(Math.abs(above.angle + 90) < 1);
   const below = g.edgeArrow({ x: 200, y: 2000 }, size);
   assert.equal(below.y, 610); assert.ok(Math.abs(below.angle - 90) < 1);
 });

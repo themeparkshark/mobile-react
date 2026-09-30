@@ -137,3 +137,10 @@ test('refresh deferred during a previous player’s mutation resumes for the cur
  h.writes[0].resolve(data());await write;await h.app.settle();assert.equal(h.app.tree.data,null);assert.equal(h.reads.length,2);
  h.reads[1].resolve({...data(),goal:{...ride,task_id:8}});await h.app.settle();assert.equal(h.app.tree.data.goal.task_id,8);
 });
+test('folded chip lines fit the 43% slot', () => {
+ const p = presentation.exports;
+ for (const phase of ['discover','play','celebrate','complete']) for (const closed of [false,true]) for (const gate of [{state:'near',meters:5},{state:'far',meters:300}]) {
+  const prompt = p.adventurePrompt({...ticket(phase),play_hint:null}, closed, gate);
+  assert.ok(prompt.chip.length <= 20, prompt.chip);
+ }
+});

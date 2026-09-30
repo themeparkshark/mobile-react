@@ -44,6 +44,8 @@ export interface AdventurePrompt {
   readonly title: string;
   readonly action: string;
   readonly detail: string;
+  /** Short line for the folded chip (the 43% slot fits about 20 characters). */
+  readonly chip: string;
   /** What the primary button does. */
   readonly intent: 'shelf' | 'detour' | 'discover' | 'play' | 'find_line' | 'celebrate';
 }
@@ -54,21 +56,21 @@ export interface AdventurePrompt {
  */
 export function adventurePrompt(ticket: AdventureTicket, closed = false,
   gate: { state: 'near' | 'far' | 'unknown'; meters: number | null } = { state: 'unknown', meters: null }): AdventurePrompt {
-  if (ticket.phase === 'complete') return { title: 'Your park-day souvenir', action: 'Visit my coin', detail: 'A coin, a story, a day to remember.', intent: 'shelf' };
-  if (closed && ticket.phase !== 'celebrate') return { title: 'Adventure takes a detour', action: 'Choose another ride', detail: 'Keep every stamp you have earned.', intent: 'detour' };
-  if (ticket.phase === 'discover') return { title: 'Your first chapter awaits', action: 'Find this coin', detail: 'Win its coin challenge at the ride.', intent: 'discover' };
+  if (ticket.phase === 'complete') return { title: 'Your park-day souvenir', chip: 'Souvenir ready', action: 'Visit my coin', detail: 'A coin, a story, a day to remember.', intent: 'shelf' };
+  if (closed && ticket.phase !== 'celebrate') return { title: 'Adventure takes a detour', chip: 'Pick a detour', action: 'Choose another ride', detail: 'Keep every stamp you have earned.', intent: 'detour' };
+  if (ticket.phase === 'discover') return { title: 'Your first chapter awaits', chip: 'Find your coin', action: 'Find this coin', detail: 'Win its coin challenge at the ride.', intent: 'discover' };
   if (ticket.phase === 'play') {
     if (ticket.play_hint === 'get_in_line') {
-      return { title: `Get in line at ${ticket.ride.ride_name}`, action: gate.state === 'far' ? 'Show me the line' : 'Play the queue adventure',
+      return { title: `Get in line at ${ticket.ride.ride_name}`, chip: 'Get in its line', action: gate.state === 'far' ? 'Show me the line' : 'Play the queue adventure',
         detail: 'Your story is done. Finish it in this ride\'s queue to punch the Play stamp.', intent: gate.state === 'far' ? 'find_line' : 'play' };
     }
     if (gate.state === 'far') {
-      return { title: 'A story for your next wait', action: 'Show me the line',
+      return { title: 'A story for your next wait', chip: 'Walk to its line', action: 'Show me the line',
         detail: `${formatDistance(gate.meters ?? 0)} away. The story opens when you are in its queue.`, intent: 'find_line' };
     }
-    return { title: 'A story for your next wait', action: 'Play the queue adventure', detail: 'Three short missions, made to play as the line moves.', intent: 'play' };
+    return { title: 'A story for your next wait', chip: 'Play in this line', action: 'Play the queue adventure', detail: 'Three short missions, made to play as the line moves.', intent: 'play' };
   }
-  return { title: 'You made a park memory', action: 'Unfold my souvenir', detail: 'Your coin and your story, together.', intent: 'celebrate' };
+  return { title: 'You made a park memory', chip: 'Unfold your souvenir', action: 'Unfold my souvenir', detail: 'Your coin and your story, together.', intent: 'celebrate' };
 }
 
 /** Stamps in order: Discover, Play, Celebrate. */

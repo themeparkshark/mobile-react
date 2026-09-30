@@ -221,7 +221,7 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
               {stamps.map((earned, index) => <StampDot key={index} earned={earned} reduced={reduced} coin={coinSource}
                 slam={slam.includes(index)} onDone={index === Math.max(...slam) ? onSlamDone : undefined} />)}
             </View>
-            <Text numberOfLines={1} style={styles.chipTitle}>{prompt.title}</Text>
+            <Text numberOfLines={1} style={styles.chipTitle}>{prompt.chip}</Text>
             <Text numberOfLines={1} style={styles.chipRide}>{ticket.ride.ride_name}</Text>
           </View>
         </Pressable>

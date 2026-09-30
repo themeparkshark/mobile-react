@@ -4,7 +4,7 @@
  * at it. null when the target is on screen.
  */
 export function edgeArrow(point: { x: number; y: number }, size: { width: number; height: number },
-  inset = { top: 150, right: 40, bottom: 190, left: 40 }): { x: number; y: number; angle: number } | null {
+  inset = { top: 250, right: 40, bottom: 190, left: 40 }): { x: number; y: number; angle: number } | null {
   const { width, height } = size;
   const minX = inset.left, maxX = width - inset.right, minY = inset.top, maxY = height - inset.bottom;
   if (point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY) return null;
