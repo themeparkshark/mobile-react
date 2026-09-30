@@ -11,7 +11,9 @@
     "build-dev": "npm run check:api -- development && eas build --profile development --platform ios",
     "build-dev-device": "npm run check:api -- development-device && eas build --profile development-device --platform ios",
     "build-preview": "npm run check:api -- preview && eas build --profile preview --platform ios",
-    "build-prod": "npm run check:api -- production && eas build --profile production --platform ios"
+    "build-prod": "npm run check:api -- production && eas build --profile production --platform ios",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tools/tests/*.test.cjs"
   },
   "dependencies": {
     "@expo/ngrok": "^4.1.3",
