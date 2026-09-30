@@ -432,3 +432,19 @@ test('score variance: expert top/median ratio stays under 1.6 on one weekly seed
   scores.sort((a, b) => a - b);
   assert.ok(scores[scores.length - 1] / scores[scores.length >> 1] <= 1.6);
 });
+
+test('golden vectors (PHP parity): every timeline hash and every recorded run still reproduces', () => {
+  const crypto = require('node:crypto');
+  const V = require('../../src/games/whack/__vectors__/vectors.json');
+  const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
+  for (const t of V.timelines) assert.equal(sha(T.timelineFingerprint(T.buildBurst(t.input))), t.sha256, JSON.stringify(t.input));
+  for (const r of V.runs) {
+    const v = P.verifyProof(r.proof);
+    assert.ok(v.ok || v.reason === 'reaction' || v.reason === 'robotic', JSON.stringify(v).slice(0, 200));
+    const res = P.replayProof(r.proof).result;
+    assert.equal(res.score, r.expect.score);
+    assert.equal(res.win, r.expect.win);
+    assert.equal(res.freezes, r.expect.freezes);
+    assert.equal(res.bossDamage, r.expect.bossDamage);
+  }
+});
