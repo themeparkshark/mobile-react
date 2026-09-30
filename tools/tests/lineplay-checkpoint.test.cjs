@@ -30,6 +30,7 @@ vm.runInNewContext(code, {
     if (name === '@react-native-async-storage/async-storage') return { default: storage };
     if (name === './crewRelay') return crewModule.exports;
     if (name === './navigationPanel') return require('./helpers/navigation-panel.cjs');
+    if (name === './replay') return require('./helpers/lineplay-replay.cjs');
     throw new Error(`Unexpected dependency: ${name}`);
   },
 }, { filename: 'checkpoint.ts' });
@@ -115,4 +116,26 @@ test('a long queue can restore extra waves within the bounded playlist cap', () 
   const extended = { ...checkpoint, playlist, extraRoundsAdded: 40 };
   assert.ok(parseCheckpoint(JSON.stringify(extended), 12, 99));
   assert.equal(parseCheckpoint(JSON.stringify({ ...extended, playlist: [...playlist, playlist[0]] }), 12, 99), null);
+});
+
+test('checkpoint round-trips replay plays, difficulty, best stars and the end reason', async () => {
+  const withReplay = { ...checkpoint, rideId: 77, gamePlays: { 'mg-1': 3, 'encore-22-mg-1': 1 },
+    gameDifficulty: { memory: 2, tap: 3 }, gameBestStars: { memory: 3, tap: 1 }, endReason: 'left_queue' };
+  await writeCheckpoint(withReplay);
+  const restored = JSON.parse(JSON.stringify(await readCheckpoint(12, 77)));
+  assert.deepEqual(restored.gamePlays, withReplay.gamePlays);
+  assert.deepEqual(restored.gameDifficulty, withReplay.gameDifficulty);
+  assert.deepEqual(restored.gameBestStars, withReplay.gameBestStars);
+  assert.equal(restored.endReason, 'left_queue');
+  await removeCheckpoint(12, 77);
+  const raw = value => JSON.stringify({ ...checkpoint, ...value });
+  assert.equal(parseCheckpoint(raw({ gamePlays: { 'mg-1': -1 } }), 12, 99), null);
+  assert.equal(parseCheckpoint(raw({ gamePlays: { 'mg-1': 1.5 } }), 12, 99), null);
+  assert.equal(parseCheckpoint(raw({ gamePlays: [] }), 12, 99), null);
+  assert.equal(parseCheckpoint(raw({ gameDifficulty: { memory: 4 } }), 12, 99), null);
+  assert.equal(parseCheckpoint(raw({ gameBestStars: { memory: 4 } }), 12, 99), null);
+  assert.equal(parseCheckpoint(raw({ endReason: 'teleported' }), 12, 99), null);
+  assert.ok(parseCheckpoint(raw({ endReason: null }), 12, 99));
+  // Older checkpoints without the new fields still restore.
+  assert.ok(parseCheckpoint(JSON.stringify(checkpoint), 12, 99));
 });

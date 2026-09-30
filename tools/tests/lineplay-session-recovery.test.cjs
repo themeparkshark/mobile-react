@@ -22,10 +22,10 @@ const gridModule = { exports: {} };
 vm.runInNewContext(gridCode, { module: gridModule, exports: gridModule.exports }, { filename: 'crewGrid.ts' });
 
 function makeHarness(saved, server, chapter = null, readResponse = null, questSubmit = null,
-  backgroundPermission = { granted: true }, completeResponse = null) {
+  backgroundPermission = { granted: true }, completeResponse = null, heartbeatResponse = null) {
   const calls = { start: 0, read: 0, complete: 0, signal: 0, puzzle: 0,
     backgroundStarted: [], backgroundStopped: [], queued: [], written: [], removed: [], chapterArgs: [],
-    currentQuest: [], completeArgs: [], selectedEpisodes: [], recordedEpisodes: [] };
+    currentQuest: [], completeArgs: [], selectedEpisodes: [], recordedEpisodes: [], triviaPrimed: [] };
   const asDefault = fn => ({ default: fn });
   const mocks = {
     '@react-native-async-storage/async-storage': { default: {} },
@@ -37,7 +37,8 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
       calls.complete++; calls.completeArgs.push(args);
       return completeResponse ? completeResponse(...args) : server;
     }),
-    '../../api/endpoints/me/inline-timer/heartbeat': asDefault(async () => server),
+    '../../api/endpoints/me/inline-timer/heartbeat': asDefault(async (...args) =>
+      heartbeatResponse ? heartbeatResponse(...args) : server),
     '../../api/endpoints/me/inline-timer/read': asDefault(async () => {
       calls.read++;
       return readResponse ? readResponse(calls.read) : server;
@@ -59,7 +60,6 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     './content': { buildPredictionCard: () => ({ id: 'new-prediction' }) },
     './chapters': {
       getLinePlayChapter: (...args) => { calls.chapterArgs.push(args); return chapter; },
-      adaptiveEpisodeCountForRide: () => 3,
     },
     './episodeRotation': { selectAdaptiveEpisode: async (...args) => {
       calls.selectedEpisodes.push(args); return 1;
@@ -67,6 +67,8 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     './crewRelay': crewModule.exports,
     './crewGrid': gridModule.exports,
     './navigationPanel': require('./helpers/navigation-panel.cjs'),
+    './replay': require('./helpers/lineplay-replay.cjs'),
+    './triviaDeck': { primeTriviaDeck: async (...args) => { calls.triviaPrimed.push(args); } },
     './checkpoint': {
       readCheckpoint: async () => saved,
       writeCheckpoint: async value => { calls.written.push(JSON.parse(JSON.stringify(value))); },
@@ -126,7 +128,7 @@ test('navigation repair pauses instantly, keeps rotations through remount and co
   const session = new Session(); await session.start(ride, undefined, 12);
   session.rotateNavigationPanel(id, 3); await session.checkpointWrites;
   const first = JSON.stringify(session.snapshot().navigationPanels);
-  session.pause('lineMoving'); session.rotateNavigationPanel(id, 3); session.startNextNavigationRound(id);
+  session.pause('manual'); session.rotateNavigationPanel(id, 3); session.startNextNavigationRound(id);
   assert.equal(JSON.stringify(session.snapshot().navigationPanels), first);
   session.resume(); session.rotateNavigationPanel('another-ride-trivia', 0);
   assert.equal(JSON.stringify(session.snapshot().navigationPanels), first);
@@ -223,28 +225,176 @@ test('offline-first queue play connects its existing session when a fresh fix ar
   session.dispose();
 });
 
-test('queue GPS drift and a short shuffle do not interrupt play, but sustained walking does', async () => {
+test('the line is always moving: walking, shuffles and GPS drift never pause play', async () => {
   const { Session } = makeHarness(null, server);
   const session = new Session();
   await session.start(ride, undefined, 12);
-  const start = Date.now() - 30_000;
+  const start = Date.now() - 60_000;
   const fix = (step, seconds, accuracyMeters, speedMps) => ({
     latitude: 34.1 + step * 0.00003, longitude: -118.3,
     timestamp: start + seconds * 1000, accuracyMeters, speedMps,
   });
+  // Noisy indoor fixes, a short shuffle, then sustained accurate walking.
   session.ingestLocation(fix(0, 0, 8, 0));
   session.ingestLocation(fix(1, 3, 45, 1.2));
   session.ingestLocation(fix(2, 6, 45, 1.2));
-  session.ingestLocation(fix(3, 9, 45, 1.2));
-  assert.equal(session.snapshot().state, 'active', 'inaccurate fixes cannot auto-pause');
   session.ingestLocation(fix(4, 12, 8, 1.1));
-  session.ingestLocation(fix(4, 15, 8, 0));
-  assert.equal(session.snapshot().state, 'active', 'one short queue shuffle is not sustained walking');
-  session.ingestLocation(fix(5, 18, 8, 1.1));
-  session.ingestLocation(fix(6, 21, 8, 1.1));
-  session.ingestLocation(fix(7, 24, 8, 1.1));
-  assert.equal(session.snapshot().state, 'paused');
-  assert.equal(session.snapshot().pauseReason, 'lineMoving');
+  for (let step = 5; step < 12; step++) session.ingestLocation(fix(step, step * 3, 8, 1.2));
+  assert.equal(session.snapshot().state, 'active');
+  assert.equal(session.snapshot().pauseReason, null);
+  session.markActivityCompleted('mg-walking');
+  assert.ok(session.snapshot().completedActivityIds.includes('mg-walking'), 'input keeps working while walking');
+  session.dispose();
+});
+
+test('a big forward advance raises one non-pausing heads up, then cools down', async () => {
+  const { Session } = makeHarness(null, server);
+  const session = new Session();
+  await session.start(ride, undefined, 12);
+  const start = Date.now() - 120_000;
+  // About 3.3m per step north: 6 accurate steps over 30s is a 20m jump forward.
+  const fix = (step, seconds, accuracyMeters = 6) => ({
+    latitude: 34.1 + step * 0.00003, longitude: -118.3, timestamp: start + seconds * 1000, accuracyMeters, speedMps: 0.9,
+  });
+  for (let step = 0; step <= 3; step++) session.ingestLocation(fix(step, step * 5));
+  assert.equal(session.snapshot().queueAdvanceAt, null, 'a small shuffle is not worth a heads up');
+  for (let step = 4; step <= 6; step++) session.ingestLocation(fix(step, step * 5));
+  const advance = session.snapshot().queueAdvanceAt;
+  assert.ok(advance != null);
+  assert.equal(session.snapshot().state, 'active');
+  session.acknowledgeQueueAdvance();
+  assert.equal(session.snapshot().queueAdvanceAt, null);
+  // Another jump right away stays quiet: the guest is playing, not being nagged.
+  for (let step = 7; step <= 14; step++) session.ingestLocation(fix(step, step * 5));
+  assert.equal(session.snapshot().queueAdvanceAt, null);
+  // Inaccurate fixes never count toward a heads up.
+  const noisy = makeHarness(null, server);
+  const other = new noisy.Session();
+  await other.start(ride, undefined, 12);
+  for (let step = 0; step <= 10; step++) other.ingestLocation(fix(step * 3, step * 5, 40));
+  assert.equal(other.snapshot().queueAdvanceAt, null);
+  other.dispose();
+  session.dispose();
+});
+
+test('leaving the queue area starts the wrap-up only after three minutes of fresh away fixes', async () => {
+  let near = true;
+  const { Session } = makeHarness(null, server, null, null, null, { granted: true }, null, async () => {
+    if (near) return server;
+    throw { response: { status: 422, data: { message: 'Queue rewards paused until you are near the ride.' } } };
+  });
+  const session = new Session();
+  const sample = { latitude: 34.1, longitude: -118.3, timestamp: Date.now(), accuracyMeters: 8 };
+  await session.start(ride, sample, 12);
+  assert.equal(session.snapshot().serverSessionId, 'server-123');
+  near = false;
+  const heartbeatAway = at => session.heartbeat({ ...sample, timestamp: at });
+  const t0 = Date.now();
+  await heartbeatAway(t0);
+  await heartbeatAway(t0 + 30_000);
+  await heartbeatAway(t0 + 60_000);
+  await heartbeatAway(t0 + 90_000);
+  assert.equal(session.snapshot().state, 'active', 'a 90 second drift through an indoor queue is not enough');
+  await heartbeatAway(t0 + 150_000);
+  assert.equal(session.snapshot().state, 'active', 'still under three minutes');
+  await heartbeatAway(t0 + 180_000);
+  assert.equal(session.snapshot().state, 'ending');
+  assert.equal(session.snapshot().endReason, 'left_queue');
+  assert.equal(session.snapshot().boardingConfirmed, false, 'leaving never confirms boarding');
+  // "Still in line" undoes it and clears the streak.
+  session.undoEnd();
+  assert.equal(session.snapshot().state, 'active');
+  assert.equal(session.snapshot().endReason, null);
+  await heartbeatAway(t0 + 210_000);
+  assert.equal(session.snapshot().state, 'active');
+  // A noisy fix never counts, and one near answer resets the streak.
+  await session.heartbeat({ ...sample, accuracyMeters: 120, timestamp: t0 + 240_000 });
+  assert.equal(session.awaySamples, 1);
+  near = true;
+  await session.heartbeat({ ...sample, timestamp: t0 + 270_000 });
+  assert.equal(session.awaySamples, 0);
+  session.dispose();
+});
+
+test('one out-of-radius ride detection mid-queue never ends the wait or confirms boarding', async () => {
+  const { Session, calls } = makeHarness(null, server);
+  const session = new Session();
+  const sample = { latitude: 34.1, longitude: -118.3, timestamp: Date.now(), accuracyMeters: 8 };
+  await session.start(ride, sample, 12);
+  session.suggestBoarded();
+  let snap = session.snapshot();
+  assert.equal(snap.state, 'active', 'a detection only asks; play keeps going');
+  assert.equal(snap.boardingSuggested, true);
+  assert.equal(snap.boardingConfirmed, false, 'boarding is never inferred');
+  assert.equal(snap.endReason, null);
+  assert.equal(snap.graceMsRemaining, 0, 'no countdown runs');
+  // "Still in line" clears the question; the session is untouched.
+  session.dismissBoardingSuggestion();
+  assert.equal(session.snapshot().boardingSuggested, false);
+  assert.equal(session.snapshot().state, 'active');
+  assert.equal(calls.complete, 0);
+  // Only the guest's own answer records boarding.
+  session.suggestBoarded();
+  session.markActivityCompleted('mg-late');
+  await session.endNow(true);
+  snap = session.snapshot();
+  assert.equal(snap.state, 'complete');
+  assert.equal(snap.endReason, 'boarded');
+  assert.equal(snap.boardingConfirmed, true);
+  assert.equal(snap.boardingSuggested, false);
+  assert.ok(snap.completedActivityIds.includes('mg-late'));
+  assert.equal(calls.complete, 1);
+  await session.forgetCheckpoint();
+  session.dispose();
+});
+
+test('the wrap-up countdown holds while a mini-game is open and resumes where it left off', async () => {
+  const { Session, calls } = makeHarness(null, server);
+  const session = new Session();
+  const sample = { latitude: 34.1, longitude: -118.3, timestamp: Date.now(), accuracyMeters: 8 };
+  await session.start(ride, sample, 12);
+  session.setGameOpen(true);
+  session.beginEnding(false, 'left_queue');
+  assert.equal(session.snapshot().state, 'ending');
+  const held = session.snapshot().graceMsRemaining;
+  assert.ok(held > 59_000);
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(session.snapshot().graceMsRemaining, held, 'held while the game is open');
+  assert.equal(session.graceTimer, null, 'no timer can complete the wait mid-game');
+  // A round finished inside the game still lands in the recap.
+  session.markActivityCompleted('mg-in-game');
+  session.setGameOpen(false);
+  assert.ok(session.graceTimer != null);
+  assert.ok(session.snapshot().graceMsRemaining <= held);
+  assert.ok(session.snapshot().graceMsRemaining > held - 1_000);
+  assert.ok(session.snapshot().completedActivityIds.includes('mg-in-game'));
+  assert.equal(calls.complete, 0);
+  session.dispose();
+});
+
+test('"Still in line" after the wrap-up settled starts a fresh session that keeps the playlist', async () => {
+  let starts = 0;
+  const { Session, calls } = makeHarness(null, () => ({ ...server, session_id: `server-${++starts}` }));
+  const session = new Session();
+  const sample = { latitude: 34.1, longitude: -118.3, timestamp: Date.now(), accuracyMeters: 8 };
+  await session.start(ride, sample, 12);
+  session.ingestLocation(sample);
+  const first = session.snapshot();
+  assert.equal(first.serverSessionId, 'server-1');
+  session.markActivityCompleted(first.playlist[0].id);
+  session.beginEnding(false, 'left_queue');
+  await session.complete();
+  assert.equal(session.snapshot().state, 'complete');
+  assert.equal(calls.complete, 1);
+  await session.continueInLine();
+  const next = session.snapshot();
+  assert.equal(next.state, 'active');
+  assert.equal(next.endReason, null);
+  assert.equal(next.endedAt, null);
+  assert.equal(next.serverSessionId, 'server-2', 'a new server session, the settled one keeps its rewards');
+  assert.deepEqual(next.playlist.map(item => item.id), first.playlist.map(item => item.id));
+  assert.ok(next.completedActivityIds.includes(first.playlist[0].id));
+  assert.equal(next.startedAt, first.startedAt, 'the clock runs on until the new server session reports its start');
   session.dispose();
 });
 
@@ -262,7 +412,7 @@ test('an episode checkpoint restores its original story seed', async () => {
 });
 
 test('a new adaptive chapter is recorded only after its first activity, once', async () => {
-  const chapter = { id: 'queue-2-test-ride-episode-1', adaptive: true,
+  const chapter = { id: 'queue-2-test-ride-episode-1', adaptive: true, episodeCount: 3,
     fieldNotes: [], finale: { idSuffix: 'finale', title: 'Finale', preview: 'Play' } };
   const { Session, calls } = makeHarness(null, server, chapter);
   const session = new Session();
@@ -272,6 +422,32 @@ test('a new adaptive chapter is recorded only after its first activity, once', a
   session.markActivityCompleted(`${chapter.id}-trivia`);
   session.markActivityCompleted(`${chapter.id}-finale`);
   assert.deepEqual(calls.recordedEpisodes, [[12, 2, 99, 1, 3]]);
+  session.dispose();
+});
+
+test('an authored chapter starts new players on flight 1 and records flight 1 without a suffix', async () => {
+  const chapter = { id: 'mk-space-mountain', episodeCount: 3, navigationPanel: true,
+    fieldNotes: [], finale: { idSuffix: 'star-chart', title: 'Finale', preview: 'Play' } };
+  const { Session, calls } = makeHarness(null, server, chapter);
+  const session = new Session();
+  await session.start(ride, undefined, 12);
+  assert.equal(calls.selectedEpisodes.length, 1);
+  // Authored stories never start mid-series: the no-history start is episode 0.
+  assert.equal(calls.selectedEpisodes[0][4], 0);
+  session.markActivityCompleted(`${chapter.id}-field-note`);
+  assert.deepEqual(calls.recordedEpisodes, [[12, 2, 99, 0, 3]]);
+  session.dispose();
+});
+
+test('a single-story chapter never touches episode history', async () => {
+  const chapter = { id: 'dl-space-mountain', fieldNotes: [],
+    finale: { idSuffix: 'launch-code', title: 'Finale', preview: 'Play' } };
+  const { Session, calls } = makeHarness(null, server, chapter);
+  const session = new Session();
+  await session.start(ride, undefined, 12);
+  session.markActivityCompleted(`${chapter.id}-field-note`);
+  assert.equal(calls.selectedEpisodes.length, 0);
+  assert.equal(calls.recordedEpisodes.length, 0);
   session.dispose();
 });
 
@@ -421,7 +597,7 @@ test('a queue clue choice survives a remount and cannot change while the line is
   assert.equal(session.snapshot().loreChoices['lo-2'], 1);
   session.chooseLore('lo-2', 2);
   assert.equal(session.snapshot().loreChoices['lo-2'], 2);
-  session.pause('lineMoving');
+  session.pause('manual');
   session.chooseLore('lo-2', 0);
   assert.equal(session.snapshot().loreChoices['lo-2'], 2);
   session.resume();
@@ -442,7 +618,7 @@ test('crew grid marks survive a remount and a completed row counts once without 
   const session = new Session();
   await session.start(ride, undefined, 12);
   session.chooseCrewGridSquare(0);
-  session.pause('lineMoving');
+  session.pause('manual');
   session.chooseCrewGridSquare(1);
   assert.deepEqual(JSON.parse(JSON.stringify(session.snapshot().crewGridMarks)), [0]);
   session.resume();
@@ -569,8 +745,9 @@ test('a crew relay result is checkpointed and counted once after completion', as
     idSuffix: 'star-chart', title: 'Rebuild the Star Chart', preview: 'Match space symbols.',
   } };
   const { Session, generatePlaylist, calls } = makeHarness({ ...saved, crewRelay: crewModule.exports.createCrewRelay(555) }, server, chapter);
-  assert.deepEqual(JSON.parse(JSON.stringify(generatePlaylist(25, 25, chapter).slice(0, 2).map(item => item.kind))),
-    ['chapter_intro', 'crew_relay']);
+  // The three story missions come first; the one-phone Crew Relay follows the finale.
+  const opening = JSON.parse(JSON.stringify(generatePlaylist(25, 25, chapter).slice(0, 5).map(item => item.kind)));
+  assert.deepEqual(opening, ['chapter_intro', 'trivia', 'lore', 'minigame', 'crew_relay']);
   const session = new Session();
   await session.start(ride, undefined, 12);
   let relay = session.snapshot().crewRelay;
@@ -604,11 +781,11 @@ test('a different ride chapter keeps its own finale in the queue playlist', () =
   assert.equal(generatePlaylist(25, 25, chapter).some(item => item.id === 'dl-pirates-star-chart'), false);
 });
 
-test('moving-line pause prevents new activity credit, predictions, and shared input', async () => {
+test('a manual pause prevents new activity credit, predictions, and shared input', async () => {
   const { Session, calls } = makeHarness({ ...saved, completedActivityIds: [], prediction: null }, server);
   const session = new Session();
   await session.start(ride, undefined, 12);
-  session.pause('lineMoving');
+  session.pause('manual');
   session.markActivityCompleted('new-trivia');
   session.choosePrediction({ id: 'wait-guess' }, 'beat');
   await session.chooseSignal('route_a');
@@ -673,7 +850,7 @@ test('a solo guest can request fresh rounds, pause safely, and restore the longe
   const session = new Session();
   await session.start(ride, undefined, 12);
   const opening = session.snapshot().playlist[0];
-  session.pause('lineMoving');
+  session.pause('manual');
   assert.equal(session.addMoreRounds(), null);
   session.resume();
   const firstId = session.addMoreRounds();
@@ -752,4 +929,57 @@ test('queue connection failures distinguish sign-in from network outages without
     assert.equal(session.snapshot().state, 'active');
     session.dispose();
   }
+});
+
+test('every replay deals a new board, and the plays counter survives a restart', async () => {
+  const { Session, calls } = makeHarness({ ...saved, completedActivityIds: [],
+    playlist: [{ kind: 'minigame', id: 'mg-1', gameId: 'memory', seed: 41 },
+      { kind: 'minigame', id: 'mg-2', gameId: 'trivia', seed: 10 }] }, server);
+  const session = new Session();
+  await session.start(ride, undefined, 12);
+  const game = session.snapshot().playlist[0];
+  const first = session.beginGame(game);
+  const second = session.beginGame(game);
+  const third = session.beginGame(game);
+  assert.equal(first.seed, 41, 'the first play keeps the saved board');
+  assert.notEqual(second.seed, first.seed);
+  assert.notEqual(third.seed, second.seed);
+  assert.equal(session.snapshot().gamePlays['mg-1'], 3);
+  // Trivia walks its deck: each replay starts after the previous five questions.
+  const trivia = session.snapshot().playlist[1];
+  assert.equal(session.beginGame(trivia).seed, 10);
+  assert.equal(session.beginGame(trivia).seed, 15);
+  await session.checkpointWrites;
+  const checkpoint = calls.written.at(-1);
+  assert.equal(checkpoint.gamePlays['mg-1'], 3);
+  session.dispose();
+
+  const { Session: Restored } = makeHarness(checkpoint, server);
+  const restored = new Restored();
+  await restored.start(ride, undefined, 12);
+  const fourth = restored.beginGame(restored.snapshot().playlist[0]);
+  assert.equal(fourth.plays, 3);
+  assert.notEqual(fourth.seed, third.seed, 'a restart never re-deals the last board');
+  assert.notEqual(fourth.seed, first.seed);
+  restored.dispose();
+});
+
+test('a 2+ star run steps the next round up, and the best stars feed NEW pills', async () => {
+  const { Session, calls } = makeHarness({ ...saved, completedActivityIds: [] }, server);
+  const session = new Session();
+  await session.start(ride, undefined, 12);
+  assert.equal(session.snapshot().gameBestStars.memory, undefined);
+  session.recordGameResult('memory', 1);
+  assert.equal(session.snapshot().gameDifficulty.memory, undefined, 'one star keeps the level');
+  assert.equal(session.snapshot().gameBestStars.memory, 1);
+  session.recordGameResult('memory', 3);
+  session.recordGameResult('memory', 2);
+  assert.equal(session.snapshot().gameDifficulty.memory, 3);
+  assert.equal(session.snapshot().gameBestStars.memory, 3, 'a weaker run never lowers the best');
+  session.recordGameResult('memory', 3);
+  assert.equal(session.snapshot().gameDifficulty.memory, 3, 'difficulty never passes 3');
+  assert.equal(session.beginGame({ kind: 'minigame', id: 'mg-1', gameId: 'memory', seed: 1 }).difficulty, 3);
+  await session.checkpointWrites;
+  assert.equal(calls.written.at(-1).gameBestStars.memory, 3);
+  session.dispose();
 });

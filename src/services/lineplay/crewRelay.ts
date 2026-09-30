@@ -138,7 +138,7 @@ export function crewRelayEpilogue(state: CrewRelayProgress, copy?: {
   readonly omega: { readonly title: string; readonly prompt: string };
 }): {
   readonly route: CrewRoute;
-  readonly gameId: 'timing' | 'shark';
+  readonly gameId: 'tap' | 'shark';
   readonly title: string;
   readonly prompt: string;
   readonly seed: number;
@@ -147,8 +147,8 @@ export function crewRelayEpilogue(state: CrewRelayProgress, copy?: {
   const observationOffset = state.observation == null ? 0 : OBSERVATIONS.indexOf(state.observation) * 211;
   const signalIntro = state.observation ? `Your ${state.observation} signal changed this round. ` : '';
   return state.route === 'alpha'
-    ? { route: 'alpha', gameId: 'timing', title: copy?.alpha.title ?? 'Hold the Alpha Signal',
-        prompt: signalIntro + (copy?.alpha.prompt ?? 'Keep a steady rhythm to guide your shark along the known flight path.'),
+    ? { route: 'alpha', gameId: 'tap', title: copy?.alpha.title ?? 'Hold the Alpha Signal',
+        prompt: signalIntro + (copy?.alpha.prompt ?? 'Tap the signal sharks as they surface along the known flight path. Skip the decoys.'),
         seed: (state.seed + 1975 + observationOffset) >>> 0 }
     : { route: 'omega', gameId: 'shark', title: copy?.omega.title ?? 'Search the Omega Trail',
         prompt: signalIntro + (copy?.omega.prompt ?? 'Swim into the unknown and look for the signal your crew missed.'),

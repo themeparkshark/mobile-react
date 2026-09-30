@@ -58,6 +58,7 @@ import {
 } from './logic';
 import { loadPersonalBest, savePersonalBest } from './storage';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { SPACE_NAVIGATOR_ART } from '../../screens/LinePlay/spaceNavigatorArt';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -404,7 +405,7 @@ export default function MemoryGame({
             <Text style={styles.bannerTitle} numberOfLines={1}>{deck.label}</Text>
           </View>
           <Image source={deck.id === 'space' && !navigatorArtFailed
-            ? require('../../../assets/images/screens/lineplay/space-navigation-shark-v2.png')
+            ? SPACE_NAVIGATOR_ART
             : require('../../../assets/images/screens/pin-collections/shark.png')}
             onError={() => setNavigatorArtFailed(true)} resizeMode="contain" style={styles.bannerShark}
             accessibilityLabel={deck.id === 'space' ? 'Your shark navigator' : 'Theme Park Shark mascot'} />

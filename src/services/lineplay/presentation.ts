@@ -1,13 +1,18 @@
-/** Keep the first queue action playable even when shared features arrive later. */
+/**
+ * Page order for the queue carousel. The ride chapter opens the wait and its
+ * missions follow in story order. The optional Crew Prompts card (self-reported
+ * talk-and-notice play) is never an early page: it closes the playlist. Shared
+ * crew pages are appended last so a live unlock never shifts the page a player
+ * is on.
+ */
 export function linePlayPages<T extends { id: string; kind: string }>(
   playlist: readonly T[],
   sharedPages: readonly T[] = [],
 ): T[] {
   const intro = playlist.find(item => item.kind === 'chapter_intro');
-  const grid = playlist.find(item => item.kind === 'crew_grid');
-  const featured = [intro, grid].filter((item): item is T => item != null);
-  const featuredIds = new Set(featured.map(item => item.id));
-  return [...featured, ...playlist.filter(item => !featuredIds.has(item.id)), ...sharedPages];
+  const prompts = playlist.filter(item => item.kind === 'crew_grid');
+  const middle = playlist.filter(item => item !== intro && item.kind !== 'crew_grid');
+  return [...(intro ? [intro] : []), ...middle, ...prompts, ...sharedPages];
 }
 
 /** One fast destination per arcade game; prefer a round the guest has not played. */

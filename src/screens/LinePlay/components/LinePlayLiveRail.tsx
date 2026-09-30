@@ -19,7 +19,7 @@ export default function LinePlayLiveRail({ crew, projectTitle, projectStage, onO
       <View style={styles.liveCopy}>
         <Text style={styles.crewLiveLabel} numberOfLines={1}>{crew.label}</Text>
         <Text style={styles.crewLiveTitle} numberOfLines={1}>{crew.title}</Text>
-        <Text style={styles.crewLiveAction} numberOfLines={1}>{crew.action}  →</Text>
+        <Text style={styles.crewLiveAction} numberOfLines={1}>{crew.action}</Text>
       </View>
       <Image source={require('../../../../assets/images/screens/pin-collections/shark.png')}
         resizeMode="contain" style={styles.liveShark} accessibilityLabel="Theme Park Shark mascot" />
@@ -29,7 +29,7 @@ export default function LinePlayLiveRail({ crew, projectTitle, projectStage, onO
       style={[styles.liveTile, styles.projectLiveTile]}>
       <Text style={styles.projectLiveLabel}>PARK CHAPTER · STAGE {projectStage ?? 0}/3</Text>
       <Text style={styles.projectLiveTitle} numberOfLines={1}>{projectTitle}</Text>
-      <Text style={styles.projectLiveAction}>MISSION & VOTE  →</Text>
+      <Text style={styles.projectLiveAction}>MISSION & VOTE</Text>
     </Pressable>}
   </View>;
 }
@@ -42,11 +42,11 @@ const styles = StyleSheet.create({
   liveCopy: { flex: 1, minWidth: 0, justifyContent: 'center', paddingVertical: spacing.xs },
   crewLiveLabel: { color: '#ffca30', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.4 },
   crewLiveTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 14, marginTop: 2 },
-  crewLiveAction: { color: '#d8f4ff', fontFamily: 'Knockout', fontSize: 10, marginTop: 3 },
+  crewLiveAction: { color: '#ffe07a', fontFamily: 'Knockout', fontSize: 12, marginTop: 3 },
   liveShark: { width: 44, height: 70, alignSelf: 'flex-end', marginRight: -5, marginBottom: -5 },
   projectLiveTile: { backgroundColor: '#ffca30', paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs, justifyContent: 'center' },
   projectLiveLabel: { color: '#07569e', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.4 },
   projectLiveTitle: { color: '#093d77', fontFamily: 'Shark', fontSize: 14, marginTop: 2 },
-  projectLiveAction: { color: '#07569e', fontFamily: 'Knockout', fontSize: 10, marginTop: 3 },
+  projectLiveAction: { color: '#07569e', fontFamily: 'Knockout', fontSize: 12, marginTop: 3 },
 });

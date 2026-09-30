@@ -35,10 +35,14 @@ test('the shared stage and vote change the actual playable queue round', () => {
   assert.equal(hidden.game.gameId, 'shark');
   assert.equal(first.game.gameId, 'memory');
   assert.equal(deep.game.gameId, 'memory');
-  assert.equal(star.game.gameId, 'timing');
+  // Rhythm Tap is out of queue rotation: a server mission naming it plays Whack-a-Shark.
+  assert.equal(star.game.gameId, 'tap');
   assert.notEqual(deep.game.id, star.game.id);
   assert.equal(deep.title, 'Deep Route');
   assert.equal(star.title, 'Star Route');
+  // ...and its rhythm prompt is replaced so it never promises a beat game.
+  assert.doesNotMatch(star.prompt, /beat/i);
+  assert.equal(deep.prompt, 'Match the symbols.');
   assert.equal(resolveProjectMission({ ...base, stage: 2, play_chapter: 'b',
     play_mission: { title: 'Star Route', prompt: 'Tap the beat.', game_id: 'timing' } }).game.seed, star.game.seed);
   const nextEvent = resolveProjectMission({ ...base, id: 42, stage: 2, play_chapter: 'b',

@@ -41,7 +41,7 @@ test('one phone hands four distinct roles across three players and completes a b
   assert.equal(state.step, 'complete');
   assert.equal(state.route, 'alpha');
   assert.equal(relay.crewRelayScore(state), 2);
-  assert.equal(relay.crewRelayEpilogue(state).gameId, 'timing');
+  assert.equal(relay.crewRelayEpilogue(state).gameId, 'tap');
   assert.equal(relay.crewRelayEpilogue(state).title, 'Hold the Alpha Signal');
 });
 
@@ -88,7 +88,7 @@ test('a chapter can change the crew ending without changing the earned result', 
   });
   assert.equal(ending.title, 'Steady Through the Channel');
   assert.equal(ending.prompt, 'Your shape signal changed this round. Enter the harbor.');
-  assert.equal(ending.gameId, 'timing');
+  assert.equal(ending.gameId, 'tap');
   assert.equal(relay.crewRelayScore(state), 2);
 });
 

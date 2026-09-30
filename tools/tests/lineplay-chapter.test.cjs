@@ -26,7 +26,8 @@ function load(file, mocks = {}) {
 
 const rideTheme = load('src/services/rideTheme.ts');
 const chapters = load('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme });
-const content = load('src/services/lineplay/content.ts', { './chapters': chapters });
+const content = load('src/services/lineplay/content.ts', { './chapters': chapters,
+  './triviaDeck': { cachedServerTrivia: () => [] } });
 
 test('the Magic Kingdom chapter cannot bleed into Disneyland or other rides', () => {
   const chapter = chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain');
@@ -106,7 +107,9 @@ test('Universal Hollywood Studio Tour has a distinct solo and crew chapter', asy
     'The World-Famous Studio Tour').id, chapter.id);
   assert.equal(chapters.getLinePlayChapter(2, 'studio-tour-2', 'Studio Tour').adaptive, true);
   assert.equal(chapter.finale.memoryDeckId, 'backlot');
-  assert.equal(chapter.trivia.length, 8);
+  // Seven sourced questions: the third-party film-title question was retired from UI copy.
+  assert.equal(chapter.trivia.length, 7);
+  assert.equal(chapter.trivia.some(question => /jaws/i.test(`${question.question} ${question.choices.join(' ')} ${question.fact ?? ''}`)), false);
   assert.equal(chapter.fieldNotes.length, 6);
   assert.notEqual(chapter.relay.epilogues.alpha.title, chapter.relay.epilogues.omega.title);
   for (let seed = 0; seed < chapter.trivia.length; seed++) {
@@ -244,9 +247,12 @@ test('adaptive and offline fallback content fits non-coaster rides across a long
   }
   assert.equal(new Set(questions.map(question => question.id)).size, 12);
   assert.equal(new Set(questions.slice(0, 6).map(question => question.question)).size, 6);
-  assert.equal(chapter.trivia[3].choices[chapter.trivia[3].correctIndex], 'Diamond ◆');
+  assert.equal(chapter.trivia[3].choices[chapter.trivia[3].correctIndex], 'Diamond');
   assert.equal(chapter.trivia[4].choices[chapter.trivia[4].correctIndex], 'West');
   assert.equal(chapter.trivia[5].choices[chapter.trivia[5].correctIndex], 'Diamond, star, circle');
+  // Pattern clues are spelled out in words: no dingbat glyphs in player copy.
+  for (const question of chapter.trivia)
+    assert.doesNotMatch(`${question.question} ${question.choices.join(' ')}`, /[✦●◆≋▲→]/u);
   for (let seed = 0; seed < 20; seed++) {
     const note = await content.fetchRideLore(undefined, undefined, seed);
     assert.doesNotMatch(note.body, /coaster|launch|inversion|airtime/i);

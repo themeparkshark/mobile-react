@@ -20,7 +20,7 @@ const promptModule = { exports: {} };
 vm.runInNewContext(promptCode, { module: promptModule, exports: promptModule.exports }, { filename: promptFile });
 const { crewLivePrompt } = promptModule.exports;
 
-test('new wait begins with chapter and playable Bingo; late shared pages do not shift the activity list', () => {
+test('a new wait opens on the chapter, Crew Prompts closes it, late shared pages do not shift the list', () => {
   const playlist = [
     { kind: 'chapter_intro', id: 'intro' },
     { kind: 'crew_relay', id: 'relay' },
@@ -33,7 +33,7 @@ test('new wait begins with chapter and playable Bingo; late shared pages do not 
     { kind: 'signal', id: 'crew-signal' },
     { kind: 'puzzle', id: 'crew-puzzle' },
   ]);
-  assert.deepEqual(Array.from(before, page => page.id), ['intro', 'grid', 'relay', 'trivia', 'game']);
+  assert.deepEqual(Array.from(before, page => page.id), ['intro', 'relay', 'trivia', 'game', 'grid']);
   assert.deepEqual(Array.from(after.slice(0, before.length), page => page.id),
     Array.from(before, page => page.id));
   assert.deepEqual(Array.from(after.slice(before.length), page => page.id), ['crew-signal', 'crew-puzzle']);
@@ -73,7 +73,7 @@ test('the visible live action advances from vote to player unlocked game to shar
   const opened = { ...base, participants: 3, unlocked_route: 'route_b',
     puzzle: { stage: 1, total_stages: 3, completed: false } };
   assert.match(crewLivePrompt(opened, new Set()).title, /Starlight Route/);
-  assert.match(crewLivePrompt(opened, new Set()).action, /RHYTHM TAP/);
+  assert.match(crewLivePrompt(opened, new Set()).action, /WHACK-A-SHARK/);
   const completed = new Set(['signal-bonus-2026-09-24-route_b']);
   assert.equal(crewLivePrompt(opened, completed).pageId, 'crew-puzzle');
   assert.match(crewLivePrompt(opened, completed).title, /Codebreaker · 1\/3/);

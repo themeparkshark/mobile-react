@@ -26,7 +26,8 @@ const session = load('src/services/lineplay/LinePlaySession.ts', {
   '../../games/trivia/config': { LINEPLAY_ROUND_QUESTIONS: 5 },
 });
 const clue = load('src/services/lineplay/chapterClue.ts');
-const content = load('src/services/lineplay/content.ts', { './chapters': chapters });
+const content = load('src/services/lineplay/content.ts', { './chapters': chapters,
+  './triviaDeck': { cachedServerTrivia: () => [] } });
 const triviaSources = load('src/games/trivia/sources.ts', {
   '../../services/lineplay/content': content,
   './config': { DEFAULT_QUESTION_SECONDS: 15, LIFELINE_ENABLED: false, LINEPLAY_ROUND_QUESTIONS: 5 },
@@ -50,16 +51,21 @@ test('a long authored queue gives one-card clues and Trivia+ a shared nonrepeati
         ? Array.from({ length: 5 }, (_, index) => item.seed + index) : []);
     const questionIds = await Promise.all(questionSeeds.map(seed =>
       content.fetchRideTrivia(undefined, parkId, seed, chapter.id).then(question => question.id)));
-    const noteIds = lore.slice(0, chapter.fieldNotes.length)
-      .map(item => chapter.fieldNotes[item.seed % chapter.fieldNotes.length].id);
     assert.ok(questionIds.length >= 3);
     assert.equal(new Set(questionIds).size, questionIds.length);
-    assert.equal(new Set(noteIds).size, chapter.fieldNotes.length);
+    // One authored Field Note per chapter; generic lore no longer fills pages.
+    assert.equal(lore.length, 1);
+    assert.equal(lore[0].id, `${chapter.id}-field-note`);
     assert.equal(trivia[0].seed, 0);
     assert.equal(lore[0].seed, 0);
     assert.equal(playlist.filter(item => item.kind === 'prediction').length, 1);
     assert.equal(playlist.some(item => item.kind === 'minigame' && item.gameId === 'current'), true);
-    assert.equal(playlist.some(item => item.kind === 'minigame' && item.gameId === 'showdown'), true);
+    assert.equal(playlist.some(item => item.kind === 'circuit'), true);
+    // Retired from the queue: Shark Showdown merges into Trivia, Rhythm Tap is pulled.
+    assert.equal(playlist.some(item => item.kind === 'minigame' &&
+      (item.gameId === 'showdown' || item.gameId === 'timing')), false);
+    // Crew Prompts is the optional last card, never an early page.
+    assert.equal(playlist[playlist.length - 1].kind, 'crew_grid');
   }
 });
 
@@ -78,7 +84,7 @@ test('a large session seed opens with ride-story clues, then new questions', asy
   const cards = playlist.filter(item => item.kind === 'trivia');
   assert.ok(cards.length >= 2);
   assert.ok(cards[0].seed >= 0 && cards[0].seed < chapter.trivia.length);
-  assert.equal(cards[1].seed, cards[0].seed + 1);
+  assert.ok(cards[1].seed > cards[0].seed);
   const first = await content.fetchRideTrivia(999, 99, cards[0].seed, chapter.id);
   const next = await content.fetchRideTrivia(999, 99, cards[1].seed, chapter.id);
   assert.ok(first.id.startsWith(chapter.id));
@@ -97,10 +103,17 @@ test('one-card and five-card general trivia consume different questions', async 
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test('the offline quickfire pool stays distinct and valid for nine full rounds', async () => {
-  const questions = await Promise.all(Array.from({ length: 48 }, (_, seed) =>
+test('the offline quickfire pool stays distinct and valid for six full rounds, with no arithmetic filler', async () => {
+  const questions = await Promise.all(Array.from({ length: 33 }, (_, seed) =>
     content.fetchRideTrivia(undefined, undefined, seed)));
-  assert.equal(new Set(questions.map(question => question.id)).size, 48);
+  assert.equal(new Set(questions.map(question => question.id)).size, 33);
+  // Arithmetic filler ("Captain Shark has 5 tickets") and the duplicated
+  // Haunted Mansion / Space Mountain year questions are retired.
+  const ids = new Set(questions.map(question => question.id));
+  for (const retired of ['gen-19', 'gen-20', 'gen-27', 'gen-29', 'gen-35', 'gen-41', 'gen-42'])
+    assert.equal(ids.has(retired), false, retired);
+  for (const question of questions)
+    assert.doesNotMatch(question.question, /How many|twice as many|worth\?/);
   for (const question of questions) {
     assert.equal(question.choices.length, 4);
     assert.equal(new Set(question.choices).size, 4);
@@ -121,11 +134,11 @@ test('a park queue sees its own fan facts before general play and no other park 
     assert.deepEqual(questions.slice(0, localIds.length).map(question => question.id), localIds);
     assert.equal(questions.slice(localIds.length).every(question => Number(question.id.slice(4)) <= 36), true);
   };
-  await checkPark(8, Array.from({ length: 9 }, (_, index) => `gen-${37 + index}`), 45);
-  await checkPark(1, ['gen-48'], 37);
-  await checkPark(6, ['gen-46'], 37);
-  await checkPark(13, ['gen-47'], 37);
-  await checkPark(2, [], 36);
+  await checkPark(8, ['gen-37', 'gen-38', 'gen-39', 'gen-40', 'gen-43', 'gen-44', 'gen-45'], 30);
+  await checkPark(1, ['gen-48'], 24);
+  await checkPark(6, ['gen-46'], 24);
+  await checkPark(13, ['gen-47'], 24);
+  await checkPark(2, [], 23);
 });
 
 test('five-question LinePlay trivia carries the fan-fact reveal without changing its answer key', async () => {
@@ -159,7 +172,7 @@ test('return visits give adaptive shark stories distinct playable finales', () =
       assert.equal(chapter.missionNames[2], finale.title);
       games.push(finale.gameId);
     }
-    assert.deepEqual(games, ['memory', 'timing', 'shark']);
+    assert.deepEqual(games, ['memory', 'tap', 'shark']);
   }
 });
 
@@ -185,7 +198,7 @@ test('optional encore waves add varied playable rounds without moving the openin
   const second = session.generateEncoreRounds(30, 413);
   assert.equal(first.length, 8);
   assert.equal(second.length, 8);
-  assert.equal(first.every(item => ['minigame', 'trivia', 'lore'].includes(item.kind)), true);
+  assert.equal(first.every(item => ['minigame', 'trivia', 'circuit'].includes(item.kind)), true);
   assert.equal(new Set([...first, ...second].map(item => item.id)).size, 16);
   assert.notDeepEqual(first.map(item => item.seed), second.map(item => item.seed));
   assert.equal(session.generateEncoreRounds(79, 413).length, 1);
@@ -216,4 +229,47 @@ test('each rotated featured field note gives a crew choice that changes the fina
       assert.equal(clue.personalizeChapterFinale(finale, chapter, null), finale);
     }
   }
+});
+
+test('Magic Kingdom Space Mountain flies on for returning players: three flights, one arc', () => {
+  const navigation = require('./helpers/navigation-panel.cjs');
+  const first = chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain');
+  assert.equal(first.id, 'mk-space-mountain');
+  assert.equal(first.episodeCount, 3);
+  assert.equal(chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain', 0), first);
+  const flights = [0, 1, 2].map(episode => chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain', episode));
+  assert.deepEqual(flights.map(chapter => chapter.id),
+    ['mk-space-mountain', 'mk-space-mountain-episode-1', 'mk-space-mountain-episode-2']);
+  assert.deepEqual(flights.map(chapter => chapter.episodeLabel), ['FLIGHT 1 OF 3', 'FLIGHT 2 OF 3', 'FLIGHT 3 OF 3']);
+  // Wraps, and resumes by id from a checkpoint.
+  assert.equal(chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain', 4), flights[1]);
+  for (const flight of flights) assert.equal(chapters.getLinePlayChapterById(flight.id), flight);
+  assert.equal(chapters.getLinePlayChapterById('mk-space-mountain-episode-3'), null);
+  // Disneyland keeps its own single story.
+  assert.equal(chapters.getLinePlayChapter(8, 'space-mountain-8', 'Space Mountain', 2).id, 'dl-space-mountain');
+
+  const titles = new Set(flights.map(chapter => chapter.title));
+  assert.equal(titles.size, 3);
+  for (const flight of flights) {
+    assert.equal(flight.navigationPanel, true);
+    // Same sourced deck on every flight; new strange-signal notes up front.
+    assert.equal(flight.trivia, first.trivia);
+    assert.equal(flight.fieldNotes.slice(0, 3).every(note => note.challenge?.options.length === 3), true);
+    assert.equal(flight.finale.memoryDeckId, 'space');
+    assert.equal(flight.finale.idSuffix, 'star-chart');
+  }
+  const featured = new Set(flights.flatMap(flight => flight.fieldNotes.slice(0, 3).map(note => note.id)));
+  assert.equal(featured.size, 9);
+  assert.notEqual(flights[1].relay.alphaResult, first.relay.alphaResult);
+  assert.notEqual(flights[2].relay.epilogues.omega.title, flights[1].relay.epilogues.omega.title);
+
+  // Returning flights open the navigation repair on the bigger board.
+  for (let offset = 0; offset < 24; offset++) {
+    const repair = session.generatePlaylist(30, 30, flights[1], true, offset)
+      .find(item => item.id === `${flights[1].id}-trivia`);
+    assert.equal(navigation.createNavigationPanel(repair.seed, 0).size, 4);
+  }
+  const firstSizes = new Set(Array.from({ length: 24 }, (_, offset) => navigation.createNavigationPanel(
+    session.generatePlaylist(30, 30, first, true, offset).find(item => item.id === `${first.id}-trivia`).seed, 0).size));
+  assert.ok(firstSizes.has(3));
 });

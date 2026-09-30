@@ -2,8 +2,15 @@
  * LinePlaySession — the in-queue session state machine.
  *
  * Lifecycle:
- *   idle -> detected -> active -> paused(lineMoving) <-> active
+ *   idle -> detected -> active <-> paused(manual)
  *                              -> ending(grace 60s) -> complete
+ *
+ * THE LINE IS ALWAYS MOVING (Dustin, 2026-09-30). Guests shuffle forward the
+ * whole wait, so movement, steps and GPS drift never pause play. Only a manual
+ * pause stops input. A big forward advance raises a gentle, non-pausing heads
+ * up. Only real queue events end a session: leaving the queue area (the server
+ * reports several fresh fixes away from the ride) or boarding detection. Both
+ * start the "Your ride's up!" wrap-up, which saves progress and wait credit.
  *
  * Responsibilities:
  *   - Own the session state machine and emit changes to subscribers.
@@ -13,8 +20,8 @@
  *     last-known cache so a session can start offline.
  *   - Model passive accrual for display only (server computes real rewards).
  *   - Generate the activity playlist as a typed activity queue.
- *   - Auto-pause only on sustained, trustworthy movement from the shared
- *     LocationContext stream — this class never creates its own watcher.
+ *   - Read the shared LocationContext stream for queue heads-ups and exit
+ *     detection; this class never creates its own watcher.
  *
  * IMPORTANT — this is a plain controller class, framework-agnostic. The screen
  * subscribes to it and feeds it location samples from useContext(LocationContext).
@@ -45,7 +52,7 @@ import {
   buildPredictionCard,
   PredictionCard,
 } from './content';
-import { adaptiveEpisodeCountForRide, getLinePlayChapter, type LinePlayChapter } from './chapters';
+import { getLinePlayChapter, type LinePlayChapter } from './chapters';
 import { recordAdaptiveEpisode, selectAdaptiveEpisode } from './episodeRotation';
 import { readCheckpoint, writeCheckpoint, removeCheckpoint, type LinePlayCheckpoint } from './checkpoint';
 import { createCrewRelay, isCrewRelayProgress, type CrewRelayProgress } from './crewRelay';
@@ -54,6 +61,8 @@ import { activateQueueBackgroundHeartbeat, deactivateQueueBackgroundHeartbeat } 
 import { LINEPLAY_ROUND_QUESTIONS } from '../../games/trivia/config';
 import { createNavigationPanel, createNavigationPanelProgress, traceNavigationPanel,
   turnNavigationTile, type NavigationPanelProgress } from './navigationPanel';
+import { nextQueueDifficulty, replaySeed, type QueueDifficulty } from './replay';
+import { primeTriviaDeck } from './triviaDeck';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -67,8 +76,11 @@ export type LinePlayState =
   | 'ending'
   | 'complete';
 
-/** Why the session is paused. Currently only auto line-movement. */
-export type PauseReason = 'lineMoving' | 'manual';
+/** Why the session is paused. Movement never pauses play; only the guest does. */
+export type PauseReason = 'manual';
+
+/** Why a wait is wrapping up. */
+export type EndReason = 'manual' | 'left_queue' | 'boarded';
 
 /** A single point in the location stream the session consumes. */
 export interface LocationSample {
@@ -120,6 +132,8 @@ export type ActivityItem =
   | { readonly kind: 'minigame'; readonly id: string; readonly gameId: MiniGameId;
       readonly seed: number; readonly title?: string; readonly preview?: string }
   | { readonly kind: 'trivia'; readonly id: string; readonly seed: number }
+  /** A procedural signal-repair circuit themed to the ride's chapter. */
+  | { readonly kind: 'circuit'; readonly id: string; readonly seed: number }
   | { readonly kind: 'lore'; readonly id: string; readonly seed: number }
   | { readonly kind: 'prediction'; readonly id: string; readonly card: PredictionCard };
 
@@ -206,9 +220,26 @@ export interface SessionSnapshot {
   readonly loreChoices: Readonly<Record<string, number>>;
   readonly navigationPanels?: Readonly<Record<string, NavigationPanelProgress>>;
   readonly crewGridMarks: readonly number[];
+  /** Launches per activity id; replays mix this into the seed. Persisted. */
+  readonly gamePlays: Readonly<Record<string, number>>;
+  /** Difficulty per game id; a 2+ star run steps the next round up. Persisted. */
+  readonly gameDifficulty: Readonly<Partial<Record<MiniGameId, QueueDifficulty>>>;
+  /** Best stars per game id this wait. Persisted; drives NEW pills and best stars. */
+  readonly gameBestStars: Readonly<Partial<Record<MiniGameId, number>>>;
+  /** Local time of the last big forward advance of the line. A heads up only; never pauses. */
+  readonly queueAdvanceAt: number | null;
+  /** Why the wait is ending or ended, once it is. */
+  readonly endReason: EndReason | null;
   readonly prediction: { card: PredictionCard; guess: 'beat' | 'miss' } | null;
   /** Guest explicitly said they reached boarding; never inferred from ending a session. */
   readonly boardingConfirmed: boolean;
+  /**
+   * Ride detection thinks the guest boarded. Only a question for the guest:
+   * it never ends the wait, starts a countdown or confirms boarding.
+   */
+  readonly boardingSuggested: boolean;
+  /** A mini-game is open; the wrap-up countdown is held until it closes. */
+  readonly gameOpen: boolean;
   readonly boardingAt: number | null;
   readonly crewRelay: CrewRelayProgress | null;
 }
@@ -219,15 +250,23 @@ type Listener = (snap: SessionSnapshot) => void;
 // Tuning constants
 // ---------------------------------------------------------------------------
 
-/** A queue shuffle should not pause play; sustained walking should. */
-const MOVE_SPEED_MPS = 0.8;
-/** How long movement must be sustained before auto-pause fires. */
-const MOVE_SUSTAIN_MS = 5_000;
-const MOVE_MAX_SAMPLE_GAP_MS = 10_000;
-const MOVE_MAX_ACCURACY_METERS = 20;
-const MOVE_MIN_NET_METERS = 6;
-/** Grace window for exit undo. */
-const EXIT_GRACE_MS = 60_000;
+/** Fixes worse than this cannot count toward a queue heads up. */
+const ADVANCE_MAX_ACCURACY_METERS = 20;
+/** Net forward distance inside the window that counts as "the line jumped ahead". */
+const ADVANCE_MIN_NET_METERS = 15;
+const ADVANCE_WINDOW_MS = 90_000;
+/** At most one heads up in this span; the guest is playing, not being nagged. */
+const ADVANCE_COOLDOWN_MS = 4 * 60_000;
+/** Consecutive fresh "not near the ride" answers before a wait is treated as over. */
+export const EXIT_AWAY_SAMPLES = 4;
+/**
+ * ...and they must span at least this long. Indoor queues drift and outdoor
+ * overflow switchbacks cross the server radius, so a short streak never ends
+ * a wait; three minutes of consistently away answers does.
+ */
+export const EXIT_AWAY_MIN_MS = 3 * 60_000;
+/** Grace window for exit undo. It never runs while a mini-game is open. */
+export const EXIT_GRACE_MS = 60_000;
 /** One accrual tick per this many seconds (display model). */
 const ACCRUAL_TICK_SECONDS = 30;
 /** Display-only energy per tick. Server value overrides at complete. */
@@ -245,10 +284,21 @@ const WAIT_CACHE_PREFIX = 'lineplay_wait_cache_';
 const FRESH_WAIT_MS = 10 * 60 * 1000;
 const CACHE_WAIT_MS = 3 * 60 * 60 * 1000;
 
-/** Round-robin order for the playlist generator. */
-const ROUND_ROBIN: ReadonlyArray<ActivityItem['kind']> = ['minigame', 'trivia', 'lore', 'prediction'];
-/** Minigames cycled through for 'minigame' slots. */
-const MINIGAME_CYCLE: ReadonlyArray<MiniGameId> = ['current', 'trivia', 'shark', 'showdown', 'tap', 'banana', 'timing', 'memory'];
+/**
+ * Free-play rhythm after the chapter: a game, one question, a game, a circuit
+ * puzzle. Self-reported prompts no longer take whole pages; they live in one
+ * optional Crew Prompts card at the end of the wait.
+ */
+const ROUND_ROBIN: ReadonlyArray<'minigame' | 'trivia' | 'circuit'> = ['minigame', 'trivia', 'minigame', 'circuit'];
+/**
+ * Minigames cycled through for 'minigame' slots. Rhythm Tap (silent and
+ * mash-proof) and Shark Showdown (merging into Trivia) are out of rotation.
+ */
+export const MINIGAME_CYCLE: ReadonlyArray<MiniGameId> = ['current', 'trivia', 'shark', 'tap', 'banana', 'memory'];
+/** Queue games that must never be offered as a new round. Old checkpoints still render them. */
+export const RETIRED_QUEUE_GAMES: ReadonlySet<MiniGameId> = new Set<MiniGameId>(['timing', 'showdown']);
+/** A signal-repair circuit takes about a minute. */
+const CIRCUIT_ROUND_SECONDS = 60;
 
 function haversineMeters(a: LocationSample, b: LocationSample): number {
   const R = 6371000;
@@ -325,10 +375,12 @@ export async function resolveSessionWaitMinutes(ride: RideContext): Promise<numb
 // ---------------------------------------------------------------------------
 
 /**
- * Build a typed activity playlist sized to the remaining wait. Round-robins
- * minigame -> trivia -> lore -> prediction. A single prediction card is placed
- * (it resolves once at session end), and it's biased toward the middle so it
- * lands while the player is engaged rather than on the very first slot.
+ * Build a typed activity playlist sized to the remaining wait.
+ *
+ * A ride chapter opens with its three missions (clue, field note, finale) and
+ * the one-phone Crew Relay. Free play then round-robins game, trivia, game,
+ * circuit. One wait prediction lands after the first free-play loop, and the
+ * optional Crew Prompts card (bingo plus talk prompts) always closes the list.
  */
 export function generatePlaylist(waitMinutes: number, postedWaitMinutes: number,
   chapter?: LinePlayChapter | null, allowPrediction = true, seedOffset = 0): ActivityItem[] {
@@ -343,13 +395,14 @@ export function generatePlaylist(waitMinutes: number, postedWaitMinutes: number,
     ? rotation % Math.min(3, chapter.fieldNotes.length) : rotation;
   const items: ActivityItem[] = chapter ? [
     { kind: 'chapter_intro', id: `${chapter.id}-intro` },
-    { kind: 'crew_relay', id: `${chapter.id}-crew-relay` },
-    { kind: 'crew_grid', id: `${chapter.id}-crew-grid`, seed: rotation + 5 },
-    { kind: 'trivia', id: `${chapter.id}-trivia`, seed: openingTriviaSeed },
+    // A returning flight's navigation repair opens on the bigger 4x4 board.
+    { kind: 'trivia', id: `${chapter.id}-trivia`,
+      seed: chapter.navigationPanel && chapter.returningFlight ? (openingTriviaSeed | 8) >>> 0 : openingTriviaSeed },
     { kind: 'lore', id: `${chapter.id}-field-note`, seed: featuredLoreSeed },
     { kind: 'minigame', id: `${chapter.id}-${chapter.finale.idSuffix}`,
       gameId: chapter.finale.gameId ?? 'memory', seed: rotation + 2,
       title: chapter.finale.title, preview: chapter.finale.preview },
+    { kind: 'crew_relay', id: `${chapter.id}-crew-relay` },
   ] : [];
   const predictionCard = buildPredictionCard(postedWaitMinutes);
   let predictionPlaced = false;
@@ -359,25 +412,14 @@ export function generatePlaylist(waitMinutes: number, postedWaitMinutes: number,
   // Inline trivia cards consume one question; the Trivia+ game consumes five.
   // Share one cursor so neither format immediately repeats the other.
   let triviaSeed = chapter ? openingTriviaSeed + 1 : rotation;
-  let loreSeed = chapter ? featuredLoreSeed + 1 : rotation;
+  let circuitSeed = (rotation + 7) >>> 0;
 
   // Cap the number of slots so a very long wait doesn't build a giant array.
   const MAX_SLOTS = 40;
 
-  while (budget > 0 && items.length < MAX_SLOTS) {
+  while (budget > 0 && items.length < MAX_SLOTS - 1) {
     const kind = ROUND_ROBIN[slot % ROUND_ROBIN.length];
     slot += 1;
-
-    if (kind === 'prediction') {
-      if (allowPrediction && !predictionPlaced) {
-        predictionPlaced = true;
-        items.push({ kind: 'prediction', id: `pred-${slot}`, card: predictionCard });
-      } else {
-        items.push({ kind: 'lore', id: `lo-${slot}`, seed: loreSeed++ });
-      }
-      budget -= LIGHT_ROUND_SECONDS;
-      continue;
-    }
 
     if (kind === 'minigame') {
       const gameId = MINIGAME_CYCLE[minigameCycle % MINIGAME_CYCLE.length];
@@ -386,19 +428,23 @@ export function generatePlaylist(waitMinutes: number, postedWaitMinutes: number,
       if (gameId === 'trivia') triviaSeed += LINEPLAY_ROUND_QUESTIONS;
       items.push({ kind: 'minigame', id: `mg-${slot}`, gameId, seed: gameSeed });
       budget -= MINIGAME_ROUND_SECONDS;
-      continue;
-    }
-
-    if (kind === 'trivia') {
+    } else if (kind === 'trivia') {
       items.push({ kind: 'trivia', id: `tr-${slot}`, seed: triviaSeed });
       triviaSeed += 1;
       budget -= LIGHT_ROUND_SECONDS;
-      continue;
+    } else {
+      items.push({ kind: 'circuit', id: `cx-${slot}`, seed: circuitSeed });
+      circuitSeed = (circuitSeed + 7919) >>> 0;
+      budget -= CIRCUIT_ROUND_SECONDS;
     }
 
-    // lore
-    items.push({ kind: 'lore', id: `lo-${slot}`, seed: loreSeed++ });
-    budget -= LIGHT_ROUND_SECONDS;
+    // One call on the wait, once the guest has played a full loop.
+    if (allowPrediction && !predictionPlaced && slot === ROUND_ROBIN.length &&
+        budget > 0 && items.length < MAX_SLOTS - 1) {
+      predictionPlaced = true;
+      items.push({ kind: 'prediction', id: `pred-${slot}`, card: predictionCard });
+      budget -= LIGHT_ROUND_SECONDS;
+    }
   }
 
   // Guarantee the prediction is present even on very short waits.
@@ -406,7 +452,19 @@ export function generatePlaylist(waitMinutes: number, postedWaitMinutes: number,
     items.push({ kind: 'prediction', id: 'pred-final', card: predictionCard });
   }
 
+  // Optional talk-and-notice play closes the wait: never a whole early page.
+  if (chapter) items.push({ kind: 'crew_grid', id: `${chapter.id}-crew-grid`, seed: rotation + 5 });
+
   return items;
+}
+
+/** Keep the optional Crew Prompts card last when a wait grows new rounds. */
+export function appendBeforeCrewPrompts(playlist: readonly ActivityItem[], additions: readonly ActivityItem[]): ActivityItem[] {
+  if (additions.length === 0) return [...playlist];
+  const last = playlist[playlist.length - 1];
+  return last?.kind === 'crew_grid'
+    ? [...playlist.slice(0, -1), ...additions, last]
+    : [...playlist, ...additions];
 }
 
 /** A fresh, optional ten-minute wave after a guest reaches the planned tail. */
@@ -414,7 +472,7 @@ export function generateEncoreRounds(startIndex: number, seedOffset: number): Ac
   if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex >= MAX_SESSION_ACTIVITY_SLOTS) return [];
   const rotation = seedOffset + startIndex * 17;
   return generatePlaylist(10, 10, null, false, rotation)
-    .filter(item => item.kind === 'minigame' || item.kind === 'trivia' || item.kind === 'lore')
+    .filter(item => item.kind === 'minigame' || item.kind === 'trivia' || item.kind === 'circuit')
     .slice(0, Math.min(8, MAX_SESSION_ACTIVITY_SLOTS - startIndex))
     .map(item => ({ ...item, id: `encore-${startIndex}-${item.id}` }));
 }
@@ -494,8 +552,20 @@ export class LinePlaySession {
   private loreChoices: Record<string, number> = {};
   private navigationPanels: Record<string, NavigationPanelProgress> = {};
   private crewGridMarks: number[] = [];
+  private gamePlays: Record<string, number> = {};
+  private gameDifficulty: Partial<Record<MiniGameId, QueueDifficulty>> = {};
+  private gameBestStars: Partial<Record<MiniGameId, number>> = {};
+  private queueAdvanceAt: number | null = null;
+  private lastAdvanceAt = 0;
+  private endReason: EndReason | null = null;
+  private awaySamples = 0;
+  private firstAwayAt: number | null = null;
   private prediction: { card: PredictionCard; guess: 'beat' | 'miss' } | null = null;
   private boardingConfirmed = false;
+  private boardingSuggested = false;
+  private gameOpen = false;
+  /** Grace left when the countdown was held for an open game. */
+  private graceHeldMs: number | null = null;
   private boardingAt: number | null = null;
   private crewRelay: CrewRelayProgress | null = null;
 
@@ -522,10 +592,9 @@ export class LinePlaySession {
     this.serverSnapshotRevision += 1;
   }
 
-  // Movement tracking for auto-pause.
+  // Movement tracking for the non-pausing queue heads up.
   private lastSample: LocationSample | null = null;
-  private sustainedMoveStart: number | null = null;
-  private sustainedMoveOrigin: LocationSample | null = null;
+  private advanceTrail: LocationSample[] = [];
 
   // Exit grace timer.
   private graceStartedAt: number | null = null;
@@ -623,8 +692,15 @@ export class LinePlaySession {
       navigationPanels: Object.fromEntries(Object.entries(this.navigationPanels).map(([id, progress]) =>
         [id, { ...progress, rotations: [...progress.rotations] }])),
       crewGridMarks: [...this.crewGridMarks],
+      gamePlays: { ...this.gamePlays },
+      gameDifficulty: { ...this.gameDifficulty },
+      gameBestStars: { ...this.gameBestStars },
+      queueAdvanceAt: this.queueAdvanceAt,
+      endReason: this.endReason,
       prediction: this.prediction,
       boardingConfirmed: this.boardingConfirmed,
+      boardingSuggested: this.boardingSuggested,
+      gameOpen: this.gameOpen,
       boardingAt: this.boardingAt,
       crewRelay: this.crewRelay,
     };
@@ -648,6 +724,10 @@ export class LinePlaySession {
       loreChoices: { ...this.loreChoices },
       navigationPanels: this.navigationPanels,
       crewGridMarks: [...this.crewGridMarks],
+      gamePlays: { ...this.gamePlays },
+      gameDifficulty: { ...this.gameDifficulty },
+      gameBestStars: { ...this.gameBestStars },
+      endReason: this.endReason,
       prediction: this.prediction,
       boardingConfirmed: this.boardingConfirmed,
       boardingAt: this.boardingAt,
@@ -673,21 +753,132 @@ export class LinePlaySession {
   }
 
   markActivityCompleted(id: string): void {
-    if (this.completedActivityIds.has(id) || this.state !== 'active') return;
+    // A round finished during the wrap-up still counts in the recap (it is
+    // cosmetic; the server's verified wait owns every reward).
+    if (this.completedActivityIds.has(id) || (this.state !== 'active' && this.state !== 'ending')) return;
     this.completedActivityIds.add(id);
     this.recordPlayedAdaptiveEpisode(id);
     this.persistCheckpoint();
     this.emit();
   }
 
+  /**
+   * Launch a queue round. Returns the seed and difficulty for this play: the
+   * first play keeps the playlist board, every replay deals a new one, and
+   * the counter survives an app restart through the checkpoint.
+   */
+  beginGame(item: Extract<ActivityItem, { kind: 'minigame' }>): { seed: number; difficulty: QueueDifficulty; plays: number } {
+    const plays = Math.max(0, this.gamePlays[item.id] ?? 0);
+    const difficulty = this.gameDifficulty[item.gameId] ?? 1;
+    let seed: number;
+    if (item.gameId === 'current' && this.currentQuestBonusEnabled && !this.currentQuestVerified &&
+        this.currentQuestSeed != null) {
+      // The bonus proof must replay the server's own route.
+      seed = this.currentQuestSeed;
+    } else if (item.gameId === 'trivia') {
+      // Trivia keeps a deck cursor: each replay starts after the last round.
+      seed = item.seed + plays * LINEPLAY_ROUND_QUESTIONS;
+    } else {
+      seed = replaySeed(item.seed, plays);
+    }
+    if (this.state === 'active') {
+      this.gamePlays = { ...this.gamePlays, [item.id]: Math.min(999, plays + 1) };
+      this.persistCheckpoint();
+      this.emit();
+    }
+    return { seed, difficulty, plays };
+  }
+
+  /** A 2+ star finish makes the next round of that game a step harder; the best run is kept. */
+  recordGameResult(gameId: MiniGameId, stars: number): void {
+    const safeStars = Number.isFinite(stars) ? Math.max(0, Math.min(3, Math.floor(stars))) : 0;
+    const next = nextQueueDifficulty(this.gameDifficulty[gameId], safeStars);
+    const best = Math.max(this.gameBestStars[gameId] ?? 0, safeStars);
+    const difficultyChanged = next !== (this.gameDifficulty[gameId] ?? 1);
+    const bestChanged = this.gameBestStars[gameId] !== best;
+    if (!difficultyChanged && !bestChanged) return;
+    if (difficultyChanged) this.gameDifficulty = { ...this.gameDifficulty, [gameId]: next };
+    if (bestChanged) this.gameBestStars = { ...this.gameBestStars, [gameId]: best };
+    this.persistCheckpoint();
+    this.emit();
+  }
+
+  /** The guest saw the heads up; clear it so it cannot replay on a remount. */
+  acknowledgeQueueAdvance(): void {
+    if (this.queueAdvanceAt == null) return;
+    this.queueAdvanceAt = null;
+    this.emit();
+  }
+
+  /**
+   * Ride detection thinks this guest rode. That signal comes from a single
+   * fix leaving the ride radius, which indoor queue drift can fake, so it only
+   * asks the guest. Play keeps going, nothing counts down, and boarding is
+   * recorded only when the guest says so (endNow(true)).
+   */
+  suggestBoarded(): void {
+    if (this.state !== 'active' && this.state !== 'paused') return;
+    if (this.boardingSuggested) return;
+    this.boardingSuggested = true;
+    this.emit();
+  }
+
+  /** The guest answered "Still in line" to a ride detection. */
+  dismissBoardingSuggestion(): void {
+    if (!this.boardingSuggested) return;
+    this.boardingSuggested = false;
+    this.emit();
+  }
+
+  /**
+   * A full-screen mini-game opened or closed. While one is open the wrap-up
+   * countdown is held (the guest cannot see its sheet), and it resumes with
+   * the time it had left when the game closes.
+   */
+  setGameOpen(open: boolean): void {
+    if (this.gameOpen === open) return;
+    this.gameOpen = open;
+    if (this.state === 'ending') {
+      if (open) this.holdGrace();
+      else this.releaseGrace();
+    }
+    this.emit();
+  }
+
+  private holdGrace(): void {
+    if (this.graceHeldMs != null) return;
+    this.graceHeldMs = this.computeGraceRemaining();
+    if (this.graceTimer) {
+      clearTimeout(this.graceTimer);
+      this.graceTimer = null;
+    }
+  }
+
+  private releaseGrace(): void {
+    if (this.graceHeldMs == null) return;
+    const remaining = this.graceHeldMs;
+    this.graceHeldMs = null;
+    this.armGrace(remaining);
+  }
+
+  private armGrace(remainingMs: number): void {
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+    this.graceStartedAt = Date.now() - (EXIT_GRACE_MS - remainingMs);
+    this.graceTimer = setTimeout(() => {
+      void this.complete();
+    }, remainingMs);
+  }
+
   private recordPlayedAdaptiveEpisode(activityId: string): void {
-    if (this.adaptiveEpisodeRecorded || !this.chapter?.adaptive || !this.ride ||
+    const count = this.chapter?.episodeCount ?? 1;
+    if (this.adaptiveEpisodeRecorded || !this.chapter || count < 2 || !this.ride ||
         !this.checkpointPlayerId || !activityId.startsWith(`${this.chapter.id}-`)) return;
-    const episode = this.chapter.id.match(/-episode-(\d+)$/);
-    if (!episode) return;
+    const suffix = this.chapter.id.match(/-episode-(\d+)$/);
+    // An authored chapter's first episode has no suffix (flight 1 keeps its id).
+    const episode = suffix ? Number(suffix[1]) : this.chapter.adaptive ? null : 0;
+    if (episode == null) return;
     this.adaptiveEpisodeRecorded = true;
-    void recordAdaptiveEpisode(this.checkpointPlayerId, this.ride.parkId, this.ride.rideId,
-      Number(episode[1]), adaptiveEpisodeCountForRide(this.ride.rideName));
+    void recordAdaptiveEpisode(this.checkpointPlayerId, this.ride.parkId, this.ride.rideId, episode, count);
   }
 
   /** Keep proof through an outage; the completion request carries it again. */
@@ -731,9 +922,8 @@ export class LinePlaySession {
 
   /** Local story play only; the server's verified wait still owns every reward. */
   rotateNavigationPanel(id: string, index: number): void {
-    if (this.state !== 'active' || !this.chapter?.navigationPanel || id !== `${this.chapter.id}-trivia`) return;
-    const item = this.playlist.find(item => item.id === id);
-    if (item?.kind !== 'trivia') return;
+    const item = this.circuitItem(id);
+    if (!item) return;
     const current = this.navigationPanels[id] ?? createNavigationPanelProgress(item.seed, 0, this.completedActivityIds.has(id));
     const next = turnNavigationTile(item.seed, current, index);
     if (next === current) return;
@@ -745,10 +935,18 @@ export class LinePlaySession {
     this.persistCheckpoint(); this.emit();
   }
 
+  /** The chapter's repair mission or any free-play circuit round. */
+  private circuitItem(id: string): { id: string; seed: number } | null {
+    if (this.state !== 'active') return null;
+    const item = this.playlist.find(entry => entry.id === id);
+    if (item?.kind === 'circuit') return item;
+    if (item?.kind === 'trivia' && this.chapter?.navigationPanel && id === `${this.chapter.id}-trivia`) return item;
+    return null;
+  }
+
   startNextNavigationRound(id: string): void {
-    if (this.state !== 'active' || !this.chapter?.navigationPanel || id !== `${this.chapter.id}-trivia`) return;
-    const item = this.playlist.find(item => item.id === id);
-    if (item?.kind !== 'trivia') return;
+    const item = this.circuitItem(id);
+    if (!item) return;
     const current = this.navigationPanels[id] ?? createNavigationPanelProgress(item.seed, 0, this.completedActivityIds.has(id));
     if (!traceNavigationPanel(createNavigationPanel(item.seed, current.round), current.rotations).solved) return;
     this.navigationPanels = { ...this.navigationPanels,
@@ -800,10 +998,10 @@ export class LinePlaySession {
       const additions = generatePlaylist(
         this.plannedWaitMinutes + extension, this.plannedWaitMinutes, this.chapter,
         this.playlist.some(item => item.kind === 'prediction'), this.playlistSeedOffset,
-      ).filter(item => item.kind !== 'prediction' && !existingIds.has(item.id))
+      ).filter(item => item.kind !== 'prediction' && item.kind !== 'crew_grid' && !existingIds.has(item.id))
         .slice(0, 40 - this.playlist.length);
       if (additions.length > 0) {
-        this.playlist = [...this.playlist, ...additions];
+        this.playlist = appendBeforeCrewPrompts(this.playlist, additions);
         this.extraRoundsAdded += additions.length;
       }
     }
@@ -816,7 +1014,7 @@ export class LinePlaySession {
     if (this.state !== 'active') return null;
     const rounds = generateEncoreRounds(this.playlist.length, this.playlistSeedOffset);
     if (rounds.length === 0) return null;
-    this.playlist = [...this.playlist, ...rounds];
+    this.playlist = appendBeforeCrewPrompts(this.playlist, rounds);
     this.extraRoundsAdded += rounds.length;
     this.persistCheckpoint();
     this.emit();
@@ -853,7 +1051,9 @@ export class LinePlaySession {
   }
 
   private computeGraceRemaining(): number {
-    if (this.state !== 'ending' || this.graceStartedAt == null) return 0;
+    if (this.state !== 'ending') return 0;
+    if (this.graceHeldMs != null) return this.graceHeldMs;
+    if (this.graceStartedAt == null) return 0;
     return Math.max(0, EXIT_GRACE_MS - (Date.now() - this.graceStartedAt));
   }
 
@@ -884,6 +1084,8 @@ export class LinePlaySession {
     if (this.disposed) return;
 
     this.ride = ride;
+    // Fact-checked server trivia for this ride; the bundled deck covers offline.
+    void primeTriviaDeck(ride.parkId, ride.rideId).catch(() => undefined);
     this.checkpointPlayerId = playerId ?? null;
     this.serverSessionId = null;
     this.backgroundTrackingSessionId = null;
@@ -925,9 +1127,11 @@ export class LinePlaySession {
     this.adaptiveEpisodeRecorded = false;
     this.chapter = getLinePlayChapter(ride.parkId, ride.rideSlug, ride.rideName,
       saved ? savedEpisode ? Number(savedEpisode[1]) : undefined : this.playlistSeedOffset);
-    if (!saved && this.chapter?.adaptive && playerId) {
+    if (!saved && (this.chapter?.episodeCount ?? 1) > 1 && playerId) {
+      // Authored chapters start every new player on episode 1 (the original
+      // story); returning players move on. Adaptive stories start anywhere.
       const nextEpisode = await selectAdaptiveEpisode(playerId, ride.parkId, ride.rideId,
-        adaptiveEpisodeCountForRide(ride.rideName), playerId * 31 + ride.rideId * 17);
+        this.chapter!.episodeCount!, this.chapter!.adaptive ? playerId * 31 + ride.rideId * 17 : 0);
       if (this.disposed) return;
       this.chapter = getLinePlayChapter(ride.parkId, ride.rideSlug, ride.rideName, nextEpisode);
     }
@@ -941,8 +1145,6 @@ export class LinePlaySession {
     this.endedAt = saved?.endedAt ?? null;
     this.pauseReason = null;
     this.lastSample = null;
-    this.sustainedMoveStart = null;
-    this.sustainedMoveOrigin = null;
     this.completedActivityIds = new Set(saved?.completedActivityIds ?? []);
     if (saved?.completedActivityIds.some(id => id.startsWith(`${this.chapter?.id}-`)))
       this.recordPlayedAdaptiveEpisode(saved.completedActivityIds.find(id =>
@@ -950,6 +1152,17 @@ export class LinePlaySession {
     this.loreChoices = saved?.loreChoices ?? {};
     this.navigationPanels = saved?.navigationPanels ?? {};
     this.crewGridMarks = saved?.crewGridMarks ?? [];
+    this.gamePlays = { ...(saved?.gamePlays ?? {}) };
+    this.gameDifficulty = { ...(saved?.gameDifficulty ?? {}) };
+    this.gameBestStars = { ...(saved?.gameBestStars ?? {}) };
+    this.queueAdvanceAt = null;
+    this.lastAdvanceAt = 0;
+    this.endReason = saved?.endReason ?? null;
+    this.awaySamples = 0;
+    this.firstAwayAt = null;
+    this.boardingSuggested = false;
+    this.graceHeldMs = null;
+    this.advanceTrail = [];
     const originalWaitStillFresh = ride.postedWaitMinutes === saved?.plannedWaitMinutes &&
       ride.postedWaitObservedAt != null &&
       Date.now() - ride.postedWaitObservedAt >= 0 &&
@@ -1139,9 +1352,16 @@ export class LinePlaySession {
     try {
       const result = await heartbeatInLineTimer(this.serverSessionId, sample.latitude, sample.longitude);
       this.lastSuccessfulPresenceUpdateAt = Date.now();
+      this.awaySamples = 0;
+      this.firstAwayAt = null;
       this.applyServerSnapshot(result);
     } catch (error) {
-      const status = (error as { response?: { status?: number } })?.response?.status;
+      const response = (error as { response?: { status?: number; data?: { code?: string; message?: string } } })?.response;
+      const status = response?.status;
+      // The server saying this fresh fix is not near the ride (older servers
+      // send only the message). Validation 422s never count as leaving.
+      if (status === 422 && (response?.data?.code === 'NOT_NEAR_RIDE' ||
+          /near the ride/i.test(response?.data?.message ?? ''))) this.recordAwaySample(sample);
       console.info('[LinePlaySession] queue reward sample unavailable', status ?? 'network');
     } finally {
       this.heartbeatInFlight = false;
@@ -1238,7 +1458,25 @@ export class LinePlaySession {
     }
   }
 
-  /** Auto-pause (line moving) or manual pause. Only from active. */
+  /**
+   * The server said a fresh, accurate fix is away from the ride. Several in a
+   * row over more than a minute mean the guest left the queue area: start the
+   * wrap-up (saving progress and wait credit) instead of silently idling. A
+   * single GPS jump or a noisy indoor fix never ends a wait.
+   */
+  private recordAwaySample(sample: LocationSample): void {
+    if (this.state !== 'active' && this.state !== 'paused') return;
+    const accuracy = sample.accuracyMeters;
+    if (typeof accuracy === 'number' && accuracy > 50) return;
+    const at = sample.timestamp ?? Date.now();
+    this.awaySamples += 1;
+    this.firstAwayAt ??= at;
+    if (this.awaySamples >= EXIT_AWAY_SAMPLES && at - this.firstAwayAt >= EXIT_AWAY_MIN_MS) {
+      this.beginEnding(false, 'left_queue');
+    }
+  }
+
+  /** Manual pause. Only from active. Movement never calls this. */
   pause(reason: PauseReason): void {
     if (this.state !== 'active') return;
     this.state = 'paused';
@@ -1251,8 +1489,6 @@ export class LinePlaySession {
     if (this.state !== 'paused') return;
     this.state = 'active';
     this.pauseReason = null;
-    this.sustainedMoveStart = null;
-    this.sustainedMoveOrigin = null;
     this.emit();
   }
 
@@ -1261,25 +1497,74 @@ export class LinePlaySession {
    * or when the user taps "End session". Auto-completes when the grace expires
    * unless undoEnd() is called first.
    */
-  beginEnding(boardingConfirmed = false): void {
+  beginEnding(boardingConfirmed = false, reason: EndReason = 'manual'): void {
     if (this.state !== 'active' && this.state !== 'paused') return;
+    this.endReason = reason;
     this.boardingConfirmed = boardingConfirmed;
+    this.boardingSuggested = false;
     this.boardingAt = boardingConfirmed ? Date.now() : null;
     this.state = 'ending';
-    this.graceStartedAt = Date.now();
+    this.graceHeldMs = null;
+    this.armGrace(EXIT_GRACE_MS);
+    // An open mini-game hides the wrap-up sheet: hold the countdown for it.
+    if (this.gameOpen) this.holdGrace();
     this.persistCheckpoint();
     this.emit();
-    if (this.graceTimer) clearTimeout(this.graceTimer);
-    this.graceTimer = setTimeout(() => {
-      void this.complete();
-    }, EXIT_GRACE_MS);
     // Keep ticking so graceMsRemaining animates down.
   }
 
   /** Explicitly confirmed line exits settle now, while the last nearby sample is fresh. */
   async endNow(boardingConfirmed: boolean): Promise<void> {
-    this.beginEnding(boardingConfirmed);
+    if (this.state === 'ending') {
+      // Answering the wrap-up sheet: keep the detected reason, record boarding.
+      this.boardingConfirmed = boardingConfirmed;
+      this.boardingAt = boardingConfirmed ? this.boardingAt ?? Date.now() : null;
+      if (boardingConfirmed && this.endReason === 'left_queue') this.endReason = 'boarded';
+    } else {
+      this.beginEnding(boardingConfirmed, boardingConfirmed ? 'boarded' : 'manual');
+    }
     await this.complete();
+  }
+
+  /**
+   * "Still in line" after the wrap-up already settled (the countdown ran out,
+   * or the guest tapped through too fast). The finished server session keeps
+   * its rewards; a fresh one starts for the rest of the wait, carrying the
+   * playlist, finished rounds, replays, difficulty and the story so far.
+   */
+  async continueInLine(): Promise<void> {
+    if (this.disposed || this.state !== 'complete' || !this.ride || this.completionInFlight) return;
+    this.startRequestId =
+      `line-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    this.serverSessionId = null;
+    this.serverStartInFlight = null;
+    this.lastServerStartAttemptAt = 0;
+    this.backgroundTrackingSessionId = null;
+    this.backgroundTrackingAvailable = null;
+    this.rewardConnectionIssue = null;
+    this.verifiedEligibleSeconds = 0;
+    this.creditedParts = null;
+    this.rewards = null;
+    this.rewardsPending = false;
+    this.currentQuestVerified = false;
+    this.currentQuestSeed = null;
+    this.currentQuestBonusEnabled = false;
+    this.endedAt = null;
+    this.endReason = null;
+    this.boardingConfirmed = false;
+    this.boardingSuggested = false;
+    this.boardingAt = null;
+    this.graceStartedAt = null;
+    this.graceHeldMs = null;
+    this.awaySamples = 0;
+    this.firstAwayAt = null;
+    this.pauseReason = null;
+    this.state = 'active';
+    this.startTicking();
+    this.persistCheckpoint();
+    this.emit();
+    const sample = this.lastSample;
+    if (sample) await this.connectServer(sample, true);
   }
 
   /** Cancel an in-progress ending and return to active. */
@@ -1290,8 +1575,13 @@ export class LinePlaySession {
       this.graceTimer = null;
     }
     this.graceStartedAt = null;
+    this.graceHeldMs = null;
     this.boardingConfirmed = false;
     this.boardingAt = null;
+    this.endReason = null;
+    // "Still in line": forget the away streak so the next check starts fresh.
+    this.awaySamples = 0;
+    this.firstAwayAt = null;
     this.state = 'active';
     this.pauseReason = null;
     this.persistCheckpoint();
@@ -1318,6 +1608,8 @@ export class LinePlaySession {
       this.graceTimer = null;
     }
     this.graceStartedAt = null;
+    this.graceHeldMs = null;
+    this.boardingSuggested = false;
     this.endedAt = Date.now();
     this.state = 'complete';
     this.backgroundTrackingAvailable = null;
@@ -1485,6 +1777,8 @@ export class LinePlaySession {
     this.extraRoundsAdded = 0;
     this.pauseReason = null;
     this.graceStartedAt = null;
+    this.graceHeldMs = null;
+    this.boardingSuggested = false;
     this.playlist = [];
     this.rewards = null;
     this.rewardsPending = false;
@@ -1492,11 +1786,18 @@ export class LinePlaySession {
     this.loreChoices = {};
     this.navigationPanels = {};
     this.crewGridMarks = [];
+    this.gamePlays = {};
+    this.gameDifficulty = {};
+    this.gameBestStars = {};
+    this.queueAdvanceAt = null;
+    this.lastAdvanceAt = 0;
+    this.endReason = null;
+    this.awaySamples = 0;
+    this.firstAwayAt = null;
     this.prediction = null;
     this.crewRelay = null;
     this.lastSample = null;
-    this.sustainedMoveStart = null;
-    this.sustainedMoveOrigin = null;
+    this.advanceTrail = [];
     this.emit();
   }
 
@@ -1509,56 +1810,41 @@ export class LinePlaySession {
     this.listeners.clear();
   }
 
-  // -- movement / auto-pause ---------------------------------------------
+  // -- movement: heads up, never a pause ------------------------------------
 
   /**
-   * Feed a location sample from the shared LocationContext stream. Computes
-   * device-reported speed and fresh, accurate fixes before interrupting play.
-   * A short queue shuffle, missing speed, or noisy indoor GPS leaves the game
-   * running. Resuming after a real pause is manual (one tap).
+   * Feed a location sample from the shared LocationContext stream. The line is
+   * always moving, so this never pauses play. It keeps the last fix fresh for
+   * the server, and when accurate fixes show the guest moved well forward in a
+   * short span it raises a gentle heads up (queueAdvanceAt) the screen shows
+   * as a toast.
    *
-   * We never create a watcher here — the screen wires this to the context's
+   * We never create a watcher here: the screen wires this to the context's
    * `location` updates.
    */
   ingestLocation(sample: LocationSample): void {
     const now = sample.timestamp ?? Date.now();
-    const prev = this.lastSample;
     this.lastSample = { ...sample, timestamp: now };
 
     if (!this.serverSessionId &&
         (this.state === 'active' || this.state === 'paused' || this.state === 'ending')) {
       void this.connectServer(sample);
     }
+    if (this.state !== 'active') return;
 
-    if (this.state !== 'active') {
-      // Only auto-pause from active play. Still keep lastSample fresh.
-      return;
-    }
-    if (!prev || prev.timestamp == null) return;
-
-    const dtMs = now - prev.timestamp;
-    const reliable = dtMs > 0 && dtMs <= MOVE_MAX_SAMPLE_GAP_MS &&
-      typeof prev.accuracyMeters === 'number' && prev.accuracyMeters >= 0 &&
-      prev.accuracyMeters <= MOVE_MAX_ACCURACY_METERS &&
-      typeof sample.accuracyMeters === 'number' && sample.accuracyMeters >= 0 &&
-      sample.accuracyMeters <= MOVE_MAX_ACCURACY_METERS &&
-      typeof sample.speedMps === 'number' && sample.speedMps > MOVE_SPEED_MPS &&
-      haversineMeters(prev, sample) >= 2;
-
-    if (reliable) {
-      if (this.sustainedMoveStart == null) {
-        this.sustainedMoveStart = now;
-        this.sustainedMoveOrigin = prev;
-      } else if (now - this.sustainedMoveStart >= MOVE_SUSTAIN_MS &&
-          this.sustainedMoveOrigin &&
-          haversineMeters(this.sustainedMoveOrigin, sample) >= MOVE_MIN_NET_METERS) {
-        this.pause('lineMoving');
-      }
-    } else {
-      // Accuracy, speed, or continuity broke; reset the sustain window.
-      this.sustainedMoveStart = null;
-      this.sustainedMoveOrigin = null;
-    }
+    const accuracy = sample.accuracyMeters;
+    if (typeof accuracy !== 'number' || accuracy < 0 || accuracy > ADVANCE_MAX_ACCURACY_METERS) return;
+    const fix = { ...sample, timestamp: now };
+    this.advanceTrail = [...this.advanceTrail.filter(point =>
+      now - (point.timestamp ?? 0) <= ADVANCE_WINDOW_MS && now >= (point.timestamp ?? 0)), fix].slice(-30);
+    const origin = this.advanceTrail[0];
+    if (!origin || origin === fix) return;
+    if (haversineMeters(origin, fix) < ADVANCE_MIN_NET_METERS) return;
+    if (this.lastAdvanceAt && now - this.lastAdvanceAt < ADVANCE_COOLDOWN_MS) return;
+    this.lastAdvanceAt = now;
+    this.queueAdvanceAt = now;
+    this.advanceTrail = [fix];
+    this.emit();
   }
 
   // -- internal ticking ---------------------------------------------------

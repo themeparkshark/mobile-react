@@ -1,6 +1,6 @@
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { SessionRecap } from './LinePlayScreen';
+import SessionRecap from './components/SessionRecap';
 
 /** Dev-only sample of the real recap after a verified ten-minute queue session. */
 export default function QueueStampPreviewScreen() {

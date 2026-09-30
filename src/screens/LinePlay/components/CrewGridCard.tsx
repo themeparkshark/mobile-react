@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { buildCrewGrid, crewGridHasLine } from '../../../services/lineplay/crewGrid';
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import * as Haptics from '../../../helpers/haptics';
+import { BRAND, GameIcon, type GameIconName } from '../../../ui';
 
 interface Props {
   readonly rideName: string;
@@ -15,11 +16,12 @@ interface Props {
   readonly onToggle: (index: number) => void;
 }
 
-const SYMBOLS: Record<string, string> = {
-  color: '●', shape: '◆', sound: '♫', name: '✎', memory: '✦',
-  captain: '★', prediction: '◉', 'three-words': '•••', pattern: '▤',
-  vote: '✓', story: '☾', symbol: '♢', question: '?', direction: '➤',
-  snack: '◕', pose: '♧', 'story-clue': '✦',
+/** Each prompt wears one of his drawn icons; no dingbats. */
+const SYMBOLS: Record<string, GameIconName> = {
+  color: 'pin', shape: 'dice', sound: 'bell', name: 'edit', memory: 'search',
+  captain: 'crown', prediction: 'ride', 'three-words': 'info', pattern: 'retry',
+  vote: 'check', story: 'star', symbol: 'fin', question: 'heart', direction: 'map',
+  snack: 'gift', pose: 'shark', 'story-clue': 'sparkle',
 };
 
 /** A self-reported one-phone activity. Only verified queue time can mint Parts. */
@@ -51,7 +53,7 @@ export default function CrewGridCard({ rideName, chapterTitle, seed, marks, comp
       celebrated.current = true;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       playSound?.(require('../../../../assets/sounds/reward.mp3'));
-      void AccessibilityInfo.announceForAccessibility('Crew Bingo! Your completed line is saved in this wait’s recap.');
+      void AccessibilityInfo.announceForAccessibility('Line complete! Your crew prompts are saved in this wait’s recap.');
       celebration.setValue(0);
       Animated.spring(celebration, { toValue: 1, friction: 5, tension: 75, useNativeDriver: true }).start();
       scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -68,25 +70,25 @@ export default function CrewGridCard({ rideName, chapterTitle, seed, marks, comp
       <LinearGradient colors={['#087ddd', '#0065b8', '#00448d']} style={styles.hero}>
         <View style={styles.heroCopy}>
           <Text style={styles.heroEyebrow}>ONE PHONE · SOLO OR CREW</Text>
-          <Text style={styles.heroTitle}>CREW{'\n'}BINGO</Text>
+          <Text style={styles.heroTitle}>CREW{'\n'}PROMPTS</Text>
         </View>
         <Image source={require('../../../../assets/images/screens/pin-collections/shark.png')}
           resizeMode="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
       </LinearGradient>
       <View style={styles.rideBanner}>
-        <Text style={styles.bannerStar}>✦</Text>
+        <GameIcon name="sparkle" size={18} />
         <Text numberOfLines={1} style={styles.rideName}>{rideName.toUpperCase()}</Text>
-        <Text style={styles.bannerStar}>✦</Text>
+        <GameIcon name="sparkle" size={18} />
       </View>
       <View style={styles.body}>
-        <Text style={styles.instruction}>{hasLine ? 'A winning line is in your crew log!' : 'Find clues, make up stories, and complete any line.'}</Text>
+        <Text style={styles.instruction}>{hasLine ? 'A finished line is in your crew log!' : 'Optional talk-and-notice prompts. Finish any line of three.'}</Text>
         <View style={styles.progressTrack} accessibilityLabel={`${marks.length} of 9 bingo squares marked`}>
           <View style={[styles.progressFill, { width: `${Math.round(marks.length / 9 * 100)}%` }]} />
         </View>
         {hasLine && <Animated.View style={[styles.bingoRibbon, {
           opacity: celebration.interpolate({ inputRange: [0, 1], outputRange: [celebrated.current ? 0.35 : 1, 1] }),
           transform: [{ rotate: '-2deg' }, { scale: celebration.interpolate({ inputRange: [0, 1], outputRange: [celebrated.current ? 0.76 : 1, 1] }) }],
-        }]}><Text style={styles.bingoText}>✦  BINGO!  ✦</Text></Animated.View>}
+        }]}><GameIcon name="sparkle" size={22} /><Text style={styles.bingoText}>LINE COMPLETE!</Text><GameIcon name="sparkle" size={22} /></Animated.View>}
         <View style={styles.grid}>
           {squares.map((square, index) => {
             const marked = marks.includes(index);
@@ -96,9 +98,9 @@ export default function CrewGridCard({ rideName, chapterTitle, seed, marks, comp
               onPress={() => chooseSquare(index)} style={styles.squareFrame}>
               <LinearGradient colors={marked ? ['#ffe984', '#ffbe24'] : ['#f4fcff', '#c9efff']}
                 style={[styles.square, selected === index && styles.squareSelected]}>
-                <Text style={styles.squareSymbol}>{SYMBOLS[square.id] ?? '✦'}</Text>
+                <GameIcon name={SYMBOLS[square.id] ?? 'sparkle'} size={28} />
                 <Text numberOfLines={2} style={styles.squareTitle}>{square.title.toUpperCase()}</Text>
-                {marked && <View style={styles.checkBubble}><Text style={styles.check}>✓</Text></View>}
+                {marked && <View style={styles.checkBubble}><GameIcon name="check" size={20} /></View>}
               </LinearGradient>
             </Pressable>;
           })}
@@ -106,7 +108,7 @@ export default function CrewGridCard({ rideName, chapterTitle, seed, marks, comp
         {!hasLine && <Text style={styles.progressText}>{marks.length}/9 SQUARES · COMPLETE ANY LINE</Text>}
         <View style={styles.ticket}>
           <View style={styles.ticketHeader}>
-            <View style={styles.ticketSymbol}><Text style={styles.ticketSymbolText}>{SYMBOLS[selectedSquare.id] ?? '✦'}</Text></View>
+            <View style={styles.ticketSymbol}><GameIcon name={SYMBOLS[selectedSquare.id] ?? 'sparkle'} size={40} /></View>
             <View style={styles.ticketHeading}>
               <Text style={styles.ticketEyebrow}>YOUR CREW QUEST</Text>
               <Text style={styles.ticketTitle}>{selectedSquare.title}</Text>
@@ -116,18 +118,18 @@ export default function CrewGridCard({ rideName, chapterTitle, seed, marks, comp
           {!hasLine && <Pressable disabled={paused} accessibilityRole="button"
             accessibilityLabel={marks.includes(selected) ? 'Undo this square' : 'Mark this square done'}
             onPress={toggleSquare} style={[styles.action, paused && styles.disabled]}>
-            <Text style={styles.actionText}>{marks.includes(selected) ? 'UNDO SQUARE' : 'WE DID IT!  ✓'}</Text>
+            <Text style={styles.actionText}>{marks.includes(selected) ? 'UNDO SQUARE' : 'WE DID IT!'}</Text>
           </Pressable>}
-          {!hasLine && <Pressable accessibilityRole="button" accessibilityLabel="Back to Crew Bingo board"
+          {!hasLine && <Pressable accessibilityRole="button" accessibilityLabel="Back to the Crew Prompts board"
             onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}>
-            <Text style={styles.backToBoard}>BACK TO BOARD  ↑</Text>
+            <Text style={styles.backToBoard}>BACK TO BOARD</Text>
           </Pressable>}
           {hasLine && <View style={styles.completePanel}>
             <Text style={styles.completeEyebrow}>CREW QUEST COMPLETE</Text>
             <Text style={styles.completeTitle}>Your line is in the log!</Text>
             <Text style={styles.completeNote}>Saved in this wait’s recap. Nice work, crew!</Text>
           </View>}
-          {paused && !hasLine && <Text style={styles.pause}>Line moving · marking pauses until you resume.</Text>}
+          {paused && !hasLine && <Text style={styles.pause}>Paused. Resume to mark squares.</Text>}
         </View>
         <Text style={styles.rewardNote}>Play from your place in line. Verified nearby time determines Ride Parts.</Text>
       </View>
@@ -152,7 +154,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     paddingHorizontal: 12, paddingVertical: 5, shadowColor: '#003f76', shadowOpacity: 0.27,
     shadowOffset: { width: 0, height: 4 }, shadowRadius: 3, elevation: 4 },
-  bannerStar: { color: '#073e79', fontSize: 13 },
   rideName: { color: '#093d77', fontFamily: 'Knockout', fontSize: 18, textAlign: 'center', flexShrink: 1 },
   body: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 26 },
   instruction: { color: '#073e79', fontFamily: 'Knockout', fontSize: 17, textAlign: 'center' },
@@ -166,16 +167,12 @@ const styles = StyleSheet.create({
     shadowColor: '#07538b', shadowOpacity: 0.25, shadowOffset: { width: 0, height: 3 },
     shadowRadius: 2, elevation: 3 },
   squareSelected: { borderColor: '#ffc323', borderWidth: 4 },
-  squareSymbol: { color: '#0561a0', fontSize: 22, lineHeight: 25, fontWeight: '900' },
   squareTitle: { color: '#113c69', fontFamily: 'Knockout', fontSize: 12, lineHeight: 14,
     textAlign: 'center', marginTop: 1 },
-  checkBubble: { position: 'absolute', top: 3, right: 3, width: 23, height: 23,
-    borderRadius: 12, backgroundColor: '#0064af', borderWidth: 2, borderColor: '#fff',
-    alignItems: 'center', justifyContent: 'center' },
-  check: { color: '#fff', fontSize: 14, fontWeight: '900', lineHeight: 17 },
+  checkBubble: { position: 'absolute', top: 2, right: 2 },
   progressText: { textAlign: 'center', color: '#005594', fontFamily: 'Knockout',
     fontSize: 14, marginTop: 12, marginBottom: 11 },
-  bingoRibbon: { alignSelf: 'center', marginTop: 7, marginBottom: 8, borderRadius: 8,
+  bingoRibbon: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', marginTop: 7, marginBottom: 8, borderRadius: 8,
     backgroundColor: '#ffcb24', borderWidth: 2, borderColor: '#fff',
     paddingHorizontal: 24, paddingVertical: 4 },
   bingoText: { color: '#093d77', fontFamily: 'Shark', fontSize: 23 },
@@ -185,11 +182,10 @@ const styles = StyleSheet.create({
   ticketHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   ticketSymbol: { width: 56, height: 56, borderRadius: 13, backgroundColor: '#ffd443',
     borderWidth: 2, borderColor: '#ffb900', alignItems: 'center', justifyContent: 'center' },
-  ticketSymbolText: { color: '#075b9b', fontSize: 32, fontWeight: '900' },
   ticketHeading: { flex: 1 },
   ticketEyebrow: { color: '#327da9', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
   ticketTitle: { color: '#092f62', fontFamily: 'Shark', fontSize: 19, marginTop: 2 },
-  prompt: { color: '#244866', fontSize: 14, lineHeight: 20, marginTop: 11 },
+  prompt: { color: '#244866', fontFamily: 'Knockout', fontSize: 16, lineHeight: 21, marginTop: 11 },
   action: { backgroundColor: '#0079da', borderRadius: 12, borderWidth: 2, borderColor: '#b7e9ff',
     alignItems: 'center', paddingVertical: 11, marginTop: 14 },
   actionText: { color: '#fff', fontFamily: 'Knockout', fontSize: 20 },
@@ -201,7 +197,7 @@ const styles = StyleSheet.create({
   completeEyebrow: { color: '#0064a8', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1.1 },
   completeTitle: { color: '#073d77', fontFamily: 'Shark', fontSize: 19, marginTop: 2 },
   completeNote: { color: '#086c54', fontFamily: 'Knockout', fontSize: 15, marginTop: 3 },
-  pause: { color: '#9a5a00', fontSize: 12, marginTop: 9 },
-  rewardNote: { color: '#084973', fontSize: 11, lineHeight: 15, textAlign: 'center',
+  pause: { color: '#9a5a00', fontFamily: 'Knockout', fontSize: 14, marginTop: 9 },
+  rewardNote: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 13, lineHeight: 17, textAlign: 'center',
     marginTop: 12, marginHorizontal: 12 },
 });

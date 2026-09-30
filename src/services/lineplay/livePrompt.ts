@@ -29,7 +29,7 @@ export function crewLivePrompt(
   if (!completedIds.has(gameId)) return {
     label: 'NEW ROUND OPEN',
     title: route === 'route_a' ? 'Shadow Trail is open' : 'Starlight Route is open',
-    action: route === 'route_a' ? 'PLAY MEMORY MATCH' : 'PLAY RHYTHM TAP',
+    action: route === 'route_a' ? 'PLAY MEMORY MATCH' : 'PLAY WHACK-A-SHARK',
     pageId: 'crew-signal',
   };
   if (signal.puzzle && !signal.puzzle.completed) return {

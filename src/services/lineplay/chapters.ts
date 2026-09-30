@@ -7,6 +7,12 @@ export interface LinePlayChapter {
   readonly adaptive?: boolean;
   /** Featured opening mission uses an original playable signal circuit. */
   readonly navigationPanel?: boolean;
+  /** Stories this ride rotates through, one per wait (returning players get the next). */
+  readonly episodeCount?: number;
+  /** Small caps label for a returning player's episode, e.g. "FLIGHT 2 OF 3". */
+  readonly episodeLabel?: string;
+  /** A returning flight opens on the bigger 4x4 navigation board. */
+  readonly returningFlight?: boolean;
   readonly parkLabel: string;
   readonly title: string;
   readonly story: string;
@@ -15,7 +21,7 @@ export interface LinePlayChapter {
   readonly progressNoun: string;
   readonly missionNames: readonly [string, string, string];
   readonly finale: { readonly idSuffix: string; readonly title: string; readonly preview: string;
-    readonly memoryDeckId: string; readonly gameId?: 'memory' | 'timing' | 'shark' };
+    readonly memoryDeckId: string; readonly gameId?: 'memory' | 'tap' | 'shark' };
   readonly relay: {
     readonly title: string;
     readonly setupStory: string;
@@ -52,8 +58,8 @@ function adaptiveClueQuestions(chapterId: string, story: AdaptiveStory): readonl
   return [
     {
       id: `${chapterId}-signal-pattern`,
-      question: `A message beside the ${story.artifact} reads ✦ ● ✦ ● ?. Which mark completes it?`,
-      choices: ['Star ✦', 'Circle ●', 'Wave ≋', 'Diamond ◆'], correctIndex: 0,
+      question: `A message beside the ${story.artifact} reads star, circle, star, circle, then a gap. Which mark completes it?`,
+      choices: ['Star', 'Circle', 'Wave', 'Diamond'], correctIndex: 0,
       difficulty: 'easy', fact: 'The star and circle alternate, so the next mark is a star.',
     },
     {
@@ -70,19 +76,19 @@ function adaptiveClueQuestions(chapterId: string, story: AdaptiveStory): readonl
     },
     {
       id: `${chapterId}-three-beat-lock`,
-      question: `The ${story.artifact} lock shows ◆ ● ● ◆ ● ● ?. Which mark starts its next beat?`,
-      choices: ['Circle ●', 'Diamond ◆', 'Star ✦', 'Wave ≋'], correctIndex: 1,
+      question: `The ${story.artifact} lock shows diamond, circle, circle, diamond, circle, circle. Which mark starts its next beat?`,
+      choices: ['Circle', 'Diamond', 'Star', 'Wave'], correctIndex: 1,
       difficulty: 'medium', fact: 'The three-mark beat repeats: diamond, circle, circle.',
     },
     {
       id: `${chapterId}-compass-turn`,
-      question: `Your shark traces the ${story.clue} on a compass: north → east → south → ?. Which way comes next?`,
+      question: `Your shark traces the ${story.clue} on a compass: north, then east, then south. Which way comes next?`,
       choices: ['North', 'South', 'West', 'East'], correctIndex: 2,
       difficulty: 'medium', fact: 'Each arrow turns one quarter clockwise, so west follows south.',
     },
     {
       id: `${chapterId}-symbol-order`,
-      question: `A note beside the ${story.artifact} says 1 = ✦, 2 = ●, 3 = ◆. What does the code 3-1-2 show?`,
+      question: `A note beside the ${story.artifact} says 1 is a star, 2 is a circle, 3 is a diamond. What does the code 3-1-2 show?`,
       choices: ['Star, circle, diamond', 'Circle, diamond, star',
         'Diamond, circle, star', 'Diamond, star, circle'], correctIndex: 3,
       difficulty: 'medium', fact: 'Read the key in order: 3 is diamond, 1 is star, and 2 is circle.',
@@ -146,17 +152,17 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
   for (const char of id) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
   const storyIndex = episode ?? hash % stories.length;
   const story = stories[storyIndex];
-  const finaleGameId = (['memory', 'timing', 'shark'] as const)[storyIndex % 3];
+  const finaleGameId = (['memory', 'tap', 'shark'] as const)[storyIndex % 3];
   const finaleTitle = finaleGameId === 'memory' ? `Rebuild the ${story.artifact}`
-    : finaleGameId === 'timing' ? `Follow the ${story.clue}`
+    : finaleGameId === 'tap' ? `Follow the ${story.clue}`
       : `Search for the ${story.artifact}`;
   const finalePreview = finaleGameId === 'memory'
-    ? 'Match illustrated symbols in a quick memory round. Play solo or pass the phone when the line is safely stopped.'
-    : finaleGameId === 'timing'
-      ? 'Keep a steady beat to trace your crew’s clue. Play solo or pass the phone when the line is safely stopped.'
-      : `Guide your shark through a short swim to find the ${story.artifact}. Play solo or take turns when the line is safely stopped.`;
+    ? 'Match illustrated symbols in a quick memory round. Play solo or let your crew call out the pairs.'
+    : finaleGameId === 'tap'
+      ? 'Tap the sharks that pop up with the clue and skip the decoys. One thumb is all it takes.'
+      : `Guide your shark through a short swim to find the ${story.artifact}. One thumb, about a minute.`;
   const chapter: LinePlayChapter = {
-    id, adaptive: true, parkLabel: 'YOUR QUEUE',
+    id, adaptive: true, episodeCount: stories.length, parkLabel: 'YOUR QUEUE',
     title: story.title,
     story: `While you wait for ${safeName}, your shark crew needs to recover a ${story.artifact}. Solve a clue, notice something from your place in line, then rebuild it together.`,
     completedTitle: `${story.artifact[0].toUpperCase()}${story.artifact.slice(1)} recovered!`,
@@ -169,7 +175,7 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
     },
     relay: {
       title: `${story.title} Crew Relay`,
-      setupStory: 'Four short turns let your crew choose the ending. Play solo or share one phone when the line is safely stopped.',
+      setupStory: 'Four short turns let your crew choose the ending. Play solo or pass one phone around your crew as the line shuffles forward.',
       firstTurnTitle: 'Decode the first clue',
       firstClueFound: `The Navigator found the first ${story.clue}.`,
       missedClue: 'The Navigator missed a clue. Your crew can still finish the adventure.',
@@ -184,7 +190,7 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
       branchDone: 'Your crew finished its chosen route. It stays in your queue recap.',
       routeNames: [story.routeA, story.routeB],
       epilogues: {
-        alpha: { title: story.routeA, prompt: 'Keep a steady rhythm to guide your shark along the chosen route.' },
+        alpha: { title: story.routeA, prompt: 'Tap the sharks that surface along the chosen route and skip the decoys.' },
         omega: { title: story.routeB, prompt: 'Swim through a quick challenge to explore the route your crew chose.' },
       },
     },
@@ -201,12 +207,12 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
         ],
         finish: 'Share your clue with your crew or keep it as a solo discovery. No photo or extra walking needed.',
       } },
-      { id: `${id}-note-2`, title: 'Three Word Clue', body: 'Describe one safe detail nearby in three words. Let someone else guess it, or test your own memory after the line moves.', challenge: {
+      { id: `${id}-note-2`, title: 'Three Word Clue', body: 'Describe one safe detail nearby in three words. Let someone else guess it, or test your own memory a minute from now.', challenge: {
         prompt: 'How will your crew make the clue?',
         options: [
           { label: 'Describe it', task: 'Choose a detail you can see from your place. Give three words and let the crew guess.' },
           { label: 'Guess it', task: 'Ask a crewmate for three words, then guess the detail without leaving your place.' },
-          { label: 'Remember it', task: 'Keep three clue words in mind. Test yourself after the line moves.' },
+          { label: 'Remember it', task: 'Keep three clue words in mind. Test yourself a minute from now.' },
         ],
         finish: 'Keep the clue as part of your shark story. No photo or extra walking needed.',
       } },
@@ -243,6 +249,8 @@ export function adaptiveEpisodeCountForRide(rideName: string): number {
 const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
   id: 'mk-space-mountain',
   navigationPanel: true,
+  episodeCount: 3,
+  episodeLabel: 'FLIGHT 1 OF 3',
   parkLabel: 'MAGIC KINGDOM',
   title: 'The Lost Star Chart',
   story: 'Your shark navigator lost three signals on the way to the stars. Repair the navigation panel, find a clue in your surroundings, then rebuild the chart together.',
@@ -251,11 +259,11 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
   progressNoun: 'signals found',
   missionNames: ['Repair the navigation panel', 'Find the missing signal', 'Rebuild the star chart'],
   finale: { idSuffix: 'star-chart', title: 'Rebuild the Star Chart',
-    preview: 'Match space symbols to restore your shark’s missing chart. Take turns with your crew or race solo.',
+    preview: 'Match space symbols to restore your shark’s missing chart. Race solo or let your crew call out the pairs.',
     memoryDeckId: 'space' },
   relay: {
     title: 'Star Chart Crew Relay',
-    setupStory: 'Four short turns build one flight plan. Stay in your place in line and pass the phone only when it is safe.',
+    setupStory: 'Four short turns build one flight plan. Play solo or pass one phone around your crew as the line shuffles forward.',
     firstTurnTitle: 'Decode the starport',
     firstClueFound: 'The Navigator found the first signal.',
     missedClue: 'The Navigator missed a signal. The crew can still finish the chart.',
@@ -265,12 +273,12 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
     perfectResult: 'Flight plan complete!', otherResult: 'Your crew made a flight plan!',
     alphaResult: 'Your shark follows the Alpha trail, using the clue your Lookout found to steer toward the next star.',
     omegaResult: 'Your shark follows the Omega trail, taking the long way around to search for a new signal.',
-    completionNote: 'Your route opened a new round next in the chapter. Swipe to play it when the line is stopped. Your flight plan will appear in the queue recap; Ride Parts and Tickets still come from verified time in line.',
+    completionNote: 'Your route opened a new round next in the chapter. Swipe to play it. Your flight plan will appear in the queue recap; Ride Parts and Tickets still come from verified time in line.',
     branchKicker: 'YOUR CREW CHANGED THE FLIGHT PLAN',
     branchDone: 'Your crew finished its chosen route. The flight plan stays in your queue recap.',
     routeNames: ['Alpha', 'Omega'],
     epilogues: {
-      alpha: { title: 'Hold the Alpha Signal', prompt: 'Keep a steady rhythm to guide your shark along the known flight path.' },
+      alpha: { title: 'Hold the Alpha Signal', prompt: 'Tap the signal sharks as they surface along the known flight path. Skip the decoys.' },
       omega: { title: 'Search the Omega Trail', prompt: 'Swim into the unknown and look for the signal your crew missed.' },
     },
   },
@@ -299,7 +307,7 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
       options: [
         { label: 'Describe it', task: 'Give your crew three words for one detail you can notice from your place.' },
         { label: 'Guess it', task: 'Ask a crewmate for three clue words, then guess the detail.' },
-        { label: 'Remember it', task: 'Hold three clue words in mind and recall them after the line moves.' },
+        { label: 'Remember it', task: 'Hold three clue words in mind and recall them a minute from now.' },
       ],
       finish: 'Your three words become this mission’s signal. Stay in your place in line.',
     } },
@@ -313,10 +321,159 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
       finish: 'This field note inspires the chart; the later Crew Relay chooses the flight path.',
     } },
     { id: 'mk-sm-note-4', title: 'A Dark Voyage', body: 'Disney describes this ride as a roller coaster in the dark. Before boarding, predict which sense will be most useful: sight, sound, or the feeling of motion.', source: 'Walt Disney World' },
-    { id: 'mk-sm-note-5', title: 'Star Chart', body: 'Pick three objects you can see from your place in line. Remember their order, look away, and ask a friend to quiz you. Solo? Test yourself after the line moves.' },
+    { id: 'mk-sm-note-5', title: 'Star Chart', body: 'Pick three objects you can see from your place in line. Remember their order, look away, and ask a friend to quiz you. Solo? Test yourself a minute from now.' },
     { id: 'mk-sm-note-6', title: 'Launch Debate', body: 'Would your shark rather navigate by a star, a comet, or a planet? Everyone gets one vote; explain your pick in one sentence.' },
   ],
 };
+
+/**
+ * Returning Magic Kingdom navigators fly on. Each wait at Space Mountain is
+ * one flight: flight 1 is the original chart above, then a strange signal
+ * answers, then a comet crosses the course. Every flight keeps the same three
+ * beats (repair the panel, decode the signal, fly the chart home) with its own
+ * signal notes, finale and crew endings, and returning flights open on the
+ * bigger board. All of it is original shark fiction; the trivia deck and the
+ * sourced notes are shared with flight 1 and unchanged.
+ */
+type SpaceFlight = Pick<LinePlayChapter, 'title' | 'story' | 'completedTitle' | 'completedStory' | 'missionNames'> & {
+  readonly finale: { readonly title: string; readonly preview: string };
+  readonly relay: Pick<LinePlayChapter['relay'], 'firstTurnTitle' | 'routeTitle' | 'routeOptions' | 'routeNames' |
+    'alphaResult' | 'omegaResult' | 'perfectResult' | 'epilogues'>;
+  readonly signalNotes: readonly [LoreCard, LoreCard, LoreCard];
+};
+
+const MK_SPACE_FLIGHTS: readonly SpaceFlight[] = [
+  {
+    title: 'The Strange Signal',
+    story: 'Last flight your chart came home, and something answered it. A strange signal is pulsing from deep space. Repair the relay, decode who is calling, then fly the chart to its source.',
+    completedTitle: 'Signal answered!',
+    completedStory: 'Your shark crew found the source of the strange signal. Keep playing while verified nearby time earns Ride Parts.',
+    missionNames: ['Repair the signal relay', 'Decode the strange signal', 'Fly to the source'],
+    finale: { title: 'Fly to the Source', preview: 'Match space symbols to lock your course onto the strange signal. Race solo or let your crew call out the pairs.' },
+    relay: {
+      firstTurnTitle: 'Decode the first pulse',
+      routeTitle: 'How will your crew answer?',
+      routeOptions: ['Beacon · flash a friendly reply', 'Silent · listen before you answer'],
+      routeNames: ['Beacon', 'Silent'],
+      perfectResult: 'Signal answered!',
+      alphaResult: 'Your shark flashes the beacon, and the signal flashes right back. Someone out there wants to meet your crew.',
+      omegaResult: 'Your shark goes quiet and listens. The signal repeats, and your crew hears a pattern nobody noticed before.',
+      epilogues: {
+        alpha: { title: 'Flash the Beacon', prompt: 'Tap the signal sharks as they surface to answer the call. Skip the decoys.' },
+        omega: { title: 'Listen in the Dark', prompt: 'Swim quietly through the dark and follow the signal to its source.' },
+      },
+    },
+    signalNotes: [
+      { id: 'mk-sm-f2-note-1', title: 'Three Blips and a Pause', body: 'The strange signal repeats: three blips, a pause, one blip. Find something near you that could be its reply.', challenge: {
+        prompt: 'What will your crew send back?',
+        options: [
+          { label: 'A rhythm', task: 'Tap the signal on your leg: three, pause, one. Ask your crew to answer with their own beat.' },
+          { label: 'A color', task: 'Pick a color you can see. Tell your crew what the signal would look like in that color.' },
+          { label: 'A word', task: 'Give the signal a one-word name your crew will remember.' },
+        ],
+        finish: 'Your reply is logged. The finale flies toward it.',
+      } },
+      { id: 'mk-sm-f2-note-2', title: 'Who Is Calling?', body: 'Your navigator thinks the strange signal is a message. Your crew gets one guess about who sent it.', challenge: {
+        prompt: 'Who is calling your shark crew?',
+        options: [
+          { label: 'A lost ship', task: 'In one sentence, tell your crew where the lost ship is trying to go.' },
+          { label: 'A new planet', task: 'Name the planet and one thing a shark could find there.' },
+          { label: 'An old friend', task: 'Tell your crew which shark from an earlier flight is calling back.' },
+        ],
+        finish: 'Keep the answer. Your crew finds out at the source.',
+      } },
+      { id: 'mk-sm-f2-note-3', title: 'Signal Strength', body: 'The signal gets stronger when your crew agrees. Everyone picks a number from one to five without saying it, then reveal together.', challenge: {
+        prompt: 'How will your crew boost the signal?',
+        options: [
+          { label: 'Match numbers', task: 'Reveal together. Every matching number adds a bar of signal.' },
+          { label: 'Count up', task: 'Take turns saying one number each, one to five, without talking over each other.' },
+          { label: 'Solo tune', task: 'Pick a number, look away, and see if you remember it a minute from now.' },
+        ],
+        finish: 'Signal locked. No photo or extra walking needed.',
+      } },
+    ],
+  },
+  {
+    title: 'The Comet Detour',
+    story: 'A comet just crossed your flight path and scrambled the course. Reroute the navigation panel, read the comet’s tail, then rebuild the chart before it passes.',
+    completedTitle: 'Course rerouted!',
+    completedStory: 'Your shark crew slipped past the comet with the chart in one piece. Keep playing while verified nearby time earns Ride Parts.',
+    missionNames: ['Reroute the navigation panel', 'Read the comet’s tail', 'Rebuild the chart'],
+    finale: { title: 'Rebuild the Chart', preview: 'Match space symbols before the comet’s tail passes. Race solo or let your crew call out the pairs.' },
+    relay: {
+      firstTurnTitle: 'Spot the comet',
+      routeTitle: 'Which way around the comet?',
+      routeOptions: ['Tail · ride the sparkle trail', 'Wide · swing out past it'],
+      routeNames: ['Tail', 'Wide'],
+      perfectResult: 'Comet cleared!',
+      alphaResult: 'Your shark rides the sparkle trail, and the comet dust lights up the missing stars on your chart.',
+      omegaResult: 'Your shark swings wide around the comet and spots a brand new star to add to the chart.',
+      epilogues: {
+        alpha: { title: 'Ride the Sparkle Trail', prompt: 'Tap the sharks that surface in the comet dust. Skip the decoys.' },
+        omega: { title: 'Swing Out Wide', prompt: 'Swim the long way around and look for the new star your crew spotted.' },
+      },
+    },
+    signalNotes: [
+      { id: 'mk-sm-f3-note-1', title: 'Comet Colors', body: 'The comet’s tail flashes three colors in a row. Pick three colors you can see from your place and put them in order.', challenge: {
+        prompt: 'How will your crew read the tail?',
+        options: [
+          { label: 'Name them', task: 'Say your three colors in order. Can a crewmate repeat them backward?' },
+          { label: 'Guess them', task: 'Ask a crewmate for their three colors, then guess which one they saw first.' },
+          { label: 'Hold them', task: 'Keep your three colors in mind and check them a minute from now.' },
+        ],
+        finish: 'The tail is read. Your finale follows those colors.',
+      } },
+      { id: 'mk-sm-f3-note-2', title: 'Comet Name', body: 'Every comet your crew spots gets a name. Build one from something you can notice without leaving your place.', challenge: {
+        prompt: 'What will you name the comet?',
+        options: [
+          { label: 'A shape', task: 'Pick a shape nearby and turn it into the comet’s first name.' },
+          { label: 'A sound', task: 'Listen for a sound and turn it into the comet’s last name.' },
+          { label: 'Crew vote', task: 'Everyone offers one name. The funniest one wins.' },
+        ],
+        finish: 'The comet is named and logged on your chart.',
+      } },
+      { id: 'mk-sm-f3-note-3', title: 'Brace for Dust', body: 'Comet dust shakes the ship. Your crew picks how the shark pilot holds the course.', challenge: {
+        prompt: 'How does your pilot hold on?',
+        options: [
+          { label: 'Steady', task: 'Tell your crew one thing that keeps you calm on a bumpy ride.' },
+          { label: 'Fast', task: 'Tell your crew the fastest ride you have ever been on.' },
+          { label: 'Together', task: 'Everyone says one word at the same time. Did anyone match?' },
+        ],
+        finish: 'The course holds. No photo or extra walking needed.',
+      } },
+    ],
+  },
+];
+
+export const MK_SPACE_FLIGHT_COUNT = MK_SPACE_FLIGHTS.length + 1;
+const mkSpaceFlights = new Map<number, LinePlayChapter>();
+
+/** Flight 1 is the original chart; flights 2 and 3 are returning-player episodes. */
+function magicKingdomSpaceFlight(episode: number): LinePlayChapter {
+  const index = ((Math.floor(episode) % MK_SPACE_FLIGHT_COUNT) + MK_SPACE_FLIGHT_COUNT) % MK_SPACE_FLIGHT_COUNT;
+  if (index === 0) return MAGIC_KINGDOM_SPACE_MOUNTAIN;
+  const cached = mkSpaceFlights.get(index);
+  if (cached) return cached;
+  const base = MAGIC_KINGDOM_SPACE_MOUNTAIN;
+  const flight = MK_SPACE_FLIGHTS[index - 1];
+  const chapter: LinePlayChapter = {
+    ...base,
+    id: `${base.id}-episode-${index}`,
+    episodeLabel: `FLIGHT ${index + 1} OF ${MK_SPACE_FLIGHT_COUNT}`,
+    returningFlight: true,
+    title: flight.title,
+    story: flight.story,
+    completedTitle: flight.completedTitle,
+    completedStory: flight.completedStory,
+    missionNames: flight.missionNames,
+    finale: { ...base.finale, title: flight.finale.title, preview: flight.finale.preview },
+    relay: { ...base.relay, ...flight.relay, title: `${flight.title} Crew Relay`,
+      branchKicker: 'YOUR CREW CHANGED THE FLIGHT', otherResult: 'Your crew chose a course!' },
+    fieldNotes: [...flight.signalNotes, ...base.fieldNotes.slice(3)],
+  };
+  mkSpaceFlights.set(index, chapter);
+  return chapter;
+}
 
 /**
  * Disneyland-specific facts are paraphrased from Disney's attraction page and
@@ -334,11 +491,11 @@ const DISNEYLAND_SPACE_MOUNTAIN: LinePlayChapter = {
   progressNoun: 'launch signals',
   missionNames: ['Decode Mission Control', 'Find a signal', 'Restore the launch code'],
   finale: { idSuffix: 'launch-code', title: 'Restore the Launch Code',
-    preview: 'Match space symbols to rebuild the code. Play solo or take turns while the line is safely stopped.',
+    preview: 'Match space symbols to rebuild the code. Play solo or let your crew call out the pairs.',
     memoryDeckId: 'launch-code' },
   relay: {
     title: 'Launch Crew Relay',
-    setupStory: 'Four quick turns choose your shark’s flight path. Play solo or pass one phone while the line is stopped.',
+    setupStory: 'Four quick turns choose your shark’s flight path. Play solo or pass one phone around your crew as the line shuffles forward.',
     firstTurnTitle: 'Decode the first signal',
     firstClueFound: 'The Navigator decoded the first launch signal.',
     missedClue: 'The Navigator missed a signal. The crew can still launch.',
@@ -353,7 +510,7 @@ const DISNEYLAND_SPACE_MOUNTAIN: LinePlayChapter = {
     branchDone: 'Your crew finished its chosen path. It stays in the queue recap.',
     routeNames: ['Solar route', 'Nebula route'],
     epilogues: {
-      alpha: { title: 'Hold the Solar Signal', prompt: 'Keep a steady rhythm to guide your shark along the light.' },
+      alpha: { title: 'Hold the Solar Signal', prompt: 'Tap the sharks that pop up in the light. Skip the decoys.' },
       omega: { title: 'Swim the Nebula Trail', prompt: 'Guide your shark through a quick journey into the swirl.' },
     },
   },
@@ -422,7 +579,7 @@ const DISNEYLAND_JUNGLE_CRUISE: LinePlayChapter = {
   progressNoun: 'river clues',
   missionNames: ['Read a river clue', 'Spot a crew signal', 'Restore the log'],
   finale: { idSuffix: 'skipper-log', title: 'Restore the Skipper’s Log',
-    preview: 'Match river symbols to recover the missing pages. Play solo or pass the phone while the line is stopped.',
+    preview: 'Match river symbols to recover the missing pages. Play solo or let your crew call out the pairs.',
     memoryDeckId: 'jungle' },
   relay: {
     title: 'River Crew Relay',
@@ -441,7 +598,7 @@ const DISNEYLAND_JUNGLE_CRUISE: LinePlayChapter = {
     branchDone: 'Your crew finished its chosen route. The logbook ending stays in your recap.',
     routeNames: ['Falls route', 'Camp route'],
     epilogues: {
-      alpha: { title: 'Follow the Falls', prompt: 'Keep a steady rhythm as your shark follows the river.' },
+      alpha: { title: 'Follow the Falls', prompt: 'Tap the sharks that pop up along the river. Skip the decoys.' },
       omega: { title: 'Search the Shore', prompt: 'Swim through a quick challenge to find the shore clue.' },
     },
   },
@@ -467,7 +624,7 @@ const DISNEYLAND_JUNGLE_CRUISE: LinePlayChapter = {
       prompt: 'How will you make the clue?', options: [
         { label: 'Describe it', task: 'Give three words for a detail visible from your place.' },
         { label: 'Guess it', task: 'Ask someone for three clue words, then make one guess.' },
-        { label: 'Remember it', task: 'Keep three clue words in mind and test yourself after the line moves.' },
+        { label: 'Remember it', task: 'Keep three clue words in mind and test yourself a minute from now.' },
       ], finish: 'Your clue goes into the skipper’s log. No photo or extra walking needed.',
     } },
     { id: 'dl-jc-note-3', title: 'Falls or Camp?', body: 'Your shark can follow the falls or search the camp for the missing pages. Which clue would it trust?', challenge: {
@@ -493,11 +650,11 @@ const DISNEYLAND_PIRATES: LinePlayChapter = {
   progressNoun: 'clues found',
   missionNames: ['Read the old map', 'Notice the bayou', 'Rebuild the compass'],
   finale: { idSuffix: 'compass', title: 'Rebuild the Compass',
-    preview: 'Match nautical symbols to rebuild your shark’s missing compass. Take turns with your crew or race solo.',
+    preview: 'Match nautical symbols to rebuild your shark’s missing compass. Race solo or let your crew call out the pairs.',
     memoryDeckId: 'pirates' },
   relay: {
     title: 'Harbor Crew Relay',
-    setupStory: 'Four short turns lead your shark crew toward a hidden harbor. Stay in your place in line and pass the phone only when it is safe.',
+    setupStory: 'Four short turns lead your shark crew toward a hidden harbor. Play solo or pass one phone around your crew as the line shuffles forward.',
     firstTurnTitle: 'Read the old map',
     firstClueFound: 'The Navigator found the first clue.',
     missedClue: 'The Navigator missed a clue. The crew can still recover the compass.',
@@ -507,12 +664,12 @@ const DISNEYLAND_PIRATES: LinePlayChapter = {
     perfectResult: 'Compass recovered!', otherResult: 'Your crew chose a course!',
     alphaResult: 'Your shark follows the marked channel toward the harbor.',
     omegaResult: 'Your shark searches the open sea for another way to the harbor.',
-    completionNote: 'Your choice opened a new round next in the chapter. Swipe to play it when the line is stopped. Your route will appear in the queue recap; Ride Parts and Tickets still come from verified time in line.',
+    completionNote: 'Your choice opened a new round next in the chapter. Swipe to play it. Your route will appear in the queue recap; Ride Parts and Tickets still come from verified time in line.',
     branchKicker: 'YOUR CREW CHANGED THE COURSE',
     branchDone: 'Your crew finished its chosen route. The course stays in your queue recap.',
     routeNames: ['Harbor', 'Open Sea'],
     epilogues: {
-      alpha: { title: 'Steady Through the Channel', prompt: 'Keep a steady rhythm while your shark guides the crew into the harbor.' },
+      alpha: { title: 'Steady Through the Channel', prompt: 'Tap the harbor sharks as they surface. Skip the decoys.' },
       omega: { title: 'Search the Open Sea', prompt: 'Swim into the unknown and find the passage your crew chose.' },
     },
   },
@@ -536,12 +693,12 @@ const DISNEYLAND_PIRATES: LinePlayChapter = {
       ],
       finish: 'Share the ship name with your crew, or keep it for your solo voyage. No photo or extra walking needed.',
     } },
-    { id: 'dl-potc-note-2', title: 'A Course by Sound', body: 'Without moving from your place, listen for one nearby sound. Describe it with three clues and let a crewmate guess. Solo? Save your clues and test yourself after the line moves.', challenge: {
+    { id: 'dl-potc-note-2', title: 'A Course by Sound', body: 'Without moving from your place, listen for one nearby sound. Describe it with three clues and let a crewmate guess. Solo? Save your clues and test yourself a minute from now.', challenge: {
       prompt: 'How will your crew follow the sound?',
       options: [
         { label: 'Describe it', task: 'Give your crew three words for one sound you can hear from your place.' },
         { label: 'Guess it', task: 'Ask a crewmate to describe one nearby sound in three words and guess it.' },
-        { label: 'Remember it', task: 'Keep three sound clues in mind and test yourself after the line moves.' },
+        { label: 'Remember it', task: 'Keep three sound clues in mind and test yourself a minute from now.' },
       ],
       finish: 'Your sound clue becomes a bearing for the shark crew. Stay in your place in line.',
     } },
@@ -554,7 +711,7 @@ const DISNEYLAND_PIRATES: LinePlayChapter = {
       ],
       finish: 'This field note changes the compass round; the later Crew Relay chooses the course.',
     } },
-    { id: 'dl-potc-note-4', title: 'Three Bearings', body: 'Pick three colors or shapes visible from your spot. Remember their order, look away briefly, then ask your crew to quiz you. Solo? Check the sequence after the line moves.' },
+    { id: 'dl-potc-note-4', title: 'Three Bearings', body: 'Pick three colors or shapes visible from your spot. Remember their order, look away briefly, then ask your crew to quiz you. Solo? Check the sequence a minute from now.' },
     { id: 'dl-potc-note-5', title: 'A Captain’s Choice', body: 'Your compass points toward a quiet harbor or a stormy shortcut. Let each person pick a route and explain the choice in one sentence.' },
     { id: 'dl-potc-note-6', title: 'Pirate Origins', body: 'Walt Disney first imagined Pirates of the Caribbean as a walk-through wax museum. Would your crew rather explore a scene on foot or by boat?', source: 'Disneyland Resort' },
   ],
@@ -575,11 +732,11 @@ const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
   progressNoun: 'guest-book clues',
   missionNames: ['Find an invitation', 'Decode a ghostly clue', 'Restore the guest book'],
   finale: { idSuffix: 'guest-book', title: 'Restore the Guest Book',
-    preview: 'Match eerie symbols to recover your shark crew’s names. Play solo or pass the phone when the line is stopped.',
+    preview: 'Match eerie symbols to recover your shark crew’s names. Play solo or let your crew call out the pairs.',
     memoryDeckId: 'mansion' },
   relay: {
     title: 'Guest Book Crew Relay',
-    setupStory: 'Four short turns decide how your shark crew enters the mansion. Play solo or share one phone while safely stopped.',
+    setupStory: 'Four short turns decide how your shark crew enters the mansion. Play solo or pass one phone around your crew as the line shuffles forward.',
     firstTurnTitle: 'Find an invitation',
     firstClueFound: 'The Navigator found the first invitation clue.',
     missedClue: 'The Navigator missed a clue. Your crew can still join the guest list.',
@@ -594,7 +751,7 @@ const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
     branchDone: 'Your crew’s entrance and guest-book ending stay in the queue recap.',
     routeNames: ['Lantern path', 'Moon path'],
     epilogues: {
-      alpha: { title: 'Follow the Lanterns', prompt: 'Keep a steady rhythm as your shark carries the guest book toward the lanterns.' },
+      alpha: { title: 'Follow the Lanterns', prompt: 'Tap the sharks that appear by the lanterns. Skip the decoys.' },
       omega: { title: 'Swim Through Moonlight', prompt: 'Guide your shark through a moonlit detour to the missing page.' },
     },
   },
@@ -623,7 +780,7 @@ const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
       options: [
         { label: 'Describe it', task: 'Describe a detail from where you stand in exactly three words.' },
         { label: 'Guess it', task: 'Ask someone with you for a three-word clue, then guess the detail.' },
-        { label: 'Remember it', task: 'Keep three clue words in mind and test yourself after the line moves.' },
+        { label: 'Remember it', task: 'Keep three clue words in mind and test yourself a minute from now.' },
       ],
       finish: 'This clue changes your memory finale. Stay with your place in line.',
     } },
@@ -637,7 +794,7 @@ const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
       finish: 'The clue changes the memory round; your later Crew Relay chooses the actual ending.',
     } },
     { id: 'mk-hm-note-4', title: 'Ghost Host or Ghost Crew?', body: 'The Ghost Host narrates the ride. If your shark were the host, what one-sentence welcome would it give?', source: 'Walt Disney World' },
-    { id: 'mk-hm-note-5', title: 'Remember the Order', body: 'Choose three colors or shapes visible from your place. Remember their order and quiz someone with you when the line is stopped. Solo? Test yourself.' },
+    { id: 'mk-hm-note-5', title: 'Remember the Order', body: 'Choose three colors or shapes visible from your place. Remember their order and quiz someone with you a minute later. Solo? Test yourself.' },
     { id: 'mk-hm-note-6', title: 'Friendly Haunts', body: 'Disney says the mansion’s ghostly residents are friendly. Invent one friendly ghost who would sign your shark’s guest book.', source: 'Walt Disney World' },
   ],
 };
@@ -658,11 +815,11 @@ const DISNEYLAND_HAUNTED_MANSION: LinePlayChapter = {
   progressNoun: 'portrait clues',
   missionNames: ['Find the first detail', 'Decode a shadow', 'Reveal the portrait'],
   finale: { idSuffix: 'portrait', title: 'Reveal the Portrait',
-    preview: 'Match mansion symbols to bring your shark’s portrait into focus. Play solo or share one phone when the line is stopped.',
+    preview: 'Match mansion symbols to bring your shark’s portrait into focus. Play solo or let your crew call out the pairs.',
     memoryDeckId: 'mansion' },
   relay: {
     title: 'Portrait Crew Relay',
-    setupStory: 'Four quick turns decide which portrait your crew reveals. Play solo or pass one phone when the line is safely stopped.',
+    setupStory: 'Four quick turns decide which portrait your crew reveals. Play solo or pass one phone around your crew as the line shuffles forward.',
     firstTurnTitle: 'Find the frame’s first detail',
     firstClueFound: 'The Navigator found the first portrait detail.',
     missedClue: 'One detail stayed hidden. Your crew can still finish the portrait.',
@@ -677,7 +834,7 @@ const DISNEYLAND_HAUNTED_MANSION: LinePlayChapter = {
     branchDone: 'Your chosen portrait stays in the queue recap.',
     routeNames: ['Gallery portrait', 'Garden portrait'],
     epilogues: {
-      alpha: { title: 'Steady the Gallery', prompt: 'Keep the colors in rhythm while your shark completes the gallery portrait.' },
+      alpha: { title: 'Steady the Gallery', prompt: 'Tap the sharks that pop out of the gallery frames. Skip the decoys.' },
       omega: { title: 'Light the Garden', prompt: 'Guide your shark through the garden to reveal the lantern portrait.' },
     },
   },
@@ -706,7 +863,7 @@ const DISNEYLAND_HAUNTED_MANSION: LinePlayChapter = {
       options: [
         { label: 'Three words', task: 'Describe your invented ghost in exactly three words.' },
         { label: 'Crew guess', task: 'Give a friend three clues and let them guess your ghost.' },
-        { label: 'Solo recall', task: 'Remember three details, then test yourself after the line moves.' },
+        { label: 'Solo recall', task: 'Remember three details, then test yourself a minute from now.' },
       ],
       finish: 'Your answer colors the memory finale. The later relay chooses the portrait ending.',
     } },
@@ -720,7 +877,7 @@ const DISNEYLAND_HAUNTED_MANSION: LinePlayChapter = {
       finish: 'Your clue affects the memory round; the Crew Relay decides the final portrait.',
     } },
     { id: 'dl-hm-note-4', title: 'Stretch the Story', body: 'Disney’s Portrait Chamber appears to stretch. Imagine what surprising detail would appear if your shark’s portrait grew taller.', source: 'Disneyland Resort' },
-    { id: 'dl-hm-note-5', title: 'Three-Detail Recall', body: 'From your spot, remember three colors or shapes in order. Quiz a friend while stopped, or test yourself solo later.' },
+    { id: 'dl-hm-note-5', title: 'Three-Detail Recall', body: 'From your spot, remember three colors or shapes in order. Quiz a friend a minute later, or test yourself solo later.' },
     { id: 'dl-hm-note-6', title: 'A Friendly Haunt', body: 'Invent one friendly ghost for the empty portrait. Give it a name and one unusual hobby. No camera or extra walking needed.' },
   ],
 };
@@ -740,11 +897,11 @@ const UNIVERSAL_STUDIO_TOUR: LinePlayChapter = {
   progressNoun: 'frames found',
   missionNames: ['Find the first frame', 'Design a sound cue', 'Rebuild the final cut'],
   finale: { idSuffix: 'final-cut', title: 'Rebuild the Final Cut',
-    preview: 'Match movie-making symbols to put your shark’s missing frames in order. Play solo or share one phone while safely stopped.',
+    preview: 'Match movie-making symbols to put your shark’s missing frames in order. Play solo or let your crew call out the pairs.',
     memoryDeckId: 'backlot' },
   relay: {
     title: 'Backlot Crew Relay',
-    setupStory: 'Four short turns turn your clues into a movie scene. Play solo or pass one phone when the line is safely stopped.',
+    setupStory: 'Four short turns turn your clues into a movie scene. Play solo or pass one phone around your crew as the line shuffles forward.',
     firstTurnTitle: 'Find the first frame',
     firstClueFound: 'The Navigator found the opening frame.',
     missedClue: 'The first frame is fuzzy. The crew can still finish the scene.',
@@ -759,7 +916,7 @@ const UNIVERSAL_STUDIO_TOUR: LinePlayChapter = {
     branchDone: 'Your crew’s cut stays in the queue recap.',
     routeNames: ['Spotlight cut', 'Splash cut'],
     epilogues: {
-      alpha: { title: 'Hold the Spotlight', prompt: 'Keep a steady rhythm as your shark times the final backlot shot.' },
+      alpha: { title: 'Hold the Spotlight', prompt: 'Tap the sharks that pop up on set for the final shot. Skip the decoys.' },
       omega: { title: 'Follow the Splash Cue', prompt: 'Swim through a quick scene to find the watery ending your crew chose.' },
     },
   },
@@ -768,9 +925,8 @@ const UNIVERSAL_STUDIO_TOUR: LinePlayChapter = {
     { id: 'ush-tour-2', question: 'Which part of Universal Studios Hollywood has the Studio Tour?', choices: ['Upper Lot', 'Lower Lot', 'CityWalk', 'Super Nintendo World'], correctIndex: 0, difficulty: 'easy', fact: 'Universal lists the Studio Tour in the Upper Lot.', source: 'Universal Studios Hollywood' },
     { id: 'ush-tour-3', question: 'How is the Studio Tour included for a regular park guest?', choices: ['With park admission', 'Only with a separate movie ticket', 'Only after sunset', 'Only with a hotel stay'], correctIndex: 0, difficulty: 'easy', fact: 'Universal says the Studio Tour is included with park admission.', source: 'Universal Studios Hollywood' },
     { id: 'ush-tour-4', question: 'What kind of place does the Studio Tour take guests behind the scenes of?', choices: ['A working movie and TV studio', 'A space center', 'A shipyard', 'An aquarium'], correctIndex: 0, difficulty: 'easy', fact: 'The tour explores Universal’s working studio and backlot.', source: 'Universal Studios Hollywood' },
-    { id: 'ush-tour-5', question: 'Which famous shark encounter does Universal mention on the tour?', choices: ['Jaws', 'The Meg', 'Sharknado', 'Deep Blue Sea'], correctIndex: 0, difficulty: 'medium', fact: 'Universal highlights the Jaws encounter among the tour’s sights.', source: 'Universal Studios Hollywood' },
     { id: 'ush-tour-6', question: 'Which tour experience puts King Kong near a T-Rex?', choices: ['King Kong 360', 'The WaterWorld show', 'Studio Tram Race', 'The Backlot Theater'], correctIndex: 0, difficulty: 'medium', fact: 'Universal describes the King Kong 360 encounter on the Studio Tour.', source: 'Universal Studios Hollywood' },
-    { id: 'ush-tour-7', question: 'Jupiter’s Claim is a set from which film featured on the tour?', choices: ['NOPE', 'Jaws', 'The Wizard of Oz', 'Back to the Future'], correctIndex: 0, difficulty: 'medium', fact: 'Universal says guests can see the Jupiter’s Claim set from Jordan Peele’s NOPE.', source: 'Universal Studios Hollywood' },
+    { id: 'ush-tour-7', question: 'Jupiter’s Claim is a set from which film featured on the tour?', choices: ['NOPE', 'A silent western', 'A pirate musical', 'A space opera'], correctIndex: 0, difficulty: 'medium', fact: 'Universal says guests can see the Jupiter’s Claim set from Jordan Peele’s NOPE.', source: 'Universal Studios Hollywood' },
     { id: 'ush-tour-8', question: 'Which craft does Universal say helps bring tour scenes to life?', choices: ['Set design and special effects', 'Live animal training only', 'Deep-sea diving', 'Astronaut training'], correctIndex: 0, difficulty: 'medium', fact: 'Universal describes working sets, soundstages, props, and special effects as part of the tour.', source: 'Universal Studios Hollywood' },
   ],
   fieldNotes: [
@@ -788,7 +944,7 @@ const UNIVERSAL_STUDIO_TOUR: LinePlayChapter = {
       options: [
         { label: 'Describe it', task: 'Give your crew three words for your imagined shark sound.' },
         { label: 'Guess it', task: 'Ask a crewmate for a three-word sound cue, then guess their scene.' },
-        { label: 'Remember it', task: 'Keep three sound words in order and repeat them after the line moves.' },
+        { label: 'Remember it', task: 'Keep three sound words in order and repeat them a minute from now.' },
       ],
       finish: 'Your sound cue becomes the second frame. Stay in your place in line.',
     } },
@@ -822,7 +978,7 @@ const DISNEYLAND_BIG_THUNDER: LinePlayChapter = {
   progressNoun: 'dispatch clues',
   missionNames: ['Decode the mine note', 'Find a ridge signal', 'Rebuild the dispatch'],
   finale: { idSuffix: 'dispatch', title: 'Rebuild the Dispatch',
-    preview: 'Match symbols from your shark crew’s lost mine note. Play solo or pass the phone when the line is stopped.',
+    preview: 'Match symbols from your shark crew’s lost mine note. Play solo or let your crew call out the pairs.',
     memoryDeckId: 'rainbow-ridge' },
   relay: {
     title: 'Rainbow Ridge Crew Relay',
@@ -841,7 +997,7 @@ const DISNEYLAND_BIG_THUNDER: LinePlayChapter = {
     branchDone: 'Your chosen trail is complete and stays in the queue recap.',
     routeNames: ['Ridge trail', 'Canyon trail'],
     epilogues: {
-      alpha: { title: 'Follow the Lanterns', prompt: 'Keep the beat to guide your shark along the ridge trail.' },
+      alpha: { title: 'Follow the Lanterns', prompt: 'Tap the sharks that pop up along the ridge trail. Skip the decoys.' },
       omega: { title: 'Search the Old Mine', prompt: 'Swim through a quick challenge to recover the last mine mark.' },
     },
   },
@@ -869,7 +1025,7 @@ const DISNEYLAND_BIG_THUNDER: LinePlayChapter = {
       options: [
         { label: 'Describe it', task: 'Give three words for one detail you can see from your spot.' },
         { label: 'Guess it', task: 'Ask a crewmate for three clue words, then guess their detail.' },
-        { label: 'Remember it', task: 'Keep three clue words in order and repeat them after the line moves.' },
+        { label: 'Remember it', task: 'Keep three clue words in order and repeat them a minute from now.' },
       ], finish: 'The lookout signal joins your shark story. No photo or extra walking needed.',
     } },
     { id: 'dl-bt-note-3', title: 'Two Trails', body: 'The crew can follow ridge lanterns or search the old canyon mine. Make a case for one trail before the relay chooses.', challenge: {
@@ -909,7 +1065,7 @@ export function getLinePlayChapter(parkId?: number, rideSlug?: string, rideName?
   }
   if (parkId === 2 &&
       (rideSlug === 'space-mountain-2' || rideName?.trim().toLowerCase() === 'space mountain')) {
-    return MAGIC_KINGDOM_SPACE_MOUNTAIN;
+    return episodeSeed == null ? MAGIC_KINGDOM_SPACE_MOUNTAIN : magicKingdomSpaceFlight(episodeSeed);
   }
   if (parkId === 8 &&
       (rideSlug === 'pirates-of-the-caribbean-8' || rideName?.trim().toLowerCase() === 'pirates of the caribbean')) {
@@ -932,6 +1088,8 @@ export function getLinePlayChapterById(id?: string): LinePlayChapter | null {
   if (id === DISNEYLAND_BIG_THUNDER.id) return DISNEYLAND_BIG_THUNDER;
   if (id === UNIVERSAL_STUDIO_TOUR.id) return UNIVERSAL_STUDIO_TOUR;
   if (id === MAGIC_KINGDOM_SPACE_MOUNTAIN.id) return MAGIC_KINGDOM_SPACE_MOUNTAIN;
+  const flight = id?.match(/^mk-space-mountain-episode-(\d+)$/);
+  if (flight && Number(flight[1]) > 0 && Number(flight[1]) < MK_SPACE_FLIGHT_COUNT) return magicKingdomSpaceFlight(Number(flight[1]));
   if (id === DISNEYLAND_PIRATES.id) return DISNEYLAND_PIRATES;
   if (id === MAGIC_KINGDOM_HAUNTED_MANSION.id) return MAGIC_KINGDOM_HAUNTED_MANSION;
   if (id === DISNEYLAND_HAUNTED_MANSION.id) return DISNEYLAND_HAUNTED_MANSION;
