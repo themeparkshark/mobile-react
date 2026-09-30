@@ -348,7 +348,8 @@ export class AudioApiBackend implements AudioBackend {
       const buffer = await this.ctx.decodeAudioDataSource(path);
       this.buffers.set(key, buffer);
       return true;
-    } catch {
+    } catch (e) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameAudio] decode failed', path, String(e));
       return false;
     }
   }
@@ -478,3 +479,109 @@ export class AudioApiBackend implements AudioBackend {
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
+
+// =============================================================================
+// Hybrid: audio-api where it can decode, expo-av for everything else
+// =============================================================================
+
+const AV_ONLY_TYPES = new Set(['m4a', 'aac', 'caf', 'mp4']);
+
+function assetType(src: number): string {
+  try {
+    return (Asset.fromModule(src).type || '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * react-native-audio-api 0.6 decodes WAV and MP3 but not AAC. The hybrid
+ * routes each file to the low-latency graph when it can, and to expo-av
+ * otherwise (compressed music beds and stingers), per key and per deck.
+ */
+export class HybridBackend implements AudioBackend {
+  readonly name = 'audio-api' as const;
+  readonly supportsPan = true;
+  readonly latencyMs = 20;
+  private routes = new Map<string, AudioBackend>();
+  private deckRoutes = new Map<string, AudioBackend>();
+  private lastDeck: AudioBackend | null = null;
+  private static readonly AV_OFFSET = 1_000_000_000;
+
+  constructor(private api: AudioApiBackend, private av: ExpoAvBackend) {}
+
+  get supportsFilter(): boolean {
+    return this.lastDeck === this.api;
+  }
+
+  async init(): Promise<void> {
+    await Promise.all([this.api.init(), this.av.init()]);
+  }
+
+  isLoaded(key: string): boolean {
+    return this.routes.get(key)?.isLoaded(key) ?? false;
+  }
+
+  async load(key: string, src: number, voices: number): Promise<boolean> {
+    if (!AV_ONLY_TYPES.has(assetType(src)) && (await this.api.load(key, src))) {
+      this.routes.set(key, this.api);
+      return true;
+    }
+    const ok = await this.av.load(key, src, voices);
+    if (ok) this.routes.set(key, this.av);
+    return ok;
+  }
+
+  play(key: string, args: PlayArgs): number {
+    const b = this.routes.get(key);
+    if (!b) return 0;
+    const t = b.play(key, args);
+    return t && b === this.av ? t + HybridBackend.AV_OFFSET : t;
+  }
+
+  stop(token: number): void {
+    if (token >= HybridBackend.AV_OFFSET) this.av.stop(token - HybridBackend.AV_OFFSET);
+    else this.api.stop(token);
+  }
+
+  stopAll(): void {
+    this.api.stopAll();
+    this.av.stopAll();
+  }
+
+  musicStart(deck: string, key: string, args: MusicArgs): void {
+    const b = this.routes.get(key) ?? this.av;
+    const prev = this.deckRoutes.get(deck);
+    if (prev && prev !== b) prev.musicStop(deck, 0);
+    this.deckRoutes.set(deck, b);
+    this.lastDeck = b;
+    b.musicStart(deck, key, args);
+  }
+
+  musicGain(deck: string, gain: number, rampMs: number): void {
+    this.deckRoutes.get(deck)?.musicGain(deck, gain, rampMs);
+  }
+
+  musicStop(deck: string, fadeMs: number): void {
+    this.deckRoutes.get(deck)?.musicStop(deck, fadeMs);
+  }
+
+  musicPosition(deck: string): Promise<number> {
+    return this.deckRoutes.get(deck)?.musicPosition(deck) ?? Promise.resolve(0);
+  }
+
+  musicFilter(cutoffHz: number | null, rampMs: number): void {
+    this.api.musicFilter(cutoffHz, rampMs);
+  }
+
+  setMasterGain(gain: number): void {
+    this.api.setMasterGain(gain);
+    this.av.setMasterGain(gain);
+  }
+
+  async unloadAll(): Promise<void> {
+    await Promise.all([this.api.unloadAll(), this.av.unloadAll()]);
+    this.routes.clear();
+    this.deckRoutes.clear();
+  }
+}

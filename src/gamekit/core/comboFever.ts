@@ -1,7 +1,7 @@
 /**
  * comboFever.ts: configurable combo + fever framework (pure, worklet-safe).
  *
- * One mutable state struct and three calls: comboHit, comboMiss, comboTick.
+ * One mutable state struct and three calls: comboFeverHit, comboFeverMiss, comboFeverTick.
  * Each returns an event bitmask (no allocation) that the game turns into
  * feel: tier-up slams, fever entry, combo-break shakes, milestone ribbons.
  *
@@ -169,10 +169,10 @@ function breakStreak(s: ComboFeverState): number {
 }
 
 /** Register a hit. `weight` scales meter charge (QUICK hits charge more). */
-export function comboHit(s: ComboFeverState, now: number, weight = 1): number {
+export function comboFeverHit(s: ComboFeverState, now: number, weight = 1): number {
   'worklet';
   let ev = EV_HIT;
-  ev |= comboTick(s, now);
+  ev |= comboFeverTick(s, now);
   s.hits += 1;
   s.streak += 1;
   s.lastHitAt = now;
@@ -198,9 +198,9 @@ export function comboHit(s: ComboFeverState, now: number, weight = 1): number {
 }
 
 /** Register a miss. Grace misses soften it; otherwise the streak breaks. */
-export function comboMiss(s: ComboFeverState, now: number): number {
+export function comboFeverMiss(s: ComboFeverState, now: number): number {
   'worklet';
-  let ev = comboTick(s, now);
+  let ev = comboFeverTick(s, now);
   s.misses += 1;
   if (s.graceLeft > 0 && s.streak > 0) {
     s.graceLeft -= 1;
@@ -217,7 +217,7 @@ export function comboMiss(s: ComboFeverState, now: number): number {
 }
 
 /** Advance time: window timeouts, fever end/warn and meter drain. */
-export function comboTick(s: ComboFeverState, now: number, dtMs = 0): number {
+export function comboFeverTick(s: ComboFeverState, now: number, dtMs = 0): number {
   'worklet';
   let ev = 0;
   if (s.streak > 0 && s.cfg.windowMs !== Infinity && now - s.lastHitAt > s.cfg.windowMs) {

@@ -29,6 +29,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
@@ -39,7 +40,7 @@ const argVal = (flag, def) => {
 };
 const SRC = path.resolve(root, argVal('--src', process.env.STUDIO_AUDIO_DIR || '../audio'));
 const DRY = args.includes('--dry');
-const OUT_DIR = path.join(root, 'src/assets/games/audio');
+const OUT_DIR = path.resolve(root, argVal('--out', 'src/assets/games/audio'));
 const OUT_TS = path.join(OUT_DIR, 'studio.generated.ts');
 const AUDIO_EXT = ['.wav', '.m4a', '.mp3', '.caf'];
 // Games whose designs ask for 16-bit WAV one-shots (same-frame haptics, no
@@ -128,7 +129,7 @@ function inferGame(game, dir) {
   for (const sub of ['music', 'beds']) {
     for (const f of listAudio(path.join(dir, sub))) {
       const rep = musicReport[`${game}/${sub}/${f.file}`] || {};
-      const isLoop = typeof rep.bpm === 'number' || /loop|^mus_|_bed/.test(f.stem);
+      const isLoop = typeof rep.bpm === 'number' || /loop|^mus_|_bed|^stage_/.test(f.stem);
       if (isLoop) {
         beds[f.stem] = {
           file: f,
@@ -143,7 +144,7 @@ function inferGame(game, dir) {
       } else {
         // Stingers and tails cut from Chris's phrases are one-shot cues.
         cues[f.stem] = {
-          files: [{ ...f, file: `${sub}/${f.file}` }],
+          files: [{ ...f, file: `${sub}/${f.file}`, keep: true }],
           ladder: [],
           meta: { bus: 'stinger', priority: 3, maxVoices: 1, durationMs: typeof rep.dur_s === 'number' ? Math.round(rep.dur_s * 1000) : undefined },
         };
@@ -198,11 +199,29 @@ function reqPath(game, file) {
   return `./${game}/${file}`;
 }
 
+// One-shots ship as 16-bit PCM WAV (channels kept, so hard-panned lane files
+// stay stereo): react-native-audio-api 0.6 decodes WAV/MP3 but not AAC, and
+// WAV has no AAC priming delay. Music beds stay .m4a (streamed by expo-av).
+const SFX_FORMAT = process.env.STUDIO_SFX_FORMAT || 'wav';
+
+function asOneShot(f) {
+  // Stingers cut from Chris's music stay compressed (seconds long, expo-av).
+  if (SFX_FORMAT !== 'wav' || f.keep || /\.wav$/i.test(f.file)) return f;
+  return { ...f, file: f.file.replace(/\.(m4a|mp3|caf|aac)$/i, '.wav'), convert: true };
+}
+
 function copy(game, f) {
   const dest = path.join(OUT_DIR, game, f.file);
   if (DRY) return;
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  if (!fs.existsSync(dest) || fs.statSync(dest).mtimeMs < fs.statSync(f.full).mtimeMs) fs.copyFileSync(f.full, dest);
+  const stale = !fs.existsSync(dest) || fs.statSync(dest).mtimeMs < fs.statSync(f.full).mtimeMs;
+  if (!stale) return;
+  if (f.convert) {
+    const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', f.full, '-c:a', 'pcm_s16le', '-ar', '44100', dest]);
+    if (r.status !== 0) throw new Error(`ffmpeg failed for ${f.full}: ${r.stderr}`);
+  } else {
+    fs.copyFileSync(f.full, dest);
+  }
 }
 
 function num(v) {
@@ -230,6 +249,8 @@ for (const game of games.sort()) {
     const c = cues[id];
     const meta = c.meta || {};
     if (c.files.length === 0 && c.ladder.length === 0) continue;
+    c.files = c.files.map(asOneShot);
+    c.ladder = c.ladder.map(asOneShot);
     [...c.files, ...c.ladder].forEach((f) => { copy(game, f); fileCount++; });
     const parts = [];
     if (c.files[0]) parts.push(`src: require('${reqPath(game, c.files[0].file)}')`);

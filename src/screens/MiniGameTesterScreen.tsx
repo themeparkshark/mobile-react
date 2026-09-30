@@ -19,6 +19,7 @@ import PostWinRewardsModal from '../components/PostWinRewardsModal';
 import { CoinUpgradeDemoScreen } from '../components/CoinUpgradeDemo';
 import AnimatedShark from '../components/AnimatedShark';
 import Wrapper from '../components/Wrapper';
+import EngineDemo from '../gamekit/demo/EngineDemo';
 
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
 
@@ -47,6 +48,10 @@ export default function MiniGameTesterScreen() {
   const [activeGame, setActiveGame] = useState<GameType | null>(null);
   const [showPostWin, setShowPostWin] = useState(false);
   const [lastResult, setLastResult] = useState<string>('');
+  // Studio engine demo. EXPO_PUBLIC_ENGINE_DEMO=1 opens it on launch with the
+  // scripted autoplay tour (used to capture the engine demo video).
+  const engineDemoAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === '1';
+  const [engineDemo, setEngineDemo] = useState(engineDemoAuto);
 
   const handlePlay = (type: GameType) => {
     setActiveGame(type);
@@ -138,6 +143,13 @@ export default function MiniGameTesterScreen() {
               footer="Exercises every gamekit primitive at 60fps."
             >
               <Cell
+                title="Studio Engine Demo: Bonk Lab"
+                cellStyle="Subtitle"
+                detail="FX stage, shaders, camera, audio, haptics, walk-safe shell, results, perf"
+                accessory="DisclosureIndicator"
+                onPress={() => setEngineDemo(true)}
+              />
+              <Cell
                 title="[GYM]  GameKit Gym"
                 cellStyle="Subtitle"
                 detail="Particles, shake, combo, FPS counter — engine stress test"
@@ -202,6 +214,11 @@ export default function MiniGameTesterScreen() {
         onClose={handleClose}
         onComplete={handleComplete}
       />
+
+      {/* Studio engine demo (dev) */}
+      {engineDemo ? (
+        <EngineDemo visible={engineDemo} autoplay={engineDemoAuto} onClose={() => setEngineDemo(false)} />
+      ) : null}
 
       {/* Post-Win Modal */}
       <PostWinRewardsModal

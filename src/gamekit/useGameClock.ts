@@ -45,9 +45,9 @@ export interface GameClockOptions {
   stepMs?: number;
   config?: Partial<ClockConfig>;
   /** Fixed-step worklet (deterministic gameplay). */
-  onStep?: (dtSec: number, stepIndex: number) => void;
+  onStep?: (dtSec: number, stepIndex: number, clock: GameClock) => void;
   /** Once per displayed frame after stepping (render interpolation, FX). */
-  onFrame?: (alpha: number, fxDtMs: number) => void;
+  onFrame?: (alpha: number, fxDtMs: number, clock: GameClock) => void;
   /** Start running (default true). */
   autostart?: boolean;
   /** Max steps per frame before dropping backlog. */
@@ -91,9 +91,9 @@ export function useGameClock({
     advanceClock(c, raw);
     const n = drainSteps(c, stepMs, maxStepsPerFrame);
     if (onStep) {
-      for (let i = 0; i < n; i++) onStep(stepMs / 1000, c.steps - n + i);
+      for (let i = 0; i < n; i++) onStep(stepMs / 1000, c.steps - n + i, c);
     }
-    if (onFrame) onFrame(stepAlpha(c, stepMs), c.lastFxDt);
+    if (onFrame) onFrame(stepAlpha(c, stepMs), c.lastFxDt, c);
     const scale = c.paused ? 0 : c.fxScale;
     if (fxScale.value !== scale) fxScale.value = scale;
     simMs.value = c.simMs;

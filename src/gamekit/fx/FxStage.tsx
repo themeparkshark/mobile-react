@@ -103,11 +103,15 @@ export interface FxState {
   txtScale: number[];
   txtRise: number[];
   txtColor: string[];
+  /** Optional key: a new fly-up with the same key replaces the live one. */
+  txtKey: string[];
   txtNext: number;
   /** Reduced motion: fewer particles, softer flashes. */
   reduced: boolean;
   /** Global cap for flash alpha (reading surfaces stay legible). */
   flashCap: number;
+  /** Stage width: fly-ups are clamped to stay fully on screen. */
+  viewW: number;
 }
 
 export function createFxState(cap: number, layerBudget?: number[]): FxState {
@@ -126,10 +130,11 @@ export function createFxState(cap: number, layerBudget?: number[]): FxState {
     bloomT: -1e9, bloomDur: 0, bloomPeak: 0, bloomX: 0, bloomY: 0, bloomR: 100, bloomColor: '#ffffff',
     vigT: -1e9, vigIn: 0, vigHold: 0, vigOut: 0, vigPeak: 0, vigColor: [1, 0.81, 0.23, 1],
     txtAlive: a0.slice(), txtStr: s0.slice(), txtX: a0.slice(), txtY: a0.slice(), txtW: a0.slice(),
-    txtT: a0.slice(), txtDur: a0.slice(), txtScale: a0.slice(), txtRise: a0.slice(), txtColor: s0.slice(),
+    txtT: a0.slice(), txtDur: a0.slice(), txtScale: a0.slice(), txtRise: a0.slice(), txtColor: s0.slice(), txtKey: s0.slice(),
     txtNext: 0,
     reduced: false,
     flashCap: 0.6,
+    viewW: 0,
   };
 }
 
@@ -149,16 +154,25 @@ export function fxEmitUI(s: FxState, def: EmitterDef, x: number, y: number, p: E
 
 export function fxFlyUpUI(
   s: FxState, text: string, x: number, y: number, scale: number, color: string,
-  width = -1, rise = 48, durMs = 520,
+  width = -1, rise = 48, durMs = 520, key = '',
 ): void {
   'worklet';
-  const i = s.txtNext;
-  s.txtNext = (i + 1) % TEXT_SLOTS;
+  let i = -1;
+  if (key !== '') {
+    for (let k = 0; k < TEXT_SLOTS; k++) if (s.txtAlive[k] === 1 && s.txtKey[k] === key) i = k;
+  }
+  if (i < 0) {
+    i = s.txtNext;
+    s.txtNext = (i + 1) % TEXT_SLOTS;
+  }
+  s.txtKey[i] = key;
   s.txtAlive[i] = 1;
   s.txtStr[i] = text;
-  s.txtX[i] = x;
-  s.txtY[i] = y;
   s.txtW[i] = width > 0 ? width : text.length * FLY_FONT_PX * 0.52;
+  // Keep the whole label on screen (edge holes, wide tallies).
+  const half = (s.txtW[i] * scale * 1.15) / 2 + 8;
+  s.txtX[i] = s.viewW > 0 ? Math.max(half, Math.min(s.viewW - half, x)) : x;
+  s.txtY[i] = y;
   s.txtT[i] = s.t;
   s.txtDur[i] = durMs;
   s.txtScale[i] = scale;
@@ -215,6 +229,8 @@ export interface FlyUpOptions {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   rise?: number;
   ms?: number;
+  /** Replace the live fly-up with the same key (running tallies, one per hole). */
+  key?: string;
 }
 
 export interface FxStageHandle {
@@ -252,7 +268,7 @@ export interface FxStageProps {
 
 const SIZE_SCALE = { sm: 20 / FLY_FONT_PX, md: 26 / FLY_FONT_PX, lg: 30 / FLY_FONT_PX, xl: 40 / FLY_FONT_PX };
 
-export const FxStage = forwardRef<FxStageHandle, FxStageProps>(function FxStage(
+export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(function FxStage(
   { width, height, capacity = 200, layerBudget, timeScale, paused, atlasImage, reducedMotion = false, flashCap = 0.6, onArrive, style },
   ref,
 ) {
@@ -263,12 +279,13 @@ export const FxStage = forwardRef<FxStageHandle, FxStageProps>(function FxStage(
   const vignette = useMemo(() => Shaders.vignette(), []);
 
   useEffect(() => {
-    runOnUI((reduced: boolean, cap: number) => {
+    runOnUI((reduced: boolean, cap: number, w: number) => {
       'worklet';
       state.value.reduced = reduced;
       state.value.flashCap = cap;
-    })(reducedMotion, flashCap);
-  }, [reducedMotion, flashCap, state]);
+      state.value.viewW = w;
+    })(reducedMotion, flashCap, width);
+  }, [reducedMotion, flashCap, width, state]);
 
   const notifyArrive = useMemo(() => (n: number) => onArrive?.(n), [onArrive]);
 
@@ -418,10 +435,10 @@ export const FxStage = forwardRef<FxStageHandle, FxStageProps>(function FxStage(
       flyUp: (text, x, y, opts = {}) => {
         const scale = SIZE_SCALE[opts.size ?? 'md'];
         const w = measure(font, text);
-        runOnUI((t: string, fx: number, fy: number, sc: number, color: string, width: number, rise: number, ms: number) => {
+        runOnUI((t: string, fx: number, fy: number, sc: number, color: string, width: number, rise: number, ms: number, key: string) => {
           'worklet';
-          fxFlyUpUI(state.value, t, fx, fy, sc, color, width, rise, ms);
-        })(text, x, y, scale, opts.color ?? '#ffffff', w, opts.rise ?? 48, opts.ms ?? 520);
+          fxFlyUpUI(state.value, t, fx, fy, sc, color, width, rise, ms, key);
+        })(text, x, y, scale, opts.color ?? '#ffffff', w, opts.rise ?? 48, opts.ms ?? 520, opts.key ?? '');
       },
       clear: () => runOnUI(() => {
         'worklet';
@@ -450,7 +467,8 @@ export const FxStage = forwardRef<FxStageHandle, FxStageProps>(function FxStage(
       <Rect x={0} y={0} width={width} height={height} color={flashColor} opacity={flashOpacity} />
     </Canvas>
   );
-});
+}));
+
 
 const RING_DEF: EmitterDef = {
   sprite: 2, count: [1, 1], speed: [0, 0], angle: 0, spread: 0, life: [0.26, 0.26],

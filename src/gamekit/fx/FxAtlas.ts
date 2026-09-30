@@ -250,8 +250,8 @@ const SOURCES = {
   sparkArt: require('../../assets/games/gamekit/particle-spark.png'),
   bubble: require('../../assets/games/gamekit/particle-bubble.png'),
   coin: require('../../../assets/images/coingold.png'),
-  splash: require('../../../assets/images/map/fx/splash@3x.png'),
-  sparkle: require('../../../assets/images/map/fx/sparkle@3x.png'),
+  splash: require('../../../assets/images/map/fx/splash.png'),
+  sparkle: require('../../../assets/images/map/fx/sparkle.png'),
 };
 
 export type FxAtlasImages = Partial<Record<keyof typeof SOURCES, SkImage | null>>;

@@ -83,10 +83,15 @@ export function ShockwaveGroup({ wave, children, enabled = true }: { wave: Shock
       light: 0.22 * (1 - p) * live,
     };
   });
-  if (!effect || !enabled) return <>{children}</>;
+  // Stable layer/transform objects: React re-renders must never rebuild Skia
+  // nodes while the UI thread is drawing them.
+  const layer = useMemo(() => (effect ? <Paint><RuntimeShader source={effect} uniforms={uniforms} /></Paint> : null), [effect, uniforms]);
+  const outer = useMemo(() => [{ scale: 1 / pd }], [pd]);
+  const inner = useMemo(() => [{ scale: pd }], [pd]);
+  if (!effect || !enabled || !layer) return <>{children}</>;
   return (
-    <Group transform={[{ scale: 1 / pd }]} layer={<Paint><RuntimeShader source={effect} uniforms={uniforms} /></Paint>}>
-      <Group transform={[{ scale: pd }]}>{children}</Group>
+    <Group transform={outer} layer={layer}>
+      <Group transform={inner}>{children}</Group>
     </Group>
   );
 }
@@ -95,7 +100,7 @@ export function ShockwaveGroup({ wave, children, enabled = true }: { wave: Shock
 // Dissolve (noise dissolve with a bright edge: ghost reveals, defeats, KO)
 // =============================================================================
 
-export function DissolveImage({ image, x, y, width, height, progress, edgeColor = '#ffcf3b', edge = 0.08, grain = 18 }: {
+export const DissolveImage = React.memo(function DissolveImage({ image, x, y, width, height, progress, edgeColor = '#ffcf3b', edge = 0.08, grain = 18 }: {
   image: SkImage | null;
   x: number;
   y: number;
@@ -110,21 +115,22 @@ export function DissolveImage({ image, x, y, width, height, progress, edgeColor 
   const effect = useMemo(() => Shaders.dissolve(), []);
   const color = useMemo(() => rgba(edgeColor), [edgeColor]);
   const uniforms = useDerivedValue(() => ({ progress: progress.value, edge, edgeColor: color, scale: grain, seed: 3.1 }));
+  const box = useMemo(() => ({ x, y, width, height }), [x, y, width, height]);
   if (!image || !effect) return null;
   return (
     <Rect x={x} y={y} width={width} height={height}>
       <Shader source={effect} uniforms={uniforms}>
-        <ImageShader image={image} fit="contain" rect={{ x, y, width, height }} />
+        <ImageShader image={image} fit="contain" rect={box} />
       </Shader>
     </Rect>
   );
-}
+});
 
 // =============================================================================
 // Sunburst rays (bright, never dark)
 // =============================================================================
 
-export function Sunburst({ cx, cy, radius, intensity, rays = 12, colorA = '#ffcf3b', colorB = '#fff8e4', speed = 0.1, width, height }: {
+export const Sunburst = React.memo(function Sunburst({ cx, cy, radius, intensity, rays = 12, colorA = '#ffcf3b', colorB = '#fff8e4', speed = 0.1, width, height }: {
   cx: number;
   cy: number;
   radius: number;
@@ -155,13 +161,13 @@ export function Sunburst({ cx, cy, radius, intensity, rays = 12, colorA = '#ffcf
       <Shader source={effect} uniforms={uniforms} />
     </Rect>
   );
-}
+});
 
 // =============================================================================
 // Shimmer sweep (meters, foil, fever bar)
 // =============================================================================
 
-export function Shimmer({ x, y, width, height, progress, color = '#ffffff', alpha = 0.55, band = 0.18 }: {
+export const Shimmer = React.memo(function Shimmer({ x, y, width, height, progress, color = '#ffffff', alpha = 0.55, band = 0.18 }: {
   x: number;
   y: number;
   width: number;
@@ -174,15 +180,16 @@ export function Shimmer({ x, y, width, height, progress, color = '#ffffff', alph
   const effect = useMemo(() => Shaders.shimmer(), []);
   const c = useMemo(() => rgba(color, alpha), [color, alpha]);
   const uniforms = useDerivedValue(() => ({ size: [width, height], progress: progress.value, width: band, color: c }));
+  const move = useMemo(() => [{ translateX: x }, { translateY: y }], [x, y]);
   if (!effect) return null;
   return (
-    <Group transform={[{ translateX: x }, { translateY: y }]}>
+    <Group transform={move}>
       <Rect x={0} y={0} width={width} height={height}>
         <Shader source={effect} uniforms={uniforms} />
       </Rect>
     </Group>
   );
-}
+});
 
 /** Looping 0..1 progress for Shimmer (period ms), paused when `active` is false. */
 export function useLoopProgress(periodMs: number, active: SharedValue<boolean> | boolean = true): SharedValue<number> {
@@ -204,19 +211,22 @@ export function useLoopProgress(periodMs: number, active: SharedValue<boolean> |
 /** Hit flash: brightness 1 = normal, 1.6 = white-hot frame. */
 export function FlashGroup({ brightness, children }: { brightness: SharedValue<number>; children: React.ReactNode }) {
   const matrix = useDerivedValue(() => brightnessMatrix(brightness.value));
-  return <Group layer={<Paint><ColorMatrix matrix={matrix} /></Paint>}>{children}</Group>;
+  const layer = useMemo(() => <Paint><ColorMatrix matrix={matrix} /></Paint>, [matrix]);
+  return <Group layer={layer}>{children}</Group>;
 }
 
 /** Fever warmth (0..1): +R, +G and a brightness lift. */
 export function WarmGroup({ amount, children }: { amount: SharedValue<number>; children: React.ReactNode }) {
   const matrix = useDerivedValue(() => warmMatrix(amount.value));
-  return <Group layer={<Paint><ColorMatrix matrix={matrix} /></Paint>}>{children}</Group>;
+  const layer = useMemo(() => <Paint><ColorMatrix matrix={matrix} /></Paint>, [matrix]);
+  return <Group layer={layer}>{children}</Group>;
 }
 
 /** Desaturate (0..1): wipeout / failed run, never darkened. */
 export function DesaturateGroup({ amount, children }: { amount: SharedValue<number>; children: React.ReactNode }) {
   const matrix = useDerivedValue(() => desaturateMatrix(amount.value));
-  return <Group layer={<Paint><ColorMatrix matrix={matrix} /></Paint>}>{children}</Group>;
+  const layer = useMemo(() => <Paint><ColorMatrix matrix={matrix} /></Paint>, [matrix]);
+  return <Group layer={layer}>{children}</Group>;
 }
 
 /** Imperative hit-flash value: flash(1.6, 33) then back to 1. */

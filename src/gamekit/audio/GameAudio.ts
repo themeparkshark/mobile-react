@@ -31,7 +31,7 @@ import {
   type Bus,
   type VoiceInfo,
 } from '../core/audioMix';
-import { AudioApiBackend, ExpoAvBackend, audioApiAvailable, type AudioBackend } from './backends';
+import { AudioApiBackend, ExpoAvBackend, HybridBackend, audioApiAvailable, type AudioBackend } from './backends';
 import { CHRIS_BEDS, CHRIS_CUES, type BedDef, type CueDef } from './chrisBank';
 
 export interface PlayOptions {
@@ -99,7 +99,8 @@ class GameAudioEngine {
       let backend: AudioBackend | null = null;
       if (choice !== 'expo-av' && audioApiAvailable()) {
         try {
-          backend = new AudioApiBackend();
+          // audio-api for WAV/MP3 one-shots, expo-av for AAC beds/stingers.
+          backend = new HybridBackend(new AudioApiBackend(), new ExpoAvBackend());
           await backend.init();
         } catch {
           backend = null;
@@ -170,6 +171,7 @@ class GameAudioEngine {
       await this.init();
       const ok = await this.backend!.load(key, src, voices);
       if (ok) this.loaded.add(key);
+      else if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn(`[GameAudio] ${this.backend!.name} could not load ${key}`);
       this.loading.delete(key);
       return ok;
     })();

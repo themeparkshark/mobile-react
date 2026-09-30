@@ -12,6 +12,7 @@
  */
 
 import { useMemo } from 'react';
+import type { ViewStyle } from 'react-native';
 import {
   Easing,
   useAnimatedStyle,
@@ -102,7 +103,7 @@ export function after(ms: number, anim: number) {
 export interface SquashStretch {
   sx: SharedValue<number>;
   sy: SharedValue<number>;
-  style: ReturnType<typeof useAnimatedStyle>;
+  style: ViewStyle;
   /** Squash on impact (depth 0.1-0.2), springs back with a wobble. */
   impact: (depth?: number) => void;
   /** Stretch up (anticipation of a jump / emerge). */
@@ -115,7 +116,7 @@ export interface SquashStretch {
 export function useSquashStretch(anchorBottom = true, height = 0): SquashStretch {
   const sx = useSharedValue(1);
   const sy = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({
+  const style = useAnimatedStyle((): ViewStyle => ({
     transform: anchorBottom && height > 0
       ? [{ translateY: (height * (1 - sy.value)) / 2 }, { scaleX: sx.value }, { scaleY: sy.value }]
       : [{ scaleX: sx.value }, { scaleY: sy.value }],

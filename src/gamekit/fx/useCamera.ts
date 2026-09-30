@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo } from 'react';
 import type { Transforms3d } from '@shopify/react-native-skia';
+import type { ViewStyle } from 'react-native';
 import {
   runOnUI,
   useAnimatedStyle,
@@ -54,7 +55,7 @@ export interface CameraRig {
   transform: SharedValue<Transforms3d>;
   origin: { x: number; y: number };
   /** RN style for Animated.View. */
-  style: ReturnType<typeof useAnimatedStyle>;
+  style: ViewStyle;
   shake: (trauma: number, dirX?: number, dirY?: number, capMs?: number) => void;
   punch: (amount: number, inMs?: number) => void;
   kick: (dx: number, dy: number) => void;
@@ -96,7 +97,7 @@ export function useCamera({ width, height, config, timeScale, reducedMotion = fa
     { rotate: rot.value },
     { scale: zoom.value },
   ]);
-  const style = useAnimatedStyle(() => ({
+  const style = useAnimatedStyle((): ViewStyle => ({
     transform: [
       { translateX: x.value },
       { translateY: y.value },
