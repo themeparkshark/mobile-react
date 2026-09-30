@@ -158,7 +158,7 @@ function dialogFor(modal: ModalState, actions: {
       const earn = earnAction(modal.item.currency.name);
       return {
         title: `${modal.shortfall} more ${need}`,
-        message: `${modal.item.name} costs ${modal.item.cost}. ${earn.hint}`,
+        message: `${modal.item.name} costs ${modal.item.cost} ${currencyLabel(modal.item.currency.name, modal.item.cost)}. ${earn.hint}`,
         icon: earn.icon,
         buttons: [
           { text: earn.label, onPress: () => RootNavigation.navigate('Explore') },

@@ -64,3 +64,16 @@ test('the restock timer never sits on zero and uses brand surfaces', () => {
 });
 
 function plainObj(value) { return JSON.parse(JSON.stringify(value)); }
+
+test('paging never skips a page, a restock refresh never blanks the shop, and prices name their currency', () => {
+  const screen = read('src/screens/StoreScreen.tsx');
+  const loadMore = screen.slice(screen.indexOf('const loadMore'), screen.indexOf('return (', screen.indexOf('const loadMore')));
+  assert.match(loadMore, /loadingMore\.current\) return;/, 'one page request at a time');
+  assert.ok(loadMore.indexOf('await getItems') < loadMore.indexOf('setPage(next)'), 'the page advances only after it loads');
+  assert.match(loadMore, /finally \{\s*loadingMore\.current = false;/);
+  assert.match(screen, /silentReload\.current = true;\s*setAttempt/);
+  assert.match(screen, /if \(!silent\) setStatus\('loading'\)/);
+  assert.match(screen, /if \(live && !silent\) setStatus\('error'\)/);
+  assert.match(read('src/hooks/usePurchaseItem.tsx'),
+    /costs \$\{modal\.item\.cost\} \$\{currencyLabel\(modal\.item\.currency\.name, modal\.item\.cost\)\}\./);
+});

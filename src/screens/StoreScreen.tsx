@@ -253,6 +253,10 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   const { startTutorial, hasCompleted } = useTutorial();
   const { purchaseItem, purchaseModal } = usePurchaseItem();
   const [page, setPage] = useState<number>(1);
+  // One page request at a time: two quick onEndReached calls must not skip a page.
+  const loadingMore = useRef(false);
+  // A restock refresh swaps the shelves in place; it never blanks the shop mid-browse.
+  const silentReload = useRef(false);
 
   // Trigger store tutorial on first visit
   useEffect(() => {
@@ -272,6 +276,7 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
       const next = await getStoreRotation(currentStore.id).catch(() => null);
       if (next?.next_rotation_at && new Date(next.next_rotation_at).getTime() > Date.now()) {
         setRestockPending(false);
+        silentReload.current = true;
         setAttempt(a => a + 1);
       }
     }, 60_000);
@@ -281,7 +286,9 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   // One load path with an end state: the shop never spins forever.
   useEffect(() => {
     let live = true;
-    setStatus('loading');
+    const silent = silentReload.current;
+    silentReload.current = false;
+    if (!silent) setStatus('loading');
     (async () => {
       // 'shark-shop' opens the global Shark Shop without knowing its id.
       const id = typeof store === 'number' ? store
@@ -301,7 +308,8 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
       setPage(1);
       setHasMore(firstPage.length > 0);
       setStatus('ready');
-    })().catch(() => { if (live) setStatus('error'); });
+    // A failed background restock keeps the shelves the player is browsing.
+    })().catch(() => { if (live && !silent) setStatus('error'); });
     return () => { live = false; };
   }, [store, attempt]);
 
@@ -316,15 +324,19 @@ export default function StoreScreen({ route }: NativeStackScreenProps<ParamListB
   }, [status]);
 
   const loadMore = async () => {
-    if (!catalog || !hasMore || status !== 'ready') return;
+    if (!catalog || !hasMore || status !== 'ready' || loadingMore.current) return;
+    loadingMore.current = true;
     const next = page + 1;
-    setPage(next);
     try {
       const response = await getItems(catalog.id, next);
+      // The page only advances once its items are in, so no page is ever skipped.
+      setPage(next);
       if (response.length === 0) setHasMore(false);
       setItems(prev => [...prev, ...response.filter(item => !prev.some(p => p.id === item.id))]);
     } catch {
       setHasMore(false);
+    } finally {
+      loadingMore.current = false;
     }
   };
 
