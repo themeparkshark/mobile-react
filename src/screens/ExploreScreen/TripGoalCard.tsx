@@ -13,6 +13,7 @@ import { SoundEffectContext } from '../../context/SoundEffectProvider';
 import HapticPatterns from '../../helpers/hapticPatterns';
 import * as RootNavigation from '../../RootNavigation';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { GameIcon, GameRichText } from '../../ui';
 
 interface Props {
   readonly refreshVersion: number;
@@ -217,7 +218,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
       style={[styles.modalWrap, { marginTop: insets.top + spacing.sm, marginBottom: insets.bottom + spacing.sm }]}>
       <ScrollView style={styles.modal} contentContainerStyle={styles.modalContent}>
         <LinearGradient colors={['#149de7', '#0873c3', '#064787']} style={styles.header}>
-          <Text style={styles.heroEyebrow}>THE SHARK TRIP PLANNER  ✦</Text>
+          <GameRichText style={styles.heroEyebrow} iconSize={14}>{'THE SHARK TRIP PLANNER [icon:sparkle]'}</GameRichText>
           <Text style={styles.heading}>{pickerMode || !goal ? 'CHOOSE YOUR NEXT RIDE'
             : goal.coin_owned ? 'MASTER YOUR COIN' : 'YOUR RIDE GOAL'}</Text>
           <Text style={styles.heroHint}>{pickerMode || !goal
@@ -228,7 +229,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
             style={styles.headerShark} contentFit="contain" accessibilityLabel="Theme Park Shark mascot" />
           <Pressable accessibilityRole="button" accessibilityLabel="Close ride goal planner"
             style={styles.closeButton} onPress={close}>
-            <Text style={styles.close}>×</Text>
+            <GameIcon name="close" size={32} accessibilityLabel="Close" />
           </Pressable>
         </LinearGradient>
         <View style={styles.body}>
@@ -265,7 +266,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
             <Text style={styles.changeRideLabel}>YOUR PINNED RIDE</Text>
             <Text style={styles.changeRideName} numberOfLines={1}>{goal.ride_name}</Text>
           </View>
-          <Text style={styles.changeRideArrow}>CHANGE ›</Text>
+          <GameRichText style={styles.changeRideArrow} iconSize={14}>{'CHANGE [icon:arrow]'}</GameRichText>
         </Pressable>}
         {goal && plan && !pickerMode && <Pressable style={styles.levelPlan} disabled={!upgradeReady || busy}
           accessibilityRole={upgradeReady ? 'button' : undefined}
@@ -273,29 +274,29 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
           onPress={() => goAfterClose(() => RootNavigation.navigate('CoinShelf', {
             focusCoin: { assetId: goal.asset_id },
           }))}>
-          <Text style={styles.planEyebrow}>✦  {goal.coin_owned ? 'COIN MASTERY' : 'FIRST UPGRADE PLAN'}</Text>
+          <GameRichText style={styles.planEyebrow} iconSize={13}>{`[icon:sparkle] ${goal.coin_owned ? 'COIN MASTERY' : 'FIRST UPGRADE PLAN'}`}</GameRichText>
           <Text style={styles.planTitle}>{plan.maxed ? 'Current max level reached'
-            : goal.coin_owned ? `Level ${plan.current_level} → ${plan.next_level}`
+            : goal.coin_owned ? `Level ${plan.current_level} to ${plan.next_level}`
             : 'Your first level-up'}</Text>
           <Text style={styles.planHint}>{plan.maxed
             ? 'This coin has reached its current maximum level. Choose another ride to keep collecting.'
             : goal.coin_owned
               ? `${plan.parts_needed === 0 ? 'Ride Parts ready' : `${plan.parts_needed} ${plan.parts_needed === 1 ? 'Ride Part' : 'Ride Parts'} to collect`} · ${plan.energy_needed === 0 ? 'Energy ready' : `${plan.energy_needed} Energy to find at home`}`
               : `${plan.energy_needed === 0 ? 'Energy ready for your first upgrade' : `${plan.energy_needed} Energy to find at home for your first upgrade`}. Earn the coin and its Ride Parts at the park.`}</Text>
-          {upgradeReady && <Text style={styles.huntAction}>Upgrade on Coin Shelf →</Text>}
+          {upgradeReady && <GameRichText style={styles.huntAction} iconSize={14}>{'Upgrade on Coin Shelf [icon:arrow]'}</GameRichText>}
         </Pressable>}
         {goal && suggestedSet && !pickerMode && <Pressable accessibilityRole="button" style={styles.hunt}
           disabled={busy} accessibilityState={{ disabled: busy }}
           onPress={() => goAfterClose(() => RootNavigation.navigate('SetCollection', { slug: suggestedSet.slug }))}>
-          <Text style={styles.huntTitle}>{rewardReady ? '🎁 HOME REWARD READY'
-            : collectionHelpsGoal ? '🗺️ HOME PREP FOR THIS GOAL' : '🗺️ HOME COLLECTION'}</Text>
+          <GameRichText style={styles.huntTitle} iconSize={16}>{rewardReady ? '[icon:gift] HOME REWARD READY'
+            : collectionHelpsGoal ? '[icon:map] HOME PREP FOR THIS GOAL' : '[icon:map] HOME COLLECTION'}</GameRichText>
           <Text style={styles.huntName}>{suggestedSet.name}</Text>
           <Text style={styles.huntHint}>{rewardReady
             ? 'Open this set to claim your earned trip prep reward.'
             : starter && !starter.rewards_claimed
               ? `${starter.collected}/${starter.target} unique finds toward a shark item and ${starter.rewards.tickets} ${starter.rewards.tickets === 1 ? 'Ticket' : 'Tickets'} · ${starter.rewards.energy} Energy`
               : `${suggestedSet.collected_count}/${suggestedSet.total_items} found · ${suggestedSet.completion_rewards.tickets} Tickets and ${suggestedSet.completion_rewards.energy} Energy on completion`}</Text>
-          <Text style={styles.huntAction}>View collection →</Text>
+          <GameRichText style={styles.huntAction} iconSize={14}>{'View collection [icon:arrow]'}</GameRichText>
         </Pressable>}
         {busy && <View style={styles.saving} accessibilityLiveRegion="polite">
           <ActivityIndicator color="#075b9b" />
@@ -303,7 +304,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
         </View>}
         {error && <Pressable disabled={busy} onPress={() => retryAction.current?.()} accessibilityRole="button"
           accessibilityLabel={`${error} Retry`} style={styles.errorCard}>
-          <Text style={styles.error}>{error}</Text><Text style={styles.retry}>RETRY ›</Text>
+          <Text style={styles.error}>{error}</Text><GameRichText style={styles.retry} iconSize={14}>{'RETRY [icon:retry]'}</GameRichText>
         </Pressable>}
         {loading && !data ? <ActivityIndicator color={colors.tertiary} style={styles.spinner} /> : (pickerMode || !goal) &&
           <View style={styles.list}>
@@ -330,7 +331,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
                       : ride.coin_owned ? ride.coin_level ? `OWNED · LEVEL ${ride.coin_level}` : 'OWNED'
                       : 'MISSING FROM YOUR SHELF'}</Text>
                   </View>
-                  <Text style={styles.check}>{goal?.task_id === ride.task_id ? '✓' : '›'}</Text>
+                  <GameIcon name={goal?.task_id === ride.task_id ? 'check' : 'arrow'} size={22} />
                 </Pressable>)}
               </View>;
             })}

@@ -6,6 +6,7 @@ import { spacing } from '../../design-system';
 import type { TripGoalData } from '../../api/endpoints/me/trip-goal';
 import type { PrepItemSetListItem } from '../../api/endpoints/me/prep-item-sets';
 import TripGoalCard from './TripGoalCard';
+import { GameRichText } from '../../ui';
 
 const starter: TripGoalData = {
   rides: [
@@ -94,7 +95,7 @@ export default function TripGoalPreviewScreen() {
       }} />
       <TripGoalCard refreshVersion={refreshVersion} loadGoal={loadGoal}
         saveGoal={saveGoal} removeGoal={removeGoal} loadCollections={loadCollections} />
-      <View style={styles.ticketGuarantee}><Text style={styles.ticketText}>🎟️ Park Ticket guaranteed within {Math.max(1, 2 - refreshVersion)} {refreshVersion > 0 ? 'pickup' : 'pickups'}</Text></View>
+      <View style={styles.ticketGuarantee}><GameRichText style={styles.ticketText} iconSize={16}>{`[icon:ticket] Park Ticket guaranteed within ${Math.max(1, 2 - refreshVersion)} ${refreshVersion > 0 ? 'pickup' : 'pickups'}`}</GameRichText></View>
     </View>
   </SafeAreaView>;
 }

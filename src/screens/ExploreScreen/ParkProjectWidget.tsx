@@ -13,6 +13,7 @@ import {
 } from '../../api/endpoints/me/park-projects';
 import { preferFreshProjectSnapshot, projectLiveUpdate, projectNextMilestone, projectStageLabel } from './projectLiveUpdate';
 import ProjectRippleFeed from './ProjectRippleFeed';
+import { GameIcon, GameRichText } from '../../ui';
 
 interface Props {
   readonly parkId: number | null;
@@ -191,7 +192,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
         style={[styles.pill, compactHome && styles.pillCompact,
           { top: topOffset, transform: [{ scale: pulse }] }]}
         onPress={() => { setOpen(true); setNotice(null); }}>
-        <Text style={styles.pillStar}>✦</Text>
+        <GameIcon name="sparkle" size={20} style={styles.pillStar} />
         <Text style={styles.pillKicker}>
           {offline ? 'LAST KNOWN' : featured.ended ? 'STORY ARCHIVE' : notice ? 'PARK UPDATE'
             : featured.previous_story?.your_vote === featured.previous_story?.chosen_chapter && featured.previous_story?.your_vote
@@ -211,7 +212,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
             <Text style={styles.headerText}>THE PARK IS CHANGING</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Close Park Projects"
               style={styles.closeButton} onPress={() => setOpen(false)}>
-              <Text style={styles.close}>×</Text>
+              <GameIcon name="close" size={30} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.list}>
@@ -270,7 +271,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
                   <View style={styles.progressCard} accessible accessibilityRole="text"
                     accessibilityLabel={`${offline ? 'Last confirmed progress. ' : ''}${project.total_points} of ${project.goal_points} shared signals. ${milestone.remaining > 0 ? `${milestone.remaining} more until ${milestone.label.toLowerCase()}` : milestone.label.toLowerCase()}. Your contribution ${project.my_points}`}>
                     <View style={styles.progressTop}>
-                      <Text style={styles.progressKicker}>✦  {projectStageLabel(project).toUpperCase()}</Text>
+                      <GameRichText style={styles.progressKicker} iconSize={13}>{`[icon:sparkle] ${projectStageLabel(project).toUpperCase()}`}</GameRichText>
                       <Text style={styles.progressCount}>{project.total_points}/{project.goal_points}</Text>
                     </View>
                     <View style={styles.progressTrack}><View style={[styles.progressFill,
@@ -369,7 +370,7 @@ const styles = StyleSheet.create({
     shadowColor: '#003c7a', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 4, elevation: 5 },
   pillCompact: { width: '29%', minWidth: 118, minHeight: 48, paddingVertical: 7,
     paddingLeft: 8, paddingRight: 23, borderWidth: 2 },
-  pillStar: { color: '#ffdc42', fontSize: 26, position: 'absolute', top: 5, right: 6 },
+  pillStar: { position: 'absolute', top: 6, right: 5 },
   pillKicker: { color: '#ffe06c', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8 },
   pillTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 15, marginTop: 3 },
   pillProgress: { color: '#dff4ff', fontSize: 11, marginTop: 4 },

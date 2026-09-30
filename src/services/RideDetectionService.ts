@@ -232,7 +232,7 @@ class RideDetectionService {
       showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: 'Theme Park Shark',
-        notificationBody: 'Tracking your rides 🦈',
+        notificationBody: 'Tracking your rides',
         notificationColor: '#00A5F5',
       },
     });

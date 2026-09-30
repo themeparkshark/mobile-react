@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { ParkProject } from '../../api/endpoints/me/park-projects';
+import { GameIcon, GameRichText } from '../../ui';
 
 type Action = NonNullable<ParkProject['recent_actions']>[number];
 
@@ -34,11 +35,11 @@ export default function ProjectRippleFeed({ project, compact = false }: {
   const isFresh = Number.isFinite(freshestAt) && Date.now() - freshestAt < 3_600_000;
 
   return <View style={styles.shell}>
-    <Text style={styles.title}>✦  {isFresh ? 'THE CREW JUST CHANGED THIS' : 'CREW ACTIVITY'}</Text>
+    <GameRichText style={styles.title} iconSize={14}>{`[icon:sparkle] ${isFresh ? 'THE CREW JUST CHANGED THIS' : 'CREW ACTIVITY'}`}</GameRichText>
     {actions.map((action, index) => {
       const copy = actionCopy(action, project);
       return <View key={`${action.kind}-${action.at}-${index}`} style={[styles.row, index > 0 && styles.divider]}>
-        <View style={styles.dot}><Text style={styles.dotText}>✦</Text></View>
+        <View style={styles.dot}><GameIcon name="sparkle" size={14} /></View>
         <View style={styles.copy}>
           <View style={styles.topline}>
             <Text style={styles.heading}>{copy.heading}</Text>
