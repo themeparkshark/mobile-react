@@ -25,6 +25,7 @@
  */
 
 import { getLinePlayChapterById } from './chapters';
+import { cachedServerTrivia } from './triviaDeck';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -398,6 +399,9 @@ const BUNDLED_LORE: readonly LoreCard[] = [
 // Loaders
 // ---------------------------------------------------------------------------
 
+/** Local sourced questions needed before the general filler deck retires. */
+const SOURCED_DECK_TARGET = 30;
+
 function seededPick<T>(items: readonly T[], seed: number): T {
   if (items.length === 0) throw new Error('seededPick: empty array');
   const idx = Math.abs(Math.floor(seed)) % items.length;
@@ -438,12 +442,21 @@ export async function fetchRideTrivia(
   const chapter = getLinePlayChapterById(chapterId);
   if (chapter?.trivia.length && seed < chapter.trivia.length)
     return varyTriviaChoices(seededPick(chapter.trivia, seed), seed);
-  const rideMatches = rideId == null ? [] : BUNDLED_TRIVIA.filter((q) => q.rideId === rideId);
-  const parkMatches = parkId == null ? [] : BUNDLED_TRIVIA.filter((q) => q.parkId === parkId && q.rideId == null);
-  const general = BUNDLED_TRIVIA.filter((q) => q.parkId == null && q.rideId == null);
-  // Put local fandom first, then use the large general deck. Filtering to only
-  // park questions makes a short local deck repeat during the same wait.
-  const eligible = parkId == null ? BUNDLED_TRIVIA : [...rideMatches, ...parkMatches, ...general];
+  // Fact-checked server questions lead (this ride, then this park). Chapter
+  // questions already played above are skipped by id.
+  const chapterIds = new Set(chapter?.trivia.map(question => question.id) ?? []);
+  const server = cachedServerTrivia(parkId, rideId).filter(question => !chapterIds.has(question.id));
+  const serverIds = new Set(server.map(question => question.id));
+  const bundled = BUNDLED_TRIVIA.filter(question => !serverIds.has(question.id));
+  const rideMatches = rideId == null ? [] : bundled.filter((q) => q.rideId === rideId);
+  const parkMatches = parkId == null ? [] : bundled.filter((q) => q.parkId === parkId && q.rideId == null);
+  const local = [...server.filter(q => q.rideId != null), ...rideMatches,
+    ...server.filter(q => q.rideId == null), ...parkMatches];
+  // Once a park has a real sourced deck, the general puzzle and glossary
+  // filler steps aside; until then it keeps a long wait from repeating.
+  const general = local.length >= SOURCED_DECK_TARGET ? []
+    : BUNDLED_TRIVIA.filter((q) => q.parkId == null && q.rideId == null);
+  const eligible = parkId == null ? BUNDLED_TRIVIA : [...local, ...general];
   const fallbackSeed = chapter ? Math.max(0, seed - chapter.trivia.length) : seed;
   return varyTriviaChoices(seededPick(eligible, fallbackSeed), seed);
 }

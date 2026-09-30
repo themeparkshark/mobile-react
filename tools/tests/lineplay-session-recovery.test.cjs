@@ -25,7 +25,7 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
   backgroundPermission = { granted: true }, completeResponse = null, heartbeatResponse = null) {
   const calls = { start: 0, read: 0, complete: 0, signal: 0, puzzle: 0,
     backgroundStarted: [], backgroundStopped: [], queued: [], written: [], removed: [], chapterArgs: [],
-    currentQuest: [], completeArgs: [], selectedEpisodes: [], recordedEpisodes: [] };
+    currentQuest: [], completeArgs: [], selectedEpisodes: [], recordedEpisodes: [], triviaPrimed: [] };
   const asDefault = fn => ({ default: fn });
   const mocks = {
     '@react-native-async-storage/async-storage': { default: {} },
@@ -69,6 +69,7 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     './crewGrid': gridModule.exports,
     './navigationPanel': require('./helpers/navigation-panel.cjs'),
     './replay': require('./helpers/lineplay-replay.cjs'),
+    './triviaDeck': { primeTriviaDeck: async (...args) => { calls.triviaPrimed.push(args); } },
     './checkpoint': {
       readCheckpoint: async () => saved,
       writeCheckpoint: async value => { calls.written.push(JSON.parse(JSON.stringify(value))); },

@@ -62,6 +62,7 @@ import { LINEPLAY_ROUND_QUESTIONS } from '../../games/trivia/config';
 import { createNavigationPanel, createNavigationPanelProgress, traceNavigationPanel,
   turnNavigationTile, type NavigationPanelProgress } from './navigationPanel';
 import { nextQueueDifficulty, replaySeed, type QueueDifficulty } from './replay';
+import { primeTriviaDeck } from './triviaDeck';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -1010,6 +1011,8 @@ export class LinePlaySession {
     if (this.disposed) return;
 
     this.ride = ride;
+    // Fact-checked server trivia for this ride; the bundled deck covers offline.
+    void primeTriviaDeck(ride.parkId, ride.rideId).catch(() => undefined);
     this.checkpointPlayerId = playerId ?? null;
     this.serverSessionId = null;
     this.backgroundTrackingSessionId = null;
@@ -1276,9 +1279,12 @@ export class LinePlaySession {
       this.firstAwayAt = null;
       this.applyServerSnapshot(result);
     } catch (error) {
-      const status = (error as { response?: { status?: number } })?.response?.status;
-      // 422 is the server saying this fresh fix is not near the ride.
-      if (status === 422) this.recordAwaySample(sample);
+      const response = (error as { response?: { status?: number; data?: { code?: string; message?: string } } })?.response;
+      const status = response?.status;
+      // The server saying this fresh fix is not near the ride (older servers
+      // send only the message). Validation 422s never count as leaving.
+      if (status === 422 && (response?.data?.code === 'NOT_NEAR_RIDE' ||
+          /near the ride/i.test(response?.data?.message ?? ''))) this.recordAwaySample(sample);
       console.info('[LinePlaySession] queue reward sample unavailable', status ?? 'network');
     } finally {
       this.heartbeatInFlight = false;
