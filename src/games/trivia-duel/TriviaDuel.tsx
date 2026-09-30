@@ -561,7 +561,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     let p: MatchPlan | null = null;
     if (ghost) p = planFromIds(ghost.mode === 'ride' ? 'queue' : ghost.mode, ghost.seed, ghost.qids, poolRef.current, rank);
     if (!p) p = planMatch(mode === 'ghost' ? 'queue' : mode, seed, poolRef.current, { parkId, seen: mem.seen, rank });
-    if (__DEV__) console.log('[trivia-duel] plan', { seed, seenIds: mem.seen.join(','), pool: poolRef.current.length, ids: p.rounds.map((r) => r.question.id) });
+    if (__DEV__) console.log('[trivia-duel] plan', { seed, seen: mem.seen.length, pool: poolRef.current.length, ids: p.rounds.map((r) => r.question.id) });
     const carry = mode === 'queue' || mode === 'practice' ? activeCarry(mem, Date.now()) : { streak: 0, shield: false };
     carryRef.current = carry;
     tally.current = createTally(carry.streak, carry.shield);
@@ -1320,7 +1320,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   useEffect(() => {
     if (!AUTOPLAY) return;
     if (phase === 'wager') later(1400, () => pickWager(2));
-    if (phase === 'results' && results) later(7000, () => (playsRef.current < 2 ? onRematch() : onContinue()));
+    if (phase === 'results' && results) later(6000, () => (playsRef.current < 2 ? onRematch() : playsRef.current === 2 && !ghost ? void onPassToCrew() : onContinue()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, results]);
 
