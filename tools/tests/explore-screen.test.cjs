@@ -74,3 +74,14 @@ test('first minute: the daily chest waits for the first catch; guests get the in
   const guest = exploreScreen({ contexts: { auth: { player: null, refreshPlayer: async () => undefined } } });
   assert.ok(guest.find(named('GuestInvite')));
 });
+
+test('Find this coin selects the ride and lays a guide toward it', async () => {
+  const app = exploreScreen({ trip: adventureTrip('discover'), redeemables });
+  await app.settle(); await app.settle();
+  app.find(named('AdventureTicketCard')).props.onDiscover(); app.render();
+  const map = app.find(named('Map'));
+  assert.equal(map.props.guideTarget.latitude, task.latitude);
+  assert.equal(map.props.focusCoordinate.latitude, task.latitude);
+  map.props.onPress(); app.render();
+  assert.equal(app.find(named('Map')).props.guideTarget, null, 'tapping the map clears the guide');
+});

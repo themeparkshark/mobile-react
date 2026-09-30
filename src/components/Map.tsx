@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Images, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { Camera, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../gamekit/Haptics';
@@ -27,7 +28,7 @@ export const MapQueryContext = createContext<{
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -35,6 +36,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly controlsTop?: number;
   /** Camera zoom after each move, for marker declutter. */
   readonly onZoomChange?: (zoom: number) => void;
+  /** After "Find": a dashed path for 4 s, and an edge arrow while the target is off screen. */
+  readonly guideTarget?: { latitude: number; longitude: number; requestId: number } | null;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -171,6 +174,27 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [window.height, window.width]);
   useEffect(() => () => clearTimeout(decoTimer.current), []);
+  // Find guide: dashed path for a few seconds, edge arrow while off screen.
+  const [viewSize, setViewSize] = useState<{ width: number; height: number } | null>(null);
+  const [guidePoint, setGuidePoint] = useState<{ x: number; y: number } | null>(null);
+  const [pathShown, setPathShown] = useState(false);
+  const guideRef = useRef(guideTarget); guideRef.current = guideTarget;
+  const projectGuide = useCallback(async () => {
+    const target = guideRef.current;
+    if (!target) { setGuidePoint(null); return; }
+    try {
+      const point = await mapViewRef.current?.getPointInView([target.longitude, target.latitude]);
+      if (guideRef.current?.requestId === target.requestId) setGuidePoint(point ? { x: point[0], y: point[1] } : null);
+    } catch { /* the map is not ready; the next camera move retries */ }
+  }, []);
+  useEffect(() => {
+    void projectGuide();
+    if (!guideTarget) { setPathShown(false); return; }
+    setPathShown(true);
+    const timer = setTimeout(() => setPathShown(false), GUIDE_PATH_MS);
+    return () => clearTimeout(timer);
+  }, [guideTarget?.requestId, projectGuide]); // eslint-disable-line react-hooks/exhaustive-deps
+  const arrow = guideTarget && guidePoint && viewSize ? edgeArrow(guidePoint, viewSize) : null;
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
   const followRef = useRef(true);
   followRef.current = focusedOnPlayer;
@@ -299,6 +323,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         position: 'relative',
         flex: 1,
       }}
+      onLayout={event => setViewSize({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}
     >
       {/* Map controls */}
       <View
@@ -339,6 +364,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap(); }}
         onRegionDidChange={(feature) => {
           refreshDecorations();
+          void projectGuide();
           const zoom = Number(feature.properties?.zoomLevel);
           if (Number.isFinite(zoom)) onZoomChange?.(zoom);
           // A real pan (not a pinch around the shark) drops follow mode.
@@ -377,6 +403,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             symbolSortKey: ['get', 'k'],
           }} />
         </ShapeSource>
+        {guideTarget && location && pathShown && (
+          <ShapeSource id="tps-guide" shape={guideLine(location, guideTarget)}>
+            <LineLayer id="tps-guide-casing" style={{ lineColor: BRAND.navy, lineWidth: 7, lineCap: 'round', lineOpacity: 0.85 }} />
+            <LineLayer id="tps-guide" style={{ lineColor: BRAND.gold, lineWidth: 4, lineCap: 'round', lineDasharray: [1.6, 1.4] }} />
+          </ShapeSource>
+        )}
         {/* Panned away: the shark stays pinned to its spot on the map. */}
         {location && !focusedOnPlayer && (
           <Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>
@@ -385,6 +417,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         )}
         <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
       </MapView>
+      {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}
       <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
         onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }}
@@ -407,6 +440,24 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   );
 }
 
+/** Edge arrow toward an off-screen Find target: pops in, then leans toward it. */
+function GuideArrow({ x, y, angle, reducedMotion }: { readonly x: number; readonly y: number; readonly angle: number; readonly reducedMotion: boolean }) {
+  const pop = useSharedValue(reducedMotion ? 1 : 0), lean = useSharedValue(0);
+  useEffect(() => {
+    if (reducedMotion) { pop.value = 1; lean.value = 0; return; }
+    pop.value = withSpring(1, { damping: 9, stiffness: 220 });
+    lean.value = withRepeat(withSequence(withTiming(1, { duration: 520 }), withTiming(0, { duration: 520 })), -1, false);
+    return () => { cancelAnimation(lean); };
+  }, [reducedMotion, pop, lean]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: x - 24 }, { translateY: y - 24 }, { rotate: `${angle}deg` },
+      { translateX: lean.value * 5 }, { scale: pop.value }],
+  }));
+  return <Reanimated.View pointerEvents="none" accessible accessibilityLabel="Your target is this way" style={[styles.guideArrow, style]}>
+    <GameIcon name="arrow" size={48} />
+  </Reanimated.View>;
+}
+
 /** The compass nudges once when you pan away, so the way back is noticed. */
 function RecenterIcon({ away, reducedMotion }: { readonly away: boolean; readonly reducedMotion: boolean }) {
   const turn = useSharedValue(0);
@@ -419,6 +470,7 @@ function RecenterIcon({ away, reducedMotion }: { readonly away: boolean; readonl
 }
 
 const styles = StyleSheet.create({
+  guideArrow: { position: 'absolute', left: 0, top: 0, width: 48, height: 48, zIndex: 9 },
   recenter: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
     backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
   recenterAway: { backgroundColor: BRAND.gold },

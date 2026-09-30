@@ -113,6 +113,12 @@ export default function ExploreScreen() {
   const [failedTaskIds, setFailedTaskIds] = useState<Set<number>>(new Set());
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
   const [focusedFromChecklist, setFocusedFromChecklist] = useState<TaskType | null>(null);
+  // "Find" guide: a dashed path and an edge arrow toward the ride the player asked to find.
+  const [findGuide, setFindGuide] = useState<{ taskId: number; latitude: number; longitude: number; requestId: number } | null>(null);
+  const guideTo = useCallback((task: TaskType) => {
+    setSelectedTask(task);
+    setFindGuide({ taskId: task.id, latitude: Number(task.latitude), longitude: Number(task.longitude), requestId: Date.now() });
+  }, []);
   const [selectedQueueRide, setSelectedQueueRide] = useState<{
     parkId: number; taskId: number; ride: RideContext;
   } | null>(null);
@@ -233,10 +239,10 @@ export default function ExploreScreen() {
   useEffect(() => {
     const focusedTask = rideFocusForPark(focusRide, park?.id);
     if (!focusedTask) return;
-    setSelectedTask(focusedTask);
+    guideTo(focusedTask);
     setFocusedFromChecklist(focusedTask);
     navigation.setParams({ focusRide: undefined });
-  }, [focusRide, navigation, park?.id]);
+  }, [focusRide, navigation, park?.id, guideTo]);
 
   // Trigger onboarding tutorial on first visit
   useEffect(() => {
@@ -489,9 +495,9 @@ export default function ExploreScreen() {
   const focusAdventureRide = useCallback(() => {
     if (!adventure || !player) return;
     const task = redeemables?.tasks?.find(item => item.id === adventure.ride.task_id);
-    if (task) { setSelectedTask(task); setFocusedFromChecklist(task); }
+    if (task) { guideTo(task); setFocusedFromChecklist(task); }
     else RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id });
-  }, [adventure, player, redeemables?.tasks]);
+  }, [adventure, player, redeemables?.tasks, guideTo]);
 
   useEffect(() => {
     setRedeemables(null);
@@ -952,7 +958,7 @@ export default function ExploreScreen() {
             if (tripGoal.coin_owned) {
               RootNavigation.navigate('CoinShelf', { focusCoin: { assetId: tripGoal.asset_id } });
             } else if (tripGoalTask) {
-              setSelectedTask(tripGoalTask);
+              guideTo(tripGoalTask);
             } else {
               RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
             }
@@ -994,6 +1000,7 @@ export default function ExploreScreen() {
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
           onZoomChange={onMapZoom}
+          guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
           controlsTop={(queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
