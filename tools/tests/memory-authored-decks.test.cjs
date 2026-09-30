@@ -26,7 +26,7 @@ const decks = load('src/games/memory/decks.ts', {
   '../../services/rideTheme': broad,
   '../../gamekit': { GAME_COLORS: { blue: '#00f', coral: '#f80', gold: '#ff0' } },
 });
-const { buildBoard } = load('src/games/memory/logic.ts');
+const { buildBoard } = load('src/games/memory/logic.ts', { './engine': load('src/games/memory/engine.ts') });
 
 test('Forbidden Journey gets authored magic art while other games and explicit decks keep their themes', () => {
   assert.equal(decks.deckIdForRideName('Harry Potter and the Forbidden Journey™'), 'wizard');
