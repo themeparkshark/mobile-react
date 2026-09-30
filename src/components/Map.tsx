@@ -409,13 +409,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             <LineLayer id="tps-guide" style={{ lineColor: BRAND.gold, lineWidth: 4, lineCap: 'round', lineDasharray: [1.6, 1.4] }} />
           </ShapeSource>
         )}
-        {/* Panned away: the shark stays pinned to its spot on the map. */}
+        <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
+        {/* Panned away: the shark stays pinned to its spot on the map. Markers draw in
+            order, so it comes after the ride islands and is never hidden under one. */}
         {location && !focusedOnPlayer && (
           <Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>
             {playerShark}
           </Marker>
         )}
-        <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
       </MapView>
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}
