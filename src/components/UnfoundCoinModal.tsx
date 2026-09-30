@@ -114,7 +114,8 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
         animationOut={reducedMotion ? 'fadeOut' : 'zoomOut'}
         animationInTiming={reducedMotion ? 120 : 220}
         animationOutTiming={reducedMotion ? 120 : 180}
-        backdropOpacity={0.85}
+        backdropColor="#05346e"
+        backdropOpacity={0.6}
         hideModalContentWhileAnimating
       >
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1,

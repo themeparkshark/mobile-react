@@ -167,3 +167,41 @@ test('park shelf loads on its underwater art, not a grey page', () => {
   const src = fs.readFileSync('src/screens/ParkScreen.tsx', 'utf8');
   assert.match(src, /\{loading && <ImageBackground[^]*?background-new\.png[^]*?<Loading \/>/);
 });
+
+test('every WS3 modal dims the app with the brand navy scrim, never near-black', () => {
+  const rnModal = ['src/components/UnfoundCoinModal.tsx', 'src/components/TaskCoinModal.tsx', 'src/components/CoinLevelingModal.tsx',
+    'src/components/PostWinRewardsModal.tsx', 'src/components/RedeemRedeemableModal.tsx'];
+  for (const file of rnModal) {
+    const src = fs.readFileSync(file, 'utf8');
+    const opens = src.split(/<Modal\b/).slice(1).map(chunk => chunk.slice(0, 1500)); // the Modal's own props
+    assert.ok(opens.length > 0, `${file} has no modal`);
+    for (const props of opens) assert.match(props, /backdropColor="#05346e"/, `${file} modal has no navy backdrop`);
+    for (const [, value] of src.matchAll(/backdropOpacity=\{[^}]*?(0\.\d+)\s*\}/g))
+      assert.ok(Number(value) <= 0.9, `${file} backdrop is too heavy`);
+  }
+  for (const [file, style] of [['src/screens/StampBookScreen.tsx', 'overlay'], ['src/screens/SetCollectionScreen.tsx', 'modalOverlay']]) {
+    const src = fs.readFileSync(file, 'utf8');
+    const block = src.slice(src.indexOf(`  ${style}: {`), src.indexOf('}', src.indexOf(`  ${style}: {`)));
+    assert.match(block, /rgba\(5,\s*52,\s*110,/, `${file} ${style} is not the navy scrim`);
+  }
+});
+
+test('collection rarity and challenge cards use the blue, white and gold ramp: no purple or pink', () => {
+  const tiers = loadTs('src/constants/coinTiers.ts');
+  assert.deepEqual(plain(Object.values(tiers.RARITY_TONES).map(t => t.name)), ['common', 'uncommon', 'rare', 'epic', 'legendary']);
+  assert.equal(tiers.rarityToneByName('epic').color, '#e0a100');
+  assert.equal(tiers.rarityToneByName('nope').name, 'common');
+  const purple = /#(a855f7|ec4899|8b5cf6|a78bfa|c4b5fd|c084fc|f472b6|9c27b0|7c3aed|d946ef)\b|rgba\(\s*(168,\s*85,\s*247|236,\s*72,\s*153|139,\s*92,\s*246|196,\s*181,\s*253)/i;
+  for (const file of ['src/screens/SetCollectionScreen.tsx', 'src/screens/StampBookScreen.tsx', 'src/components/RedeemRedeemableModal.tsx',
+    'src/components/TicketPunch.tsx', 'src/constants/coinTiers.ts', 'src/components/UnfoundCoinModal.tsx',
+    'src/components/CoinUpgradeDemo.tsx'])
+    assert.ok(!purple.test(fs.readFileSync(file, 'utf8')), `${file} has a purple or pink surface`);
+  for (const color of Object.values(plain(tiers.CHALLENGE_GAME_COLORS))) assert.match(color, /^#[0-9a-f]{6}$/);
+});
+
+test('Set Collection text never falls back to the system font', () => {
+  const src = fs.readFileSync('src/screens/SetCollectionScreen.tsx', 'utf8');
+  const bare = [...src.matchAll(/(\w+): \{([^{}]*)\}/g)]
+    .filter(([, , block]) => /fontSize/.test(block) && !/fontFamily/.test(block)).map(([, name]) => name);
+  assert.deepEqual(bare, []);
+});

@@ -18,6 +18,7 @@ import TopbarText from '../components/Topbar/TopbarText';
 import Wrapper from '../components/Wrapper';
 import { claimStampReward, equipStampTitle, getStamps, StampData as ApiStampData, StampRewards } from '../api/endpoints/me/stamps';
 import { AuthContext } from '../context/AuthProvider';
+import { RARITY_TONES } from '../constants/coinTiers';
 
 // ── Assets ──────────────────────────────────────────────
 const BOOK_BG = require('../../assets/images/stampbook-bg.png');
@@ -43,13 +44,10 @@ const INK = '#3E2712';
 const STAMP_EARNED_COLOR = '#4CAF50';
 const STAMP_LOCKED_COLOR = '#C4B69C';
 
-const RARITY_COLORS: Record<string, string> = {
-  common: '#78909C',
-  uncommon: '#4CAF50',
-  rare: '#2196F3',
-  epic: '#E0A100',
-  legendary: '#FF9800',
-};
+/** Shared blue, white and gold rarity ramp (epic is gold, never purple). */
+const RARITY_COLORS: Record<string, string> = Object.fromEntries(
+  Object.values(RARITY_TONES).map(tone => [tone.name, tone.color]),
+);
 
 // ── Image key mapping ───────────────────────────────────
 const IMAGE_KEY_MAP: Record<string, number> = {

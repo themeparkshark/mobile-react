@@ -49,6 +49,7 @@ import {
   type TaskAttemptCheckpoint,
 } from '../services/task-attempt/checkpoint';
 import { recoverTaskAttempt } from '../services/task-attempt/recovery';
+import { CHALLENGE_GAME_COLORS } from '../constants/coinTiers';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const WHEEL_SIZE = Math.min(SCREEN_WIDTH * 0.7, 260);
@@ -64,11 +65,11 @@ function getTicketCost(redeemable: CurrentRedeemableType): number {
 
 // Challenges the server can assign when a Ticket is spent
 const GAMES = [
-  { id: 'tap' as const, name: 'WHACK-A-SHARK', color: '#3b82f6' },
-  { id: 'timing' as const, name: 'RHYTHM TAP', color: '#8b5cf6' },
-  { id: 'memory' as const, name: 'MEMORY MATCH', color: '#ec4899' },
-  { id: 'trivia' as const, name: 'QUICK TRIVIA', color: '#f59e0b' },
-  { id: 'photo' as const, name: 'SNAP THE RIDE', color: '#22c55e' },
+  { id: 'tap' as const, name: 'WHACK-A-SHARK', color: CHALLENGE_GAME_COLORS.tap },
+  { id: 'timing' as const, name: 'RHYTHM TAP', color: CHALLENGE_GAME_COLORS.timing },
+  { id: 'memory' as const, name: 'MEMORY MATCH', color: CHALLENGE_GAME_COLORS.memory },
+  { id: 'trivia' as const, name: 'QUICK TRIVIA', color: CHALLENGE_GAME_COLORS.trivia },
+  { id: 'photo' as const, name: 'SNAP THE RIDE', color: CHALLENGE_GAME_COLORS.photo },
 ];
 
 type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';

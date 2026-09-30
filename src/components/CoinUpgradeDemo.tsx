@@ -469,7 +469,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
                 top: -5,
                 width: level >= 4 ? 16 : 10,
                 height: size + 10,
-                backgroundColor: level >= 5 ? 'rgba(251,191,36,0.35)' : level >= 4 ? 'rgba(196,181,253,0.3)' : 'rgba(255,255,255,0.25)',
+                backgroundColor: level >= 5 ? 'rgba(251,191,36,0.35)' : level >= 4 ? 'rgba(95,208,255,0.3)' : 'rgba(255,255,255,0.25)',
                 transform: [{ translateX: shimmerX }, { rotate: '20deg' }],
               }} />
             </Animated.View>
@@ -585,6 +585,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   placeholderText: {
+    fontFamily: 'Shark',
     fontSize: 20,
   },
   labelWrap: {
@@ -592,13 +593,13 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   label: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontFamily: 'Shark',
+    fontSize: 12,
     letterSpacing: 0.5,
   },
   labelName: {
-    fontSize: 8,
-    fontWeight: '700',
+    fontFamily: 'Knockout',
+    fontSize: 10,
     opacity: 0.7,
     marginTop: 1,
     textTransform: 'uppercase',
@@ -611,12 +612,13 @@ const s = StyleSheet.create({
   },
   demoTitle: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
+    fontFamily: 'Shark',
+    fontSize: 20,
   },
   demoSub: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontFamily: 'Knockout',
+    fontSize: 15,
     marginTop: 2,
     marginBottom: 12,
   },

@@ -24,7 +24,7 @@ export interface CoinTier {
 }
 
 export const COIN_TIERS: readonly CoinTier[] = [
-  { level: 1, name: 'Classic', ring: '#ffffff', ringDeep: '#9cc8ea', halo: 'rgba(255,255,255,0.55)', ringWidth: 2, shimmer: false,
+  { level: 1, name: 'Classic', ring: '#ffffff', ringDeep: '#ffcf3b', halo: 'rgba(255,255,255,0.85)', ringWidth: 3, shimmer: false,
     look: 'The coin as it was first drawn' },
   { level: 2, name: 'Silver', ring: '#e3eef8', ringDeep: '#8fa9c2', halo: 'rgba(227,238,248,0.7)', ringWidth: 3, shimmer: true,
     look: 'A polished silver rim with a shimmer' },
@@ -53,3 +53,41 @@ export function coinLevelLabel(level: number | null | undefined): string {
   const tier = coinTier(level);
   return `Level ${tier.level} · ${tier.name}`;
 }
+
+/**
+ * Collection rarity (Set Collection items, Stamp Book stamps): the same blue,
+ * white and gold ramp as the coin tiers. Common is silver-white, uncommon and
+ * rare are water blues, epic and legendary are golds. No purple, no pink.
+ */
+export interface RarityTone {
+  readonly name: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+  readonly label: string;
+  /** Border, badge and progress fill. */
+  readonly color: string;
+  /** Soft card fill. */
+  readonly bgColor: string;
+  /** Glow behind a collected item. */
+  readonly glowColor: string;
+}
+
+export const RARITY_TONES: Readonly<Record<1 | 2 | 3 | 4 | 5, RarityTone>> = {
+  1: { name: 'common', label: 'Common', color: '#8fa9c2', bgColor: 'rgba(143,169,194,0.10)', glowColor: 'rgba(143,169,194,0.25)' },
+  2: { name: 'uncommon', label: 'Uncommon', color: '#1d9bf0', bgColor: 'rgba(29,155,240,0.08)', glowColor: 'rgba(29,155,240,0.22)' },
+  3: { name: 'rare', label: 'Rare', color: '#0a5fb0', bgColor: 'rgba(10,95,176,0.08)', glowColor: 'rgba(10,95,176,0.22)' },
+  4: { name: 'epic', label: 'Epic', color: '#e0a100', bgColor: 'rgba(224,161,0,0.09)', glowColor: 'rgba(224,161,0,0.25)' },
+  5: { name: 'legendary', label: 'Legendary', color: '#ff8a00', bgColor: 'rgba(255,138,0,0.10)', glowColor: 'rgba(255,138,0,0.3)' },
+};
+
+/** Rarity tone by name (Stamp Book uses names, sets use numbers). Unknown is common. */
+export function rarityToneByName(name: string | null | undefined): RarityTone {
+  return Object.values(RARITY_TONES).find(tone => tone.name === name) ?? RARITY_TONES[1];
+}
+
+/** Border colour of the "Your challenge" card, per assigned game. Blue and gold only. */
+export const CHALLENGE_GAME_COLORS = {
+  tap: '#1d9bf0',
+  timing: '#0a5fb0',
+  memory: '#ffb400',
+  trivia: '#e0a100',
+  photo: '#5fd0ff',
+} as const;

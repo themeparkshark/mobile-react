@@ -44,6 +44,7 @@ import getPrepItemSets, {
   PrepItemSetItem,
   PrepItemSetDetailResponse,
 } from '../api/endpoints/me/prep-item-sets';
+import { RARITY_TONES } from '../constants/coinTiers';
 
 // Churro image mapping - require all images statically
 const CHURRO_IMAGES: Record<string, any> = {
@@ -97,14 +98,8 @@ const getChurroImage = (variantSlug: string) => {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ITEM_SIZE = (SCREEN_WIDTH - 56) / 4; // 4 items per row with padding
 
-// Rarity configuration: modern, softer palette
-const RARITY_CONFIG = {
-  1: { name: 'common', label: 'Common', color: '#22c55e', bgColor: 'rgba(34, 197, 94, 0.08)', glowColor: 'rgba(34, 197, 94, 0.2)' },
-  2: { name: 'uncommon', label: 'Uncommon', color: '#3b82f6', bgColor: 'rgba(59, 130, 246, 0.08)', glowColor: 'rgba(59, 130, 246, 0.2)' },
-  3: { name: 'rare', label: 'Rare', color: '#a855f7', bgColor: 'rgba(168, 85, 247, 0.08)', glowColor: 'rgba(168, 85, 247, 0.2)' },
-  4: { name: 'epic', label: 'Epic', color: '#ec4899', bgColor: 'rgba(236, 72, 153, 0.08)', glowColor: 'rgba(236, 72, 153, 0.2)' },
-  5: { name: 'legendary', label: 'Legendary', color: '#f59e0b', bgColor: 'rgba(245, 158, 11, 0.1)', glowColor: 'rgba(245, 158, 11, 0.3)' },
-};
+// Rarity tones come from the shared blue, white and gold collection ramp.
+const RARITY_CONFIG = RARITY_TONES;
 
 // Animated collection item card
 function CollectionCard({
@@ -1683,7 +1678,7 @@ const styles = StyleSheet.create({
   listHeroEyebrow: { color: '#bfeaff', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
   listHeroTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 29, lineHeight: 33, marginTop: 5,
     textShadowColor: '#003c7a', textShadowOffset: { width: 2, height: 3 }, textShadowRadius: 1 },
-  listHeroSub: { color: '#e5f7ff', fontSize: 12, lineHeight: 16, marginTop: 6, maxWidth: 215 },
+  listHeroSub: { color: '#e5f7ff', fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, marginTop: 6, maxWidth: 215 },
   listHeroShark: { position: 'absolute', width: 132, height: 142, right: -14, bottom: -4 },
   listSectionTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 20,
     textShadowColor: '#003c7a', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
@@ -1701,7 +1696,7 @@ const styles = StyleSheet.create({
   upcomingEyebrow: { color: '#ffcf4c', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8 },
   upcomingTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 19, marginTop: 2 },
   upcomingDate: { color: '#ffcf4c', fontFamily: 'Knockout', fontSize: 14, marginTop: 2 },
-  upcomingBody: { color: '#d9f1ff', fontSize: 12, lineHeight: 16, marginTop: 4 },
+  upcomingBody: { color: '#d9f1ff', fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, marginTop: 4 },
   upcomingSaved: { color: '#ffcf4c', fontFamily: 'Knockout', fontSize: 12, marginTop: 5 },
   noCurrentHunts: { color: '#e6f7ff', fontFamily: 'Knockout', fontSize: 15,
     paddingHorizontal: 10, paddingVertical: 9 },
@@ -1713,7 +1708,7 @@ const styles = StyleSheet.create({
   mapHuntCopy: { flex: 1 },
   mapHuntKicker: { color: '#07569e', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1 },
   mapHuntTitle: { color: '#093d77', fontFamily: 'Shark', fontSize: 17, marginTop: 2 },
-  mapHuntBody: { color: '#244d70', fontSize: 12, lineHeight: 16, marginTop: 3 },
+  mapHuntBody: { color: '#244d70', fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, marginTop: 3 },
   mapHuntAction: { color: '#005da4', fontFamily: 'Knockout', fontSize: 16, marginTop: 6 },
   setCard: {
     borderRadius: 18,
@@ -1988,9 +1983,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4, elevation: 3 },
   chaseKicker: { color: '#ffdf54', fontFamily: 'Knockout', fontSize: 13, letterSpacing: 0.8 },
   chaseTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 20, marginTop: 5 },
-  chaseBody: { color: '#e4f5ff', fontSize: 13, lineHeight: 19, marginTop: 8 },
+  chaseBody: { color: '#e4f5ff', fontFamily: 'Knockout', fontSize: 16, lineHeight: 20, marginTop: 8 },
   chaseDiscovery: { color: '#ffdf54', fontFamily: 'Knockout', fontSize: 14, marginTop: 12 },
-  chaseNote: { color: '#d6eeff', fontSize: 11, lineHeight: 16, marginTop: 6 },
+  chaseNote: { color: '#d6eeff', fontFamily: 'Knockout', fontSize: 14, lineHeight: 17, marginTop: 6 },
   chaseButton: { marginTop: 14, padding: 12, borderRadius: 12, borderWidth: 2,
     borderColor: '#fff', backgroundColor: '#ffca30', alignItems: 'center' },
   chaseButtonText: { color: '#093d77', fontFamily: 'Knockout', fontSize: 17 },
@@ -1999,8 +1994,8 @@ const styles = StyleSheet.create({
   missingImage: { width: 43, height: 43, marginRight: 8 },
   missingCopy: { flex: 1 },
   missingName: { color: '#093d77', fontFamily: 'Knockout', fontSize: 15 },
-  missingRarity: { color: '#376888', fontSize: 11 },
-  missingArrow: { color: '#0875c9', fontSize: 21, fontWeight: '800' },
+  missingRarity: { color: '#376888', fontFamily: 'Knockout', fontSize: 13 },
+  missingArrow: { color: '#0875c9', fontFamily: 'Shark', fontSize: 21 },
   rewardsSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2046,7 +2041,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 2,
   },
-  tripPrepExplanation: { color: '#315674', fontSize: 13, lineHeight: 18,
+  tripPrepExplanation: { color: '#315674', fontFamily: 'Knockout', fontSize: 16, lineHeight: 20,
     marginTop: 7, marginBottom: 12 },
   claimButton: {
     flexDirection: 'row',
