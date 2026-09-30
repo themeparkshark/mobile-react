@@ -39,7 +39,6 @@ const CARD_SIZE = (SW - 48) / 3; // 3 columns with gaps
 
 // ── Colors ──────────────────────────────────────────────
 const GOLD = '#C5933A';
-const GOLD_LIGHT = '#DEB155';
 const INK = '#3E2712';
 const STAMP_EARNED_COLOR = '#4CAF50';
 const STAMP_LOCKED_COLOR = '#C4B69C';
@@ -48,7 +47,7 @@ const RARITY_COLORS: Record<string, string> = {
   common: '#78909C',
   uncommon: '#4CAF50',
   rare: '#2196F3',
-  epic: '#9C27B0',
+  epic: '#E0A100',
   legendary: '#FF9800',
 };
 
@@ -148,7 +147,7 @@ function StampCard({ stamp, index, onPress }: { stamp: StampData; index: number;
   return (
     <Animated.View style={[cardStyles.wrapper, { opacity: fadeAnim, transform: [{ scale: Animated.multiply(scaleAnim, pressScale) }] }]}>
       <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={onPress}>
-        <View style={[cardStyles.card, { borderColor: stamp.earned ? rarityColor : 'rgba(210,195,170,0.4)' }]}>
+        <View style={[cardStyles.card, { borderColor: stamp.earned ? rarityColor : '#e6d6b3' }]}>
           {/* Rarity stripe */}
           <View style={[cardStyles.stripe, { backgroundColor: stamp.earned ? rarityColor : STAMP_LOCKED_COLOR }]} />
 
@@ -159,7 +158,7 @@ function StampCard({ stamp, index, onPress }: { stamp: StampData; index: number;
           </View>
 
           {/* Name */}
-          <Text style={[cardStyles.name, !stamp.earned && { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={1}>
+          <Text style={[cardStyles.name, !stamp.earned && { color: '#7a6446' }]} numberOfLines={1}>
             {stamp.name}
           </Text>
 
@@ -182,7 +181,7 @@ function StampCard({ stamp, index, onPress }: { stamp: StampData; index: number;
               <GameIcon name="check" size={8 + 4} />
             </View>
           ) : (
-            <View style={[cardStyles.badge, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
+            <View style={[cardStyles.badge, { backgroundColor: '#9c8a6a' }]}>
               <GameIcon name="lock" size={8 + 4} />
             </View>
           )}
@@ -498,7 +497,7 @@ const cardStyles = StyleSheet.create({
     width: CARD_SIZE,
   },
   card: {
-    backgroundColor: 'rgba(60,40,20,0.85)',
+    backgroundColor: '#fff8e4',
     borderRadius: 10,
     borderWidth: 1.5,
     alignItems: 'center',
@@ -533,19 +532,19 @@ const cardStyles = StyleSheet.create({
   },
   lockedOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'rgba(255,248,228,0.35)',
   },
   name: {
     fontFamily: 'Knockout',
     fontSize: 10,
-    color: '#fff',
+    color: INK,
     fontWeight: '600',
     textAlign: 'center',
   },
   goal: {
     fontFamily: 'Knockout',
     fontSize: 8,
-    color: 'rgba(255,255,255,0.65)',
+    color: '#6b5335',
     textAlign: 'center',
     lineHeight: 10,
     marginTop: 1,
@@ -559,7 +558,7 @@ const cardStyles = StyleSheet.create({
   progressBg: {
     width: '100%',
     height: 3,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: '#eadfc6',
     borderRadius: 2,
     overflow: 'hidden',
   },
@@ -570,7 +569,7 @@ const cardStyles = StyleSheet.create({
   progressText: {
     fontFamily: 'Knockout',
     fontSize: 7,
-    color: 'rgba(255,255,255,0.4)',
+    color: '#7a6446',
     marginTop: 1,
   },
   badge: {
@@ -597,16 +596,16 @@ const modalStyles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 320,
-    backgroundColor: '#1a1510',
+    backgroundColor: '#fff8e4',
     borderRadius: 20,
-    borderWidth: 2,
-    borderColor: GOLD + '50',
+    borderWidth: 3,
+    borderColor: '#ffffff',
     alignItems: 'center',
     padding: 24,
-    shadowColor: GOLD,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
+    shadowColor: '#05346e',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
     elevation: 10,
   },
   imageContainer: {
@@ -622,7 +621,7 @@ const modalStyles = StyleSheet.create({
   },
   lockedImageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    backgroundColor: 'rgba(255,248,228,0.3)',
   },
   rarityBadge: {
     paddingHorizontal: 14,
@@ -640,31 +639,31 @@ const modalStyles = StyleSheet.create({
   name: {
     fontFamily: 'Shark',
     fontSize: 24,
-    color: '#fff',
+    color: '#05346e',
     textAlign: 'center',
     textTransform: 'uppercase',
     marginBottom: 12,
   },
   goalBox: {
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 2,
+    borderColor: '#f2e3bf',
   },
   goalLabel: {
     fontFamily: 'Knockout',
     fontSize: 9,
-    color: GOLD_LIGHT,
+    color: '#a36609',
     letterSpacing: 1.5,
     marginBottom: 6,
   },
   goalText: {
     fontFamily: 'Knockout',
     fontSize: 15,
-    color: '#fff',
+    color: '#05346e',
     lineHeight: 20,
   },
   progressSection: {
@@ -674,7 +673,7 @@ const modalStyles = StyleSheet.create({
   progressBarBg: {
     width: '100%',
     height: 8,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: '#eadfc6',
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 4,
@@ -686,14 +685,14 @@ const modalStyles = StyleSheet.create({
   progressLabel: {
     fontFamily: 'Knockout',
     fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
+    color: '#6b5335',
     textAlign: 'center',
   },
   earnedBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(76,175,80,0.15)',
+    backgroundColor: '#e3f5e4',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 12,
@@ -702,14 +701,14 @@ const modalStyles = StyleSheet.create({
   earnedText: {
     fontFamily: 'Knockout',
     fontSize: 16,
-    color: STAMP_EARNED_COLOR,
+    color: '#2e7d32',
     fontWeight: '700',
   },
   lockedBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#f3ead6',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 12,
@@ -718,15 +717,15 @@ const modalStyles = StyleSheet.create({
   lockedText: {
     fontFamily: 'Knockout',
     fontSize: 16,
-    color: 'rgba(255,255,255,0.4)',
+    color: '#7a6446',
   },
   closeHint: {
     fontFamily: 'Knockout',
     fontSize: 11,
-    color: 'rgba(255,255,255,0.25)',
+    color: '#9c8a6a',
     marginTop: 4,
   },
   claimButton: { backgroundColor: GOLD, borderRadius: 10, paddingHorizontal: 24, paddingVertical: 12, marginBottom: 10 },
   claimText: { color: INK, fontFamily: 'Knockout', fontSize: 16, textAlign: 'center' },
-  claimMessage: { color: '#fff', fontFamily: 'Knockout', fontSize: 13, textAlign: 'center', marginBottom: 10 },
+  claimMessage: { color: '#05346e', fontFamily: 'Knockout', fontSize: 13, textAlign: 'center', marginBottom: 10 },
 });

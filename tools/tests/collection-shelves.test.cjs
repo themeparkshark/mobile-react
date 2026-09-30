@@ -148,3 +148,10 @@ test('park header only calls a reviewed ride coin a ride; food stands get neutra
   assert.ok(!header.includes("'YOUR NEXT RIDE COIN'"), 'header must take the eyebrow from nextCoinEyebrow');
   assert.match(fs.readFileSync('src/screens/ParkScreen.tsx', 'utf8'), /nextCoinKind=\{goalCoinKind\(/);
 });
+
+test('stamp book cards and detail are bright parchment, never dark or purple', () => {
+  const src = fs.readFileSync('src/screens/StampBookScreen.tsx', 'utf8');
+  for (const dark of ['#1a1510', 'rgba(60,40,20', '#9C27B0', "backgroundColor: 'rgba(0,0,0,0.4)'"])
+    assert.ok(!src.includes(dark), `StampBookScreen still has ${dark}`);
+  assert.match(src, /card: \{\n\s+backgroundColor: '#fff8e4'/);
+});
