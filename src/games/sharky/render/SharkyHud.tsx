@@ -106,14 +106,16 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
     tick.value;
     const s = sim.value;
     if (s.frenzy > 0) return `FRENZY x${multiplier(s)}`;
-    return s.chain > 0 ? `x${multiplier(s)}  ${s.chain}` : 'x1';
+    if (s.chain <= 0) return 'CHAIN x1';
+    const toNext = s.chain >= 9 ? s.frenzyAt - s.chain : 3 - (s.chain % 3);
+    return s.chain >= 9 ? `x${multiplier(s)}  FRENZY IN ${Math.max(1, toNext)}` : `CHAIN x${multiplier(s)}`;
   });
   const pillColor = useDerivedValue(() => {
     const s = sim.value;
     if (s.frenzy > 0) return Math.floor(tick.value / 8) % 2 ? GOLD : '#fff1b8';
     return TIER_COLORS[chainTier(s)];
   });
-  const pillW = 150;
+  const pillW = 190;
   const pillX = W / 2 - pillW / 2;
   const drain = useDerivedValue(() => {
     const s = sim.value;

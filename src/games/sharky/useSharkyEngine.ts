@@ -67,10 +67,102 @@ export interface EngineInput {
   fingers: number;
 }
 
+/** Ambient/presentation particles (not part of the sim): bubble jet, rising bubbles, sand puffs. */
+export const AMB_N = 56;
+export interface Ambient {
+  x: number[];
+  y: number[];
+  vx: number[];
+  vy: number[];
+  life: number[];
+  max: number[];
+  size: number[];
+  kind: number[];
+  next: number;
+  jetAcc: number;
+  riseAcc: number;
+  puffAcc: number;
+  seed: number;
+}
+
+function createAmbient(): Ambient {
+  'worklet';
+  const z = () => {
+    const a: number[] = [];
+    for (let i = 0; i < AMB_N; i++) a.push(0);
+    return a;
+  };
+  return { x: z(), y: z(), vx: z(), vy: z(), life: z(), max: z(), size: z(), kind: z(), next: 0, jetAcc: 0, riseAcc: 0, puffAcc: 0, seed: 7 };
+}
+
+function ambRand(a: Ambient): number {
+  'worklet';
+  a.seed = (a.seed * 1103515245 + 12345) & 0x7fffffff;
+  return a.seed / 0x7fffffff;
+}
+
+function ambSpawn(a: Ambient, x: number, y: number, vx: number, vy: number, life: number, size: number, kind: number): void {
+  'worklet';
+  const i = a.next;
+  a.next = (a.next + 1) % AMB_N;
+  a.x[i] = x;
+  a.y[i] = y;
+  a.vx[i] = vx;
+  a.vy[i] = vy;
+  a.life[i] = life;
+  a.max[i] = life;
+  a.size[i] = size;
+  a.kind[i] = kind;
+}
+
+/** Advance ambient particles by fxDt (ms): freezes with hit-stop, slows with slow-mo. */
+function ambStep(a: Ambient, s: SimState, dtMs: number): void {
+  'worklet';
+  if (dtMs <= 0) return;
+  const dt = dtMs / 1000;
+  const du = s.dist / 256;
+  const y = s.y / 256;
+  const playing = s.phase === PH_PLAY && s.float === 0;
+  // Jetpack bubble jet: a downward cone while holding, one every 40ms.
+  if (playing && s.holding) {
+    a.jetAcc += dtMs;
+    while (a.jetAcc >= 40) {
+      a.jetAcc -= 40;
+      ambSpawn(a, du - 50 + ambRand(a) * 16, y + 18, -40 - ambRand(a) * 60, 200 + ambRand(a) * 60, 0.55, 12 + ambRand(a) * 10, 0);
+    }
+    // Sand kicked up where the jet reaches the floor band.
+    if (y > 700) {
+      a.puffAcc += dtMs;
+      while (a.puffAcc >= 120) {
+        a.puffAcc -= 120;
+        ambSpawn(a, du - 30 + ambRand(a) * 40, 958, -20, -60 - ambRand(a) * 40, 0.5, 26 + ambRand(a) * 10, 1);
+      }
+    }
+  } else {
+    a.jetAcc = 0;
+  }
+  // Ambient bubbles rise from the reef (cap stays low: 60 ambient max).
+  a.riseAcc += dtMs;
+  while (a.riseAcc >= 420) {
+    a.riseAcc -= 420;
+    ambSpawn(a, du - 200 + ambRand(a) * 1200, 940, 0, -90 - ambRand(a) * 70, 6, 8 + ambRand(a) * 12, 2);
+  }
+  for (let i = 0; i < AMB_N; i++) {
+    if (a.life[i] <= 0) continue;
+    a.life[i] -= dt;
+    a.x[i] += a.vx[i] * dt;
+    a.y[i] += a.vy[i] * dt;
+    if (a.kind[i] === 0) a.vy[i] *= 0.94;
+    if (a.kind[i] === 2) a.x[i] += Math.sin((a.life[i] + i) * 3) * 0.6;
+    if (a.kind[i] === 2 && a.y[i] < 44) a.life[i] = 0;
+  }
+}
+
 export interface SharkyEngine {
   sim: SharedValue<SimState>;
   rivals: SharedValue<RivalSlot[]>;
   input: SharedValue<EngineInput>;
+  ambient: SharedValue<Ambient>;
   running: SharedValue<boolean>;
   tick: SharedValue<number>;
   alpha: SharedValue<number>;
@@ -103,6 +195,7 @@ export function useSharkyEngine(
   const sim = useSharedValue<SimState>(createSim(initial));
   const rivals = useSharedValue<RivalSlot[]>([emptyRival(), emptyRival(), emptyRival()]);
   const input = useSharedValue<EngineInput>(emptyInput());
+  const ambient = useSharedValue<Ambient>(createAmbient());
   const running = useSharedValue(false);
   const tick = useSharedValue(0);
   const alpha = useSharedValue(0);
@@ -172,8 +265,9 @@ export function useSharkyEngine(
         pushEvent(r, s.ev[o], s.ev[o + 1], s.ev[o + 2], s.ev[o + 3], s.ev[o + 4]);
       }
     },
-    onFrame: (a) => {
+    onFrame: (a, fxDt) => {
       'worklet';
+      if (running.value) ambStep(ambient.value, sim.value, fxDt);
       alpha.value = a;
       tick.value = tick.value + 1;
       bridge.flush();
@@ -224,6 +318,6 @@ export function useSharkyEngine(
     })(slot, dist, y, vel);
   }, [rivals, sim]);
 
-  return useMemo(() => ({ sim, rivals, input, running, tick, alpha, clock, log, reset, setRunning, ext, remote }),
-    [sim, rivals, input, running, tick, alpha, clock, reset, setRunning, ext, remote]);
+  return useMemo(() => ({ sim, rivals, input, ambient, running, tick, alpha, clock, log, reset, setRunning, ext, remote }),
+    [sim, rivals, input, ambient, running, tick, alpha, clock, reset, setRunning, ext, remote]);
 }

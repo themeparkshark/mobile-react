@@ -448,6 +448,7 @@ export function SharkySwim({
                     layout={layout}
                     sim={engine.sim}
                     rivals={engine.rivals}
+                    ambient={engine.ambient}
                     tick={engine.tick}
                     alpha={engine.alpha}
                     rivalColors={RIVAL_COLORS}

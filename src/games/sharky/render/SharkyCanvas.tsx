@@ -48,7 +48,7 @@ import {
   PUFF_R0, PUFF_R1, RING_R, SURFACE_Y, TORP_W, aheadU, anchorX, hazardSpan, jellyY, pufferR,
   type SimState,
 } from '../sim/core';
-import type { RivalSlot } from '../useSharkyEngine';
+import { AMB_N, type Ambient, type RivalSlot } from '../useSharkyEngine';
 import { VIEW_H, VIEW_W, type SharkyLayout } from './view';
 import { SHARKY_ART } from '../assets';
 
@@ -80,7 +80,7 @@ const SPR_SEG = 10;
 const SPR_CAP = 11;
 const SPR_POLE = 12;
 
-const SLOTS = 128; // atlas draw slots per frame
+const SLOTS = 176; // atlas draw slots per frame
 const PSTRIDE = 7; // sprite, cx, cy, scale(u per atlas px), rot, alpha, flip
 const PYLONS = 6;
 const RINGS = 4;
@@ -97,6 +97,7 @@ export interface SharkyCanvasProps {
   layout: SharkyLayout;
   sim: SharedValue<SimState>;
   rivals: SharedValue<RivalSlot[]>;
+  ambient: SharedValue<Ambient>;
   tick: SharedValue<number>;
   alpha: SharedValue<number>;
   /** Rival tint colours (player colours). */
@@ -167,7 +168,7 @@ function sharkPose(s: SimState, a: number): SharkPose {
 }
 
 export const SharkyCanvas = React.memo(function SharkyCanvas({
-  layout, sim, rivals, tick, alpha, rivalColors, reducedMotion,
+  layout, sim, rivals, ambient, tick, alpha, rivalColors, reducedMotion,
 }: SharkyCanvasProps) {
   const L = layout;
   // --- art ------------------------------------------------------------------
@@ -229,6 +230,16 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
       n++;
     };
     const floatPhase = s.float > 0;
+    // Ambient bubbles and sand puffs first (they sit behind the gameplay sprites).
+    const am = ambient.value;
+    for (let i = 0; i < AMB_N; i++) {
+      if (am.life[i] <= 0) continue;
+      const k = am.life[i] / am.max[i];
+      const vx = anc + (am.x[i] - dist);
+      if (vx < -40 || vx > VIEW_W + 40) continue;
+      if (am.kind[i] === 1) put(SPR_BUBBLE, vx, am.y[i], am.size[i] * (1.6 - k * 0.6), 0, 1);
+      else put(SPR_BUBBLE, vx, am.y[i], am.size[i] * (am.kind[i] === 0 ? 0.6 + 0.4 * k : 1), 0, 1);
+    }
     for (let i = 0; i < ENT_CAP; i++) {
       const et = s.et[i];
       if (et === 0 || et === E_RING) continue;
