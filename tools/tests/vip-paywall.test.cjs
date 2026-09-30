@@ -30,3 +30,21 @@ test('the paywall promises only live perks, uses kit art and dialogs, and handle
   assert.match(screen, /Sign in to join VIP/);
   assert.match(screen, /state="error"[\s\S]*onRetry/);
 });
+
+test('a signed-in player is linked to Adapty at sign-in, once per id', async () => {
+  const calls = [];
+  const adapty = {
+    activate: async (key, opts) => { calls.push(['activate', opts.customerUserId]); },
+    identify: async (id) => { calls.push(['identify', id]); },
+  };
+  const fresh = loadTs('src/services/purchases.ts', { 'react-native-adapty': { adapty } });
+  fresh.activateVipForPlayer(null);
+  fresh.activateVipForPlayer(undefined);
+  fresh.activateVipForPlayer(7);
+  await fresh.ensureAdapty(7);
+  await fresh.ensureAdapty(9);
+  assert.deepEqual(calls, [['activate', '7'], ['identify', '9']]);
+
+  const provider = fs.readFileSync(path.join(root, 'src/context/DailyGiftProvider.tsx'), 'utf8');
+  assert.match(provider, /activateVipForPlayer\(player\.id\)/);
+});
