@@ -105,5 +105,12 @@
     "prettier-plugin-organize-imports": "^3.2.2",
     "typescript": "^5.3.3"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "autolinking": {
+      "exclude": [
+        "expo-gl"
+      ]
+    }
+  }
 }
