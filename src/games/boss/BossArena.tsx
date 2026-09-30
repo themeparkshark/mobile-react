@@ -19,6 +19,7 @@ import {
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { ease } from '../../gamekit/core/ease';
 import { viewLane, type ArenaLayout, type BossView } from './view';
+import { aspectOf } from './useArenaImages';
 
 export interface ArenaImages {
   bg: SkImageType | null;
@@ -119,11 +120,10 @@ function Backdrop({ L, fx, img }: { L: ArenaLayout; fx: SharedValue<number>; img
   const cloudA = useDerivedValue(() => [{ translateX: ((fx.value * 0.008) % (L.W + 240)) - 200 }]);
   const cloudB = useDerivedValue(() => [{ translateX: ((fx.value * 0.005 + L.W * 0.6) % (L.W + 240)) - 200 }]);
   // Cover-fit the 9:16 lagoon so the waterline sits behind the boss.
-  const iw = img.bg ? img.bg.width() : 752;
-  const ih = img.bg ? img.bg.height() : 1344;
-  const s = Math.max(L.W / iw, L.H / ih);
-  const w = iw * s;
-  const h = ih * s;
+  const ar = aspectOf(img.bg, 752 / 1344);
+  const s = Math.max(L.W / ar, L.H);
+  const w = ar * s;
+  const h = s;
   return (
     <Group>
       <Rect x={0} y={0} width={L.W} height={L.H}>
@@ -440,7 +440,7 @@ function Target({ i, L, view, t, fx, squash, img, bossKind }: {
   const x = L.laneX[i];
   const y = L.targetY;
   const h = bossKind === 1 ? 26 : 84;
-  const w = img ? (img.width() / img.height()) * h : h;
+  const w = aspectOf(img, 1) * h;
   const tr = useDerivedValue(() => {
     const bob = bossKind === 0 ? Math.sin(fx.value / 540 + i * 1.7) * 3 : bossKind === 2 ? Math.sin(fx.value / 700 + i) * 0.04 : 0;
     const s = squash.value;
@@ -654,7 +654,7 @@ function FloatAndShark({ L, view, t, fx, anim, img }: {
   const smear = useDerivedValue(() => (anim.lunge.value > 0.3 ? 0.25 : 0));
   const sharkImg = (im: SkImageType | null, op: SharedValue<number>) => {
     if (!im) return null;
-    const w = (im.width() / im.height()) * SH;
+    const w = aspectOf(im, 0.75) * SH;
     return (
       <Group opacity={op}>
         <SkImage image={im} x={-w / 2} y={-SH * 0.82} width={w} height={SH} />

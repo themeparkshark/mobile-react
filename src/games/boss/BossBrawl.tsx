@@ -18,7 +18,6 @@
  */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Image, LogBox, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import { useImage } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing, runOnJS, runOnUI, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
@@ -49,6 +48,7 @@ import { IN_END, IN_PAD_DOWN, IN_PAD_UP, IN_PAUSE, IN_RESUME, IN_TARGET, STAR_PO
 import { pickVariant } from './sim/patterns';
 import { boutProof, legacyDamage, summarize, timingReadout, toLegacyProof } from './sim/round';
 import { tauntFor } from './taunts';
+import { useArenaImages } from './useArenaImages';
 import { CrewLayer, type CrewLayerHandle } from './multiplayer/CrewLayer';
 import {
   CREW_BREAK, CREW_BREAK_END, CREW_CAUGHT, CREW_LUNGE, CREW_PERFECT, HouseCrew, ghostAt, ghostTimeline,
@@ -209,14 +209,13 @@ export function BossBrawl(props: BossBrawlProps) {
   const camera = useCamera({ width: L.W, height: L.H, timeScale: clock.fxScale, reducedMotion: reduced, walking });
 
   // Images (Skia)
-  const img: ArenaImages = {
-    bg: useImage(ART.bg), boss: useImage(BOSS_ART[boss]), buoy: useImage(ART.buoy), lantern: useImage(ART.lantern),
-    plate: useImage(ART.plate), float: useImage(ART.float), shark: useImage(ART.shark), sharkStrike: useImage(ART.sharkStrike),
-    sharkBonk: useImage(ART.sharkBonk), sharkDizzy: useImage(ART.sharkDizzy), sharkCheer: useImage(ART.sharkCheer),
-    anchor: useImage(ART.anchor), splash: useImage(ART.splash), impact: useImage(ART.impact), star: useImage(ART.star),
-    starburst: useImage(ART.starburst), cloud: useImage(ART.cloud),
-  };
-  const imgMemo = useMemo(() => img, Object.values(img)); // eslint-disable-line react-hooks/exhaustive-deps
+  const loaded = useArenaImages({
+    bg: ART.bg, boss: BOSS_ART[boss], buoy: ART.buoy, lantern: ART.lantern, plate: ART.plate, float: ART.float,
+    shark: ART.shark, sharkStrike: ART.sharkStrike, sharkBonk: ART.sharkBonk, sharkDizzy: ART.sharkDizzy,
+    sharkCheer: ART.sharkCheer, anchor: ART.anchor, splash: ART.splash, impact: ART.impact, star: ART.star,
+    starburst: ART.starburst, cloud: ART.cloud,
+  });
+  const imgMemo: ArenaImages = useMemo(() => loaded, [loaded]);
   const animMemo = useMemo(() => anim, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const beds = useMemo(() => bossBeds(boss), [boss]);

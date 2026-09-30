@@ -86,7 +86,7 @@ export const CrewLayer = forwardRef<CrewLayerHandle, {
         </View>
       )}
       {meLure && (
-        <View style={[styles.lure, { left: L.floatX - 58, top: L.floatY - L.floatR * 2.9 }]}>
+        <View style={[styles.lure, { left: Math.max(6, L.floatX - L.floatR - 128), top: L.floatY - 12 }]}>
           <Text style={styles.lureText}>YOU'RE THE LURE</Text>
         </View>
       )}
