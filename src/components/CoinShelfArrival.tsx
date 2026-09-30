@@ -80,6 +80,7 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       <Image source={coinUrl} contentFit="contain" onError={finish} style={{ width: size, height: size }} />
     </Animated.View>}
     <Animated.View style={[styles.chip, chipStyle]} accessibilityLiveRegion="polite">
+      <View style={styles.chipBody}>
       <GameIcon name="coin" size={30} />
       <View style={{ flex: 1 }}>
         <Text style={styles.eyebrow} numberOfLines={1}>
@@ -95,16 +96,19 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
         style={styles.close} onPress={() => { finish(); callbacks.current.onClose(); }}>
         <GameIcon name="close" size={28} />
       </Pressable>
+      </View>
     </Animated.View>
   </View>;
 }
 
 const styles = StyleSheet.create({
   dim: { backgroundColor: '#05346e' },
-  chip: { position: 'absolute', bottom: 118, left: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 9,
-    paddingVertical: 8, paddingLeft: 10, paddingRight: 6, borderRadius: 18, borderWidth: 3, borderColor: '#ffffff',
-    backgroundColor: '#fff8e4', shadowColor: '#05346e', shadowOpacity: 0.28, shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  // Outer layer carries position and shadow; the body carries the fill so the
+  // cream always spans the full chip, close button included.
+  chip: { position: 'absolute', bottom: 118, left: 14, right: 14, borderRadius: 18,
+    shadowColor: '#05346e', shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  chipBody: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 8, paddingLeft: 10, paddingRight: 6,
+    borderRadius: 18, borderWidth: 3, borderColor: '#ffffff', backgroundColor: '#fff8e4', overflow: 'hidden' },
   eyebrow: { fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8, color: '#8a5a00' },
   title: { fontFamily: 'Shark', fontSize: 18, color: '#05346e' },
   primary: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 12,
