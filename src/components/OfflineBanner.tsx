@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   runOnJS,
@@ -12,7 +12,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { initialWindowMetrics } from 'react-native-safe-area-context';
-import Svg, { Line, Rect } from 'react-native-svg';
 import client from '../api/client';
 import * as Haptics from '../helpers/haptics';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
@@ -30,18 +29,11 @@ const BACK_ONLINE_HOLD_MS = 1400;
 
 type Phase = 'hidden' | 'offline' | 'back';
 
-/** Signal bars with a slash: flat, thick navy outline, gold first bar. */
-export function OfflineSignalIcon({ size = 28 }: { readonly size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 28 28" accessibilityElementsHidden importantForAccessibility="no">
-      <Rect x={3} y={16} width={5} height={8} rx={2} fill={GOLD} stroke={NAVY} strokeWidth={2.4} />
-      <Rect x={11.5} y={10} width={5} height={14} rx={2} fill="#ffffff" stroke={NAVY} strokeWidth={2.4} />
-      <Rect x={20} y={4} width={5} height={20} rx={2} fill="#ffffff" stroke={NAVY} strokeWidth={2.4} />
-      <Line x1={3} y1={4.5} x2={25} y2={25} stroke={CREAM} strokeWidth={6} strokeLinecap="round" />
-      <Line x1={3} y1={4.5} x2={25} y2={25} stroke={NAVY} strokeWidth={3} strokeLinecap="round" />
-    </Svg>
-  );
-}
+// Illustrated in Dustin's icon style (GPT Image 2.5 with his coin, sword,
+// energy and shield art as references; review sheet in the audit folder).
+const OFFLINE_ICON = require('../../assets/images/offline/offline.png');
+const BACK_ONLINE_ICON = require('../../assets/images/offline/back-online.png');
+const ICON_SIZE = 34;
 
 function probe(): Promise<unknown> {
   // Any HTTP response marks the app reachable (client.ts interceptor).
@@ -154,7 +146,7 @@ export default function OfflineBanner() {
       >
         <View style={[styles.card, back && styles.cardBack]}>
           <Animated.View style={iconStyle}>
-            {back ? <BackOnlineIcon /> : <OfflineSignalIcon />}
+            <Image source={back ? BACK_ONLINE_ICON : OFFLINE_ICON} style={styles.icon} accessibilityElementsHidden importantForAccessibility="no" />
           </Animated.View>
           <View style={styles.copy}>
             <Text style={styles.title} maxFontSizeMultiplier={1.3}>{back ? 'BACK ONLINE' : 'OFFLINE'}</Text>
@@ -182,16 +174,6 @@ export default function OfflineBanner() {
   );
 }
 
-function BackOnlineIcon({ size = 28 }: { readonly size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 28 28" accessibilityElementsHidden importantForAccessibility="no">
-      <Rect x={3} y={16} width={5} height={8} rx={2} fill={GOLD} stroke={NAVY} strokeWidth={2.4} />
-      <Rect x={11.5} y={10} width={5} height={14} rx={2} fill={GOLD} stroke={NAVY} strokeWidth={2.4} />
-      <Rect x={20} y={4} width={5} height={20} rx={2} fill={GOLD} stroke={NAVY} strokeWidth={2.4} />
-    </Svg>
-  );
-}
-
 const styles = StyleSheet.create({
   host: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 1000, elevation: 1000 },
   lip: { borderRadius: 24, backgroundColor: NAVY, paddingBottom: 4, maxWidth: 360, marginHorizontal: 16 },
@@ -208,6 +190,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   cardBack: { backgroundColor: '#e8f6ff' },
+  icon: { width: ICON_SIZE, height: ICON_SIZE, resizeMode: 'contain' },
   copy: { marginLeft: 10, marginRight: 12, flexShrink: 1 },
   title: { fontFamily: 'Shark', fontSize: 17, color: NAVY, letterSpacing: 0.5 },
   body: { fontFamily: 'Knockout', fontSize: 14, color: BLUE, marginTop: -1 },

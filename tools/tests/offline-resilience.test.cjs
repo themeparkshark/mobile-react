@@ -140,6 +140,12 @@ test('one branded offline banner is mounted at the root', () => {
   assert.match(banner, /useReducedMotion/);
   assert.doesNotMatch(banner, /—/);
   assert.doesNotMatch(banner, /#000|black/i);
+  // Icons are illustrated PNG art in Dustin's style, never flat vector shapes.
+  assert.doesNotMatch(banner, /react-native-svg|react-native-skia/);
+  for (const art of ['offline.png', 'back-online.png']) {
+    assert.match(banner, new RegExp(`assets/images/offline/${art.replace('.', '\\.')}`));
+    assert.ok(require('node:fs').existsSync(require('node:path').join(root, 'assets/images/offline', art)), art);
+  }
 });
 
 test('client interceptor: a dropped GET is retried then succeeds; a dropped POST marks offline once', async () => {
