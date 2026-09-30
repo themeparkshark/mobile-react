@@ -206,28 +206,28 @@ test('combo/fever: tiers, streak fever, meter fever, grace misses, Infinity wind
   const s = combo.createComboFever();
   let tierUps = 0, fever = 0;
   for (let i = 0; i < 10; i++) {
-    const ev = combo.comboHit(s, i * 100);
+    const ev = combo.comboFeverHit(s, i * 100);
     if (combo.hasEv(ev, combo.EV_TIER_UP)) tierUps++;
     if (combo.hasEv(ev, combo.EV_FEVER_START)) fever++;
   }
   assert.equal(tierUps, 3);
   assert.equal(fever, 1);
   assert.equal(combo.comboMultiplier(s), 5);
-  assert.ok(combo.hasEv(combo.comboTick(s, 3000), combo.EV_TIMEOUT), 'the window lapses');
+  assert.ok(combo.hasEv(combo.comboFeverTick(s, 3000), combo.EV_TIMEOUT), 'the window lapses');
   assert.equal(s.fever, true, 'a lapsed streak keeps the fever it earned');
-  assert.ok(combo.hasEv(combo.comboTick(s, 900 + 6000), combo.EV_FEVER_END));
+  assert.ok(combo.hasEv(combo.comboFeverTick(s, 900 + 6000), combo.EV_FEVER_END));
   const inf = combo.createComboFever({ ...combo.DEFAULT_COMBO_FEVER, windowMs: Infinity });
-  combo.comboHit(inf, 0); combo.comboHit(inf, 1e7);
+  combo.comboFeverHit(inf, 0); combo.comboFeverHit(inf, 1e7);
   assert.equal(inf.streak, 2, 'Whack: only misses break');
   const grace = combo.createComboFever({ ...combo.DEFAULT_COMBO_FEVER, graceMisses: 1 });
-  for (let i = 0; i < 5; i++) combo.comboHit(grace, i);
-  assert.ok(combo.hasEv(combo.comboMiss(grace, 6), combo.EV_GRACE));
+  for (let i = 0; i < 5; i++) combo.comboFeverHit(grace, i);
+  assert.ok(combo.hasEv(combo.comboFeverMiss(grace, 6), combo.EV_GRACE));
   assert.equal(grace.streak, 5, 'one walking bump is forgiven');
-  assert.ok(combo.hasEv(combo.comboMiss(grace, 7), combo.EV_BREAK));
+  assert.ok(combo.hasEv(combo.comboFeverMiss(grace, 7), combo.EV_BREAK));
   assert.equal(grace.lastBreak, 5);
   const meter = combo.createComboFever({ ...combo.DEFAULT_COMBO_FEVER, fever: { ...combo.DEFAULT_COMBO_FEVER.fever, mode: 'meter', chargePerHit: 0.25 } });
   let started = false;
-  for (let i = 0; i < 4; i++) started = started || combo.hasEv(combo.comboHit(meter, i * 10), combo.EV_FEVER_START);
+  for (let i = 0; i < 4; i++) started = started || combo.hasEv(combo.comboFeverHit(meter, i * 10), combo.EV_FEVER_START);
   assert.ok(started);
   assert.ok(!Object.values(combo.TIER_COLORS).some(c => /7c4dff|purple/i.test(c)), 'no purple tier');
 });
