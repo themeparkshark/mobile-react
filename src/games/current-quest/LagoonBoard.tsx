@@ -775,7 +775,9 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
                 <Group transform={sandLift}>
                   <Oval x={cx - rx} y={cy - ry + 5} width={rx * 2} height={ry * 2} color={CQ.wetSand} />
                   <Oval x={cx - rx} y={cy - ry} width={rx * 2} height={ry * 2} color={CQ.sand} />
-                  <Oval x={cx - rx * 0.55} y={cy - ry * 0.62} width={rx * 0.7} height={ry * 0.5} color="rgba(255,255,255,0.45)" />
+                  <Oval x={cx - rx * 0.72} y={cy - ry * 0.35} width={rx * 1.44} height={ry * 1.05} color="rgba(217,179,110,0.55)" style="stroke" strokeWidth={1.5} />
+                  <Oval x={cx - rx * 0.42} y={cy - ry * 0.05} width={rx * 0.84} height={ry * 0.6} color="rgba(217,179,110,0.45)" style="stroke" strokeWidth={1.2} />
+                  <Oval x={cx - rx * 0.55} y={cy - ry * 0.7} width={rx * 0.62} height={ry * 0.42} color="rgba(255,255,255,0.55)" />
                   <Oval x={cx - rx} y={cy - ry} width={rx * 2} height={ry * 2 + 5} color={CQ.ink} style="stroke" strokeWidth={2} />
                   <Group opacity={shoreAlpha}>
                     <Oval x={cx - rx - 3} y={cy - ry - 2} width={rx * 2 + 6} height={ry * 2 + 9} color={CQ.shoreline} style="stroke" strokeWidth={3} />

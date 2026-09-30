@@ -58,7 +58,7 @@ export const QuestHud = React.memo(function QuestHud({ h, walkingChip }: { h: Hu
       <View style={styles.left}>
         <View style={styles.pearlRow}>
           {Array.from({ length: h.pearls }, (_, k) => (
-            <Pop key={`p${k}`} on={k < h.pearlsTaken} size={24}>
+            <Pop key={`p${k}`} on={k < h.pearlsTaken} size={21}>
               <Image source={PEARL} style={[styles.pearl, k >= h.pearlsTaken && styles.dim]} />
             </Pop>
           ))}
@@ -117,9 +117,9 @@ export const QuestHud = React.memo(function QuestHud({ h, walkingChip }: { h: Hu
 
 const styles = StyleSheet.create({
   wrap: { height: 58, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, gap: 6 },
-  left: { width: 92, justifyContent: 'center' },
+  left: { width: 100, justifyContent: 'center' },
   pearlRow: { flexDirection: 'row', alignItems: 'center' },
-  pearl: { width: 22, height: 22, resizeMode: 'contain' },
+  pearl: { width: 19, height: 19, resizeMode: 'contain' },
   golden: { width: 26, height: 28, resizeMode: 'contain' },
   dim: { opacity: 0.32 },
   ringRow: { flexDirection: 'row', marginTop: 2 },
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   shellSlot: { width: 19, height: 19, alignItems: 'center', justifyContent: 'center' },
   shell: { width: 18, height: 19, resizeMode: 'contain' },
   shellEmpty: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(47,47,58,0.18)' },
-  right: { width: 92, alignItems: 'flex-end', justifyContent: 'center', gap: 3 },
+  right: { width: 84, alignItems: 'flex-end', justifyContent: 'center', gap: 3 },
   ripChip: {
     flexDirection: 'row', gap: 4, paddingHorizontal: 7, paddingVertical: 5, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.7)',
     borderWidth: 2, borderColor: CQ.ink,
