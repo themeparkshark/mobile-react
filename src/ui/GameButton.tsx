@@ -26,7 +26,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import useUiReducedMotion from './useUiReducedMotion';
 import { haptic } from '../gamekit/Haptics';
 import { artButtonFontSize } from './artButtonText';
 import GameIcon from './GameIcon';
@@ -99,7 +99,7 @@ export default function GameButton({
   testID,
   style,
 }: GameButtonProps) {
-  const reducedMotion = useReducedGameMotion();
+  const reducedMotion = useUiReducedMotion();
   const scale = useSharedValue(1);
   const pulse = useSharedValue(1);
   const [labelAreaHeight, setLabelAreaHeight] = useState(0);

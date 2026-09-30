@@ -46,9 +46,10 @@ export type DialogRequest = GameDialogOptions & {
 const OK: GameDialogButton = { text: 'OK' };
 
 /**
- * Buttons in display order (top to bottom): the main action first as the gold
- * primary, a destructive action as the red danger button, other actions as
- * blue secondaries, and cancel last as a quiet ghost button.
+ * Buttons in display order (top to bottom): the main action first as the
+ * primary (his yellow button, full width), a destructive action as the red
+ * danger button, other actions as secondaries (the same yellow button at 240
+ * wide), and cancel last as a quiet ghost text action.
  */
 export function layoutActions(buttons: readonly GameDialogButton[] | undefined): DialogAction[] {
   const list = buttons && buttons.length ? buttons : [OK];
@@ -77,6 +78,28 @@ export function dismissAction(request: GameDialogOptions): number | null {
   const cancel = buttons.findIndex(button => button.style === 'cancel');
   if (cancel >= 0) return cancel;
   return buttons.length === 1 ? 0 : null;
+}
+
+/**
+ * Longest title that still reads at a comfortable size in Dustin's ribbon.
+ * The ribbon is one line of Shark that shrinks to fit; 22 characters
+ * ("HOW DID YOUR WAIT END?") is the longest that stays around 24pt on a 375pt
+ * phone.
+ */
+export const RIBBON_TITLE_MAX = 22;
+
+export type DialogTitleLayout =
+  | { readonly placement: 'ribbon'; readonly text: string }
+  | { readonly placement: 'card'; readonly text: string };
+
+/**
+ * Where the title goes. A short title sits in the ribbon; a longer one (an
+ * Alert.alert title that is really a sentence) moves onto the card as a
+ * wrapping heading, so it never shrinks to an unreadable size.
+ */
+export function dialogTitleLayout(title: string): DialogTitleLayout {
+  const text = title.trim();
+  return text.length <= RIBBON_TITLE_MAX ? { placement: 'ribbon', text } : { placement: 'card', text };
 }
 
 type Listener = (current: DialogRequest | null) => void;
@@ -118,13 +141,37 @@ export function createDialogStore(nativeFallback: NativeFallback) {
     notify();
   }
 
+  /** Hand any queued requests to the native alert, one after another. */
+  function drainToNative() {
+    const request = queue.shift();
+    if (!request) return;
+    const buttons = (request.buttons && request.buttons.length ? request.buttons : [OK]).map((button, index) => ({
+      ...button,
+      onPress: () => {
+        request.resolve(index);
+        try { button.onPress?.(); } finally { drainToNative(); }
+      },
+    }));
+    nativeFallback(request.title, request.message, buttons);
+  }
+
+  /**
+   * Only the most recently attached host shows dialogs. Attaching a new one
+   * clears the previous host first so two Modals never show the same request.
+   * When the last host detaches mid-dialog, the queue falls back to the
+   * native alert so no request is left unresolved.
+   */
   function attach(listener: Listener) {
+    hosts[hosts.length - 1]?.(null);
     hosts.push(listener);
     listener(current());
     return () => {
       const at = hosts.lastIndexOf(listener);
-      if (at >= 0) hosts.splice(at, 1);
-      notify();
+      if (at < 0) return;
+      const wasTop = at === hosts.length - 1;
+      hosts.splice(at, 1);
+      if (!hosts.length) { drainToNative(); return; }
+      if (wasTop) notify();
     };
   }
 

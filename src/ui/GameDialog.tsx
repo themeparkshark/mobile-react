@@ -13,7 +13,12 @@
  * house blue card with a white border, white copy, an optional GameIcon, and
  * his yellow image buttons stacked with the main action on top (red for
  * destructive, a quiet text action for cancel). The scrim is navy, never black.
+ * Titles up to RIBBON_TITLE_MAX characters sit in the ribbon; a longer title
+ * becomes a wrapping heading on the card (and warns in dev) so it never
+ * shrinks to an unreadable size.
  * Motion: scrim fade plus a spring pop on the UI thread; reduced motion fades.
+ * The preference is known on the first render (useUiReducedMotion), so a
+ * dialog that mounts already open still springs.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Modal, Pressable, View } from 'react-native';
@@ -25,7 +30,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import useUiReducedMotion from './useUiReducedMotion';
 import { haptic } from '../gamekit/Haptics';
 import GameButton from './GameButton';
 import GameIcon from './GameIcon';
@@ -33,7 +38,9 @@ import GameText from './GameText';
 import Ribbon from '../components/Ribbon';
 import {
   createDialogStore,
+  dialogTitleLayout,
   dismissAction,
+  RIBBON_TITLE_MAX,
   layoutActions,
   type DialogRequest,
   type GameDialogButton,
@@ -121,7 +128,7 @@ export function GameDialog({
   runButtonHandlers = true,
   testID,
 }: GameDialogProps) {
-  const reducedMotion = useReducedGameMotion();
+  const reducedMotion = useUiReducedMotion();
   const [mounted, setMounted] = useState(visible);
   const closing = useRef(false);
   const chosen = useRef<number | null>(null);
@@ -129,6 +136,10 @@ export function GameDialog({
   const pop = useSharedValue(0);
   const actions = layoutActions(buttons);
   const request = { title, message, icon, buttons, dismissible };
+  const titleLayout = dialogTitleLayout(title);
+  if (__DEV__ && visible && titleLayout.placement === 'card') {
+    console.warn(`GameDialog: "${title}" is longer than ${RIBBON_TITLE_MAX} characters, so it moves off the ribbon. Pass a short title and put the rest in the message.`);
+  }
 
   useEffect(() => {
     if (visible) {
@@ -190,19 +201,25 @@ export function GameDialog({
         </Animated.View>
         <Animated.View accessibilityViewIsModal accessibilityRole="alert"
           style={[{ width: '85%', maxWidth: 380, alignItems: 'center' }, cardStyle]}>
-          <View accessible accessibilityRole="header" accessibilityLabel={title} style={{ width: '100%', zIndex: 2 }}>
-            <Ribbon text={title} />
-          </View>
+          {titleLayout.placement === 'ribbon' && (
+            <View accessible accessibilityRole="header" accessibilityLabel={title} style={{ width: '100%', zIndex: 2 }}>
+              <Ribbon text={titleLayout.text} />
+            </View>
+          )}
           <View style={{
             ...DIALOG_CARD,
             width: '95%',
-            marginTop: '-10%',
-            paddingTop: SPACE.xxl + SPACE.sm,
+            marginTop: titleLayout.placement === 'ribbon' ? '-10%' : 0,
+            paddingTop: titleLayout.placement === 'ribbon' ? SPACE.xxl + SPACE.sm : SPACE.xl,
             paddingHorizontal: SPACE.xl,
             paddingBottom: SPACE.lg,
             alignItems: 'center',
             gap: SPACE.md,
           }}>
+            {titleLayout.placement === 'card' && (
+              <GameText preset="title" tone="onBlue" align="center" accessibilityRole="header"
+                style={{ textTransform: 'uppercase' }}>{titleLayout.text}</GameText>
+            )}
             {icon && <GameIcon name={icon} size={72} />}
             {!!message && <GameText preset="body" tone="onBlue" align="center" style={{ color: DIALOG_COPY }}>{message}</GameText>}
             {children}
@@ -219,7 +236,10 @@ export function GameDialog({
   );
 }
 
-/** Mount once near the root (WS9 owns Root.tsx). Screens may also mount one while waiting. */
+/**
+ * Mount exactly once near the root (WS9 owns Root.tsx). Do not mount one per
+ * screen: only the newest host shows dialogs.
+ */
 export function GameDialogHost() {
   const [request, setRequest] = useState<DialogRequest | null>(null);
   const [visible, setVisible] = useState(false);
