@@ -1,5 +1,4 @@
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faLock, faCheck } from '@fortawesome/free-solid-svg-icons';
+import GameIcon from '../ui/GameIcon';
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState, useCallback, useContext } from 'react';
 import {
@@ -180,11 +179,11 @@ function StampCard({ stamp, index, onPress }: { stamp: StampData; index: number;
           {/* Badge */}
           {stamp.earned ? (
             <View style={[cardStyles.badge, { backgroundColor: STAMP_EARNED_COLOR }]}>
-              <FontAwesomeIcon icon={faCheck} size={8} color="white" />
+              <GameIcon name="check" size={8 + 4} />
             </View>
           ) : (
             <View style={[cardStyles.badge, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
-              <FontAwesomeIcon icon={faLock} size={8} color="rgba(255,255,255,0.7)" />
+              <GameIcon name="lock" size={8 + 4} />
             </View>
           )}
         </View>
@@ -406,14 +405,14 @@ export default function StampBookScreen() {
               {/* Status */}
               {selectedStamp.earned ? (
                 <View style={modalStyles.earnedBox}>
-                  <FontAwesomeIcon icon={faCheck} size={14} color={STAMP_EARNED_COLOR} />
+                  <GameIcon name="check" size={14 + 4} />
                   <Text style={modalStyles.earnedText}>
                     {selectedStamp.rewardClaimed && rewardText(selectedStamp.rewards) ? 'Rewards claimed' : 'Earned!'}
                   </Text>
                 </View>
               ) : (
                 <View style={modalStyles.lockedBox}>
-                  <FontAwesomeIcon icon={faLock} size={14} color={STAMP_LOCKED_COLOR} />
+                  <GameIcon name="lock" size={14 + 4} />
                   <Text style={modalStyles.lockedText}>Locked</Text>
                 </View>
               )}

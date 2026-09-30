@@ -16,15 +16,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from '../helpers/haptics';
 import HapticPatterns from '../helpers/hapticPatterns';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import {
-  faLock,
-  faStar,
-  faCheck,
-  faClock,
-  faTrophy,
-  faGem,
-} from '@fortawesome/free-solid-svg-icons';
 import Wrapper from '../components/Wrapper';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
@@ -238,7 +229,7 @@ function CollectionCard({
                     ]}
                   >
                     {!isCollected && (
-                      <FontAwesomeIcon icon={faLock} size={18} color="rgba(0,0,0,0.12)" />
+                      <GameIcon name="lock" size={18 + 4} style={{ opacity: 0.35 }} />
                     )}
                   </View>
                 );
@@ -249,11 +240,7 @@ function CollectionCard({
           {/* Lock overlay for uncollected */}
           {!isCollected && (
             <View style={styles.lockOverlay}>
-              <FontAwesomeIcon
-                icon={faLock}
-                size={16}
-                color="rgba(0,0,0,0.15)"
-              />
+              <GameIcon name="lock" size={16 + 4} style={{ opacity: 0.35 }} />
             </View>
           )}
 
@@ -807,18 +794,14 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
           {/* Completion Badge */}
           {isComplete && (
             <View style={styles.completeBadge}>
-              <FontAwesomeIcon icon={faStar} size={14} color="#FFD700" />
+              <GameIcon name="star" size={14 + 4} />
             </View>
           )}
 
           {/* Time Gate Indicator */}
           {set.time_gate && set.time_gate.is_spawning_now === false && (
             <View style={styles.timeGateBadge}>
-              <FontAwesomeIcon
-                icon={faClock}
-                size={10}
-                color="rgba(255,255,255,0.4)"
-              />
+              <GameIcon name="timer" size={10 + 4} />
             </View>
           )}
         </View>
@@ -899,11 +882,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             {/* Time gate info */}
             {set.is_in_rotation !== false && set.time_gate && (
               <View style={styles.timeGateInfo}>
-                <FontAwesomeIcon
-                  icon={faClock}
-                  size={12}
-                  color="rgba(255,255,255,0.6)"
-                />
+                <GameIcon name="timer" size={12 + 4} />
                 <Text style={styles.timeGateText}>
                   {set.time_gate.description}
                 </Text>
@@ -1081,7 +1060,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             ) : progress.starter_milestone.is_unlocked ? (
               <Button onPress={handleClaimStarter} hasPermission={!claimingStarter}>
                 <LinearGradient colors={['#FFBE57', '#F18B32']} style={styles.claimButton}>
-                  <FontAwesomeIcon icon={faStar} size={18} color="white" />
+                  <GameIcon name="star" size={18 + 4} />
                   <Text style={styles.claimButtonText}>{claimingStarter ? 'Claiming...' : 'Claim Trip Prep'}</Text>
                 </LinearGradient>
               </Button>
@@ -1161,7 +1140,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
             {progress.spare_count} spare copies · Exchange {progress.exchange_cost} for any missing item
           </Text>}
           <View style={styles.rewardsSectionHeader}>
-            <FontAwesomeIcon icon={faTrophy} size={16} color="#FFD700" />
+            <GameIcon name="trophy" size={16 + 4} />
             <Text style={styles.sectionTitle}>Completion Rewards</Text>
           </View>
           <View style={styles.rewardsGrid}>
@@ -1224,11 +1203,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                     { backgroundColor: 'rgba(255,215,0,0.15)' },
                   ]}
                 >
-                  <FontAwesomeIcon
-                    icon={faTrophy}
-                    size={16}
-                    color="#FFD700"
-                  />
+                  <GameIcon name="trophy" size={16 + 4} />
                 </View>
                 <Text style={[styles.rewardValue, { fontSize: 11 }]} numberOfLines={2}>
                   {completion_rewards.title}
@@ -1248,11 +1223,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                 colors={['#FFD700', '#FFA000']}
                 style={styles.claimButton}
               >
-                <FontAwesomeIcon
-                  icon={faStar}
-                  size={18}
-                  color="white"
-                />
+                <GameIcon name="star" size={18 + 4} />
                 <Text style={styles.claimButtonText}>
                   {claiming ? 'Claiming...' : 'Claim Rewards!'}
                 </Text>
@@ -1262,7 +1233,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
           {progress.rewards_claimed && completion_rewards.title && (
               <Button onPress={() => handleEquipTitle('complete')} hasPermission={!equippingTitle}>
               <LinearGradient colors={['#254A72', '#142C4B']} style={styles.claimButton}>
-                <FontAwesomeIcon icon={faTrophy} size={17} color="white" />
+                <GameIcon name="trophy" size={17 + 4} />
                 <Text style={styles.claimButtonText}>
                   {equippingTitle ? 'Saving...' : player?.title === completion_rewards.title
                     ? 'Remove Profile Title' : 'Wear Profile Title'}
@@ -1386,11 +1357,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
               </View>
             ) : sets.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <FontAwesomeIcon
-                  icon={faGem}
-                  size={48}
-                  color="rgba(0,0,0,0.1)"
-                />
+                <GameIcon name="sparkle" size={48 + 4} style={{ opacity: 0.35 }} />
                 <Text style={styles.emptyText}>
                   No collections available
                 </Text>
@@ -1599,11 +1566,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                 <View style={styles.modalStatusRow}>
                   {selectedItem.is_collected ? (
                     <>
-                      <FontAwesomeIcon
-                        icon={faCheck}
-                        size={14}
-                        color="#4CAF50"
-                      />
+                      <GameIcon name="check" size={14 + 4} />
                       <Text
                         style={[
                           styles.modalStatus,
@@ -1618,11 +1581,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails }: {
                     </>
                   ) : (
                     <>
-                      <FontAwesomeIcon
-                        icon={faLock}
-                        size={14}
-                        color="rgba(255,255,255,0.5)"
-                      />
+                      <GameIcon name="lock" size={14 + 4} />
                       <Text style={styles.modalStatus}>
                         Not Yet Collected
                       </Text>
