@@ -8,7 +8,7 @@
  * left behind is tidied. That way a server string with an emoji never reaches
  * the screen, even before the backend stream swaps it.
  */
-import { GAME_ICON_NAMES, type GameIconName } from './iconNames';
+import { resolveIconName, type GameIconName } from './iconNames';
 
 export type CopyPart = { readonly kind: 'text'; readonly text: string } | { readonly kind: 'icon'; readonly name: GameIconName };
 
@@ -55,12 +55,20 @@ const LEGACY_EMOJI: Readonly<Record<string, GameIconName>> = {
   'ℹ': 'info',
   '\u{1F504}': 'retry',
   '➡': 'arrow',
+  '⚙': 'settings',
+  '✏': 'edit',
+  '\u{1F4F7}': 'camera',
+  '\u{1F4F8}': 'camera',
+  '\u{1F50D}': 'search',
+  '\u{1F9ED}': 'map',
+  '\u{1F3C5}': 'medal1',
+  '\u{1F195}': 'new',
+  '\u{1F4B5}': 'coins',
 };
 
-const TOKEN_RE = /\[icon:([a-z0-9]+)\]/g;
+const TOKEN_RE = /\[icon:([A-Za-z0-9]+)\]/g;
 // One emoji "grapheme": a pictograph with optional variation selector, skin tone and ZWJ joins, a flag pair, or a keycap.
 const EMOJI_RE = /(?:[\u{1F1E6}-\u{1F1FF}]{2}|[#*0-9]️?⃣|(?![©®™])\p{Extended_Pictographic}️?[\u{1F3FB}-\u{1F3FF}]?(?:‍\p{Extended_Pictographic}️?[\u{1F3FB}-\u{1F3FF}]?)*)/gu;
-const KNOWN = new Set<string>(GAME_ICON_NAMES);
 
 export function iconForEmoji(emoji: string): GameIconName | undefined {
   return LEGACY_EMOJI[emoji.replace(/️/g, '')];
@@ -85,11 +93,11 @@ export function parseIconTokens(text: string, options: { legacyEmoji?: boolean }
   const parts: CopyPart[] = [];
   let last = 0;
   for (const match of source.matchAll(TOKEN_RE)) {
-    const name = match[1];
-    if (!KNOWN.has(name)) continue;
+    const name = resolveIconName(match[1]);
+    if (!name) continue;
     const start = match.index ?? 0;
     if (start > last) parts.push({ kind: 'text', text: source.slice(last, start) });
-    parts.push({ kind: 'icon', name: name as GameIconName });
+    parts.push({ kind: 'icon', name });
     last = start + match[0].length;
   }
   if (last < source.length) parts.push({ kind: 'text', text: source.slice(last) });

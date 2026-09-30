@@ -11,7 +11,6 @@ const { runtime } = require('./helpers/reward-hook-runtime.cjs');
 const root = path.resolve(__dirname, '../..');
 const tokens = loadTs('src/ui/tokens.ts');
 const presets = loadTs('src/ui/TextPresets.ts');
-const art = loadTs('src/ui/gameIconArt.ts');
 const names = loadTs('src/ui/iconNames.ts');
 const iconTokens = loadTs('src/ui/iconTokens.ts');
 
@@ -28,10 +27,12 @@ test('brand tokens: navy scrim instead of black, and no purple or near-black sur
   assert.equal(tokens.BRAND.cream, '#fff8e4');
   assert.equal(tokens.BRAND.navy, '#05346e');
   assert.equal(tokens.BRAND.gold, '#ffcf3b');
-  assert.equal(tokens.BUTTON.height, 58);
-  assert.equal(tokens.BUTTON.maxWidth, 320);
-  assert.equal(tokens.BUTTON.lip, 4);
   assert.equal(tokens.BRAND.goldLip.toLowerCase(), '#d99a00');
+  // GameButton geometry comes from YellowButton (his art), not a new button design.
+  assert.equal(tokens.BUTTON.aspectRatio, 3.8);
+  assert.equal(tokens.BUTTON.labelAspectRatio, 4.4);
+  assert.equal(tokens.BUTTON.pressScale, 0.97);
+  assert.equal(tokens.BUTTON.maxWidth, 320);
   for (const [name, value] of Object.entries(tokens.BRAND)) {
     if (!value.startsWith('#')) continue;
     const { h, s, l } = hue(value);
@@ -56,33 +57,62 @@ test('text presets never fake bold, use the brand faces, and outline display tex
   assert.equal(presets.textPreset('body').color, tokens.BRAND.navy);
 });
 
-test('icon set covers the plan list and every raster icon reuses a file that exists', () => {
+const ICON_DIR = path.join(root, 'assets/images/icons');
+/** Width, height and PNG colour type from the IHDR chunk, plus whether a tRNS chunk exists. */
+function pngInfo(file) {
+  const buf = fs.readFileSync(file);
+  assert.equal(buf.toString('ascii', 1, 4), 'PNG', `${file} is a PNG`);
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20), colorType: buf[25], trns: buf.includes(Buffer.from('tRNS')) };
+}
+function iconSources() {
+  const source = fs.readFileSync(path.join(root, 'src/ui/GameIcon.tsx'), 'utf8');
+  return Object.fromEntries([...source.matchAll(/\s(\w+): require\('([^']+)'\)/g)]
+    .map(([, name, rel]) => [name, path.resolve(root, 'src/ui', rel)]));
+}
+
+test('icon set covers the plan list, and every icon is a PNG that exists', () => {
   const required = ['energy', 'ticket', 'rush', 'wrench', 'pin', 'gift', 'crown', 'medal1', 'medal2', 'medal3',
-    'timer', 'streak', 'dice', 'bell', 'check', 'close', 'pause', 'star', 'sparkle', 'heart', 'map', 'swords', 'shark'];
+    'timer', 'streak', 'dice', 'bell', 'check', 'close', 'pause', 'star', 'sparkle', 'heart', 'map', 'swords', 'shark',
+    'fin', 'ride', 'camera', 'play', 'retry', 'arrow', 'lock', 'info', 'trophy', 'chest', 'settings', 'xp', 'edit', 'coin', 'coins'];
   for (const name of required) assert.ok(names.isGameIconName(name), `missing icon ${name}`);
   assert.equal(new Set(names.GAME_ICON_NAMES).size, names.GAME_ICON_NAMES.length, 'icon names are unique');
-  const source = fs.readFileSync(path.join(root, 'src/ui/GameIcon.tsx'), 'utf8');
-  for (const name of names.RASTER_ICON_NAMES) {
-    const match = new RegExp(`${name}: require\\('([^']+)'\\)`).exec(source);
-    assert.ok(match, `raster ${name} is mapped`);
-    assert.ok(fs.existsSync(path.resolve(root, 'src/ui', match[1])), `${match[1]} exists`);
+  const sources = iconSources();
+  assert.deepEqual(Object.keys(sources).sort(), [...names.GAME_ICON_NAMES].sort(), 'every name has exactly one source');
+  for (const [name, file] of Object.entries(sources)) {
+    assert.ok(file.endsWith('.png') && fs.existsSync(file), `${name}: ${file} exists`);
+    const info = pngInfo(file);
+    assert.ok(info.colorType === 6 || (info.colorType === 3 && info.trns), `${name} has a transparent background`);
   }
+  for (const [alias, target] of Object.entries(names.ICON_ALIASES)) {
+    assert.equal(names.resolveIconName(alias), target);
+    assert.ok(names.isGameIconName(target), `alias ${alias} points at a real icon`);
+  }
+  assert.equal(names.resolveIconName('nope'), undefined);
 });
 
-test('vector icons stay on the 48 grid and only use brand paint', () => {
-  const allowed = new Set([...Object.values(tokens.BRAND), '#ff8f3a', '#e3ebf5', '#9fb2c9', '#eb9a5c', '#b8662f']);
-  for (const [name, icon] of Object.entries(art.VECTOR_ICONS)) {
-    assert.ok(icon.silhouette.length > 0, `${name} has a silhouette`);
-    for (const shape of [...icon.silhouette, ...(icon.detail ?? [])]) {
-      for (const paint of [shape.fill, shape.stroke]) if (paint) assert.ok(allowed.has(paint), `${name} uses ${paint}`);
-      const numbers = shape.kind === 'path' ? shape.d.match(/-?\d+(\.\d+)?/g).map(Number)
-        : shape.kind === 'circle' ? [shape.cx - shape.r, shape.cx + shape.r, shape.cy - shape.r, shape.cy + shape.r]
-        : shape.kind === 'rect' ? [shape.x, shape.y, shape.x + shape.w, shape.y + shape.h] : [shape.x, shape.y];
-      for (const value of numbers) assert.ok(value >= 0 && value <= 48, `${name} leaves the grid (${value})`);
-    }
+test('icons are hand-drawn art: no vector shapes, no icon fonts, no drawn-over originals', () => {
+  assert.ok(!fs.existsSync(path.join(root, 'src/ui/gameIconArt.ts')), 'the rejected vector icon set is gone');
+  for (const file of fs.readdirSync(path.join(root, 'src/ui'))) {
+    if (!/\.tsx?$/.test(file)) continue;
+    const source = fs.readFileSync(path.join(root, 'src/ui', file), 'utf8');
+    assert.ok(!/from 'react-native-svg'|@shopify\/react-native-skia|@expo\/vector-icons|react-native-vector-icons/.test(source),
+      `src/ui/${file} draws icons with vectors or an icon font`);
   }
-  assert.equal(art.outlineWidth({ kind: 'circle', cx: 1, cy: 1, r: 1, fill: '#fff' }), art.ICON_OUTLINE * 2);
-  assert.equal(art.outlineWidth({ kind: 'path', d: 'M0 0', stroke: '#fff', width: 5 }), 5 + art.ICON_OUTLINE * 2);
+  const sources = iconSources();
+  // New art (GPT Image 2.5 from Alex's references) lives in assets/images/icons, trimmed, long side 384.
+  for (const name of names.GENERATED_ICON_NAMES) {
+    assert.equal(path.dirname(sources[name]), ICON_DIR, `${name} is in assets/images/icons`);
+    const { width, height } = pngInfo(sources[name]);
+    assert.equal(Math.max(width, height), 384, `${name} is ~384px on the long side`);
+  }
+  // The Feb-2026 repo art is used only for the currencies it already represents.
+  const feb2026 = ['energy.png', 'ticket-icon.png', 'sword-icon.png', 'ride-parts.png', 'coingold.png', 'shield.png'];
+  const febUsers = Object.entries(sources).filter(([, file]) => feb2026.includes(path.basename(file))).map(([name]) => name).sort();
+  assert.deepEqual(febUsers, ['energy', 'parts', 'swords', 'ticket']);
+  // Alex's originals copied into assets/images/icons keep their names; nothing else hides in there.
+  const inDir = fs.readdirSync(ICON_DIR).filter(file => file.endsWith('.png')).map(file => file.replace(/\.png$/, ''));
+  const used = new Set(Object.values(sources).filter(file => path.dirname(file) === ICON_DIR).map(file => path.basename(file, '.png')));
+  for (const file of inDir) assert.ok(used.has(file), `assets/images/icons/${file}.png is unused`);
 });
 
 test('icon tokens split copy, and legacy emoji become icons or disappear cleanly', () => {
@@ -151,16 +181,22 @@ test('dialog store: falls back to the native alert with no host, queues one at a
   assert.equal(native.length, 2, 'detached hosts fall back to native again');
 });
 
+const artText = loadTs('src/ui/artButtonText.ts');
+
 function buttonView(props, reduced = false) {
   const hapticCalls = [];
   const view = runtime('src/ui/GameButton.tsx', {
     '../hooks/useReducedGameMotion': { default: () => reduced },
     '../gamekit/Haptics': { haptic: intent => hapticCalls.push(intent) },
     './GameIcon': { default: 'GameIcon' },
+    './artButtonText': artText,
     './tokens': tokens,
   }, props);
   return { view, hapticCalls, pressable: () => view.tree };
 }
+const face = view => view.find(n => n.props && n.props.source && n.props.resizeMode === 'contain');
+const labelArea = view => view.find(n => n.props && typeof n.props.onLayout === 'function');
+const label = view => view.find(n => n.type === 'Text');
 
 test('GameButton: press gives a light haptic and fires once; disabled and loading ignore presses', () => {
   let presses = 0;
@@ -170,7 +206,7 @@ test('GameButton: press gives a light haptic and fires once; disabled and loadin
   pressable().props.onPressIn(); pressable().props.onPress(); pressable().props.onPressOut();
   assert.equal(presses, 1);
   assert.deepEqual(hapticCalls, ['tapLight']);
-  assert.ok(view.motions.includes('timing'), 'press collapse animates');
+  assert.ok(view.motions.includes('timing'), 'press scale animates');
   assert.ok(view.find(n => n.type === 'Text' && n.props.children === 'Play ride'));
 
   view.change({ disabled: true });
@@ -181,21 +217,34 @@ test('GameButton: press gives a light haptic and fires once; disabled and loadin
   pressable().props.onPress();
   assert.equal(presses, 1);
   assert.equal(pressable().props.accessibilityState.busy, true);
+  assert.equal(buttonView({ label: 'x', haptics: false }).hapticCalls.length, 0);
 });
 
-test('GameButton: fixed Shark 24 (not shrink-from-72), 58 tall, capped at 320; reduced motion skips tweens', () => {
+test("GameButton: Dustin's own button art and YellowButton's label, sized from the button height", () => {
   const { view, pressable } = buttonView({ label: 'Go', onPress: () => undefined }, true);
-  const label = view.find(n => n.type === 'Text');
-  assert.equal(label.props.style.fontSize, 24);
-  assert.equal(label.props.style.fontFamily, 'Shark');
-  const outer = [].concat(pressable().props.style).find(style => style && style.height);
-  assert.equal(outer.height, 58);
+  assert.equal(face(view).props.source, '../../assets/images/yellow_button.png', 'primary is his yellow_button.png');
+  assert.equal(face(view).props.style.aspectRatio, 3.8);
+  const style = label(view).props.style;
+  for (const [key, value] of Object.entries({ fontFamily: 'Shark', color: 'white', textTransform: 'uppercase',
+    textShadowColor: 'rgba(0, 0, 0, .5)', textShadowRadius: 0 })) assert.equal(style[key], value, `label ${key}`);
+  assert.equal(labelArea(view).props.style.opacity, 0, 'label hidden for the frame before layout');
+  labelArea(view).props.onLayout({ nativeEvent: { layout: { height: 52 } } });
+  view.render();
+  assert.equal(label(view).props.style.fontSize, 24, 'label size follows the measured label area');
+  assert.equal(labelArea(view).props.style.opacity, 1);
+  const outer = [].concat(pressable().props.style).find(entry => entry && entry.maxWidth);
   assert.equal(outer.maxWidth, 320);
   const before = view.motions.length;
   pressable().props.onPressIn(); pressable().props.onPressOut();
   assert.equal(view.motions.length, before, 'no tween under reduced motion');
-  const compact = buttonView({ label: 'Go', size: 'compact' }).view.find(n => n.type === 'Text');
-  assert.equal(compact.props.style.fontSize, 20);
+
+  assert.equal(face(buttonView({ label: 'Leave', variant: 'danger' }).view).props.source, '../../assets/images/red_button.png');
+  const secondary = buttonView({ label: 'Later', variant: 'secondary' });
+  assert.equal(face(secondary.view).props.source, '../../assets/images/yellow_button.png');
+  assert.equal([].concat(secondary.pressable().props.style).find(entry => entry && entry.maxWidth).maxWidth, 240);
+  const ghost = buttonView({ label: 'Not now', variant: 'ghost' }).view;
+  assert.equal(face(ghost), undefined, 'ghost is a text action, no art');
+  assert.equal(label(ghost).props.style.color, tokens.BRAND.navy);
 });
 
 function loaderView(props) {
@@ -212,7 +261,7 @@ test('SharkLoader: loading turns slow and offers retry; error and empty never sp
   let retries = 0;
   const view = loaderView({ onRetry: () => { retries += 1; }, slowAfterMs: 5000 });
   assert.ok(view.find(n => n.type === 'GameText' && n.props.children === 'Loading'));
-  assert.ok(view.find(n => n.type?.name === 'SwimmingFin' && n.props.still === true), 'reduced motion holds the fin still');
+  assert.ok(view.find(n => n.type?.name === 'SwimmingShark' && n.props.still === true), 'reduced motion holds the shark still');
   assert.equal(view.find(n => n.type === 'GameButton'), undefined, 'no retry before it runs slow');
   assert.equal(view.timers.size, 1);
   [...view.timers.values()][0]();
@@ -224,7 +273,8 @@ test('SharkLoader: loading turns slow and offers retry; error and empty never sp
   view.change({ state: 'error' });
   assert.ok(view.find(n => n.type === 'GameText' && n.props.children === "Couldn't load this"));
   assert.equal(view.find(n => n.type === 'GameButton').props.variant, 'primary');
-  assert.equal(view.find(n => n.type?.name === 'SwimmingFin'), undefined);
+  assert.equal(view.find(n => n.type?.name === 'SwimmingShark'), undefined);
+  assert.ok(view.find(n => n.type === 'Image' && n.props.source === '../../assets/images/screens/pin-collections/shark.png'), 'error shows his shark');
 
   const empty = loaderView({ state: 'empty', title: 'Be the first on the podium', action: { label: 'Find a ride', onPress: () => undefined } });
   assert.ok(empty.find(n => n.type === 'GameText' && n.props.children === 'Be the first on the podium'));
@@ -238,8 +288,6 @@ test('Loading is a thin wrapper over SharkLoader', () => {
   assert.equal(loading.tree.props.state, 'error');
   assert.equal(loading.tree.props.onRetry, 'r');
 });
-
-const artText = loadTs('src/ui/artButtonText.ts');
 
 test('image button labels: one size per button height instead of shrink-from-72', () => {
   assert.equal(artText.artButtonFontSize(0), 72, 'unmeasured keeps the original start size (label hidden until measured)');

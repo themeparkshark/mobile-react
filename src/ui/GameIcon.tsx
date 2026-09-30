@@ -2,106 +2,95 @@
  * <GameIcon name="ticket" size={24} /> (WS0 UI kit)
  *
  * One icon set for the whole game, so no screen needs an emoji, a dingbat or a
- * bracket code. Raster icons reuse the existing repo art players already know;
- * vector icons are hand-drawn in src/ui/gameIconArt.ts in the same style
- * (thick navy outline, brand fills).
+ * bracket code. Every icon is hand-drawn PNG art: Alex's originals and the art
+ * players already know are reused as they are, and the few icons that had no
+ * original were drawn with GPT Image 2.5 from Alex's references (see
+ * iconNames.ts and src/ui/README.md). Never swap in vector shapes or icon fonts.
  *
  * Icons are decorative by default (hidden from VoiceOver). Pass
- * accessibilityLabel when the icon carries meaning on its own.
- * Pass `mono` to paint a vector icon as a single-colour silhouette, for
- * example a white glyph on a gold button. Raster icons are tinted instead.
+ * accessibilityLabel when the icon carries meaning on its own. `mono` tints the
+ * art to a single-colour silhouette (for example a white glyph on a button).
  */
 import { memo } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import Svg, { Circle, G, Path, Rect, Text as SvgText } from 'react-native-svg';
-import { BRAND, FONT } from './tokens';
-import { ICON_GRID, VECTOR_ICONS, outlineWidth, type IconShape, type VectorIcon, type VectorIconName } from './gameIconArt';
-import { GAME_ICON_NAMES, isGameIconName, isRasterIconName, type GameIconName, type RasterIconName } from './iconNames';
+import { GAME_ICON_NAMES, isGameIconName, resolveIconName, type GameIconName } from './iconNames';
 
-export const RASTER_ICONS: Record<RasterIconName, number> = {
+export const ICON_SOURCES: Record<GameIconName, number> = {
+  // Currencies exactly as players see them today
   energy: require('../../assets/images/energy.png'),
   ticket: require('../../assets/images/ticket-icon.png'),
-  coin: require('../../assets/images/coingold.png'),
-  crown: require('../../assets/images/screens/leaderboard/crown-gold.png'),
   swords: require('../../assets/images/sword-icon.png'),
+  parts: require('../../assets/images/ride-parts.png'),
+  coin: require('../../assets/images/icons/coin.png'),
+  coins: require('../../assets/images/icons/coins.png'),
+  // Alex's originals
+  close: require('../../assets/images/icons/close.png'),
+  check: require('../../assets/images/screens/notifications/mark_all_as_read.png'),
+  back: require('../../assets/images/screens/explore/back.png'),
+  bell: require('../../assets/images/screens/profile/notifications.png'),
+  settings: require('../../assets/images/screens/profile/settings.png'),
+  info: require('../../assets/images/faq.png'),
+  edit: require('../../assets/images/screens/profile/edit.png'),
+  lock: require('../../assets/images/locked.png'),
   star: require('../../assets/images/screens/pin-collections/star.png'),
+  heart: require('../../assets/images/screens/player/compliment.png'),
+  gift: require('../../assets/images/icons/gift.png'),
+  chest: require('../../assets/images/screens/redeem/chest_closed.png'),
+  chestOpen: require('../../assets/images/screens/redeem/chest_opened.png'),
+  trophy: require('../../assets/images/screens/park/gold.png'),
+  trophySilver: require('../../assets/images/screens/park/silver.png'),
+  trophyBronze: require('../../assets/images/screens/park/bronze.png'),
+  map: require('../../assets/images/icons/map.png'),
+  xp: require('../../assets/images/screens/explore/xp.png'),
+  shark: require('../../assets/images/icons/shark.png'),
+  fin: require('../../assets/images/icons/fin.png'),
+  search: require('../../assets/images/icons/search.png'),
+  new: require('../../assets/images/icons/new.png'),
+  member: require('../../assets/images/screens/profile/subscribed.png'),
+  queue: require('../../assets/images/screens/explore/queuetimes.png'),
+  // Drawn with GPT Image 2.5 from Alex's references (no original existed)
+  crown: require('../../assets/images/icons/crown.png'),
+  streak: require('../../assets/images/icons/streak.png'),
+  timer: require('../../assets/images/icons/timer.png'),
+  rush: require('../../assets/images/icons/rush.png'),
+  wrench: require('../../assets/images/icons/wrench.png'),
+  pin: require('../../assets/images/icons/pin.png'),
+  medal1: require('../../assets/images/icons/medal1.png'),
+  medal2: require('../../assets/images/icons/medal2.png'),
+  medal3: require('../../assets/images/icons/medal3.png'),
+  dice: require('../../assets/images/icons/dice.png'),
+  sparkle: require('../../assets/images/icons/sparkle.png'),
+  ride: require('../../assets/images/icons/ride.png'),
+  camera: require('../../assets/images/icons/camera.png'),
+  pause: require('../../assets/images/icons/pause.png'),
+  play: require('../../assets/images/icons/play.png'),
+  retry: require('../../assets/images/icons/retry.png'),
+  arrow: require('../../assets/images/icons/arrow.png'),
 };
 
 export { GAME_ICON_NAMES, isGameIconName };
-export type { GameIconName, RasterIconName };
+export type { GameIconName };
 
 export type GameIconProps = {
+  /** An icon name (or a legacy alias such as 'faq'). Unknown names render an empty box. */
   readonly name: GameIconName;
   readonly size?: number;
+  /** Tint the art to one colour. */
   readonly mono?: string;
   readonly accessibilityLabel?: string;
   readonly style?: StyleProp<ViewStyle>;
   readonly testID?: string;
 };
 
-type Override = { fill?: string; stroke?: string; width?: number; opacity?: number; dash?: readonly number[] | null };
-
-function paint(shape: IconShape, override: Override = {}) {
-  const fill = override.fill ?? shape.fill;
-  const stroke = override.stroke ?? shape.stroke;
-  const dash = override.dash === null ? undefined : override.dash ?? shape.dash;
-  return {
-    fill: fill ?? 'none',
-    stroke,
-    strokeWidth: stroke ? override.width ?? shape.width ?? 2 : undefined,
-    strokeLinecap: stroke ? shape.cap ?? 'round' : undefined,
-    strokeLinejoin: stroke ? 'round' as const : undefined,
-    strokeDasharray: dash ? [...dash] : undefined,
-    opacity: override.opacity ?? shape.opacity,
-  };
-}
-
-function renderShape(shape: IconShape, key: string, override?: Override) {
-  const props = paint(shape, override);
-  let node;
-  switch (shape.kind) {
-    case 'path': node = <Path key={key} d={shape.d} {...props} />; break;
-    case 'circle': node = <Circle key={key} cx={shape.cx} cy={shape.cy} r={shape.r} {...props} />; break;
-    case 'rect': node = <Rect key={key} x={shape.x} y={shape.y} width={shape.w} height={shape.h}
-      rx={shape.rx ?? 0} ry={shape.rx ?? 0} {...props} />; break;
-    case 'text': node = <SvgText key={key} x={shape.x} y={shape.y} fontSize={shape.size} fontFamily={FONT.display}
-      textAnchor="middle" {...props}>{shape.text}</SvgText>; break;
-  }
-  return shape.transform ? <G key={key} transform={shape.transform}>{node}</G> : node;
-}
-
-/** Layers for a vector icon: navy outline pass, fill pass, then details. */
-export function vectorLayers(name: VectorIconName, mono?: string) {
-  const icon: VectorIcon = VECTOR_ICONS[name];
-  const outline = mono ?? BRAND.navy;
-  const layers = icon.silhouette.map((shape, i) => renderShape(shape, `o${i}`, shape.fill
-    ? { fill: outline, stroke: outline, width: outlineWidth(shape), opacity: 1, dash: null }
-    : { stroke: outline, width: outlineWidth(shape), opacity: 1, dash: null }));
-  if (mono) return layers;
-  return [
-    ...layers,
-    ...icon.silhouette.map((shape, i) => renderShape(shape, `f${i}`)),
-    ...(icon.detail ?? []).map((shape, i) => renderShape(shape, `d${i}`)),
-  ];
-}
-
 function GameIcon({ name, size = 24, mono, accessibilityLabel, style, testID }: GameIconProps) {
   const a11y = accessibilityLabel
     ? { accessible: true, accessibilityRole: 'image' as const, accessibilityLabel }
     : { accessible: false, importantForAccessibility: 'no-hide-descendants' as const };
-  const box = [{ width: size, height: size }, style];
-  if (isRasterIconName(name)) {
-    return <View {...a11y} testID={testID} pointerEvents="none" style={box}>
-      <Image source={RASTER_ICONS[name]} contentFit="contain"
-        tintColor={mono} style={{ width: size, height: size }} />
-    </View>;
-  }
-  if (!isGameIconName(name)) return <View style={box} />;
-  return <View {...a11y} testID={testID} pointerEvents="none" style={box}>
-    <Svg width={size} height={size} viewBox={`0 0 ${ICON_GRID} ${ICON_GRID}`}>
-      {vectorLayers(name as VectorIconName, mono)}
-    </Svg>
+  const resolved = resolveIconName(name);
+  return <View {...a11y} testID={testID} pointerEvents="none" style={[{ width: size, height: size }, style]}>
+    {resolved && <Image source={ICON_SOURCES[resolved]} contentFit="contain" tintColor={mono}
+      cachePolicy="memory-disk" style={{ width: size, height: size }} />}
   </View>;
 }
 

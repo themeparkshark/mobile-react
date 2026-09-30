@@ -1,17 +1,22 @@
 /**
- * <GameButton> (WS0 UI kit): the one call-to-action button.
+ * <GameButton> (WS0 UI kit): Dustin's own image button with a few extras.
  *
  *   <GameButton label="Play ride" icon="ticket" onPress={play} />
- *   <GameButton label="Not now" variant="secondary" size="compact" onPress={close} />
+ *   <GameButton label="Leave the line" variant="danger" onPress={leave} />
+ *   <GameButton label="Not now" variant="ghost" onPress={close} />
  *
- * Geometry: 58pt tall (46 compact), max 320 wide, Shark 24 (20 compact),
- * a 4pt lip under the face and a thick navy outline. Pressing collapses the
- * face onto its lip on the UI thread. A light haptic fires on press (it
- * respects the player's haptics setting). Reduced motion keeps the pressed
- * state but drops the tween and the loading pulse.
+ * The face is his art, unchanged: yellow_button.png for primary and secondary
+ * (secondary is the same button at a smaller width), red_button.png for danger.
+ * The label is the YellowButton label (white Shark caps, the same shadow),
+ * sized from the button height so every label on one size matches. Ghost is a
+ * plain Shark-font text action for "Cancel" and "Not now".
+ *
+ * Extras over YellowButton: an optional GameIcon before the label, a loading
+ * state, a light haptic, and the press scale on the UI thread. Reduced motion
+ * keeps presses instant.
  */
-import { useEffect } from 'react';
-import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ImageBackground, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -23,16 +28,24 @@ import Animated, {
 } from 'react-native-reanimated';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { haptic } from '../gamekit/Haptics';
+import { artButtonFontSize } from './artButtonText';
 import GameIcon from './GameIcon';
 import type { GameIconName } from './iconNames';
-import { BRAND, BUTTON, FONT, HIT_SLOP, MOTION, OUTLINE, RADIUS, type GameButtonSize, type GameButtonVariant } from './tokens';
+import { BRAND, BUTTON, FONT, HIT_SLOP, type GameButtonSize, type GameButtonVariant } from './tokens';
 
 export type { GameButtonSize, GameButtonVariant };
+
+export const BUTTON_ART = {
+  yellow: require('../../assets/images/yellow_button.png'),
+  red: require('../../assets/images/red_button.png'),
+} as const;
 
 export type GameButtonProps = {
   readonly label: string;
   readonly onPress?: () => void;
+  /** primary (yellow), secondary (yellow, smaller), danger (red), ghost (text only). */
   readonly variant?: GameButtonVariant;
+  /** compact is the secondary width on any image variant. */
   readonly size?: GameButtonSize;
   readonly icon?: GameIconName;
   readonly disabled?: boolean;
@@ -40,7 +53,7 @@ export type GameButtonProps = {
   readonly loading?: boolean;
   /** Ghost buttons only: which surface they sit on. */
   readonly tone?: 'onLight' | 'onBlue';
-  /** Stretch to the parent width (still capped at 320). Default true. */
+  /** Stretch to the parent width (still capped). Default true. */
   readonly fullWidth?: boolean;
   readonly haptics?: boolean;
   readonly accessibilityLabel?: string;
@@ -49,20 +62,26 @@ export type GameButtonProps = {
   readonly style?: StyleProp<ViewStyle>;
 };
 
-type Palette = { face: string; lip: string; ink: string; outline: string; shadow: string | null };
-
-export function buttonPalette(variant: GameButtonVariant, inactive: boolean, tone: 'onLight' | 'onBlue' = 'onLight'): Palette {
-  if (variant === 'ghost') {
-    const ink = tone === 'onBlue' ? BRAND.white : BRAND.navy;
-    return { face: 'transparent', lip: 'transparent', ink: inactive ? BRAND.navySoft : ink, outline: 'transparent', shadow: null };
-  }
-  if (inactive) return { face: '#d5e2f0', lip: '#a9bcd3', ink: BRAND.white, outline: '#7f97b6', shadow: '#7f97b6' };
-  switch (variant) {
-    case 'secondary': return { face: BRAND.blueBright, lip: BRAND.blueLip, ink: BRAND.white, outline: BRAND.navy, shadow: BRAND.navy };
-    case 'danger': return { face: BRAND.red, lip: BRAND.redLip, ink: BRAND.white, outline: BRAND.navy, shadow: BRAND.navy };
-    default: return { face: BRAND.gold, lip: BRAND.goldLip, ink: BRAND.white, outline: BRAND.navy, shadow: BRAND.navy };
-  }
+/** Which art and width a variant uses. Pure, so it is unit tested. */
+export function buttonLook(variant: GameButtonVariant, size: GameButtonSize) {
+  if (variant === 'ghost') return { art: null, maxWidth: BUTTON.maxWidth };
+  const compact = size === 'compact' || variant === 'secondary';
+  return {
+    art: variant === 'danger' ? 'red' as const : 'yellow' as const,
+    maxWidth: compact ? BUTTON.compactMaxWidth : BUTTON.maxWidth,
+  };
 }
+
+/** YellowButton's label style, so both buttons read as one family. */
+export const ART_LABEL_STYLE = {
+  textAlign: 'center',
+  color: 'white',
+  fontFamily: FONT.display,
+  textTransform: 'uppercase',
+  textShadowColor: 'rgba(0, 0, 0, .5)',
+  textShadowOffset: { width: 1, height: 1 },
+  textShadowRadius: 0,
+} as const;
 
 export default function GameButton({
   label,
@@ -81,37 +100,56 @@ export default function GameButton({
   style,
 }: GameButtonProps) {
   const reducedMotion = useReducedGameMotion();
-  const pressed = useSharedValue(0);
+  const scale = useSharedValue(1);
   const pulse = useSharedValue(1);
+  const [labelAreaHeight, setLabelAreaHeight] = useState(0);
   const inactive = disabled || loading;
-  const ghost = variant === 'ghost';
-  const height = size === 'compact' ? BUTTON.compactHeight : BUTTON.height;
-  const lip = ghost ? 0 : BUTTON.lip;
-  const fontSize = size === 'compact' ? BUTTON.compactFontSize : BUTTON.fontSize;
-  const palette = buttonPalette(variant, disabled, tone);
+  const look = buttonLook(variant, size);
 
   useEffect(() => {
     cancelAnimation(pulse);
     if (loading && !reducedMotion) {
       pulse.value = withRepeat(withSequence(
-        withTiming(0.55, { duration: 520, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0.45, { duration: 520, easing: Easing.inOut(Easing.quad) }),
         withTiming(1, { duration: 520, easing: Easing.inOut(Easing.quad) }),
       ), -1, false);
     } else {
-      pulse.value = loading ? 0.7 : 1;
+      pulse.value = loading ? 0.6 : 1;
     }
     return () => cancelAnimation(pulse);
   }, [loading, reducedMotion, pulse]);
 
-  const faceStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: pressed.value * lip }],
-  }));
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const labelStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
-  const press = (to: number) => {
-    if (inactive) return;
-    pressed.value = reducedMotion ? to : withTiming(to, { duration: to ? MOTION.pressInMs : MOTION.pressOutMs });
+  const press = (down: boolean) => {
+    if (inactive || reducedMotion) return;
+    scale.value = withTiming(down ? BUTTON.pressScale : 1, { duration: down ? BUTTON.pressInMs : BUTTON.pressOutMs });
   };
+
+  const fontSize = look.art ? artButtonFontSize(labelAreaHeight) : size === 'compact' ? 16 : 18;
+  const iconSize = Math.round(fontSize * 1.25);
+  const content = <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', maxWidth: '100%' }, labelStyle]}>
+    {icon && <GameIcon name={icon} size={iconSize} style={{ marginRight: Math.round(fontSize * 0.3) }} />}
+    <Text
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.6}
+      maxFontSizeMultiplier={1.2}
+      style={look.art ? { ...ART_LABEL_STYLE, flexShrink: 1, fontSize, paddingTop: 4, paddingBottom: 4 } : {
+        flexShrink: 1,
+        textAlign: 'center',
+        fontFamily: FONT.display,
+        textTransform: 'uppercase',
+        fontSize,
+        letterSpacing: 0.5,
+        color: tone === 'onBlue' ? BRAND.white : BRAND.navy,
+        ...(tone === 'onBlue' ? { textShadowColor: 'rgba(0, 0, 0, .5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 0 } : null),
+      }}
+    >
+      {label}
+    </Text>
+  </Animated.View>;
 
   return (
     <Pressable
@@ -122,70 +160,26 @@ export default function GameButton({
       accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}
       hitSlop={HIT_SLOP}
-      onPressIn={() => press(1)}
-      onPressOut={() => press(0)}
+      onPressIn={() => press(true)}
+      onPressOut={() => press(false)}
       onPress={() => {
         if (inactive) return;
         if (haptics) haptic('tapLight');
         onPress?.();
       }}
-      style={[{
-        height,
-        width: fullWidth ? '100%' : undefined,
-        maxWidth: BUTTON.maxWidth,
-        alignSelf: 'center',
-      }, style]}
+      style={[{ width: fullWidth ? '100%' : undefined, maxWidth: look.maxWidth, alignSelf: 'center' }, style]}
     >
-      {!ghost && <View pointerEvents="none" style={{
-        position: 'absolute', left: 0, right: 0, top: lip, bottom: 0,
-        backgroundColor: palette.lip, borderRadius: RADIUS.md,
-        borderWidth: OUTLINE.thick, borderColor: palette.outline,
-      }} />}
-      <Animated.View pointerEvents="none" style={[{
-        height: height - lip,
-        borderRadius: RADIUS.md,
-        backgroundColor: palette.face,
-        borderWidth: ghost ? 0 : OUTLINE.thick,
-        borderColor: palette.outline,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: size === 'compact' ? 16 : 22,
-        overflow: 'hidden',
-      }, faceStyle]}>
-        {!ghost && <View style={{
-          position: 'absolute', left: 8, right: 8, top: 4, height: 5, borderRadius: 3,
-          backgroundColor: 'rgba(255,255,255,0.35)',
-        }} />}
-        <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }, labelStyle]}>
-          {icon && <View style={{ marginRight: 8 }}>
-            <GameIcon name={icon} size={Math.round(fontSize * 1.15)} />
-          </View>}
-          <Text
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.75}
-            maxFontSizeMultiplier={1.2}
-            style={{
-              flexShrink: 1,
-              fontFamily: FONT.display,
-              fontSize,
-              lineHeight: Math.round(fontSize * 1.2),
-              paddingTop: 3,
-              color: palette.ink,
-              textTransform: 'uppercase',
-              letterSpacing: 0.5,
-              textAlign: 'center',
-              ...(palette.shadow ? {
-                textShadowColor: palette.shadow,
-                textShadowOffset: { width: 0, height: 2 },
-                textShadowRadius: 0.1,
-              } : null),
-            }}
-          >
-            {label}
-          </Text>
-        </Animated.View>
+      <Animated.View style={[{ opacity: disabled ? 0.5 : 1 }, pressStyle]}>
+        {look.art
+          ? <ImageBackground source={BUTTON_ART[look.art]} resizeMode="contain"
+            style={{ width: '100%', aspectRatio: BUTTON.aspectRatio }}>
+            <View onLayout={event => setLabelAreaHeight(event.nativeEvent.layout.height)}
+              style={{ aspectRatio: BUTTON.labelAspectRatio, justifyContent: 'center', paddingHorizontal: 24,
+                opacity: labelAreaHeight > 0 ? 1 : 0 }}>
+              {content}
+            </View>
+          </ImageBackground>
+          : <View style={{ minHeight: BUTTON.ghostMinHeight, justifyContent: 'center', paddingHorizontal: 12 }}>{content}</View>}
       </Animated.View>
     </Pressable>
   );

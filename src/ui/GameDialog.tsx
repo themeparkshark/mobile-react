@@ -8,10 +8,12 @@
  * Controlled, for a screen that owns the state:
  *   <GameDialog visible={open} title="Saved!" icon="check" buttons={[{ text: 'Nice' }]} onAnswer={() => setOpen(false)} />
  *
- * Look: navy scrim (never black), cream card with a heavy navy outline, a blue
- * title band, an optional GameIcon medallion, and GameButtons stacked with the
- * main action on top. Motion: scrim fade plus a spring pop on the UI thread;
- * reduced motion fades only.
+ * Look: Dustin's own modal template, the one TaskCoinModal and
+ * UnfoundCoinModal use: his ribbon.png title (the Ribbon component) over the
+ * house blue card with a white border, white copy, an optional GameIcon, and
+ * his yellow image buttons stacked with the main action on top (red for
+ * destructive, a quiet text action for cancel). The scrim is navy, never black.
+ * Motion: scrim fade plus a spring pop on the UI thread; reduced motion fades.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Modal, Pressable, View } from 'react-native';
@@ -28,6 +30,7 @@ import { haptic } from '../gamekit/Haptics';
 import GameButton from './GameButton';
 import GameIcon from './GameIcon';
 import GameText from './GameText';
+import Ribbon from '../components/Ribbon';
 import {
   createDialogStore,
   dismissAction,
@@ -36,7 +39,17 @@ import {
   type GameDialogButton,
   type GameDialogOptions,
 } from './gameDialogModel';
-import { BRAND, MOTION, OUTLINE, RADIUS, SHADOW, SPACE, Z } from './tokens';
+import { BRAND, MOTION, SPACE, Z } from './tokens';
+
+/** Dustin's modal card, as in UnfoundCoinModal and TaskCoinModal. */
+export const DIALOG_CARD = {
+  backgroundColor: '#0a77bf',
+  borderRadius: 20,
+  borderWidth: 2.5,
+  borderColor: '#ffffff',
+} as const;
+/** Message copy on the card, as in UnfoundCoinModal. */
+export const DIALOG_COPY = '#e2f6ff';
 
 export type { GameDialogButton, GameDialogOptions };
 
@@ -176,45 +189,30 @@ export function GameDialog({
             disabled={dismiss === null} onPress={() => { if (dismiss !== null) close(dismiss); }} />
         </Animated.View>
         <Animated.View accessibilityViewIsModal accessibilityRole="alert"
-          style={[{ width: '86%', maxWidth: 360, paddingTop: icon ? 34 : 0 }, cardStyle]}>
+          style={[{ width: '85%', maxWidth: 380, alignItems: 'center' }, cardStyle]}>
+          <View accessible accessibilityRole="header" accessibilityLabel={title} style={{ width: '100%', zIndex: 2 }}>
+            <Ribbon text={title} />
+          </View>
           <View style={{
-            backgroundColor: BRAND.cream,
-            borderRadius: RADIUS.xl,
-            borderWidth: OUTLINE.heavy,
-            borderColor: BRAND.navy,
-            overflow: 'hidden',
-            ...SHADOW.lifted,
+            ...DIALOG_CARD,
+            width: '95%',
+            marginTop: '-10%',
+            paddingTop: SPACE.xxl + SPACE.sm,
+            paddingHorizontal: SPACE.xl,
+            paddingBottom: SPACE.lg,
+            alignItems: 'center',
+            gap: SPACE.md,
           }}>
-            <View style={{
-              backgroundColor: BRAND.blueBright,
-              borderBottomWidth: OUTLINE.thick,
-              borderBottomColor: BRAND.navy,
-              paddingTop: icon ? 34 : SPACE.lg,
-              paddingBottom: SPACE.md,
-              paddingHorizontal: SPACE.lg,
-            }}>
-              <GameText preset="title" tone="onBlue" align="center" accessibilityRole="header">{title}</GameText>
-            </View>
-            <View style={{ paddingHorizontal: SPACE.xl, paddingTop: SPACE.lg, paddingBottom: SPACE.xl, gap: SPACE.md }}>
-              {!!message && <GameText preset="body" align="center">{message}</GameText>}
-              {children}
-              <View style={{ gap: SPACE.sm, marginTop: SPACE.xs }}>
-                {actions.map(action => (
-                  <GameButton key={action.index} label={action.text} variant={action.variant}
-                    size={action.variant === 'primary' || action.variant === 'danger' ? 'regular' : 'compact'}
-                    onPress={() => close(action.index)} />
-                ))}
-              </View>
+            {icon && <GameIcon name={icon} size={72} />}
+            {!!message && <GameText preset="body" tone="onBlue" align="center" style={{ color: DIALOG_COPY }}>{message}</GameText>}
+            {children}
+            <View style={{ alignSelf: 'stretch', gap: SPACE.xs, marginTop: SPACE.xs }}>
+              {actions.map(action => (
+                <GameButton key={action.index} label={action.text} variant={action.variant} tone="onBlue"
+                  onPress={() => close(action.index)} />
+              ))}
             </View>
           </View>
-          {icon && <View pointerEvents="none" style={{
-            position: 'absolute', top: 0, alignSelf: 'center',
-            width: 68, height: 68, borderRadius: 34,
-            backgroundColor: BRAND.white, borderWidth: OUTLINE.heavy, borderColor: BRAND.navy,
-            alignItems: 'center', justifyContent: 'center', ...SHADOW.card,
-          }}>
-            <GameIcon name={icon} size={44} />
-          </View>}
         </Animated.View>
       </View>
     </Modal>

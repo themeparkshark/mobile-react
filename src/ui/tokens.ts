@@ -107,14 +107,25 @@ export const MOTION = {
   bobMs: 900,
 } as const;
 
-/** Button geometry from the WS0 spec. */
+/**
+ * Button geometry. GameButton is Dustin's own image button (yellow_button.png,
+ * red_button.png), so these numbers come from YellowButton, not a new design.
+ */
 export const BUTTON = {
-  height: 58,
-  compactHeight: 46,
+  /** yellow_button.png is drawn at this width:height (contain). */
+  aspectRatio: 3.8,
+  /** The label area inside the art, as in YellowButton. */
+  labelAspectRatio: 4.4,
+  /** Regular buttons never grow wider than this. */
   maxWidth: 320,
-  lip: 4,
-  fontSize: 24,
-  compactFontSize: 20,
+  /** Secondary (compact) buttons. */
+  compactMaxWidth: 240,
+  /** Press scale and timings from YellowButton. */
+  pressScale: 0.97,
+  pressInMs: 65,
+  pressOutMs: 95,
+  /** Ghost (text) buttons keep a 44pt touch target. */
+  ghostMinHeight: 44,
 } as const;
 
 export const Z = {
