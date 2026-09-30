@@ -126,12 +126,13 @@ test('useAxiosSetup registers once, reads fresh callbacks and has no em dash toa
   assert.doesNotMatch(source, /showToast\([^)]*offline/i, 'offline is the banner, not a toast');
 });
 
-test('the client reports reachability from real responses and retries GETs', () => {
+test('the client reports reachability from real responses and retries GETs in the transport', () => {
   const source = read('src/api/client.ts');
   assert.match(source, /reportReachable\(\)/);
-  assert.match(source, /if \(status === undefined\) reportUnreachable\(\)/);
+  assert.match(source, /isNetworkFailure\(error\)/);
   assert.doesNotMatch(source, /if \(!?error\.response\)/, "RN network errors carry a status-0 response");
-  assert.match(source, /nextGetRetryDelay\(config, error\)/);
+  assert.match(source, /client\.defaults\.adapter = withGetRetry\(/);
+  assert.doesNotMatch(source, /client\.request\(/, 'never retry from inside an interceptor');
 });
 
 test('one branded offline banner is mounted at the root', () => {
@@ -139,6 +140,8 @@ test('one branded offline banner is mounted at the root', () => {
   assert.match(rootSource, /<OfflineBanner \/>/);
   const banner = read('src/components/OfflineBanner.tsx');
   assert.match(banner, /useReducedMotion/);
+  assert.doesNotMatch(banner, /saved park/i, 'never promise cached park data that is not cached');
+  assert.match(banner, /HEADER_CLEARANCE/, 'sits below his header, not over it');
   assert.doesNotMatch(banner, /—/);
   assert.doesNotMatch(banner, /#000|black/i);
   // Icons are illustrated PNG art in Dustin's style, never flat vector shapes.
@@ -149,30 +152,100 @@ test('one branded offline banner is mounted at the root', () => {
   }
 });
 
-test('client interceptor: a dropped GET is retried then succeeds; a dropped POST marks offline once', async () => {
+// Real axios, a fake transport, and both response interceptors installed
+// (client.ts, then useAxiosSetup), so a retried request is seen exactly as
+// the running app sees it.
+function realStack(transport) {
+  const realAxios = require(path.join(root, 'node_modules/axios'));
   const events = [];
-  let handlers = null;
-  let requests = 0;
-  const instance = {
-    defaults: { headers: { common: {} } },
-    interceptors: { response: { use: (ok, bad) => { handlers = { ok, bad }; } } },
-    request: async config => { requests += 1; events.push(['request', config.tpsRetryCount]); return { status: 200, config }; },
-  };
-  loadTs('src/api/client.ts', {
-    axios: { create: () => instance, isCancel: () => false },
+  const captured = [];
+  const client = loadTs('src/api/client.ts', {
+    axios: { create: cfg => realAxios.create({ ...cfg, adapter: transport }), isCancel: realAxios.isCancel },
     'expo-device': {},
     '../config': { apiUrl: 'http://api.test/api' },
-    '../services/telemetry/coreLoopEvents': { classifyCoreLoopRequest: () => null },
-    '../services/telemetry': { addBreadcrumb() {}, captureMessage() {} },
-    '../services/connectivity': { reportReachable: () => events.push(['reachable']), reportUnreachable: () => events.push(['unreachable']) },
-    './getRetry': loadTs('src/api/getRetry.ts'),
-  }, { setTimeout: (fn) => { fn(); return 0; } });
-  const retried = await handlers.bad({ code: 'ERR_NETWORK', config: { method: 'get', url: '/me' } });
-  assert.equal(retried.status, 200);
-  assert.equal(requests, 1);
-  await assert.rejects(handlers.bad({ code: 'ERR_NETWORK', config: { method: 'post', url: '/me/task-attempts' } }));
-  await assert.rejects(handlers.bad({ response: { status: 422 }, config: { method: 'post', url: '/x' } }));
-  assert.deepEqual(JSON.parse(JSON.stringify(events)), [['request', 1], ['unreachable'], ['reachable']]);
+    '../services/telemetry/coreLoopEvents': { classifyCoreLoopRequest: (_m, url) => (url === '/core' ? 'queue_play.complete' : null) },
+    '../services/telemetry': { addBreadcrumb() {}, captureMessage: (_m, _l, extra) => captured.push(extra.status) },
+    '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable') },
+    './getRetry': loadTs('src/api/getRetry.ts', {}, { setTimeout: fn => { fn(); return 0; } }),
+  }).default;
+  const broadcasts = [];
+  const toasts = [];
+  const setup = loadTs('src/hooks/useAxiosSetup.ts', {
+    react: { useContext: ctx => ctx.value, useRef: value => ({ current: value }), useEffect: fn => fn() },
+    '../api/client': { __esModule: true, default: client },
+    '../context/AuthProvider': { AuthContext: { value: { logout() {} } } },
+    '../context/BroadcastProvider': { BroadcastContext: { value: { enqueue: list => broadcasts.push(list) } } },
+    '../utils/toast': { showToast: message => toasts.push(message) },
+  });
+  setup.useAxiosSetup();
+  return { client, events, captured, broadcasts, toasts, AxiosError: realAxios.AxiosError, SERVER_TROUBLE_TOAST: setup.SERVER_TROUBLE_TOAST };
+}
+
+const reply = (config, status, data = {}) => ({ data, status, statusText: String(status), headers: {}, config, request: {} });
+
+test('real axios: a GET that succeeds on its 3rd try runs every interceptor once', async () => {
+  let attempts = 0;
+  let stack;
+  stack = realStack(async config => {
+    attempts += 1;
+    if (attempts < 3) {
+      const response = reply(config, 503);
+      throw new stack.AxiosError('busy', 'ERR_BAD_RESPONSE', config, {}, response);
+    }
+    return reply(config, 200, { broadcasts: [{ id: 7 }] });
+  });
+  const res = await stack.client.get('/me');
+  assert.equal(res.status, 200);
+  assert.equal(attempts, 3, 'retried twice below the interceptors');
+  assert.equal(stack.broadcasts.length, 1, 'broadcasts enqueued once');
+  assert.deepEqual(stack.events, ['reachable']);
+});
+
+test('real axios: the 5xx counter goes up once per logical request, so one failed GET never toasts', async () => {
+  let attempts = 0;
+  let stack;
+  stack = realStack(async config => {
+    attempts += 1;
+    throw new stack.AxiosError('busy', 'ERR_BAD_RESPONSE', config, {}, reply(config, 503));
+  });
+  await assert.rejects(stack.client.get('/me'));
+  assert.equal(attempts, 3);
+  assert.deepEqual(stack.toasts, [], 'three attempts of one request are one failure');
+  await assert.rejects(stack.client.get('/me'));
+  assert.deepEqual(stack.toasts, []);
+  await assert.rejects(stack.client.get('/me'));
+  assert.deepEqual(stack.toasts, [stack.SERVER_TROUBLE_TOAST], 'three failed requests in a row toast once');
+});
+
+test('real axios: a dropped POST is never retried and marks offline once', async () => {
+  let attempts = 0;
+  let stack;
+  stack = realStack(async config => {
+    attempts += 1;
+    throw new stack.AxiosError('Network Error', 'ERR_NETWORK', config, { status: 0 }, { status: 0, config });
+  });
+  await assert.rejects(stack.client.post('/core', { a: 1 }));
+  assert.equal(attempts, 1);
+  assert.deepEqual(stack.events, ['unreachable']);
+  assert.deepEqual(stack.captured, ['network']);
+});
+
+test('real axios: one timeout does not mark the app offline; two in a row do', async () => {
+  let stack;
+  let mode = 'timeout';
+  stack = realStack(async config => {
+    if (mode === 'ok') return reply(config, 200);
+    throw new stack.AxiosError('timeout of 12000ms exceeded', 'ECONNABORTED', config, {});
+  });
+  await assert.rejects(stack.client.get('/slow'));
+  assert.deepEqual(stack.events, [], 'a single slow endpoint is not an outage');
+  mode = 'ok';
+  await stack.client.get('/fast');
+  mode = 'timeout';
+  await assert.rejects(stack.client.get('/slow'));
+  assert.deepEqual(stack.events, ['reachable'], 'a response in between resets the count');
+  await assert.rejects(stack.client.get('/slow'));
+  assert.deepEqual(stack.events, ['reachable', 'unreachable']);
 });
 
 test('React Native network errors (response with status 0) count as no response', async () => {

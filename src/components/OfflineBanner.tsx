@@ -29,6 +29,8 @@ type Phase = 'hidden' | 'offline' | 'back';
 const OFFLINE_ICON = require('../../assets/images/offline/offline.png');
 const BACK_ONLINE_ICON = require('../../assets/images/offline/back-online.png');
 const ICON_SIZE = 34;
+// Topbar: 70pt art under the status bar, plus a small gap.
+export const HEADER_CLEARANCE = 70 + 8;
 
 function probe(): Promise<unknown> {
   // Any HTTP response marks the app reachable (client.ts interceptor).
@@ -37,8 +39,10 @@ function probe(): Promise<unknown> {
 
 /**
  * One branded offline surface for the whole app. Appears after a short
- * debounce when API calls fail without a response, probes quietly every 15s,
- * and says "Back online" before sliding away.
+ * debounce when API calls fail at the network level (or time out twice in a
+ * row), probes quietly every 15s, and says "Back online" before sliding away.
+ * The copy promises nothing about cached data: only crumbs, currencies and
+ * the theme are kept last-good, so the park view itself may not load.
  */
 export default function OfflineBanner() {
   const reduceMotion = useReducedMotion();
@@ -120,14 +124,16 @@ export default function OfflineBanner() {
       opacity: Math.min(1, progress * 1.4),
       transform: reduceMotion
         ? []
-        : [{ translateY: (1 - progress) * -90 }, { scale: 0.92 + 0.08 * progress }],
+        : [{ translateY: (1 - progress) * -28 }, { scale: 0.92 + 0.08 * progress }],
     };
   });
   const iconStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
   if (!mounted) return null;
   const back = phase === 'back';
-  const top = (initialWindowMetrics?.insets.top ?? 47) + 6;
+  // Below his header bar (Topbar is 70pt under the status bar) so the logo,
+  // currency counters and header buttons stay visible and tappable offline.
+  const top = (initialWindowMetrics?.insets.top ?? 47) + HEADER_CLEARANCE;
 
   return (
     <View pointerEvents="box-none" style={[styles.host, { top }]}>
@@ -135,16 +141,16 @@ export default function OfflineBanner() {
         style={[styles.lip, cardStyle]}
         accessibilityLiveRegion="polite"
         accessibilityRole="alert"
-        accessibilityLabel={back ? 'Back online' : 'You are offline. Showing your saved park.'}
+        accessibilityLabel={back ? 'Back online' : 'Connection lost. Reconnecting. Some things may not load.'}
       >
         <View style={[styles.card, back && styles.cardBack]}>
           <Animated.View style={iconStyle}>
             <Image source={back ? BACK_ONLINE_ICON : OFFLINE_ICON} style={styles.icon} accessibilityElementsHidden importantForAccessibility="no" />
           </Animated.View>
           <View style={styles.copy}>
-            <Text style={styles.title} maxFontSizeMultiplier={1.3}>{back ? 'BACK ONLINE' : 'OFFLINE'}</Text>
+            <Text style={styles.title} maxFontSizeMultiplier={1.3}>{back ? 'BACK ONLINE' : 'RECONNECTING'}</Text>
             <Text style={styles.body} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-              {back ? 'Your park is live again' : 'Showing your saved park'}
+              {back ? 'Your park is live again' : 'Some things may not load'}
             </Text>
           </View>
           {!back && (

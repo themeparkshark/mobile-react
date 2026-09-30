@@ -1,10 +1,10 @@
-import axios, { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from 'axios';
+import axios, { type AxiosAdapter, type AxiosError, type AxiosResponse } from 'axios';
 import * as Device from 'expo-device';
 import config from '../config';
 import { classifyCoreLoopRequest } from '../services/telemetry/coreLoopEvents';
 import { addBreadcrumb, captureMessage } from '../services/telemetry';
 import { reportReachable, reportUnreachable } from '../services/connectivity';
-import { httpStatus, nextGetRetryDelay } from './getRetry';
+import { httpStatus, isNetworkFailure, isTimeout, withGetRetry } from './getRetry';
 
 const client = axios.create({
   baseURL: config.apiUrl,
@@ -39,29 +39,40 @@ export function recordCoreLoopResponse(
   }
 }
 
-type RetryableConfig = AxiosRequestConfig & { tpsRetryCount?: number; tpsNoRetry?: boolean };
+// GET retry lives in the transport, below the interceptors, so every
+// interceptor (here and in useAxiosSetup) runs once per logical request.
+if (client.defaults.adapter) {
+  client.defaults.adapter = withGetRetry(client.defaults.adapter as AxiosAdapter) as AxiosAdapter;
+}
 
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+/**
+ * Timeouts only count as offline when two land in a row with no response in
+ * between: one slow endpoint on a working connection is not an outage.
+ */
+const TIMEOUTS_BEFORE_OFFLINE = 2;
+let consecutiveTimeouts = 0;
 
 client.interceptors.response.use(
   (response: AxiosResponse) => {
+    consecutiveTimeouts = 0;
     reportReachable();
     recordCoreLoopResponse(response.config?.method, response.config?.url, response.status);
     return response;
   },
-  async (error: AxiosError) => {
+  (error: AxiosError) => {
     if (axios.isCancel(error)) return Promise.reject(error);
     // A status of 0 is React Native's "no response" (refused, dropped, offline).
     const status = httpStatus(error);
-    if (status !== undefined) reportReachable();
-    const config = error.config as RetryableConfig | undefined;
-    const delay = nextGetRetryDelay(config, error);
-    if (config && delay !== null) {
-      config.tpsRetryCount = (config.tpsRetryCount ?? 0) + 1;
-      await wait(delay);
-      return client.request(config);
+    if (status !== undefined) {
+      consecutiveTimeouts = 0;
+      reportReachable();
+    } else if (isNetworkFailure(error)) {
+      reportUnreachable();
+    } else if (isTimeout(error)) {
+      consecutiveTimeouts += 1;
+      if (consecutiveTimeouts >= TIMEOUTS_BEFORE_OFFLINE) reportUnreachable();
     }
-    if (status === undefined) reportUnreachable();
+    const config = error.config;
     recordCoreLoopResponse(config?.method, config?.url, status);
     return Promise.reject(error);
   },
