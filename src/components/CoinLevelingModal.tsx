@@ -477,27 +477,6 @@ export default function CoinLevelingModal({
                   </TouchableOpacity>
                 )}
 
-                {/* ── Your rides: the ride journal behind this coin ── */}
-                {yourRides && yourRides.count > 0 && (state === 'preview' || state === 'maxed') && !showEditions && (
-                  <View style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffffff',
-                    borderWidth: 2, borderColor: '#bfe5ff', borderRadius: 12, paddingVertical: 7, paddingHorizontal: 10, marginBottom: 8 }}
-                    accessible accessibilityLabel={`You rode this ${yourRides.count} times.`}>
-                    <GameIcon name="ride" size={28} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: '#05346e' }}>
-                        YOUR RIDES: {yourRides.count}{yourRides.last_rode_at ? `, LAST ${ridDay(yourRides.last_rode_at)}` : ''}
-                      </Text>
-                      {!!yourRides.last_memory && <Text numberOfLines={1} style={{ fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c' }}>
-                        “{yourRides.last_memory}”
-                      </Text>}
-                    </View>
-                    {yourRides.average_rating !== null && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <GameIcon name="star" size={18} />
-                      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: '#05346e' }}>{yourRides.average_rating.toFixed(1)}</Text>
-                    </View>}
-                  </View>
-                )}
-
                 {/* ── Level Progress Dots ── */}
                 <View style={{
                   flexDirection: 'row',
@@ -527,6 +506,27 @@ export default function CoinLevelingModal({
                     );
                   })}
                 </View>
+
+                {/* ── Your rides: the ride journal behind this coin ── */}
+                {yourRides && yourRides.count > 0 && (state === 'preview' || state === 'maxed') && !showEditions && (
+                  <View style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#ffffff',
+                    borderWidth: 2, borderColor: '#bfe5ff', borderRadius: 12, paddingVertical: 7, paddingHorizontal: 10, marginBottom: 8 }}
+                    accessible accessibilityLabel={`You rode this ${yourRides.count} times.`}>
+                    <GameIcon name="ride" size={28} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: '#05346e' }}>
+                        YOUR RIDES: {yourRides.count}{yourRides.last_rode_at ? `, LAST ${ridDay(yourRides.last_rode_at)}` : ''}
+                      </Text>
+                      {!!yourRides.last_memory && <Text numberOfLines={1} style={{ fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c' }}>
+                        “{yourRides.last_memory}”
+                      </Text>}
+                    </View>
+                    {yourRides.average_rating !== null && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <GameIcon name="star" size={18} />
+                      <Text style={{ fontFamily: 'Shark', fontSize: 15, color: '#05346e' }}>{yourRides.average_rating.toFixed(1)}</Text>
+                    </View>}
+                  </View>
+                )}
 
                 {showEditions && (state === 'preview' || state === 'maxed') && (
                   <ScrollView style={{ maxHeight: 180, width: '100%', marginBottom: 10 }}
