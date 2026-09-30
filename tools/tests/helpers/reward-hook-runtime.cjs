@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
 exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}) {
-  const slots = [], animations = [], timers = new Map(), sounds = [], cancelled = [], motions = [];
+  const slots = [], animations = [], timers = new Map(), sounds = [], cancelled = [], motions = [], jsCalls = [];
   let index = 0, dirty = true, effects = [], tree, timerId = 0, preferenceListener;
   let Component;
   const props = { ...initialProps };
@@ -58,7 +58,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}) 
       if (name === 'react-native') return native;
       if (name === 'react-native-reanimated') { const transition = { duration() { return this; }, delay() { return this; } }; return { default: { View: 'ReanimatedView', createAnimatedComponent: type => type }, FadeIn: transition, FadeOut: transition, SlideOutDown: transition,
         useSharedValue: value => react.useRef({ value }).current, useAnimatedStyle: fn => fn(),
-        Easing: native.Easing, cancelAnimation: value => cancelled.push(value), runOnJS: fn => fn,
+        useDerivedValue: fn => react.useEffect(fn),
+        Easing: native.Easing, cancelAnimation: value => cancelled.push(value),
+        runOnJS: fn => (...args) => { jsCalls.push({ fn, args }); return fn(...args); },
         withTiming: value => { motions.push('timing'); return value; }, withSpring: value => { motions.push('spring'); return value; }, withDelay: (ms, value) => value,
         interpolate: (value, inputs, outputs) => outputs[0] + value * (outputs[1] - outputs[0]),
         withRepeat: value => value, withSequence: (...values) => values.at(-1) }; }
@@ -72,7 +74,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}) 
       return { default: name };
     },
   }, { filename: file });
-  Component = module.exports.default ?? module.exports.MemoryCard ?? module.exports.GameShellV2;
+  Component = module.exports.default ?? module.exports.MemoryCard ?? module.exports.GameShellV2 ?? module.exports.BossBrawl ?? module.exports.ScoreDisplay;
   function render() { let count = 0; do {
     assert.ok(count++ < 20, 'hooks settle'); dirty = false; index = 0; effects = []; tree = Component(props); effects.forEach(fn => fn());
   } while (dirty); }
@@ -83,7 +85,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}) 
     return find(node.props?.children, predicate);
   }
   render();
-  return { props, native, animations, timers, sounds, cancelled, motions, render,
+  return { props, native, animations, timers, sounds, cancelled, motions, jsCalls, render,
     get tree() { return tree; }, find: predicate => find(tree, predicate),
     change(value) { Object.assign(props, value); render(); },
     async settle() { await new Promise(resolve => setImmediate(resolve)); render(); },

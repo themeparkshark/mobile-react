@@ -419,6 +419,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                 fever={fever}
                 personalBest={personalBest}
                 compact
+                reducedMotion={reducedMotion}
               />
             </View>
           </View>

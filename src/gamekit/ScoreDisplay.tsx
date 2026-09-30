@@ -4,13 +4,13 @@
  *
  * The number tweens on the UI thread via a Reanimated shared value; we mirror
  * it into React state only as often as needed to update the <Text> (RN can't
- * bind text to a shared value directly, so we sample via useDerivedValue +
- * runOnJS at a throttled cadence to avoid render storms).
+ * bind text to a shared value directly, so samples arrive via useDerivedValue
+ * and runOnJS; a sample from an older target cannot undo a round reset).
  *
  * Props are intentionally minimal so any game can drop this into its HUD.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -21,6 +21,7 @@ import Animated, {
   withSpring,
   runOnJS,
   Easing,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import { GAME_COLORS, SCORE_TWEEN_MS, COMBO_TIER_COLORS, JUICE } from './theme';
 
@@ -38,6 +39,7 @@ interface ScoreDisplayProps {
   /** Force-show the multiplier badge even at 1x. */
   showMultiplierAtOne?: boolean;
   compact?: boolean;
+  reducedMotion?: boolean;
 }
 
 export function ScoreDisplay({
@@ -48,11 +50,15 @@ export function ScoreDisplay({
   label,
   showMultiplierAtOne = false,
   compact = false,
+  reducedMotion = false,
 }: ScoreDisplayProps) {
   const animated = useSharedValue(score);
   const [display, setDisplay] = useState(score);
   const prevScore = useRef(score);
+  const generation = useRef(0);
+  const sampleGeneration = useSharedValue(0);
   const beatenPB = useRef(false);
+  const prevMultiplier = useRef(multiplier);
 
   // Badge + PB flash animation values.
   const badgeScale = useSharedValue(1);
@@ -61,6 +67,14 @@ export function ScoreDisplay({
 
   // Tween the number toward `score`.
   useEffect(() => {
+    generation.current += 1;
+    sampleGeneration.value = generation.current;
+    if (reducedMotion || score === 0) {
+      cancelAnimation(animated); cancelAnimation(punch);
+      animated.value = score; punch.value = 1; prevScore.current = score;
+      setDisplay(score);
+      return;
+    }
     if (score !== prevScore.current) {
       animated.value = withTiming(score, {
         duration: SCORE_TWEEN_MS,
@@ -75,34 +89,44 @@ export function ScoreDisplay({
       }
       prevScore.current = score;
     }
-  }, [score, animated, punch]);
+  }, [score, reducedMotion, animated, punch, sampleGeneration]);
+
+  const sampleScore = useCallback((value: number, target: number, epoch: number) => {
+    // UI-thread samples queued by a previous round cannot overwrite its reset.
+    if (prevScore.current === target && generation.current === epoch) setDisplay(value);
+  }, []);
 
   // Sample the tweened value into React state for the <Text>.
   useDerivedValue(() => {
     const rounded = Math.round(animated.value);
-    runOnJS(setDisplay)(rounded);
-  }, [animated]);
+    runOnJS(sampleScore)(rounded, score, sampleGeneration.value);
+  }, [animated, score, sampleScore, sampleGeneration]);
 
   // Personal-best delta flash — one-shot when score first passes PB.
   useEffect(() => {
     if (personalBest == null) return;
     if (!beatenPB.current && score > personalBest && personalBest > 0) {
       beatenPB.current = true;
-      pbFlash.value = withSequence(
+      pbFlash.value = reducedMotion ? 1 : withSequence(
         withTiming(1, { duration: 140 }),
         withTiming(0, { duration: 600, easing: Easing.in(Easing.quad) }),
       );
     }
-    if (score <= personalBest) beatenPB.current = false;
-  }, [score, personalBest, pbFlash]);
+    if (score <= personalBest) { beatenPB.current = false; cancelAnimation(pbFlash); pbFlash.value = 0; }
+    if (reducedMotion) { cancelAnimation(pbFlash); pbFlash.value = beatenPB.current ? 1 : 0; }
+  }, [score, personalBest, reducedMotion, pbFlash]);
 
   // Pop the badge whenever the multiplier changes.
   useEffect(() => {
-    badgeScale.value = withSequence(
+    if (reducedMotion) { cancelAnimation(badgeScale); badgeScale.value = 1; }
+    else if (prevMultiplier.current !== multiplier) badgeScale.value = withSequence(
       withTiming(1.35, { duration: 90 }),
       withSpring(1, JUICE.popSpring),
     );
-  }, [multiplier, badgeScale]);
+    prevMultiplier.current = multiplier;
+  }, [multiplier, reducedMotion, badgeScale]);
+  useEffect(() => () => { [animated, punch, badgeScale, pbFlash].forEach(cancelAnimation); },
+    [animated, punch, badgeScale, pbFlash]);
 
   const rootStyle = useAnimatedStyle(() => ({
     transform: [{ scale: punch.value }],

@@ -371,3 +371,54 @@ and the optional daily chest declined. Its wallet remained 180 Coins, seven
 Tickets and 185 Energy. The normal Profile park card still opens all 26 available
 coins with three owned coins and no arrival replay. No deployment or outgoing
 message occurred. Legacy development-runtime warnings remain unresolved.
+
+## Boss openings with distinct play
+
+The existing 20-second brawl now has three readable openings. A buoy draws Kraken
+aside, exposing its center for a short strike window. Robo-Shark requires a
+numbered three-node circuit; wrong order restarts the circuit, and a successful
+critical changes the next route. Ghost Squid telegraphs its reveal, then becomes
+solid for a one-second strike window. Hidden Ghost taps do not count. The
+existing boss illustrations are reused; no new generated anatomy was accepted.
+
+Opening actions grant no hits or currency. Accepted strikes retain the server's
+145 ms gap and at most one critical per three hits. The round preview and final
+damage both round the full scaled contribution once, matching the backend's
+remote-damage formula. Boss-specific star thresholds make a complete skilled
+round achievable despite different vulnerability windows; star multipliers and
+server payouts are unchanged. The HP bar explicitly labels its local preview.
+
+Pause stops the gameplay clock, hit squash/flash/shake and particles. Resuming
+preserves the circuit, lure deadline and Ghost phase. Closing rejects further
+inputs; finishing is guarded once. Reduced motion removes decorative movement,
+flashes, shakes, particles and floating numbers, while retaining the timed
+states. The arena provides an accessibility strike action with the same timing
+and critical budget. Native VoiceOver review is still pending.
+
+The shared score display now starts each zero-score round immediately, rejects
+queued UI samples from older score generations, and receives reduced motion from
+GameShellV2. Its static reduced-motion personal-best and multiplier presentation
+keeps the score readable without a punch or count-up. It cancels effects on
+unmount.
+
+Native iOS 18.6 practice review verified Robo's circuit/route change and Kraken's
+lure with three hits/one critical/50 damage each. Ghost's faded/solid states,
+pause/resume and accepted strikes were manually observed. An automated full
+Ghost practice round produced 34 hits/11 criticals/560 damage and three stars,
+matching the server formula and proof bounds. A subsequent Robo countdown
+displayed zero immediately after the 560-score Ghost round. The practice route
+has no raid submission or reward API; no Energy, Tickets, damage or loot was
+submitted. 256 checks, TypeScript and diff checks pass.
+
+This verifies the new mechanics and bounded native presentation, not voluntary
+replay appeal or physical-phone accessibility/performance. Confirmed shared-map
+impact, boss exit choreography, raid submission recovery, Adventure Ticket and
+crew payoff still need further finishing. The six-part goal remains active.
+
+During restoration, a development reload from the practice arena produced one
+native EXC_BAD_ACCESS in folly dynamic hashing / Reanimated Fabric shadow-tree
+cloning (local crash report 2026-09-29 19:48:14 Pacific). Reopening the app loaded
+the ordinary player successfully; the optional chest was declined. This crash
+has not been fixed or attributed to a specific source change. Native reload and
+release stability require reproduction and further review; passing JavaScript
+tests does not resolve that finding.
