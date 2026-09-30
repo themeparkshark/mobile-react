@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   runOnJS,
@@ -15,13 +15,7 @@ import { initialWindowMetrics } from 'react-native-safe-area-context';
 import client from '../api/client';
 import * as Haptics from '../helpers/haptics';
 import { isOffline, onConnectivityChange } from '../services/connectivity';
-
-// Brand tokens (mirrors the WS0 kit values until src/ui/tokens lands).
-const CREAM = '#fff8e4';
-const NAVY = '#05346e';
-const BLUE = '#0768b9';
-const GOLD = '#ffcf3b';
-const GOLD_LIP = '#d99a00';
+import { BRAND, FONT, GameButton, OUTLINE, Z } from '../ui';
 
 export const OFFLINE_SHOW_DELAY_MS = 1200;
 export const OFFLINE_PROBE_INTERVAL_MS = 15000;
@@ -117,10 +111,8 @@ export default function OfflineBanner() {
     return () => clearInterval(interval);
   }, [phase, runProbe]);
 
-  const onRetry = useCallback(() => {
-    Haptics.impactAsync('light');
-    runProbe();
-  }, [runProbe]);
+  // GameButton plays its own light tap haptic.
+  const onRetry = runProbe;
 
   const cardStyle = useAnimatedStyle(() => {
     const progress = enter.value;
@@ -156,18 +148,15 @@ export default function OfflineBanner() {
             </Text>
           </View>
           {!back && (
-            <Pressable
+            <GameButton
+              label="Retry"
+              size="compact"
+              fullWidth={false}
+              loading={probing}
               onPress={onRetry}
-              disabled={probing}
-              hitSlop={10}
-              accessibilityRole="button"
               accessibilityLabel="Try to reconnect"
-              style={({ pressed }) => [styles.retryLip, pressed && styles.retryPressed, probing && styles.retryBusy]}
-            >
-              <View style={styles.retry}>
-                <Text style={styles.retryText} maxFontSizeMultiplier={1.2}>RETRY</Text>
-              </View>
-            </Pressable>
+              style={styles.retry}
+            />
           )}
         </View>
       </Animated.View>
@@ -175,38 +164,29 @@ export default function OfflineBanner() {
   );
 }
 
+// Sits above screens but under GameDialog (Z.dialog) and toasts.
+const BANNER_Z = Z.dialog - 1;
+
 const styles = StyleSheet.create({
-  host: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 1000, elevation: 1000 },
-  lip: { borderRadius: 24, backgroundColor: NAVY, paddingBottom: 4, maxWidth: 360, marginHorizontal: 16 },
+  host: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: BANNER_Z, elevation: BANNER_Z },
+  lip: { borderRadius: 24, backgroundColor: BRAND.navy, paddingBottom: 4, maxWidth: 360, marginHorizontal: 16 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: CREAM,
-    borderColor: NAVY,
-    borderWidth: 3,
+    backgroundColor: BRAND.cream,
+    borderColor: BRAND.navy,
+    borderWidth: OUTLINE.thick,
     borderRadius: 24,
     paddingLeft: 12,
     paddingRight: 8,
     paddingVertical: 6,
     minHeight: 48,
   },
-  cardBack: { backgroundColor: '#e8f6ff' },
+  cardBack: { backgroundColor: BRAND.sky },
   icon: { width: ICON_SIZE, height: ICON_SIZE, resizeMode: 'contain' },
   copy: { marginLeft: 10, marginRight: 12, flexShrink: 1 },
-  title: { fontFamily: 'Shark', fontSize: 17, color: NAVY, letterSpacing: 0.5 },
-  body: { fontFamily: 'Knockout', fontSize: 14, color: BLUE, marginTop: -1 },
-  retryLip: { backgroundColor: GOLD_LIP, borderRadius: 14, paddingBottom: 3 },
-  retryPressed: { paddingBottom: 0, marginTop: 3 },
-  retryBusy: { opacity: 0.6 },
-  retry: {
-    backgroundColor: GOLD,
-    borderColor: NAVY,
-    borderWidth: 2.5,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    minWidth: 70,
-    alignItems: 'center',
-  },
-  retryText: { fontFamily: 'Shark', fontSize: 15, color: NAVY, letterSpacing: 0.5 },
+  title: { fontFamily: FONT.display, fontSize: 17, color: BRAND.navy, letterSpacing: 0.5 },
+  body: { fontFamily: FONT.body, fontSize: 14, color: BRAND.blue, marginTop: -1 },
+  // His yellow button art at 3.8:1, so 112 wide is about 30pt tall.
+  retry: { width: 112 },
 });

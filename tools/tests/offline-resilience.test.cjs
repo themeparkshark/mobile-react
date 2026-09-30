@@ -204,3 +204,12 @@ test('React Native network errors (response with status 0) count as no response'
   assert.deepEqual(events, ['unreachable'], 'status 0 shows the offline banner instead of marking the API reachable');
   assert.deepEqual(statuses, ['network']);
 });
+
+test('the offline banner is built from the WS0 kit: brand tokens and his yellow button', () => {
+  const source = read('src/components/OfflineBanner.tsx');
+  assert.match(source, /from '\.\.\/ui'/);
+  assert.match(source, /<GameButton\s+label="Retry"/);
+  assert.doesNotMatch(source, /<Pressable/, 'no hand-rolled CTA');
+  assert.doesNotMatch(source, /'#[0-9a-f]{6}'/i, 'colours come from BRAND tokens');
+  assert.doesNotMatch(source, /—/);
+});

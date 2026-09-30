@@ -31,16 +31,18 @@ test('node_modules is never tracked, including a worktree symlink', () => {
   assert.match(read('.gitignore'), /^\/node_modules$/m);
 });
 
-test('the crash fallback is an on-brand card: cream, navy outline, gold lip button, brand fonts', () => {
+test('the crash fallback is an on-brand card: kit tokens, his yellow button art, brand fonts', () => {
   const app = read('App.tsx');
   const fallback = app.slice(app.indexOf('const ErrorFallback'), app.indexOf("import { ToastProvider }"));
   assert.ok(fallback.length > 0, 'ErrorFallback block found');
-  assert.match(fallback, /#fff8e4/i, 'cream card');
-  assert.match(fallback, /#05346e/i, 'navy outline');
-  assert.match(fallback, /#ffcf3b/i, 'gold button');
-  assert.match(fallback, /#d99a00/i, 'gold button lip');
-  assert.match(fallback, /fontFamily: 'Shark'/);
-  assert.match(fallback, /fontFamily: 'Knockout'/);
+  assert.match(fallback, /backgroundColor: BRAND\.cream/, 'cream card');
+  assert.match(fallback, /borderColor: BRAND\.navy/, 'navy outline');
+  // The CTA is the WS0 GameButton (Dustin's yellow_button.png), not a hand-rolled gold box.
+  assert.match(fallback, /<GameButton label="Try again" onPress=\{resetError\}/);
+  assert.doesNotMatch(fallback, /#[0-9a-f]{6}\b/i, 'colours come from BRAND tokens');
+  assert.match(app, /from '\.\/src\/ui'/);
+  assert.match(fallback, /fontFamily: FONT\.display/);
+  assert.match(fallback, /fontFamily: FONT\.body/);
   // Card waits for fonts so the brand type never flashes as system text.
   assert.match(fallback, /fontsSettled && <View style=\{errorStyles\.card\}>/);
   // No dark or neon surfaces, no system-weight-only text, no em dashes.

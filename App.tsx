@@ -1,10 +1,11 @@
-import { Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, ImageBackground, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
 import { holdNativeSplash } from './src/nativeSplash';
 import { captureException, captureMessage, initTelemetry } from './src/services/telemetry';
+import { BRAND, FONT, GameButton, OUTLINE, SHADOW } from './src/ui';
 
 // Must run at module scope, before the first render, or the native launch
 // screen may already be gone.
@@ -36,36 +37,24 @@ const ErrorFallback = ({ resetError }: { error: Error; resetError: () => void })
           resizeMode="contain" style={errorStyles.shark} />
         <Text style={errorStyles.title}>A little rough water!</Text>
         <Text style={errorStyles.body}>The adventure paused. Let’s get your shark moving again.</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Try again"
-          onPress={resetError}
-          style={({ pressed }) => [errorStyles.buttonLip, pressed && errorStyles.buttonLipPressed]}>
-          <View style={errorStyles.button}>
-            <Text style={errorStyles.buttonText} maxFontSizeMultiplier={1.3}>TRY AGAIN</Text>
-          </View>
-        </Pressable>
+        <GameButton label="Try again" onPress={resetError} style={errorStyles.button} />
       </View>}
     </ImageBackground>
   );
 };
 
-// Brand tokens (cream card, navy outline, gold button with its lip), matching
-// the WS0 kit values until src/ui/tokens lands.
+// WS0 kit tokens: cream card, navy outline, his yellow button art.
 const errorStyles = StyleSheet.create({
   background: { flex: 1, justifyContent: 'center', paddingHorizontal: 22 },
-  card: { alignItems: 'center', backgroundColor: '#fff8e4', borderColor: '#05346e',
-    borderWidth: 3, borderRadius: 26, paddingHorizontal: 22, paddingTop: 18,
-    paddingBottom: 26, shadowColor: '#04285a', shadowOpacity: 0.3,
-    shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+  card: { alignItems: 'center', backgroundColor: BRAND.cream, borderColor: BRAND.navy,
+    borderWidth: OUTLINE.thick, borderRadius: 26, paddingHorizontal: 22, paddingTop: 18,
+    paddingBottom: 22, ...SHADOW.card },
   shark: { width: 185, height: 185, marginTop: -12, marginBottom: -8 },
-  title: { color: '#05346e', fontFamily: 'Shark', fontSize: 34, textAlign: 'center',
+  title: { color: BRAND.navy, fontFamily: FONT.display, fontSize: 34, textAlign: 'center',
     letterSpacing: 0.5, marginTop: 2 },
-  body: { color: '#0768b9', fontFamily: 'Knockout', fontSize: 19, lineHeight: 24,
-    textAlign: 'center', marginTop: 6, marginBottom: 22 },
-  buttonLip: { backgroundColor: '#d99a00', borderRadius: 18, paddingBottom: 4, minWidth: 220 },
-  buttonLipPressed: { paddingBottom: 0, marginTop: 4 },
-  button: { backgroundColor: '#ffcf3b', borderColor: '#05346e', borderWidth: 3,
-    borderRadius: 18, paddingHorizontal: 30, paddingVertical: 10, alignItems: 'center' },
-  buttonText: { color: '#05346e', fontFamily: 'Shark', fontSize: 26, letterSpacing: 1 },
+  body: { color: BRAND.blue, fontFamily: FONT.body, fontSize: 19, lineHeight: 24,
+    textAlign: 'center', marginTop: 6, marginBottom: 18 },
+  button: { maxWidth: 260 },
 });
 import { ToastProvider } from './src/components/Toast';
 
