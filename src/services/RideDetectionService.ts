@@ -150,7 +150,7 @@ class RideDetectionService {
   }
 
   setRides(rides: RideType[]) {
-    this.rides = rides.filter(isDetectionCandidate);
+    this.rides = Array.isArray(rides) ? rides.filter(isDetectionCandidate) : [];
     // Cache to AsyncStorage for background task (BUG 3 fix)
     this.cacheRides();
   }
@@ -192,7 +192,7 @@ class RideDetectionService {
       const raw = await AsyncStorage.getItem(RIDES_CACHE_KEY);
       if (raw) {
         const cached = JSON.parse(raw) as RideType[];
-        this.rides = cached.filter(isDetectionCandidate);
+        this.rides = Array.isArray(cached) ? cached.filter(isDetectionCandidate) : [];
       }
     } catch (e) {
       console.warn('Failed to load rides from cache:', e);

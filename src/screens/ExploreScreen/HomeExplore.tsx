@@ -141,7 +141,7 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
         cacheReadOnce.current = true;
         const cached = await getCachedPrepItems(lat, lng, playerId);
         if (cached) {
-          setPrepItems(cached.data);
+          setPrepItems(Array.isArray(cached.data) ? cached.data : []);
           setPlayerStats(cached.player_stats);
           setIsLoading(false);
         }
@@ -149,7 +149,7 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
 
       try {
         const response = await getPrepItems(lat, lng, playerId);
-        setPrepItems(response.data);
+        setPrepItems(Array.isArray(response.data) ? response.data : []);
         setPlayerStats(response.player_stats);
         setLoadError(false);
         recordFetch(lat, lng, lastFetchLocation, lastFetchTime);

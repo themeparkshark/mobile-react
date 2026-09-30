@@ -55,3 +55,17 @@ test('DwellCard plays or dismisses, with haptics and a reduced-motion path', () 
   const still = load(true);
   assert.deepEqual(still.motions, []);
 });
+
+test('a malformed rides payload leaves detection empty instead of crashing the map', () => {
+  const s = service().default;
+  assert.doesNotThrow(() => s.setRides(undefined));
+  assert.equal(s.currentDwell(90_000, Date.now()), null);
+});
+
+test('home prep items only accept an array from the cache or the server', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/HomeExplore.tsx'), 'utf8');
+  const sets = src.match(/setPrepItems\(([^)]*\))?[^;]*\);/g) ?? [];
+  const loads = sets.filter(line => /data/.test(line));
+  assert.ok(loads.length >= 2);
+  for (const line of loads) assert.match(line, /Array\.isArray/);
+});
