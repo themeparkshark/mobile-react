@@ -92,9 +92,22 @@ function archPoint(cx: number, top: number, w: number, h: number, band: number, 
 
 const BULBS = 13;
 
+/** Bulb centres in the marquee art (fractions of its size, measured from the file). */
+const MARQUEE_BULBS: readonly [number, number][] = [
+  [0.174, 0.393], [0.255, 0.271], [0.363, 0.189], [0.495, 0.159], [0.627, 0.191], [0.736, 0.274], [0.817, 0.393],
+];
+const STAGE_ART = {
+  backdrop: require('../../../assets/games/trivia-duel/stage_backdrop.jpg'),
+  marquee: require('../../../assets/games/trivia-duel/stage_marquee.png'),
+  podium: require('../../../assets/games/trivia-duel/stage_podium.png'),
+};
+
 export const Stage = React.memo(function Stage({ width: W, height: H, actors: a, opponent, ghost, meLook = 'classic', stripes, sunburstSpeed, reducedMotion }: Props) {
   const finImgs = FIN_POSE_ORDER.map((p) => useImage(FIN_POSES[p])); // eslint-disable-line react-hooks/rules-of-hooks
   const hat = useImage(ART.hat);
+  const backdrop = useImage(STAGE_ART.backdrop);
+  const marquee = useImage(STAGE_ART.marquee);
+  const podiumImg = useImage(STAGE_ART.podium);
   const shades = useImage(ART.sunglasses);
   const finger = useImage(ART.foamFinger);
   const meImg = useImage(SHARKS[meLook]);
@@ -108,6 +121,18 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
   const podH = H * 0.26;
   const meX = W * 0.22;
   const oppX = W * 0.78;
+  // Backdrop: cover the band, anchored so the deck sits at the bottom.
+  const bgRect = useMemo(() => {
+    const ar = 1152 / 645;
+    const w = Math.max(W + 40, (H + 20) * ar);
+    const h = w / ar;
+    return { x: (W - w) / 2, y: H - h + 4, w, h };
+  }, [W, H]);
+  const marq = useMemo(() => {
+    const w = W * 0.56;
+    const h = w * (559 / 768);
+    return { x: (W - w) / 2, y: 2, w, h };
+  }, [W]);
   const arch = useMemo(() => ({ cx: W / 2, top: H * 0.07, w: W * 0.62, h: H * 0.5, band: 16 }), [W, H]);
   const archP = useMemo(() => archPath(arch.cx, arch.top, arch.w, arch.h, arch.band), [arch]);
   const bulbs = useMemo(() => Array.from({ length: BULBS }, (_, i) => archPoint(arch.cx, arch.top, arch.w, arch.h, arch.band, (i + 0.5) / BULBS)), [arch]);
@@ -170,8 +195,10 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
   const shimmer = useDerivedValue(() => {
     const t = Math.floor(a.t.value / 83) * 83;
     const p = Skia.Path.Make();
+    const s0 = bgRect.y + bgRect.h * 0.5;
+    const s1 = bgRect.y + bgRect.h * 0.6;
     for (let row = 0; row < 3; row++) {
-      const y = seaTop + 8 + row * ((deckTop - seaTop - 12) / 3);
+      const y = s0 + row * ((s1 - s0) / 3);
       const ph = t * 0.0019 * (row % 2 ? -1 : 1) + row;
       for (let x = 10 + row * 23; x < W; x += 64) {
         const yy = y + Math.sin(ph + x * 0.05) * 1.5;
@@ -244,32 +271,21 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
   return (
     <Canvas style={{ width: W, height: H }} pointerEvents="none">
       <Group transform={rig} origin={vec(W / 2, H * 0.75)}>
-        {/* L1 sky, sea, deck */}
-        <Rect x={-40} y={-20} width={W + 80} height={seaTop + 20}>
-          <LinearGradient start={vec(0, 0)} end={vec(0, seaTop)} colors={[C.skyTop, '#bfeaff']} />
-        </Rect>
-        <Sunburst cx={W / 2} cy={H * 0.36} radius={W * 0.9} intensity={a.sunburst} rays={14} width={W} height={H} speed={sunburstSpeed} />
-        <Rect x={-40} y={seaTop} width={W + 80} height={deckTop - seaTop} color={C.sea} />
-        <Path path={shimmer} color="rgba(255,255,255,0.85)" style="stroke" strokeWidth={2.5} strokeCap="round" />
-        <Rect x={-40} y={seaTop - 1.5} width={W + 80} height={3} color={C.ink} />
-        <Rect x={-40} y={deckTop} width={W + 80} height={H - deckTop + 20}>
-          <LinearGradient start={vec(0, deckTop)} end={vec(0, H)} colors={[C.wood, '#d99452']} />
-        </Rect>
-        <Path path={deckPlanks} color="rgba(120,70,30,0.35)" style="stroke" strokeWidth={1.5} />
-        <Rect x={-40} y={deckTop - 1.5} width={W + 80} height={3} color={C.ink} />
+        {/* L1 backdrop (gate-passed, studio/art/trivia) */}
+        {backdrop ? (
+          <SkImage image={backdrop} x={bgRect.x} y={bgRect.y} width={bgRect.w} height={bgRect.h} fit="fill" />
+        ) : (
+          <Rect x={-40} y={-20} width={W + 80} height={H + 40} color={C.sky} />
+        )}
+        <Group opacity={0.55}>
+          <Sunburst cx={W / 2} cy={marq.y + marq.h * 0.55} radius={W * 0.8} intensity={a.sunburst} rays={14} width={W} height={H * 0.62} speed={sunburstSpeed} />
+        </Group>
+        <Path path={shimmer} color="rgba(255,255,255,0.7)" style="stroke" strokeWidth={2} strokeCap="round" />
 
-        {/* L2 marquee arch + bunting */}
-        <Path path={archP} color={C.gold} />
-        <Path path={archP} color={C.ink} style="stroke" strokeWidth={3} strokeJoin="round" />
-        {bulbs.map((b, i) => (
-          <Bulb key={i} x={b.x} y={b.y} index={i} lit={bulbLit} />
-        ))}
-        <Path path={bunting.string} color={C.ink} style="stroke" strokeWidth={1.5} />
-        {bunting.flags.map((f, i) => (
-          <Group key={i}>
-            <Path path={f.path} color={f.color} />
-            <Path path={f.path} color={C.ink} style="stroke" strokeWidth={2} strokeJoin="round" />
-          </Group>
+        {/* L2 marquee arch: bulbs glow on the beat (8ths, 16ths in the drum-roll) */}
+        {marquee ? <SkImage image={marquee} x={marq.x} y={marq.y} width={marq.w} height={marq.h} /> : null}
+        {MARQUEE_BULBS.map((b, i) => (
+          <Bulb key={i} x={marq.x + b[0] * marq.w} y={marq.y + b[1] * marq.h} r={marq.w * 0.045} index={i} lit={bulbLit} />
         ))}
 
         {/* Final spotlights */}
@@ -279,8 +295,8 @@ export const Stage = React.memo(function Stage({ width: W, height: H, actors: a,
         </Group>
 
         {/* L3 podiums */}
-        <Podium path={podium.me} cx={meX} top={podTop} w={podW} h={podH} rise={a.podMe} />
-        <Podium path={podium.opp} cx={oppX} top={podTop} w={podW} h={podH} rise={a.podOpp} />
+        <Podium img={podiumImg} cx={meX} top={podTop - 8} w={podW} rise={a.podMe} />
+        <Podium img={podiumImg} cx={oppX} top={podTop - 8} w={podW} rise={a.podOpp} />
 
         {/* You */}
         {meImg ? (
@@ -338,28 +354,23 @@ function cone(x0: number, y0: number, x1: number, y1: number, spread: number) {
   return p;
 }
 
-const Bulb = React.memo(function Bulb({ x, y, index, lit }: { x: number; y: number; index: number; lit: SharedValue<number> }) {
-  const on = useDerivedValue(() => (index % 4 === lit.value ? 1 : 0));
-  const glow = useDerivedValue(() => on.value * 0.85);
-  const fill = useDerivedValue(() => (on.value ? '#fff7c2' : '#f6d774'));
+const Bulb = React.memo(function Bulb({ x, y, r, index, lit }: { x: number; y: number; r: number; index: number; lit: SharedValue<number> }) {
+  const glow = useDerivedValue(() => (index % 4 === lit.value ? 0.95 : 0));
   return (
-    <Group>
-      <Circle cx={x} cy={y} r={9} color="rgba(255,240,150,1)" opacity={glow} />
-      <Circle cx={x} cy={y} r={4.2} color={fill} />
-      <Circle cx={x} cy={y} r={4.2} color={C.ink} style="stroke" strokeWidth={1.6} />
+    <Group opacity={glow}>
+      <Circle cx={x} cy={y} r={r * 2.1} color="rgba(255,236,120,0.55)" />
+      <Circle cx={x} cy={y} r={r * 0.95} color="#fffbe0" />
     </Group>
   );
 });
 
-const Podium = React.memo(function Podium({ path, cx, top, w, h, rise }: { path: ReturnType<typeof Skia.Path.Make>; cx: number; top: number; w: number; h: number; rise: SharedValue<number> }) {
+const Podium = React.memo(function Podium({ img, cx, top, w, rise }: { img: SkImageType | null; cx: number; top: number; w: number; rise: SharedValue<number> }) {
   const tr = useDerivedValue(() => [{ translateY: -rise.value }]);
+  if (!img) return null;
+  const h = w * (img.height() / img.width());
   return (
     <Group transform={tr}>
-      <Path path={path} color={C.blue} />
-      <Rect x={cx - w / 2 + 4} y={top + h * 0.3} width={w - 8} height={h * 0.18} color={C.gold} />
-      <RoundedRect x={cx - w / 2 - 4} y={top - 7} width={w + 8} height={12} r={4} color={C.cream} />
-      <RoundedRect x={cx - w / 2 - 4} y={top - 7} width={w + 8} height={12} r={4} color={C.ink} style="stroke" strokeWidth={2.5} />
-      <Path path={path} color={C.ink} style="stroke" strokeWidth={3} strokeJoin="round" />
+      <SkImage image={img} x={cx - w / 2} y={top} width={w} height={h} />
     </Group>
   );
 });

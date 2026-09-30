@@ -133,6 +133,7 @@ export interface TriviaDuelProps {
 }
 
 const { width: SW } = Dimensions.get('window');
+const AUTOPLAY = __DEV__ && process.env.EXPO_PUBLIC_TRIVIA_AUTOPLAY === '1';
 const TIER_TEXT: Record<SpeedTier, string> = { lightning: 'LIGHTNING!', great: 'GREAT', nice: 'NICE', none: '' };
 const TIER_COLOR: Record<SpeedTier, string> = { lightning: C.lightning, great: C.gold, nice: C.blue, none: C.cream };
 const TIER_STEP: Record<SpeedTier, number> = { lightning: 2, great: 1, nice: 0, none: 0 };
@@ -764,6 +765,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   dispatchRef.current = (ev: number, a: number, b: number) => {
     const r = round;
     if (!r || !plan) return;
+    if (AUTOPLAY) autoplayOn(ev, r);
     switch (ev) {
       case EV_UNLOCK: {
         if (r.spec.type === 'buzz') {
@@ -1256,6 +1258,36 @@ export function TriviaDuel(props: TriviaDuelProps) {
     void beginMatch(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ghostKey]);
+
+  // -- Dev autoplay (demo capture only; __DEV__ + EXPO_PUBLIC_TRIVIA_AUTOPLAY=1) ----------------------
+  const autoN = useRef(0);
+  const autoplayOn = (ev: number, r: PlannedRound) => {
+    const q = r.question;
+    const k = (autoN.current += 1);
+    const skill = (mixSeed(seedRef.current, k) % 100) / 100;
+    const pick = skill < 0.78 ? q.correctIndex : (q.correctIndex + 1) % Math.max(2, q.choices.length);
+    const tapAt = (i: number, ms: number) => later(ms, () => runOnUI((x: number) => { 'worklet'; onTapUI(x); })(i));
+    if (ev === EV_UNLOCK) {
+      const ms = 900 + skill * 2200;
+      if (r.spec.type === 'buzz') later(ms * 0.7, onBuzzUI);
+      else if (q.format === 'closest' && q.slider) {
+        const guess = q.slider.truth + (skill < 0.7 ? 0 : 3);
+        later(ms * 0.6, () => setSliderVal(guess));
+        later(ms, lockSlider);
+      } else {
+        if (k % 4 === 1 && tray.chomp && q.choices.length >= 3) later(400, useChomp);
+        tapAt(pick, ms);
+      }
+    } else if (ev === EV_BUZZ) tapAt(pick, 700);
+    else if (ev === EV_FIN_BUZZ && oppIn.current.choice !== q.correctIndex) tapAt(q.correctIndex, 2000);
+    else if (ev === EV_TIMEOUT && r.spec.type === 'buzz') tapAt(pick, 1200);
+  };
+  useEffect(() => {
+    if (!AUTOPLAY) return;
+    if (phase === 'wager') later(1400, () => pickWager(2));
+    if (phase === 'results' && results) later(7000, () => (playsRef.current < 2 ? onRematch() : onContinue()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, results]);
 
   // -- Lifelines (6) -------------------------------------------------------------------------------------
   const canLifeline = phase === 'question' && !usedThisQ && round != null && (subMode === null || subMode === 'buzzAnswer');
