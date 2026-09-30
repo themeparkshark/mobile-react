@@ -1,4 +1,5 @@
 import client from '../../client';
+import { appVersionHeaders } from '../../platform';
 
 /**
  * GET /api/feature-flags (public, cached 60s by the server). Switches the app
@@ -21,7 +22,11 @@ export type FeatureFlagsPayload = {
 };
 
 export default async function getFeatureFlags(): Promise<FeatureFlagsPayload> {
-  const { data } = await client.get<{ data: FeatureFlagsPayload }>('/feature-flags', { timeout: 8000 });
+  // Sent here as well as by the shared client: update_required depends on it.
+  const { data } = await client.get<{ data: FeatureFlagsPayload }>('/feature-flags', {
+    timeout: 8000,
+    headers: appVersionHeaders(),
+  });
   const payload = data?.data;
   if (!payload || typeof payload.flags !== 'object' || payload.flags === null) {
     throw new Error('Feature flags response was malformed.');
