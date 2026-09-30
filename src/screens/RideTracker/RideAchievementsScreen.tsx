@@ -12,6 +12,8 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getRideAchievements, RideAchievementType } from '../../api/endpoints/player-rides';
 import { colors } from '../../design-system';
+import { GameIcon } from '../../ui';
+import { achievementIconName } from './achievementIcon';
 
 // ─── Achievement Card ───
 interface AchievementCardProps {
@@ -21,9 +23,10 @@ const AchievementCard: React.FC<AchievementCardProps> = React.memo(({ achievemen
   const unlocked = achievement.unlocked;
   return (
     <View style={[styles.card, !unlocked && styles.cardLocked]}>
-      <Text style={[styles.cardIcon, !unlocked && styles.iconLocked]}>
-        {unlocked ? achievement.icon : '🔒'}
-      </Text>
+      <View style={[styles.cardIcon, !unlocked && styles.iconLocked]}
+        accessibilityLabel={unlocked ? undefined : 'Locked'}>
+        <GameIcon name={unlocked ? achievementIconName(achievement.icon) : 'lock'} size={40} />
+      </View>
       <View style={styles.cardContent}>
         <Text style={[styles.cardName, !unlocked && styles.textLocked]}>{achievement.name}</Text>
         <Text style={[styles.cardDesc, !unlocked && styles.textLocked]}>{achievement.description}</Text>
@@ -185,7 +188,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardLocked: { opacity: 0.6 },
-  cardIcon: { fontSize: 36 },
+  cardIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   iconLocked: { opacity: 0.5 },
   cardContent: { flex: 1 },
   cardName: { 

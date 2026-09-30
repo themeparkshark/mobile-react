@@ -47,3 +47,17 @@ test('owned HUD and home-find surfaces use art, not emoji, and no dark or purple
     assert.equal(fs.existsSync(path.join(root, `src/components/${dead}.tsx`)), false, dead);
   }
 });
+
+test('ride achievements draw GameIcon art for server icon keys and legacy emoji, never raw text', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const { achievementIconName } = loadTs('src/screens/RideTracker/achievementIcon.ts');
+  for (const key of ['ride', 'rush', 'star', 'swords', 'trophy', 'crown', 'map', 'pin', 'check']) {
+    assert.equal(achievementIconName(key), key);
+  }
+  assert.equal(achievementIconName('\u{1F451}'), 'crown', 'an older server emoji still maps to art');
+  assert.equal(achievementIconName('something-new'), 'trophy');
+  assert.equal(achievementIconName(undefined), 'trophy');
+  const screen = read('src/screens/RideTracker/RideAchievementsScreen.tsx');
+  assert.match(screen, /<GameIcon name=\{unlocked \? achievementIconName\(achievement\.icon\) : 'lock'\}/);
+  assert.doesNotMatch(screen, /\{unlocked \? achievement\.icon/);
+});
