@@ -208,7 +208,7 @@ Applied to the isolated backend and the original LOCAL backend serving the previ
 
 ## Validation and remaining work
 
-TypeScript and git diff checks pass. Full app checks: 227 tests. Focused backend
+TypeScript and git diff checks pass. Full app checks: 232 tests. Focused backend
 checks: seven tests, 53 assertions. PHP 8.5 emits an existing PDO deprecation. The
 legacy full migration suite needs Doctrine DBAL; unrelated test-discovery warnings
 remain and are not claimed clean.
@@ -275,3 +275,27 @@ the player stays in one area. No suggested ride was confirmed in this pass. This
 must be repaired before claiming ride-journal accuracy or physical GPS readiness.
 Small-phone/native reduced-motion and real first-earned-souvenir finishing remain
 pending. The broader goal stays active.
+
+
+## GPS suggestion quality repair
+
+Local API inspection confirmed that the ride catalog includes raw `restaurant`
+records alongside `attraction` and `show`. The detector previously accepted all
+coordinates, including dining, and started a dwell for every overlapping radius.
+Stopping it finalized all unfinished dwell records as exits.
+
+The detector now accepts known attraction types only, applies the same filter to
+old background caches, and ignores invalid coordinates. It tracks one clearly
+nearest attraction at a time; new entry waits when two candidates are within a
+15-meter distance margin, and an active zone remains until actual GPS exit. This
+is a conservative heuristic requiring physical park review. Stopping discards
+unfinished zones without manufacturing an exit or erasing existing pending
+reviews. Tests cover real dwell/exit, dining/shop exclusion, overlaps, ambiguous
+entry, cache filtering, invalid samples and stationary stop.
+
+232 app checks, TypeScript and diff checks pass. Native normal-player session was
+restored with the first-play preview off, the optional chest declined and wallet
+still 180 Coins / seven Tickets / 185 Energy. The map is usable after Fast Refresh.
+This does not prove real GPS accuracy, exact adjacent-ride discrimination or
+battery behavior. Old queued suggestions are preserved for explicit review, not
+silently deleted. No ride suggestion was confirmed and no social post was sent.

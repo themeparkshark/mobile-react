@@ -29,6 +29,15 @@ const MAX_WALKTHROUGH_MS = 60_000; // anything under 1 min = walk-through
 const RE_RIDE_GAP_MS = 180_000; // 3 min gap before counting as re-ride
 const DETECTION_COOLDOWN_MS = 120_000; // 2 min cooldown per ride
 const BACKGROUND_LOCATION_TASK = 'ride-detection-background';
+// Catalog APIs also contain dining and shops; these are never ride candidates.
+const DETECTABLE_TYPES = new Set(['ride', 'attraction', 'coaster', 'dark_ride',
+  'flat_ride', 'water_ride', 'show', 'walk_through', 'transport', 'other']);
+const AMBIGUOUS_DISTANCE_MARGIN = 15; // wait for a clearer GPS position between overlapping attractions
+
+function isDetectionCandidate(ride: RideType): boolean {
+  return DETECTABLE_TYPES.has(ride.type) && Number.isFinite(ride.lat) &&
+    Number.isFinite(ride.lng) && Math.abs(ride.lat!) <= 90 && Math.abs(ride.lng!) <= 180;
+}
 
 export interface DetectedRide {
   id: string;
@@ -137,7 +146,7 @@ class RideDetectionService {
   }
 
   setRides(rides: RideType[]) {
-    this.rides = rides.filter(r => r.lat != null && r.lng != null);
+    this.rides = rides.filter(isDetectionCandidate);
     // Cache to AsyncStorage for background task (BUG 3 fix)
     this.cacheRides();
   }
@@ -179,7 +188,7 @@ class RideDetectionService {
       const raw = await AsyncStorage.getItem(RIDES_CACHE_KEY);
       if (raw) {
         const cached = JSON.parse(raw) as RideType[];
-        this.rides = cached.filter(r => r.lat != null && r.lng != null);
+        this.rides = cached.filter(isDetectionCandidate);
       }
     } catch (e) {
       console.warn('Failed to load rides from cache:', e);
@@ -237,6 +246,9 @@ class RideDetectionService {
   async stopDetection() {
     ++this.lifecycleToken;
     this.running = false;
+    // Stopping/reloading is not evidence that a guest left or rode an attraction.
+    // Already queued detections remain intact; unfinished zones are discarded.
+    this.zoneStates.clear();
 
     // Stop background location
     try {
@@ -247,19 +259,11 @@ class RideDetectionService {
       console.warn('Failed to stop background location:', e);
     }
 
-    // Finalize any open zone states — await each sequentially (BUG 2 fix)
-    const now = Date.now();
-    for (const [rideId, state] of Array.from(this.zoneStates.entries())) {
-      const dwellMs = now - state.enteredAt;
-      if (dwellMs > state.minDwellMs && dwellMs > MAX_WALKTHROUGH_MS) {
-        await this.queueDetection(state, dwellMs, now);
-      }
-    }
-    this.zoneStates.clear();
   }
 
   /** Public so background task can call it */
   processLocation(lat: number, lng: number) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
     const now = Date.now();
     const nearbyRides = this.findNearbyRides(lat, lng);
     const nearbyIds = new Set(nearbyRides.map(r => r.id));
@@ -286,8 +290,15 @@ class RideDetectionService {
       }
     }
 
-    // Check for zone enters
-    for (const ride of nearbyRides) {
+    // Track one attraction at a time. Keep it until a genuine zone exit;
+    // a crowded overlap with no clear closest attraction starts no new dwell.
+    const candidates = nearbyRides.map(ride => ({ ride,
+      distance: haversineDistance(lat, lng, ride.lat!, ride.lng!) }))
+      .sort((a, b) => a.distance - b.distance || a.ride.id - b.ride.id);
+    const unambiguous = candidates.length === 1 || (candidates.length > 1 &&
+      candidates[1].distance - candidates[0].distance >= AMBIGUOUS_DISTANCE_MARGIN);
+    const entries = this.zoneStates.size === 0 && unambiguous ? [candidates[0].ride] : [];
+    for (const ride of entries) {
       if (!this.zoneStates.has(ride.id)) {
         // Check cooldown from rideHistory (BUG 1 fix - was checking zoneStates which is always empty here)
         const history = this.rideHistory.get(ride.id);
@@ -318,8 +329,8 @@ class RideDetectionService {
 
   private findNearbyRides(lat: number, lng: number): RideType[] {
     return this.rides.filter(ride => {
-      if (!ride.lat || !ride.lng) return false;
-      const dist = haversineDistance(lat, lng, ride.lat, ride.lng);
+      if (!isDetectionCandidate(ride)) return false;
+      const dist = haversineDistance(lat, lng, ride.lat!, ride.lng!);
       const radius = ride.radius ?? DEFAULT_RIDE_RADIUS;
       return dist <= radius;
     });

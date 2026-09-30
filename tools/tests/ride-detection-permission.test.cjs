@@ -139,3 +139,52 @@ test('map location samples still queue a ride after a real dwell and exit', asyn
   assert.equal(calls.watcherStarts, 0);
   await service.stopDetection();
 });
+
+
+test('dining, shops and unsupported catalog types never become ride suggestions', async () => {
+  const { service, advance } = makeHarness();
+  service.setRides(['restaurant', 'shop', 'store', 'unknown'].map((type, i) => ({ id: i+1,
+    name: type, type, park_id: 1, lat: 34, lng: -118, radius: 50, min_dwell_minutes: 1 })));
+  await service.startDetection(); service.processForegroundLocation(34, -118);
+  advance(300_000); service.processForegroundLocation(34.002, -118);
+  await new Promise(resolve => setImmediate(resolve)); assert.equal((await service.getPendingDetections()).length, 0);
+});
+test('overlapping attraction zones track only the clear nearest ride, not every neighbor', async () => {
+  const { service, advance } = makeHarness();
+  service.setRides([0, .0003, .0004].map((offset, i) => ({ id: i+1, name: 'Ride '+i,
+    type: 'attraction', park_id: 1, lat: 34+offset, lng: -118, radius: 60, min_dwell_minutes: 1 })));
+  await service.startDetection(); service.processForegroundLocation(34, -118);
+  advance(300_000); service.processForegroundLocation(34.002, -118);
+  await new Promise(resolve => setImmediate(resolve)); assert.deepEqual(Array.from(await service.getPendingDetections(), d=>d.rideId), [1]);
+});
+test('an ambiguous overlap starts no dwell until a clear attraction is available', async () => {
+  const { service, advance } = makeHarness();
+  service.setRides([-.0001, .0001].map((offset,i) => ({ id: i+1, name: 'Ride '+i,
+    type: 'show', park_id: 1, lat: 34+offset, lng: -118, radius: 60, min_dwell_minutes: 1 })));
+  await service.startDetection(); service.processForegroundLocation(34, -118); advance(300_000);
+  service.processForegroundLocation(34.002, -118); await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await service.getPendingDetections()).length, 0);
+  service.processForegroundLocation(34.0001, -118); advance(300_000); service.processForegroundLocation(34.002, -118);
+  await new Promise(resolve => setImmediate(resolve)); assert.deepEqual(Array.from(await service.getPendingDetections(), d=>d.rideId), [2]);
+});
+test('stopping a stationary visit creates no synthetic ride exit and keeps pending reviews', async () => {
+  const { service, advance, storage } = makeHarness();
+  storage.set('pending_ride_detections', JSON.stringify([{id:'review-me'}]));
+  service.setRides([{id:1,name:'Nearby Ride',type:'coaster',park_id:1,lat:34,lng:-118,radius:50,min_dwell_minutes:1}]);
+  await service.startDetection(); service.processForegroundLocation(34,-118); advance(300_000);
+  await service.stopDetection(); assert.deepEqual(JSON.parse(storage.get('pending_ride_detections')), [{id:'review-me'}]);
+});
+
+
+test('old background caches exclude dining and invalid GPS samples cannot manufacture an exit', async () => {
+  const { service, advance, storage } = makeHarness();
+  storage.set('ride_detection_rides_cache',JSON.stringify([
+    {id:1,name:'Diner',type:'restaurant',park_id:1,lat:34,lng:-118,radius:50,min_dwell_minutes:1},
+    {id:2,name:'Ride',type:'attraction',park_id:1,lat:34,lng:-118,radius:50,min_dwell_minutes:1}
+  ]));
+  await service.loadRidesFromCache(); await service.startDetection(); service.processForegroundLocation(34,-118);
+  advance(300_000); service.processForegroundLocation(NaN,-118);
+  await new Promise(resolve => setImmediate(resolve)); assert.equal((await service.getPendingDetections()).length,0);
+  service.processForegroundLocation(34.002,-118); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(Array.from(await service.getPendingDetections(), d=>d.rideId),[2]);
+});
