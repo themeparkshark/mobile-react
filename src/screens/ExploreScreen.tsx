@@ -32,7 +32,7 @@ import useTripGoal from '../hooks/useTripGoal';
 import AdventureTicketCard from './ExploreScreen/AdventureTicketCard';
 import { adventurePlayGate, adventureRideClosed, adventureShelfArrival, rankDetours } from './ExploreScreen/adventureTicketPresentation';
 import useAdventureStampMoment from './ExploreScreen/useAdventureStampMoment';
-import { resolveMapQueueContext } from '../services/lineplay/resolveRide';
+import { resolveMapQueueContext, resolveRideContextById } from '../services/lineplay/resolveRide';
 import type { RideContext } from '../services/lineplay/LinePlaySession';
 import checkForRedeemable from '../helpers/check-for-redeemable';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
@@ -71,6 +71,7 @@ import TaskMarker from './ExploreScreen/TaskMarker';
 import MapResourcePill from './ExploreScreen/MapResourcePill';
 import TooFarDialog from './ExploreScreen/TooFarDialog';
 import DwellCard from './ExploreScreen/DwellCard';
+import MapSuggestionStub from './ExploreScreen/MapSuggestionStub';
 import useQueueDwell from './ExploreScreen/useQueueDwell';
 import { clusterMarkers, revealDelays } from './ExploreScreen/mapMarkerPresentation';
 import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
@@ -83,7 +84,7 @@ import { GymMarker, SwordMarker } from '../components/GymBattle';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
-import { GameRichText } from '../ui';
+import { GameIcon, GameRichText } from '../ui';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -646,6 +647,9 @@ export default function ExploreScreen() {
     return () => { current = false; };
   }, [mapFocused, park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds]);
 
+  // Every ride island, not the zoom-dependent clusters, so the beacon's spot stays put while zooming.
+  const beaconAvoid = useMemo(() => [...visibleTasks, ...restingTasks].map(task => ({
+    latitude: Number(task.latitude), longitude: Number(task.longitude) })), [visibleTasks, restingTasks]);
   const queueDwell = useQueueDwell(park?.id ?? null, mapFocused && !!player);
   const [dismissedDwell, setDismissedDwell] = useState<number | null>(null);
   const dwellShown = !!queueDwell && dismissedDwell !== queueDwell.rideId &&
@@ -654,6 +658,7 @@ export default function ExploreScreen() {
     dwell: dwellShown,
     bossMoment: !!bossMap.moment && bossMap.moment.phase !== 'settled',
     queueRide: !!(selectedTask && queueRide), adventure: !!adventure, goal: !!tripGoal, project: !!activeParkProject,
+    adventureSlam: !!adventureMoment.slam?.length,
   });
   const chestReady = chestMayPresent({
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
@@ -739,6 +744,7 @@ export default function ExploreScreen() {
       {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
         onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion}
         pillHidden={!!park && suggestionSlots.right !== 'project'}
+        pillCollapsed={!!park && suggestionSlots.rightStub}
         topOffset={park ? suggestionSlotScreenTop(Constants.statusBarHeight ?? 0, hasLiveEvents) : undefined} />}
       {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
         presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
@@ -940,16 +946,22 @@ export default function ExploreScreen() {
               onRush={(task) => setSelectedTask(task)} />
           </View>
         )}
-        {suggestionSlots.left === 'dwell' && queueDwell && <DwellCard key={`dwell-${queueDwell.rideId}`}
+        {suggestionSlots.left === 'dwell' && suggestionSlots.leftStub && queueDwell && <MapSuggestionStub side="left" top={slotTop}
+          label={`In line at ${queueDwell.rideName}? Show queue games`} onPress={() => setSelectedTask(null)}>
+          <GameIcon name="queue" size={32} />
+        </MapSuggestionStub>}
+        {suggestionSlots.left === 'dwell' && !suggestionSlots.leftStub && queueDwell && <DwellCard key={`dwell-${queueDwell.rideId}`}
           rideName={queueDwell.rideName} top={slotTop}
           onDismiss={() => setDismissedDwell(queueDwell.rideId)}
           onPlay={async () => {
-            const ride = await resolveMapQueueContext(park.id, queueDwell.rideName);
-            if (ride) navigation.navigate('LinePlay', { ride });
+            const ride = await resolveRideContextById(park.id, queueDwell.rideId)
+              ?? await resolveMapQueueContext(park.id, queueDwell.rideName);
+            if (!ride) throw new Error('This line could not load.');
+            navigation.navigate('LinePlay', { ride });
           }} />}
         {adventure && suggestionSlots.left === 'adventure' && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
-          closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={slotTop}
+          closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={slotTop} collapsed={suggestionSlots.leftStub}
           slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           onOcclusionChange={setAdventureOccluded} onRefresh={refreshTripGoal}
           onSelect={selectAdventureRide} onDismiss={dismissAdventure}
@@ -966,7 +978,14 @@ export default function ExploreScreen() {
             const earnedCoin = adventureShelfArrival(adventure);
             RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id, ...(earnedCoin ? { earnedCoin } : {}) });
           }} />}
-        {suggestionSlots.left === 'goal' && tripGoal && player && <Pressable
+        {suggestionSlots.left === 'goal' && suggestionSlots.leftStub && tripGoal && player && <MapSuggestionStub side="left" top={slotTop}
+          label={`Your ride goal: ${tripGoal.ride_name}. Show it`} onPress={() => {
+            if (tripGoalTask) guideTo(tripGoalTask);
+            else RootNavigation.navigate('Park', { park: tripGoal.park_id, player: player.id });
+          }}>
+          <GameIcon name="ride" size={32} />
+        </MapSuggestionStub>}
+        {suggestionSlots.left === 'goal' && !suggestionSlots.leftStub && tripGoal && player && <Pressable
           accessibilityRole="button"
           accessibilityLabel={tripGoal.coin_owned
             ? `Open ${tripGoal.ride_name} on my coin shelf`
@@ -1023,10 +1042,6 @@ export default function ExploreScreen() {
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : mapFocusRequest}>
-          {activeParkProject?.park_id === park.id && (
-            <ParkProjectMapBeacon project={activeParkProject}
-              onPress={() => setProjectOpenRequestVersion(version => version + 1)} />
-          )}
           {redeemables?.items
             .filter((item) => !item.is_hidden)
             .map((item) => (
@@ -1062,6 +1077,11 @@ export default function ExploreScreen() {
               onPress={handleTaskPress}
             />;
           })}
+          {/* After the ride islands so their ambience never prints over the label; it settles clear of them. */}
+          {activeParkProject?.park_id === park.id && (
+            <ParkProjectMapBeacon project={activeParkProject} avoid={beaconAvoid}
+              onPress={() => setProjectOpenRequestVersion(version => version + 1)} />
+          )}
           {bossMap.moment && (bossMap.moment.phase === 'exit' || bossMap.moment.phase === 'flag') &&
             <Circle center={bossMap.moment.impact.coordinate} radius={65} fillColor="rgba(255,207,59,0.12)" strokeColor="#ffcf3b" strokeWidth={2} />}
           {bossMap.moment?.phase === 'exit' && <BossMapDeparture impact={bossMap.moment.impact} onComplete={bossMap.finishExit} />}

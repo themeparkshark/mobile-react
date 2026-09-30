@@ -39,23 +39,35 @@ export function suggestionSlotScreenTop(statusBarHeight: number, hasLiveEvents: 
 
 export type MapSuggestion = 'boss' | 'ride' | 'dwell' | 'adventure' | 'goal' | 'project' | null;
 
-/** Which suggestion chips may show. The left slot holds adventure or goal; the right slot ride or project. */
+/**
+ * Which suggestion chips may show, and which one leads. Only the lead renders at
+ * full size; every other suggestion folds into a 56pt stub in its slot, so the
+ * map top never stacks two full chips. The left slot holds dwell, adventure or
+ * goal; the right slot ride or project.
+ */
 export function mapSuggestionSlots(state: {
   readonly bossMoment: boolean;
   readonly queueRide: boolean;
   /** Standing in a line (90 s dwell) at a ride that is not already the adventure or selected ride. */
   readonly dwell?: boolean;
   readonly adventure: boolean;
+  /** A new stamp is waiting to slam onto the ticket: the adventure leads until it lands. */
+  readonly adventureSlam?: boolean;
   readonly goal: boolean;
   readonly project: boolean;
-}): { left: 'dwell' | 'adventure' | 'goal' | null; right: 'ride' | 'project' | null; lead: MapSuggestion } {
+}): {
+  left: 'dwell' | 'adventure' | 'goal' | null; right: 'ride' | 'project' | null; lead: MapSuggestion;
+  /** True when that slot shows only its 56pt stub. */
+  leftStub: boolean; rightStub: boolean;
+} {
   // A boss map moment owns the screen until it settles.
-  if (state.bossMoment) return { left: null, right: null, lead: 'boss' };
+  if (state.bossMoment) return { left: null, right: null, lead: 'boss', leftStub: false, rightStub: false };
   // Waiting in a line is the most contextual suggestion: it takes the left slot.
   const left = state.dwell ? 'dwell' : state.adventure ? 'adventure' : state.goal ? 'goal' : null;
   const right = state.queueRide ? 'ride' : state.project ? 'project' : null;
-  const lead: MapSuggestion = state.queueRide ? 'ride' : left ?? (state.project ? 'project' : null);
-  return { left, right, lead };
+  const lead: MapSuggestion = left === 'adventure' && state.adventureSlam ? 'adventure'
+    : state.queueRide ? 'ride' : left ?? (state.project ? 'project' : null);
+  return { left, right, lead, leftStub: left != null && lead !== left, rightStub: right != null && lead !== right };
 }
 
 /** A player who has caught anything before, or catches now, has had their first catch. */

@@ -13,6 +13,7 @@ import {
 } from '../../api/endpoints/me/park-projects';
 import { preferFreshProjectSnapshot, projectLiveUpdate, projectNextMilestone, projectStageLabel } from './projectLiveUpdate';
 import ProjectRippleFeed from './ProjectRippleFeed';
+import MapSuggestionStub from './MapSuggestionStub';
 import { GameIcon, GameRichText } from '../../ui';
 
 interface Props {
@@ -24,6 +25,8 @@ interface Props {
   readonly topOffset?: number;
   /** Another suggestion owns the right slot (one suggestion at a time); the sheet still opens on request. */
   readonly pillHidden?: boolean;
+  /** Another suggestion leads: the pill folds into a 56pt stub on the right slot. */
+  readonly pillCollapsed?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -44,7 +47,7 @@ export function projectHeroSource(slug: string) {
 
 export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProjectChange,
   openRequestVersion = 0, loadProjects = getParkProjects,
-  topOffset = 82 + Constants.statusBarHeight, pillHidden = false }: Props) {
+  topOffset = 82 + Constants.statusBarHeight, pillHidden = false, pillCollapsed = false }: Props) {
   const [projects, setProjects] = useState<ParkProject[]>([]);
   const [history, setHistory] = useState<ParkProject[]>([]);
   const [open, setOpen] = useState(false);
@@ -189,7 +192,12 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
 
   return (
     <>
-      {!pillHidden && <AnimatedPressable accessibilityRole="button"
+      {!pillHidden && pillCollapsed && <MapSuggestionStub side="right" top={topOffset} zIndex={30}
+        label={`Park story: ${featured.title}. ${featured.total_points} of ${featured.goal_points} signals. Open story.`}
+        badge={`${featured.total_points}/${featured.goal_points}`} onPress={() => { setOpen(true); setNotice(null); }}>
+        <GameIcon name="sparkle" size={30} />
+      </MapSuggestionStub>}
+      {!pillHidden && !pillCollapsed && <AnimatedPressable accessibilityRole="button"
         accessibilityLabel={`${offline ? 'Last confirmed park story' : 'Park story'}: ${featured.title}. ${featured.total_points} of ${featured.goal_points} signals.${offline ? ' Progress may have changed.' : ''} Open story.`}
         style={[styles.pill, compactHome && styles.pillCompact,
           { top: topOffset, transform: [{ scale: pulse }] }]}
@@ -375,7 +383,7 @@ const styles = StyleSheet.create({
   pillStar: { position: 'absolute', top: 6, right: 5 },
   pillKicker: { color: '#ffe06c', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8 },
   pillTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 15, marginTop: 3 },
-  pillProgress: { color: '#dff4ff', fontSize: 11, marginTop: 4 },
+  pillProgress: { color: '#dff4ff', fontFamily: 'Knockout', fontSize: 11, marginTop: 4 },
   modal: { maxHeight: '85%', borderRadius: 20, backgroundColor: '#bdeaff', padding: spacing.lg,
     borderWidth: 3, borderColor: '#fff' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

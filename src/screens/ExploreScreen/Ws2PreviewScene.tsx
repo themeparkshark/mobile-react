@@ -115,7 +115,7 @@ export default function Ws2PreviewScene() {
     {scene === 'adventure-detour' && adventureCard('play', { open: true, picker: true, closed: true })}
     {scene === 'adventure-celebrate' && adventureCard('celebrate', { open: true })}
     {scene === 'adventure-complete' && adventureCard('complete')}
-    {scene === 'dwell' && <DwellCard rideName="Space Voyage" top={64} onPlay={noop} onDismiss={noop} />}
+    {scene === 'dwell' && <DwellCard rideName="Space Voyage" top={64} onPlay={async () => {}} onDismiss={noop} />}
     <TooFarDialog visible={scene === 'too-far'} distanceMeters={42} requiredMeters={14} homeItem={false} onClose={noop} />
     <Label scene={scene} />
   </View>;

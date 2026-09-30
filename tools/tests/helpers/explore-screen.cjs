@@ -78,6 +78,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     './ExploreScreen/mapMarkerPresentation': markers,
     './ExploreScreen/adventureTicketPresentation': adventure,
     './ExploreScreen/mapPresentationQueue': queue,
+    './ExploreScreen/useQueueDwell': { default: () => options.queueDwell ?? null },
     '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined, hasCompleted: () => true, isReady: true, isActive: false }) },
     '../components/boss/BossRaidFlow': { default: component('BossRaidFlow'), useParkRaid: () => ({ raid: null, setState: () => undefined }) },
     '../hooks/useBossMapMoment': { default: () => ({ moment: null, flag: null, enqueue: async () => undefined, dismiss: () => undefined, finishExit: () => undefined }) },

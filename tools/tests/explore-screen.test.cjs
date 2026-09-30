@@ -101,3 +101,33 @@ test('the Park Project pill sits on the same row as the other suggestion slots, 
   // The recenter compass clears the tallest chip in the right slot (the Park Story pill).
   assert.ok(app.find(named('Map')).props.controlsTop >= q.suggestionSlotTop(false) + 76);
 });
+
+test('one suggestion leads: a live raid plus an adventure plus a Park Story shows exactly one full chip', async () => {
+  const app = exploreScreen({ trip: adventureTrip('discover'), redeemables, modules: {
+    '../components/boss/BossRaidFlow': { default: named => null, useParkRaid: () => ({ raid: { id: 3, status: 'active' }, setState: () => undefined }) },
+  } });
+  await app.settle();
+  app.find(named('ParkProjectWidget')).props.onActiveProjectChange({ id: 9, park_id: 1, title: 'Signal', total_points: 0, goal_points: 100 });
+  app.render(); await app.settle();
+  const q = require('./helpers/ts-module.cjs').loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+  const card = app.find(named('AdventureTicketCard'));
+  const widget = app.find(named('ParkProjectWidget'));
+  const fullChips = [
+    card && !card.props.collapsed,
+    widget && !widget.props.pillHidden && !widget.props.pillCollapsed,
+    !!app.find(label('Play queue games for')),
+  ].filter(Boolean);
+  assert.equal(fullChips.length, 1, 'exactly one full suggestion chip');
+  assert.equal(card.props.collapsed, false, 'the adventure leads');
+  assert.equal(widget.props.pillCollapsed, true, 'the Park Story folds into its stub');
+  // Both slots sit under the Live Events row.
+  assert.equal(card.props.top, q.suggestionSlotTop(true));
+  assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0, true));
+});
+
+test('a selected queue ride leads and the adventure folds into its stub', async () => {
+  const app = exploreScreen({ trip: adventureTrip('discover'), redeemables, queueRide });
+  await selectRide(app);
+  assert.ok(app.find(label('Play queue games for Space Ride')));
+  assert.equal(app.find(named('AdventureTicketCard')).props.collapsed, true);
+});

@@ -12,6 +12,7 @@ import { BRAND, GameButton, GameIcon, SHADOW } from '../../ui';
 import {
   adventureErrorMessage, adventurePrompt, adventureStamps, detourDetail, type DetourPick,
 } from './adventureTicketPresentation';
+import MapSuggestionStub from './MapSuggestionStub';
 
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
 const FINN = require('../../../assets/images/screens/pin-collections/shark.png');
@@ -22,6 +23,8 @@ interface Props {
   closed: boolean;
   stale: boolean;
   top: number;
+  /** Another suggestion leads: show only the 56pt stub (coin plus stamp count); tapping opens the ticket. */
+  collapsed?: boolean;
   /** Distance to the ticket ride's queue; Play opens only in its line. */
   gate?: { state: 'near' | 'far' | 'unknown'; meters: number | null };
   /** Ranked detour rides (rankDetours): open first, nearest, shortest wait, top 3. */
@@ -136,7 +139,7 @@ function ChipEntrance({ reduced, children, style }: { reduced: boolean; children
   return <Animated.View style={[style, animated]}>{children}</Animated.View>;
 }
 
-export default function AdventureTicketCard({ ticket, data, closed, stale, top, gate, detours = [], slam = [], onSlamDone,
+export default function AdventureTicketCard({ ticket, data, closed, stale, top, collapsed = false, gate, detours = [], slam = [], onSlamDone,
   onDiscover, onPlay, onFindLine, onShelf, onSelect, onDismiss, onCelebrate, onRefresh, onOcclusionChange,
   initialOpen = false, initialPicker = false }: Props) {
   const [open, setOpen] = useState(initialOpen), [picker, setPicker] = useState(initialPicker);
@@ -211,6 +214,11 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
           <View style={styles.stubCheck}><GameIcon name="check" size={16} /></View>
         </Pressable>
       </ChipEntrance>
+    ) : collapsed ? (
+      <MapSuggestionStub side="left" top={top} label={a11y} badge={`${earnedCount}/3`}
+        onPress={() => { setPicker(false); setError(null); setOpen(true); }}>
+        <Image source={coinSource} style={styles.stubCoin} contentFit="contain" />
+      </MapSuggestionStub>
     ) : (
       <ChipEntrance reduced={reduced} style={[styles.chipSlot, { top }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={a11y} onPress={openSheet} style={styles.chip}>
