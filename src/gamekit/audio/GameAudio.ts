@@ -31,6 +31,7 @@ import {
   type Bus,
   type VoiceInfo,
 } from '../core/audioMix';
+import { beatMapFromBpm, type BeatMap } from '../core/beatMap';
 import { AudioApiBackend, ExpoAvBackend, HybridBackend, audioApiAvailable, type AudioBackend } from './backends';
 import { CHRIS_BEDS, CHRIS_CUES, type BedDef, type CueDef } from './chrisBank';
 
@@ -399,6 +400,40 @@ export class MusicDirector {
     const def = this.current ? this.engine.bed(this.current) : undefined;
     if (!def || !def.bpm) return null;
     return { bpm: def.bpm, beatsPerBar: def.beatsPerBar ?? 4, offsetMs: def.offsetMs ?? 0 };
+  }
+
+  /**
+   * Beat map of the current bed: measured beats when the bed carries them,
+   * otherwise a constant grid from bpm and offset. Drives FX sync on the UI
+   * thread (see useMusicBeat) and beat-quantized cues.
+   */
+  beatMap(): BeatMap | null {
+    const def = this.current ? this.engine.bed(this.current) : undefined;
+    if (!def) return null;
+    const bpb = def.beatsPerBar ?? 4;
+    if (def.beats && def.beats.length >= 2) {
+      return { beats: def.beats, beatsPerBar: bpb, downbeat: def.downbeat ?? 0, loopMs: 0 };
+    }
+    if (!def.bpm) return null;
+    const span = def.loopEndMs ?? 120000;
+    const count = Math.ceil((span / 60000) * def.bpm) + 2;
+    return beatMapFromBpm(def.bpm, def.offsetMs ?? 0, count, bpb, 0);
+  }
+
+  /** Is a bed audibly playing (not paused or stopped)? */
+  get playing(): boolean {
+    return !!this.current && !this.paused;
+  }
+
+  /** Playback position in the current bed (ms, file time). */
+  async positionMs(): Promise<number> {
+    const b = this.engine.backend;
+    if (!b || !this.current) return 0;
+    try {
+      return await b.musicPosition(this.deck);
+    } catch {
+      return this.elapsedMs();
+    }
   }
 
   private gainFor(name: string): number {

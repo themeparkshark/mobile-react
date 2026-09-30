@@ -183,6 +183,10 @@ function inferGame(game, dir, listing = listingFromDir(dir)) {
             beatsPerBar: 4,
             offsetMs: Array.isArray(rep.downbeats_s) && rep.downbeats_s.length ? Math.round(rep.downbeats_s[0] * 1000) : undefined,
             loopEndMs: typeof rep.dur_s === 'number' ? Math.round(rep.dur_s * 1000) : undefined,
+            beats: Array.isArray(rep.beats_s) && rep.beats_s.length >= 2 ? rep.beats_s.map((b) => Math.round(b * 1000)) : undefined,
+            downbeat: Array.isArray(rep.beats_s) && Array.isArray(rep.downbeats_s) && rep.downbeats_s.length
+              ? Math.max(0, rep.beats_s.findIndex((b) => Math.abs(b - rep.downbeats_s[0]) < 0.03))
+              : undefined,
           },
           sub,
         };
@@ -326,6 +330,8 @@ for (const game of games.sort()) {
     const m = b.meta || {};
     const parts = [`src: require('${reqPath(game, rel)}')`];
     for (const k of ['bpm', 'beatsPerBar', 'offsetMs', 'loopStartMs', 'loopEndMs', 'gainDb']) if (num(m[k]) !== undefined) parts.push(`${k}: ${m[k]}`);
+    if (Array.isArray(m.beats)) parts.push(`beats: [${m.beats.join(', ')}]`);
+    if (num(m.downbeat) !== undefined && m.downbeat > 0) parts.push(`downbeat: ${m.downbeat}`);
     const ok = isApproved(m, id, game);
     parts.push(`approved: ${ok}`);
     (ok ? bl : devBl).push(`    '${id}': { ${parts.join(', ')} },`);

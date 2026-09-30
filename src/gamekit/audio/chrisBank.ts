@@ -71,6 +71,10 @@ export interface BedDef {
   offsetMs?: number;
   loopStartMs?: number;
   loopEndMs?: number;
+  /** Measured beat onsets (ms, file time) for live-feel edits; see core/beatMap. */
+  beats?: number[];
+  /** Index into `beats` of the first downbeat. */
+  downbeat?: number;
   gainDb?: number;
   approved?: boolean;
   note?: string;

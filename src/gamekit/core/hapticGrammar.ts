@@ -130,3 +130,13 @@ export function patternStrength(steps: readonly HapticStep[]): number {
   for (const st of steps) m = Math.max(m, PRIMITIVE_STRENGTH[st.p]);
   return m;
 }
+
+/**
+ * Steps on a regular grid from one start: `count` pulses at firstAt + k*every.
+ * `alt` swaps every other pulse (Current Quest: tick, then light on 4+ tiles).
+ */
+export function gridSteps(count: number, firstAt: number, every: number, p: HapticPrimitive, alt?: HapticPrimitive): HapticStep[] {
+  const out: HapticStep[] = [];
+  for (let k = 0; k < count; k++) out.push({ at: firstAt + k * every, p: alt && k % 2 === 1 ? alt : p });
+  return out;
+}

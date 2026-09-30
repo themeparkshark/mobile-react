@@ -89,6 +89,12 @@ export * from './core/session';
 export * from './core/perfStats';
 export * from './core/audioMix';
 export * from './core/hapticGrammar';
+export * from './core/eventRing';
+export * from './core/walkSense';
+export * from './core/beatMap';
+export * from './core/calibration';
+export * from './core/timeline';
+export * from './core/atlasLayout';
 
 // Loop + time
 export { useGameClock } from './useGameClock';
@@ -110,13 +116,20 @@ export { Shaders, brightnessMatrix, tintMatrix, warmMatrix, desaturateMatrix, rg
 export { withPop, withPopIn, withSlam, withAnticipation, withWobble, after, useSquashStretch, SPRING } from './fx/motion';
 export type { SquashStretch } from './fx/motion';
 export { CountUpText } from './fx/CountUpText';
+export { useEventBridge } from './fx/useEventBridge';
+export type { EventBridge } from './fx/useEventBridge';
+export { buildSpriteAtlas, useSpriteAtlas } from './fx/SpriteAtlas';
+export type { SpriteAtlas, SpriteAtlasOptions } from './fx/SpriteAtlas';
+export { useWalkSense } from './motion/useWalkSense';
+export type { WalkSense, WalkSenseOptions } from './motion/useWalkSense';
+export { loadCalibration, saveCalibration } from './session/calibrationStore';
 
 // Feel grammar (sound + haptic + time + camera + FX in one call)
 export { useFeel, fireFeel } from './feel';
 export type { FeelDef, FeelAt, FeelDeps, FeelBurst, FeelFire } from './feel';
 export {
   playHaptic, firePrimitive, setTellHapticsEnabled, areTellHapticsEnabled,
-  setHapticAudioOffsetMs, setHapticGapMs,
+  setHapticAudioOffsetMs, setHapticGapMs, scheduleHaptics,
 } from './Haptics';
 export type { PatternOptions } from './Haptics';
 
@@ -127,6 +140,8 @@ export { CHRIS_CUES, CHRIS_BEDS, LEGACY_SFX_TO_CUE } from './audio/chrisBank';
 export type { CueDef, BedDef, ChrisCueName, ChrisBedName } from './audio/chrisBank';
 export { registerStudioAudio, useStudioAudio, studioCueIds, studioBedIds, fallbackFor } from './audio/studioLibrary';
 export { useGameMusic } from './audio/useGameMusic';
+export { useMusicBeat } from './audio/useMusicBeat';
+export type { MusicBeat } from './audio/useMusicBeat';
 export type { GameMusicOptions } from './audio/useGameMusic';
 
 // Session (interruptions, snapshots, queue wrap-up)

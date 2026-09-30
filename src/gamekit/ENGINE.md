@@ -36,6 +36,12 @@ into it with the scripted autoplay tour.
 | Replay | `core/replay.ts` | input logs, compact encoding, ghost cursors, `replayRun` |
 | Results | `results/ResultsCard.tsx`, `GameShellV2.tsx` | stars with drama, count-up, NEW BEST, NEXT STAR bar, Play again and Challenge |
 | Perf | `core/perfStats.ts`, `perf/PerfOverlay.tsx` | UI fps, fps p5, JS fps, frame graph, `fps_p5` for proof meta |
+| Event bridge | `core/eventRing.ts`, `fx/useEventBridge.ts` | UI-thread event ring, one runOnJS per frame (the Banana bridge fix) |
+| Walk sense | `core/walkSense.ts`, `motion/useWalkSense.ts` | accelerometer steps, walking, cadence, jostle, forgiveness; never pauses |
+| Beat sync | `core/beatMap.ts`, `audio/useMusicBeat.ts` | measured per-beat maps, next 8th/bar, grid error, residual gate, UI-thread beat |
+| Calibration | `core/calibration.ts`, `session/calibrationStore.ts` | per-route audio latency and input offset (Rhythm, Boss, Trivia) |
+| Timelines | `core/timeline.ts` | closed-form fx springs, cue timelines on the fx clock, fixed logical views |
+| Sprite atlas | `core/atlasLayout.ts`, `fx/SpriteAtlas.ts` | per-theme atlas built at mount from Alex's frames (2048 px cap) |
 
 ## A game in 60 lines
 
@@ -319,6 +325,89 @@ over 16.7 ms. Add `fps_p5: perf.summary().fpsP5` to proof meta. The studio gate
 is a p5 of 55 or better on an iPhone 12 **release** build: simulator and Debug
 numbers are not representative.
 
+## Event bridge (UI thread to JS)
+
+```ts
+const bridge = useEventBridge((batch) => forEachEvent(batch, (kind, a, b, c, t) => {
+  if (kind === EV_BONK) { GameAudio.play('wh_bonk', { pan: a }); playHaptic('quickHit'); }
+}));
+// clock onStep / onFrame worklet:
+pushEvent(bridge.ring.value, EV_BONK, pan, hole, tier, c.simMs);
+bridge.flush();   // once, at the end of onFrame
+```
+
+The ring is preallocated (256 by default), overwrites the oldest event when
+full (`dropped` counts it) and drains into a fresh plain array, because
+mutating a typed array in place inside a SharedValue never crosses threads.
+Touch-down feedback can still call `runOnJS` straight from the gesture worklet
+for the lowest latency; sim-driven events (spawns, escapes, bot hits, tells) go
+through the ring.
+
+## Walk sense (QUEUE REALITY)
+
+```ts
+const walk = useWalkSense({ active: playing });            // expo-sensors, 50 Hz, no prompt
+const cam = useCamera({ ..., walking: walk.walking });      // shakes x0.3
+const r = HIT_RADIUS * walkForgiveness(walk.state.current); // +15% walking, + up to 20% jostle
+proof.meta.walking = walk.walking;
+```
+
+A step is a peak of at least 0.07 g above gravity. Walking starts after 4 steps
+in 4 s and stops after 2.5 s without one. It never pauses a game.
+
+## Beat sync and beat maps
+
+```ts
+const beat = useMusicBeat(visible);                         // UI thread, locked to the audio position
+const lit = useDerivedValue(() => Math.floor(beat.beat.value * 2) % 8);  // 8th-note bulb chase
+const map = GameAudio.music.beatMap();                      // measured beats when the bed has them
+setTimeout(reveal, msToNext(map, await GameAudio.music.positionMs(), 0.5, 40)); // next 8th
+gridErrorMs(map, tapMs, 0.5);                               // judge a tap against the grid
+beatMapResidualMs(map).maxResidualMs < 5;                   // the Rhythm beat-map gate
+```
+
+The audio sync writes `beats` and `downbeat` into every loop that has
+`beats_s` in `_metrics/music.json`, so Chris's live-feel edits lock to their
+real onsets. `useMusicBeat` re-anchors to the backend position every 500 ms
+and slews at most 2 ms per frame (snaps on a seek or bed switch).
+
+## Calibration
+
+```ts
+const cal = await loadCalibration('bluetooth', GameAudio.backendName === 'audio-api' ? 'audio-api' : 'expo-av');
+const est = estimateOffset(tapErrorsMs);                    // trimmed median, null if scattered
+if (est) await saveCalibration(applyEstimate(cal, est, Date.now()));
+const judged = correctedTouchMs(touchMs, cal.inputOffsetMs);
+const startAt = cueStartMs(hitAtMs, nowMs, cal.audioLatencyMs); // telegraph lands when heard
+```
+
+Grading stays on sim time. Calibration only moves when cues are heard and how
+taps are read.
+
+## Timelines, springs and fixed views
+
+```ts
+const y = springAt(fxMs - popAt, 1.12, 1, { damping: 10, stiffness: 380, mass: 0.5 }); // freezes with hit-stop
+const tl = createTimeline([[CUE_CARD, 0], [CUE_STAR1, 280], [CUE_STAR2, 500], [CUE_STAR3, 720]]);
+startTimeline(tl, clock.fxMs);  // then each frame: for (const id of timelineDue(tl, fxMs)) fire(id)
+const fit = fitView(W, H, 960, 1000);  // Sharky's fixed 960x1000 view; screenToView(fit, x, y) for input
+```
+
+`scheduleHaptics(steps, { startAt })` plays a sequence from one start
+timestamp (for example `gridSteps(n, 60, 75, 'selection', 'light')` for a
+Current Quest carry). Drift never piles up, steps more than 40 ms late are
+dropped, and it returns a cancel function for pause and wrap-up.
+
+## Sprite atlas
+
+```ts
+const atlas = useSpriteAtlas([finnIdle, finnPeek, finnBonk, holeLip], { cell: 256, anchors: ['base', 'base', 'base', 'center'] });
+<Atlas image={atlas.image} sprites={atlas.rects} transforms={rsx} />
+```
+
+One offscreen draw at mount, capped at 2048 px (16 MB). `layoutAtlas` is pure
+and tested.
+
 ## Art rule
 
 The engine draws **no characters, icons or props**. Characters and props come
@@ -333,5 +422,8 @@ navy-outline cartoon style.
   particles, combo, scoring, replay and perf.
 - `tools/tests/gamekit-engine-systems.test.cjs` covers audio mix, GameAudio,
   haptic grammar, the session model, feel and the audio sync.
+- `tools/tests/gamekit-engine-timing.test.cjs` covers the event ring, walk
+  sense, beat maps, calibration, fx springs, cue timelines, fixed views, atlas
+  layout and haptic scheduling.
 - `tools/tests/game-shell-presentation.test.cjs` covers the QUEUE REALITY shell
   flows.

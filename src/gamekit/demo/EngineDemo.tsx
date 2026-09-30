@@ -19,6 +19,9 @@
  *   - GameShellV2 QUEUE REALITY: movement heads-up (never pauses), pocket hold
  *     with snapshot + quick 3-2-1, "YOUR RIDE'S UP!" wrap-up, results card
  *   - PerfOverlay: UI fps, fps p5, JS fps, frame graph
+ *   - Event bridge: sim events leave the UI thread in ONE runOnJS per frame
+ *   - Walk sense (accelerometer) calms the camera; never pauses
+ *   - Beat sync: marquee bulbs chase the music's measured beats on 8ths
  *
  * `autoplay` runs a bot plus a scripted tour of every system (used for the
  * demo video). Everything here is dev-only.
@@ -28,6 +31,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Dimensions, LogBox, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   Canvas,
+  Circle,
   Group,
   Image as SkImage,
   LinearGradient,
@@ -71,6 +75,10 @@ import { registerStudioAudio } from '../audio/studioLibrary';
 import { useGameMusic } from '../audio/useGameMusic';
 import { playHaptic } from '../Haptics';
 import { PerfOverlay, usePerfProbe } from '../perf/PerfOverlay';
+import { useEventBridge } from '../fx/useEventBridge';
+import { forEachEvent, pushEvent } from '../core/eventRing';
+import { useWalkSense } from '../motion/useWalkSense';
+import { useMusicBeat, type MusicBeat } from '../audio/useMusicBeat';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 
 registerStudioAudio('whack');
@@ -106,6 +114,10 @@ const IDLE = 0;
 const UP = 1;
 const BONKED = 2;
 const ESCAPE = 3;
+// Bridge events
+const EV_TELL = 1;
+const EV_HIT = 2;
+const EV_ESCAPE = 3;
 // Tiers
 const LATE = 0;
 const GOOD = 1;
@@ -221,6 +233,14 @@ export default function EngineDemo({ visible, onClose, autoplay = false }: Engin
   const escapeJS = useCallback((i: number, kind: number) => onEscapeRef.current(i, kind), []);
   const tellJS = useCallback((i: number, kind: number) => onTellRef.current(i, kind), []);
 
+  // Sim events leave the UI thread through the event ring: one runOnJS per frame.
+  const bridge = useEventBridge((batch) => forEachEvent(batch, (kind, a, b, c, t) => {
+    if (kind === EV_TELL) tellJS(a, b);
+    else if (kind === EV_HIT) hitJS(a, b, c, t);
+    else if (kind === EV_ESCAPE) escapeJS(a, b);
+  }));
+  const ring = bridge.ring;
+
   const clock = useGameClock({
     config: { slots: N, freezeBudget: 0.05 },
     onStep: (dtSec) => {
@@ -244,7 +264,7 @@ export default function EngineDemo({ visible, onClose, autoplay = false }: Engin
           s.life[i] = 1150 - Math.min(450, s.t / 90);
           s.anim[i] = 0;
           s.botAt[i] = s.t + 240 + rngFloat(s.rng) * 380;
-          runOnJS(tellJS)(i, s.kind[i]);
+          pushEvent(ring.value, EV_TELL, i, s.kind[i], 0, s.t);
         }
         s.gap = Math.max(380, s.gap - 6);
         s.nextSpawn = s.t + s.gap * (0.75 + rngFloat(s.rng) * 0.5);
@@ -255,11 +275,11 @@ export default function EngineDemo({ visible, onClose, autoplay = false }: Engin
             const reaction = s.t - s.upAt[i];
             s.state[i] = BONKED;
             s.anim[i] = 0;
-            runOnJS(hitJS)(i, reaction < 380 ? QUICK : reaction < 650 ? GOOD : LATE, s.kind[i], reaction);
+            pushEvent(ring.value, EV_HIT, i, reaction < 380 ? QUICK : reaction < 650 ? GOOD : LATE, s.kind[i], reaction);
           } else if (s.t - s.upAt[i] > s.life[i]) {
             s.state[i] = ESCAPE;
             s.anim[i] = 0;
-            runOnJS(escapeJS)(i, s.kind[i]);
+            pushEvent(ring.value, EV_ESCAPE, i, s.kind[i], 0, s.t);
           }
         } else if ((s.state[i] === BONKED && s.anim[i] > 520) || (s.state[i] === ESCAPE && s.anim[i] > 160)) {
           s.state[i] = IDLE;
@@ -271,11 +291,15 @@ export default function EngineDemo({ visible, onClose, autoplay = false }: Engin
       const s = sim.value;
       for (let i = 0; i < N; i++) s.anim[i] += slotDt(c, i);
       tick.value = tick.value + 1;
+      bridge.flush();
     },
   });
 
   // -- Camera (board only; HUD never shakes) ----------------------------------
-  const camera = useCamera({ width: SW, height: FIELD_H, timeScale: clock.fxScale, reducedMotion, walking });
+  const walk = useWalkSense({ active: visible && !result });
+  const walkingNow = walking || walk.walking;
+  const camera = useCamera({ width: SW, height: FIELD_H, timeScale: clock.fxScale, reducedMotion, walking: walkingNow });
+  const beat = useMusicBeat(visible && !result);
 
   // -- Feel table ---------------------------------------------------------------
   const table = useMemo<Record<string, FeelDef>>(() => ({
@@ -659,6 +683,7 @@ export default function EngineDemo({ visible, onClose, autoplay = false }: Engin
               <DissolveImage image={mascotImg} x={0} y={0} width={84} height={84} progress={dissolve} edgeColor="#ffcf3b" />
             </Canvas>
           </View>
+          <Marquee beat={beat} fever={feverActive} />
 
           <FxStage ref={fx} width={SW} height={FIELD_H} timeScale={clock.fxScale} reducedMotion={reducedMotion}
             onArrive={onArrive} />
@@ -679,10 +704,49 @@ export default function EngineDemo({ visible, onClose, autoplay = false }: Engin
             </ScrollView>
           </View>
 
-          <PerfOverlay probe={perf} visible={showPerf} style={styles.perf} extra={() => `sfx ${plays.current}  voices ${GameAudio.activeVoices()}  ${walking ? 'walking' : 'standing'}`} />
+          <PerfOverlay probe={perf} visible={showPerf} style={styles.perf} extra={() => `sfx ${plays.current}  voices ${GameAudio.activeVoices()}  ${walkingNow ? 'walking' : 'standing'}  steps ${walk.state.current.steps}  beat ${beat.beat.value.toFixed(1)}`} />
         </GestureHandlerRootView>
       </GameShellV2>
     </LinePlayMovementContext.Provider>
+  );
+}
+
+const BULBS = 12;
+const BULB_GAP = SW / BULBS;
+
+/**
+ * Marquee: bulbs chase on 8ths of the music's measured beat map (never fully
+ * off: 40-100% brightness), and every bulb pops on the downbeat. Pure UI
+ * thread, locked to the audio clock via useMusicBeat.
+ */
+const Marquee = React.memo(function Marquee({ beat, fever }: { beat: MusicBeat; fever: SharedValue<boolean> }) {
+  return (
+    <Canvas style={styles.marquee} pointerEvents="none">
+      <Rect x={0} y={7} width={SW} height={4} color="#05346e" opacity={0.35} />
+      {Array.from({ length: BULBS }, (_, k) => (
+        <Bulb key={k} k={k} beat={beat} fever={fever} />
+      ))}
+    </Canvas>
+  );
+});
+
+function Bulb({ k, beat, fever }: { k: number; beat: MusicBeat; fever: SharedValue<boolean> }) {
+  const r = useDerivedValue(() => {
+    const eighth = Math.floor(beat.beat.value * 2);
+    const lit = ((eighth % BULBS) + BULBS) % BULBS === k || ((eighth + BULBS / 2) % BULBS) === k;
+    const down = beat.phase.value < 0.12 && Math.floor(beat.beat.value) % 4 === 0;
+    return lit || down ? 6.5 : 4.5;
+  });
+  const color = useDerivedValue(() => {
+    const eighth = Math.floor(beat.beat.value * 2);
+    const lit = ((eighth % BULBS) + BULBS) % BULBS === k || ((eighth + BULBS / 2) % BULBS) === k;
+    return lit ? (fever.value ? '#ffcf3b' : '#fff8e4') : fever.value ? 'rgba(255,207,59,0.55)' : 'rgba(255,248,228,0.45)';
+  });
+  return (
+    <Group>
+      <Circle cx={BULB_GAP * (k + 0.5)} cy={9} r={r} color={color} />
+      <Circle cx={BULB_GAP * (k + 0.5)} cy={9} r={r} color="#05346e" style="stroke" strokeWidth={1.5} />
+    </Group>
   );
 }
 
@@ -827,6 +891,7 @@ const styles = StyleSheet.create({
   meterTrack: { height: 18, borderRadius: 9, backgroundColor: '#bfe5ff', borderWidth: 3, borderColor: '#05346e', overflow: 'hidden' },
   meterFill: { height: '100%', backgroundColor: '#ffcf3b' },
   mascot: { width: 84, height: 84 },
+  marquee: { position: 'absolute', left: 0, right: 0, top: 0, height: 18 },
   controls: { position: 'absolute', left: 0, right: 0, bottom: 0, height: CONTROLS_H, justifyContent: 'center' },
   perf: { top: undefined, bottom: CONTROLS_H + 4, left: 8, right: undefined },
   controlRow: { paddingHorizontal: 10, alignItems: 'center' },

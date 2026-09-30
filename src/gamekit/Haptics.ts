@@ -211,5 +211,39 @@ export function playHaptic(pattern: HapticPatternName | HapticStep[], opts: Patt
   return true;
 }
 
+/**
+ * Schedule a haptic sequence from ONE start timestamp (Date.now() ms), e.g. a
+ * Current Quest carry: ticks at 60 + 75k ms from the stroke start. Each step's
+ * delay is computed from the shared start, so JS timer drift never piles up
+ * across the sequence. Steps already in the past fire immediately; steps more
+ * than `lateDropMs` late are skipped (a late buzz reads as a bug).
+ * Returns a cancel function (call it on pause or wrap-up).
+ */
+export function scheduleHaptics(
+  steps: readonly HapticStep[],
+  opts: PatternOptions & { startAt?: number; lateDropMs?: number } = {},
+): () => void {
+  if (!enabled || steps.length === 0) return () => {};
+  if (opts.tell && !tellsEnabled) return () => {};
+  const priority = opts.priority ?? (opts.tell ? HP.telegraph : HP.own);
+  if (priority <= HP.rival) return () => {};
+  const start = opts.startAt ?? Date.now();
+  const lead = opts.alignToAudio ? offsetMs : 0;
+  const lateDrop = opts.lateDropMs ?? 40;
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  const now = Date.now();
+  for (const step of steps) {
+    const due = start + step.at + lead;
+    const delay = due - now;
+    if (delay < -lateDrop) continue;
+    if (delay <= 0) firePrimitive(step.p);
+    else timers.push(setTimeout(() => firePrimitive(step.p), delay));
+  }
+  return () => {
+    for (const t of timers) clearTimeout(t);
+    timers.length = 0;
+  };
+}
+
 export { HAPTIC_PATTERNS, HP, PRIMITIVE_STRENGTH };
 export type { HapticPatternName, HapticPrimitive, HapticStep };
