@@ -101,9 +101,9 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
     <LinearGradient colors={['#0a8fe3', '#0768b9']} style={styles.hero}>
       <Image source={require('../../assets/images/screens/pin-collections/shark.png')}
         contentFit="contain" style={styles.shark} accessibilityLabel="Theme Park Shark mascot" />
-      <Text style={styles.eyebrow} numberOfLines={1}>{parkName.toUpperCase()}</Text>
+      {/* The title bar already names the park, so the header starts with the count. */}
       <View style={styles.countRow} accessible
-        accessibilityLabel={available > 0 ? `${shownCollected} of ${available} Ride Coins collected` : 'Ride Coins coming soon'}>
+        accessibilityLabel={available > 0 ? `${shownCollected} of ${available} ${parkName} Ride Coins collected` : 'Ride Coins coming soon'}>
         <Animated.Text style={[styles.count, flash && styles.countFlash, popStyle]}>
           {available > 0 ? `${shownCollected}/${available}` : 'NEW'}
         </Animated.Text>
@@ -141,11 +141,13 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
         </View>
         {onOpenStampBook && <GameIcon name="arrow" size={26} />}
       </Pressable> : goal && <View style={styles.goal}>
-        <View style={styles.goalIcon}><GameIcon name={nextRideOwned ? 'parts' : 'coin'} size={30} /></View>
+        <View style={styles.goalIcon}><GameIcon name={nextRideOwned ? 'parts' : 'coin'} size={24} /></View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.goalEyebrow}>{goal.eyebrow}</Text>
-          <Text numberOfLines={1} style={styles.goalName}>{goal.name}</Text>
-          <Text style={styles.goalHint} numberOfLines={2}>{goal.hint}</Text>
+          <Text numberOfLines={1} style={styles.goalLine}>
+            <Text style={styles.goalEyebrow}>{goal.eyebrow}  </Text>
+            <Text style={styles.goalName}>{goal.name}</Text>
+          </Text>
+          <Text style={styles.goalHint} numberOfLines={1}>{goal.hint}</Text>
         </View>
       </View>}
     </View>}
@@ -156,29 +158,29 @@ const styles = StyleSheet.create({
   frame: { borderRadius: 20, borderWidth: 3, borderColor: '#fff', backgroundColor: '#fff8e4',
     overflow: 'hidden', shadowColor: '#05346e', shadowOpacity: 0.22,
     shadowOffset: { width: 0, height: 4 }, shadowRadius: 8, elevation: 5 },
-  hero: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12, overflow: 'hidden' },
-  shark: { position: 'absolute', right: -6, top: -4, width: 96, height: 96 },
-  eyebrow: { fontFamily: 'Knockout', color: '#dff4ff', fontSize: 14, letterSpacing: 1.2, maxWidth: '72%' },
-  countRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: 2 },
+  hero: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, overflow: 'hidden' },
+  shark: { position: 'absolute', right: -4, top: -2, width: 84, height: 84 },
+  countRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   count: { fontFamily: 'Shark', fontSize: 36, lineHeight: 40, color: '#ffcf3b',
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
   countFlash: { color: '#fff3b0' },
   countLabel: { fontFamily: 'Shark', color: '#fff', fontSize: 18, marginBottom: 5,
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   track: { height: 12, backgroundColor: '#bfe5ff', borderWidth: 2, borderColor: '#fff',
-    borderRadius: 7, overflow: 'hidden', marginTop: 6, marginRight: 78 },
+    borderRadius: 7, overflow: 'hidden', marginTop: 5, marginRight: 70 },
   fill: { height: '100%', backgroundColor: '#ffcf3b', borderRadius: 7 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 9 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 7 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 4,
     backgroundColor: '#fff8e4', borderWidth: 2, borderColor: '#ffcf3b', borderRadius: 12 },
   chipText: { fontFamily: 'Shark', color: '#05346e', fontSize: 14 },
-  lower: { padding: 10 },
+  lower: { paddingHorizontal: 8, paddingVertical: 7 },
   completeStamp: { width: 48, height: 48 },
   goal: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff4cc',
-    borderColor: '#ffcf3b', borderWidth: 2, borderRadius: 14, padding: 9 },
-  goalIcon: { width: 42, height: 42, backgroundColor: '#fff', borderRadius: 21,
+    borderColor: '#ffcf3b', borderWidth: 2, borderRadius: 14, paddingVertical: 5, paddingHorizontal: 8 },
+  goalIcon: { width: 34, height: 34, backgroundColor: '#fff', borderRadius: 17,
     borderWidth: 2, borderColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center' },
-  goalEyebrow: { fontFamily: 'Knockout', color: '#8a5a00', fontSize: 12, letterSpacing: 0.8 },
-  goalName: { fontFamily: 'Shark', color: '#05346e', fontSize: 18 },
-  goalHint: { fontFamily: 'Knockout', color: '#3d5f8c', fontSize: 14, lineHeight: 17, marginTop: 1 },
+  goalLine: { fontFamily: 'Shark', color: '#05346e', fontSize: 17 },
+  goalEyebrow: { fontFamily: 'Knockout', color: '#8a5a00', fontSize: 13, letterSpacing: 0.8 },
+  goalName: { fontFamily: 'Shark', color: '#05346e', fontSize: 17 },
+  goalHint: { fontFamily: 'Knockout', color: '#3d5f8c', fontSize: 14, lineHeight: 17 },
 });

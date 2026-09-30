@@ -26,6 +26,7 @@ function recoveredWin() {
     './rewards/challengeCopy': challengeCopy,
     '../RootNavigation': { navigate: (...args) => navigation.push(args) },
     '../services/collection/earnedShelf': require('./helpers/earned-shelf.cjs'),
+    '../constants/coinTiers': coinTiers,
   }, { open: true, park: { id: 1 }, redeemable: { type: 'task', model: { id: 104, name: 'Forbidden Journey' } },
     close() { view.props.open = false; }, onPress() {} });
   return { view, navigation, prefetches, milestoneReads, game: () => view.find(node => node.type === 'react-native-modal'),
@@ -156,6 +157,20 @@ test('a lost park-shelf upgrade response reads back the confirmed level before o
   assert.equal(await modal.props.onLevelUp(13), true);
   assert.equal(spends, 1); assert.equal(reads, 2);
 });
+test('a task payload without asset_id still finds its coin through the coin image', async () => {
+  const reads = [];
+  const view = runtime('src/components/TaskCoinModal.tsx', {
+    '../context/AuthProvider': { AuthContext: { value: { player: { id: 5, energy: 10 }, refreshPlayer: async () => {} } } },
+    '../helpers/haptics': { impactAsync() {}, ImpactFeedbackStyle: {} },
+    '../constants/coinTiers': coinTiers,
+    '../context/CoinCollection': { loadCoinCollection: async () => [{ id: 31, coin_url: 'other' }, { id: 32, coin_url: 'coin-b' }],
+      loadCoin: async (_player, id) => { reads.push(id); return { id, current_level: 2, ride_name: 'Old Payload' }; },
+      upsertCoin() {}, setFeaturedCoin() {} },
+  }, { task: { id: 104, name: 'Old Payload', coin_url: 'coin-b' } });
+  await view.find(node => node.type === '../components/Button').props.onPress(); view.render();
+  assert.deepEqual(reads, [32]);
+  assert.equal(view.find(node => node.type === './CoinLevelingModal').props.visible, true);
+});
 test('the owner shelf shows each coin at its real level, never a blanket Level 1', () => {
   const view = runtime('src/components/TaskCoinModal.tsx', {
     '../context/AuthProvider': { AuthContext: { value: { player: { id: 5 }, refreshPlayer: async () => {} } } },
@@ -229,6 +244,10 @@ test('post-win model: milestone headline, next unlock and parts meter use only c
   assert.equal(postWinModel.milestoneHeadline({milestones:[{type:'park_complete',park_id:1,percent:100}],progress,next:null}).ribbon,'Shelf Complete!');
   assert.equal(postWinModel.milestoneHeadline({milestones:[{type:'park_percent',park_id:1,percent:50}],progress:{...progress,collected:13},next:null}).title,'Test Park shelf 50% full');
   assert.equal(postWinModel.milestoneHeadline({milestones:[],progress,next:null}),null);
+  // The passport stamp may use a reviewed subset, so the shelf headline never promises a new stamp.
+  assert.ok(!/stamp/i.test(postWinModel.milestoneHeadline({milestones:[{type:'park_complete',park_id:1,percent:100}],progress,next:null}).body));
+  assert.deepEqual([...postWinModel.rewardChips({coinsEarned:0,xpEarned:0,ridePartsEarned:1,energyEarned:0}).map(c=>c.label)],['Ride Part']);
+  assert.deepEqual([...postWinModel.rewardChips({coinsEarned:0,xpEarned:0,ridePartsEarned:2,energyEarned:0}).map(c=>c.label)],['Ride Parts']);
   assert.equal(postWinModel.nextUnlockLine({milestones:[],progress,next:{percent:100,coins_needed:1}}),'1 more coin to complete the shelf.');
   assert.equal(postWinModel.nextUnlockLine({milestones:[],progress,next:{percent:50,coins_needed:3}}),'3 more coins for 50% of the shelf.');
   const parts=postWinModel.partsProgress({current_level:2,max_level:5,is_unlocked:true,available_parts:3,parts_to_next_level:6,energy_to_next_level:25},10,2);

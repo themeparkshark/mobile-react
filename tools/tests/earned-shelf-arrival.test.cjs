@@ -69,7 +69,7 @@ test('reduced-motion arrival immediately marks its real slot with no entrance mo
  '../hooks/useReducedGameMotion':{default:()=>true},'../gamekit/SFX':{playSfx(){}}
  },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,onLand(){lands++;},onInspect(){},onClose(){}});
  assert.equal(lands,1);assert.equal(view.motions.length,0);
- assert.ok(view.find(n=>n.props?.children==='ON YOUR PARK SHELF'));assert.equal(view.timers.size,0);
+ assert.ok(view.find(n=>n.props?.children==='ON YOUR SHELF'));assert.equal(view.timers.size,0);
 });
 test('explicit mastery opens once and cannot present a late response after its action is cancelled',async()=>{
  let reads=0,resolve;

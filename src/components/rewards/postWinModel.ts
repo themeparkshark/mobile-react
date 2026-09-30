@@ -16,7 +16,7 @@ export function rewardChips({ coinsEarned, xpEarned, ridePartsEarned, energyEarn
   return ([
     { icon: 'coins', amount: coinsEarned, label: 'Shark Coins' },
     { icon: 'xp', amount: xpEarned, label: 'XP' },
-    { icon: 'parts', amount: ridePartsEarned, label: 'Ride Parts' },
+    { icon: 'parts', amount: ridePartsEarned, label: ridePartsEarned === 1 ? 'Ride Part' : 'Ride Parts' },
     { icon: 'energy', amount: energyEarned, label: 'Energy' },
   ] as RewardChipModel[]).filter(chip => chip.amount > 0);
 }
@@ -37,7 +37,7 @@ export function milestoneHeadline(result: CollectionMilestones | null): Mileston
   const types = result.milestones.map(milestone => milestone.type);
   if (types.includes('park_complete')) {
     return { ribbon: 'Shelf Complete!', title: `${park} shelf complete`, big: true, icon: 'trophy',
-      body: `All ${available} Ride Coins collected. Your Stamp Book has a new stamp.` };
+      body: `All ${available} Ride Coins collected. Every ride on this shelf is yours.` };
   }
   const percent = result.milestones.find(milestone => milestone.type === 'park_percent')?.percent;
   if (percent) {

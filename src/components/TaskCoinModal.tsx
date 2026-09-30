@@ -6,7 +6,7 @@ import Button from '../components/Button';
 import CoinLevelingModal from './CoinLevelingModal';
 import ShelfCoin from './collection/ShelfCoin';
 import { AuthContext } from '../context/AuthProvider';
-import { loadCoin, setFeaturedCoin, upsertCoin } from '../context/CoinCollection';
+import { loadCoin, loadCoinCollection, setFeaturedCoin, upsertCoin } from '../context/CoinCollection';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
@@ -57,8 +57,13 @@ export default function TaskCoinModal({
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const fetchCoin = async (force = false) => {
-    if (!player?.id || !task.asset_id) return null;
-    return loadCoin(player.id, task.asset_id, { force });
+    if (!player?.id) return null;
+    if (task.asset_id) return loadCoin(player.id, task.asset_id, { force });
+    // Older task payloads carry only the coin image: match it in the shared collection.
+    if (!task.coin_url) return null;
+    const coins = await loadCoinCollection(player.id, { force });
+    const match = coins.find(coin => coin.coin_url === task.coin_url);
+    return match ? loadCoin(player.id, match.id, { force }) : null;
   };
 
   const handleOpen = async (stillRequested: () => boolean = () => true) => {

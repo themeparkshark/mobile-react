@@ -64,6 +64,7 @@ function ShelfCoin({ coinUrl, level, size, phase = 0, igniteKey, dimmed = false 
   const reduced = useReducedGameMotion();
   const tier = coinTier(level);
   const border = Math.max(2, Math.round(tier.ringWidth * size / 60));
+  const keyline = Math.max(1.5, Math.round(size / 36));
   const shimmers = tier.shimmer && !reduced && !dimmed;
   useShelfClock(shimmers);
 
@@ -110,6 +111,9 @@ function ShelfCoin({ coinUrl, level, size, phase = 0, igniteKey, dimmed = false 
       <Animated.View style={[StyleSheet.absoluteFill, { borderRadius: size }, pulseStyle,
         { borderWidth: Math.max(3, border), borderColor: tier.ring }]} />
       <Animated.View style={[{ width: size, height: size }, coinStyle]}>
+        {/* A navy keyline outside every earned ring so even a Classic coin reads as earned against the faded sockets. */}
+        <View style={[styles.keyline, { left: -keyline, top: -keyline, width: size + keyline * 2, height: size + keyline * 2,
+          borderRadius: size, borderWidth: keyline, opacity: dimmed ? 0.4 : 1 }]} />
         <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: border,
           borderColor: tier.ring, borderBottomColor: tier.ringDeep, backgroundColor: tier.halo,
           overflow: 'hidden', alignItems: 'center', justifyContent: 'center', opacity: dimmed ? 0.55 : 1 }}>
@@ -140,7 +144,8 @@ function SparkleBit({ progress, dx, dy, size, left, top }: {
 }
 
 const styles = StyleSheet.create({
-  contact: { position: 'absolute', backgroundColor: BRAND.navy, opacity: 0.22 },
+  contact: { position: 'absolute', backgroundColor: BRAND.navy, opacity: 0.32 },
+  keyline: { position: 'absolute', borderColor: BRAND.navy },
   shimmer: { position: 'absolute', left: 0, backgroundColor: '#ffffff' },
   sparkle: { position: 'absolute' },
 });

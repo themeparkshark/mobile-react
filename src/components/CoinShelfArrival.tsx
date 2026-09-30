@@ -83,7 +83,7 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
       <GameIcon name="coin" size={30} />
       <View style={{ flex: 1 }}>
         <Text style={styles.eyebrow} numberOfLines={1}>
-          {landed ? `ON YOUR ${parkName ? parkName.toUpperCase() : 'PARK'} SHELF` : 'YOUR SOUVENIR HAS A HOME'}
+          {landed ? 'ON YOUR SHELF' : 'YOUR SOUVENIR HAS A HOME'}
         </Text>
         <Text style={styles.title} numberOfLines={1}>{rideName}</Text>
       </View>
@@ -91,8 +91,8 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
         onPress={() => { finish(); callbacks.current.onInspect(); }}>
         <Text style={styles.primaryText}>Mastery</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Keep exploring this shelf" hitSlop={10}
-        onPress={() => { finish(); callbacks.current.onClose(); }}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Keep exploring this shelf" hitSlop={8}
+        style={styles.close} onPress={() => { finish(); callbacks.current.onClose(); }}>
         <GameIcon name="close" size={28} />
       </Pressable>
     </Animated.View>
@@ -102,7 +102,7 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
 const styles = StyleSheet.create({
   dim: { backgroundColor: '#05346e' },
   chip: { position: 'absolute', bottom: 118, left: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 9,
-    paddingVertical: 8, paddingLeft: 10, paddingRight: 8, borderRadius: 18, borderWidth: 3, borderColor: '#ffffff',
+    paddingVertical: 8, paddingLeft: 10, paddingRight: 6, borderRadius: 18, borderWidth: 3, borderColor: '#ffffff',
     backgroundColor: '#fff8e4', shadowColor: '#05346e', shadowOpacity: 0.28, shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 }, elevation: 8 },
   eyebrow: { fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8, color: '#8a5a00' },
@@ -110,4 +110,5 @@ const styles = StyleSheet.create({
   primary: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 12,
     backgroundColor: '#ffcf3b', borderBottomWidth: 3, borderBottomColor: '#d99a00' },
   primaryText: { fontFamily: 'Shark', fontSize: 14, color: '#05346e' },
+  close: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 });
