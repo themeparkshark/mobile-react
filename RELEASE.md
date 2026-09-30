@@ -46,6 +46,7 @@ needs:
   `false`, and no Expo default "Allow $(PRODUCT_NAME)" purpose string ships.
 - Privacy manifest: `plugins/privacy-manifest.json` is the source for
   `ios.privacyManifests` and matches `PrivacyInfo.xcprivacy`.
+- Xcode project: no `ENABLE_BITCODE` setting (deprecated since Xcode 14).
 - `newArchEnabled: true` matches `Podfile.properties.json`.
 
 After any prebuild, `npm test` (`native-invariants`, `release-native-config`)

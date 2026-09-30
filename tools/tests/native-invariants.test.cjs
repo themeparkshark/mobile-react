@@ -87,3 +87,17 @@ test('committed native project keeps the widget target and the CocoaPods MapLibr
   assert.doesNotMatch(read('ios/Podfile'), /\$MLRN\.post_install/);
   assert.match(read('RELEASE.md'), /never run `expo prebuild --clean`/i);
 });
+
+test('bitcode is gone from the committed Xcode project and the plugin strips it after prebuild', () => {
+  assert.doesNotMatch(read('ios/ThemeParkShark.xcodeproj/project.pbxproj'), /ENABLE_BITCODE/);
+  const configs = {
+    A: { isa: 'XCBuildConfiguration', buildSettings: { ENABLE_BITCODE: 'YES', SWIFT_VERSION: '5.0' } },
+    A_comment: 'Debug',
+    B: { isa: 'XCBuildConfiguration', buildSettings: { ENABLE_BITCODE: 'NO' } },
+    C: { isa: 'XCBuildConfiguration', buildSettings: {} },
+  };
+  assert.equal(plugin.stripBitcode(configs), 2);
+  assert.deepEqual(configs.A.buildSettings, { SWIFT_VERSION: '5.0' });
+  assert.deepEqual(configs.B.buildSettings, {});
+  assert.equal(plugin.stripBitcode(configs), 0, 'idempotent');
+});

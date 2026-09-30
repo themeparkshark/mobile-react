@@ -10,13 +10,15 @@
 // - Info.plist: background modes stay exactly [location] (expo-task-manager's
 //   plugin adds an unused `fetch`), and the unused image picker's Expo-default
 //   photo-library read string is dropped.
+// - Xcode project: no ENABLE_BITCODE build setting. Bitcode is deprecated
+//   since Xcode 14 and the App Store no longer accepts it.
 //
 // This plugin is listed first in app.config.js so its mods run last.
 //
 // What it cannot cover (why `prebuild --clean` stays forbidden, see
 // assertPrebuildAllowed and RELEASE.md): the LinePlayWidget Live Activity
 // extension target in ThemeParkShark.xcodeproj. A clean prebuild deletes it.
-const { withInfoPlist, withPodfile } = require('@expo/config-plugins');
+const { withInfoPlist, withPodfile, withXcodeProject } = require('@expo/config-plugins');
 
 const MAPLIBRE_POD = "  pod 'MapLibre', '6.17.1'";
 
@@ -99,7 +101,27 @@ function applyInfoPlistInvariants(plist) {
   return out;
 }
 
+/**
+ * Pure over the xcode project's build configuration map
+ * (project.pbxXCBuildConfigurationSection()): removes ENABLE_BITCODE from
+ * every configuration. Returns how many settings were removed.
+ */
+function stripBitcode(buildConfigurations) {
+  let removed = 0;
+  for (const entry of Object.values(buildConfigurations || {})) {
+    if (entry && typeof entry === 'object' && entry.buildSettings && 'ENABLE_BITCODE' in entry.buildSettings) {
+      delete entry.buildSettings.ENABLE_BITCODE;
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 const withTpsNativeInvariants = config => {
+  config = withXcodeProject(config, mod => {
+    stripBitcode(mod.modResults.pbxXCBuildConfigurationSection());
+    return mod;
+  });
   config = withPodfile(config, mod => {
     mod.modResults.contents = applyPodfilePatches(mod.modResults.contents);
     return mod;
@@ -114,3 +136,4 @@ module.exports = withTpsNativeInvariants;
 module.exports.applyPodfilePatches = applyPodfilePatches;
 module.exports.assertPrebuildAllowed = assertPrebuildAllowed;
 module.exports.applyInfoPlistInvariants = applyInfoPlistInvariants;
+module.exports.stripBitcode = stripBitcode;
