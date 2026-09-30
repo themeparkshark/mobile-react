@@ -22,6 +22,8 @@ interface Props {
   readonly openRequestVersion?: number;
   readonly loadProjects?: typeof getParkProjects;
   readonly topOffset?: number;
+  /** Another suggestion owns the right slot (one suggestion at a time); the sheet still opens on request. */
+  readonly pillHidden?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -42,7 +44,7 @@ export function projectHeroSource(slug: string) {
 
 export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProjectChange,
   openRequestVersion = 0, loadProjects = getParkProjects,
-  topOffset = 82 + Constants.statusBarHeight }: Props) {
+  topOffset = 82 + Constants.statusBarHeight, pillHidden = false }: Props) {
   const [projects, setProjects] = useState<ParkProject[]>([]);
   const [history, setHistory] = useState<ParkProject[]>([]);
   const [open, setOpen] = useState(false);
@@ -187,7 +189,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
 
   return (
     <>
-      <AnimatedPressable accessibilityRole="button"
+      {!pillHidden && <AnimatedPressable accessibilityRole="button"
         accessibilityLabel={`${offline ? 'Last confirmed park story' : 'Park story'}: ${featured.title}. ${featured.total_points} of ${featured.goal_points} signals.${offline ? ' Progress may have changed.' : ''} Open story.`}
         style={[styles.pill, compactHome && styles.pillCompact,
           { top: topOffset, transform: [{ scale: pulse }] }]}
@@ -202,7 +204,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
         <Text style={styles.pillProgress}>{compactHome
           ? featured.ended ? 'Tap to revisit' : `${featured.total_points}/${featured.goal_points} signals`
           : `${featured.total_points}/${featured.goal_points} · ${notice ? 'Tap to see what changed' : featured.ended ? 'Your park story' : projectStageLabel(featured)}`}</Text>
-      </AnimatedPressable>
+      </AnimatedPressable>}
       <Modal isVisible={open} onBackdropPress={() => setOpen(false)} onBackButtonPress={() => setOpen(false)}>
         <View style={styles.modal}>
           <View style={styles.header}>

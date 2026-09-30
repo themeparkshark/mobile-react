@@ -60,3 +60,17 @@ test('stacked rides fold into one island; tapping it zooms in instead of selecti
   assert.ok(map.props.focusCoordinate.zoom > 17.6, 'the camera zooms into the stack');
   assert.equal(app.find(label('Play queue games for')), undefined);
 });
+
+test('first minute: the daily chest waits for the first catch; guests get the invitation over the map', async () => {
+  const gift = { dailyGift: { redeemed_at: null } };
+  const modules = { '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined,
+    hasCompleted: id => id === 'onboarding', isReady: true, isActive: false }) } };
+  const fresh = exploreScreen({ contexts: { dailyGift: gift, auth: { player: { id: 5, completed_tasks_count: 0 }, refreshPlayer: async () => undefined } }, modules, redeemables });
+  await fresh.settle();
+  assert.equal(fresh.find(named('DailyGiftModal')), undefined, 'no chest before the first catch');
+  const veteran = exploreScreen({ contexts: { dailyGift: gift, auth: { player: { id: 5, completed_tasks_count: 4 }, refreshPlayer: async () => undefined } }, modules, redeemables });
+  await veteran.settle();
+  assert.ok(veteran.find(named('DailyGiftModal')));
+  const guest = exploreScreen({ contexts: { auth: { player: null, refreshPlayer: async () => undefined } } });
+  assert.ok(guest.find(named('GuestInvite')));
+});

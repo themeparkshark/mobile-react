@@ -13,6 +13,7 @@ const { loadTs } = require('./ts-module.cjs');
 const markers = loadTs('src/screens/ExploreScreen/mapMarkerPresentation.ts');
 const adventure = loadTs('src/screens/ExploreScreen/adventureTicketPresentation.ts');
 const timing = loadTs('src/screens/ExploreScreen/mapOpportunityTiming.ts');
+const queue = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
 
 // Modules the runtime implements itself; the stub proxy must not shadow them.
 const RUNTIME_OWNED = new Set(['react', 'react/jsx-runtime', 'react-native', 'react-native-reanimated',
@@ -76,6 +77,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     './ExploreScreen/mapOpportunityTiming': { ...timing, opportunityIsActive: () => true },
     './ExploreScreen/mapMarkerPresentation': markers,
     './ExploreScreen/adventureTicketPresentation': adventure,
+    './ExploreScreen/mapPresentationQueue': queue,
     '../components/Tutorial': { useTutorial: () => ({ startTutorial: () => undefined, hasCompleted: () => true, isReady: true, isActive: false }) },
     '../components/boss/BossRaidFlow': { default: component('BossRaidFlow'), useParkRaid: () => ({ raid: null, setState: () => undefined }) },
     '../hooks/useBossMapMoment': { default: () => ({ moment: null, flag: null, enqueue: async () => undefined, dismiss: () => undefined, finishExit: () => undefined }) },

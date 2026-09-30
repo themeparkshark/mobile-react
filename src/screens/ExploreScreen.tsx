@@ -46,7 +46,8 @@ import ParkProjectWidget from './ExploreScreen/ParkProjectWidget';
 import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
 import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
-import NotSignedIn from './ExploreScreen/NotSignedIn';
+import GuestInvite from './ExploreScreen/GuestInvite';
+import { chestMayPresent, hasFirstCatch, mapSuggestionSlots } from './ExploreScreen/mapPresentationQueue';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
 import { rideLook } from '../services/rideLandmark';
@@ -259,6 +260,8 @@ export default function ExploreScreen() {
   // One overlay at a time: a find that shows up during a tutorial waits for it.
   const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
   const collectedOnce = useRef(false);
+  const [caughtThisSession, setCaughtThisSession] = useState(false);
+  const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
 
   // Handler for when user taps a prep item in home mode — enforce proximity
   const handlePrepItemNearby = useCallback((prepItem: PrepItemType, pivotId: number) => {
@@ -623,6 +626,18 @@ export default function ExploreScreen() {
     return () => { current = false; };
   }, [mapFocused, park?.id, location?.latitude, location?.longitude, redeemables, failedTaskIds]);
 
+  const suggestionSlots = mapSuggestionSlots({
+    bossMoment: !!bossMap.moment && bossMap.moment.phase !== 'settled',
+    queueRide: !!(selectedTask && queueRide), adventure: !!adventure, goal: !!tripGoal, project: !!activeParkProject,
+  });
+  const chestReady = chestMayPresent({
+    tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
+    firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
+    boss: bossOpen || bossOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
+    rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
+    otherModalOpen: showTooFarModal || showCommunityCenterModal,
+  });
+
   return (
     <Wrapper>
       <Topbar>
@@ -697,37 +712,23 @@ export default function ExploreScreen() {
         )}
       </Topbar>
       {player && <ParkProjectWidget key={`park-project-${player.id}`} parkId={park?.id ?? null} refreshVersion={homeCollectionVersion}
-        onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion} />}
+        onActiveProjectChange={setActiveParkProject} openRequestVersion={projectOpenRequestVersion}
+        pillHidden={!!park && suggestionSlots.right !== 'project'} />}
       {player && park && <BossRaidFlow parkId={park.id} raid={raid} open={bossOpen} onClose={() => setBossOpen(false)}
         presentationAvailable={!isActive && !dailyGiftOccluded && !showTooFarModal && !showCommunityCenterModal && !showPrepItemModal && !activeRedeemable}
         onMapOcclusionChange={setBossOccluded} onCelebrationDismiss={result => { void bossMap.enqueue(result); }}
         onState={state => { setRaidState(state); void refreshRideControl(); }} />}
       {player && permissionChecked && !permissionGranted && <PermissionsNotGranted />}
-      {/* One overlay at a time: the daily gift waits for the first-run tutorial. */}
-      {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && !isActive && hasCompleted('onboarding') &&
+      {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
+      {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && hasCompleted('onboarding') && chestReady &&
         <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} />}
       {/* Home Mode: Show prep items map instead of "Not at Park" message */}
       {player && parkLoaded && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed} />
       )}
-      {/* Guest: Sign-in prompt */}
-      {!player && (
-        <View style={{ flex: 1, backgroundColor: '#d9d9d9', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-          <Image
-            source={require('../../assets/images/screens/login/logo.png')}
-            style={{ width: 260, height: 260 * (322 / 1284), marginBottom: 24 }}
-            contentFit="contain"
-          />
-          <Text style={{ color: '#333', fontFamily: 'Shark', fontSize: 22, textAlign: 'center', marginBottom: 8 }}>
-            Welcome to Theme Park Shark!
-          </Text>
-          <Text style={{ color: 'rgba(0,0,0,0.5)', fontFamily: 'Knockout', fontSize: 15, textAlign: 'center', marginBottom: 28, lineHeight: 22 }}>
-            Sign in to collect coins, battle at gyms, customize your shark, and explore theme parks!
-          </Text>
-          <SignInButtons />
-        </View>
-      )}
+      {/* Guest: a bright sign-in invitation over the live map */}
+      {!player && <GuestInvite />}
       
       {/* Prep Item Redeem Modal (Home Mode) */}
       <PrepItemRedeemModal
@@ -745,6 +746,7 @@ export default function ExploreScreen() {
         }}
         onCollected={() => {
           collectedOnce.current = true;
+          setCaughtThisSession(true);
           setHomeCollectionVersion((version) => version + 1);
         }}
         onUnavailable={() => setHomeCollectionVersion((version) => version + 1)}
@@ -825,6 +827,8 @@ export default function ExploreScreen() {
             <RedeemModal
               redeemable={mapFocused ? activeRedeemable : undefined}
               park={park}
+              selectedTaskId={selectedTask?.id ?? null}
+              onOpenChange={setRedeemFlowOpen}
               onPress={async () => {
                 await getRedeemables();
                 await refreshPlayer();
@@ -910,7 +914,7 @@ export default function ExploreScreen() {
               onRush={(task) => setSelectedTask(task)} />
           </View>
         )}
-        {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
+        {adventure && suggestionSlots.left === 'adventure' && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`}
           ticket={adventure} data={tripGoalData} stale={tripGoalStale} gate={adventureGate} detours={adventureDetours}
           closed={adventureRideClosed(adventure, livePark, park.id, mapNow)} top={hasLiveEvents ? 124 : 64}
           slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
@@ -929,7 +933,7 @@ export default function ExploreScreen() {
             const earnedCoin = adventureShelfArrival(adventure);
             RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id, ...(earnedCoin ? { earnedCoin } : {}) });
           }} />}
-        {!adventure && tripGoal && player && <Pressable
+        {suggestionSlots.left === 'goal' && tripGoal && player && <Pressable
           accessibilityRole="button"
           accessibilityLabel={tripGoal.coin_owned
             ? `Open ${tripGoal.ride_name} on my coin shelf`
@@ -961,7 +965,7 @@ export default function ExploreScreen() {
                 : 'Open Ride Guide for its coin'}
           </Text>
         </Pressable>}
-        {selectedTask && queueRide && <Pressable
+        {suggestionSlots.right === 'ride' && selectedTask && queueRide && <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Play queue games for ${selectedTask.name}. ${queueRide.lineRewardsReady === false
             ? 'Ride Parts are not set up here yet.' : 'Ride Parts require a verified wait.'}`}
