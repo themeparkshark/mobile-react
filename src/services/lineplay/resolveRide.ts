@@ -104,6 +104,32 @@ export async function resolveRideContext(
   }
 }
 
+/**
+ * Resolve a RideContext by the catalog ride id (the dwell detector already knows
+ * it), so a renamed or aliased ride still opens. Null when the catalog cannot
+ * load or no longer has that ride.
+ */
+export async function resolveRideContextById(parkId: number, rideId: number): Promise<RideContext | null> {
+  try {
+    const map = await getRideNameMap(parkId);
+    for (const ride of map.values()) {
+      if (ride.id !== rideId) continue;
+      return {
+        rideId: ride.id,
+        rideName: ride.name,
+        rideSlug: ride.slug,
+        parkId: ride.park_id,
+        postedWaitMinutes: null,
+        imageUrl: ride.image_url,
+        lineRewardsReady: ride.line_rewards_ready,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Keep queue games playable during catalog outages without inventing a rewardable ride id. */
 export async function resolveRideContextOrOffline(
   parkId: number,

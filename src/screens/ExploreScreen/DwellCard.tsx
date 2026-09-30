@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
@@ -13,10 +13,23 @@ import { BRAND, GameIcon, SHADOW } from '../../ui';
 export default function DwellCard({ rideName, top, onPlay, onDismiss }: {
   readonly rideName: string;
   readonly top: number;
-  readonly onPlay: () => void;
+  /** Rejects with a reason when the ride's games cannot open; the chip shows it. */
+  readonly onPlay: () => Promise<void>;
   readonly onDismiss: () => void;
 }) {
   const reduced = useReducedGameMotion();
+  const [error, setError] = useState<string | null>(null);
+  const busy = useRef(false), mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  const play = () => {
+    if (busy.current) return;
+    busy.current = true; setError(null); haptic('tapLight');
+    Promise.resolve().then(onPlay).catch(() => {
+      if (!mounted.current) return;
+      haptic('warning');
+      setError('Could not open this line. Tap to try again.');
+    }).finally(() => { busy.current = false; });
+  };
   const enter = useSharedValue(reduced ? 1 : 0), wiggle = useSharedValue(0);
   useEffect(() => {
     if (reduced) { enter.value = 1; wiggle.value = 0; return; }
@@ -28,12 +41,12 @@ export default function DwellCard({ rideName, top, onPlay, onDismiss }: {
   const style = useAnimatedStyle(() => ({ opacity: enter.value, transform: [{ translateX: (1 - enter.value) * -28 }, { scale: 0.92 + enter.value * 0.08 }] }));
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${wiggle.value * 10}deg` }] }));
   return <Animated.View style={[styles.slot, { top }, style]}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`In line at ${rideName}? Play queue games`} onPress={() => { haptic('tapLight'); onPlay(); }} style={styles.chip}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`In line at ${rideName}? Play queue games`} onPress={play} style={styles.chip}>
       <Animated.View style={iconStyle}><GameIcon name="queue" size={32} /></Animated.View>
       <View style={styles.copy}>
         <Text style={styles.kicker}>IN LINE HERE?</Text>
-        <Text style={styles.title} numberOfLines={1}>Play while you wait</Text>
-        <Text style={styles.ride} numberOfLines={1}>{rideName}</Text>
+        <Text style={styles.title} numberOfLines={1}>{error ? 'Not ready yet' : 'Play while you wait'}</Text>
+        <Text style={styles.ride} numberOfLines={error ? 2 : 1} accessibilityLiveRegion="polite">{error ?? rideName}</Text>
       </View>
     </Pressable>
     <Pressable accessibilityRole="button" accessibilityLabel="Not now" hitSlop={10} onPress={onDismiss} style={styles.close}>

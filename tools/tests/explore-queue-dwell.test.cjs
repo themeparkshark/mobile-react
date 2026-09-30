@@ -40,7 +40,7 @@ test('the dwell takes the left slot ahead of the adventure and goal', () => {
   assert.equal(q.mapSuggestionSlots({ bossMoment: true, queueRide: false, dwell: true, adventure: true, goal: true, project: true }).left, null);
 });
 
-test('DwellCard plays or dismisses, with haptics and a reduced-motion path', () => {
+test('DwellCard plays or dismisses, with haptics and a reduced-motion path', async () => {
   const calls = [];
   const load = reduced => runtime('src/screens/ExploreScreen/DwellCard.tsx', {
     '../../gamekit/Haptics': { haptic: name => calls.push(name) },
@@ -51,7 +51,8 @@ test('DwellCard plays or dismisses, with haptics and a reduced-motion path', () 
   assert.ok(app.motions.includes('spring'));
   app.find(n => n.props?.accessibilityLabel === 'In line at Space Ride? Play queue games').props.onPress();
   app.find(n => n.props?.accessibilityLabel === 'Not now').props.onPress();
-  assert.deepEqual(calls, ['tickSelection', 'tapLight', 'play', 'dismiss']);
+  await app.settle();
+  assert.deepEqual(calls, ['tickSelection', 'tapLight', 'dismiss', 'play']);
   const still = load(true);
   assert.deepEqual(still.motions, []);
 });
@@ -68,4 +69,33 @@ test('home prep items only accept an array from the cache or the server', () => 
   const loads = sets.filter(line => /data/.test(line));
   assert.ok(loads.length >= 2);
   for (const line of loads) assert.match(line, /Array\.isArray/);
+});
+
+test('DwellCard Play that cannot load says so instead of failing silently', async () => {
+  const calls = [];
+  const app = runtime('src/screens/ExploreScreen/DwellCard.tsx', {
+    '../../gamekit/Haptics': { haptic: name => calls.push(name) },
+    '../../hooks/useReducedGameMotion': { default: () => true },
+    '../../ui': { BRAND: new Proxy({}, { get: () => '#fff' }), GameIcon: 'GameIcon', SHADOW: { card: {} } },
+  }, { rideName: 'Space Ride', top: 64, onPlay: async () => { throw new Error('no ride'); }, onDismiss: () => undefined });
+  app.find(n => n.props?.accessibilityLabel === 'In line at Space Ride? Play queue games').props.onPress();
+  await app.settle(); await app.settle();
+  assert.ok(calls.includes('warning'));
+  assert.ok(app.find(n => n.props?.children === 'Could not open this line. Tap to try again.'), 'the chip shows a readable reason');
+});
+
+test('the dwell Play resolves by ride id first, then by name, and throws a readable error when neither loads', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  const block = src.slice(src.indexOf('<DwellCard'), src.indexOf('<AdventureTicketCard'));
+  assert.match(block, /resolveRideContextById\(park\.id, queueDwell\.rideId\)/);
+  assert.match(block, /throw new Error/);
+});
+
+test('dwell queue types match the server Adventure Ticket ride types', () => {
+  const { QUEUE_RIDE_TYPES } = require('./helpers/ts-module.cjs').loadTs('src/constants/queueRideTypes.ts');
+  // Mirrors backend config/adventure.php ADVENTURE_TICKET_RIDE_TYPES default.
+  assert.deepEqual([...QUEUE_RIDE_TYPES], ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride']);
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/services/RideDetectionService.ts'), 'utf8');
+  assert.match(src, /QUEUE_TYPES = new Set<string>\(QUEUE_RIDE_TYPES\)/);
+  assert.match(src, /overlapping attractions\nconst AMBIGUOUS_DISTANCE_MARGIN/);
 });

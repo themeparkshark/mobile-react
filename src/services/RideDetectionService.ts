@@ -20,6 +20,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { AppState } from 'react-native';
 import { RideType } from '../api/endpoints/rides';
+import { QUEUE_RIDE_TYPES } from '../constants/queueRideTypes';
 
 const STORAGE_KEY = 'pending_ride_detections';
 const RIDES_CACHE_KEY = 'ride_detection_rides_cache';
@@ -32,11 +33,12 @@ const BACKGROUND_LOCATION_TASK = 'ride-detection-background';
 // Catalog APIs also contain dining and shops; these are never ride candidates.
 const DETECTABLE_TYPES = new Set(['ride', 'attraction', 'coaster', 'dark_ride',
   'flat_ride', 'water_ride', 'show', 'walk_through', 'transport', 'other']);
+// wait for a clearer GPS position between overlapping attractions
 const AMBIGUOUS_DISTANCE_MARGIN = 15;
 /** Standing at one attraction this long suggests "In line at X? Play". */
 export const DWELL_SUGGESTION_MS = 90_000;
 /** Rides with a real queue to play in (no shows, walk-throughs or transport). */
-const QUEUE_TYPES = new Set(['ride', 'attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride', 'other']); // wait for a clearer GPS position between overlapping attractions
+const QUEUE_TYPES = new Set<string>(QUEUE_RIDE_TYPES);
 
 function isDetectionCandidate(ride: RideType): boolean {
   return DETECTABLE_TYPES.has(ride.type) && Number.isFinite(ride.lat) &&
