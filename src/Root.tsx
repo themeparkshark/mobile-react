@@ -1,7 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useFonts } from 'expo-font';
-import { useContext, useCallback } from 'react';
+import { useContext, useCallback, useEffect } from 'react';
 import { View, StyleSheet as RNStyleSheet } from 'react-native';
 import { DevJoystick } from './components/DevJoystick';
 import { LocationContext } from './context/LocationProvider';
@@ -93,6 +93,7 @@ import RideBatchConfirmScreen from './screens/RideTracker/RideBatchConfirmScreen
 import RideDetectionOverlay from './components/RideTracker/RideDetectionOverlay';
 import SharkDropHandler from './components/SharkDropHandler';
 import { isStandalonePreviewMode } from './utils/standalonePreview';
+import { releaseNativeSplash } from './nativeSplash';
 
 const Stack = createNativeStackNavigator();
 
@@ -192,17 +193,22 @@ export default function App() {
           : 'Splash';
   useAppUpdates();
   const { player } = useContext(AuthContext);
-  const { setCrumbs, crumbsLoaded } = useContext(CrumbContext);
-  const { retrieveCurrencies, currenciesLoaded } = useContext(CurrencyContext);
-  const { retrieveTheme, themeLoaded } = useContext(ThemeContext);
+  const { setCrumbs } = useContext(CrumbContext);
+  const { retrieveCurrencies } = useContext(CurrencyContext);
+  const { retrieveTheme } = useContext(ThemeContext);
   const { devMode, setDevMode, moveDevLocation, location: currentLocation, permissionGranted } = useContext(LocationContext);
   // Keep ride detection alive as the guest moves between map, queue, and profile.
   // The service itself never asks for Always permission during app startup.
   useRideDetection(!isStandalonePreview && !!player && permissionGranted);
-  const [fontsLoaded] = useFonts({
+  const [fontsReady, fontError] = useFonts({
     Shark: require('../assets/fonts/shark-random-funnyness-2.ttf'),
     Knockout: require('../assets/fonts/knockout.otf'),
   });
+  // A font failure falls back to system fonts instead of a blank app.
+  const fontsLoaded = fontsReady || !!fontError;
+  useEffect(() => {
+    if (fontsLoaded) releaseNativeSplash();
+  }, [fontsLoaded]);
   useAxiosSetup();
 
   const handleJoystickMove = useCallback((dx: number, dy: number, speed: number) => {
@@ -236,11 +242,8 @@ export default function App() {
 
   // Wait for fonts to load - but let crumbs load in background
   // SplashScreen will wait for crumbs before navigating
-  if (!fontsLoaded) {
-    console.log('🦈 Waiting for fonts...');
-    return <></>;
-  }
-  console.log('🦈 App loading! Theme:', themeLoaded, 'Currencies:', currenciesLoaded);
+  // The native launch screen stays up until fonts are ready (nativeSplash.ts).
+  if (!fontsLoaded) return null;
 
   return (
     <View style={{ flex: 1 }}>

@@ -2,6 +2,11 @@ import { Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
+import { holdNativeSplash } from './src/nativeSplash';
+
+// Must run at module scope, before the first render, or the native launch
+// screen may already be gone.
+holdNativeSplash();
 
 const ErrorFallback = ({ resetError }: { error: Error; resetError: () => void }) => {
   return (
