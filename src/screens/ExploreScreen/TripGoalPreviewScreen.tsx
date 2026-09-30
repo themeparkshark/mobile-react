@@ -1,13 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import PreviewMap from '../../dev/PreviewMap';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { spacing } from '../../design-system';
 import type { TripGoalData } from '../../api/endpoints/me/trip-goal';
 import type { PrepItemSetListItem } from '../../api/endpoints/me/prep-item-sets';
 import TripGoalCard from './TripGoalCard';
-
-const TICKET_ICON = require('../../../assets/images/ticket-icon.png');
 
 const starter: TripGoalData = {
   rides: [
@@ -96,7 +94,7 @@ export default function TripGoalPreviewScreen() {
       }} />
       <TripGoalCard refreshVersion={refreshVersion} loadGoal={loadGoal}
         saveGoal={saveGoal} removeGoal={removeGoal} loadCollections={loadCollections} />
-      <View style={styles.ticketGuarantee}><Image source={TICKET_ICON} style={styles.ticketIcon} /><Text style={styles.ticketText}>Park Ticket guaranteed within {Math.max(1, 2 - refreshVersion)} {refreshVersion > 0 ? 'pickup' : 'pickups'}</Text></View>
+      <View style={styles.ticketGuarantee}><Text style={styles.ticketText}>🎟️ Park Ticket guaranteed within {Math.max(1, 2 - refreshVersion)} {refreshVersion > 0 ? 'pickup' : 'pickups'}</Text></View>
     </View>
   </SafeAreaView>;
 }
@@ -109,9 +107,7 @@ const styles = StyleSheet.create({
   action: { color: '#ffdf48', fontFamily: 'Knockout', fontSize: 16 },
   scene: { flex: 1 },
   ticketGuarantee: { position: 'absolute', bottom: 35, alignSelf: 'center',
-    flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: '#0879ca', borderWidth: 2, borderColor: '#fff', borderRadius: 16,
     paddingHorizontal: 14, paddingVertical: 9 },
-  ticketIcon: { width: 26, height: 26, resizeMode: 'contain' },
   ticketText: { color: '#fff', fontSize: 15, fontFamily: 'Knockout' },
 });
