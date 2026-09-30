@@ -27,6 +27,7 @@ import { playHaptic, HP, type HapticPatternName } from './Haptics';
 import type { FxStageHandle, FlyUpOptions } from './fx/FxStage';
 import type { CameraRig } from './fx/useCamera';
 import type { GameClockHandle } from './useGameClock';
+import { govFlash, govHitStop, govPunch, govShake, type FxGovernor } from './core/fxGovernor';
 
 export interface FeelBurst {
   emitter: EmitterName;
@@ -73,6 +74,10 @@ export interface FeelDef {
   flyUp?: FlyUpOptions & { dy?: number };
   /** Duck music (dB) for this moment. */
   duckDb?: number;
+  /** Governor priority (higher wins stacked flashes, stops and punches). */
+  prio?: number;
+  /** KO / round end: bypass the governor's gaps and budgets. */
+  force?: boolean;
   /** Anything bespoke (sprite swaps, banners). Runs last. */
   custom?: (at: FeelAt) => void;
 }
@@ -103,6 +108,14 @@ export interface FeelDeps {
   width?: number;
   /** Walking or reduced motion: skip camera moves. */
   calm?: boolean;
+  /**
+   * Optional FX governor (core/fxGovernor): gates full-frame flashes (a denied
+   * flash becomes a localized bloom), budgets global hit-stops, merges shakes
+   * and keeps punches away from shakes. Create one per game with createFxGovernor().
+   */
+  governor?: FxGovernor | null;
+  /** Clock for the governor (default Date.now). */
+  now?: () => number;
 }
 
 export type FeelFire<K extends string> = (name: K, at?: FeelAt) => void;
@@ -122,16 +135,22 @@ export function fireFeel(def: FeelDef, at: FeelAt, deps: FeelDeps): void {
     playHaptic(def.haptic, { priority: def.priority ?? (def.tell ? HP.telegraph : HP.own), tell: def.tell });
   }
   if (def.duckDb) GameAudio.duck(def.duckDb, 40, 250, 300);
+  const gov = deps.governor;
+  const now = gov ? (deps.now ? deps.now() : Date.now()) : 0;
+  const prio = def.prio ?? 0;
+  const force = !!(def.force || def.forceStop);
   // 2. Time.
   if (deps.clock) {
-    if (def.hitStop) deps.clock.hitStop(def.hitStop, { holdSim: def.hitStopSim, force: def.forceStop });
+    const stop = def.hitStop && gov ? govHitStop(gov, now, def.hitStop, prio, force) : def.hitStop;
+    if (stop) deps.clock.hitStop(stop, { holdSim: def.hitStopSim, force: def.forceStop });
     if (def.localStop && at.slot !== undefined) deps.clock.localStop(at.slot, def.localStop);
     if (def.slowMo) deps.clock.slowMo(def.slowMo[0], def.slowMo[1], def.slowMo[2]);
   }
   // 3. Camera (skipped while calm: walking / reduced motion handled in rig too).
   if (deps.camera && !deps.calm) {
-    if (def.shake) deps.camera.shake(def.shake, at.dx ?? 0, at.dy ?? 0);
-    if (def.punch) deps.camera.punch(def.punch);
+    const trauma = def.shake && gov ? govShake(gov, now, def.shake) : def.shake;
+    if (trauma) deps.camera.shake(trauma, at.dx ?? 0, at.dy ?? 0);
+    if (def.punch && (!gov || govPunch(gov, now, prio, force))) deps.camera.punch(def.punch);
     if (def.kick && (at.dx || at.dy)) {
       const len = Math.hypot(at.dx ?? 0, at.dy ?? 0) || 1;
       deps.camera.kick(((at.dx ?? 0) / len) * def.kick, ((at.dy ?? 0) / len) * def.kick);
@@ -145,7 +164,11 @@ export function fireFeel(def: FeelDef, at: FeelAt, deps: FeelDeps): void {
       ...(b.magnet && at.magnetTo ? { tx: at.magnetTo.x, ty: at.magnetTo.y } : {}),
     }));
     if (def.ring) fx.ring(x, y, def.ring);
-    if (def.flash) fx.flash(def.flash);
+    if (def.flash) {
+      const peak = gov ? govFlash(gov, now, def.flash.peak ?? 0.35, prio, force) : (def.flash.peak ?? 0.35);
+      if (peak > 0) fx.flash({ ...def.flash, peak });
+      else if (!def.bloom) fx.bloom(x, y, { color: def.flash.color, radius: 140, peak: 0.6 });
+    }
     if (def.bloom) fx.bloom(x, y, def.bloom);
     if (def.vignette) fx.vignette(def.vignette);
     if (def.flyUp && at.text) fx.flyUp(at.text, x, y + (def.flyUp.dy ?? -24), def.flyUp);

@@ -14,9 +14,14 @@ and stays backward compatible: every existing import from `src/gamekit` still wo
 - **QUEUE REALITY.** The line never stops moving, so movement never pauses a
   game (see "Interruptions").
 
-Demo: **MiniGameTester, then "Studio Engine Demo: Bonk Lab"** (`demo/EngineDemo.tsx`).
-Set `EXPO_PUBLIC_RIDE_GAME_PREVIEW=1 EXPO_PUBLIC_ENGINE_DEMO=1` to boot straight
-into it with the scripted autoplay tour.
+Demos (dev MiniGameTester):
+- **"Studio Engine Demo: Bonk Lab"** (`demo/EngineDemo.tsx`): the full game loop.
+  `EXPO_PUBLIC_RIDE_GAME_PREVIEW=1 EXPO_PUBLIC_ENGINE_DEMO=1` boots into its tour.
+- **"Studio Engine Lab: FX Lab"** (`demo/FxLab.tsx`): ribbon trails, afterimages,
+  brush strokes, the FX governor, card flips, nearest-target taps, perf tiers,
+  the colour guard and the rival near-miss results card.
+  `EXPO_PUBLIC_ENGINE_DEMO=fxlab` boots into its tour
+  (`/Users/dustinsparage/apps/tps-mg/engine-metro.sh`, port 8093).
 
 ## Map
 
@@ -42,6 +47,13 @@ into it with the scripted autoplay tour.
 | Calibration | `core/calibration.ts`, `session/calibrationStore.ts` | per-route audio latency and input offset (Rhythm, Boss, Trivia) |
 | Timelines | `core/timeline.ts` | closed-form fx springs, cue timelines on the fx clock, fixed logical views |
 | Sprite atlas | `core/atlasLayout.ts`, `fx/SpriteAtlas.ts` | per-theme atlas built at mount from Alex's frames (2048 px cap) |
+| FX governor | `core/fxGovernor.ts`, `feel.ts` | flash gate (35%, 500 ms, under 3 Hz), hit-stop budget, one stop per stroke, punch vs shake, priority |
+| Perf tiers | `core/perfTier.ts`, `perf/usePerfTier.ts` | auto full / lite / min from the first 60 frames, step-down only, `TIER_SCALES` |
+| Trails and ink | `core/trail.ts`, `fx/RibbonTrail.tsx` | ribbon trails, ink brush strokes (tapering over a 2 px INK edge), afterimages |
+| Colour guard | `core/color.ts` | `brightTeamColor`, contrast ratio, readable pick, palette lerps |
+| Walk-safe input | `core/hitTest.ts` | nearest target with forgiveness, bump rejection, tap/swipe/drag |
+| Card flip | `core/flip.ts` | flip pose (face at 90 deg, edge, shade, specular, squash), network hold, deal-in |
+| Near miss | `core/nearMiss.ts`, `results/ResultsCard.tsx` | the "one more run" line: beat a ghost, so close to a star |
 
 ## A game in 60 lines
 
@@ -252,6 +264,10 @@ GameAudio.music.setTrimDb(-3);                      // line moving: dip, never s
   steals that cue's oldest voice. Impacts steal the oldest tells. `cooldownMs`
   merges rapid repeats, variants never repeat back to back, and `pitchJitter`
   adds random pitch variance.
+- **Decode safety**: audio-api decodes are serialized (one in flight). 0.6.5
+  builds buffer host objects on detached threads into an unsynchronized debug
+  registry, and parallel decodes aborted the app. The native fix for the next
+  binary is `node tools/audio/patch-audio-api.mjs` before `pod install`.
 - **Latency**: react-native-audio-api 0.6 decodes WAV and MP3 but not AAC, so the
   `HybridBackend` sends compressed files to expo-av.
   `setHapticAudioOffsetMs(GameAudio.latencyMs)` aligns patterns that pass
@@ -408,6 +424,115 @@ const atlas = useSpriteAtlas([finnIdle, finnPeek, finnBonk, holeLip], { cell: 25
 One offscreen draw at mount, capped at 2048 px (16 MB). `layoutAtlas` is pure
 and tested.
 
+## FX governor
+
+Stacked moments must read as one big beat, not a strobe.
+
+```ts
+const governor = useMemo(() => createFxGovernor({ calm: reducedMotion || walking }), [reducedMotion, walking]);
+const feel = useFeel({
+  golden: { hitStop: 110, flash: { peak: 0.6 }, punch: 0.05, prio: 5, ... },
+  pearl:  { hitStop: 50,  flash: { peak: 0.3 }, punch: 0.03, prio: 1, ... },
+  ko:     { hitStop: 160, flash: { peak: 0.5 }, force: true, ... },
+}, { fx, camera, clock, governor });
+govBeginStroke(governor, strokeIndex);   // Current Quest: one global hit-stop per player move
+```
+
+- Full-frame flashes: at most one per 500 ms and one per 2 s window, peak capped
+  at 35% (15% calm). A denied flash becomes a localized bloom, so the moment
+  still lands.
+- Global hit-stops: at most 90 ms of freeze per second (Sharky), trimmed to
+  what is left, and at most one per stroke.
+- Camera: no punch within 150 ms of a shake; shakes in the same beat keep the
+  larger trauma.
+- Priority: inside a 120 ms beat, a lower `prio` never takes a flash, stop or
+  punch that a higher one owns (golden > unlock > Riptide > pearl bank > tide).
+- `force` (KO, round end) skips the gaps and budgets but keeps the caps.
+
+Direct use: `govFlash(g, now, peak, prio)`, `govHitStop`, `govShake`, `govPunch`.
+
+## Perf tiers
+
+```ts
+const tier = usePerfTier({ active: playing });
+const s = TIER_SCALES[tier.tierJs];                    // { particles, shaders, shaderRes, ambient, blur, trails }
+<FxStage capacity={Math.round(200 * s.particles)} ... />
+{s.shaders ? <Caustics /> : <BakedCaustics />}
+fxEmitUI(fx.state.value, { ...EMITTERS.stars, count: tierCount(tier.tier.value, 12) }, x, y);   // worklet
+proof.meta.perf_tier = TIER_NAMES[tier.tierJs];
+```
+
+The probe skips 20 warm-up frames, then the p95 of the next 60 vsync intervals
+picks the tier (lite above 19 ms, min above 28 ms; at 60 Hz a healthy frame is
+16.7 ms). During play it only steps down, after a full 120-frame window over the
+threshold x1.15 and a 240-frame cooldown, and never back up mid-run. App-switch
+hitches over 250 ms are ignored. `tier.force(1)` pins a tier for the tester;
+`force(-1)` returns to auto and re-measures.
+
+## Ribbon trails, brush strokes, afterimages
+
+```tsx
+const trail = useRibbonTrail({ cap: 24, lifeMs: 600 });
+// UI thread, each frame: trailPush(trail.state.value, x, y, fxMs); trail.version.value += 1;
+<RibbonTrail trail={trail} now={fxMsSv} color="#ffcf3b" head={24} tail={6} />      // inside your Canvas
+
+const xs = [], ys = [];
+quadPolyline(x0, y0, cx, cy, x1, y1, 24, xs, ys);        // or ringPolyline(...)
+<BrushStroke xs={xs} ys={ys} progress={drawOnSv} color="#ffffff" head={3} tail={9} taperIn={0.1} />
+
+const ghosts = useSharedValue(createAfterimages(4, 30, 170));   // Sharky Dash: 4 every 30 ms
+afterimagePush(ghosts.value, fxMs, x, y, rot, frame);            // worklet
+afterimageAlpha(ghosts.value, i, fxMs, 0.45);                    // per ghost sprite
+```
+
+Every strip is drawn twice: the INK outline pass (navy, widened 2 px per side)
+and the fill. That is the Current Quest ink rule, and it keeps procedural FX in
+Alex's outlined style. Feed the fx clock so a hit-stop freezes the fade.
+
+## Walk-safe taps
+
+```ts
+const i = nearestTarget(cxs, cys, radii, liveMask, n, x, y, { forgiveness: walkForgiveness(walk.state.current) });
+if (i === AMBIGUOUS) return;        // a bump dead between two targets flips nothing
+if (i >= 0) flip(i);
+swipeKind(dx, dy, durMs);           // STROKE_TAP tolerates a 22 px walking wobble
+```
+
+Distances are normalized by each target's radius, so a big target never steals a
+tap from a small one under the finger. Use the art's true radius; forgiveness
+grows it.
+
+## Card flip
+
+```ts
+const card = useAnimatedStyle(() => {
+  const p = flipPose(fxMs.value - startSv.value, undefined, !faceUpSv.value);  // FLIP_DEFAULT: 220 ms
+  return { transform: [{ perspective: 800 }, { rotateY: `${p.angle}deg` }, { scale: p.squash }] };
+});
+// p.faceUp swaps the art at exactly 90 deg; p.edge, p.shade, p.specularX/p.specular, p.shadowStretch drive the layers.
+holdPose(elapsedMs);     // server-revealed modes: 60 deg, wobble only after 180 ms
+dealPose(elapsedMs, i);  // 38 ms stagger, out-back 0.6 -> 1, rotateZ -12 -> 0
+```
+
+Worklet note: never give a worklet a default parameter that points at a module
+object (`timing = FLIP_DEFAULT`). The Reanimated plugin does not capture it and
+the worklet throws "Property doesn't exist" on the UI thread.
+
+## Colour guard
+
+`brightTeamColor(hex)` keeps bright colours and remaps dark, navy or purple ones to
+sky, coral or gold by hue (Line Party crews, player colours). `contrastRatio`,
+`pickReadable(candidates, skies, 3)` (Parade Beat notes at 3:1 in every sky
+state), `mixHex` and `lighten` for palette lerps. `BRIGHT` holds the world
+palette, and `BRIGHT.ink` is for outlines only.
+
+## Near miss on the results card
+
+`GameResult.rival = { name, score }` (a ghost, a crew mate, the Daily median)
+adds one line to the card, chosen by `nearMissLine`: "You beat Maya by 60", "Only
+40 behind Sam", "Just 50 from star 2", "120 off your best". It always uses
+positive framing and never says "you lost".
+
 ## Art rule
 
 The engine draws **no characters, icons or props**. Characters and props come
@@ -425,5 +550,8 @@ navy-outline cartoon style.
 - `tools/tests/gamekit-engine-timing.test.cjs` covers the event ring, walk
   sense, beat maps, calibration, fx springs, cue timelines, fixed views, atlas
   layout and haptic scheduling.
+- `tools/tests/gamekit-engine-fx.test.cjs` covers the FX governor, perf tiers,
+  trails, brush strips, afterimages, the colour guard, hit testing, the flip pose
+  and near-miss lines (the governor through `fireFeel` is in the systems test).
 - `tools/tests/game-shell-presentation.test.cjs` covers the QUEUE REALITY shell
   flows.

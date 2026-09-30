@@ -95,6 +95,13 @@ export * from './core/beatMap';
 export * from './core/calibration';
 export * from './core/timeline';
 export * from './core/atlasLayout';
+export * from './core/fxGovernor';
+export * from './core/perfTier';
+export * from './core/trail';
+export * from './core/color';
+export * from './core/hitTest';
+export * from './core/flip';
+export * from './core/nearMiss';
 
 // Loop + time
 export { useGameClock } from './useGameClock';
@@ -119,6 +126,8 @@ export { CountUpText } from './fx/CountUpText';
 export { useEventBridge } from './fx/useEventBridge';
 export type { EventBridge } from './fx/useEventBridge';
 export { buildSpriteAtlas, useSpriteAtlas } from './fx/SpriteAtlas';
+export { RibbonTrail, BrushStroke, useRibbonTrail, INK } from './fx/RibbonTrail';
+export type { RibbonTrailHandle } from './fx/RibbonTrail';
 export type { SpriteAtlas, SpriteAtlasOptions } from './fx/SpriteAtlas';
 export { useWalkSense } from './motion/useWalkSense';
 export type { WalkSense, WalkSenseOptions } from './motion/useWalkSense';
@@ -155,4 +164,6 @@ export { ResultsCard, defaultMessage as resultsMessage } from './results/Results
 export type { ResultsCardProps, ResultStat } from './results/ResultsCard';
 export { usePerfProbe, PerfOverlay } from './perf/PerfOverlay';
 export type { PerfProbe } from './perf/PerfOverlay';
+export { usePerfTier } from './perf/usePerfTier';
+export type { PerfTierHandle } from './perf/usePerfTier';
 export type { ShellSnapshotData } from './GameShellV2';
