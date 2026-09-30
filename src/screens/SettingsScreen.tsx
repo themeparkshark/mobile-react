@@ -436,10 +436,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: BRAND.white,
     borderRadius: RADIUS.lg,
-    borderWidth: 3,
-    borderColor: BRAND.white,
-    borderBottomWidth: 5,
-    borderBottomColor: BRAND.sky,
+    borderWidth: 2,
+    borderColor: '#cfe8fb',
     ...SHADOW.card,
     shadowOpacity: 0.12,
   },

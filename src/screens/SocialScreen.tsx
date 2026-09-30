@@ -792,10 +792,10 @@ const fabStyles = StyleSheet.create({
   },
   plus: {
     fontFamily: 'Shark',
-    fontSize: 34,
-    lineHeight: 38,
+    fontSize: 44,
+    lineHeight: 48,
     color: '#ffffff',
-    marginTop: 2,
+    marginTop: 6,
     textShadowColor: '#05346e',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 0,
