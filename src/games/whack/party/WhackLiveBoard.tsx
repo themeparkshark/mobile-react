@@ -34,7 +34,8 @@ import { computeLayout, type BoardLayout } from '../render/layout';
 import { boxesFor } from '../render/boxes';
 import { WhackBoard, useBoardImages } from '../render/WhackBoard';
 import { E_TAPLOG, useWhackRuntime } from '../useWhackRuntime';
-import { useWhackCues, useWhackJuice } from '../useWhackJuice';
+import { pickCue, useWhackCues, useWhackJuice } from '../useWhackJuice';
+import { useGameMusic } from '../../../gamekit/audio/useGameMusic';
 
 registerStudioAudio(['whack']);
 
@@ -84,7 +85,7 @@ export default function WhackLiveBoard({
   const onEventsRef = useRef<(batch: number[]) => void>(() => undefined);
   const onEvents = useCallback((batch: number[]) => onEventsRef.current(batch), []);
   const runtime = useWhackRuntime({ geo, boxes, onEvents });
-  const [, setFever] = useState(false);
+  const [fever, setFever] = useState(false);
   const juice = useWhackJuice({
     fx, camera, cues, runtime, layout: Lref, width: field?.w ?? 390, reducedMotion, walking: false, party: true, onFever: setFever,
   });
@@ -177,6 +178,9 @@ export default function WhackLiveBoard({
     }, 100);
     return () => clearInterval(iv);
   }, [durationMs, cues]);
+
+  // Chris's Whack loop edits: the intense bed for the race, the fever variant while fever runs.
+  useGameMusic(fever ? pickCue('mus_whack_fever', 'chris.track1') : pickCue('mus_whack_intense', 'chris.track1'), { at: 'bar' });
 
   const images = useBoardImages(theme, null);
   const hud = useMemo(() => ({ burstLabel: 'WHACK RUSH', ride: false, feverOn: true, boss: false, notches: 0, compact: true }), []);
