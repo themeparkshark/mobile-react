@@ -4,13 +4,15 @@
  * Layout (portrait, one-thumb):
  *   - Top: compact WaitCard (ride name, posted wait, elapsed, accrual, art).
  *   - Bottom: horizontal activity carousel (one activity per page).
- *   - Pause sheet when the line is moving (auto) or user pauses (manual).
- *   - "Line's moving 🚶" toast when auto-paused.
- *   - Session recap card on complete (time survived, activities, earned).
+ *   - The line is always moving: movement never pauses play. A big jump
+ *     forward shows a non-blocking heads-up toast; a manual pause resumes
+ *     with a quick 3-2-1.
+ *   - Leaving the queue area or boarding opens the "Your ride's up!" wrap-up,
+ *     which saves progress and wait credit, then the recap.
  *
  * Notably: NO keep-awake (games/queue must be battery-light and the timer is
  * server-side). The session controller lives in useLinePlaySession, which feeds
- * the shared LocationContext stream in for auto-pause — no new GPS watcher.
+ * the shared LocationContext stream in; no new GPS watcher.
  *
  * Route params: { ride: RideContext }. Wire via Root.tsx Stack.Screen "LinePlay".
  */
@@ -20,10 +22,8 @@ import {
   Dimensions,
   FlatList,
   AppState,
-  Alert,
   Linking,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -37,16 +37,10 @@ import TopbarText from '../../components/Topbar/TopbarText';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
 import Wrapper from '../../components/Wrapper';
 import * as Haptics from 'expo-haptics';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-  withRepeat,
-  withSequence,
-  Easing,
-} from 'react-native-reanimated';
 import { StackActions, useNavigation, useRoute } from '@react-navigation/native';
-import { colors, spacing, borderRadius, shadows } from '../../design-system';
+import { colors, spacing, borderRadius } from '../../design-system';
+import { GameDialog, gameAlert } from '../../ui';
+import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useLinePlaySession } from '../../services/lineplay/useLinePlaySession';
 import { isRecentQueueSample, MAX_SESSION_ACTIVITY_SLOTS } from '../../services/lineplay/LinePlaySession';
@@ -64,18 +58,22 @@ import { WhackAShark } from '../../games/whack';
 import { RhythmTapGame } from '../../games/rhythm';
 import { MemoryGame } from '../../games/memory';
 import { TriviaGame, createLinePlayTriviaSource } from '../../games/trivia';
-import { LINEPLAY_ROUND_QUESTIONS } from '../../games/trivia/config';
 import { SharkySwim } from '../../games/sharky';
 import { BananaBasketGame } from '../../games/banana-basket';
 import { CurrentQuestGame } from '../../games/current-quest';
 import SharkShowdown from '../../games/showdown/SharkShowdown';
 import { showdownReplaySeed } from '../../games/showdown/logic';
 import type { RideContext, ActivityItem } from '../../services/lineplay/LinePlaySession';
+import { starsFromMultiplier, type QueueDifficulty } from '../../services/lineplay/replay';
 import {
   PredictionCard,
   PredictionResolution,
   resolvePrediction,
 } from '../../services/lineplay/content';
+import { circuitThemeFor } from '../../services/lineplay/circuitTheme';
+import SessionRecap from './components/SessionRecap';
+import QueueToast, { type QueueToastMessage } from './components/QueueToast';
+import ResumeCountdown from './components/ResumeCountdown';
 import WaitCard from './components/WaitCard';
 import NewRoundsBanner from './components/NewRoundsBanner';
 import ActivitySlot from './components/ActivitySlot';
@@ -88,14 +86,14 @@ import CrewRelayCard from './components/CrewRelayCard';
 import ProjectMissionModal from './components/ProjectMissionModal';
 import QueueArcadeSheet from './components/QueueArcadeSheet';
 import { resolveProjectMission } from '../../services/lineplay/projectMission';
-import type { CrewPuzzleSummary } from '../../api/endpoints/me/inline-timer/types';
-import { crewRelayEpilogue, crewRelayScore, type CrewRelayProgress } from '../../services/lineplay/crewRelay';
+import { crewRelayEpilogue } from '../../services/lineplay/crewRelay';
 import type { LinePlayChapter } from '../../services/lineplay/chapters';
 import { linePlayPages, queueArcadeDestinations } from '../../services/lineplay/presentation';
 import { personalizeChapterFinale, resolveChapterClue } from '../../services/lineplay/chapterClue';
 
 const { width: SCREEN_W } = Dimensions.get('window');
-const QUEUE_STAMP_IMAGE = require('../../../assets/images/stamps/stamp-09.png');
+/** Returning after this long away gets a quick "welcome back" heads up. */
+const WELCOME_BACK_AFTER_MS = 20_000;
 const QUEUE_RECAP_SHARK = require('../../../assets/images/screens/lineplay/queue-recap-shark.png');
 
 const GAME_NAMES: Record<string, string> = {
@@ -107,16 +105,17 @@ const GAME_NAMES: Record<string, string> = {
 function playedActivityName(id: string, playlist: readonly ActivityItem[], chapter: LinePlayChapter | null): string {
   const item = playlist.find(entry => entry.id === id);
   if (item?.kind === 'minigame') return GAME_NAMES[item.gameId] ?? 'Mini-game';
-  if (item?.kind === 'crew_grid') return 'Crew Bingo';
+  if (item?.kind === 'crew_grid') return 'Crew Prompts';
+  if (item?.kind === 'circuit') return 'Signal Repair';
   if (item?.kind === 'trivia') return chapter?.navigationPanel && id === `${chapter.id}-trivia`
     ? 'Starport navigation repair' : 'Ride trivia';
   if (item?.kind === 'lore') return chapter?.fieldNotes[item.seed % chapter.fieldNotes.length]?.title ?? 'Queue clue';
   if (item?.kind === 'prediction') return 'Wait prediction';
   if (id.startsWith('pred-')) return 'Wait prediction';
   if (item?.kind === 'crew_relay') return 'Crew relay';
-  if (id.endsWith('-route-alpha')) return 'Alpha Signal Rhythm Tap';
-  if (id.endsWith('-route-omega')) return 'Omega Trail Sharky Swim';
-  if (id.startsWith('signal-bonus-')) return id.endsWith('route_a') ? 'Crew Memory Match' : 'Crew Rhythm Tap';
+  if (id.endsWith('-route-alpha')) return chapter?.relay.routeNames[0] ?? 'Crew route';
+  if (id.endsWith('-route-omega')) return chapter?.relay.routeNames[1] ?? 'Crew route';
+  if (id.startsWith('signal-bonus-')) return id.endsWith('route_a') ? 'Crew Memory Match' : 'Crew Whack-a-Shark';
   if (id.startsWith('project-')) return `Park chapter ${GAME_NAMES[id.split('-').at(-1) ?? ''] ?? 'round'}`;
   return 'Bonus round';
 }
@@ -124,7 +123,8 @@ function playedActivityName(id: string, playlist: readonly ActivityItem[], chapt
 function pageName(item: ActivityItem | { kind: 'signal' | 'puzzle'; id: string }, chapter?: LinePlayChapter | null): string {
   switch (item.kind) {
     case 'chapter_intro': return 'Ride chapter';
-    case 'crew_grid': return 'Crew Bingo';
+    case 'crew_grid': return 'Crew Prompts';
+    case 'circuit': return 'Signal Repair';
     case 'crew_relay': return 'Crew Relay';
     case 'signal': return 'Crew Route';
     case 'puzzle': return 'Codebreaker';
@@ -173,7 +173,15 @@ export default function LinePlayScreen() {
   const [newRoundNotice, setNewRoundNotice] = useState<{ id: string; count: number } | null>(null);
   const queuedProjectGame = useRef<Extract<ActivityItem, { kind: 'minigame' }> | null>(null);
   const startedRef = useRef<{ session: typeof session; playerId: number; rideId: number } | null>(null);
-  const prevPausedRef = useRef(false);
+  /** The "How did your wait end?" sheet; `tab` continues to that tab after the recap. */
+  const [waitEndPrompt, setWaitEndPrompt] = useState<{ tab: string | null } | null>(null);
+  const [resuming, setResuming] = useState(false);
+  const [toast, setToast] = useState<QueueToastMessage | null>(null);
+  const toastKey = useRef(0);
+  const showToast = useCallback((message: Omit<QueueToastMessage, 'key'>) => {
+    toastKey.current += 1;
+    setToast({ ...message, key: toastKey.current });
+  }, []);
 
   const enableLockedScreenPlay = async () => {
     if (backgroundPermissionBusy) return;
@@ -181,20 +189,20 @@ export default function LinePlayScreen() {
     try {
       let permission = await Location.getBackgroundPermissionsAsync();
       if (!permission.granted && !permission.canAskAgain) {
-        Alert.alert('Play while your phone is locked',
+        gameAlert('Play while locked',
           'Allow Always location in iPhone Settings so verified queue time can continue while LinePlay is in the background.',
           [{ text: 'Keep app open', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } }]);
+            { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } }], { icon: 'settings' });
         return;
       }
       if (!permission.granted) permission = await Location.requestBackgroundPermissionsAsync();
       if (permission.granted) {
         const ready = await session.retryBackgroundTracking();
-        if (!ready) Alert.alert('Keep LinePlay open',
+        if (!ready) gameAlert('Keep LinePlay open',
           'Background tracking could not start. Keep the app open while you wait to earn verified queue progress.');
       }
     } catch {
-      Alert.alert('Keep LinePlay open',
+      gameAlert('Keep LinePlay open',
         'Background tracking is unavailable right now. You can still play and earn verified queue progress with the app open.');
     } finally {
       setBackgroundPermissionBusy(false);
@@ -350,14 +358,41 @@ export default function LinePlayScreen() {
     };
   }, [session, ride?.parkId, ride?.waitFeedRideId, snapshot.state]);
 
-  // Haptic on transition into paused (line moving).
+  // The line jumped well ahead: a gentle heads up. It never pauses anything.
   useEffect(() => {
-    const nowPaused = snapshot.state === 'paused';
-    if (nowPaused && !prevPausedRef.current) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    }
-    prevPausedRef.current = nowPaused;
-  }, [snapshot.state]);
+    if (snapshot.queueAdvanceAt == null || snapshot.state !== 'active') return;
+    showToast({ icon: 'ride', title: 'The line is moving!', body: 'Keep playing as you walk. Your round is safe.' });
+    session.acknowledgeQueueAdvance();
+  }, [snapshot.queueAdvanceAt, snapshot.state, session, showToast]);
+
+  // Phone pocketed or app switched: everything is saved. On return, say so.
+  useEffect(() => {
+    if (snapshot.state !== 'active' && snapshot.state !== 'paused') return;
+    let awayAt: number | null = null;
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active') { awayAt ??= Date.now(); return; }
+      if (awayAt != null && Date.now() - awayAt >= WELCOME_BACK_AFTER_MS) {
+        showToast({ icon: 'timer', title: 'Welcome back!', body: 'Your wait kept counting and your games are saved.' });
+      }
+      awayAt = null;
+    });
+    return () => subscription.remove();
+  }, [snapshot.state === 'active' || snapshot.state === 'paused', showToast]);
+
+  // Boarding detection: the ride tracker saw this guest ride this ride.
+  useEffect(() => {
+    if (!ride) return;
+    return rideDetectionEmitter.on('rideDetected', detection => {
+      if (detection.rideId === ride.rideId) session.markBoarded();
+    });
+  }, [ride?.rideId, session]);
+
+  // The queue ended the wait: a success haptic lands with the wrap-up sheet.
+  const rideUp = snapshot.state === 'ending' &&
+    (snapshot.endReason === 'left_queue' || snapshot.endReason === 'boarded');
+  useEffect(() => {
+    if (rideUp) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [rideUp]);
 
   useEffect(() => {
     if (!snapshot.parkProject) {
@@ -372,9 +407,7 @@ export default function LinePlayScreen() {
   }, [session]);
 
   const [activeGame, setActiveGame] =
-    useState<Extract<ActivityItem, { kind: 'minigame' }> | null>(null);
-  const showdownPlays = useRef<Map<string, number>>(new Map());
-  const triviaPlays = useRef<Map<string, number>>(new Map());
+    useState<(Extract<ActivityItem, { kind: 'minigame' }> & { difficulty: QueueDifficulty }) | null>(null);
 
   // TriviaGame holds its question cursor in the source. Keep one source for
   // the whole round even while LinePlay emits a new timer snapshot each second.
@@ -392,24 +425,11 @@ export default function LinePlayScreen() {
   const handlePlayGame = useCallback((item: Extract<ActivityItem, { kind: 'minigame' }>) => {
     if (session.getState() !== 'active') return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const currentSeed = item.gameId === 'current' && session.snapshot().currentQuestBonusEnabled
-      ? session.snapshot().currentQuestSeed : null;
-    if (item.gameId === 'showdown') {
-      const plays = showdownPlays.current.get(item.id) ?? 0;
-      showdownPlays.current.set(item.id, plays + 1);
-      // Each rematch begins at the next three questions of the ride deck.
-      setActiveGame({ ...item, seed: showdownReplaySeed(item.seed, plays) });
-      return;
-    }
-    if (item.gameId === 'trivia') {
-      const plays = triviaPlays.current.get(item.id)
-        ?? (session.snapshot().completedActivityIds.includes(item.id) ? 1 : 0);
-      triviaPlays.current.set(item.id, plays + 1);
-      // A replay starts after the previous five-question round in the offline deck.
-      setActiveGame({ ...item, seed: item.seed + plays * LINEPLAY_ROUND_QUESTIONS });
-      return;
-    }
-    setActiveGame(currentSeed == null ? item : { ...item, seed: currentSeed });
+    // The session owns replay variety: the first play keeps the saved board,
+    // each replay deals a new one, and the count survives a restart.
+    const launch = session.beginGame(item);
+    setActiveGame({ ...item, seed: item.gameId === 'showdown'
+      ? showdownReplaySeed(item.seed, launch.plays) : launch.seed, difficulty: launch.difficulty });
   }, [session]);
 
   const handleGameDone = useCallback(() => {
@@ -429,19 +449,20 @@ export default function LinePlayScreen() {
       visible: true,
       seed: activeGame.seed,
       onClose: handleGameDone,
-      onComplete: (_mult: number, meta?: Record<string, unknown>) => {
+      onComplete: (multiplier: number, meta?: Record<string, unknown>) => {
         if (activeGame.gameId === 'current') session.recordCurrentQuest(meta);
+        session.recordGameResult(activeGame.gameId, starsFromMultiplier(multiplier));
         handleActivityCompleted(activeGame.id);
         handleGameDone();
       },
     };
     switch (activeGame.gameId) {
-      case 'tap': return <WhackAShark {...common} />;
+      case 'tap': return <WhackAShark {...common} difficulty={activeGame.difficulty} taskName={ride.rideName} />;
       case 'timing': return <RhythmTapGame visible seed={activeGame.seed}
         onClose={common.onClose} onComplete={common.onComplete} />;
       case 'memory': return <MemoryGame {...common} deckId={snapshot.chapter?.finale.memoryDeckId} taskName={ride.rideName} />;
-      case 'shark': return <SharkySwim {...common} />;
-      case 'banana': return <BananaBasketGame {...common} />;
+      case 'shark': return <SharkySwim {...common} difficulty={activeGame.difficulty} />;
+      case 'banana': return <BananaBasketGame {...common} difficulty={Math.max(2, activeGame.difficulty) as QueueDifficulty} />;
       case 'current': return <CurrentQuestGame {...common} taskName={ride.rideName} />;
       case 'showdown': return <SharkShowdown {...common} rideId={ride.rideId} parkId={ride.parkId}
         chapterId={snapshot.chapter?.id} rideName={ride.rideName} />;
@@ -458,23 +479,19 @@ export default function LinePlayScreen() {
     }
   };
 
-  const handleEndSession = useCallback(() => {
-    Alert.alert(
-      'How did this line end?',
-      'You keep any eligible queue rewards either way. A wait prediction counts only when you reach boarding.',
-      [
-        { text: 'Keep playing', style: 'cancel' },
-        { text: 'I left the line', onPress: () => {
-          void session.endNow(false).catch(() =>
-            Alert.alert('Could not finish LinePlay', 'Stay on this recap and try again.'));
-        } },
-        { text: 'I reached boarding', onPress: () => {
-          void session.endNow(true).catch(() =>
-            Alert.alert('Could not finish LinePlay', 'Stay on this recap and try again.'));
-        } },
-      ],
-    );
-  }, [session]);
+  const finishFailed = useCallback(() =>
+    gameAlert('Could not finish', 'Stay on this recap and try again.'), []);
+
+  /** One branded sheet for every way a guest can end a wait by hand. */
+  const handleEndSession = useCallback(() => setWaitEndPrompt({ tab: null }), []);
+
+  const answerWaitEnd = useCallback((boarded: boolean | null) => {
+    const tab = waitEndPrompt?.tab ?? null;
+    setWaitEndPrompt(null);
+    if (boarded == null) return;
+    if (tab) tabAfterRecap.current = tab;
+    void session.endNow(boarded).catch(finishFailed);
+  }, [session, waitEndPrompt, finishFailed]);
 
   const handleExit = useCallback(async () => {
     try {
@@ -482,36 +499,19 @@ export default function LinePlayScreen() {
       if (!session.snapshot().rewardsPending) await session.forgetCheckpoint();
       navigation.goBack();
     } catch {
-      Alert.alert('Could not finish LinePlay', 'Stay on this recap and try again.');
+      finishFailed();
     }
-  }, [navigation, session]);
+  }, [navigation, session, finishFailed]);
 
   const handleNavigateTab = useCallback((screen: string) => {
     const state = session.getState();
     if (state === 'active' || state === 'paused') {
-      Alert.alert(
-        'Finish this wait?',
-        `Your LinePlay recap will appear before opening ${tabLabel(screen)}. You keep any eligible queue rewards either way.`,
-        [
-          { text: 'Keep playing', style: 'cancel' },
-          { text: 'I left the line', onPress: () => {
-            tabAfterRecap.current = screen;
-            void session.endNow(false).catch(() =>
-              Alert.alert('Could not finish LinePlay', 'Stay on this recap and try again.'));
-          } },
-          { text: 'I reached boarding', onPress: () => {
-            tabAfterRecap.current = screen;
-            void session.endNow(true).catch(() =>
-              Alert.alert('Could not finish LinePlay', 'Stay on this recap and try again.'));
-          } },
-        ],
-      );
+      setWaitEndPrompt({ tab: screen });
       return;
     }
     if (state === 'ending') {
       tabAfterRecap.current = screen;
-      void session.complete().catch(() =>
-        Alert.alert('Could not finish LinePlay', 'Stay on this recap and try again.'));
+      void session.complete().catch(finishFailed);
       return;
     }
     void (async () => {
@@ -520,10 +520,10 @@ export default function LinePlayScreen() {
         if (!session.snapshot().rewardsPending) await session.forgetCheckpoint();
         navigation.dispatch(StackActions.replace(screen));
       } catch {
-        Alert.alert('Could not finish LinePlay', 'Stay on this recap and try again.');
+        finishFailed();
       }
     })();
-  }, [navigation, session]);
+  }, [navigation, session, finishFailed]);
 
   const handleOpenCoin = useCallback(async () => {
     if (!snapshot.rewardsPending) await session.forgetCheckpoint();
@@ -613,6 +613,7 @@ export default function LinePlayScreen() {
       gameId: choice.gameId,
       index: choice.index,
       completed: choice.completed,
+      bestStars: snapshot.gameBestStars[choice.gameId as keyof typeof snapshot.gameBestStars],
     }));
   useEffect(() => {
     const id = pendingEncoreId.current;
@@ -642,7 +643,7 @@ export default function LinePlayScreen() {
     handlePlayGame({
       kind: 'minigame',
       id: `signal-bonus-${snapshot.signal?.park_day}-${routeChoice}`,
-      gameId: routeChoice === 'route_a' ? 'memory' : 'timing',
+      gameId: routeChoice === 'route_a' ? 'memory' : 'tap',
       seed: (ride.rideId * 31 + daySeed) % 100000,
     });
   };
@@ -665,6 +666,7 @@ export default function LinePlayScreen() {
   const newRoundIndex = newRoundNotice
     ? activityPages.findIndex(page => page.id === newRoundNotice.id) : -1;
   const projectMission = snapshot.parkProject ? resolveProjectMission(snapshot.parkProject) : null;
+  const circuitTheme = circuitThemeFor(ride.rideName, snapshot.chapter?.navigationPanel === true);
   const liveCrew = crewLivePrompt(snapshot.signal, completedActivityIds);
 
   return (
@@ -741,10 +743,13 @@ export default function LinePlayScreen() {
               currentQuestProofPending={snapshot.currentQuestProofPending}
               imageUrl={ride.imageUrl}
               completed={snapshot.state === 'complete'}
-              paused={snapshot.state === 'paused'}
+              paused={snapshot.state === 'paused' || resuming}
               pauseReason={snapshot.pauseReason}
-              onTogglePause={() => snapshot.state === 'paused'
-                ? session.resume() : session.pause('manual')}
+              onTogglePause={() => {
+                if (resuming) return;
+                if (snapshot.state === 'paused') setResuming(true);
+                else { session.pause('manual'); void Haptics.selectionAsync(); }
+              }}
               onPlayBonus={arcadeChoices.length ? () => setArcadeOpen(true) : undefined}
             />
           )}
@@ -794,6 +799,7 @@ export default function LinePlayScreen() {
               playerEnergy={recapEnergy}
               energyUnavailable={recapEnergyUnavailable}
               rideName={ride.rideName}
+              endReason={snapshot.endReason}
               onOpenCoin={() => void handleOpenCoin()}
               onOpenPark={() => void handleOpenPark()}
               parkAvailable={ride.parkId != null && player?.id != null}
@@ -877,6 +883,10 @@ export default function LinePlayScreen() {
                   ) : item.kind !== 'signal' && item.kind !== 'puzzle' ? (
                     <ActivitySlot
                       item={item}
+                      circuitTheme={circuitTheme}
+                      nextLabel={pageName(activityPages[index + 1 < activityPages.length ? index + 1 : 0], snapshot.chapter)}
+                      bestStars={item.kind === 'minigame'
+                        ? snapshot.gameBestStars[(item as Extract<ActivityItem, { kind: 'minigame' }>).gameId] : undefined}
                       rideId={ride.rideId}
                       parkId={ride.parkId}
                       chapterId={snapshot.chapter?.id}
@@ -884,7 +894,9 @@ export default function LinePlayScreen() {
                       navigationProgress={snapshot.navigationPanels?.[item.id]}
                       onNavigationTurn={(index) => session.rotateNavigationPanel(item.id, index)}
                       onNavigationReplay={() => session.startNextNavigationRound(item.id)}
-                      onNavigationNext={() => jumpToPage(activityPages.findIndex(page => page.id === `${snapshot.chapter?.id}-field-note`))}
+                      onNavigationNext={() => item.kind === 'circuit'
+                        ? jumpToPage(index + 1 < activityPages.length ? index + 1 : 0)
+                        : jumpToPage(activityPages.findIndex(page => page.id === `${snapshot.chapter?.id}-field-note`))}
                       completed={completedActivityIds.has(item.id)}
                       paused={snapshot.state !== 'active'}
                       savedPrediction={item.kind === 'prediction' && prediction?.card.id === item.card.id ? prediction?.guess ?? null : null}
@@ -968,382 +980,71 @@ export default function LinePlayScreen() {
         />
       )}
 
-      {/* Wave 3: mounted GameKit game (GameShellV2 renders its own Modal) */}
-      <LinePlayMovementContext.Provider value={{
-        moving: snapshot.state === 'paused',
-        onResume: () => session.resume(),
-      }}>
+      {/* Mounted GameKit game (GameShellV2 renders its own Modal). The line is
+          always moving, so LinePlay never asks a game to pause for movement. */}
+      <LinePlayMovementContext.Provider value={NEVER_PAUSE_FOR_MOVEMENT}>
         {renderActiveGame()}
       </LinePlayMovementContext.Provider>
 
-      {/* Auto-pause toast */}
-      {snapshot.state === 'paused' && snapshot.pauseReason === 'lineMoving' && (
-        <LineMovingToast onResume={() => session.resume()} />
-      )}
+      <QueueToast message={toast} onDone={() => setToast(null)} />
 
-      {/* Ending grace bar */}
-      {snapshot.state === 'ending' && (
-        <EndingBar
-          graceMsRemaining={snapshot.graceMsRemaining}
-          onUndo={() => session.undoEnd()}
-          onEndNow={() => void session.complete()}
-        />
-      )}
+      <ResumeCountdown active={resuming} onDone={() => {
+        setResuming(false);
+        session.resume();
+      }} />
+
+      {/* End by hand: one branded sheet (header End, back, or a footer tab). */}
+      <GameDialog
+        visible={waitEndPrompt != null && (snapshot.state === 'active' || snapshot.state === 'paused')}
+        title="How did your wait end?"
+        message={waitEndPrompt?.tab
+          ? `Your recap opens first, then ${tabLabel(waitEndPrompt.tab)}. You keep eligible queue rewards either way.`
+          : 'You keep eligible queue rewards either way. A wait prediction counts only when you reach boarding.'}
+        icon="queue"
+        buttons={[
+          { text: 'I left the line' },
+          { text: 'I reached boarding' },
+          { text: 'Keep playing', style: 'cancel' },
+        ]}
+        onAnswer={index => answerWaitEnd(index === 1 ? true : index === 0 ? false : null)}
+      />
+
+      {/* The queue ended the wait: leaving the queue area or boarding. */}
+      <GameDialog
+        visible={rideUp}
+        title="Your ride’s up!"
+        message={`${snapshot.endReason === 'boarded'
+          ? 'Enjoy the ride! Your games and wait time are saved.'
+          : 'Looks like you left the line. Your games and wait time are saved.'} Wrapping up in ${Math.ceil(snapshot.graceMsRemaining / 1000)}s.`}
+        icon="ride"
+        haptic="none"
+        buttons={snapshot.endReason === 'boarded' ? [
+          { text: 'See my recap' },
+          { text: 'Still in line', style: 'cancel' },
+        ] : [
+          { text: 'I left the line' },
+          { text: 'I reached boarding' },
+          { text: 'Still in line', style: 'cancel' },
+        ]}
+        onAnswer={index => {
+          const cancel = snapshot.endReason === 'boarded' ? 1 : 2;
+          if (index == null || index === cancel) { session.undoEnd(); return; }
+          const boarded = snapshot.endReason === 'boarded' || index === 1;
+          void session.endNow(boarded).catch(finishFailed);
+        }}
+      />
     </View>
   );
 }
 
-// -- toast -------------------------------------------------------------------
-
-function LineMovingToast({ onResume }: { onResume: () => void }) {
-  const walk = useSharedValue(0);
-  useEffect(() => {
-    walk.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 400, easing: Easing.inOut(Easing.quad) }),
-        withTiming(0, { duration: 400, easing: Easing.inOut(Easing.quad) }),
-      ),
-      -1,
-      false,
-    );
-  }, [walk]);
-  const walkStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: walk.value * 6 }],
-  }));
-
-  return (
-    <View style={styles.toastWrap} pointerEvents="box-none">
-      <View style={styles.toast}>
-        <Animated.Text style={[styles.toastEmoji, walkStyle]}>🚶</Animated.Text>
-        <Text style={styles.toastText}>Line&apos;s moving! Games paused</Text>
-        <Pressable onPress={onResume} style={styles.toastBtn} hitSlop={8}>
-          <Text style={styles.toastBtnText}>Resume</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-// -- ending grace bar --------------------------------------------------------
-
-function EndingBar({
-  graceMsRemaining,
-  onUndo,
-  onEndNow,
-}: {
-  graceMsRemaining: number;
-  onUndo: () => void;
-  onEndNow: () => void;
-}) {
-  const secs = Math.ceil(graceMsRemaining / 1000);
-  return (
-    <View style={styles.endingWrap} pointerEvents="box-none">
-      <View style={styles.endingBar}>
-        <Text style={styles.endingText}>Ending session in {secs}s</Text>
-        <View style={styles.endingBtns}>
-          <Pressable onPress={onUndo} style={styles.endingUndo} hitSlop={8}>
-            <Text style={styles.endingUndoText}>Undo</Text>
-          </Pressable>
-          <Pressable onPress={onEndNow} style={styles.endingNow} hitSlop={8}>
-            <Text style={styles.endingNowText}>End now</Text>
-          </Pressable>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// -- recap -------------------------------------------------------------------
-
-export function SessionRecap({
-  elapsedSeconds,
-  activityCount,
-  activityNames,
-  earnedEnergy,
-  experience,
-  partsCount,
-  ticketsEarned,
-  masteryBonusParts,
-  crewPuzzleBonusParts = 0,
-  currentQuestBonusParts = 0,
-  rewardsPending,
-  rewardsConfirmed,
-  rewardTrackingAvailable,
-  queueStamp = null,
-  onOpenStampBook,
-  resolution,
-  predictionUnscored,
-  crewPuzzle,
-  crewRelay,
-  crewRouteNames,
-  crewScoreNoun,
-  coin,
-  coinState,
-  playerEnergy,
-  energyUnavailable = false,
-  rideName,
-  onOpenCoin,
-  onOpenPark,
-  parkAvailable,
-  feedbackEnabled = false,
-  feedback = null,
-  feedbackLoading = false,
-  feedbackSaving = false,
-  feedbackError = null,
-  onRateWait,
-  onFavoriteActivity,
-  doneLabel = 'Done',
-  onDone,
-}: {
-  elapsedSeconds: number;
-  activityCount: number;
-  activityNames: readonly string[];
-  earnedEnergy: number;
-  experience: number;
-  partsCount: number;
-  ticketsEarned: number;
-  masteryBonusParts: number;
-  crewPuzzleBonusParts?: number;
-  currentQuestBonusParts?: number;
-  rewardsPending: boolean;
-  rewardsConfirmed: boolean;
-  rewardTrackingAvailable: boolean;
-  queueStamp?: { earned: boolean; new: boolean } | null;
-  onOpenStampBook?: () => void;
-  resolution: PredictionResolution | null;
-  predictionUnscored: boolean;
-  crewPuzzle: CrewPuzzleSummary | null;
-  crewRelay: CrewRelayProgress | null;
-  crewRouteNames: readonly [string, string] | null;
-  crewScoreNoun: string;
-  coin: RideCoinLevelType | null;
-  coinState: 'idle' | 'loading' | 'owned' | 'unowned' | 'unavailable';
-  playerEnergy: number | null;
-  energyUnavailable?: boolean;
-  rideName: string;
-  onOpenCoin: () => void;
-  onOpenPark: () => void;
-  parkAvailable: boolean;
-  feedbackEnabled?: boolean;
-  feedback?: LinePlayFeedback | null;
-  feedbackLoading?: boolean;
-  feedbackSaving?: boolean;
-  feedbackError?: string | null;
-  onRateWait?: (rating: WaitRating) => void;
-  onFavoriteActivity?: (favorite: FavoriteLinePlayActivity) => void;
-  doneLabel?: string;
-  onDone: () => void;
-}) {
-  const mins = Math.floor(elapsedSeconds / 60);
-  const secs = elapsedSeconds % 60;
-
-  return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.recapCard}>
-      <LinearGradient colors={['#13a8e9', '#0867bb', '#064483']} style={styles.recapHero}>
-        <View style={styles.recapHeroCopy}>
-          <Text style={styles.recapKicker}>LINEPLAY COMPLETE</Text>
-          <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
-          <Text style={styles.recapTime}>{mins}m {secs}s</Text>
-          <Text style={styles.recapSub}>session time</Text>
-        </View>
-        <Image source={QUEUE_RECAP_SHARK} style={styles.recapShark} contentFit="contain" accessibilityLabel="Shark celebrating with a ride coin and park ticket" />
-      </LinearGradient>
-
-      <Text style={styles.recapSectionTitle}>{rewardsConfirmed ? 'YOUR VERIFIED HAUL' : 'YOUR LINEPLAY ADVENTURE'}</Text>
-      <View style={styles.recapStats}>
-        <RecapStat value={String(activityCount)} label={activityCount === 1 ? 'activity' : 'activities'} />
-        {rewardsConfirmed && <RecapStat value={`+${earnedEnergy}⚡`} label="energy" />}
-        {rewardsConfirmed && <RecapStat value={`+${experience}`} label="xp" />}
-        {rewardsConfirmed && <RecapStat value={String(partsCount)} label="parts" />}
-        {rewardsConfirmed && ticketsEarned > 0 && <RecapStat value={`+${ticketsEarned}`} label="ticket" />}
-      </View>
-
-      {rewardsConfirmed && queueStamp?.earned && onOpenStampBook && (
-        <Pressable accessibilityRole="button" accessibilityLabel="Open Queue Navigator in Stamp Book"
-          onPress={onOpenStampBook} style={styles.queueStampCard}>
-          <Image source={QUEUE_STAMP_IMAGE} style={styles.queueStampImage} contentFit="contain" />
-          <View style={styles.queueStampCopy}>
-            <Text style={styles.queueStampKicker}>{queueStamp.new ? 'NEW STAMP EARNED' : 'YOUR LINEPLAY STAMP'}</Text>
-            <Text style={styles.queueStampTitle}>QUEUE NAVIGATOR</Text>
-            <Text style={styles.queueStampAction}>Open Stamp Book to see your rewards →</Text>
-          </View>
-        </Pressable>
-      )}
-
-      {rewardsConfirmed && masteryBonusParts > 0 && (
-        <Text style={styles.recapPredictionText}>⭐ Coin mastery added {masteryBonusParts} Ride Part to this verified session.</Text>
-      )}
-      {rewardsConfirmed && crewPuzzleBonusParts > 0 && (
-        <Text style={styles.recapPredictionText}>🧩 Your Crew Codebreaker guess added {crewPuzzleBonusParts} Ride Part.</Text>
-      )}
-      {rewardsConfirmed && currentQuestBonusParts > 0 && (
-        <Text style={styles.recapPredictionText}>🦈 Current Quest added {currentQuestBonusParts} Ride Part to this verified wait.</Text>
-      )}
-
-      {activityNames.length > 0 && <View style={styles.recapPrediction}>
-        <Text style={styles.recapPredictionText}>
-          Played: {Array.from(new Map(
-            Array.from(new Set(activityNames)).map(name => [name, activityNames.filter(item => item === name).length])
-          )).map(([name, count]) => count > 1 ? `${name} ×${count}` : name).join(' · ')}
-        </Text>
-      </View>}
-
-      {resolution && (
-        <View style={styles.recapPrediction}>
-          <Text style={styles.recapPredictionText}>
-            {resolution.correct ? '🎯 Nailed the prediction!' : '🤏 Prediction missed.'}
-            {'  '}
-            {resolution.beat
-              ? `You beat the posted wait by ${Math.max(0, Math.round(resolution.postedWaitMinutes - resolution.actualWaitMinutes))}m.`
-              : `The line held near the posted ${resolution.postedWaitMinutes}m.`}
-          </Text>
-        </View>
-      )}
-
-      {predictionUnscored && (
-        <Text style={styles.recapPending}>Your wait prediction was saved but not scored because boarding was not confirmed.</Text>
-      )}
-
-      {crewPuzzle && (
-        <View style={styles.recapPrediction}>
-          <Text style={styles.recapPredictionText}>
-            {crewPuzzle.completed
-              ? `Your ride’s crew opened all ${crewPuzzle.total_stages} codebreaker gates together.`
-              : `Your ride’s crew opened ${crewPuzzle.stage - 1} of ${crewPuzzle.total_stages} codebreaker gates.`}
-            {' '}{crewPuzzle.participants} players contributed clues.
-          </Text>
-        </View>
-      )}
-
-      {crewRelay?.step === 'complete' && (
-        <View style={styles.recapPrediction}>
-          <Text style={styles.recapPredictionText}>
-            Your one-phone crew chose the {crewRelay.route === 'alpha'
-              ? crewRouteNames?.[0] ?? 'Alpha' : crewRouteNames?.[1] ?? 'Omega'} route.
-            {crewRelay.observation ? ` The Lookout's ${crewRelay.observation} signal shaped the Decoder's code and finale.` : ''}
-            {' '}{crewScoreNoun}: {crewRelayScore(crewRelay)}/2.
-          </Text>
-        </View>
-      )}
-
-      {rewardsPending && (
-        <Text style={styles.recapPending}>Rewards will sync when you&apos;re back online.</Text>
-      )}
-      {rewardTrackingAvailable && !rewardsConfirmed && !rewardsPending && (
-        <Text style={styles.recapPending}>Checking eligible nearby time...</Text>
-      )}
-      {!rewardTrackingAvailable && (
-        <Text style={styles.recapPending}>Games completed. Queue rewards are unavailable for this session.</Text>
-      )}
-
-      {rewardsConfirmed && coinState === 'loading' && (
-        <Text style={styles.recapPending}>Checking this ride&apos;s coin progress...</Text>
-      )}
-
-      {rewardsConfirmed && coinState === 'owned' && coin && (
-        <View style={styles.coinNextCard}>
-          <Text style={styles.coinNextLabel}>YOUR NEXT COIN MOVE</Text>
-          <Text style={styles.coinNextTitle}>{coin.ride_name} · Level {coin.current_level}/{coin.max_level}</Text>
-          {coin.current_level >= coin.max_level ? (
-            <Text style={styles.coinNextBody}>This coin is fully mastered. Its Ride Parts stay in your collection.</Text>
-          ) : (
-            <>
-              <Text style={styles.coinNextBody}>
-                {coin.available_parts ?? 0}/{coin.parts_to_next_level} Ride Parts · {playerEnergy == null
-                  ? energyUnavailable ? 'Energy balance unavailable' : 'Checking Energy balance'
-                  : `${playerEnergy}/${coin.energy_to_next_level} Energy`}
-                {'\n'}{playerEnergy == null
-                  ? energyUnavailable ? 'Check this coin when you are connected.' : 'Checking your next upgrade.'
-                  : (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy >= coin.energy_to_next_level
-                    ? 'Upgrade ready now.'
-                    : `Next upgrade needs ${Math.max(0, coin.parts_to_next_level - (coin.available_parts ?? 0))} more Parts and ${Math.max(0, coin.energy_to_next_level - playerEnergy)} more Energy.`}
-              </Text>
-              {coin.next_level_perks.length > 0 && (
-                <Text style={styles.coinNextBody}>Next unlock: {coin.next_level_perks.map(perk => perk.name).join(' · ')}</Text>
-              )}
-            </>
-          )}
-          <Pressable accessibilityRole="button" onPress={onOpenCoin} style={styles.coinNextButton}>
-            <Text style={styles.coinNextButtonText}>{coin.current_level < coin.max_level &&
-              (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null && playerEnergy >= coin.energy_to_next_level
-              ? 'Upgrade coin →' : 'View this coin →'}</Text>
-          </Pressable>
-        </View>
-      )}
-      {rewardsConfirmed && coinState === 'unowned' && (
-        <View style={styles.coinNextCard}>
-          <Text style={styles.coinNextLabel}>{partsCount > 0 ? 'PARTS SAVED' : 'YOUR NEXT PARK MOVE'}</Text>
-          <Text style={styles.coinNextTitle}>{rideName}</Text>
-          <Text style={styles.coinNextBody}>{partsCount > 0
-            ? 'Collect this ride’s coin to spend the Parts you earned in line.'
-            : 'Collect this ride’s coin to start mastering it. Your queue games still count in this recap.'}</Text>
-          <Pressable accessibilityRole="button" onPress={onOpenPark} style={styles.coinNextButton}>
-            <Text style={styles.coinNextButtonText}>{parkAvailable ? 'Open ride checklist →' : 'Open Coin Shelf →'}</Text>
-          </Pressable>
-        </View>
-      )}
-      {rewardsConfirmed && coinState === 'unavailable' && (
-        <Text style={styles.recapPending}>Coin progress is unavailable right now. Check the Coin Shelf when you&apos;re back online.</Text>
-      )}
-
-      {feedbackEnabled && (
-        <View style={styles.waitFeedbackCard}>
-          <Text style={styles.waitFeedbackTitle}>Did LinePlay make this wait better?</Text>
-          {feedbackLoading ? <Text style={styles.recapPending}>Checking your answer...</Text> : <>
-            <View style={styles.waitFeedbackOptions}>
-              {([
-                ['better', 'Yes'], ['somewhat', 'Somewhat'], ['no', 'No'],
-              ] as const).map(([rating, label]) => (
-                <Pressable key={rating} accessibilityRole="button"
-                  disabled={feedbackSaving} onPress={() => onRateWait?.(rating)}
-                  style={[styles.waitFeedbackOption, feedback?.rating === rating && styles.waitFeedbackSelected]}>
-                  <Text style={styles.waitFeedbackOptionText}>{label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {feedback && <>
-              <Text style={styles.waitFeedbackNote}>Thanks. What helped most? Optional.</Text>
-              <View style={styles.waitFeedbackOptions}>
-                {([
-                  ['games', 'Games'], ['story', 'Story'], ['crew', 'Crew'],
-                  ['rewards', 'Rewards'], ['none', 'Nothing yet'],
-                ] as const).map(([favorite, label]) => (
-                  <Pressable key={favorite} accessibilityRole="button"
-                    disabled={feedbackSaving} onPress={() => onFavoriteActivity?.(favorite)}
-                    style={[styles.waitFeedbackOption, feedback.favorite === favorite && styles.waitFeedbackSelected]}>
-                    <Text style={styles.waitFeedbackOptionText}>{label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </>}
-            {feedbackError && <Text style={styles.waitFeedbackError}>{feedbackError}</Text>}
-            <Text style={styles.waitFeedbackNote}>Your answer never changes rewards. You can skip this.</Text>
-          </>}
-        </View>
-      )}
-
-      <Pressable onPress={onDone} style={styles.recapBtn}>
-        <Text style={styles.recapBtnText}>{doneLabel}</Text>
-      </Pressable>
-    </ScrollView>
-  );
-}
-
-function RecapStat({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={styles.recapStat}>
-      <Text style={styles.recapStatValue}>{value}</Text>
-      <Text style={styles.recapStatLabel}>{label}</Text>
-    </View>
-  );
-}
+const NEVER_PAUSE_FOR_MOVEMENT = { moving: false, onResume: () => undefined } as const;
 
 // -- skeletons ---------------------------------------------------------------
 
 function WaitCardSkeleton({ rideName }: { rideName: string }) {
   return <LinearGradient colors={['#159ee2', '#0873bd', '#064780']} style={styles.waitSkeleton}>
     <View style={styles.waitSkeletonCopy}>
-      <Text style={styles.waitSkeletonKicker}>YOUR SHARK IS READY  ✦</Text>
+      <Text style={styles.waitSkeletonKicker}>YOUR SHARK IS READY</Text>
       <Text style={styles.waitSkeletonRide} numberOfLines={2}>{rideName}</Text>
       <Text style={styles.waitSkeletonHint}>Opening your ride chapter…</Text>
     </View>
@@ -1355,7 +1056,7 @@ function ActivitySkeleton() {
   return (
     <View style={styles.page}>
       <View style={styles.activitySkeleton}>
-        <Text style={styles.activitySkeletonKicker}>LINEPLAY  ✦  FIRST ROUND</Text>
+        <Text style={styles.activitySkeletonKicker}>LINEPLAY · FIRST ROUND</Text>
         <Text style={styles.activitySkeletonTitle}>A ride story is surfacing</Text>
         <Text style={styles.activitySkeletonHint}>Your games will open here in a moment.</Text>
         <View style={styles.activitySkeletonRule} />
@@ -1431,177 +1132,4 @@ const styles = StyleSheet.create({
   },
   ghostBtnText: { color: colors.secondary, fontWeight: '700' },
 
-  // toast
-  toastWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: spacing.xxl,
-    alignItems: 'center',
-  },
-  toast: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.full,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    ...shadows.xl,
-  },
-  toastEmoji: { fontSize: 20, marginRight: spacing.sm },
-  toastText: { color: colors.textPrimary, fontSize: 14, fontWeight: '700' },
-  toastBtn: {
-    marginLeft: spacing.lg,
-    backgroundColor: colors.tertiary,
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  toastBtnText: { color: colors.primary, fontWeight: '800', fontSize: 13 },
-
-  // ending bar
-  endingWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: spacing.xxl,
-    alignItems: 'center',
-  },
-  endingBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bgLight,
-    borderRadius: borderRadius.full,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    ...shadows.xl,
-  },
-  endingText: { color: colors.textPrimary, fontSize: 14, fontWeight: '700' },
-  endingBtns: { flexDirection: 'row', marginLeft: spacing.lg, gap: spacing.sm },
-  endingUndo: {
-    backgroundColor: colors.tertiary,
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  endingUndoText: { color: colors.primary, fontWeight: '800', fontSize: 13 },
-  endingNow: {
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  endingNowText: { color: colors.textSecondary, fontWeight: '700', fontSize: 13 },
-
-  // recap
-  recapCard: {
-    marginHorizontal: spacing.lg,
-    backgroundColor: '#ddf5ff',
-    borderRadius: borderRadius.xxl,
-    padding: spacing.md,
-    borderWidth: 3,
-    borderColor: '#ffffff',
-    ...shadows.lg,
-  },
-  recapHero: {
-    minHeight: 176,
-    borderRadius: borderRadius.xl,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#80e4ff',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  recapHeroCopy: { width: '60%', zIndex: 1 },
-  recapShark: { position: 'absolute', width: 168, height: 168, right: -5, bottom: -11 },
-  recapKicker: {
-    color: '#fff4ac',
-    fontFamily: 'Knockout',
-    fontSize: 14,
-    letterSpacing: 0.7,
-  },
-  recapRide: { color: '#ffffff', fontFamily: 'Shark', fontSize: 21, marginTop: 6, lineHeight: 25 },
-  recapTime: {
-    color: '#ffffff',
-    fontFamily: 'Knockout',
-    fontSize: 36,
-    marginTop: spacing.xs,
-  },
-  recapSub: { color: '#d6f4ff', fontFamily: 'Knockout', fontSize: 14 },
-  recapSectionTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 17,
-    textAlign: 'center', marginTop: spacing.lg },
-  recapStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: spacing.sm,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    borderWidth: 2,
-    borderColor: '#6dc9f2',
-    backgroundColor: '#ffffff',
-  },
-  recapStat: { alignItems: 'center', flex: 1 },
-  recapStatValue: { color: '#07528f', fontFamily: 'Knockout', fontSize: 18 },
-  recapStatLabel: {
-    color: '#3b6884',
-    fontFamily: 'Knockout', fontSize: 11,
-    marginTop: 2,
-    textTransform: 'uppercase',
-  },
-  queueStampCard: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg,
-    padding: spacing.sm, borderRadius: borderRadius.lg, borderWidth: 3,
-    borderColor: '#ffd443', backgroundColor: '#e5f8ff', ...shadows.md },
-  queueStampImage: { width: 70, height: 70, marginRight: spacing.sm },
-  queueStampCopy: { flex: 1 },
-  queueStampKicker: { color: '#0874bb', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8 },
-  queueStampTitle: { color: '#083d73', fontFamily: 'Shark', fontSize: 17, marginTop: 1 },
-  queueStampAction: { color: '#205570', fontFamily: 'Knockout', fontSize: 13, marginTop: 3 },
-  recapPrediction: {
-    marginTop: spacing.md,
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#a3d8ef',
-  },
-  recapPredictionText: { color: '#205570', fontFamily: 'Knockout', fontSize: 13, lineHeight: 19 },
-  recapPending: {
-    color: '#925200',
-    fontFamily: 'Knockout', fontSize: 12,
-    marginTop: spacing.lg,
-  },
-  coinNextCard: {
-    marginTop: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: borderRadius.lg,
-    borderWidth: 2,
-    borderColor: '#ffd443',
-    backgroundColor: '#ffffff',
-  },
-  coinNextLabel: { color: '#0874bb', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.7 },
-  coinNextTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 18, marginTop: spacing.xs },
-  coinNextBody: { color: '#315d77', fontFamily: 'Knockout', fontSize: 13, lineHeight: 19, marginTop: spacing.sm },
-  coinNextButton: { alignSelf: 'flex-start', marginTop: spacing.md, paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm, borderRadius: borderRadius.full, backgroundColor: colors.tertiary },
-  coinNextButtonText: { color: colors.primary, fontFamily: 'Knockout', fontSize: 13 },
-  waitFeedbackCard: { marginTop: spacing.xl, padding: spacing.lg, borderRadius: borderRadius.lg,
-    backgroundColor: '#ffffff' },
-  waitFeedbackTitle: { color: '#073b74', fontFamily: 'Shark', fontSize: 17 },
-  waitFeedbackOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.md },
-  waitFeedbackOption: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm, borderRadius: borderRadius.full, borderWidth: 1,
-    borderColor: '#8bc8e9' },
-  waitFeedbackSelected: { borderColor: '#e7ac00', backgroundColor: '#fff3ba' },
-  waitFeedbackOptionText: { color: '#073b74', fontFamily: 'Knockout', fontSize: 13 },
-  waitFeedbackNote: { color: '#4c758d', fontFamily: 'Knockout', fontSize: 12, lineHeight: 18, marginTop: spacing.md },
-  waitFeedbackError: { color: colors.error, fontFamily: 'Knockout', fontSize: 12, marginTop: spacing.sm },
-  recapBtn: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.tertiary,
-    borderRadius: borderRadius.full,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  recapBtnText: { color: colors.primary, fontFamily: 'Knockout', fontSize: 16 },
 });

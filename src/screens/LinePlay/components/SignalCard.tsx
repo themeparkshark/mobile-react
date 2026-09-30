@@ -1,6 +1,7 @@
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { LineSignalSummary } from '../../../api/endpoints/me/inline-timer/types';
 import { borderRadius, shadows, spacing } from '../../../design-system';
+import { BRAND, GameButton, GameIcon } from '../../../ui';
 
 interface Props {
   readonly signal: LineSignalSummary;
@@ -13,7 +14,7 @@ interface Props {
 
 const ROUTES = {
   route_a: { name: 'Shadow Trail', game: 'Memory Match', prompt: 'Spot one easy-to-miss queue detail. Let someone else find it before you point it out.' },
-  route_b: { name: 'Starlight Route', game: 'Rhythm Tap', prompt: 'Listen for a repeating sound or watch for a light cue. Can your group predict its next beat?' },
+  route_b: { name: 'Starlight Route', game: 'Whack-a-Shark', prompt: 'Watch for a light cue that repeats. Tap the starlight sharks as they surface and skip the decoys.' },
 } as const;
 
 export default function SignalCard({ signal, pending, paused, error, onChoose, onPlayUnlocked }: Props) {
@@ -66,7 +67,7 @@ export default function SignalCard({ signal, pending, paused, error, onChoose, o
               style={[styles.choice, route === 'route_b' && styles.choiceB,
                 (!signal.can_choose || pending || paused) && styles.disabled]}
             >
-              <Text style={[styles.choiceSymbol, route === 'route_b' && styles.choiceLight]}>{route === 'route_a' ? '★' : '✦'}</Text>
+              <GameIcon name={route === 'route_a' ? 'search' : 'sparkle'} size={40} />
               <Text style={[styles.choiceText, route === 'route_b' && styles.choiceLight]}>{ROUTES[route].name}</Text>
             </Pressable>
           ))}
@@ -82,13 +83,11 @@ export default function SignalCard({ signal, pending, paused, error, onChoose, o
       {active && (
         <>
           <Text style={styles.prompt}>{ROUTES[active].prompt} Pass the phone or play solo.</Text>
-          <Pressable accessibilityRole="button" disabled={paused} onPress={() => onPlayUnlocked(active)}
-            style={[styles.playButton, paused && styles.disabled]}>
-            <Text style={styles.playButtonText}>PLAY {ROUTES[active].game.toUpperCase()}  →</Text>
-          </Pressable>
+          <GameButton label={`Play ${ROUTES[active].game}`} icon="play" disabled={paused} fullWidth
+            onPress={() => onPlayUnlocked(active)} style={styles.playButton} />
         </>
       )}
-      {paused && <Text style={styles.note}>Interactions are paused until the session resumes.</Text>}
+      {paused && <Text style={styles.note}>Paused. Tap play on the wait card to jump back in.</Text>}
       {error && <Text style={styles.error}>{error}</Text>}
     </ScrollView>
   );
@@ -107,27 +106,24 @@ const styles = StyleSheet.create({
     textShadowColor: '#034471', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 1 },
   day: { color: '#0875c9', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.5 },
   title: { color: '#153e67', fontFamily: 'Shark', fontSize: 21, marginTop: spacing.sm },
-  body: { color: '#244d70', fontSize: 14, lineHeight: 20, marginTop: spacing.sm },
+  body: { color: '#244d70', fontFamily: 'Knockout', fontSize: 15, lineHeight: 20, marginTop: spacing.sm },
   meter: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md,
     padding: spacing.md, borderRadius: borderRadius.lg, borderWidth: 2, borderColor: '#fff',
     backgroundColor: '#bcecff' },
   meterCount: { color: '#075d9f', fontFamily: 'Shark', fontSize: 27, marginRight: spacing.md },
   meterCopy: { flex: 1 },
   meterTitle: { color: '#075d9f', fontFamily: 'Knockout', fontSize: 18 },
-  meterText: { color: '#244d70', fontSize: 12, marginTop: 2 },
+  meterText: { color: '#244d70', fontFamily: 'Knockout', fontSize: 14, marginTop: 2 },
   choices: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   choice: { flex: 1, minHeight: 82, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm,
     borderRadius: borderRadius.lg, borderWidth: 3, borderColor: '#fff',
     backgroundColor: '#ffca30', alignItems: 'center', justifyContent: 'center', ...shadows.md },
-  choiceB: { backgroundColor: '#0875c9' },
-  choiceSymbol: { color: '#093d77', fontSize: 24, lineHeight: 27 },
+  choiceB: { backgroundColor: BRAND.blueBright },
   choiceLight: { color: '#fff' },
   disabled: { opacity: 0.45 },
   choiceText: { color: '#093d77', fontFamily: 'Knockout', fontSize: 17, textAlign: 'center' },
-  note: { color: '#376888', fontSize: 12, marginTop: spacing.md },
-  prompt: { color: '#153e67', fontSize: 14, lineHeight: 21, marginTop: spacing.lg },
-  playButton: { padding: spacing.md, borderRadius: borderRadius.lg, borderWidth: 2,
-    borderColor: '#fff', backgroundColor: '#ffca30', alignItems: 'center', marginTop: spacing.md },
-  playButtonText: { color: '#093d77', fontFamily: 'Knockout', fontSize: 18 },
-  error: { color: '#b72333', fontSize: 13, marginTop: spacing.md },
+  note: { color: '#376888', fontFamily: 'Knockout', fontSize: 14, marginTop: spacing.md },
+  prompt: { color: '#153e67', fontFamily: 'Knockout', fontSize: 15, lineHeight: 21, marginTop: spacing.lg },
+  playButton: { marginTop: spacing.md, alignSelf: 'center' },
+  error: { color: '#b72333', fontFamily: 'Knockout', fontSize: 14, marginTop: spacing.md },
 });

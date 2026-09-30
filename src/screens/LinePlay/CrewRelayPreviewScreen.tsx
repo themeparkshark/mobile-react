@@ -8,6 +8,7 @@ import { colors, spacing } from '../../design-system';
 import { getLinePlayChapter } from '../../services/lineplay/chapters';
 import { createCrewRelay, crewRelayEpilogue } from '../../services/lineplay/crewRelay';
 import { personalizeChapterFinale, resolveChapterClue } from '../../services/lineplay/chapterClue';
+import { WhackAShark } from '../../games/whack';
 import { RhythmTapGame } from '../../games/rhythm';
 import { SharkySwim } from '../../games/sharky';
 import { MemoryGame } from '../../games/memory';
@@ -18,7 +19,7 @@ import ActivitySlot from './components/ActivitySlot';
 import ChapterCard from './components/ChapterCard';
 import CrewRelayCard from './components/CrewRelayCard';
 import CrewPuzzleCard from './components/CrewPuzzleCard';
-import { SessionRecap } from './LinePlayScreen';
+import SessionRecap from './components/SessionRecap';
 import type { RideCoinLevelType } from '../../models/ride-coin-level-type';
 import type { CrewPuzzleSummary } from '../../api/endpoints/me/inline-timer/types';
 
@@ -213,7 +214,7 @@ export default function CrewRelayPreviewScreen() {
         {gameOpen && view === 'showdown' && <SharkShowdown visible seed={314159}
           chapterId={chapter.id} rideName={previewCoin.ride_name}
           onClose={() => setGameOpen(false)} onComplete={() => setGameOpen(false)} />}
-        {gameOpen && view === 'epilogue' && epilogue?.gameId === 'timing' && <RhythmTapGame visible seed={epilogue.seed}
+        {gameOpen && view === 'epilogue' && epilogue?.gameId === 'tap' && <WhackAShark visible seed={epilogue.seed}
           onClose={() => setGameOpen(false)} onComplete={() => { setEpilogueDone(true); setGameOpen(false); }} />}
         {gameOpen && view === 'epilogue' && epilogue?.gameId === 'shark' && <SharkySwim visible seed={epilogue.seed}
           onClose={() => setGameOpen(false)} onComplete={() => { setEpilogueDone(true); setGameOpen(false); }} />}

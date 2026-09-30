@@ -7,7 +7,7 @@
  */
 
 import { useContext, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   spacing,
   borderRadius,
@@ -25,6 +25,9 @@ import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import NavigationPanelCard from './NavigationPanelCard';
 import type { NavigationPanelProgress } from '../../../services/lineplay/navigationPanel';
+import type { CircuitTheme } from '../../../services/lineplay/circuitTheme';
+import { factSourceLine } from '../../../services/lineplay/labels';
+import { BRAND, GameButton, GameIcon, SharkLoader } from '../../../ui';
 
 export interface ActivitySlotProps {
   readonly item: ActivityItem;
@@ -47,6 +50,12 @@ export interface ActivitySlotProps {
   readonly onNavigationTurn?: (index: number) => void;
   readonly onNavigationReplay?: () => void;
   readonly onNavigationNext?: () => void;
+  /** Ride-themed dressing for free-play circuit rounds. */
+  readonly circuitTheme?: CircuitTheme;
+  /** Name of the page after this one, for a circuit's next button. */
+  readonly nextLabel?: string;
+  /** Best stars earned in this game during the wait, or undefined when never played. */
+  readonly bestStars?: number;
 }
 
 const GAME_LABELS: Record<string, string> = {
@@ -105,11 +114,19 @@ export default function ActivitySlot({
   onNavigationTurn,
   onNavigationReplay,
   onNavigationNext,
+  circuitTheme,
+  nextLabel,
+  bestStars,
 }: ActivitySlotProps) {
   switch (item.kind) {
     case 'minigame':
       return <MiniGameSlot item={item} navigator={navigationPanel && item.id === `${chapterId}-star-chart`} completed={completed} paused={paused}
-        currentQuestBonusStatus={currentQuestBonusStatus} onPlayGame={onPlayGame} />;
+        currentQuestBonusStatus={currentQuestBonusStatus} bestStars={bestStars} onPlayGame={onPlayGame} />;
+    case 'circuit':
+      if (!onNavigationTurn || !onNavigationReplay || !onNavigationNext) return null;
+      return <NavigationPanelCard mode="free" theme={circuitTheme} nextLabel={nextLabel} seed={item.seed}
+        progress={navigationProgress} completed={completed} paused={paused}
+        onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} />;
     case 'trivia':
       if (navigationPanel && item.id === `${chapterId}-trivia` && onNavigationTurn && onNavigationReplay && onNavigationNext)
         return <NavigationPanelCard seed={item.seed} progress={navigationProgress} completed={completed} paused={paused}
@@ -135,6 +152,7 @@ function MiniGameSlot({
   completed,
   paused,
   currentQuestBonusStatus,
+  bestStars,
   onPlayGame,
 }: {
   item: Extract<ActivityItem, { kind: 'minigame' }>;
@@ -142,6 +160,7 @@ function MiniGameSlot({
   completed: boolean;
   paused: boolean;
   currentQuestBonusStatus: 'available' | 'pending' | 'verified' | null;
+  bestStars?: number;
   onPlayGame: (item: Extract<ActivityItem, { kind: 'minigame' }>) => void;
 }) {
   const isStarChart = item.id.endsWith('-star-chart');
@@ -149,6 +168,13 @@ function MiniGameSlot({
   return (
     <View style={styles.card}>
       <ActivityHero kicker={navigator ? 'STARPORT · MISSION 3 OF 3' : 'QUEUE ARCADE'} title={label} navigator={navigator} />
+      <View style={styles.bestRow} accessible
+        accessibilityLabel={bestStars == null ? 'New game this wait' : `Best this wait: ${bestStars} of 3 stars`}>
+        {bestStars == null ? <View style={styles.newPill}><Text style={styles.newPillText}>NEW</Text></View>
+          : [1, 2, 3].map(slot => <GameIcon key={slot} name="star" size={24}
+            mono={slot <= bestStars ? undefined : '#b7cfe2'} />)}
+        <Text style={styles.bestLabel}>{bestStars == null ? 'Not played this wait' : 'Your best this wait'}</Text>
+      </View>
       <View style={styles.gamePlaceholder}>
         <Text style={styles.gamePlaceholderText}>
           {item.preview ?? (isStarChart
@@ -156,15 +182,9 @@ function MiniGameSlot({
             : GAME_PREVIEWS[item.gameId] ?? 'Play a quick round while you wait.')}
         </Text>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        disabled={paused}
-        onPress={() => onPlayGame(item)}
-        style={({ pressed }) => [styles.primaryBtn, paused && styles.disabled, pressed && styles.pressed]}
-      >
-        <Text style={styles.primaryBtnText}>{completed && item.gameId === 'showdown'
-          ? 'Rematch' : completed ? 'Play again' : 'Play'}</Text>
-      </Pressable>
+      <GameButton label={completed && item.gameId === 'showdown' ? 'Rematch' : completed ? 'Play again' : 'Play'}
+        icon={completed ? 'retry' : 'play'} disabled={paused} fullWidth onPress={() => onPlayGame(item)}
+        accessibilityLabel={`${completed ? 'Play again' : 'Play'}: ${label}`} />
       {item.gameId === 'current' && currentQuestBonusStatus && (
         <Text style={styles.note}>
           {currentQuestBonusStatus === 'verified'
@@ -250,7 +270,7 @@ function TriviaSlot({
           opacity: answerReveal,
           transform: [{ translateY: answerReveal.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
         }]}>{picked === q.correctIndex
-          ? '✓  Correct! Your crew found the answer.'
+          ? 'Correct! Your crew found the answer.'
           : `The answer is ${q.choices[q.correctIndex]}. Your next clue awaits.`}</Animated.Text>}
       <View style={styles.choices}>
         {q.choices.map((choice, i) => {
@@ -286,7 +306,7 @@ function TriviaSlot({
         <View style={styles.factBox}>
           <Text style={styles.factKicker}>{picked == null ? 'THE ANSWER' : picked === q.correctIndex ? 'CORRECT · FAN FACT' : 'FAN FACT'}</Text>
           <Text style={styles.factText}>{q.fact}</Text>
-          {q.source && <Text style={styles.factSource}>Source: {q.source}</Text>}
+          {factSourceLine(q.source) && <Text style={styles.factSource}>{factSourceLine(q.source)}</Text>}
         </View>
       )}
       {completed && picked == null ? <Text style={styles.note}>Answered earlier in this session</Text> : null}
@@ -338,7 +358,7 @@ function LoreSlot({
       <ActivityHero kicker={navigator ? 'STARPORT · MISSION 2 OF 3' : 'QUEUE QUEST'} title={navigator ? 'Find the signal' : 'Field Note'} navigator={navigator} />
       <Text style={styles.loreTitle}>{lore.title}</Text>
       <Text style={styles.loreBody}>{lore.body}</Text>
-      {lore.source ? <Text style={styles.loreSource}>— {lore.source}</Text> : null}
+      {factSourceLine(lore.source) ? <Text style={styles.loreSource}>{factSourceLine(lore.source)}</Text> : null}
       {lore.challenge && !completed && selectedClue == null && (
         <View style={styles.clueChallenge}>
           <Text style={styles.cluePrompt}>{lore.challenge.prompt}</Text>
@@ -420,7 +440,8 @@ function PredictionSlot({
             pressed && styles.pressed,
           ]}
         >
-          <Text style={styles.predictBtnText}>Beat it 🏁</Text>
+          <Text style={styles.predictBtnText}>Beat it</Text>
+          <Text style={styles.predictBtnHint}>faster than posted</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -433,7 +454,8 @@ function PredictionSlot({
             pressed && styles.pressed,
           ]}
         >
-          <Text style={styles.predictBtnText}>Miss it 🐌</Text>
+          <Text style={styles.predictBtnText}>Miss it</Text>
+          <Text style={styles.predictBtnHint}>slower than posted</Text>
         </Pressable>
       </View>
       {lockedGuess ? (
@@ -449,7 +471,7 @@ function SkeletonCard({ label }: { label: string }) {
   return (
     <View style={[styles.card, styles.skeleton]}>
       <ActivityHero kicker="LOADING THE NEXT ROUND" title={label} />
-      <ActivityIndicator color="#0875c9" style={{ marginTop: spacing.lg }} />
+      <SharkLoader compact message="Dealing your next round" />
     </View>
   );
 }
@@ -614,6 +636,12 @@ const styles = StyleSheet.create({
     fontSize: 17,
   },
   note: { color: '#376888', fontFamily: 'Knockout', fontSize: 12, marginTop: spacing.md },
+  bestRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: -2 },
+  bestLabel: { color: BRAND.navySoft, fontFamily: 'Knockout', fontSize: 14, marginLeft: 6 },
+  newPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: BRAND.gold,
+    borderWidth: 2, borderColor: BRAND.navy },
+  newPillText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
+  predictBtnHint: { color: BRAND.navySoft, fontFamily: 'Knockout', fontSize: 13, marginTop: 2 },
   disabled: { opacity: 0.45 },
   pressed: {
     opacity: 0.85,

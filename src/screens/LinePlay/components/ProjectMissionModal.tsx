@@ -6,6 +6,7 @@ import type { ActivityItem } from '../../../services/lineplay/LinePlaySession';
 import { resolveProjectMission } from '../../../services/lineplay/projectMission';
 import { borderRadius, shadows, spacing } from '../../../design-system';
 import ProjectRippleFeed from '../../ExploreScreen/ProjectRippleFeed';
+import { GameIcon } from '../../../ui';
 
 interface Props {
   readonly visible: boolean;
@@ -36,8 +37,8 @@ export default function ProjectMissionModal({ visible, project, paused, pending,
             <Text style={styles.headerTitle}>LIVE CHAPTER</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Close park chapter"
-            style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.close}>×</Text>
+            style={styles.closeButton} onPress={onClose} hitSlop={8}>
+            <GameIcon name="close" size={40} />
           </Pressable>
         </View>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
@@ -55,12 +56,18 @@ export default function ProjectMissionModal({ visible, project, paused, pending,
             </View>
           </View>
           <ProjectRippleFeed project={project} compact />
-          {project.personal_clue && <Text style={styles.clue}>✦  YOUR CLUE: {project.personal_clue}</Text>}
+          {project.personal_clue && <View style={styles.clueBox}>
+            <GameIcon name="sparkle" size={22} />
+            <Text style={styles.clue}>YOUR CLUE: {project.personal_clue}</Text>
+          </View>}
           {project.crew && (
-            <Text style={styles.clue}>
-              ✦  FRIEND CREW: {project.crew.points}/{project.crew.target} verified points · {project.crew.friends} {project.crew.friends === 1 ? 'friend' : 'friends'} helped
-              {project.crew.clue ? `\nCREW CLUE: ${project.crew.clue}` : '\nThe clue opens when your crew reaches the target. Solo progress counts too.'}
-            </Text>
+            <View style={styles.clueBox}>
+              <GameIcon name="heart" size={22} />
+              <Text style={styles.clue}>
+                FRIEND CREW: {project.crew.points}/{project.crew.target} verified points · {project.crew.friends} {project.crew.friends === 1 ? 'friend' : 'friends'} helped
+                {project.crew.clue ? `\nCREW CLUE: ${project.crew.clue}` : '\nThe clue opens when your crew reaches the target. Solo progress counts too.'}
+              </Text>
+            </View>
           )}
 
           <View style={styles.mission}>
@@ -104,7 +111,7 @@ export default function ProjectMissionModal({ visible, project, paused, pending,
               <Text style={styles.context}>A tie follows {project.chapter_a_title}.</Text>
             </View>
           )}
-          {paused && <Text style={styles.context}>The line is moving. Resume before playing or voting.</Text>}
+          {paused && <Text style={styles.context}>Paused. Resume to play or vote.</Text>}
           {error && <Text style={styles.error}>{error}</Text>}
         </ScrollView>
         {project.stage >= 2 && (
@@ -112,9 +119,9 @@ export default function ProjectMissionModal({ visible, project, paused, pending,
             onPress={() => scrollRef.current?.scrollTo({ y: voteY.current, animated: true })}
             style={styles.voteJump}>
             <Text style={styles.voteJumpText}>
-              {project.can_vote ? 'SHAPE THE NEXT CHAPTER' : 'SEE THE CREW VOTE'}  →
+              {project.can_vote ? 'SHAPE THE NEXT CHAPTER' : 'SEE THE CREW VOTE'}
             </Text>
-            <Text style={styles.voteJumpCounts}>{project.chapter_a_votes}  ✦  {project.chapter_b_votes}</Text>
+            <Text style={styles.voteJumpCounts}>{project.chapter_a_votes} vs {project.chapter_b_votes}</Text>
           </Pressable>
         )}
       </View>
@@ -134,13 +141,11 @@ const styles = StyleSheet.create({
     textShadowColor: '#062a55', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
   headerTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 25, marginTop: 4,
     textShadowColor: '#062a55', textShadowOffset: { width: 1, height: 2 }, textShadowRadius: 3 },
-  closeButton: { width: 36, height: 36, marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center',
-    borderRadius: 18, backgroundColor: '#063566e8', borderWidth: 2, borderColor: '#ffdd4c', zIndex: 1 },
-  close: { color: '#fff', fontFamily: 'Knockout', fontSize: 25, lineHeight: 29 },
+  closeButton: { width: 48, height: 48, marginRight: spacing.sm, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   content: { padding: spacing.lg, paddingBottom: spacing.xl },
   park: { color: '#0875c9', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.5 },
   title: { color: '#153e67', fontFamily: 'Shark', fontSize: 23, marginTop: spacing.xs },
-  story: { color: '#244d70', fontSize: 14, lineHeight: 21, marginTop: spacing.sm },
+  story: { color: '#244d70', fontFamily: 'Knockout', fontSize: 15, lineHeight: 21, marginTop: spacing.sm },
   progressBox: { marginTop: spacing.md, borderRadius: borderRadius.lg, borderWidth: 2,
     borderColor: '#fff', backgroundColor: '#bcecff', padding: spacing.sm },
   stageRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
@@ -148,14 +153,15 @@ const styles = StyleSheet.create({
   stageTrack: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.sm },
   stagePip: { flex: 1, height: 8, backgroundColor: '#fff', borderRadius: 8 },
   stagePipActive: { backgroundColor: '#ffca30' },
-  clue: { color: '#153e67', fontSize: 13, lineHeight: 19, padding: spacing.md,
+  clueBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: spacing.md,
     borderRadius: borderRadius.lg, borderWidth: 2, borderColor: '#ffca30',
     backgroundColor: '#fff6d0', marginTop: spacing.md },
+  clue: { flex: 1, color: '#153e67', fontFamily: 'Knockout', fontSize: 14, lineHeight: 19 },
   mission: { backgroundColor: '#fff', borderRadius: borderRadius.lg, borderWidth: 2,
     borderColor: '#80d4fb', padding: spacing.md, marginTop: spacing.lg },
   missionKicker: { color: '#0875c9', fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.6 },
   missionTitle: { color: '#153e67', fontFamily: 'Shark', fontSize: 19, marginTop: spacing.sm },
-  context: { color: '#376888', fontSize: 12, lineHeight: 18, marginTop: spacing.md },
+  context: { color: '#376888', fontFamily: 'Knockout', fontSize: 14, lineHeight: 18, marginTop: spacing.md },
   play: { backgroundColor: '#ffca30', borderRadius: borderRadius.lg, borderWidth: 2,
     borderColor: '#fff', padding: spacing.md, alignItems: 'center', marginTop: spacing.lg, ...shadows.md },
   playText: { color: '#093d77', fontFamily: 'Knockout', fontSize: 18 },
@@ -171,5 +177,5 @@ const styles = StyleSheet.create({
   voteJumpText: { color: '#093d77', fontFamily: 'Knockout', fontSize: 17 },
   voteJumpCounts: { color: '#07569e', fontFamily: 'Knockout', fontSize: 14 },
   disabled: { opacity: 0.5 },
-  error: { color: '#b72333', fontSize: 13, marginTop: spacing.md },
+  error: { color: '#b72333', fontFamily: 'Knockout', fontSize: 14, marginTop: spacing.md },
 });

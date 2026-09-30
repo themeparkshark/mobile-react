@@ -13,6 +13,15 @@ import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import HapticPatterns from '../../../helpers/hapticPatterns';
 import { partCountdown } from '../../../services/lineplay/partCountdown';
 import Svg, { Circle } from 'react-native-svg';
+import { GameIcon, type GameIconName } from '../../../ui';
+
+/** A detail line with its art, never an emoji. */
+function HintLine({ icon, children }: { icon: GameIconName; children: string }) {
+  return <View style={styles.hintLine}>
+    <GameIcon name={icon} size={18} />
+    <Text style={[styles.ticketHint, styles.hintLineText]}>{children}</Text>
+  </View>;
+}
 
 const RING = 96;
 const RING_STROKE = 10;
@@ -138,16 +147,16 @@ export default function WaitCard({
   const earned = creditedParts ?? 0;
   // One plain status line; the fine print lives behind the details toggle.
   const headline = completed ? 'Session complete' : paused
-    ? pauseReason === 'manual' ? 'Paused' : 'Line moving · paused'
+    ? 'Paused'
     : !rewardTrackingAvailable
-      ? lineRewardsReady === false || rewardUnavailable ? 'Games only here'
+      ? lineRewardsReady === false || rewardUnavailable ? 'PLAY ANYTIME'
         : rewardConnectionIssue === 'sign_in' ? 'Sign-in needed'
           : rewardConnectionIssue ? 'Games ready' : 'Checking location…'
       : atCap ? 'Max Parts reached'
         : countdown.needsCheck || countdown.checking ? 'Checking you’re in line…'
           : fmt(countdown.remainingSeconds);
   const subline = completed ? 'Your game recap is ready below.' : paused
-    ? 'Time near the ride still counts.'
+    ? pauseReason === 'manual' ? 'Time near the ride still counts. Tap play when you’re ready.' : 'Time near the ride still counts.'
     : !rewardTrackingAvailable
       ? lineRewardsReady === false || rewardUnavailable
         ? 'Ride Parts aren’t available at this ride right now.'
@@ -183,7 +192,7 @@ export default function WaitCard({
           </Pressable>}
           {!completed && <Pressable accessibilityRole="button" accessibilityLabel={paused ? 'Resume queue games' : 'Pause queue games'}
             onPress={onTogglePause} style={styles.pauseButton} hitSlop={8}>
-            <Text style={styles.pauseButtonText}>{paused ? '▶' : 'II'}</Text>
+            <GameIcon name={paused ? 'play' : 'pause'} size={40} />
           </Pressable>}
         </View>
 
@@ -196,7 +205,7 @@ export default function WaitCard({
           <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
             accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
             onPress={() => setExpanded(value => !value)} style={styles.compactDetails}>
-            <Text style={styles.detailsButtonText}>{expanded ? 'Hide ↑' : 'Details ↓'}</Text>
+            <Text style={styles.detailsButtonText}>{expanded ? 'Hide' : 'Details'}</Text>
           </Pressable>
         </View> : <View style={styles.meterRow}>
           <View style={{ width: RING, height: RING }}
@@ -256,23 +265,23 @@ export default function WaitCard({
             {`Verified time near the ride: ${fmt(verifiedEligibleSeconds)}. One Ride Part per ${Math.round(interval / 60)} minutes, up to ${sessionPartCap} per line.`}
           </Text>}
           {rewardTrackingAvailable && masteryBonusAvailable && (
-            <Text style={styles.ticketHint}>⭐ Coin mastery: your first Part here today earns +1 bonus Part.</Text>
+            <HintLine icon="star">Coin mastery: your first Part here today earns +1 bonus Part.</HintLine>
           )}
           {rewardTrackingAvailable && currentQuestBonusEnabled && (
-            <Text style={styles.ticketHint}>
-              {currentQuestVerified ? '🦈 Current Quest verified: bonus Part on the way.'
-                : currentQuestProofPending ? '🦈 Current Quest played. Checking your route.'
-                  : '🦈 Finish Current Quest for a bonus Part.'}
-            </Text>
+            <HintLine icon="shark">
+              {currentQuestVerified ? 'Current Quest verified: bonus Part on the way.'
+                : currentQuestProofPending ? 'Current Quest played. Checking your route.'
+                  : 'Finish Current Quest for a bonus Part.'}
+            </HintLine>
           )}
           {rewardTrackingAvailable && ticketAvailable !== null && (
-            <Text style={styles.ticketHint}>
+            <HintLine icon="ticket">
               {ticketAvailable
                 ? verifiedEligibleSeconds >= ticketIntervalSeconds
-                  ? '🎫 Park Ticket ready when this line ends.'
-                  : `🎫 Park Ticket in ${fmt(ticketIntervalSeconds - verifiedEligibleSeconds)} more.`
-                : '🎫 Today’s Ticket for this ride is collected.'}
-            </Text>
+                  ? 'Park Ticket ready when this line ends.'
+                  : `Park Ticket in ${fmt(ticketIntervalSeconds - verifiedEligibleSeconds)} more.`
+                : 'Today’s Ticket for this ride is collected.'}
+            </HintLine>
           )}
         </>}
       </View>
@@ -342,9 +351,9 @@ const styles = StyleSheet.create({
   partBurstText: { color: '#7dffb0', fontFamily: 'Shark', fontSize: 18, marginTop: 4 },
   detailsButton: { minHeight: 34, justifyContent: 'center', alignItems: 'center' },
   detailsButtonText: { color: '#cdeaff', fontFamily: 'Knockout', fontSize: 14 },
-  pauseButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 2,
-    borderColor: '#fff', backgroundColor: 'rgba(5,52,110,0.7)', justifyContent: 'center', alignItems: 'center' },
-  pauseButtonText: { color: '#fff', fontFamily: 'Knockout', fontSize: 15 },
+  pauseButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
+  hintLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
+  hintLineText: { marginTop: 0, flexShrink: 1 },
   waitSourceHint: { color: '#d4edff', fontFamily: 'Knockout', fontSize: 11, marginTop: spacing.sm },
   entranceHint: { color: colors.textPrimary, fontFamily: 'Knockout', fontSize: 11, marginTop: spacing.xs },
   ticketHint: {
