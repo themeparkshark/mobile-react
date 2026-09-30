@@ -87,3 +87,31 @@ reloads mid-session.
 Assets under `assets/` are Dustin's hand-illustrated art. Size work may
 downscale or re-encode losslessly; it never palette-quantizes, redraws or
 restyles. `tools/tests/asset-diet.test.cjs` rejects palette-mode stamp art.
+
+## Binary size (measured September 30, 2026)
+
+Unsigned Release device archive (Xcode 16.4 locally): app 199 MB, zipped
+IPA about 164 MB. Assets are 146 MB of that; the Hermes bundle is 11 MB and
+the arm64 binary 29 MB. The 80 MB target needs work outside this stream's
+files, in this order:
+
+1. `assets/images/screens/explore/item_animation.gif` (13.7 MB) and
+   `pin_animation.gif` (8.9 MB): the marker swap WS2 owns.
+2. Lossless WebP for the large PNGs (identical pixels, no restyle): about
+   21 MB saved across 158 files. Each owning stream swaps its own `require`
+   paths; expo-image and iOS 14+ decode WebP natively.
+3. Music tracks (`assets/music`, 10.5 MB) re-encoded to AAC at 96 kbps.
+
+To measure again: `xcodebuild -workspace ios/ThemeParkShark.xcworkspace
+-scheme ThemeParkShark -configuration Release -sdk iphoneos
+-destination generic/platform=iOS -archivePath /tmp/TPS.xcarchive
+CODE_SIGNING_ALLOWED=NO archive`, then zip `Products/Applications/*.app`
+under `Payload/`.
+
+## Launch screen check
+
+Record a cold start with `xcrun simctl io <udid> recordVideo` and launch with
+`xcrun simctl launch`. On the simulator a `simctl launch` shows a short black
+zoom before any app's launch screen (Apple Settings shows about 1 s of it the
+same way), so judge the handoff from the first blue frame: launch art, the
+same art in JS, then the login loop.
