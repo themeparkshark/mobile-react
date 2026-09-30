@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   tFinal: { color: '#c98a00' },
   tTotal: { width: 30, fontFamily: FONT.display, fontSize: 16, color: BRAND.blue, textAlign: 'right' },
   ceremony: { alignItems: 'center', justifyContent: 'center', marginTop: 16, height: 250 },
-  ray: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,207,59,0.55)' },
+  ray: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,248,228,0.5)', borderColor: BRAND.gold, borderWidth: 6 },
   champImg: { width: 110, height: 110, resizeMode: 'contain' },
   bigCrown: { position: 'absolute', top: 18 },
   champName: { marginTop: 10, fontFamily: FONT.display, fontSize: 30, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
