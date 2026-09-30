@@ -184,14 +184,14 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                       : typeof task.ticket_cost === 'number'
                       ? `${task.ticket_cost} Park Ticket${task.ticket_cost === 1 ? '' : 's'} to start. `
                       : 'Park Tickets start standard attempts. '}
-                    {task.ticket_cost !== 0 && 'Out of Tickets? A Shark Rescue Pass may be available at the ride.'}
+                    {task.ticket_cost !== 0 && `Out of Tickets? A Shark Rescue Pass may be available ${kind === 'ride' ? 'at the ride' : 'at this spot'}.`}
                   </Text>
                   {'energy_reward' in task && 'ride_parts_reward' in task &&
                     typeof task.coins === 'number' && typeof task.experience === 'number' &&
                     typeof task.energy_reward === 'number' && typeof task.ride_parts_reward === 'number' && (
                       <Text style={{ color: '#327395', fontFamily: 'Knockout', fontSize: 13, lineHeight: 18, marginTop: 8 }}>
                         Base win: +{task.coins} Shark Coins · +{task.experience} XP ·
-                        {' '}+{task.energy_reward} Energy · +{task.ride_parts_reward} Ride Parts
+                        {' '}+{task.energy_reward} Energy · +{task.ride_parts_reward} Ride Part{task.ride_parts_reward === 1 ? '' : 's'}
                       </Text>
                     )}
                 </View>

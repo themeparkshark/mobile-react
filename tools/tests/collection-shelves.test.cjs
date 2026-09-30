@@ -155,3 +155,10 @@ test('stamp book cards and detail are bright parchment, never dark or purple', (
     assert.ok(!src.includes(dark), `StampBookScreen still has ${dark}`);
   assert.match(src, /card: \{\n\s+backgroundColor: '#fff8e4'/);
 });
+
+test('unfound coin copy: rescue pass wording follows the coin kind and Ride Part is singular for one', () => {
+  const src = fs.readFileSync('src/components/UnfoundCoinModal.tsx', 'utf8');
+  assert.ok(!src.includes("may be available at the ride.'"), 'rescue pass copy must not assume a ride');
+  assert.match(src, /kind === 'ride' \? 'at the ride' : 'at this spot'/);
+  assert.match(src, /Ride Part\{task\.ride_parts_reward === 1 \? '' : 's'\}/);
+});
