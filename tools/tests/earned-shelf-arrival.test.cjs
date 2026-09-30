@@ -59,9 +59,9 @@ test('arrival actions remain usable immediately; land feedback happens once and 
   '../hooks/useReducedGameMotion':{default:()=>false},'../gamekit/SFX':{playSfx(){}}
  },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,
  onLand(){lands++;},onInspect(){inspections++;},onClose(){}});
- const primary=view.find(n=>n.type==='Pressable'&&n.props.children?.props?.children==='View coin mastery');
+ const primary=view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='View coin mastery');
  primary.props.onPress();view.render();assert.equal(lands,1);assert.equal(inspections,1);
- view.find(n=>n.type==='Pressable'&&n.props.children?.props?.children==='Keep exploring this shelf').props.onPress();
+ view.find(n=>n.type==='Pressable'&&n.props.accessibilityLabel==='Keep exploring this shelf').props.onPress();
  assert.equal(lands,1);view.unmount();assert.ok(view.cancelled.length>0);assert.equal(view.timers.size,0);
 });
 test('reduced-motion arrival immediately marks its real slot with no entrance motion',()=>{
@@ -74,15 +74,16 @@ test('reduced-motion arrival immediately marks its real slot with no entrance mo
 test('explicit mastery opens once and cannot present a late response after its action is cancelled',async()=>{
  let reads=0,resolve;
  const view=runtime('src/components/TaskCoinModal.tsx',{
-  '../context/AuthProvider':{AuthContext:{value:{player:{energy:185},refreshPlayer:async()=>{}}}},
+  '../context/AuthProvider':{AuthContext:{value:{player:{id:5,energy:185},refreshPlayer:async()=>{}}}},
   '../helpers/haptics':{impactAsync(){},ImpactFeedbackStyle:{}},
-  '../api/endpoints/me/ride-coins':{default:()=>{reads++;return new Promise(done=>{resolve=done;});}},
+  '../constants/coinTiers':require('./helpers/ts-module.cjs').loadTs('src/constants/coinTiers.ts'),
+  '../context/CoinCollection':{loadCoin:()=>{reads++;return new Promise(done=>{resolve=done;});},upsertCoin(){},setFeaturedCoin(){}},
  },{task:{id:109,asset_id:24,name:'Snowball'},openRequestKey:6});
  view.render();assert.equal(reads,1);
  view.change({openRequestKey:undefined});
- resolve({data:[{id:24,current_level:1,ride_name:'Snowball'}]});await view.settle();
+ resolve({id:24,current_level:1,ride_name:'Snowball'});await view.settle();
  assert.equal(view.find(n=>n.type==='./CoinLevelingModal').props.visible,false);
  view.change({openRequestKey:7});assert.equal(reads,2);
- resolve({data:[{id:24,current_level:1,ride_name:'Snowball'}]});await view.settle();
+ resolve({id:24,current_level:1,ride_name:'Snowball'});await view.settle();
  assert.equal(view.find(n=>n.type==='./CoinLevelingModal').props.visible,true);
 });

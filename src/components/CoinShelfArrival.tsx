@@ -2,20 +2,27 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 import { playSfx } from '../gamekit/SFX';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import type { ShelfArrivalTarget } from '../hooks/useEarnedShelfArrival';
+import GameIcon from '../ui/GameIcon';
 
-/** The same collectible settles into its measured, server-confirmed park slot. */
-export default function CoinShelfArrival({ target, coinUrl, rideName, firstCollection, onLand, onInspect, onClose }: {
-  target: ShelfArrivalTarget; coinUrl: string; rideName: string; firstCollection: boolean;
+/**
+ * The caught coin flies in an arc into its measured, server-confirmed slot.
+ * On landing the slot itself ignites (squash, ring pulse, sparkles: ShelfCoin),
+ * the header count ticks, and a "clink" and a light haptic land on the same
+ * frame. A small caption chip replaces the old bottom-third card so the shelf
+ * stays the hero. Tap anywhere to place the coin immediately.
+ */
+export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, firstCollection, onLand, onInspect, onClose }: {
+  target: ShelfArrivalTarget; coinUrl: string; rideName: string; parkName?: string | null; firstCollection: boolean;
   onLand: () => void; onInspect: () => void; onClose: () => void;
 }) {
   const reduced = useReducedGameMotion();
   const progress = useSharedValue(0);
+  const chip = useSharedValue(0);
   const [landed, setLanded] = useState(false);
-  const [artFailed, setArtFailed] = useState(false);
   const alive = useRef(true), completed = useRef(false);
   const callbacks = useRef({ onLand, onInspect, onClose });
   callbacks.current = { onLand, onInspect, onClose };
@@ -23,68 +30,84 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, firstColle
     if (!alive.current || completed.current) return;
     completed.current = true; cancelAnimation(progress); progress.value = 1;
     setLanded(true); callbacks.current.onLand();
-    playSfx('coin', 0.7);
+    playSfx('coin', 0.8);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
   useEffect(() => {
     alive.current = true;
-    return () => { alive.current = false; cancelAnimation(progress); };
-  }, [progress]);
+    return () => { alive.current = false; cancelAnimation(progress); cancelAnimation(chip); };
+  }, [progress, chip]);
   useEffect(() => {
     if (completed.current) return;
-    if (reduced) { finish(); return; }
-    progress.value = withTiming(1, { duration: firstCollection ? 720 : 360,
-      easing: Easing.out(Easing.cubic) }, ok => { if (ok) runOnJS(finish)(); });
-    const fallback = setTimeout(finish, firstCollection ? 1050 : 650);
+    if (reduced) { chip.value = 1; finish(); return; }
+    progress.value = withTiming(1, { duration: firstCollection ? 760 : 420,
+      easing: Easing.inOut(Easing.cubic) }, ok => { if (ok) runOnJS(finish)(); });
+    chip.value = withDelay(firstCollection ? 520 : 260, withSpring(1, { damping: 14, stiffness: 220 }));
+    const fallback = setTimeout(finish, firstCollection ? 1100 : 700);
     return () => { clearTimeout(fallback); cancelAnimation(progress); };
-  }, [reduced, firstCollection, progress]);
+  }, [reduced, firstCollection, progress, chip]);
 
   const size = Math.min(176, target.frameWidth * 0.46);
   const startX = (target.frameWidth - size) / 2;
   const startY = Math.min(target.frameHeight * 0.4, target.frameHeight - size - 170);
   const dx = target.x + target.width / 2 - (startX + size / 2);
   const dy = target.y + target.height / 2 - (startY + size / 2);
-  const coinStyle = useAnimatedStyle(() => ({ transform: [
-    { translateX: dx * progress.value },
-    { translateY: dy * progress.value - (reduced ? 0 : Math.sin(progress.value * Math.PI) * 28) },
-    { scale: 1 + (target.width / size - 1) * progress.value },
-  ], opacity: landed ? 0 : 1 }));
+  const coinStyle = useAnimatedStyle(() => {
+    const t = progress.value;
+    return {
+      transform: [
+        { translateX: dx * t },
+        // An arc: up first, then down into the slot.
+        { translateY: dy * t - (reduced ? 0 : Math.sin(t * Math.PI) * 60) },
+        { rotate: `${reduced ? 0 : (1 - t) * -18}deg` },
+        { scale: 1 + (target.width / size - 1) * t },
+      ],
+      opacity: landed ? 0 : 1,
+    };
+  });
+  const dimStyle = useAnimatedStyle(() => ({ opacity: 0.35 * (1 - progress.value) }));
+  const chipStyle = useAnimatedStyle(() => ({
+    opacity: chip.value,
+    transform: [{ translateY: (1 - chip.value) * 30 }, { scale: 0.9 + chip.value * 0.1 }],
+  }));
 
   return <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-    {!landed && <Pressable style={[StyleSheet.absoluteFill, styles.dim]} onPress={finish}
-      accessibilityRole="button" accessibilityLabel={`Place ${rideName} coin on its shelf now`} />}
+    {!landed && <Pressable style={StyleSheet.absoluteFill} onPress={finish}
+      accessibilityRole="button" accessibilityLabel={`Place ${rideName} coin on its shelf now`}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.dim, dimStyle]} />
+    </Pressable>}
     {!landed && <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: startX, top: startY, width: size, height: size }, coinStyle]}>
-      {!artFailed && <Image source={coinUrl} contentFit="contain" onError={() => { setArtFailed(true); finish(); }}
-        style={{ width: size, height: size }} />}
+      <Image source={coinUrl} contentFit="contain" onError={finish} style={{ width: size, height: size }} />
     </Animated.View>}
-    {landed && <View pointerEvents="none" style={[styles.slotRing, {
-      left: target.x - 5, top: target.y - 5, width: target.width + 10, height: target.height + 10,
-    }]} />}
-    <View style={styles.caption} accessibilityLiveRegion="polite">
-      <Text style={styles.eyebrow}>{landed ? 'ON YOUR PARK SHELF' : 'YOUR SOUVENIR HAS A HOME'}</Text>
-      <Text style={styles.title} numberOfLines={2}>{rideName}</Text>
-      <Pressable accessibilityRole="button" style={styles.primary}
+    <Animated.View style={[styles.chip, chipStyle]} accessibilityLiveRegion="polite">
+      <GameIcon name="coin" size={30} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.eyebrow} numberOfLines={1}>
+          {landed ? `ON YOUR ${parkName ? parkName.toUpperCase() : 'PARK'} SHELF` : 'YOUR SOUVENIR HAS A HOME'}
+        </Text>
+        <Text style={styles.title} numberOfLines={1}>{rideName}</Text>
+      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel="View coin mastery" style={styles.primary}
         onPress={() => { finish(); callbacks.current.onInspect(); }}>
-        <Text style={styles.primaryText}>View coin mastery</Text>
+        <Text style={styles.primaryText}>Mastery</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" style={styles.secondary}
+      <Pressable accessibilityRole="button" accessibilityLabel="Keep exploring this shelf" hitSlop={10}
         onPress={() => { finish(); callbacks.current.onClose(); }}>
-        <Text style={styles.secondaryText}>Keep exploring this shelf</Text>
+        <GameIcon name="close" size={28} />
       </Pressable>
-    </View>
+    </Animated.View>
   </View>;
 }
 
 const styles = StyleSheet.create({
-  dim: { backgroundColor: 'rgba(3,28,59,0.35)' },
-  slotRing: { position: 'absolute', borderRadius: 50, borderWidth: 3, borderColor: '#FFD64B', backgroundColor: 'rgba(255,214,75,0.1)' },
-  caption: { position: 'absolute', bottom: 52, left: 20, right: 20, padding: 16,
-    borderRadius: 20, borderWidth: 2, borderColor: '#A6DFF5', backgroundColor: '#075083', alignItems: 'center' },
-  eyebrow: { fontFamily: 'Knockout', fontSize: 12, letterSpacing: 1, color: '#FFDF66', textAlign: 'center' },
-  title: { fontFamily: 'Shark', fontSize: 23, color: '#FFF', textAlign: 'center', marginTop: 5, marginBottom: 12 },
-  primary: { alignSelf: 'stretch', minHeight: 48, justifyContent: 'center', padding: 10,
-    borderRadius: 14, backgroundColor: '#FFD34B', alignItems: 'center' },
-  primaryText: { fontFamily: 'Shark', fontSize: 18, color: '#075083', textAlign: 'center' },
-  secondary: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
-  secondaryText: { fontFamily: 'Knockout', fontSize: 15, color: '#DFF6FF', textAlign: 'center' },
+  dim: { backgroundColor: '#05346e' },
+  chip: { position: 'absolute', bottom: 34, left: 14, right: 14, flexDirection: 'row', alignItems: 'center', gap: 9,
+    paddingVertical: 8, paddingLeft: 10, paddingRight: 8, borderRadius: 18, borderWidth: 3, borderColor: '#ffffff',
+    backgroundColor: '#fff8e4', shadowColor: '#05346e', shadowOpacity: 0.28, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  eyebrow: { fontFamily: 'Knockout', fontSize: 12, letterSpacing: 0.8, color: '#8a5a00' },
+  title: { fontFamily: 'Shark', fontSize: 18, color: '#05346e' },
+  primary: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 12,
+    backgroundColor: '#ffcf3b', borderBottomWidth: 3, borderBottomColor: '#d99a00' },
+  primaryText: { fontFamily: 'Shark', fontSize: 14, color: '#05346e' },
 });

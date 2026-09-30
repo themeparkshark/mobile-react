@@ -1,8 +1,9 @@
-import { Image } from 'expo-image';
-import MysteryCoinArtwork from '../components/MysteryCoinArtwork';
+import CoinSocket from '../components/collection/CoinSocket';
+import ShelfCoin from '../components/collection/ShelfCoin';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import TaskCoinModal from '../components/TaskCoinModal';
+import GameIcon from '../ui/GameIcon';
 import UnfoundCoinModal from '../components/UnfoundCoinModal';
 import type { TaskType } from '../models/task-type';
 
@@ -22,7 +23,10 @@ interface Props {
   readonly onPlayInLine?: (task: TaskType) => void;
 }
 
-/** Named, scannable companion to the collectible shelf. */
+/**
+ * Named, scannable companion to the shelf. Collapsed by default: it shows only
+ * the one suggested coin (goal or nearest) and opens to the full searchable list.
+ */
 export default function ParkRideDirectory({ rides, completed, isOwnPark = true, goalTaskId, nearbyRideId,
   nearbyRideReportedOpen = false, savedGoalReportedDown = false, rideTaskIds, rideOnly = false,
   onRideOnlyChange, onChooseGoal, onShowOnMap, onPlayInLine }: Props) {
@@ -42,12 +46,13 @@ export default function ParkRideDirectory({ rides, completed, isOwnPark = true, 
   const matching = normalizedQuery
     ? ordered.filter(task => task.name.toLocaleLowerCase().includes(normalizedQuery))
     : ordered;
-  const visible = expanded ? matching : matching.slice(0, 5);
+  const suggested = ordered.filter(task => task.id === goalTaskId || (task.id === nearbyRideId && !ownedIds.has(task.id)));
+  const visible = expanded ? matching : suggested.slice(0, 1);
 
   return <View style={styles.wrap}>
     <View style={styles.headingRow}>
       <Text style={styles.heading}>{rideOnly ? 'RIDE PASSPORT' : 'COIN GUIDE'}</Text>
-      <Text style={styles.count}>{filtered.filter(task => ownedIds.has(task.id)).length}/{filtered.length} FOUND</Text>
+      {rideOnly && <Text style={styles.count}>{filtered.filter(task => ownedIds.has(task.id)).length}/{filtered.length}</Text>}
     </View>
     {!!rideTaskIds?.length && onRideOnlyChange && <View style={styles.filterRow}>
       <Pressable accessibilityRole="button" accessibilityState={{ selected: !rideOnly }}
@@ -61,16 +66,6 @@ export default function ParkRideDirectory({ rides, completed, isOwnPark = true, 
         <Text style={[styles.filterText, rideOnly && styles.filterTextSelected]}>RIDES</Text>
       </Pressable>
     </View>}
-    <Text style={styles.intro}>{!isOwnPark
-      ? 'Explore this fan’s park coins and collection progress.'
-      : rideOnly ? 'Choose an uncollected ride coin or open one you already own.'
-      : savedGoalReportedDown && nearbyRideReportedOpen && nearbyRideId
-      ? 'Your saved ride is reported down. This nearby uncollected ride is reported open; check the official park app before heading over.'
-      : nearbyRideReportedOpen && nearbyRideId
-      ? 'The nearest uncollected ride reported open is highlighted. Check the official park app before heading over.'
-      : nearbyRideId && !goalTaskId
-      ? 'The nearest uncollected coin area is highlighted. Open its coin to make it your goal.'
-      : 'Choose your next coin or open one from your collection.'}</Text>
     {expanded && <TextInput
       value={query}
       onChangeText={setQuery}
@@ -86,12 +81,10 @@ export default function ParkRideDirectory({ rides, completed, isOwnPark = true, 
       const goal = task.id === goalTaskId;
       const nearby = !owned && !goal && task.id === nearbyRideId;
       const row = <View style={[styles.row, (goal || nearby) && styles.goalRow]}>
-        <View style={[styles.coin, owned && styles.ownedCoin,
-          !owned && { backgroundColor: 'transparent', borderWidth: 0 }]}>
-          {owned && task.coin_url ? <Image source={{ uri: task.coin_url }}
-            contentFit="contain" style={styles.coinArt} />
-            : <MysteryCoinArtwork size={42} />}
-        </View>
+        {owned
+          ? <ShelfCoin coinUrl={task.coin_url} size={42}
+              level={completed.find(coin => coin.id === task.id)?.coin_level ?? null} />
+          : <CoinSocket size={42} coinUrl={task.coin_url} onLight goal={goal} />}
         <View style={styles.copy}>
           <Text style={styles.rideName} numberOfLines={2}>{task.name}</Text>
           <Text style={[styles.status, (goal || nearby) && styles.goalStatus]} numberOfLines={1}>{owned
@@ -105,21 +98,24 @@ export default function ParkRideDirectory({ rides, completed, isOwnPark = true, 
       return <View key={task.id} style={styles.rowWrap}>
         {owned
           ? <TaskCoinModal task={task} trigger={row} readOnly={!isOwnPark}
+              level={completed.find(coin => coin.id === task.id)?.coin_level ?? null}
               onPlayInLine={rideIds.has(task.id) && onPlayInLine ? () => onPlayInLine(task) : undefined}
               timesCompleted={completed.find(coin => coin.id === task.id)?.times_completed} />
           : <UnfoundCoinModal task={task} trigger={row}
+              kind={rideIds.size > 0 ? rideIds.has(task.id) ? 'ride' : 'coin' : undefined}
               onChooseGoal={onChooseGoal ? () => onChooseGoal(task.id) : undefined}
               onPlayInLine={rideIds.has(task.id) && onPlayInLine ? () => onPlayInLine(task) : undefined}
               onShowOnMap={onShowOnMap ? () => onShowOnMap(task) : undefined} />}
       </View>;
     })}
     {expanded && visible.length === 0 && <Text style={styles.empty}>No coins match that name.</Text>}
-    {filtered.length > 5 && <Pressable accessibilityRole="button"
-      accessibilityLabel={expanded ? 'Show fewer coins' : `Show all ${filtered.length} coins`}
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
+      accessibilityLabel={expanded ? 'Close the coin guide' : `Open the coin guide, ${filtered.length} coins`}
       onPress={() => { setExpanded(!expanded); setQuery(''); }}
       style={styles.toggle}>
-      <Text style={styles.toggleText}>{expanded ? 'SHOW FEWER COINS' : `SEE ALL ${filtered.length} COINS`}</Text>
-    </Pressable>}
+      <GameIcon name={expanded ? 'close' : 'search'} size={22} />
+      <Text style={styles.toggleText}>{expanded ? 'CLOSE COIN GUIDE' : `FIND A COIN (${filtered.length})`}</Text>
+    </Pressable>
   </View>;
 }
 
@@ -158,7 +154,8 @@ const styles = StyleSheet.create({
   chevron: { fontFamily: 'Knockout', fontSize: 28, color: '#0869aa', lineHeight: 31 },
   empty: { fontFamily: 'Knockout', color: '#386783', fontSize: 15,
     textAlign: 'center', paddingVertical: 18 },
-  toggle: { backgroundColor: '#ffcb3e', borderColor: '#c57e12', borderWidth: 2,
-    borderRadius: 10, alignItems: 'center', marginTop: 10, paddingVertical: 10 },
-  toggleText: { fontFamily: 'Shark', color: '#0b4f83', fontSize: 16 },
+  toggle: { flexDirection: 'row', justifyContent: 'center', gap: 8, backgroundColor: '#ffcf3b',
+    borderColor: '#ffffff', borderWidth: 2, borderBottomWidth: 4, borderBottomColor: '#d99a00',
+    borderRadius: 12, alignItems: 'center', marginTop: 8, paddingVertical: 9 },
+  toggleText: { fontFamily: 'Shark', color: '#05346e', fontSize: 16 },
 });

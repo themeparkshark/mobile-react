@@ -3,14 +3,9 @@ import { chunk } from 'lodash';
 import { useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
 import { ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
-import getArchivedTasks from '../api/endpoints/parks/getArchivedTasks';
-import getSecretTasks from '../api/endpoints/parks/getSecretTasks';
-import getTasks from '../api/endpoints/parks/getTasks';
 import getWikiTimes, { type WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
-import getCompletedArchivedTasks from '../api/endpoints/players/parks/getCompletedArchivedTasks';
-import getCompletedSecretTasks from '../api/endpoints/players/parks/getCompletedSecretTasks';
-import getCompletedTasks from '../api/endpoints/players/parks/getCompletedTasks';
-import getVisitedPark from '../api/endpoints/players/visited-parks/getPark';
+import { loadParkShelf } from '../services/collection/parkShelfPrefetch';
+import Ribbon from '../components/Ribbon';
 import InformationModal from '../components/InformationModal';
 import Loading from '../components/Loading';
 import ParkTrophyModal from '../components/ParkTrophyModal';
@@ -49,7 +44,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const { width } = useWindowDimensions();
   // Keep the familiar five-coin rows inside their shelves on smaller phones.
   const shelfCoinSize = Math.max(40, Math.min(62, (width - 88) / 5));
-  const { park, player, earnedCoin } = route.params as { park: number; player: number; earnedCoin?: EarnedShelfArrival };
+  const { park, player, earnedCoin, openMastery, focusCoin } = route.params as {
+    park: number; player: number; earnedCoin?: EarnedShelfArrival;
+    /** "Upgrade Your Coin": open mastery as soon as the coin lands (one hop). */
+    openMastery?: boolean;
+    /** A coin link from elsewhere: scroll to its slot and open it. */
+    focusCoin?: { assetId: number };
+  };
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const isFocused = useIsFocused();
   const receivedArrival = useRef(false);
@@ -81,7 +82,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const [rideOnly, setRideOnly] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const checklistOffset = useRef(0);
-  const coinShelfOffset = useRef(0);
+  const guideOffset = useRef(0);
   const secretShelfOffset = useRef(0);
   const reducedMotion = useReducedGameMotion();
   useEffect(() => { setRideOnly(false); }, [park]);
@@ -108,6 +109,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     if (arrivalSlot && earnedCoin) setInspection({ section: arrivalSlot.section, taskId: arrivalSlot.task.id, key: earnedCoin.attemptId });
     closeArrival();
   };
+  const landArrival = () => {
+    setLandedKey(requestKey);
+    if (openMastery) setTimeout(inspectArrival, reducedMotion ? 0 : 520);
+  };
   useEffect(() => {
     if (wasFocused.current && !isFocused && requestKey) {
       setClosedKey(requestKey);
@@ -117,6 +122,30 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   }, [isFocused, requestKey, navigation]);
   useEffect(() => { setInspection(null); }, [park, player]);
   useEffect(() => { if (!isFocused) setInspection(null); }, [isFocused]);
+  // A coin link from another screen lands here: scroll to its slot and open it once.
+  const focusSlotRef = useRef<View>(null);
+  const handledFocus = useRef<number | null>(null);
+  const focusAssetId = typeof focusCoin?.assetId === 'number' ? focusCoin.assetId : null;
+  const focusSlot = focusAssetId && !loading ? ((): { section: ShelfSection; task: TaskType | SecretTaskType } | null => {
+    for (const [section, done] of [['normal', completedTasks], ['secret', completedSecretTasks], ['archived', completedArchivedTasks]] as const) {
+      const task = (done as ReadonlyArray<TaskType | SecretTaskType>).find(item => item.asset_id === focusAssetId);
+      if (task) return { section, task };
+    }
+    return null;
+  })() : null;
+  useEffect(() => {
+    if (!focusSlot || !isFocused || requestKey || handledFocus.current === focusAssetId) return undefined;
+    handledFocus.current = focusAssetId;
+    const timer = setTimeout(() => {
+      const content = contentRef.current;
+      if (content) focusSlotRef.current?.measureLayout(content, (_x, y) => {
+        scrollRef.current?.scrollTo({ y: Math.max(0, y - 180), animated: !reducedMotion });
+      }, () => undefined);
+      setInspection({ section: focusSlot.section, taskId: focusSlot.task.id, key: Date.now() });
+      navigation.setParams({ focusCoin: undefined });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [focusSlot?.section, focusSlot?.task.id, isFocused, requestKey, focusAssetId, reducedMotion, navigation]);
   const parkTripGoal = canChooseGoal && tripGoalData?.goal?.park_id === Number(park)
     ? tripGoalData.goal : null;
   const goalPlan = parkTripGoal?.coin_owned ? tripGoalData?.goal_plan : null;
@@ -159,22 +188,6 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     }
   }, [isFocused, tutorialReady, loading, tutorialActive, hasCompleted, startTutorial]);
 
-  const hasCompletedTask = (task: number) => {
-    return completedTasks.find((completedTask) => completedTask.id === task);
-  };
-
-  const hasCompletedSecretTask = (secretTask: number) => {
-    return completedSecretTasks.find(
-      (completedSecretTask) => completedSecretTask.id === secretTask
-    );
-  };
-
-  const hasCompletedArchivedTask = (task: number) => {
-    return completedArchivedTasks.find(
-      (archivedTask) => archivedTask.id === task
-    );
-  };
-
   const silver =
     currentPark && currentPark.park_coins_count >= 50
       ? require('../../assets/images/screens/park/silver.png')
@@ -202,12 +215,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     let active = true;
     void (async () => {
       try {
-        const [visitedPark, available, secret, completed, completedSecret, archived, completedArchived] =
-          await Promise.all([
-            getVisitedPark(park, player), getTasks(park), getSecretTasks(park),
-            getCompletedTasks(park, player), getCompletedSecretTasks(park, player),
-            getArchivedTasks(park), getCompletedArchivedTasks(park, player),
-          ]);
+        const { visitedPark, available, secret, completed, completedSecret, archived, completedArchived } =
+          await loadParkShelf(Number(park), Number(player));
         if (!active) return;
         setCurrentPark(visitedPark);
         setTasks(available);
@@ -256,6 +265,69 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     const interval = setInterval(() => void refresh(), 60_000);
     return () => { active = false; clearInterval(interval); request?.abort(); };
   }, [park, canChooseGoal, inThisPark]));
+
+  // One slot size for earned coins and empty sockets, so the shelf reads as one row.
+  const coinSize = Math.min(60, shelfCoinSize);
+  const shelfPanel = { backgroundColor: '#0768b9', borderWidth: 3, borderColor: '#fff', borderRadius: 20,
+    paddingTop: 34, paddingHorizontal: 10, paddingBottom: 12, shadowColor: '#05346e', shadowOpacity: 0.22,
+    shadowOffset: { width: 0, height: 4 }, shadowRadius: 8 } as const;
+  const completedFor = (section: ShelfSection) => (section === 'secret' ? completedSecretTasks
+    : section === 'archived' ? completedArchivedTasks : completedTasks) as ReadonlyArray<TaskType | SecretTaskType>;
+  const rideKind = (taskId: number): 'ride' | 'coin' | undefined => currentPark?.ride_passport_task_ids?.length
+    ? currentPark.ride_passport_task_ids.includes(taskId) ? 'ride' : 'coin' : undefined;
+  const shelfRows = (section: ShelfSection, list: ReadonlyArray<TaskType | SecretTaskType>) => chunk(list, 5).map((row, rowIndex) => (
+    <View key={rowIndex} style={{ paddingBottom: 14 }}>
+      <View style={{ position: 'relative', height: coinSize + 43 }}>
+        <ParkShelfArtwork variant={section} height={55} />
+        <View style={{ flexDirection: 'row', justifyContent: 'center', position: 'absolute', top: 4, width: '100%' }}>
+          {row.map((task, index) => {
+            const owned = completedFor(section).find(done => done.id === task.id);
+            const arriving = matchesArrival(section, task.id);
+            const hidden = arriving && !!arrival.target && landedKey !== requestKey;
+            const focused = focusSlot?.section === section && focusSlot.task.id === task.id;
+            return <View key={task.id} style={{ paddingLeft: index === 0 ? 0 : 7 }}>
+              {owned ? (
+                <View collapsable={false}
+                  ref={arriving ? slotRef : focused ? focusSlotRef : undefined}
+                  onLayout={arriving ? arrival.notifyLayout : undefined}
+                  pointerEvents={hidden ? 'none' : 'auto'}
+                  style={{ width: coinSize, height: coinSize, opacity: hidden ? 0 : 1 }}>
+                  <TaskCoinModal
+                    openRequestKey={inspectionKey(section, task.id)}
+                    size={coinSize}
+                    phase={rowIndex * 5 + index}
+                    task={task}
+                    isSecretTask={section === 'secret'}
+                    level={owned.coin_level ?? null}
+                    igniteKey={arriving && landedKey === requestKey ? requestKey ?? undefined : undefined}
+                    onPlayInLine={section === 'normal' && canChooseGoal && inThisPark &&
+                      currentPark?.ride_passport_task_ids?.includes(task.id)
+                      ? () => openRideLinePlay(task as TaskType) : undefined}
+                    timesCompleted={owned.times_completed ?? 0}
+                    readOnly={!canChooseGoal}
+                  />
+                </View>
+              ) : section === 'normal' ? (
+                <UnfoundCoinModal task={task} size={coinSize} kind={rideKind(task.id)}
+                  isGoal={parkTripGoal?.task_id === task.id}
+                  onPlayInLine={canChooseGoal && inThisPark &&
+                    currentPark?.ride_passport_task_ids?.includes(task.id)
+                    ? () => openRideLinePlay(task as TaskType) : undefined}
+                  onChooseGoal={canChooseGoal ? () => chooseTripGoal(task.id).then(() => undefined) : undefined}
+                  onShowOnMap={canChooseGoal && inThisPark
+                    ? () => RootNavigation.navigate('Explore', {
+                      focusRide: { parkId: Number(park), task },
+                    }) : undefined} />
+              ) : (
+                <UnfoundCoinModal task={task} size={coinSize} isSecret={section === 'secret'}
+                  isArchived={section === 'archived'} />
+              )}
+            </View>;
+          })}
+        </View>
+      </View>
+    </View>
+  ));
 
   return (
     <Wrapper>
@@ -306,31 +378,23 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
             {currentPark && tasks && secretTasks && (
               <ScrollView ref={scrollRef} scrollEnabled={!arrival.target} onContentSizeChange={arrival.notifyLayout}>
                 <View ref={contentRef} collapsable={false}>
-                <View
-                  style={{
-                    paddingTop: 24,
-                    paddingLeft: 16,
-                    paddingRight: 16,
-                    paddingBottom: 24,
-                  }}
-                >
+                <View style={{ paddingTop: 16, paddingHorizontal: 16, paddingBottom: 14 }}>
                   <ParkCollectionHeader
                     parkName={currentPark.display_name ?? currentPark.name}
                     isOwnPark={canChooseGoal}
                     collected={hasRideCoinProgress ? rideCoinsCollected : 0}
                     available={hasRideCoinProgress ? rideCoinsAvailable : 0}
                     completionRate={hasRideCoinProgress ? headlineRate : 0}
+                    holdCount={!!arrival.target && landedKey !== requestKey && !!earnedCoin?.firstCollection}
+                    tickKey={landedKey && landedKey === requestKey && earnedCoin?.firstCollection ? landedKey : null}
                     ridePassportCollected={currentPark.ride_passport_collected}
                     ridePassportAvailable={currentPark.ride_passport_available}
                     onOpenRidePassport={currentPark.ride_passport_task_ids?.length
                       ? () => {
                         setRideOnly(true);
-                        scrollRef.current?.scrollTo({ y: checklistOffset.current, animated: !reducedMotion });
+                        scrollRef.current?.scrollTo({ y: checklistOffset.current + guideOffset.current, animated: !reducedMotion });
                       } : undefined}
                     onOpenStampBook={canChooseGoal ? () => RootNavigation.navigate('StampBook') : undefined}
-                    onBrowseCoins={tasks.length > 0 ? () => scrollRef.current?.scrollTo({
-                      y: Math.max(0, checklistOffset.current + coinShelfOffset.current - 12), animated: !reducedMotion,
-                    }) : undefined}
                     onBrowseSecrets={secretTasks.length > 0 ? () => scrollRef.current?.scrollTo({
                       y: Math.max(0, checklistOffset.current + secretShelfOffset.current - 12), animated: !reducedMotion,
                     }) : undefined}
@@ -345,213 +409,53 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     goalStale={tripGoalStale}
                     goalReportedDown={goalReportedDown}
                     alternateRideName={alternateRide?.task.name}
-                    parkCoins={currentPark.park_coins_count}
-                    taskMilestones={currentPark.completed_tasks_count}
                     secretMilestones={currentPark.completed_secret_tasks_count}
                   />
                 </View>
                 <View
                   onLayout={event => { checklistOffset.current = event.nativeEvent.layout.y; }}
-                  style={{
-                    paddingLeft: 16,
-                    paddingRight: 16,
-                    paddingBottom: 32,
-                  }}
+                  style={{ paddingHorizontal: 16, paddingBottom: 32 }}
                 >
-                  {tasks && tasks.length > 0 && (
-                    <View style={{
-                      backgroundColor: '#075d9c',
-                      borderWidth: 2, borderColor: '#fff',
-                      borderRadius: 18,
-                      padding: 12,
-                      marginBottom: 16,
-                    }}>
-                      <Text
-                        style={{
-                          textAlign: 'center',
-                          paddingBottom: 16,
-                          fontFamily: 'Shark',
-                          textTransform: 'uppercase',
-                          fontSize: 28,
-                          color: 'white',
-                          textShadowColor: 'rgba(0, 0, 0, .5)',
-                          textShadowOffset: {
-                            width: 1,
-                            height: 1,
-                          },
-                          textShadowRadius: 0,
-                        }}
-                      >
-                        {passportMode ? 'RIDE PASSPORT CHECKLIST' : 'PARK COIN CHECKLIST'}
-                      </Text>
-                      <ParkRideDirectory
-                        rides={tasks}
-                        completed={completedTasks}
-                        isOwnPark={canChooseGoal}
-                        goalTaskId={parkTripGoal?.task_id}
-                        nearbyRideId={goalReportedDown ? alternateRide?.task.id : nearbySuggestion?.task.id}
-                        nearbyRideReportedOpen={goalReportedDown ? !!alternateRide : !!nearbyReportedOpenRide}
-                        savedGoalReportedDown={goalReportedDown}
-                        rideTaskIds={currentPark.ride_passport_task_ids}
-                        rideOnly={passportMode}
-                        onRideOnlyChange={setRideOnly}
-                        onChooseGoal={canChooseGoal
-                          ? (taskId) => chooseTripGoal(taskId).then(() => undefined)
-                          : undefined}
-                        onShowOnMap={canChooseGoal && inThisPark
-                          ? (task) => RootNavigation.navigate('Explore', {
-                            focusRide: { parkId: Number(park), task },
-                          }) : undefined}
-                        onPlayInLine={canChooseGoal && inThisPark ? openRideLinePlay : undefined}
-                      />
-                      <Text onLayout={event => { coinShelfOffset.current = event.nativeEvent.layout.y; }}
-                        style={{ fontFamily: 'Shark', color: '#fff',
-                        fontSize: 19, textAlign: 'center', marginTop: 18,
-                        marginBottom: 8 }}>
-                        COIN SHELF
-                      </Text>
-                      {chunk(tasks, 5).map(
-                        (tasks: TaskType[], index: number) => (
-                          <View key={index} style={{ paddingBottom: 16 }}>
-                            <View style={{ position: 'relative', height: 105 }}>
-                              <ParkShelfArtwork variant="normal" height={55} />
-                              <View
-                                style={{
-                                  flexDirection: 'row',
-                                  justifyContent: 'center',
-                                  position: 'absolute',
-                                  top: 0,
-                                  width: '100%',
-                                }}
-                              >
-                                {tasks.map((task, index) => (
-                                  <View
-                                    key={task.id}
-                                    style={{
-                                      paddingLeft: index === 0 ? 0 : 6,
-                                      borderRadius: 12,
-                                      borderWidth: parkTripGoal?.task_id === task.id ? 2 : 0,
-                                      borderColor: '#fbbf24',
-                                    }}
-                                  >
-                                    {hasCompletedTask(task.id) ? (
-                                      <View collapsable={false}
-                                        ref={matchesArrival('normal', task.id) ? slotRef : undefined}
-                                        onLayout={matchesArrival('normal', task.id) ? arrival.notifyLayout : undefined}
-                                        pointerEvents={matchesArrival('normal', task.id) && arrival.target && landedKey !== requestKey ? 'none' : 'auto'}
-                                        style={{ width: Math.min(60, shelfCoinSize), height: Math.min(60, shelfCoinSize),
-                                          opacity: matchesArrival('normal', task.id) && arrival.target && landedKey !== requestKey ? 0 : 1 }}>
-                                      <TaskCoinModal
-                                        openRequestKey={inspectionKey('normal', task.id)}
-                                        size={Math.min(60, shelfCoinSize)}
-                                        task={task}
-                                        onPlayInLine={canChooseGoal && inThisPark &&
-                                          currentPark.ride_passport_task_ids?.includes(task.id)
-                                          ? () => openRideLinePlay(task) : undefined}
-                                        timesCompleted={
-                                          completedTasks.find(
-                                            (completedTask) =>
-                                              completedTask.id === task.id
-                                          )?.times_completed ?? 0
-                                        }
-                                        readOnly={!canChooseGoal}
-                                      />
-                                      </View>
-                                    ) : (
-                                      <UnfoundCoinModal task={task} size={shelfCoinSize}
-                                        onPlayInLine={canChooseGoal && inThisPark &&
-                                          currentPark.ride_passport_task_ids?.includes(task.id)
-                                          ? () => openRideLinePlay(task) : undefined}
-                                        onChooseGoal={canChooseGoal ? () => chooseTripGoal(task.id).then(() => undefined) : undefined}
-                                        onShowOnMap={canChooseGoal && inThisPark
-                                          ? () => RootNavigation.navigate('Explore', {
-                                            focusRide: { parkId: Number(park), task },
-                                          }) : undefined} />
-                                    )}
-                                  </View>
-                                ))}
-                              </View>
-                            </View>
-                          </View>
-                        )
-                      )}
+                  {tasks.length > 0 && (
+                    <View style={{ marginBottom: 16 }}>
+                      <View style={{ marginHorizontal: 18, marginBottom: -26, zIndex: 2 }}>
+                        <Ribbon text={passportMode ? 'Ride Passport' : 'Ride Coins'} />
+                      </View>
+                      <View style={shelfPanel}>
+                        {shelfRows('normal', passportMode
+                          ? tasks.filter(task => currentPark.ride_passport_task_ids?.includes(task.id)) : tasks)}
+                        <View onLayout={event => { guideOffset.current = event.nativeEvent.layout.y; }}>
+                          <ParkRideDirectory
+                            rides={tasks}
+                            completed={completedTasks}
+                            isOwnPark={canChooseGoal}
+                            goalTaskId={parkTripGoal?.task_id}
+                            nearbyRideId={goalReportedDown ? alternateRide?.task.id : nearbySuggestion?.task.id}
+                            nearbyRideReportedOpen={goalReportedDown ? !!alternateRide : !!nearbyReportedOpenRide}
+                            savedGoalReportedDown={goalReportedDown}
+                            rideTaskIds={currentPark.ride_passport_task_ids}
+                            rideOnly={passportMode}
+                            onRideOnlyChange={setRideOnly}
+                            onChooseGoal={canChooseGoal
+                              ? (taskId) => chooseTripGoal(taskId).then(() => undefined)
+                              : undefined}
+                            onShowOnMap={canChooseGoal && inThisPark
+                              ? (task) => RootNavigation.navigate('Explore', {
+                                focusRide: { parkId: Number(park), task },
+                              }) : undefined}
+                            onPlayInLine={canChooseGoal && inThisPark ? openRideLinePlay : undefined}
+                          />
+                        </View>
+                      </View>
                     </View>
                   )}
-                  {secretTasks && secretTasks.length > 0 && (
-                    <View onLayout={event => { secretShelfOffset.current = event.nativeEvent.layout.y; }} style={{
-                      backgroundColor: '#075d9c',
-                      borderWidth: 2, borderColor: '#fff',
-                      borderRadius: 18,
-                      padding: 12,
-                      marginBottom: 16,
-                    }}>
-                      <Text
-                        style={{
-                          textAlign: 'center',
-                          paddingBottom: 16,
-                          fontFamily: 'Shark',
-                          textTransform: 'uppercase',
-                          fontSize: 28,
-                          color: 'white',
-                          textShadowColor: 'rgba(0, 0, 0, .5)',
-                          textShadowOffset: {
-                            width: 1,
-                            height: 1,
-                          },
-                          textShadowRadius: 0,
-                        }}
-                      >
-                        {labels.secret_tasks}
-                      </Text>
-                      {chunk(secretTasks, 5).map(
-                        (secretTasks: SecretTaskType[], index: number) => (
-                          <View key={index} style={{ paddingBottom: 16 }}>
-                            <View style={{ position: 'relative', height: 105 }}>
-                              <ParkShelfArtwork variant="secret" height={55} />
-                              <View
-                                style={{
-                                  flexDirection: 'row',
-                                  justifyContent: 'center',
-                                  position: 'absolute',
-                                  top: 0,
-                                  width: '100%',
-                                }}
-                              >
-                                {secretTasks.map((secretTask, index) => (
-                                  <View
-                                    key={secretTask.id}
-                                    style={{
-                                      paddingLeft: index === 0 ? 0 : 6,
-                                    }}
-                                  >
-                                    {hasCompletedSecretTask(secretTask.id) ? (
-                                      <View collapsable={false}
-                                        ref={matchesArrival('secret', secretTask.id) ? slotRef : undefined}
-                                        onLayout={matchesArrival('secret', secretTask.id) ? arrival.notifyLayout : undefined}
-                                        pointerEvents={matchesArrival('secret', secretTask.id) && arrival.target && landedKey !== requestKey ? 'none' : 'auto'}
-                                        style={{ width: Math.min(60, shelfCoinSize), height: Math.min(60, shelfCoinSize),
-                                          opacity: matchesArrival('secret', secretTask.id) && arrival.target && landedKey !== requestKey ? 0 : 1 }}>
-                                      <TaskCoinModal
-                                        openRequestKey={inspectionKey('secret', secretTask.id)}
-                                        size={Math.min(60, shelfCoinSize)}
-                                        task={secretTask}
-                                        isSecretTask
-                                        readOnly={!canChooseGoal}
-                                        timesCompleted={completedSecretTasks.find(
-                                          completed => completed.id === secretTask.id
-                                        )?.times_completed}
-                                      />
-                                      </View>
-                                    ) : (
-                                      <UnfoundCoinModal task={secretTask} isSecret size={shelfCoinSize} />
-                                    )}
-                                  </View>
-                                ))}
-                              </View>
-                            </View>
-                          </View>
-                        )
-                      )}
+                  {secretTasks.length > 0 && (
+                    <View onLayout={event => { secretShelfOffset.current = event.nativeEvent.layout.y; }}
+                      style={{ marginBottom: 16 }}>
+                      <View style={{ marginHorizontal: 18, marginBottom: -26, zIndex: 2 }}>
+                        <Ribbon text={labels.secret_tasks || 'Secret Coins'} />
+                      </View>
+                      <View style={shelfPanel}>{shelfRows('secret', secretTasks)}</View>
                     </View>
                   )}
                   <View style={{
@@ -662,86 +566,12 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                   </View>
                   {canChooseGoal && <ParkDayRecapCard parkId={Number(park)}
                     atPark={locationPark?.id === Number(park)} refreshVersion={refreshVersion} />}
-                  {archivedTasks && archivedTasks.length > 0 && (
-                    <View style={{
-                      backgroundColor: '#075d9c',
-                      borderWidth: 2, borderColor: '#fff',
-                      borderRadius: 18,
-                      padding: 12,
-                      marginBottom: 16,
-                    }}>
-                      <Text
-                        style={{
-                          textAlign: 'center',
-                          paddingBottom: 16,
-                          fontFamily: 'Shark',
-                          textTransform: 'uppercase',
-                          fontSize: 28,
-                          color: 'white',
-                          textShadowColor: 'rgba(0, 0, 0, .5)',
-                          textShadowOffset: {
-                            width: 1,
-                            height: 1,
-                          },
-                          textShadowRadius: 0,
-                        }}
-                      >
-                        {labels.archived_tasks}
-                      </Text>
-                      {chunk(archivedTasks, 5).map(
-                        (rowTasks: TaskType[], rowIndex: number) => (
-                          <View key={rowIndex} style={{ paddingBottom: 16 }}>
-                            <View style={{ position: 'relative', height: 105 }}>
-                              <ParkShelfArtwork variant="archived" height={55} />
-                              <View
-                                style={{
-                                  flexDirection: 'row',
-                                  justifyContent: 'center',
-                                  position: 'absolute',
-                                  top: 0,
-                                  width: '100%',
-                                }}
-                              >
-                                {rowTasks.map((archivedTask, index) => (
-                                  <View
-                                    key={archivedTask.id}
-                                    style={{
-                                      paddingLeft: index === 0 ? 0 : 6,
-                                    }}
-                                  >
-                                    {hasCompletedArchivedTask(
-                                      archivedTask.id
-                                    ) ? (
-                                      <View collapsable={false}
-                                        ref={matchesArrival('archived', archivedTask.id) ? slotRef : undefined}
-                                        onLayout={matchesArrival('archived', archivedTask.id) ? arrival.notifyLayout : undefined}
-                                        pointerEvents={matchesArrival('archived', archivedTask.id) && arrival.target && landedKey !== requestKey ? 'none' : 'auto'}
-                                        style={{ width: Math.min(60, shelfCoinSize), height: Math.min(60, shelfCoinSize),
-                                          opacity: matchesArrival('archived', archivedTask.id) && arrival.target && landedKey !== requestKey ? 0 : 1 }}>
-                                      <TaskCoinModal
-                                        openRequestKey={inspectionKey('archived', archivedTask.id)}
-                                        size={Math.min(60, shelfCoinSize)}
-                                        task={archivedTask}
-                                        readOnly={!canChooseGoal}
-                                        timesCompleted={
-                                          completedArchivedTasks.find(
-                                            (completedTask) =>
-                                              completedTask.id ===
-                                              archivedTask.id
-                                          )?.times_completed ?? 0
-                                        }
-                                      />
-                                      </View>
-                                    ) : (
-                                      <UnfoundCoinModal task={archivedTask} isArchived size={shelfCoinSize} />
-                                    )}
-                                  </View>
-                                ))}
-                              </View>
-                            </View>
-                          </View>
-                        )
-                      )}
+                  {archivedTasks.length > 0 && (
+                    <View style={{ marginBottom: 16 }}>
+                      <View style={{ marginHorizontal: 18, marginBottom: -26, zIndex: 2 }}>
+                        <Ribbon text={labels.archived_tasks || 'Past Event Coins'} />
+                      </View>
+                      <View style={shelfPanel}>{shelfRows('archived', archivedTasks)}</View>
                     </View>
                   )}
                 </View>
@@ -752,7 +582,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
           {isFocused && arrival.target && arrivalSlot && earnedCoin && requestKey && closedKey !== requestKey && (
             <CoinShelfArrival key={requestKey} target={arrival.target} coinUrl={arrivalSlot.task.coin_url}
               rideName={arrivalSlot.task.name} firstCollection={earnedCoin.firstCollection}
-              onLand={() => setLandedKey(requestKey)} onInspect={inspectArrival} onClose={closeArrival} />
+              parkName={currentPark?.display_name ?? currentPark?.name}
+              onLand={landArrival} onInspect={inspectArrival} onClose={closeArrival} />
           )}
           {isFocused && requestKey && closedKey !== requestKey && !loading &&
             (!arrivalSlot || arrival.failed) && <View style={{ position: 'absolute', bottom: 52, left: 20, right: 20,
