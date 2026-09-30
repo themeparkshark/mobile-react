@@ -208,7 +208,7 @@ Applied to the isolated backend and the original LOCAL backend serving the previ
 
 ## Validation and remaining work
 
-TypeScript and git diff checks pass. Full app checks: 232 tests. Focused backend
+TypeScript and git diff checks pass. Full app checks: 237 tests. Focused backend
 checks: seven tests, 53 assertions. PHP 8.5 emits an existing PDO deprecation. The
 legacy full migration suite needs Doctrine DBAL; unrelated test-discovery warnings
 remain and are not claimed clean.
@@ -299,3 +299,34 @@ still 180 Coins / seven Tickets / 185 Energy. The map is usable after Fast Refre
 This does not prove real GPS accuracy, exact adjacent-ride discrimination or
 battery behavior. Old queued suggestions are preserved for explicit review, not
 silently deleted. No ride suggestion was confirmed and no social post was sent.
+
+
+## Souvenir-first reward finishing
+
+A new ride coin now leads the post-win summary, with one collection action before
+upgrade advice. Extra currencies, Rush details, VIP comparison and stamp rewards
+sit in an expandable, illustrated receipt. Confirmed team takeover remains visible
+because it explains the player's impact. Receipt amounts appear immediately at
+their confirmed values; there is no temporary +0 or delayed count-up on opening.
+No-coin completions bypass the coin catch and show their real reward receipt.
+
+Repeat coins use one short feedback beat and lift (about 900 ms of scheduled UI
+motion, 1100 ms completion fallback), rather than the full first-discovery wobble.
+Their summary settles immediately without long hero loops. Confirmed upgrade
+readiness still determines their next action. Reduced motion remains static and
+all primary actions remain usable. VIP/team links now navigate only after native
+reward-modal dismissal, with pending navigation cleared on unmount.
+
+Native iOS 18.6 review used read-only first/repeat reward fixtures with the actual
+Space Mountain coin artwork from the local public catalog. It verified collapsed
+hierarchy, expanded first payouts/stamp, exact immediate repeat receipt amounts,
+collection count, the missing-Part mastery hint, and first reward -> coin detail
+after modal dismissal. No fixture reward or upgrade was granted. Source checks:
+237 passing tests, TypeScript and diff checks clean.
+
+This is not the complete coin-to-slot signature animation: the current post-win
+handoff still opens the matching mastery detail through CoinShelf. It must carry
+the earned collectible into the original Profile park's exact shelf slot. Physical
+small-phone and native reduced-motion review, full Adventure Ticket progression,
+crew contribution payoff, boss personality and longer play remain pending. The
+full six-part goal remains active.

@@ -5,10 +5,12 @@ import PostWinRewardsModal from '../components/PostWinRewardsModal';
 import CoinLevelingModal from '../components/CoinLevelingModal';
 import type { RideCoinLevelType } from '../models/ride-coin-level-type';
 
+const repeatPreview = __DEV__ && process.env.EXPO_PUBLIC_POST_WIN_REPEAT_PREVIEW === '1';
 const firstWinPreview = __DEV__ && process.env.EXPO_PUBLIC_POST_WIN_FIRST_PREVIEW === '1';
 const previewCoin: RideCoinLevelType = {
-  id: 1, ride_id: 1, ride_name: 'Space Mountain', coin_url: '',
-  current_level: 1, max_level: 5, times_collected: 1,
+  id: 53, ride_id: 1, ride_name: 'Space Mountain',
+  coin_url: 'https://assets.themeparkshark.com/mobile/production/assets/r6pPIyzacnukCvbqkMqjqEB8BczIujFYwhc4YDYB.png',
+  current_level: 1, max_level: 5, times_collected: repeatPreview ? 9 : 1,
   available_parts: firstWinPreview ? 1 : 2, energy_to_next_level: 10, parts_to_next_level: 2,
   required_parts: [], player_level_required: 1, is_unlocked: true,
   current_perks: [], next_level_perks: [],
@@ -26,6 +28,7 @@ export default function PostWinRewardsPreviewScreen() {
       <PostWinRewardsModal
         visible={showWin}
         rideName="Space Mountain"
+        taskCoinUrl={previewCoin.coin_url}
         rideControl={{ ride_name: 'Space Mountain', team: 'shark', points: 23, underdog: true, controller: 'shark',
           previous_controller: 'globe', flipped: true, captain: 1 }}
         playerId={1}
@@ -33,11 +36,11 @@ export default function PostWinRewardsPreviewScreen() {
         xpEarned={firstWinPreview ? 50 : 51}
         ridePartsEarned={firstWinPreview ? 1 : 2}
         energyEarned={10}
-        coinTimesCollected={1}
-        earnedEdition={firstWinPreview ? null : { id: 1, name: 'Starlight Crew', color: '#C39BFF',
+        coinTimesCollected={repeatPreview ? 9 : 1}
+        earnedEdition={firstWinPreview || repeatPreview ? null : { id: 1, name: 'Starlight Crew', color: '#C39BFF',
           project_title: 'The Missing Signal', source: 'Ride challenge',
           earned_at: '2026-09-24T12:00:00Z' }}
-        earnedStamp={{ id: 1, name: 'First Park Coin', rewards: {
+        earnedStamp={repeatPreview ? null : { id: 1, name: 'First Park Coin', rewards: {
           energy: 10, tickets: 0, xp: 50, coins: 0, title: null,
         } }}
         coinProgress={previewCoin}

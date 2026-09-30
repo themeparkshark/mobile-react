@@ -115,6 +115,21 @@ export default function CoinCatchReveal({
         return;
       }
 
+      if (!isNewCoin) {
+        // A repeat is a quick deposit: one lift, one tactile beat, no long wobble.
+        backdrop.value = withTiming(1, { duration: 100 });
+        flip.value = 1; title.value = 1;
+        scale.value = withSequence(withTiming(1.06, { duration: 160 }),
+          withTiming(1, { duration: 140 }));
+        at(160, () => { setBurst(true); success(); });
+        lift.value = withDelay(650, withTiming(-height * 0.18, { duration: 250 }));
+        coinOpacity.value = withDelay(650, withTiming(0, { duration: 250 }));
+        backdrop.value = withSequence(withTiming(1, { duration: 100 }),
+          withDelay(550, withTiming(0, { duration: 250 }, ok => { if (ok) runOnJS(finish)(); })));
+        at(1100, finish);
+        return;
+      }
+
       // Every visual beat is scheduled up front on the UI thread (withDelay), so
       // a busy JS thread can't stall or skip the animation. Haptics and sound
       // ride JS timers at the same offsets; finish is driven by the last beat.
@@ -244,7 +259,7 @@ export default function CoinCatchReveal({
       </View>
 
       <Animated.View style={[styles.titleWrap, { top: height * 0.42 + coinSize * 0.62 }, titleStyle]} pointerEvents="none">
-        <Text style={styles.kicker}>{isNewCoin ? 'NEW RIDE COIN!' : 'COIN COLLECTED!'}</Text>
+        <Text style={styles.kicker}>{isNewCoin ? 'NEW RIDE COIN!' : 'COIN ADDED!'}</Text>
         <Text style={styles.ride} numberOfLines={2}>{rideName}</Text>
       </Animated.View>
 

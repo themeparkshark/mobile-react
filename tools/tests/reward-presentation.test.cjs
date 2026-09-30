@@ -115,3 +115,59 @@ test('a lost park-shelf upgrade response reads back the confirmed level before o
   assert.equal(await modal.props.onLevelUp(13), true);
   assert.equal(spends, 1); assert.equal(reads, 2);
 });
+
+
+test('first souvenir keeps confirmed payouts in a toggleable receipt and chooses collection before upgrading', () => {
+  const rewards = rewardView(true); rewards.change({ onViewCoin() {}, coinProgress: {
+    current_level:1,max_level:5,is_unlocked:true,parts_to_next_level:2,available_parts:4,energy_to_next_level:10 }, playerEnergy:40 });
+  rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
+  const receipt = () => rewards.find(node => node.props?.accessibilityLabel?.startsWith('Reward receipt.'));
+  assert.equal(receipt().props.accessibilityState.expanded,false);
+  assert.equal(rewards.find(node => node.props?.children === 'Shark Coins'),undefined);
+  assert.equal(rewards.find(node => node.type === './YellowButton').props.text,'See Your Coin');
+  receipt().props.onPress(); rewards.render(); assert.equal(receipt().props.accessibilityState.expanded,true);
+  assert.ok(rewards.find(node => node.props?.children === 'Shark Coins'));
+  assert.ok(rewards.find(node => node.type === 'Text' && Array.isArray(node.props.children) && node.props.children.join('') === '+10'));
+  receipt().props.onPress(); rewards.render(); assert.equal(rewards.find(node => node.props?.children === 'Shark Coins'),undefined);
+  rewards.change({ visible:false }); rewards.change({ visible:true });
+  rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
+  assert.equal(receipt().props.accessibilityState.expanded,false);
+});
+test('a repeat coin uses a short once-only deposit and cancels pending feedback on skip', async () => {
+  let done=0,bursts=0;
+  const view=runtime('src/components/CoinCatchReveal.tsx',{}, {rideName:'Forbidden Journey',isNewCoin:false,
+    onDone(){done++;},onBurst(){bursts++;}});
+  await view.settle(); assert.equal(view.timers.size,2); // one feedback beat and a bounded completion fallback
+  const burst=Array.from(view.timers.values())[0]; burst(); assert.equal(bursts,1);
+  view.tree.props.onPress(); view.tree.props.onPress(); assert.equal(done,1);assert.equal(view.timers.size,0);
+  assert.equal(view.sounds.filter(sound=>sound==='tick').length,0);
+});
+test('a challenge with no confirmed ride coin skips the coin catch and exposes its receipt', () => {
+  const view=rewardView(true); view.change({coinTimesCollected:null});
+  assert.equal(view.find(node=>node.type==='./CoinCatchReveal'),undefined);
+  assert.ok(view.find(node=>node.props?.children==='Shark Coins'));
+  assert.equal(view.find(node=>node.type==='./YellowButton').props.text,'Continue Park');
+});
+
+
+test('receipt navigation waits for native dismissal and fires only once', () => {
+  const navigated=[]; let closes=0;
+  const view=runtime('src/components/PostWinRewardsModal.tsx', {
+    '../context/AuthProvider': {AuthContext:{value:{player:null}}},
+    '../hooks/useReducedGameMotion':{default:()=>true},
+    '../RootNavigation':{navigate:(...args)=>navigated.push(args)},
+  }, {visible:true,rideName:'Space Mountain',coinTimesCollected:1,coinsEarned:10,xpEarned:25,
+    ridePartsEarned:1,energyEarned:10,onClose(){closes++;}});
+  view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();
+  view.find(n=>n.props?.accessibilityLabel?.startsWith('Reward receipt.')).props.onPress();view.render();
+  view.find(n=>n.props?.accessibilityLabel?.startsWith('VIP would')).props.onPress();
+  assert.equal(closes,1);assert.deepEqual(navigated,[]);assert.equal(view.timers.size,0);
+  view.tree.props.onModalHide();view.tree.props.onModalHide();assert.deepEqual(navigated,[['Membership']]);
+});
+test('repeat summary settles without long hero loops and still offers an earned upgrade', () => {
+  const view=rewardView(false);view.change({coinTimesCollected:9,onViewCoin(){},playerEnergy:40,
+    coinProgress:{current_level:1,max_level:5,is_unlocked:true,available_parts:4,parts_to_next_level:2,energy_to_next_level:10}});
+  view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();
+  assert.equal(view.animations.filter(a=>a.started).length,0);
+  assert.equal(view.find(n=>n.type==='./YellowButton').props.text,'Upgrade Your Coin');
+});

@@ -194,29 +194,6 @@ function Sparkle({ delay, x, color }: { delay: number; x: number; color: string 
   );
 }
 
-/* Count once; reduced motion shows the confirmed amount immediately. */
-function AnimatedTickText({ value, delay, style, reducedMotion }: {
-  value: number; delay: number; style: any; reducedMotion: boolean;
-}) {
-  const anim = useRef(new Animated.Value(0)).current;
-  const [display, setDisplay] = useState(reducedMotion ? value : 0);
-  useEffect(() => {
-    if (reducedMotion || value <= 0) { setDisplay(value); return; }
-    setDisplay(0);
-    anim.setValue(0);
-    const listener = anim.addListener(({ value: v }) => setDisplay(Math.round(v)));
-    const animation = Animated.sequence([
-      Animated.delay(delay),
-      Animated.timing(anim, { toValue: value, duration: 600,
-        easing: Easing.out(Easing.cubic), useNativeDriver: false }),
-    ]);
-    animation.start();
-    return () => { animation.stop(); anim.removeListener(listener); };
-  }, [value, delay, reducedMotion, anim]);
-  return <Text style={style}>+{display.toLocaleString()}</Text>;
-}
-
-
 /* ─── Main component ─── */
 export default function PostWinRewardsModal({
   visible,
@@ -241,6 +218,9 @@ export default function PostWinRewardsModal({
   onClose,
 }: Props) {
   const { player } = useContext(AuthContext);
+  const afterHide = useRef<(() => void) | null>(null);
+  useEffect(() => () => { afterHide.current = null; }, []);
+  const closeTo = (destination: () => void) => { afterHide.current = destination; onClose(); };
   const isVip = !!player?.is_subscribed;
   const reducedMotion = useReducedGameMotion();
   const insets = useSafeAreaInsets();
@@ -249,7 +229,11 @@ export default function PostWinRewardsModal({
   useEffect(() => { setCoinArtFailed(false); }, [taskCoinUrl, visible]);
   // The coin catch plays first; the rewards summary animates in after it.
   const [caught, setCaught] = useState(false);
-  useEffect(() => { if (!visible) setCaught(false); }, [visible]);
+  const [receiptExpanded, setReceiptExpanded] = useState(false);
+  useEffect(() => {
+    if (!visible) { setCaught(false); setReceiptExpanded(false); }
+    else if (!hasCoin) setCaught(true);
+  }, [visible, hasCoin]);
   const missingParts = coinProgress
     ? Math.max(0, coinProgress.parts_to_next_level - (coinProgress.available_parts ?? 0)) : 0;
   const missingEnergy = coinProgress && playerEnergy !== null && playerEnergy !== undefined
@@ -296,7 +280,7 @@ export default function PostWinRewardsModal({
     if (!visible || !caught) return;
 
     const values = [cardScale, heroAnim, coinSpin, shelfPulse, buttonAnim, ...rowAnims];
-    if (reducedMotion) {
+    if (reducedMotion || coinTimesCollected !== 1) {
       values.forEach(value => value.setValue(1));
       coinGlow.setValue(0.5);
       return;
@@ -323,7 +307,7 @@ export default function PostWinRewardsModal({
     ];
     animations.forEach(animation => animation.start());
     return () => animations.forEach(animation => animation.stop());
-  }, [visible, caught, reducedMotion, cardScale, heroAnim, coinSpin, coinGlow, shelfPulse, buttonAnim, rowAnims]);
+  }, [visible, caught, reducedMotion, coinTimesCollected, cardScale, heroAnim, coinSpin, coinGlow, shelfPulse, buttonAnim, rowAnims]);
 
   const statRows = [
     {
@@ -368,7 +352,10 @@ export default function PostWinRewardsModal({
       animationInTiming={reducedMotion ? 120 : 250}
       animationOutTiming={reducedMotion ? 120 : 200}
       onBackButtonPress={caught ? onClose : undefined}
-      onModalHide={onHidden}
+      onModalHide={() => {
+        const next = afterHide.current; afterHide.current = null;
+        onHidden?.(); next?.();
+      }}
       onBackdropPress={caught ? onClose : undefined}
       backdropOpacity={0.92}
     >
@@ -381,7 +368,7 @@ export default function PostWinRewardsModal({
         }]}
         showsVerticalScrollIndicator={false}>
         {/* Sparkle particles floating behind everything */}
-        {!reducedMotion && sparkles.map((s, i) => (
+        {!reducedMotion && coinTimesCollected === 1 && sparkles.map((s, i) => (
           <Sparkle key={i} delay={s.delay} x={s.x} color={s.color} />
         ))}
 
@@ -435,7 +422,7 @@ export default function PostWinRewardsModal({
 
               {/* Rotating light rays */}
               <View style={styles.raysWrap}>
-                <LightRays color={earnedEdition?.color ?? '#4cdcff'} size={200} reducedMotion={reducedMotion} />
+                <LightRays color={earnedEdition?.color ?? '#4cdcff'} size={200} reducedMotion={reducedMotion || coinTimesCollected !== 1} />
               </View>
 
               {/* Animated glow behind coin */}
@@ -529,6 +516,25 @@ export default function PostWinRewardsModal({
               )}
             </Animated.View>
 
+            {rideControl && <RideControlBanner result={rideControl} playerId={playerId ?? null}
+              onPickTeam={() => closeTo(() => RootNavigation.navigate('TeamSelection', {}))} />}
+
+            {hasCoin && (statRows.length > 0 || rush || earnedStamp) && (
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: receiptExpanded }}
+                accessibilityLabel={`Reward receipt. ${receiptExpanded ? 'Hide' : 'Show'} confirmed bonuses`}
+                onPress={() => setReceiptExpanded(value => !value)} style={styles.receiptToggle}>
+                <View style={styles.receiptIcons}>
+                  {statRows.slice(0, 4).map(reward => <Image key={reward.label} source={reward.icon}
+                    style={styles.receiptIcon} contentFit="contain" />)}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.receiptTitle}>Reward receipt</Text>
+                  <Text style={styles.receiptHint}>{receiptExpanded ? 'Confirmed rewards from this win' : 'Your bonuses are safely collected'}</Text>
+                </View>
+                <Text style={styles.receiptChevron}>{receiptExpanded ? '−' : '+'}</Text>
+              </Pressable>
+            )}
+            {(!hasCoin || receiptExpanded) && <View>
             {rush && (
               <View style={styles.rushBonus} accessibilityLabel={`Rush bonus: ${rush.bonus_parts} extra Ride Parts and ${rush.bonus_xp} extra XP`}>
                 <Text style={styles.rushBonusTitle}>⚡ RUSH BONUS</Text>
@@ -537,9 +543,6 @@ export default function PostWinRewardsModal({
                 </Text>
               </View>
             )}
-
-            {rideControl && <RideControlBanner result={rideControl} playerId={playerId ?? null}
-              onPickTeam={() => { onClose(); RootNavigation.navigate('TeamSelection', {}); }} />}
 
             {/* ── Stat grid with glowing cards ── */}
             <View style={styles.statsGrid}>
@@ -582,13 +585,9 @@ export default function PostWinRewardsModal({
                     <Image source={reward.icon} style={styles.statIcon} contentFit="contain" />
                   </View>
 
-                  {/* Tick-up number */}
-                  <AnimatedTickText
-                    value={reward.amount}
-                    reducedMotion={reducedMotion}
-                    delay={700 + index * 100}
-                    style={[styles.statAmount, { color: reward.accent }]}
-                  />
+                  <Text style={[styles.statAmount, { color: reward.accent }]}>
+                    +{reward.amount.toLocaleString()}
+                  </Text>
                   <Text style={styles.statLabel}>{reward.label}</Text>
 
                   {/* Bottom accent line */}
@@ -606,7 +605,7 @@ export default function PostWinRewardsModal({
             {!isVip && (xpEarned > 0 || coinsEarned > 0) && (
               <Pressable style={styles.vipChip} accessibilityRole="button"
                 accessibilityLabel={`VIP would have doubled this win: plus ${xpEarned} XP and ${coinsEarned} Shark Coins. See VIP.`}
-                onPress={() => { onClose(); setTimeout(() => RootNavigation.navigate('Membership'), 350); }}>
+                onPress={() => closeTo(() => RootNavigation.navigate('Membership'))}>
                 <Image source={require('../../assets/images/screens/leaderboard/crown-gold.png')}
                   style={styles.rewardFlourish} contentFit="contain" />
                 <Text style={styles.vipChipText} numberOfLines={1}>
@@ -661,7 +660,10 @@ export default function PostWinRewardsModal({
               </Animated.View>
             )}
 
-            {nextGoal && <Text style={styles.hint}>{nextGoal}</Text>}
+            </View>}
+            {hasCoin && coinTimesCollected === 1
+              ? <Text style={styles.hint}>A new souvenir for your park story. See it on your shelf.</Text>
+              : nextGoal && <Text style={styles.hint}>{nextGoal}</Text>}
 
           </View>
         </Animated.View>
@@ -676,7 +678,7 @@ export default function PostWinRewardsModal({
         opacity: buttonAnim,
       }]}>
         <YellowButton text={hasCoin && onViewCoin
-          ? upgradeReady ? 'Upgrade Your Coin' : 'See Your Coin'
+          ? upgradeReady && coinTimesCollected !== 1 ? 'Upgrade Your Coin' : 'See Your Coin'
           : 'Continue Park'}
           onPress={hasCoin && onViewCoin ? onViewCoin : onClose} />
         {hasCoin && onViewCoin && (
@@ -687,7 +689,7 @@ export default function PostWinRewardsModal({
         )}
       </Animated.View>
       </View>}
-      {visible && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
+      {visible && hasCoin && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
         isNewCoin={coinTimesCollected === 1}
         onDone={() => setCaught(true)} />}
     </Modal>
@@ -695,6 +697,14 @@ export default function PostWinRewardsModal({
 }
 
 const styles = StyleSheet.create({
+  receiptToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 62,
+    marginTop: 16, padding: 12, borderWidth: 1, borderColor: '#39617B',
+    borderRadius: 16, backgroundColor: '#112940' },
+  receiptIcons: { flexDirection: 'row', width: 46, flexWrap: 'wrap', gap: 2 },
+  receiptIcon: { width: 21, height: 21 },
+  receiptTitle: { color: '#E8F8FF', fontFamily: 'Shark', fontSize: 17 },
+  receiptHint: { color: '#B1CDDF', fontFamily: 'Knockout', fontSize: 12, marginTop: 3 },
+  receiptChevron: { color: '#FFD84A', fontFamily: 'Shark', fontSize: 26, width: 22, textAlign: 'center' },
   vipChip: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'center',
     backgroundColor: 'rgba(59, 26, 92, 0.85)', borderRadius: 14, borderWidth: 2, borderColor: '#ffcf3b',
     paddingVertical: 6, paddingHorizontal: 12 },
