@@ -42,9 +42,12 @@ const parkOnboardingSteps: TutorialStep[] = [
   },
   {
     id: 'park_ride', sequence: 'onboarding', title: 'Start your collection',
-    text: 'This is your next park coin. Win its ride challenge to earn it.',
+    // Copy stands on its own: it must read right whether or not the card is spotlit.
+    text: 'Choose a ride coin you are missing on the map. Win its ride challenge to earn it.',
     subtitle: 'Later: Profile, scroll to your parks, tap a park.',
-    // Spotlights the "YOUR NEXT PARK COIN" card when the map registers it, with Finn above the card.
+    // Spotlights the "YOUR NEXT PARK COIN" card once ParkCollectionHeader calls
+    // registerRef('next_park_coin') (change request filed with its owner). Until then
+    // there is no spotlight and Finn keeps his default spot.
     spotlightRef: 'next_park_coin', placement: 'above-spotlight',
     sharkPosition: 'bottom-center', sharkMood: 'pointing', nextText: 'Find a ride coin',
   },

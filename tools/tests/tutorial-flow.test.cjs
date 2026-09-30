@@ -41,6 +41,8 @@ test('first-park guide spotlights the next park coin with a one-line subtitle', 
     assert.equal(ride.spotlightRef, 'next_park_coin');
     assert.equal(ride.placement, 'above-spotlight');
     assert.ok(ride.subtitle.length <= 52, `subtitle fits one line: ${ride.subtitle}`);
+    // No screen registers 'next_park_coin' yet, so the line must not point at the card.
+    assert.doesNotMatch(ride.text, /\bthis is\b|\bhere\b|\bthis card\b/i, 'copy does not depend on the spotlight');
   }
   const arrival = getStepsForSequence('park_arrival');
   assert.equal(arrival[1].placement, 'above-spotlight');
