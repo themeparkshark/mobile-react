@@ -11,6 +11,9 @@ import GameIcon from './GameIcon';
 import { textPreset, type TextPresetName, type TextTone } from './TextPresets';
 import { parseIconTokens, stripIconTokens } from './iconTokens';
 
+/** How far (share of the icon size) an inline icon drops below the baseline so it centres on the text. */
+export const INLINE_ICON_DROP = 0.4;
+
 export type GameRichTextProps = {
   readonly children: string;
   readonly preset?: TextPresetName;
@@ -28,7 +31,8 @@ export default function GameRichText({ children, preset = 'body', tone = 'onLigh
   return <Text style={[base, style]} numberOfLines={numberOfLines} maxFontSizeMultiplier={1.4}
     accessibilityLabel={stripIconTokens(children ?? '')}>
     {parts.map((part, index) => part.kind === 'text' ? part.text
-      : <View key={index} style={{ width: size, height: size, marginBottom: -Math.round(size * 0.18) }}>
+      // iOS sits inline views on the baseline; drop the icon so it centres on the letters.
+      : <View key={index} style={{ width: size, height: size, transform: [{ translateY: Math.round(size * INLINE_ICON_DROP) }] }}>
         <GameIcon name={part.name} size={size} />
       </View>)}
   </Text>;

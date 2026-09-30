@@ -309,3 +309,22 @@ test("YellowButton keeps Dustin's original art and label style; only the size ru
   assert.ok(!source.includes('fontSize: 72'), 'the fixed 72pt start size is gone');
   assert.ok(!/GameButton|react-native-svg/.test(source), 'YellowButton does not render a new button style');
 });
+
+test('GameRichText: icons inline and centred on the text, plain text for VoiceOver, emoji never rendered', () => {
+  const view = runtime('src/ui/GameRichText.tsx', {
+    './GameIcon': { default: 'GameIcon' },
+    './TextPresets': presets,
+    './iconTokens': iconTokens,
+  }, { children: 'Spend [icon:ticket] 1 Ticket \u{1F525}' });
+  assert.equal(view.tree.type, 'Text');
+  assert.equal(view.tree.props.accessibilityLabel, 'Spend 1 Ticket');
+  const icons = [];
+  (function walk(node) { if (!node || typeof node !== 'object') return; if (Array.isArray(node)) return node.forEach(walk);
+    if (node.type === 'GameIcon') icons.push(node.props.name); walk(node.props?.children); })(view.tree);
+  assert.deepEqual(icons, ['ticket', 'streak']);
+  const holder = view.find(n => n.type === 'View');
+  const size = Math.round(presets.textPreset('body').fontSize * 1.15);
+  assert.deepEqual(plain(holder.props.style.transform), [{ translateY: Math.round(size * 0.4) }], 'icon drops onto the text line');
+  const texts = [].concat(view.tree.props.children).filter(part => typeof part === 'string').join('');
+  assert.ok(!/\p{Extended_Pictographic}/u.test(texts), 'no emoji reaches the screen');
+});
