@@ -1019,7 +1019,7 @@ export default function ExploreScreen() {
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
           onZoomChange={onMapZoom}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
-          controlsTop={(queueRide ? 168 : 124) + (hasLiveEvents ? 60 : 0)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
+          controlsTop={slotTop + (queueRide ? 104 : 76)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
           latitude: Number(selectedTask.latitude), longitude: Number(selectedTask.longitude),
         } : mapFocusRequest}>

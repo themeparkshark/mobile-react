@@ -98,4 +98,6 @@ test('the Park Project pill sits on the same row as the other suggestion slots, 
   const widget = app.find(named('ParkProjectWidget'));
   assert.ok(widget, 'project widget renders at the park');
   assert.equal(widget.props.topOffset, q.suggestionSlotScreenTop(0, false));
+  // The recenter compass clears the tallest chip in the right slot (the Park Story pill).
+  assert.ok(app.find(named('Map')).props.controlsTop >= q.suggestionSlotTop(false) + 76);
 });
