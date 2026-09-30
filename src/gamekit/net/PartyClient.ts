@@ -14,7 +14,8 @@
  * just unlocked) still gets its full length: boards are parallel, the server
  * replays each log against the shared seed, so a synced GO is presentation only.
  */
-import { buildTimeline, resolve, BONK_RACE_VERSION, type Spawn, type Tap } from '../../games/party/bonkRace';
+import { buildTimeline, type Spawn, type Tap } from '../../games/party/bonkRace';
+import { partyGame } from '../party/partyGames';
 import { ClockSync } from './ClockSync';
 import type { EmoteEvent, EmoteId, EntryResponse, PartyApiError, ProgressWhisper, RoomSnapshot, RoundSummary } from './partyTypes';
 import {
@@ -80,6 +81,8 @@ export interface PartyClientOptions {
 export interface LocalRound {
   roundId: string;
   roundNo: number;
+  /** Registry key (bonk_race, trivia_sprint). */
+  game: string;
   seed: number;
   spawns: Spawn[];
   durationMs: number;
@@ -303,7 +306,7 @@ export class PartyClient {
       const alreadyIn = room.you?.round_id === round.id && room.you.submitted;
       if (late > MAX_LATE_START_MS || alreadyIn) {
         // Too late to play fairly inside the submit window: the ghost takes this one.
-        this.local = { roundId: round.id, roundNo: round.round_no, seed: round.seed, spawns: [], durationMs: round.duration_ms, goAt, lateStart: true, taps: [], ended: true, submitted: alreadyIn };
+        this.local = { roundId: round.id, roundNo: round.round_no, game: round.game, seed: round.seed, spawns: [], durationMs: round.duration_ms, goAt, lateStart: true, taps: [], ended: true, submitted: alreadyIn };
         if (!alreadyIn) void this.submit(true, 0);
         this.set({ ...this.state, ghostedRoundId: round.id });
         return;
@@ -313,7 +316,8 @@ export class PartyClient {
         lateStart = late > 0;
       }
       this.local = {
-        roundId: round.id, roundNo: round.round_no, seed: round.seed, spawns: buildTimeline(round.seed),
+        roundId: round.id, roundNo: round.round_no, game: round.game, seed: round.seed,
+        spawns: round.game === 'bonk_race' || !round.game ? buildTimeline(round.seed) : [],
         durationMs: round.duration_ms, goAt, lateStart, taps: [], ended: false, submitted: false,
       };
       this.log('round scheduled', { round: round.round_no, inMs: Math.round(goAt - nowPerf), lateStart });
@@ -362,8 +366,8 @@ export class PartyClient {
       taps,
       partial,
       ...(partial ? { until_ms: untilMs } : {}),
-      client_score: partial ? null : resolve(r.spawns.length ? r.spawns : buildTimeline(r.seed), taps).score,
-      sim_version: BONK_RACE_VERSION,
+      client_score: partial ? null : partyGame(r.game).score(r.seed, taps),
+      sim_version: partyGame(r.game).version,
     };
     await this.opts.storage?.setItem(PENDING_KEY, JSON.stringify({ roundId: r.roundId, body, at: this.now() })).catch(() => {});
     for (let attempt = 0; attempt < 6 && !this.destroyed; attempt++) {
@@ -432,7 +436,7 @@ export class PartyClient {
     const room = this.state.room;
     if (!room || this.destroyed) return;
     const liveScore = this.local && !this.local.ended && this.state.connection !== 'live'
-      ? resolve(this.local.spawns, this.local.taps).score : undefined;
+      ? partyGame(this.local.game).score(this.local.seed, this.local.taps) : undefined;
     this.opts.http.post<{ room: RoomSnapshot }>(`/party/rooms/${room.id}/heartbeat`, liveScore !== undefined ? { live_score: liveScore } : {})
       .then(({ data }) => this.applyRoom(data.room))
       .catch((e) => this.handleError(e));

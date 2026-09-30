@@ -24,6 +24,8 @@ import { usePartyState } from '../net/useParty';
 import { placementOf } from '../net/roomState';
 import type { EmoteId } from '../net/partyTypes';
 import BonkBoard from './BonkBoard';
+import TriviaSprintBoard from './TriviaSprintBoard';
+import { partyGame } from './partyGames';
 import PartyLobby from './PartyLobby';
 import PartyResults from './PartyResults';
 import RaceStrip, { type RacerLine } from './RaceStrip';
@@ -103,11 +105,12 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   const [boardT, setBoardT] = useState(-3000);
   const [myScore, setMyScore] = useState(0);
   const spawns = useMemo(() => (local?.spawns.length ? local.spawns : round ? buildTimeline(round.seed) : []), [local?.roundId, round?.seed]);
+  const game = partyGame(round?.game);
   const botLogs = useMemo(() => {
-    const m = new Map<number, ReturnType<typeof botTaps>>();
-    round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, botTaps(spawns, round.seed, s.seat, s.profile)); });
+    const m = new Map<number, [number, number][]>();
+    round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, game.botTaps(round.seed, s.seat, s.profile)); });
     return m;
-  }, [round?.id, spawns]);
+  }, [round?.id, game]);
   const perfNow = useCallback(() => (globalThis.performance?.now ? globalThis.performance.now() : Date.now()), []);
 
   // Board clock for the HUD when the board is not mounted (ghosting, spectating).
@@ -132,7 +135,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         ghost = state.ghostedRoundId === round.id;
       } else if (seat.kind === 'bot') {
         const log = botLogs.get(seat.seat) ?? [];
-        score = resolve(spawns, log.filter(([t]) => t <= boardT)).score;
+        score = game.score(round.seed, log.filter(([t]) => t <= boardT));
       } else {
         const rival = seat.user_id !== undefined ? state.rivals[seat.user_id] : undefined;
         const member = state.room?.members.find((m) => m.id === seat.user_id);
@@ -158,7 +161,19 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         <Timer seconds={secondsLeft} urgent={secondsLeft <= 3 && boardT > 0} />
       </View>
       <View style={styles.boardWrap}>
-        {playing && local ? (
+        {playing && local && round?.game === 'trivia_sprint' ? (
+          <TriviaSprintBoard
+            key={local.roundId}
+            seed={local.seed}
+            goAt={local.goAt}
+            durationMs={local.durationMs}
+            perfNow={perfNow}
+            onTap={(choice) => client.recordTap(choice)}
+            onProgress={onProgress}
+            onTick={onTick}
+            autoplay={autoplay}
+          />
+        ) : playing && local ? (
           <BonkBoard
             key={local.roundId}
             spawns={spawns}
