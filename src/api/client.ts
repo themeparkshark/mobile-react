@@ -9,7 +9,8 @@ const client = axios.create({
   timeout: 12000,
 });
 
-client.defaults.headers.common['Device-Name'] = Device.deviceName ?? 'unknown';
+// Device-Name is deliberately not sent: on iOS it is the owner's chosen
+// device name (often their real name), which the API does not need.
 client.defaults.headers.common['Is-Device'] = Device.isDevice ?? false;
 client.defaults.headers.common['Manufacturer'] = Device.manufacturer ?? 'unknown';
 client.defaults.headers.common['Model-Name'] = Device.modelName ?? 'unknown';

@@ -1,4 +1,4 @@
-import { Image, ImageBackground, LogBox, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, ImageBackground, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ErrorBoundary from 'react-native-error-boundary';
 import Root from './src/Root';
@@ -40,13 +40,6 @@ const errorStyles = StyleSheet.create({
 });
 import { ToastProvider } from './src/components/Toast';
 
-// Suppress common network error warnings in LogBox
-LogBox.ignoreLogs([
-  'Possible Unhandled Promise Rejection',
-  'Network Error',
-  'API error',
-  'AxiosError',
-]);
 import { AuthProvider } from './src/context/AuthProvider';
 import { BroadcastProvider } from './src/context/BroadcastProvider';
 import { CrumbProvider } from './src/context/CrumbProvider';

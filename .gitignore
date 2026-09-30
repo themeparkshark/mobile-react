@@ -1,4 +1,5 @@
 node_modules/
+/node_modules
 .expo/
 dist/
 npm-debug.*
@@ -21,3 +22,5 @@ tsconfig.tsbuildinfo
 build-*.ipa
 *.ipa
 .env*.local
+.env.local.backup
+.env*.backup
