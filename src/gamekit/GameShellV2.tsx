@@ -351,6 +351,20 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }
     }, [visible, effectiveResult, phase, sessionKey, clearCountdown, clearResume, clearCelebration, resultsOpacity, resultsScale]);
 
+    // Play again: the game clears its result, so the shell runs a fresh countdown.
+    const hadResult = useRef(false);
+    useEffect(() => {
+      if (result) { hadResult.current = true; return; }
+      if (!hadResult.current || phase !== 'results' || wrap) return;
+      hadResult.current = false;
+      startedRef.current = false;
+      claimedRef.current = false;
+      resultsScale.value = 0.7;
+      resultsOpacity.value = 0;
+      setCountText('3');
+      setPhase('countdown');
+    }, [result, phase, wrap, resultsScale, resultsOpacity]);
+
     // Ride challenge win: a short stamp, then straight into the coin reveal.
     useEffect(() => {
       if (!rideChallenge || phase !== 'results' || !effectiveResult || effectiveResult.stars <= 0) return;
