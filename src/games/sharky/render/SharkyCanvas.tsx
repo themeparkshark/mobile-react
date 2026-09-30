@@ -32,7 +32,6 @@ import {
   Text as SkText,
   Vertices,
   rect,
-  useColorBuffer,
   useFont,
   useImage,
   useRSXformBuffer,
@@ -45,7 +44,7 @@ import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { useSpriteAtlas } from '../../../gamekit/fx/SpriteAtlas';
 import {
   E_BOX, E_COIN, E_GATE, E_JELLY, E_PUFFER, E_PYLON, E_RING, E_SCATTER, E_SHIELD, E_TOKEN, E_TORPEDO,
-  ENT_CAP, F_BADGE, F_DONE, F_HIT, FLOOR_Y, G_RIDE, G_SPLIT, G_FINISH, JELLY_R, PH_POCKET, PH_WIPE, PH_DONE,
+  ENT_CAP, F_BADGE, F_DONE, F_HIT, FLOOR_Y, PYLON_W, G_RIDE, G_SPLIT, G_FINISH, JELLY_R, PH_POCKET, PH_WIPE, PH_DONE,
   PUFF_R0, PUFF_R1, RING_R, SURFACE_Y, TORP_W, aheadU, anchorX, hazardSpan, jellyY, pufferR,
   type SimState,
 } from '../sim/core';
@@ -77,8 +76,11 @@ const SPR_BOAT = 6;
 const SPR_BUBBLE = 7;
 const SPR_TOKEN_O = 8;
 const SPR_TOKEN_B = 9;
+const SPR_SEG = 10;
+const SPR_CAP = 11;
+const SPR_POLE = 12;
 
-const SLOTS = 72; // atlas draw slots per frame
+const SLOTS = 128; // atlas draw slots per frame
 const PSTRIDE = 7; // sprite, cx, cy, scale(u per atlas px), rot, alpha, flip
 const PYLONS = 6;
 const RINGS = 4;
@@ -178,6 +180,9 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
   const puff = useImage(SHARKY_ART.puffer);
   const puffed = useImage(SHARKY_ART.pufferPuffed);
   const boat = useImage(SHARKY_ART.boat);
+  const seg = useImage(SHARKY_ART.pylonSegment);
+  const cap = useImage(SHARKY_ART.pylonCap);
+  const pole = useImage(SHARKY_ART.gatePole);
   const bubble = useImage(SHARKY_ART.bubble);
   const ringImg = useImage(SHARKY_ART.ring);
   const swim = useImage(SHARKY_ART.swim);
@@ -190,7 +195,7 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
   const reefNear = useImage(SHARKY_ART.reefNear);
   const font = useFont(SHARKY_ART.font, 44);
 
-  const atlas = useSpriteAtlas([coin, tokenG, box, jelly, puff, puffed, boat, bubble, tokenO, tokenB], { cell: 256 });
+  const atlas = useSpriteAtlas([coin, tokenG, box, jelly, puff, puffed, boat, bubble, tokenO, tokenB, seg, cap, pole], { cell: 256 });
   const rects = useMemo(() => {
     if (!atlas) return [] as number[];
     const out: number[] = [];
@@ -226,11 +231,37 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     const floatPhase = s.float > 0;
     for (let i = 0; i < ENT_CAP; i++) {
       const et = s.et[i];
-      if (et === 0 || et === E_PYLON || et === E_RING || et === E_GATE) continue;
+      if (et === 0 || et === E_RING) continue;
       const ex = lerp(s.epx[i], s.ex[i], a);
       const vx = anc + (ex - dist);
       if (vx < -200 || vx > VIEW_W + 200) continue;
       const hazardAlpha = floatPhase ? 0.5 : 1;
+      if (et === E_PYLON) {
+        // Stacked coaster segments with a striped cap at each gap edge.
+        const shake = (s.ef[i] & F_HIT) && s.etm[i] < 8 ? Math.sin(s.etm[i] * 2.2) * 3 : 0;
+        const cx = vx + PYLON_W / 2 + shake;
+        const half = s.ep1[i] / 2;
+        const top = s.ey[i] - half;
+        const bot = s.ey[i] + half;
+        const capW = 124;
+        const capH = capW * rects[SPR_CAP * 4 + 3] / Math.max(1, rects[SPR_CAP * 4 + 2]);
+        const segW = PYLON_W;
+        const segH = segW * rects[SPR_SEG * 4 + 3] / Math.max(1, rects[SPR_SEG * 4 + 2]);
+        for (let y = top - capH - segH / 2 + 10; y + segH / 2 > SURFACE_Y - 80; y -= segH - 6) put(SPR_SEG, cx, y, segW, 0, 1);
+        for (let y = bot + capH + segH / 2 - 10; y - segH / 2 < FLOOR_Y + 80; y += segH - 6) put(SPR_SEG, cx, y, segW, 0, 1);
+        put(SPR_CAP, cx, top - capH / 2, capW, 0, 1);
+        put(SPR_CAP, cx, bot + capH / 2, capW, Math.PI, 1);
+        continue;
+      }
+      if (et === E_GATE) {
+        if (s.ep1[i] === G_SPLIT) continue;
+        const big = s.ep1[i] === G_RIDE || s.ep1[i] === G_FINISH;
+        const h = big ? 360 : 300;
+        const w = h * rects[SPR_POLE * 4 + 2] / Math.max(1, rects[SPR_POLE * 4 + 3]);
+        put(SPR_POLE, vx, FLOOR_Y + 10 - h / 2, w, 0, 1);
+        put(SPR_POLE, vx, SURFACE_Y - 10 + h / 2, w, Math.PI, 1);
+        continue;
+      }
       if (et === E_COIN) {
         const glint = 1 + 0.06 * Math.sin(t * 6.283 + i);
         put(SPR_COIN, vx, s.ey[i], (frenzy ? 62 : 48) * glint, 0, 1);
@@ -303,13 +334,10 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     const ty = p[o + 2] - (sn * w * 0.5 + c * h * 0.5);
     x.set(c, sn, tx, ty);
   });
-  const colors = useColorBuffer(SLOTS, (c, i) => {
-    'worklet';
-    const al = plan.value[i * PSTRIDE + 5];
-    c[0] = al;
-    c[1] = al;
-    c[2] = al;
-    c[3] = al;
+  // Float phases hazards through: the whole world layer drops to 55% (nothing scores then).
+  const worldAlpha = useDerivedValue(() => {
+    tick.value;
+    return sim.value.float > 0 ? 0.55 : 1;
   });
 
   // --- camera (world group) -------------------------------------------------
@@ -458,12 +486,13 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
         <Rect x={-200} y={FLOOR_Y - 6} width={VIEW_W + 400} height={5} color={INK} opacity={0.55} />
 
         <Rivals sim={sim} rivals={rivals} tick={tick} alpha={alpha} swim={swim} colors={rivalColors} />
-        <Pylons sim={sim} tick={tick} alpha={alpha} />
         <Gates sim={sim} tick={tick} alpha={alpha} font={font} />
         <Rings sim={sim} tick={tick} alpha={alpha} image={ringImg} half="back" />
 
         {atlas ? (
-          <Atlas image={atlas.image} sprites={sprites} transforms={transforms} colors={colors} blendMode="modulate" />
+          <Group opacity={worldAlpha}>
+            <Atlas image={atlas.image} sprites={sprites} transforms={transforms} />
+          </Group>
         ) : null}
 
         <Shark sim={sim} tick={tick} alpha={alpha} swim={swim} dash={dashImg} dizzy={dizzy} bonked={bonked} cheer={cheer} bubble={bubble} />
@@ -658,93 +687,6 @@ const Shark = React.memo(function Shark({ sim, tick, alpha, swim, dash, dizzy, b
 });
 
 // ---------------------------------------------------------------------------
-// Pylons: coaster support beams with coral warning caps at the gap edges.
-// (Stopgap drawing until the pipeline pylon art lands; see NOTES.)
-// ---------------------------------------------------------------------------
-function pylonList(s: SimState, a: number): number[] {
-  'worklet';
-  const out: number[] = [];
-  const dist = lerp(s.pdist, s.dist, a) / 256;
-  const anc = anchorX(s);
-  for (let i = 0; i < ENT_CAP && out.length < PYLONS * 5; i++) {
-    if (s.et[i] !== E_PYLON) continue;
-    const vx = anc + (s.ex[i] - dist);
-    if (vx < -140 || vx > VIEW_W + 40) continue;
-    const hit = (s.ef[i] & F_HIT) && s.etm[i] < 8 ? 1 : 0;
-    out.push(vx, s.ey[i], s.ep1[i], hit, s.float > 0 ? 0.5 : 1);
-  }
-  return out;
-}
-
-const Pylons = React.memo(function Pylons({ sim, tick, alpha }: { sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number> }) {
-  const list = useDerivedValue(() => {
-    tick.value;
-    return pylonList(sim.value, alpha.value);
-  });
-  return (
-    <Group>
-      {Array.from({ length: PYLONS }, (_, i) => <Pylon key={i} i={i} list={list} tick={tick} />)}
-    </Group>
-  );
-});
-
-function Pylon({ i, list, tick }: { i: number; list: SharedValue<number[]>; tick: SharedValue<number> }) {
-  const geo = useDerivedValue(() => {
-    const l = list.value;
-    const o = i * 5;
-    if (o >= l.length) return { x: -9999, top: 0, bot: 0, shake: 0, alpha: 0 };
-    const shake = l[o + 3] ? Math.sin(tick.value * 2.2) * 3 : 0;
-    return { x: l[o] + shake, top: l[o + 1] - l[o + 2] / 2, bot: l[o + 1] + l[o + 2] / 2, shake, alpha: l[o + 4] };
-  });
-  const paths = useDerivedValue(() => {
-    const g = geo.value;
-    const beam = Skia.Path.Make();
-    const brace = Skia.Path.Make();
-    const caps = Skia.Path.Make();
-    const stripes = Skia.Path.Make();
-    const W = 100;
-    if (g.x > -9000) {
-      // Upper and lower beams: two rails with cross bracing (coaster support).
-      const segs: number[][] = [[SURFACE_Y - 400, g.top - 26], [g.bot + 26, FLOOR_Y + 400]];
-      segs.forEach(([y0, y1]) => {
-        beam.addRRect(Skia.RRectXY(Skia.XYWHRect(g.x + 10, y0, 18, y1 - y0), 6, 6));
-        beam.addRRect(Skia.RRectXY(Skia.XYWHRect(g.x + W - 28, y0, 18, y1 - y0), 6, 6));
-        for (let y = y1 - 70; y > y0; y -= 90) {
-          brace.moveTo(g.x + 20, y);
-          brace.lineTo(g.x + W - 20, y - 70);
-          brace.moveTo(g.x + 20, y - 70);
-          brace.lineTo(g.x + W - 20, y);
-        }
-      });
-      caps.addRRect(Skia.RRectXY(Skia.XYWHRect(g.x - 4, g.top - 34, W + 8, 34), 10, 10));
-      caps.addRRect(Skia.RRectXY(Skia.XYWHRect(g.x - 4, g.bot, W + 8, 34), 10, 10));
-      for (let k = 0; k < 4; k++) {
-        const sx = g.x + 6 + k * 26;
-        stripes.addRect(Skia.XYWHRect(sx, g.top - 30, 12, 26));
-        stripes.addRect(Skia.XYWHRect(sx, g.bot + 4, 12, 26));
-      }
-    }
-    return { beam, brace, caps, stripes };
-  });
-  const beam = useDerivedValue(() => paths.value.beam);
-  const brace = useDerivedValue(() => paths.value.brace);
-  const caps = useDerivedValue(() => paths.value.caps);
-  const stripes = useDerivedValue(() => paths.value.stripes);
-  const op = useDerivedValue(() => geo.value.alpha);
-  return (
-    <Group opacity={op}>
-      <Path path={brace} style="stroke" strokeWidth={9} color={INK} />
-      <Path path={brace} style="stroke" strokeWidth={5} color="#cfe6fb" />
-      <Path path={beam} color="#f4f9ff" />
-      <Path path={beam} style="stroke" strokeWidth={4} color={INK} />
-      <Path path={caps} color="#ffffff" />
-      <Path path={stripes} color={CORAL} />
-      <Path path={caps} style="stroke" strokeWidth={5} color={INK} />
-    </Group>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Gates: Tide Gate (bunting arch), race split line, Ride Gate / finish.
 // ---------------------------------------------------------------------------
 const Gates = React.memo(function Gates({ sim, tick, alpha, font }: { sim: SharedValue<SimState>; tick: SharedValue<number>; alpha: SharedValue<number>; font: SkFont | null }) {
@@ -772,76 +714,46 @@ const Gates = React.memo(function Gates({ sim, tick, alpha, font }: { sim: Share
 });
 
 function Gate({ i, list, font }: { i: number; list: SharedValue<number[]>; font: SkFont | null }) {
-  const g = useDerivedValue(() => {
+  const paths = useDerivedValue(() => {
     const l = list.value;
     const o = i * 3;
-    if (o >= l.length) return { x: -9999, kind: 0, t: 0 };
-    return { x: l[o], kind: l[o + 1], t: l[o + 2] };
-  });
-  const posts = useDerivedValue(() => {
-    const { x, kind } = g.value;
-    const p = Skia.Path.Make();
-    if (x < -9000) return p;
-    const big = kind === G_RIDE || kind === G_FINISH;
-    const w = big ? 36 : 26;
-    p.addRRect(Skia.RRectXY(Skia.XYWHRect(x - w / 2, SURFACE_Y - 30, w, FLOOR_Y - SURFACE_Y + 60), 10, 10));
-    return p;
-  });
-  const bunting = useDerivedValue(() => {
-    const { x, t, kind } = g.value;
-    const p = Skia.Path.Make();
-    if (x < -9000 || kind === G_SPLIT) return p;
-    // Bunting flags hang off the post, waving at 3 Hz.
-    for (let k = 0; k < 9; k++) {
-      const y = 90 + k * 96;
-      const wave = Math.sin(t * 6.28 * 1.5 + k) * 10;
-      p.moveTo(x + 12, y);
-      p.lineTo(x + 70 + wave, y + 26);
-      p.lineTo(x + 12, y + 52);
-      p.close();
+    const rope = Skia.Path.Make();
+    const flags = Skia.Path.Make();
+    const split = Skia.Path.Make();
+    if (o >= l.length) return { rope, flags, split };
+    const x = l[o];
+    const kind = l[o + 1];
+    const t = l[o + 2];
+    if (kind === G_SPLIT) {
+      for (let y = SURFACE_Y; y < FLOOR_Y; y += 40) split.addRect(Skia.XYWHRect(x - 4, y, 8, 22));
+      return { rope, flags, split };
     }
-    return p;
-  });
-  const bulbs = useDerivedValue(() => {
-    const { x, t, kind } = g.value;
-    const pts: number[] = [];
-    if (x < -9000) return pts;
-    const n = 10;
-    const lit = Math.floor(t * 8) % 3;
-    for (let k = 0; k < n; k++) pts.push(x, SURFACE_Y + 40 + (k * (FLOOR_Y - SURFACE_Y - 80)) / (n - 1), (k % 3 === lit ? 1 : 0.45) * (kind === G_SPLIT ? 0.6 : 1));
-    return pts;
-  });
-  const flagColor = useDerivedValue(() => (g.value.kind === G_RIDE || g.value.kind === G_FINISH ? GOLD : '#ffffff'));
-  const splitLine = useDerivedValue(() => {
-    const p = Skia.Path.Make();
-    const { x, kind } = g.value;
-    if (x < -9000 || kind !== G_SPLIT) return p;
-    for (let y = SURFACE_Y; y < FLOOR_Y; y += 40) {
-      p.addRect(Skia.XYWHRect(x - 4, y, 8, 22));
+    // Bunting rope between the hanging pole and the standing pole, flags wave at 3 Hz.
+    const y0 = SURFACE_Y + 250;
+    const y1 = FLOOR_Y - 250;
+    rope.moveTo(x, y0);
+    rope.quadTo(x + 26 + Math.sin(t * 2) * 6, (y0 + y1) / 2, x, y1);
+    for (let k = 0; k < 7; k++) {
+      const y = y0 + 20 + k * ((y1 - y0 - 40) / 6);
+      const bow = Math.sin((k / 6) * Math.PI) * 22;
+      const wave = Math.sin(t * 6.28 * 1.5 + k) * 8;
+      flags.moveTo(x + bow, y - 16);
+      flags.lineTo(x + bow + 44 + wave, y);
+      flags.lineTo(x + bow, y + 16);
+      flags.close();
     }
-    return p;
+    return { rope, flags, split };
   });
+  const rope = useDerivedValue(() => paths.value.rope);
+  const flags = useDerivedValue(() => paths.value.flags);
+  const split = useDerivedValue(() => paths.value.split);
   void font;
   return (
     <Group>
-      <Path path={splitLine} color="#ffffff" opacity={0.85} />
-      <Path path={posts} color="#3aa7f0" />
-      <Path path={posts} style="stroke" strokeWidth={5} color={INK} />
-      <Path path={bunting} color={flagColor} />
-      <Path path={bunting} style="stroke" strokeWidth={4} color={INK} />
-      {Array.from({ length: 10 }, (_, k) => <Bulb key={k} k={k} bulbs={bulbs} />)}
-    </Group>
-  );
-}
-
-function Bulb({ k, bulbs }: { k: number; bulbs: SharedValue<number[]> }) {
-  const cx = useDerivedValue(() => (bulbs.value.length > k * 3 ? bulbs.value[k * 3] : -9999));
-  const cy = useDerivedValue(() => (bulbs.value.length > k * 3 ? bulbs.value[k * 3 + 1] : -9999));
-  const op = useDerivedValue(() => (bulbs.value.length > k * 3 ? bulbs.value[k * 3 + 2] : 0));
-  return (
-    <Group opacity={op}>
-      <Circle cx={cx} cy={cy} r={11} color="#fff6c8" />
-      <Circle cx={cx} cy={cy} r={11} style="stroke" strokeWidth={3} color={INK} />
+      <Path path={split} color="#ffffff" opacity={0.85} />
+      <Path path={rope} style="stroke" strokeWidth={5} color={INK} />
+      <Path path={flags} color={GOLD} />
+      <Path path={flags} style="stroke" strokeWidth={4} color={INK} />
     </Group>
   );
 }

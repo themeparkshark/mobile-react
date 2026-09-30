@@ -731,6 +731,170 @@ function zeros(n: number): number[] {
   return a;
 }
 
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+
+function emit(s: SimState, kind: number, a: number, b: number, c: number, d: number): void {
+  'worklet';
+  if (s.evN >= EV_CAP) return;
+  const o = s.evN * EV_STRIDE;
+  s.ev[o] = kind;
+  s.ev[o + 1] = a;
+  s.ev[o + 2] = b;
+  s.ev[o + 3] = c;
+  s.ev[o + 4] = d;
+  s.evN++;
+}
+
+// ---------------------------------------------------------------------------
+// Course
+// ---------------------------------------------------------------------------
+
+export function distU(s: SimState): number {
+  'worklet';
+  return s.dist >> 8;
+}
+
+/** Speed fraction Q8 (0..256) between base and cap. */
+export function speedFrac(s: SimState): number {
+  'worklet';
+  const den = s.speedCap - s.speedBase;
+  if (den <= 0) return 0;
+  return clampi(idiv((s.speed - s.speedBase) * 256, den), 0, 256);
+}
+
+/** Shark anchor x in the view (u): 250 at base speed, 140 at max. */
+export function anchorX(s: SimState): number {
+  'worklet';
+  return 250 - ((110 * speedFrac(s)) >> 8);
+}
+
+/** Course visible ahead of the shark centre (u). */
+export function aheadU(s: SimState): number {
+  'worklet';
+  return VIEW_W - anchorX(s);
+}
+
+function allocEntity(s: SimState): number {
+  'worklet';
+  for (let k = 0; k < ENT_CAP; k++) {
+    const i = (s.eHint + k) % ENT_CAP;
+    if (s.et[i] === E_NONE) {
+      s.eHint = (i + 1) % ENT_CAP;
+      return i;
+    }
+  }
+  return -1;
+}
+
+function spawn(s: SimState, t: number, x: number, y: number, p1: number, p2: number, line: number): number {
+  'worklet';
+  const i = allocEntity(s);
+  if (i < 0) return -1;
+  s.et[i] = t;
+  s.ex[i] = x;
+  s.ey[i] = y;
+  s.epx[i] = x;
+  s.epy[i] = y;
+  s.ep1[i] = p1;
+  s.ep2[i] = p2;
+  s.est[i] = 0;
+  s.etm[i] = 0;
+  s.evx[i] = 0;
+  s.evy[i] = 0;
+  s.ef[i] = 0;
+  s.eline[i] = line;
+  return i;
+}
+
+/**
+ * Start sprint `idx`: materialize its descriptor into the chunk queue. `desc`
+ * may be a server-streamed descriptor; null regenerates locally.
+ */
+export function startSprint(s: SimState, idx: number, desc: SprintDescriptor | null): void {
+  'worklet';
+  const d = desc || generateSprint(s.seed, idx, s.mode, s.tier, s.speed >> 8);
+  s.sprint = idx;
+  const du = distU(s);
+  // Lead-in: no hazard hitbox within ~1.5s of the pocket exit.
+  const lead = idx === 0 ? 260 : idiv((s.speed >> 8) * 3, 2);
+  let x = du + lead;
+  s.sprintStart = x;
+  s.cqN = 0;
+  s.cqNext = 0;
+  s.tokenPlaced = idx >= 3 || s.etier < 1 ? 1 : 0;
+  for (let i = 0; i < d.chunks.length && i < s.cq.length; i++) {
+    s.cq[i] = d.chunks[i];
+    s.cqX[i] = x;
+    x += CHUNKS[d.chunks[i]].len;
+    s.cqN++;
+  }
+  // Gate at the end of the sprint.
+  let kind = G_TIDE;
+  if (s.mode === MODE_RIDE && idx >= 2) kind = G_RIDE;
+  if (s.mode === MODE_RACE) kind = G_FINISH;
+  s.gateKind = kind;
+  s.gateX = x + 160;
+  if (s.mode === MODE_RACE) {
+    // One race course: mid split gate at half the course (no pocket).
+    s.gateX = s.sprintStart + 7500;
+    spawn(s, E_GATE, s.sprintStart + 3750, 500, G_SPLIT, 0, 0);
+  }
+  spawn(s, E_GATE, s.gateX, 500, kind, 0, 0);
+  emit(s, EV_SPRINT, idx, s.gateX, kind, 0);
+}
+
+function spawnChunk(s: SimState, qi: number): void {
+  'worklet';
+  const c = CHUNKS[s.cq[qi]];
+  const x0 = s.cqX[qi];
+  // Map chunk-local coin lines to global line slots.
+  const localToGlobal = [-1, -1, -1, -1, -1, -1, -1, -1];
+  const e = c.e;
+  for (let k = 0; k + 4 < e.length; k += 5) {
+    const t = e[k];
+    if (entityTier(t) > s.etier) continue;
+    const x = x0 + e[k + 1];
+    const y = e[k + 2];
+    if (t === E_TOKEN) {
+      if (s.tokenPlaced) continue;
+      s.tokenPlaced = 1;
+      spawn(s, E_TOKEN, x, y, s.sprint, 0, 0);
+      continue;
+    }
+    if (t === E_COIN) {
+      const lp = e[k + 3] & 7;
+      if (localToGlobal[lp] < 0) {
+        const g = s.lineSeq % LINE_CAP;
+        s.lineSeq++;
+        localToGlobal[lp] = g;
+        s.lineTotal[g] = 0;
+        s.lineGot[g] = 0;
+        s.lineId[g] = s.lineSeq;
+      }
+      const g = localToGlobal[lp];
+      s.lineTotal[g]++;
+      spawn(s, E_COIN, x, y, 0, 0, g);
+      continue;
+    }
+    if (t === E_PYLON) {
+      spawn(s, E_PYLON, x, y, pylonGap(s.mode === MODE_RACE ? 2 : s.diff, e[k + 3]), 0, 0);
+      continue;
+    }
+    spawn(s, t, x, y, e[k + 3], e[k + 4], 0);
+  }
+  // A sprint whose chunks carry no token slot gets one on the gate approach.
+  if (qi === s.cqN - 1 && !s.tokenPlaced && s.sprint < 3 && s.etier >= 1) {
+    s.tokenPlaced = 1;
+    spawn(s, E_TOKEN, s.gateX - 300, 230, s.sprint, 0, 0);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Geometry
+// ---------------------------------------------------------------------------
+
 export function createSim(cfg: SimConfig): SimState {
   'worklet';
   const st = speedTable(cfg.mode, cfg.difficulty);
@@ -860,170 +1024,6 @@ export function createSim(cfg: SimConfig): SimState {
   startSprint(s, 0, null);
   return s;
 }
-
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
-
-function emit(s: SimState, kind: number, a: number, b: number, c: number, d: number): void {
-  'worklet';
-  if (s.evN >= EV_CAP) return;
-  const o = s.evN * EV_STRIDE;
-  s.ev[o] = kind;
-  s.ev[o + 1] = a;
-  s.ev[o + 2] = b;
-  s.ev[o + 3] = c;
-  s.ev[o + 4] = d;
-  s.evN++;
-}
-
-// ---------------------------------------------------------------------------
-// Course
-// ---------------------------------------------------------------------------
-
-export function distU(s: SimState): number {
-  'worklet';
-  return s.dist >> 8;
-}
-
-/** Speed fraction Q8 (0..256) between base and cap. */
-export function speedFrac(s: SimState): number {
-  'worklet';
-  const den = s.speedCap - s.speedBase;
-  if (den <= 0) return 0;
-  return clampi(idiv((s.speed - s.speedBase) * 256, den), 0, 256);
-}
-
-/** Shark anchor x in the view (u): 250 at base speed, 140 at max. */
-export function anchorX(s: SimState): number {
-  'worklet';
-  return 250 - ((110 * speedFrac(s)) >> 8);
-}
-
-/** Course visible ahead of the shark centre (u). */
-export function aheadU(s: SimState): number {
-  'worklet';
-  return VIEW_W - anchorX(s);
-}
-
-/**
- * Start sprint `idx`: materialize its descriptor into the chunk queue. `desc`
- * may be a server-streamed descriptor; null regenerates locally.
- */
-export function startSprint(s: SimState, idx: number, desc: SprintDescriptor | null): void {
-  'worklet';
-  const d = desc || generateSprint(s.seed, idx, s.mode, s.tier, s.speed >> 8);
-  s.sprint = idx;
-  const du = distU(s);
-  // Lead-in: no hazard hitbox within ~1.5s of the pocket exit.
-  const lead = idx === 0 ? 260 : idiv((s.speed >> 8) * 3, 2);
-  let x = du + lead;
-  s.sprintStart = x;
-  s.cqN = 0;
-  s.cqNext = 0;
-  s.tokenPlaced = idx >= 3 || s.etier < 1 ? 1 : 0;
-  for (let i = 0; i < d.chunks.length && i < s.cq.length; i++) {
-    s.cq[i] = d.chunks[i];
-    s.cqX[i] = x;
-    x += CHUNKS[d.chunks[i]].len;
-    s.cqN++;
-  }
-  // Gate at the end of the sprint.
-  let kind = G_TIDE;
-  if (s.mode === MODE_RIDE && idx >= 2) kind = G_RIDE;
-  if (s.mode === MODE_RACE) kind = G_FINISH;
-  s.gateKind = kind;
-  s.gateX = x + 160;
-  if (s.mode === MODE_RACE) {
-    // One race course: mid split gate at half the course (no pocket).
-    s.gateX = s.sprintStart + 7500;
-    spawn(s, E_GATE, s.sprintStart + 3750, 500, G_SPLIT, 0, 0);
-  }
-  spawn(s, E_GATE, s.gateX, 500, kind, 0, 0);
-  emit(s, EV_SPRINT, idx, s.gateX, kind, 0);
-}
-
-function allocEntity(s: SimState): number {
-  'worklet';
-  for (let k = 0; k < ENT_CAP; k++) {
-    const i = (s.eHint + k) % ENT_CAP;
-    if (s.et[i] === E_NONE) {
-      s.eHint = (i + 1) % ENT_CAP;
-      return i;
-    }
-  }
-  return -1;
-}
-
-function spawn(s: SimState, t: number, x: number, y: number, p1: number, p2: number, line: number): number {
-  'worklet';
-  const i = allocEntity(s);
-  if (i < 0) return -1;
-  s.et[i] = t;
-  s.ex[i] = x;
-  s.ey[i] = y;
-  s.epx[i] = x;
-  s.epy[i] = y;
-  s.ep1[i] = p1;
-  s.ep2[i] = p2;
-  s.est[i] = 0;
-  s.etm[i] = 0;
-  s.evx[i] = 0;
-  s.evy[i] = 0;
-  s.ef[i] = 0;
-  s.eline[i] = line;
-  return i;
-}
-
-function spawnChunk(s: SimState, qi: number): void {
-  'worklet';
-  const c = CHUNKS[s.cq[qi]];
-  const x0 = s.cqX[qi];
-  // Map chunk-local coin lines to global line slots.
-  const localToGlobal = [-1, -1, -1, -1, -1, -1, -1, -1];
-  const e = c.e;
-  for (let k = 0; k + 4 < e.length; k += 5) {
-    const t = e[k];
-    if (entityTier(t) > s.etier) continue;
-    const x = x0 + e[k + 1];
-    const y = e[k + 2];
-    if (t === E_TOKEN) {
-      if (s.tokenPlaced) continue;
-      s.tokenPlaced = 1;
-      spawn(s, E_TOKEN, x, y, s.sprint, 0, 0);
-      continue;
-    }
-    if (t === E_COIN) {
-      const lp = e[k + 3] & 7;
-      if (localToGlobal[lp] < 0) {
-        const g = s.lineSeq % LINE_CAP;
-        s.lineSeq++;
-        localToGlobal[lp] = g;
-        s.lineTotal[g] = 0;
-        s.lineGot[g] = 0;
-        s.lineId[g] = s.lineSeq;
-      }
-      const g = localToGlobal[lp];
-      s.lineTotal[g]++;
-      spawn(s, E_COIN, x, y, 0, 0, g);
-      continue;
-    }
-    if (t === E_PYLON) {
-      spawn(s, E_PYLON, x, y, pylonGap(s.mode === MODE_RACE ? 2 : s.diff, e[k + 3]), 0, 0);
-      continue;
-    }
-    spawn(s, t, x, y, e[k + 3], e[k + 4], 0);
-  }
-  // A sprint whose chunks carry no token slot gets one on the gate approach.
-  if (qi === s.cqN - 1 && !s.tokenPlaced && s.sprint < 3 && s.etier >= 1) {
-    s.tokenPlaced = 1;
-    spawn(s, E_TOKEN, s.gateX - 300, 230, s.sprint, 0, 0);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Geometry
-// ---------------------------------------------------------------------------
 
 export function ellipseRect(cx: number, cy: number, rx: number, ry: number, x0: number, y0: number, x1: number, y1: number): boolean {
   'worklet';
@@ -1196,6 +1196,17 @@ function breakChain(s: SimState, reason: number): void {
 // Input
 // ---------------------------------------------------------------------------
 
+function startDash(s: SimState): void {
+  'worklet';
+  s.boost -= BOOST_COST;
+  s.dash = DASH_STEPS;
+  s.dashBuf = 0;
+  s.stDashes++;
+  if (s.vy > 200 * Q) s.vy = 200 * Q;
+  if (s.vy < -200 * Q) s.vy = -200 * Q;
+  emit(s, EV_DASH, s.boost, 0, 0, 0);
+}
+
 /**
  * Apply one logged input at the current step (before step()). Every mode,
  * every client and the server verifier go through here.
@@ -1294,17 +1305,6 @@ export function applyInput(s: SimState, kind: number, sub: number, arg: number):
     }
     // EXT_PAUSE_RESUME: recorded for plausibility (exact-state resume, QUEUE REALITY).
   }
-}
-
-function startDash(s: SimState): void {
-  'worklet';
-  s.boost -= BOOST_COST;
-  s.dash = DASH_STEPS;
-  s.dashBuf = 0;
-  s.stDashes++;
-  if (s.vy > 200 * Q) s.vy = 200 * Q;
-  if (s.vy < -200 * Q) s.vy = -200 * Q;
-  emit(s, EV_DASH, s.boost, 0, 0, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -1418,6 +1418,13 @@ function speedMulQ8(s: SimState): number {
   return m;
 }
 
+function bounce(s: SimState, which: number): void {
+  'worklet';
+  s.stBounces++;
+  emit(s, EV_BOUNCE, which, s.dist >> 8, 0, 0);
+  if (s.chain > 0 || s.frenzy > 0) breakChain(s, which === 0 ? 4 : 5);
+}
+
 function sharkPhysics(s: SimState): void {
   'worklet';
   const sf = speedFrac(s);
@@ -1451,13 +1458,6 @@ function sharkPhysics(s: SimState): void {
     if (s.vy > 0) s.vy = -420 * Q;
     bounce(s, 1);
   }
-}
-
-function bounce(s: SimState, which: number): void {
-  'worklet';
-  s.stBounces++;
-  emit(s, EV_BOUNCE, which, s.dist >> 8, 0, 0);
-  if (s.chain > 0 || s.frenzy > 0) breakChain(s, which === 0 ? 4 : 5);
 }
 
 function hazardAhead(s: SimState, lookU: number): boolean {
@@ -1607,6 +1607,82 @@ function updateEntities(s: SimState, du: number, pdu: number): void {
   void pdu;
 }
 
+function skim(s: SimState, i: number): void {
+  'worklet';
+  s.stSkims++;
+  s.skimStack = s.skimTimer > 0 ? clampi(s.skimStack + 1, 1, 4) : 1;
+  s.skimTimer = 60;
+  if (!scoringOn(s)) return;
+  const pts = (s.dash > 0 ? 50 : 25) * multiplier(s);
+  addScore(s, pts);
+  addBoost(s, 34);
+  chainEvent(s);
+  const y = s.et[i] === E_JELLY ? jellyY(s, i) : s.ey[i];
+  emit(s, EV_SKIM, s.dist >> 8, s.y >> 8, s.skimStack, y);
+}
+
+function end(s: SimState, reason: number): void {
+  'worklet';
+  if (s.phase === PH_DONE) return;
+  if (s.frenzy > 0) {
+    s.frenzy = 0;
+    bankPot(s, 0);
+  }
+  s.phase = PH_DONE;
+  s.endReason = reason;
+  emit(s, EV_END, reason, s.score, s.hearts, s.tokens);
+}
+
+function gate(s: SimState, i: number): void {
+  'worklet';
+  const kind = s.ep1[i];
+  if (kind === G_SPLIT) {
+    const k = clampi(s.gates, 0, 7);
+    s.splitSteps[k] = s.step;
+    s.gates++;
+    emit(s, EV_GATE, 0, kind, s.step, 0);
+    return;
+  }
+  const frenzyNow = s.frenzy > 0;
+  const multNow = multiplier(s);
+  if (s.frenzy > 0) {
+    s.frenzy = 0;
+    bankPot(s, 0);
+  }
+  if (kind === G_FINISH) {
+    s.finishStep = s.step;
+    end(s, END_FINISH);
+    emit(s, EV_GATE, 0, kind, s.step, 0);
+    return;
+  }
+  if (kind === G_RIDE) {
+    s.finishStep = s.step;
+    end(s, END_GATE);
+    emit(s, EV_GATE, 0, kind, s.step, 0);
+    return;
+  }
+  // Tide Gate: clock bonus 4s + (multiplier - 1)s, 8s during Frenzy; 60s cap.
+  let bonus = 0;
+  if (s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE) {
+    const want = frenzyNow ? 480 : (4 + (multNow - 1)) * 60;
+    const room = CLOCK_CAP - (CLOCK_BASE + s.bonusSteps);
+    bonus = clampi(want, 0, room);
+    s.bonusSteps += bonus;
+    s.clockSteps += bonus;
+  }
+  const k = clampi(s.gates, 0, 7);
+  s.splitSteps[k] = s.step;
+  s.gates++;
+  emit(s, EV_GATE, bonus, kind, s.step, s.gates);
+  s.phase = PH_POCKET;
+  s.phaseSteps = 0;
+  s.pocketY = s.y;
+  s.float = 0;
+  s.dash = 0;
+  s.dashBuf = 0;
+  s.holding = s.holding;
+}
+
 function collide(s: SimState, du: number, pdu: number): void {
   'worklet';
   const sy = s.y >> 8;
@@ -1749,80 +1825,17 @@ function collide(s: SimState, du: number, pdu: number): void {
   }
 }
 
-function skim(s: SimState, i: number): void {
+export function stateHash(s: SimState): number {
   'worklet';
-  s.stSkims++;
-  s.skimStack = s.skimTimer > 0 ? clampi(s.skimStack + 1, 1, 4) : 1;
-  s.skimTimer = 60;
-  if (!scoringOn(s)) return;
-  const pts = (s.dash > 0 ? 50 : 25) * multiplier(s);
-  addScore(s, pts);
-  addBoost(s, 34);
-  chainEvent(s);
-  const y = s.et[i] === E_JELLY ? jellyY(s, i) : s.ey[i];
-  emit(s, EV_SKIM, s.dist >> 8, s.y >> 8, s.skimStack, y);
-}
-
-function gate(s: SimState, i: number): void {
-  'worklet';
-  const kind = s.ep1[i];
-  if (kind === G_SPLIT) {
-    const k = clampi(s.gates, 0, 7);
-    s.splitSteps[k] = s.step;
-    s.gates++;
-    emit(s, EV_GATE, 0, kind, s.step, 0);
-    return;
-  }
-  const frenzyNow = s.frenzy > 0;
-  const multNow = multiplier(s);
-  if (s.frenzy > 0) {
-    s.frenzy = 0;
-    bankPot(s, 0);
-  }
-  if (kind === G_FINISH) {
-    s.finishStep = s.step;
-    end(s, END_FINISH);
-    emit(s, EV_GATE, 0, kind, s.step, 0);
-    return;
-  }
-  if (kind === G_RIDE) {
-    s.finishStep = s.step;
-    end(s, END_GATE);
-    emit(s, EV_GATE, 0, kind, s.step, 0);
-    return;
-  }
-  // Tide Gate: clock bonus 4s + (multiplier - 1)s, 8s during Frenzy; 60s cap.
-  let bonus = 0;
-  if (s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE) {
-    const want = frenzyNow ? 480 : (4 + (multNow - 1)) * 60;
-    const room = CLOCK_CAP - (CLOCK_BASE + s.bonusSteps);
-    bonus = clampi(want, 0, room);
-    s.bonusSteps += bonus;
-    s.clockSteps += bonus;
-  }
-  const k = clampi(s.gates, 0, 7);
-  s.splitSteps[k] = s.step;
-  s.gates++;
-  emit(s, EV_GATE, bonus, kind, s.step, s.gates);
-  s.phase = PH_POCKET;
-  s.phaseSteps = 0;
-  s.pocketY = s.y;
-  s.float = 0;
-  s.dash = 0;
-  s.dashBuf = 0;
-  s.holding = s.holding;
-}
-
-function end(s: SimState, reason: number): void {
-  'worklet';
-  if (s.phase === PH_DONE) return;
-  if (s.frenzy > 0) {
-    s.frenzy = 0;
-    bankPot(s, 0);
-  }
-  s.phase = PH_DONE;
-  s.endReason = reason;
-  emit(s, EV_END, reason, s.score, s.hearts, s.tokens);
+  let h = s.hash;
+  h = fnv(h, s.y);
+  h = fnv(h, s.vy);
+  h = fnv(h, s.speed);
+  h = fnv(h, s.dist);
+  h = fnv(h, s.score);
+  h = fnv(h, s.hearts);
+  h = fnv(h, s.boost);
+  return h >>> 0;
 }
 
 /**
@@ -2000,19 +2013,6 @@ export function step(s: SimState): void {
 
   if (s.phaseSteps % 6 === 0) emit(s, EV_SCORE, s.score, s.pot, 0, 0);
   if (s.step % 600 === 0) s.hash = stateHash(s);
-}
-
-export function stateHash(s: SimState): number {
-  'worklet';
-  let h = s.hash;
-  h = fnv(h, s.y);
-  h = fnv(h, s.vy);
-  h = fnv(h, s.speed);
-  h = fnv(h, s.dist);
-  h = fnv(h, s.score);
-  h = fnv(h, s.hearts);
-  h = fnv(h, s.boost);
-  return h >>> 0;
 }
 
 // ---------------------------------------------------------------------------

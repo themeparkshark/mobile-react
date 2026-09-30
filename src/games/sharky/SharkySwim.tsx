@@ -1,535 +1,555 @@
 /**
- * SharkySwim.tsx — native Skia rebuild of the WebView flappy shark.
+ * SharkySwim: "Tide Run", the one-thumb underwater theme-park runner.
  *
- * Renders entirely on the Skia canvas driven by useSharkyEngine's SharedValues
- * (no JS-thread animation). Wrapped in GameShellV2 so it inherits the countdown,
- * pause sheet, results screen, star→multiplier contract and confetti — and
- * reports {score, maxCombo, seed} through onComplete for server-authoritative
- * rewards. One-thumb, portrait, offline.
+ * Hold anywhere to swim up, let go to sink. Skim the coaster pylons, chomp the
+ * prize boxes, chain the golden rings into a Frenzy, beat the tide to each
+ * gate, then look up while your shark cruises the Tide Pocket. Walk-safe:
+ * line movement never pauses (the shell plays through); letting go wraps the
+ * shark in a Bubble Float instead of crashing.
  *
- * External contract (unchanged from the legacy SharkMiniGame):
- *   onComplete(multiplier: number, meta) — GameShellV2 derives multiplier from
- *   stars; meta carries { score, duration, seed, maxCombo } to the backend.
- *   onClose() — player quit without a win.
+ * Everything that matters runs in the deterministic integer sim (sim/core.ts)
+ * on the UI thread; the same file is the server verifier, so ghosts replay
+ * exactly and results are server-authoritative (swim proof in meta).
+ *
+ * External contract (unchanged): onComplete(multiplier, meta), onClose().
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View, type LayoutChangeEvent } from 'react-native';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { runOnUI } from 'react-native-reanimated';
+import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
+import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
+import { useCamera } from '../../gamekit/fx/useCamera';
+import { GameAudio } from '../../gamekit/audio/GameAudio';
+import { registerStudioAudio, useStudioAudio } from '../../gamekit/audio/studioLibrary';
+import { useGameMusic } from '../../gamekit/audio/useGameMusic';
+import { useWalkSense } from '../../gamekit/motion/useWalkSense';
+import { usePerfProbe, PerfOverlay } from '../../gamekit/perf/PerfOverlay';
+import { starsFor } from '../../gamekit/core/scoring';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import {
-  View,
-  Pressable,
-  StyleSheet,
-  Dimensions,
-  type LayoutChangeEvent,
-} from 'react-native';
+  END_FINISH, END_GATE, END_TIME, EXT_PAUSE_RESUME, EXT_REVIVE, IN_DASH, IN_PRESS, IN_RELEASE,
+  MODE_GHOST, MODE_PRACTICE, MODE_QUEUE, MODE_RACE, MODE_RIDE, decodeInputs, encodeInputs, hash2, multiplier, replay,
+  type InputEntry, type SimConfig, type SimState,
+} from './sim/core';
+import { buildSwimProof } from './sim/verify';
+import { BOT_PROFILES, planRun } from './sim/bots';
+import { useSharkyEngine } from './useSharkyEngine';
+import { SharkyCanvas } from './render/SharkyCanvas';
+import { SharkyHud } from './render/SharkyHud';
+import { sharkyLayout, type SharkyLayout } from './render/view';
+import { createSharkyFeel } from './sharkyFeel';
 import {
-  Canvas,
-  Image as SkiaImage,
-  Group,
-  RoundedRect,
-  useImage,
-} from '@shopify/react-native-skia';
-import {
-  useSharedValue,
-  useDerivedValue,
-  runOnJS,
-  type SharedValue,
-} from 'react-native-reanimated';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  GameShellV2,
-  ParticleField,
-  useCombo,
-  GAME_COLORS,
-  type GameShellV2Handle,
-  type GameResult,
-  type ParticleHandle,
-} from '../../gamekit';
-import {
-  DIFFICULTY,
-  OBSTACLE,
-  PARALLAX,
-  PB_KEY,
-  RING,
-  ROUND_SECONDS,
-  SHARK,
-  type Difficulty,
-} from './constants';
-import { useSharkyEngine, type Obstacle, type Ring } from './useSharkyEngine';
-import {
-  OCEAN_BACK,
-  OCEAN_MID,
-  OCEAN_FRONT,
-  RING_IMAGE,
-  SHARK_FRAMES,
-} from './assets';
+  EMPTY_PROGRESS, loadProgress, ratedDifficulty, saveProgress, unlockCard, unlockTier,
+  type GhostRecord, type SharkyProgress,
+} from './meta/progress';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+registerStudioAudio('sharky');
+
+export type SharkyMode = 'queue' | 'ride' | 'race' | 'ghost' | 'practice';
+export type Difficulty = 1 | 2 | 3;
 
 export interface SharkySwimProps {
   visible: boolean;
-  /** 1-3, chosen by session context. Controls gap size + speed. */
+  /** 1-3. When omitted, a local rating from recent stars is used (design 5.6). */
   difficulty?: Difficulty;
-  /** Optional deterministic seed (else time-based). Enables replay. */
+  /** Deterministic seed (server attempt seed or LinePlay item seed). */
   seed?: number;
-  /** GameShellV2 external contract — matches MiniGameSelector. */
+  /** queue (LinePlay, default), ride (Ride Challenge), race, ghost, practice. */
+  mode?: SharkyMode;
+  taskName?: string;
+  rideId?: number;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
+  onQuit?: (resume: () => void) => void;
 }
 
-/** Star thresholds by score. Tuned so a clean ~30s run earns 1-2 stars. */
-function scoreToStars(score: number): number {
-  if (score >= 600) return 3;
-  if (score >= 300) return 2;
-  if (score >= 120) return 1;
-  return 0;
+const MODE_ID: Record<SharkyMode, number> = { queue: MODE_QUEUE, ride: MODE_RIDE, race: MODE_RACE, ghost: MODE_GHOST, practice: MODE_PRACTICE };
+const QUEUE_STARS = { one: 900, two: 2400, three: 5000 };
+const RACE_NAMES = ['Captain Fin', 'Bubbles', 'Coral'];
+const RIVAL_COLORS = ['#ffffff', '#ffe27a', '#bff3ff'];
+const RIVAL_PROFILES = ['ace', 'regular', 'rookie'];
+
+function rideStars(s: SimState): number {
+  if (s.endReason !== END_GATE || s.hearts < 1) return 0;
+  if (s.tokens >= 3 && s.score >= 3300) return 3;
+  if (s.score >= 1800) return 2;
+  return 1;
 }
 
 export function SharkySwim({
-  visible,
-  difficulty = 1,
-  seed,
-  onComplete,
-  onClose,
+  visible, difficulty, seed, mode = 'queue', taskName, rideId, onComplete, onClose, onQuit,
 }: SharkySwimProps) {
-  const shellRef = useRef<GameShellV2Handle>(null);
-  const trailRef = useRef<ParticleHandle>(null);
-
-  // Playfield size (measured; defaults to screen so the canvas is never 0).
-  const [field, setField] = useState({ w: SCREEN_W, h: SCREEN_H - 120 });
-
-  // Score / combo (JS thread — updated from engine callbacks).
+  const reducedMotion = useReducedGameMotion();
+  const shell = useRef<GameShellV2Handle>(null);
+  const fx = useRef<FxStageHandle>(null);
+  const [layout, setLayout] = useState<SharkyLayout | null>(null);
+  const layoutRef = useRef<SharkyLayout>(sharkyLayout(390, 700));
+  const [progress, setProgress] = useState<SharkyProgress | null>(null);
+  const [runIdx, setRunIdx] = useState(0);
+  const [runMode, setRunMode] = useState<SharkyMode>(mode);
+  const [ghost, setGhost] = useState<GhostRecord | null>(null);
   const [score, setScore] = useState(0);
-  const scoreRef = useRef(0);
-  const combo = useCombo();
-  const [best, setBest] = useState<number>(0);
+  const [fever, setFever] = useState(false);
   const [result, setResult] = useState<GameResult | null>(null);
-  const runSeed = useRef<number>(seed ?? Date.now() >>> 0);
-  const startedAt = useRef<number>(0);
-  const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [reviveOffer, setReviveOffer] = useState(false);
+  const [frozen, setFrozen] = useState(false);
+  const [banner, setBanner] = useState<string | null>(null);
+  const [gates, setGates] = useState(0);
+  const [newCard, setNewCard] = useState<string | null>(null);
+  const startedAt = useRef(0);
+  const pausedMs = useRef(0);
+  const endedRef = useRef(false);
+  const perf = usePerfProbe(visible && !result);
 
-  const cfg = DIFFICULTY[difficulty];
-
-  // Load personal best once.
   useEffect(() => {
     let alive = true;
-    AsyncStorage.getItem(PB_KEY)
-      .then((v) => {
-        if (alive && v != null) setBest(parseInt(v, 10) || 0);
-      })
-      .catch(() => undefined);
+    void loadProgress().then((p) => alive && setProgress(p));
     return () => {
       alive = false;
     };
   }, []);
 
-  // --- Engine callbacks (JS thread) ----------------------------------------
-  // Rings drive the combo chain (a chain of rings triggers fever); a cleared
-  // gap scores at whatever multiplier the current ring streak is worth.
-  const onRingCollected = useCallback(
-    (pts: number) => {
-      const next = combo.hit();
-      scoreRef.current += Math.round(pts * next.multiplier);
-      setScore(scoreRef.current);
-    },
-    [combo],
-  );
+  // --- run config ---------------------------------------------------------------
+  const prog = progress ?? EMPTY_PROGRESS;
+  const cfg = useMemo<SimConfig>(() => {
+    const m = MODE_ID[runMode];
+    const base = (seed ?? 20260930) >>> 0;
+    const runSeed = ghost ? ghost.seed : runIdx === 0 ? base : hash2(base, runIdx) >>> 0;
+    return {
+      seed: runSeed | 0,
+      mode: m,
+      difficulty: ghost ? ghost.difficulty : difficulty ?? ratedDifficulty(prog),
+      tier: ghost ? ghost.tier : unlockTier(prog.runs),
+      runs: ghost ? ghost.runs : prog.runs,
+    };
+  }, [runMode, seed, runIdx, ghost, difficulty, prog]);
 
-  const onGapCleared = useCallback(
-    (pts: number) => {
-      scoreRef.current += Math.round(pts * combo.multiplier);
-      setScore(scoreRef.current);
-    },
-    [combo],
-  );
+  // --- engine ---------------------------------------------------------------------
+  const feelRef = useRef<ReturnType<typeof createSharkyFeel> | null>(null);
+  const autoplay = __DEV__ && process.env.EXPO_PUBLIC_SHARKY_AUTOPLAY === '1';
+  const engine = useSharkyEngine(cfg, (batch) => feelRef.current?.handle(batch), autoplay);
+  const walk = useWalkSense({ active: visible && !result });
+  const L = layout ?? layoutRef.current;
+  const camera = useCamera({ width: L.w, height: L.h, timeScale: engine.clock.fxScale, reducedMotion, walking: walk.walking });
 
-  const finish = useCallback(() => {
-    if (result) return;
-    const finalScore = scoreRef.current;
-    const isNewBest = finalScore > best;
-    const stars = scoreToStars(finalScore);
-    if (isNewBest) {
-      setBest(finalScore);
-      AsyncStorage.setItem(PB_KEY, String(finalScore)).catch(() => undefined);
-    }
-    const duration = (Date.now() - startedAt.current) / 1000;
-    setResult({
-      score: finalScore,
-      stars,
-      maxCombo: combo.maxStreak,
-      message: stars === 0 ? 'CRASHED!' : undefined,
-      meta: {
-        score: finalScore,
-        duration,
-        seed: runSeed.current,
-        maxCombo: combo.maxStreak,
-        difficulty,
-        isNewBest,
+  const finish = useCallback((reason: number) => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    // Read the final state by replaying the JS log (exact, and proof-grade).
+    const entries = engine.log.current.slice();
+    setTimeout(() => {
+      {
+        const s = replay(cfg, entries, 60 * 60 * 20);
+        const elapsed = Date.now() - startedAt.current;
+        const proof = buildSwimProof(cfg, entries, s, elapsed);
+        const m = cfg.mode;
+        const stars = m === MODE_RIDE ? rideStars(s) : m === MODE_RACE ? (s.endReason === END_FINISH ? 1 : 0) : starsFor(s.score, QUEUE_STARS);
+        const before = prog.runs;
+        const next: SharkyProgress = {
+          ...prog,
+          runs: before + 1,
+          best: { ...prog.best },
+          recentStars: [...prog.recentStars, stars].slice(-5),
+          ghosts: { ...prog.ghosts },
+          rideTokens: { ...prog.rideTokens },
+        };
+        const key = runMode;
+        const isBest = s.score > (prog.best[key] ?? 0);
+        if (isBest) next.best[key] = s.score;
+        if (m !== MODE_RACE && (isBest || !prog.ghosts[key])) {
+          next.ghosts[key] = {
+            seed: cfg.seed, mode: cfg.mode, tier: cfg.tier, difficulty: cfg.difficulty, runs: cfg.runs,
+            score: s.score, finishStep: s.finishStep || s.step, inputs: encodeInputs(entries), name: 'Your best', at: Date.now(),
+          };
+        }
+        if (rideId != null) next.rideTokens[String(rideId)] = (prog.rideTokens[String(rideId)] ?? 0) + s.tokens;
+        setNewCard(m === MODE_QUEUE ? unlockCard(before, before + 1) : null);
+        setProgress(next);
+        void saveProgress(next);
+        const res: GameResult = {
+          score: s.score,
+          stars,
+          message: reason === END_TIME ? 'TIME!' : reason === END_GATE ? 'RIDE GATE!' : reason === END_FINISH ? 'FINISH!' : 'WIPEOUT!',
+          maxCombo: s.maxChain,
+          thresholds: m === MODE_RIDE ? { one: 1, two: 1800, three: 3300 } : QUEUE_STARS,
+          stats: [
+            { label: 'SKIMS', value: `${s.stSkims}` },
+            { label: 'PERFECT', value: `${s.stPerfects}` },
+            { label: 'TOKENS', value: `${s.tokens}/3` },
+            { label: 'CHOMPS', value: `${s.stChomps}` },
+          ],
+          meta: {
+            game: 'shark', score: s.score, seed: cfg.seed, mode: runMode, stars, reason,
+            maxCombo: s.maxChain, tokens: s.tokens, hearts: s.hearts, distance: s.dist >> 8,
+            duration: elapsed, swimProof: proof, walking: walk.walking, fps_p5: perf.summary().fpsP5,
+          },
+        };
+        setResult(res);
+      }
+    }, reason === END_TIME || reason === END_GATE || reason === END_FINISH ? 900 : 300);
+  }, [engine.log, cfg, prog, runMode, rideId, walk.walking, perf]);
+
+  feelRef.current = useMemo(() => createSharkyFeel({
+    fx,
+    camera,
+    clock: engine.clock,
+    layout: () => layoutRef.current,
+    calm: reducedMotion,
+    tier: () => cfg.tier,
+    hooks: {
+      onScore: (sc) => setScore(sc),
+      onGate: (_bonus, _kind, _step, g) => {
+        setGates(g);
+        setBanner(`SPRINT ${g + 1}`);
+        setTimeout(() => setBanner(null), 1800);
       },
-    });
-  }, [result, best, combo.maxStreak, difficulty]);
+      onPocketEnd: () => setBanner(null),
+      onFrenzy: (on) => setFever(on),
+      onFreeze: (on) => setFrozen(on),
+      onWipeout: () => {
+        if ((cfg.mode === MODE_QUEUE || cfg.mode === MODE_GHOST || cfg.mode === MODE_PRACTICE)) {
+          setTimeout(() => setReviveOffer(true), 900);
+          if (autoplay) setTimeout(() => engine.ext(EXT_REVIVE, 1), 1800);
+        }
+      },
+      onRevive: () => setReviveOffer(false),
+      onEnd: (reason) => {
+        setReviveOffer(false);
+        finish(reason);
+      },
+      onRivalDone: () => undefined,
+      onSprint: () => undefined,
+      onGateNear: () => undefined,
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [camera, engine.clock, reducedMotion, cfg, finish]);
 
-  const onCrash = useCallback(() => {
-    engine.loop.pause();
-    finish();
-  }, [finish]);
-
-  const engine = useSharkyEngine({
-    difficulty,
-    width: field.w,
-    height: field.h,
-    onGapCleared,
-    onRingCollected,
-    onCrash,
-  });
-
-  // --- Shell lifecycle ------------------------------------------------------
-  const handleStart = useCallback(() => {
-    scoreRef.current = 0;
+  // Reset the sim for every run (rematch, ghost race, sprint race).
+  const [rivalNames, setRivalNames] = useState<string[]>([]);
+  useEffect(() => {
+    if (!progress) return;
+    endedRef.current = false;
     setScore(0);
-    combo.reset();
-    setResult(null);
-    runSeed.current = seed ?? Date.now() >>> 0;
-    startedAt.current = Date.now();
-    engine.start(runSeed.current);
-    // Round timer — survive to the clock or crash, whichever first.
-    if (endTimer.current) clearTimeout(endTimer.current);
-    endTimer.current = setTimeout(() => {
-      engine.loop.pause();
-      finish();
-    }, ROUND_SECONDS * 1000);
-  }, [combo, engine, seed, finish]);
-
-  const handlePause = useCallback(() => {
-    engine.loop.pause();
-  }, [engine]);
-
-  const handleResume = useCallback(() => {
-    engine.loop.resume();
-  }, [engine]);
+    setFever(false);
+    setGates(0);
+    setReviveOffer(false);
+    setFrozen(false);
+    let rv: Array<{ cfg: SimConfig; log: InputEntry[] } | null> = [];
+    const names: string[] = [];
+    if (ghost) {
+      rv = [{ cfg: { seed: ghost.seed, mode: ghost.mode, difficulty: ghost.difficulty, tier: ghost.tier, runs: ghost.runs }, log: decodeInputs(ghost.inputs) }];
+      names.push(ghost.name);
+    } else if (cfg.mode === MODE_RACE) {
+      // House-crew racers: planned once here, then replayed in lockstep.
+      rv = RIVAL_PROFILES.map((p, j) => {
+        const bc = { ...cfg };
+        const plan = planRun(bc, BOT_PROFILES[p], hash2(cfg.seed, j + 11), 2400);
+        names.push(RACE_NAMES[j]);
+        return { cfg: bc, log: plan.log };
+      });
+    }
+    setRivalNames(names);
+    engine.reset(cfg, rv);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg, progress == null]);
 
   useEffect(() => {
-    return () => {
-      if (endTimer.current) clearTimeout(endTimer.current);
-    };
-  }, []);
+    if (!visible) return undefined;
+    void GameAudio.init();
+    return undefined;
+  }, [visible]);
+  useStudioAudio('sharky', ['sk_ring', 'sk_ring_perfect', 'sk_skim', 'sk_bump', 'sk_dash', 'sk_tide_gate', 'sh_chomp', 'coin_tick']);
 
-  // --- Tap to swim (coyote-forgiving; engine owns the grace window) ---------
-  const handleTap = useCallback(() => {
-    if (shellRef.current?.getPhase() !== 'playing') return;
-    engine.swim();
+  // Music: Chris's track-3 loop-edit; key rises each Tide Gate; Frenzy variant.
+  const key = gates >= 2 ? '_p4' : gates === 1 ? '_p2' : '';
+  const wanted = fever ? `sharky_frenzy_loop${key}` : `sharky_loop${key}`;
+  const bed = GameAudio.bed?.(wanted) ? wanted : GameAudio.bed?.('sharky_loop') ? 'sharky_loop' : 'chris.track3';
+  useGameMusic(visible && !result ? bed : null, { at: 'bar', fadeMs: 250 });
+
+  // --- input: one thumb; hold = swim, slide right or 2nd finger = Dash ------------
+  const input = engine.input;
+  const gesture = useMemo(() => Gesture.Manual()
+    .onTouchesDown((e, mgr) => {
+      'worklet';
+      mgr.activate();
+      const inp = input.value;
+      const t = e.allTouches[0];
+      if (inp.fingers === 0) {
+        inp.q.push(IN_PRESS, 0, 0);
+        inp.holding = true;
+        inp.startX = t ? t.x : 0;
+        inp.startY = t ? t.y : 0;
+        inp.startT = Date.now();
+        inp.slideFired = false;
+      } else if (e.numberOfTouches >= 2) {
+        inp.q.push(IN_DASH, 0, 0);
+      }
+      inp.fingers = e.numberOfTouches;
+    })
+    .onTouchesMove((e) => {
+      'worklet';
+      const inp = input.value;
+      const t = e.allTouches[0];
+      if (!t || !inp.holding) return;
+      const now = Date.now();
+      if (now - inp.startT > 180) {
+        inp.startX = t.x;
+        inp.startY = t.y;
+        inp.startT = now;
+        if (inp.slideFired && now - inp.startT > 0) inp.slideFired = false;
+      }
+      const dx = t.x - inp.startX;
+      const dy = t.y - inp.startY;
+      if (!inp.slideFired && dx >= 28 && dy < 36 && dy > -36) {
+        inp.q.push(IN_DASH, 0, 0);
+        inp.slideFired = true;
+        inp.startX = t.x;
+        inp.startY = t.y;
+        inp.startT = now;
+      }
+    })
+    .onTouchesUp((e, mgr) => {
+      'worklet';
+      const inp = input.value;
+      const left = e.numberOfTouches - e.changedTouches.length;
+      inp.fingers = left < 0 ? 0 : left;
+      if (inp.fingers === 0) {
+        if (inp.holding) inp.q.push(IN_RELEASE, 0, 0);
+        inp.holding = false;
+        mgr.end();
+      }
+    })
+    .onTouchesCancelled((_e, mgr) => {
+      'worklet';
+      const inp = input.value;
+      if (inp.holding) inp.q.push(IN_RELEASE, 0, 0);
+      inp.holding = false;
+      inp.fingers = 0;
+      mgr.end();
+    }), [input]);
+
+  // --- shell hooks -------------------------------------------------------------------
+  const onStart = useCallback(() => {
+    startedAt.current = Date.now();
+    pausedMs.current = 0;
+    engine.clock.resume();
+    engine.setRunning(true);
   }, [engine]);
 
-  const onFieldLayout = useCallback((e: LayoutChangeEvent) => {
+  const onPause = useCallback(() => {
+    engine.clock.pause();
+    // A held finger is gone after a hold: release on the first step back.
+    runOnUI(() => {
+      'worklet';
+      const inp = input.value;
+      if (inp.holding) inp.q.push(IN_RELEASE, 0, 0);
+      inp.holding = false;
+      inp.fingers = 0;
+    })();
+  }, [engine, input]);
+
+  const onResume = useCallback(() => {
+    engine.ext(EXT_PAUSE_RESUME, 0);
+    engine.clock.resume();
+  }, [engine]);
+
+  const onRematch = useCallback(() => {
+    setGhost(null);
+    setRunMode(mode);
+    setResult(null);
+    setNewCard(null);
+    setRunIdx((n) => n + 1);
+  }, [mode]);
+
+  const onChallenge = useCallback(() => {
+    // Race your best ghost on its identical course, or the house crew once races unlock.
+    const g = progress?.ghosts[mode] ?? null;
+    setResult(null);
+    setNewCard(null);
+    if (g && (progress?.runs ?? 0) < 3) {
+      setGhost(g);
+      setRunMode('ghost');
+    } else {
+      setGhost(null);
+      setRunMode('race');
+    }
+    setRunIdx((n) => n + 1);
+  }, [progress, mode]);
+
+  const onWrapUp = useCallback(() => {
+    // "Your ride's up!": save what we have.
+    const entries = engine.log.current.slice();
+    const sc = score;
+    return {
+      score: sc,
+      stars: cfg.mode === MODE_RIDE ? 0 : starsFor(sc, QUEUE_STARS),
+      thresholds: QUEUE_STARS,
+      meta: { game: 'shark', score: sc, seed: cfg.seed, mode: runMode, inputs: encodeInputs(entries) },
+    } as GameResult;
+  }, [engine.log, score, cfg, runMode]);
+
+  const getSnapshot = useCallback(() => ({
+    score,
+    steps: engine.log.current.length ? engine.log.current[engine.log.current.length - 1].step : 0,
+    state: { cfg, inputs: encodeInputs(engine.log.current) },
+  }), [score, cfg, engine.log]);
+
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
-    if (width > 0 && height > 0) setField({ w: width, h: height });
+    if (width < 10 || height < 10) return;
+    const l = sharkyLayout(width, height);
+    layoutRef.current = l;
+    setLayout(l);
   }, []);
+
+  const title = runMode === 'ride' ? 'Ride Challenge' : runMode === 'race' ? 'Sprint Race' : runMode === 'ghost' ? 'Ghost Race' : 'Sharky Swim';
+  const objective = runMode === 'ride'
+    ? 'Reach the Ride Gate. Hold to swim up, let go to sink.'
+    : cfg.tier === 0 ? 'Hold anywhere to swim up. Let go to sink.' : 'Beat the tide to each gate. Chain rings into a FRENZY.';
+  const showBoost = cfg.tier >= 2 || cfg.mode === MODE_RACE;
 
   return (
     <GameShellV2
-      ref={shellRef}
+      key={`sharky-${runIdx}`}
+      ref={shell}
       visible={visible}
-      title="Sharky Swim"
-      subtitle="Tap to swim through the gaps"
-      objective="Swim through the gaps. Grab golden rings for a combo!"
+      title={title}
+      subtitle={taskName}
       score={score}
-      multiplier={combo.multiplier}
-      fever={combo.fever}
-      personalBest={best}
+      multiplier={1}
+      fever={fever}
+      personalBest={prog.best[runMode] ?? 0}
+      objective={objective}
       result={result}
-      onStart={handleStart}
-      onPause={handlePause}
-      onResume={handleResume}
+      thresholds={cfg.mode === MODE_RIDE ? { one: 1, two: 1800, three: 3300 } : QUEUE_STARS}
+      gameId="sharky"
+      sessionKey={`sharky:${rideId ?? 0}:${cfg.seed}`}
+      movementPolicy="playThrough"
+      getSnapshot={getSnapshot}
+      onWrapUp={onWrapUp}
+      onStart={onStart}
+      onPause={onPause}
+      onResume={onResume}
       onComplete={onComplete}
       onClose={onClose}
+      onQuit={onQuit}
+      onRematch={runMode === 'ride' ? undefined : onRematch}
+      onChallenge={runMode === 'ride' || prog.runs < 1 ? undefined : onChallenge}
     >
-      <Pressable style={styles.fill} onPress={handleTap} onLayout={onFieldLayout}>
-        <OceanScene
-          engine={engine}
-          width={field.w}
-          height={field.h}
-          fever={combo.fever}
-        />
-        {/* Trail particles sit above the canvas, behind the HUD. */}
-        <ParticleField
-          ref={trailRef}
-          width={field.w}
-          height={field.h}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <TrailEmitter
-          engine={engine}
-          trailRef={trailRef}
-          fever={combo.fever}
-          tailX={field.w * SHARK.xFrac - SHARK.drawW * 0.35}
-        />
-      </Pressable>
+      <GestureHandlerRootView style={styles.fill}>
+        <GestureDetector gesture={gesture}>
+          <View style={styles.fill} onLayout={onLayout} collapsable={false}>
+            {layout ? (
+              <>
+                <Animated.View style={[StyleSheet.absoluteFill, camera.style]} pointerEvents="none">
+                  <SharkyCanvas
+                    layout={layout}
+                    sim={engine.sim}
+                    rivals={engine.rivals}
+                    tick={engine.tick}
+                    alpha={engine.alpha}
+                    rivalColors={RIVAL_COLORS}
+                    reducedMotion={reducedMotion}
+                  />
+                </Animated.View>
+                <SharkyHud layout={layout} sim={engine.sim} rivals={engine.rivals} tick={engine.tick} showBoost={showBoost} boostHint={!prog.boostHintSeen} />
+                <FxStage ref={fx} width={layout.w} height={layout.h} timeScale={engine.clock.fxScale} reducedMotion={reducedMotion} />
+              </>
+            ) : null}
+
+            {rivalNames.length ? (
+              <View pointerEvents="none" style={[styles.pills, { top: (layout?.skyH ?? 120) - 34 }]}>
+                {rivalNames.map((n, j) => (
+                  <View key={n} style={[styles.pill, { borderColor: RIVAL_COLORS[j] }]}>
+                    <Text style={styles.pillText}>{n}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {banner ? (
+              <View pointerEvents="none" style={[styles.banner, { top: (layout?.skyH ?? 120) + 40 }]}>
+                <Text style={styles.bannerText}>{banner}</Text>
+                <Text style={styles.bannerSub}>Look up, your shark is cruising</Text>
+              </View>
+            ) : null}
+
+            {frozen ? (
+              <View pointerEvents="none" style={styles.freeze}>
+                <View style={styles.freezeBubble}>
+                  <Text style={styles.freezeText}>TAP TO SWIM</Text>
+                </View>
+              </View>
+            ) : null}
+
+            {reviveOffer ? (
+              <View style={styles.revive}>
+                <View style={styles.reviveCard}>
+                  <Text style={styles.reviveTitle}>SECOND WIND?</Text>
+                  <Text style={styles.reviveBody}>One free revive this run. Back in with 1 heart.</Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.reviveBtn}
+                    onPress={() => {
+                      setReviveOffer(false);
+                      engine.ext(EXT_REVIVE, 1);
+                    }}
+                  >
+                    <Text style={styles.reviveBtnText}>REVIVE</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity accessibilityRole="button" onPress={() => setReviveOffer(false)}>
+                    <Text style={styles.reviveSkip}>No thanks</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+            {result && newCard ? (
+              <View pointerEvents="none" style={styles.newCard}>
+                <Text style={styles.newCardTitle}>NEXT RUN</Text>
+                <Text style={styles.newCardText}>{newCard}</Text>
+              </View>
+            ) : null}
+
+            {__DEV__ ? <PerfOverlay probe={perf} style={styles.perf} extra={() => `mult x${multiplier(engine.sim.value)} ${walk.walking ? 'walking' : ''}`} /> : null}
+          </View>
+        </GestureDetector>
+      </GestureHandlerRootView>
     </GameShellV2>
   );
 }
 
-// =============================================================================
-// Skia scene — all motion derives from engine SharedValues (UI thread)
-// =============================================================================
-
-interface SceneProps {
-  engine: ReturnType<typeof useSharkyEngine>;
-  width: number;
-  height: number;
-  fever: boolean;
-}
-
-function OceanScene({ engine, width, height, fever }: SceneProps) {
-  const back = useImage(OCEAN_BACK);
-  const mid = useImage(OCEAN_MID);
-  const front = useImage(OCEAN_FRONT);
-  const ringImg = useImage(RING_IMAGE);
-  const frame0 = useImage(SHARK_FRAMES[0]);
-  const frame1 = useImage(SHARK_FRAMES[1]);
-  const frame2 = useImage(SHARK_FRAMES[2]);
-
-  const sharkX = width * SHARK.xFrac;
-
-  return (
-    <Canvas style={{ width, height }}>
-      {/* Parallax ocean — three tiled layers scrolling at different rates. */}
-      <ParallaxLayer image={back} scrollX={engine.scrollX} factor={PARALLAX.back} width={width} height={height} />
-      <ParallaxLayer image={mid} scrollX={engine.scrollX} factor={PARALLAX.mid} width={width} height={height} />
-
-      {/* Obstacles (behind the shark, in front of mid ocean). */}
-      {Array.from({ length: engine.obstacles.value.length }).map((_, i) => (
-        <ObstaclePillar key={`ob-${i}`} obstacles={engine.obstacles} index={i} height={height} />
-      ))}
-
-      {/* Golden rings. */}
-      {Array.from({ length: engine.rings.value.length }).map((_, i) => (
-        <RingSprite key={`ring-${i}`} rings={engine.rings} index={i} image={ringImg} />
-      ))}
-
-      {/* Shark sprite — 3-frame swim cycle + velocity tilt. */}
-      <SharkSprite
-        engine={engine}
-        x={sharkX}
-        frames={[frame0, frame1, frame2]}
-      />
-
-      {/* Front ocean layer overlays for depth. */}
-      <ParallaxLayer image={front} scrollX={engine.scrollX} factor={PARALLAX.front} width={width} height={height} opacity={fever ? 0.55 : 0.85} />
-    </Canvas>
-  );
-}
-
-// --- One tiled, wrapping parallax layer -------------------------------------
-
-function ParallaxLayer({
-  image,
-  scrollX,
-  factor,
-  width,
-  height,
-  opacity = 1,
-}: {
-  image: ReturnType<typeof useImage>;
-  scrollX: SharedValue<number>;
-  factor: number;
-  width: number;
-  height: number;
-  opacity?: number;
-}) {
-  // Two side-by-side copies wrap seamlessly. Phase = -(scrollX*factor mod width).
-  const tx1 = useDerivedValue(() => {
-    'worklet';
-    const phase = (scrollX.value * factor) % width;
-    return -phase;
-  }, [scrollX, factor, width]);
-  const tx2 = useDerivedValue(() => {
-    'worklet';
-    const phase = (scrollX.value * factor) % width;
-    return -phase + width;
-  }, [scrollX, factor, width]);
-
-  const t1 = useDerivedValue(() => [{ translateX: tx1.value }], [tx1]);
-  const t2 = useDerivedValue(() => [{ translateX: tx2.value }], [tx2]);
-
-  if (!image) return null;
-  return (
-    <Group opacity={opacity}>
-      <Group transform={t1}>
-        <SkiaImage image={image} x={0} y={0} width={width} height={height} fit="cover" />
-      </Group>
-      <Group transform={t2}>
-        <SkiaImage image={image} x={0} y={0} width={width} height={height} fit="cover" />
-      </Group>
-    </Group>
-  );
-}
-
-// --- Obstacle pillar (top + bottom around the gap) --------------------------
-
-function ObstaclePillar({
-  obstacles,
-  index,
-  height,
-}: {
-  obstacles: SharedValue<Obstacle[]>;
-  index: number;
-  height: number;
-}) {
-  const x = useDerivedValue(() => obstacles.value[index].x, [obstacles, index]);
-  const topH = useDerivedValue(() => {
-    'worklet';
-    const ob = obstacles.value[index];
-    return ob.active ? Math.max(0, ob.gapY - ob.gapHalf) : 0;
-  }, [obstacles, index]);
-  const botY = useDerivedValue(() => {
-    'worklet';
-    const ob = obstacles.value[index];
-    return ob.active ? ob.gapY + ob.gapHalf : height;
-  }, [obstacles, index]);
-  const botH = useDerivedValue(() => {
-    'worklet';
-    const ob = obstacles.value[index];
-    return ob.active ? Math.max(0, height - (ob.gapY + ob.gapHalf)) : 0;
-  }, [obstacles, index]);
-  const opacity = useDerivedValue(() => (obstacles.value[index].active ? 1 : 0), [obstacles, index]);
-
-  return (
-    <Group opacity={opacity}>
-      <RoundedRect x={x} y={0} width={OBSTACLE.width} height={topH} r={OBSTACLE.cap} color={GAME_COLORS.navy} />
-      <RoundedRect x={x} y={botY} width={OBSTACLE.width} height={botH} r={OBSTACLE.cap} color={GAME_COLORS.navy} />
-      {/* Rim highlights read as coral kelp caps. */}
-      <RoundedRect x={x} y={0} width={OBSTACLE.width} height={topH} r={OBSTACLE.cap} color={GAME_COLORS.blue} style="stroke" strokeWidth={3} />
-      <RoundedRect x={x} y={botY} width={OBSTACLE.width} height={botH} r={OBSTACLE.cap} color={GAME_COLORS.blue} style="stroke" strokeWidth={3} />
-    </Group>
-  );
-}
-
-// --- Golden ring sprite ------------------------------------------------------
-
-function RingSprite({
-  rings,
-  index,
-  image,
-}: {
-  rings: SharedValue<Ring[]>;
-  index: number;
-  image: ReturnType<typeof useImage>;
-}) {
-  const x = useDerivedValue(() => rings.value[index].x - RING.drawSize / 2, [rings, index]);
-  const y = useDerivedValue(() => rings.value[index].y - RING.drawSize / 2, [rings, index]);
-  const opacity = useDerivedValue(() => (rings.value[index].active ? 1 : 0), [rings, index]);
-  if (!image) return null;
-  return (
-    <Group opacity={opacity}>
-      <SkiaImage image={image} x={x} y={y} width={RING.drawSize} height={RING.drawSize} fit="contain" />
-    </Group>
-  );
-}
-
-// --- Shark sprite (3-frame flipbook + velocity tilt) ------------------------
-
-function SharkSprite({
-  engine,
-  x,
-  frames,
-}: {
-  engine: ReturnType<typeof useSharkyEngine>;
-  x: number;
-  frames: Array<ReturnType<typeof useImage>>;
-}) {
-  const drawX = x - SHARK.drawW / 2;
-  const drawY = useDerivedValue(() => engine.sharkY.value - SHARK.drawH / 2, [engine.sharkY]);
-
-  // Tilt with vertical velocity (nose up when swimming, down when falling).
-  const transform = useDerivedValue(() => {
-    'worklet';
-    const vy = engine.sharkVY.value;
-    const tilt = Math.max(-0.5, Math.min(0.6, vy / 1400));
-    return [
-      { translateX: x },
-      { translateY: engine.sharkY.value },
-      { rotate: tilt },
-      { translateX: -x },
-      { translateY: -engine.sharkY.value },
-    ];
-  }, [engine.sharkVY, engine.sharkY, x]);
-
-  // Only one frame is visible at a time; opacity toggles by sharkFrame.
-  const op0 = useDerivedValue(() => (engine.sharkFrame.value === 0 ? 1 : 0), [engine.sharkFrame]);
-  const op1 = useDerivedValue(() => (engine.sharkFrame.value === 1 ? 1 : 0), [engine.sharkFrame]);
-  const op2 = useDerivedValue(() => (engine.sharkFrame.value === 2 ? 1 : 0), [engine.sharkFrame]);
-  const ops = [op0, op1, op2];
-
-  return (
-    <Group transform={transform}>
-      {frames.map((img, i) =>
-        img ? (
-          <Group key={i} opacity={ops[i]}>
-            <SkiaImage
-              image={img}
-              x={drawX}
-              y={drawY}
-              width={SHARK.drawW}
-              height={SHARK.drawH}
-              fit="contain"
-            />
-          </Group>
-        ) : null,
-      )}
-    </Group>
-  );
-}
-
-// =============================================================================
-// Trail emitter — pulls shark position off the UI thread at a throttled cadence
-// and drips particles behind it (juice, quality bar #3).
-// =============================================================================
-
-function TrailEmitter({
-  engine,
-  trailRef,
-  fever,
-  tailX,
-}: {
-  engine: ReturnType<typeof useSharkyEngine>;
-  trailRef: React.RefObject<ParticleHandle | null>;
-  fever: boolean;
-  /** Fixed on-screen x of the shark's tail (its x is fixed in a side-scroller). */
-  tailX: number;
-}) {
-  const lastEmit = useSharedValue(0);
-
-  const drop = useCallback(
-    (y: number, hot: boolean) => {
-      trailRef.current?.trail(tailX, y, hot ? GAME_COLORS.gold : GAME_COLORS.blue);
-    },
-    [trailRef, tailX],
-  );
-
-  // Runs every real frame (depends on scrollX which advances continuously while
-  // the loop runs). Throttle to ~18Hz so the trail reads without flooding the
-  // pool. When the loop is paused scrollX stops changing → no emissions.
-  useDerivedValue(() => {
-    'worklet';
-    // Touch scrollX so this recomputes each frame the world moves.
-    const moving = engine.scrollX.value;
-    const now = Date.now();
-    if (now - lastEmit.value < 55) return;
-    lastEmit.value = now;
-    if (moving >= 0) runOnJS(drop)(engine.sharkY.value, fever);
-  }, [engine.sharkY, engine.scrollX, fever]);
-
-  return null;
-}
-
+const INK = '#23384f';
 const styles = StyleSheet.create({
-  fill: { flex: 1, backgroundColor: GAME_COLORS.bgDeep },
+  fill: { flex: 1, backgroundColor: '#7fd3ff' },
+  pills: { position: 'absolute', right: 10, flexDirection: 'row' },
+  pill: { backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 999, borderWidth: 3, paddingHorizontal: 10, paddingVertical: 3, marginLeft: 6 },
+  pillText: { fontFamily: 'Knockout', fontSize: 13, color: INK },
+  banner: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  bannerText: {
+    fontFamily: 'Shark', fontSize: 40, color: '#ffffff',
+    textShadowColor: INK, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0,
+  },
+  bannerSub: { fontFamily: 'Knockout', fontSize: 16, color: INK, marginTop: 2 },
+  freeze: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(235,248,255,0.55)' },
+  freezeBubble: { backgroundColor: '#ffffff', borderRadius: 999, borderWidth: 4, borderColor: INK, paddingHorizontal: 26, paddingVertical: 14 },
+  freezeText: { fontFamily: 'Shark', fontSize: 30, color: INK },
+  revive: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  reviveCard: { width: '80%', backgroundColor: '#fff8e4', borderRadius: 24, borderWidth: 4, borderColor: INK, padding: 20, alignItems: 'center' },
+  reviveTitle: { fontFamily: 'Shark', fontSize: 34, color: INK },
+  reviveBody: { fontFamily: 'Knockout', fontSize: 16, color: INK, textAlign: 'center', marginVertical: 10 },
+  reviveBtn: { backgroundColor: '#ffc233', borderRadius: 999, borderWidth: 4, borderColor: INK, paddingHorizontal: 40, paddingVertical: 12, marginTop: 4 },
+  reviveBtnText: { fontFamily: 'Shark', fontSize: 28, color: INK },
+  reviveSkip: { fontFamily: 'Knockout', fontSize: 15, color: INK, marginTop: 12, opacity: 0.8 },
+  newCard: {
+    position: 'absolute', top: 12, alignSelf: 'center', backgroundColor: '#ffc233', borderRadius: 16, borderWidth: 4,
+    borderColor: INK, paddingHorizontal: 18, paddingVertical: 8, alignItems: 'center',
+  },
+  newCardTitle: { fontFamily: 'Knockout', fontSize: 13, color: INK, letterSpacing: 1 },
+  newCardText: { fontFamily: 'Shark', fontSize: 22, color: INK },
+  perf: { top: undefined, bottom: 4, left: 4, right: undefined },
 });
 
 export default SharkySwim;

@@ -22,7 +22,13 @@ import {
   PH_DONE,
   anchorX,
   applyInput,
+  botTargetY,
   createSim,
+  planHold,
+  IN_DASH,
+  IN_PRESS,
+  IN_RELEASE,
+  PH_PLAY,
   step as simStep,
   type InputEntry,
   type SimConfig,
@@ -92,6 +98,7 @@ function emptyInput(): EngineInput {
 export function useSharkyEngine(
   initial: SimConfig,
   onEvents: (batch: number[]) => void,
+  autoplay = false,
 ): SharkyEngine {
   const sim = useSharedValue<SimState>(createSim(initial));
   const rivals = useSharedValue<RivalSlot[]>([emptyRival(), emptyRival(), emptyRival()]);
@@ -122,6 +129,16 @@ export function useSharkyEngine(
       if (s.phase === PH_DONE) return;
       const inp = input.value;
       const r = ring.value;
+      // Dev autoplay: the planner bot plays through the real input path.
+      if (autoplay && s.phase === PH_PLAY && s.step % 6 === 0) {
+        const ty = botTargetY(s, (s.speed >> 8) + 120);
+        const prefer = (s.y >> 8) > ty ? 1 : 0;
+        let c = planHold(s, 6, 12, 400, prefer);
+        if (c < 0) c = prefer;
+        if (c === 1 && !s.holding) inp.q.push(IN_PRESS, 0, 0);
+        if (c === 0 && s.holding) inp.q.push(IN_RELEASE, 0, 0);
+        if (s.boost >= 200 && s.dash === 0 && s.step % 240 === 0) inp.q.push(IN_DASH, 0, 0);
+      }
       // Apply queued inputs (encoded as groups of 3: kind, sub, arg).
       const q = inp.q;
       for (let i = 0; i + 2 < q.length; i += 3) {

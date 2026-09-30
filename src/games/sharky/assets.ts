@@ -19,6 +19,10 @@ export const SHARKY_ART = {
   pufferPuffed: require('../../assets/games/sharky/tide/pufferfish_puffed.png'),
   jelly: require('../../assets/games/sharky/tide/jellyfish.png'),
   boat: require('../../assets/games/sharky/tide/bumper_boat.png'),
+  // Coaster pylon and Tide Gate props (gate-passed, pipeline 2026-09-30).
+  pylonSegment: require('../../assets/games/sharky/tide/pylon_segment.png'),
+  pylonCap: require('../../assets/games/sharky/tide/pylon_cap.png'),
+  gatePole: require('../../assets/games/sharky/tide/gate_pole.png'),
   // Pickups (Alex originals: coin slice87, gift slice41, token rims slice88-90).
   coin: require('../../assets/games/sharky/tide/coin.png'),
   prizeBox: require('../../assets/games/sharky/tide/prize_box.png'),
