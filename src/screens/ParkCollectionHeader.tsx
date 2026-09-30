@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { nextCoinEyebrow, ticketsReadyHint } from '../services/collection/nextCoinCopy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -37,6 +38,8 @@ interface Props {
    * catch; `tickKey` changes when it lands and the count ticks up (3/26 -> 4/26).
    */
   readonly holdCount?: boolean;
+  /** Server coin_kind of the goal coin; only 'ride' is called a ride. */
+  readonly nextCoinKind?: string | null;
   readonly tickKey?: string | number | null;
 }
 
@@ -46,7 +49,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   nextRideName, nextRideOwned, ownedGoalHint, nearbyRideName, ticketsNeeded = 0,
   rescuePassAvailable = false, goalStale = false,
   goalReportedDown = false, alternateRideName, nearbyReportedOpen = false,
-  secretMilestones, holdCount = false, tickKey }: Props) {
+  secretMilestones, holdCount = false, tickKey, nextCoinKind }: Props) {
   const reduced = useReducedGameMotion();
   const shownCollected = holdCount ? Math.max(0, collected - 1) : collected;
   const rate = available > 0 ? Math.max(0, Math.min(100, shownCollected / available * 100))
@@ -78,14 +81,14 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
 
   const goal = nextRideName ? {
     eyebrow: goalStale ? 'LAST CONFIRMED GOAL' : goalReportedDown ? 'YOUR GOAL IS REPORTED DOWN'
-      : nextRideOwned ? 'COIN MASTERY GOAL' : 'YOUR NEXT RIDE COIN',
+      : nextRideOwned ? 'COIN MASTERY GOAL' : nextCoinEyebrow(nextCoinKind),
     name: nextRideName,
     hint: goalReportedDown
       ? alternateRideName ? `${alternateRideName} nearby is reported open.` : 'Pick another coin below while you wait.'
       : nextRideOwned ? ownedGoalHint ?? 'On your shelf. Keep earning its Ride Parts.'
       : rescuePassAvailable ? 'Shark Rescue Pass ready at this ride.'
       : ticketsNeeded > 0 ? `${ticketsNeeded} more ${ticketsNeeded === 1 ? 'Ticket' : 'Tickets'} to play.`
-      : 'Tickets ready. Head to the ride.',
+      : ticketsReadyHint(nextCoinKind),
   } : nearbyRideName ? {
     eyebrow: nearbyReportedOpen ? 'NEARBY AND REPORTED OPEN' : 'NEAREST MISSING COIN',
     name: nearbyRideName,

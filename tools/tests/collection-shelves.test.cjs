@@ -132,3 +132,19 @@ test('missing coins show their own art as a quiet socket; secret coins stay a my
   assert.match(park, /const coinSize = Math\.min\(60, shelfCoinSize\)/, 'earned and missing slots share one size');
   assert.doesNotMatch(park, /size=\{shelfCoinSize\}/);
 });
+
+test('park header only calls a reviewed ride coin a ride; food stands get neutral goal copy', () => {
+  const copy = loadTs('src/services/collection/nextCoinCopy.ts');
+  assert.equal(copy.nextCoinEyebrow('ride'), 'YOUR NEXT RIDE COIN');
+  assert.equal(copy.nextCoinEyebrow(null), 'YOUR NEXT COIN');
+  assert.equal(copy.ticketsReadyHint(undefined), 'Tickets ready. Head there to play.');
+  assert.equal(copy.ticketsReadyHint('ride'), 'Tickets ready. Head to the ride.');
+  const open = [{ id: 1, coin_kind: null }], done = [{ id: 7, coin_kind: 'ride' }];
+  assert.equal(copy.goalCoinKind(7, open, done), 'ride');
+  assert.equal(copy.goalCoinKind(1, open, done), null);
+  assert.equal(copy.goalCoinKind(99, open, done), null);
+  assert.equal(copy.goalCoinKind(undefined, open), null);
+  const header = fs.readFileSync('src/screens/ParkCollectionHeader.tsx', 'utf8');
+  assert.ok(!header.includes("'YOUR NEXT RIDE COIN'"), 'header must take the eyebrow from nextCoinEyebrow');
+  assert.match(fs.readFileSync('src/screens/ParkScreen.tsx', 'utf8'), /nextCoinKind=\{goalCoinKind\(/);
+});

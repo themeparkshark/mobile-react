@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { goalCoinKind } from '../services/collection/nextCoinCopy';
 import { chunk } from 'lodash';
 import { useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
@@ -400,6 +401,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     }) : undefined}
                     nextRideName={parkTripGoal?.ride_name}
                     nextRideOwned={parkTripGoal?.coin_owned}
+                    nextCoinKind={goalCoinKind(parkTripGoal?.task_id, tasks, completedTasks, archivedTasks)}
                     ownedGoalHint={ownedGoalHint}
                     nearbyRideName={nearbySuggestion?.task.name}
                     nearbyReportedOpen={!!nearbyReportedOpenRide}
