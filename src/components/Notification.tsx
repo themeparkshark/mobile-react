@@ -11,6 +11,7 @@ import { NotificationContext } from '../context/NotificationProvider';
 import dayjs from '../helpers/dayjs';
 import { NotificationType } from '../models/notification-type';
 import { BRAND, GameIcon, GameRichText } from '../ui';
+import { notificationMessage } from './notificationCopy';
 
 /**
  * Backend screen names / param keys don't always match the navigator.
@@ -212,12 +213,14 @@ export default function Notification({
           {/* Content */}
           <View style={{ flex: 1, marginLeft: 12 }}>
             {/* Server copy: stored rows can predate the emoji cleanup, so it renders through the icon-safe text. */}
+            {/* One typeface for every row; unread reads through navy text, the tinted card and the dot. Icons stay inside the line. */}
             <GameRichText
-              preset={isUnread ? 'heading' : 'bodySmall'}
-              style={{ fontSize: isUnread ? 14 : 15, color: isUnread ? BRAND.navy : BRAND.navySoft, lineHeight: 20 }}
+              preset="bodySmall"
+              style={{ fontSize: 15, color: isUnread ? BRAND.navy : BRAND.navySoft, lineHeight: 20 }}
+              iconSize={16}
               numberOfLines={3}
             >
-              {notification.content?.message ?? ''}
+              {notificationMessage(notification.content?.message)}
             </GameRichText>
             <Text
               style={{

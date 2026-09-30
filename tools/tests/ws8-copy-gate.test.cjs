@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const { scanSource } = require('./helpers/ui-copy-rules.cjs');
+const { loadTs } = require('./helpers/ts-module.cjs');
 
 const root = path.resolve(__dirname, '../..');
 const RIDE_TRACKER = fs.readdirSync(path.join(root, 'src/screens/RideTracker')).map(f => `src/screens/RideTracker/${f}`)
@@ -48,6 +49,8 @@ const WS8_CLEAN = [
   'src/screens/ArticleScreen.tsx',
   'src/screens/NotificationsScreen.tsx',
   'src/components/Notification.tsx',
+  'src/components/notificationCopy.ts',
+  'src/screens/CommunityCenter/communityCenterRewards.ts',
   'src/screens/CommunityCenterScreen.tsx',
   'src/components/CommunityCenterModal.tsx',
   'src/components/GuestInvite.tsx',
@@ -166,4 +169,19 @@ test('a notification row renders server copy through the icon-safe text and draw
   assert.doesNotMatch(source, /<Text[^>]*>\s*\{notification\.content\?\.message/);
   assert.match(source, /<GameIcon name="arrow"/);
   assert.doesNotMatch(source, /›/);
+});
+
+test('an emoji that split two sentences leaves a full stop, and every row uses one typeface', () => {
+  const { notificationMessage } = loadTs('src/components/notificationCopy.ts');
+  const { tokenizeLegacyEmoji } = loadTs('src/ui/iconTokens.ts', { './iconNames': loadTs('src/ui/iconNames.ts') });
+  const shown = text => tokenizeLegacyEmoji(notificationMessage(text));
+  assert.equal(shown('Kraken is attacking Magic Kingdom \u{1F419} Join the raid before it escapes'),
+    'Kraken is attacking Magic Kingdom. Join the raid before it escapes');
+  assert.equal(shown('Your streak is alive \u{1F525} Keep it going'), 'Your streak is alive. [icon:streak] Keep it going');
+  assert.equal(shown('Nice! \u{1F525} Keep it going'), 'Nice! [icon:streak] Keep it going', 'already punctuated');
+  assert.equal(shown('You got 2 \u{1F3AB} tickets'), 'You got 2 [icon:ticket] tickets', 'mid-sentence icon');
+  assert.equal(notificationMessage(undefined), '');
+  const source = fs.readFileSync(path.join(root, 'src/components/Notification.tsx'), 'utf8');
+  assert.doesNotMatch(source, /preset=\{isUnread/, 'read and unread rows share a preset');
+  assert.match(source, /iconSize=\{16\}/, 'inline art fits the line');
 });
