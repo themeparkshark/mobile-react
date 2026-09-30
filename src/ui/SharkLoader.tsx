@@ -10,8 +10,9 @@
  * fails and `state="empty"` when it succeeds with nothing to show.
  *
  * The art is Dustin's own TPS shark (the hand-drawn mascot in the TPS cap).
- * While loading he bobs and sways on the UI thread; reduced motion holds him
- * still. Error and empty states show him standing, or a GameIcon when given.
+ * While loading he bobs and sways on the UI thread over a still ground
+ * shadow; reduced motion holds him still. Error and empty states show him
+ * standing, or a GameIcon when given.
  */
 import { useEffect, useState } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
@@ -25,7 +26,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
-import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import useUiReducedMotion from './useUiReducedMotion';
 import GameButton from './GameButton';
 import GameIcon from './GameIcon';
 import GameText from './GameText';
@@ -98,7 +99,23 @@ export function sharkLoaderContent(props: SharkLoaderProps, slow: boolean) {
   };
 }
 
-/** The shark, bobbing and swaying while it loads. Reduced motion holds it still. */
+/**
+ * Geometry of SHARK_LOADER_ART (1189 x 1158). The body ends above row 1030;
+ * rows 1100 to 1153 are the baked-in ground shadow, an ellipse spanning
+ * x 214 to 616. The art itself is never edited: the moving shark is cropped
+ * above the shadow in layout, and a separate still shadow sits on the ground.
+ */
+const ART_ASPECT = 1158 / 1189;
+const ART_BODY_BOTTOM = 1030 / 1158;
+const ART_SHADOW = { top: 1100 / 1158, height: 54 / 1158, left: 214 / 1189, width: 402 / 1189 } as const;
+/** The ground shadow, in the same navy as the scrim family, never black. */
+const GROUND_SHADOW = 'rgba(4,40,90,0.28)';
+
+/**
+ * The shark, bobbing and swaying while it loads. Only the body moves; its
+ * ground shadow stays put and shrinks a little as he rises. Reduced motion
+ * holds him still.
+ */
 function SwimmingShark({ size, still }: { size: number; still: boolean }) {
   const bob = useSharedValue(0);
   const sway = useSharedValue(0);
@@ -118,23 +135,40 @@ function SwimmingShark({ size, still }: { size: number; still: boolean }) {
     return () => { cancelAnimation(bob); cancelAnimation(sway); };
   }, [still, bob, sway]);
 
-  const style = useAnimatedStyle(() => ({
+  const artHeight = size * ART_ASPECT;
+  const top = (size - artHeight) / 2;
+  const bodyStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: -bob.value * size * 0.07 },
-      { translateX: sway.value * size * 0.04 },
-      { rotate: `${sway.value * 5}deg` },
+      { translateX: sway.value * size * 0.03 },
+      { rotate: `${sway.value * 3}deg` },
     ],
   }));
-  return <Animated.View style={[{ width: size, height: size }, style]}>
-    <Image source={SHARK_LOADER_ART} contentFit="contain" style={{ width: size, height: size }}
-      accessibilityIgnoresInvertColors />
-  </Animated.View>;
+  const shadowStyle = useAnimatedStyle(() => ({
+    opacity: 1 - bob.value * 0.35,
+    transform: [{ scaleX: 1 - bob.value * 0.18 }, { scaleY: 1 - bob.value * 0.18 }],
+  }));
+  return <View style={{ width: size, height: size }}>
+    <Animated.View style={[{
+      position: 'absolute',
+      top: top + artHeight * ART_SHADOW.top,
+      left: size * ART_SHADOW.left,
+      width: size * ART_SHADOW.width,
+      height: artHeight * ART_SHADOW.height,
+      borderRadius: size,
+      backgroundColor: GROUND_SHADOW,
+    }, shadowStyle]} />
+    <Animated.View style={[{ position: 'absolute', top, left: 0, width: size, height: artHeight * ART_BODY_BOTTOM, overflow: 'hidden' }, bodyStyle]}>
+      <Image source={SHARK_LOADER_ART} contentFit="contain" style={{ width: size, height: artHeight }}
+        accessibilityIgnoresInvertColors />
+    </Animated.View>
+  </View>;
 }
 
 export default function SharkLoader(props: SharkLoaderProps) {
   const { compact = false, tone = 'onLight', slowAfterMs = 6000, style, testID } = props;
   const state = props.state ?? 'loading';
-  const reducedMotion = useReducedGameMotion();
+  const reducedMotion = useUiReducedMotion();
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     setSlow(false);
