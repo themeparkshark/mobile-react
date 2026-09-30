@@ -1,8 +1,10 @@
 import { Image } from 'expo-image';
 import { useContext } from 'react';
 import { ImageBackground, Pressable, Text, View } from 'react-native';
+import * as RootNavigation from '../../RootNavigation';
 import { AuthContext } from '../../context/AuthProvider';
 import config from '../../config';
+import { BRAND, GameIcon } from '../../ui';
 import useCrumbs from '../../hooks/useCrumbs';
 import { ItemType } from '../../models/item-type';
 
@@ -15,6 +17,7 @@ export default function Item({
 }) {
   const { player } = useContext(AuthContext);
   const { labels } = useCrumbs();
+  const vipLocked = !!item.is_member_item && !player?.is_subscribed;
 
   return (
     <>
@@ -23,9 +26,16 @@ export default function Item({
         if (!player) {
           return;
         }
+        // VIP gear opens the membership page instead of a checkout that must fail.
+        if (vipLocked && !item.has_purchased) {
+          RootNavigation.navigate('Membership');
+          return;
+        }
 
         onPurchase?.(item);
       }}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, ${item.has_purchased ? 'owned' : vipLocked ? 'VIP only' : `${item.cost} ${item.currency.name}`}`}
       style={({ pressed }) => ({
         position: 'relative',
         width: '100%',
@@ -76,12 +86,22 @@ export default function Item({
           </Text>
         </View>
       )}
+      {item.has_purchased && (
+        <View style={{ position: 'absolute', top: -8, right: -8, zIndex: 11 }}>
+          <GameIcon name="check" size={28} />
+        </View>
+      )}
+      {vipLocked && !item.has_purchased && (
+        <View style={{ position: 'absolute', top: -8, right: -8, zIndex: 11 }}>
+          <GameIcon name="lock" size={28} />
+        </View>
+      )}
       <View
         style={{
           backgroundColor: 'white',
           borderRadius: 16,
           overflow: 'hidden',
-          shadowColor: '#000',
+          shadowColor: BRAND.navy,
           shadowOffset: { width: 0, height: 2 },
           shadowOpacity: 0.08,
           shadowRadius: 8,
@@ -128,26 +148,37 @@ export default function Item({
             borderTopColor: '#f0f0f0',
           }}
         >
-          <Image
-            source={{
-              uri: item.currency.icon_url,
-            }}
-            style={{
-              width: 16,
-              height: 16,
-              marginRight: 4,
-            }}
-            contentFit="contain"
-          />
-          <Text
-            style={{
-              color: config.primary,
-              fontFamily: 'Shark',
-              fontSize: 14,
-            }}
-          >
-            {item.cost}
-          </Text>
+          {item.has_purchased ? (
+            <Text style={{ color: BRAND.greenLip, fontFamily: 'Shark', fontSize: 14 }}>OWNED</Text>
+          ) : vipLocked ? (
+            <>
+              <GameIcon name="member" size={16} style={{ marginRight: 4 }} />
+              <Text style={{ color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 }}>VIP</Text>
+            </>
+          ) : (
+            <>
+              <Image
+                source={{
+                  uri: item.currency.icon_url,
+                }}
+                style={{
+                  width: 16,
+                  height: 16,
+                  marginRight: 4,
+                }}
+                contentFit="contain"
+              />
+              <Text
+                style={{
+                  color: config.primary,
+                  fontFamily: 'Shark',
+                  fontSize: 14,
+                }}
+              >
+                {item.cost}
+              </Text>
+            </>
+          )}
         </View>
       </View>
     </Pressable>

@@ -16,4 +16,6 @@ export interface ItemType {
   readonly is_clearance: boolean;
   readonly currency: CurrencyType;
   readonly is_coin_code_item: boolean;
+  /** VIP-only gear: shows a lock for non-members instead of failing at checkout. */
+  readonly is_member_item?: boolean;
 }
