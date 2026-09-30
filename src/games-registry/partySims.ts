@@ -11,8 +11,9 @@
  */
 import * as bonk from '../games/party/bonkRace';
 import * as sprint from '../games/trivia-duel/party/triviaSprint';
+import * as rush from '../games/whack/party/whackRush';
 
-export type PartySimKey = 'bonk_race' | 'trivia_sprint';
+export type PartySimKey = 'bonk_race' | 'trivia_sprint' | 'whack_rush';
 export type SimTap = [number, number];
 export type SimProfile = 'rookie' | 'regular' | 'ace';
 
@@ -53,6 +54,19 @@ export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
     botTaps: sprint.botTaps,
     ghostFill: sprint.ghostFill,
     resultHash: sprint.resultHash,
+  },
+  // Whack-a-Shark's live round: the full Bonk Rush board (grades, crits, fever) on one shared seed.
+  whack_rush: {
+    key: 'whack_rush',
+    version: rush.WHACK_RUSH_VERSION,
+    roundMs: rush.ROUND_MS,
+    maxTaps: rush.MAX_TAPS,
+    build: rush.buildBoard,
+    validTaps: rush.validTaps,
+    resolve: rush.resolve,
+    botTaps: rush.botTaps,
+    ghostFill: rush.ghostFill,
+    resultHash: rush.resultHash,
   },
 };
 

@@ -91,6 +91,11 @@ export interface Timeline {
   butterfingers: boolean;
   fever: boolean;
   boss: boolean;
+  /**
+   * Auto Look-Up on (every solo format). Off for live party rounds: the room's
+   * clock is shared, so a look-up is a personal HOLD there, never a freeze.
+   */
+  lookUp: boolean;
   bossKind: number;
   bossHp: number;
   meterStart: number;
@@ -103,6 +108,8 @@ export function lifetimeFor(input: BurstInput): number {
   if (input.format === 'daily' || input.format === 'weekly') return 19;
   if (input.format === 'duel') return Math.max(1, input.unlockLevel);
   if (input.format === 'raid') return 19;
+  // Live party rounds: everyone gets the same roster (formations, helmets, twins, sprinters; no puffer).
+  if (input.format === 'party') return 9;
   return Math.max(0, input.unlockLevel) + input.burstIndex + 1;
 }
 
@@ -111,6 +118,7 @@ export function shapeFor(input: BurstInput, lifetime: number): BurstShapeId {
   switch (input.format) {
     case 'ride': return 'ride';
     case 'raid': return 'raid';
+    case 'party': return 'party';
     case 'duel': return (['b2', 'b3', 'b4'] as const)[Math.min(2, i)];
     case 'daily': return (['b2', 'b3', 'b5'] as const)[Math.min(2, i)];
     default: {
@@ -364,6 +372,7 @@ export function buildBurst(input: BurstInput): Timeline {
     butterfingers: ride || lifetime >= UNLOCK.butterfingers,
     fever: !ride && lifetime >= UNLOCK.fever,
     boss: base.boss,
+    lookUp: input.format !== 'party',
     bossKind,
     bossHp: base.boss ? (input.format === 'raid' ? BOSS_HP[d] + 8 : BOSS_HP[d]) : 0,
     meterStart: input.walkBoost === 'meter' && walkOk(input.format) ? 50 : 0,

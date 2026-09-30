@@ -8,7 +8,8 @@
  */
 
 export type Difficulty = 1 | 2 | 3;
-export type WhackFormat = 'ride' | 'queue' | 'daily' | 'weekly' | 'duel' | 'raid';
+/** 'party' is the live Line Party round (Whack Rush): one 20s Burst, same seed for every seat, no Auto Look-Up. */
+export type WhackFormat = 'ride' | 'queue' | 'daily' | 'weekly' | 'duel' | 'raid' | 'party';
 
 // -- Target kinds (ints: they live in UI-thread structs and proof vectors) ----
 export const K_FINN = 0;
@@ -159,7 +160,7 @@ export const FIRST_CALLOUT: Record<number, string> = {
 };
 
 // -- Burst shapes -------------------------------------------------------------------
-export type BurstShapeId = 'b1' | 'b2' | 'b3' | 'b4' | 'b5' | 'rush' | 'ride' | 'raid';
+export type BurstShapeId = 'b1' | 'b2' | 'b3' | 'b4' | 'b5' | 'rush' | 'ride' | 'raid' | 'party';
 
 export interface BurstShape {
   id: BurstShapeId;
@@ -201,6 +202,10 @@ export const SHAPES: Record<BurstShapeId, BurstShape> = {
     angler: 0.2, helmet: 0, tentacle: 0, goldens: [[2600, 4000], [9000, 12000]], formations: [], tricksters: [], boss: false },
   ride: { id: 'ride', lengthMs: 30000, banner: '17 BONKS TO WIN', startMs: 600, gapFrom: 1350, gapTo: 1100, maxUpFrom: 2, maxUpTo: 3,
     angler: 0.25, helmet: 0, tentacle: 0, goldens: [[10000, 14000]], formations: [17000, 21000], tricksters: [], boss: false },
+  // Line Party live round: a 20s mixtape of everything a regular knows (no boss, no puffer),
+  // two goldens and a late trickster so a comeback is always possible.
+  party: { id: 'party', lengthMs: 20000, banner: 'WHACK RUSH', startMs: 600, gapFrom: 780, gapTo: 540, maxUpFrom: 2, maxUpTo: 3,
+    angler: 0.22, helmet: 0.12, tentacle: 0, goldens: [[5500, 8500], [13500, 16500]], formations: [3600, 10800], tricksters: [16800], boss: false },
   raid: { id: 'raid', lengthMs: 18000, banner: 'CREW RAID', startMs: 1600, gapFrom: 600, gapTo: 480, maxUpFrom: 3, maxUpTo: 3,
     angler: 0.15, helmet: 0, tentacle: 0.6, goldens: [[8000, 11000]], formations: [], tricksters: [], boss: true },
 };
@@ -215,7 +220,7 @@ export const GAP_SCALE: Record<Difficulty, number> = { 1: 1.12, 2: 1, 3: 0.9 };
 
 /** Queue Run: 5 Bursts; daily 3; duel 3 (B2/B3/B4 shapes at 15s); raid 1. */
 export function burstCount(format: WhackFormat): number {
-  if (format === 'ride' || format === 'raid') return 1;
+  if (format === 'ride' || format === 'raid' || format === 'party') return 1;
   if (format === 'daily' || format === 'duel') return 3;
   return 5;
 }

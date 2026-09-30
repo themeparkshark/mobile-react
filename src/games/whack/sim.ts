@@ -106,6 +106,8 @@ export interface WhackSim {
   butterOn: boolean;
   feverOn: boolean;
   boss: boolean;
+  /** Auto Look-Up enabled (false in live party rounds). */
+  lookUpOn: boolean;
   seed: number;
   // Clock
   t: number;
@@ -203,6 +205,7 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     butterOn: tl.butterfingers,
     feverOn: tl.fever,
     boss: tl.boss,
+    lookUpOn: tl.lookUp !== false,
     seed: tl.burstSeed,
     t: 0,
     next: 0,
@@ -490,7 +493,7 @@ function tick(s: WhackSim): void {
     }
   }
   // Auto Look-Up: freeze before any target can escape a disengaged player.
-  if (t - s.lastTap >= LOOKUP_IDLE_MS) {
+  if (s.lookUpOn && t - s.lastTap >= LOOKUP_IDLE_MS) {
     for (let h = 0; h < 9; h++) {
       if (s.hPh[h] !== P_UP || s.hSplat[h] === SPLAT_DOWN) continue;
       if (isDecoyKind(kindAt(s, h))) continue;
