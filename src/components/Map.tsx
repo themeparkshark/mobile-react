@@ -1,13 +1,12 @@
-import { faLocationArrow as faSolidArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
-import { faLocationArrow } from '@fortawesome/free-solid-svg-icons/faLocationArrow';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { Image } from 'expo-image';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Images, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
-import { Animated, Pressable, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
-import config from '../config';
+import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
+import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import { haptic } from '../gamekit/Haptics';
+import { BRAND, GameIcon, SHADOW } from '../ui';
 import { AuthContext } from '../context/AuthProvider';
-import { LocationContext } from '../context/LocationProvider';
+import { HeadingContext, LocationContext } from '../context/LocationProvider';
 import { Marker } from './map/Marker';
 import { buildDecorations, DECO_ICONS, decorationBand } from './map/decorations';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
@@ -37,16 +36,27 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   /** Camera zoom after each move, for marker declutter. */
   readonly onZoomChange?: (zoom: number) => void;
 }) {
-  const { location, heading, headingEnabled, setHeadingEnabled } = useContext(LocationContext);
+  const { location } = useContext(LocationContext);
+  const { heading, setHeadingEnabled } = useContext(HeadingContext);
   const { player } = useContext(AuthContext);
   const reducedMotion = useReducedGameMotion();
 
-  // Shark marker animations
-  const bobAnim = useRef(new Animated.Value(0)).current;
-  const tiltAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const glowPulseAnim = useRef(new Animated.Value(0.3)).current;
-  const shadowAnim = useRef(new Animated.Value(1)).current;
+  // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
+  // thread. Loops stop on unmount; reduced motion holds the shark still.
+  const idle = useSharedValue(0), sway = useSharedValue(0), glow = useSharedValue(0.5);
+  useEffect(() => {
+    if (reducedMotion) { idle.value = 0; sway.value = 0; glow.value = 0.5; return; }
+    const ease = REasing.inOut(REasing.sin);
+    idle.value = withRepeat(withSequence(withTiming(1, { duration: 1000, easing: ease }), withTiming(0, { duration: 1000, easing: ease })), -1, false);
+    sway.value = withRepeat(withSequence(withTiming(1, { duration: 1200, easing: ease }), withTiming(-1, { duration: 1200, easing: ease })), -1, false);
+    glow.value = withRepeat(withSequence(withTiming(1, { duration: 1400, easing: ease }), withTiming(0, { duration: 1400, easing: ease })), -1, false);
+    return () => { cancelAnimation(idle); cancelAnimation(sway); cancelAnimation(glow); };
+  }, [reducedMotion, idle, sway, glow]);
+  const sharkStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -8 * idle.value }, { rotate: `${3 * sway.value}deg` }, { scale: 1 + 0.04 * idle.value }],
+  }));
+  const shadowStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: 1 - 0.15 * idle.value }, { scaleY: 1 - 0.15 * idle.value }] }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: 0.3 + 0.4 * glow.value }));
 
   const prevLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const glideRef = useRef(0);
@@ -100,47 +110,6 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     pushCamera(glideDuration);
   }, [location?.latitude, location?.longitude]);
 
-  useEffect(() => {
-    // Float bob — gentle up/down like swimming
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(bobAnim, { toValue: -8, duration: 1000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(bobAnim, { toValue: 0, duration: 1000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    ).start();
-
-    // Gentle side-to-side tilt — like a shark swaying in water
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(tiltAnim, { toValue: 3, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(tiltAnim, { toValue: -3, duration: 1200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    ).start();
-
-    // Subtle breathing scale
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(scaleAnim, { toValue: 1.04, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    ).start();
-
-    // Ground shadow pulses with the bob (smaller when higher)
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shadowAnim, { toValue: 0.85, duration: 1000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(shadowAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])
-    ).start();
-
-    // Glow ring pulse
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowPulseAnim, { toValue: 0.7, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
-        Animated.timing(glowPulseAnim, { toValue: 0.3, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
-      ])
-    ).start();
-  }, []);
   const cameraRef = useRef<CameraRef>(null);
   // A water-and-sparkle cover hides the blank map while tiles stream in, then
   // lifts away once the map has fully drawn (or after 4 s, whatever happens).
@@ -273,22 +242,15 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const playerShark = (
       <View style={styles.sharkMarkerContainer}>
         {/* Animated glow ring */}
-        <Animated.View style={[styles.outerGlowRing, { opacity: glowPulseAnim }]} />
+        <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
         {/* Inner blue ring (ground indicator) */}
         <View style={styles.groundRing} />
         {/* Animated shadow — shrinks when shark bobs up */}
-        <Animated.View style={[styles.shadowDisc, { transform: [{ scaleX: shadowAnim }, { scaleY: shadowAnim }] }]} />
+        <Reanimated.View style={[styles.shadowDisc, shadowStyle]} />
         {/* Directional indicator — only visible in heading mode */}
         {heading !== null && focusedOnPlayer && <View style={styles.sharkDirectionCone} />}
         {/* Player's avatar — bobs, tilts, breathes */}
-        <Animated.View style={{
-          width: 60, height: 60,
-          transform: [
-            { translateY: bobAnim },
-            { rotate: tiltAnim.interpolate({ inputRange: [-3, 3], outputRange: ['-3deg', '3deg'] }) },
-            { scale: scaleAnim },
-          ],
-        }}>
+        <Reanimated.View style={[{ width: 60, height: 60 }, sharkStyle]}>
           {player?.inventory?.skin_item?.no_eye_url ? (
             <View style={{ width: 60, height: 60, position: 'relative' }}>
               {/* Base skin (no eyes) */}
@@ -327,7 +289,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
               contentFit="contain"
             />
           )}
-        </Animated.View>
+        </Reanimated.View>
       </View>
   );
 
@@ -348,25 +310,15 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           gap: 8,
         }}
       >
-        {/* Recenter button */}
+        {/* Recenter: Alex's compass on a blue button; gold when you have panned away. */}
         <Pressable
-          onPress={recenterOnPlayer}
-          style={{
-            padding: 12,
-            backgroundColor: focusedOnPlayer ? config.primary : 'rgba(255,255,255,0.9)',
-            borderRadius: 25,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            elevation: 5,
-          }}
+          onPress={() => { haptic('tapLight'); recenterOnPlayer(); }}
+          accessibilityRole="button"
+          accessibilityLabel={focusedOnPlayer ? 'Following your shark' : 'Center the map on your shark'}
+          hitSlop={6}
+          style={({ pressed }) => [styles.recenter, !focusedOnPlayer && styles.recenterAway, pressed && styles.recenterPressed]}
         >
-          <FontAwesomeIcon
-            icon={focusedOnPlayer ? faSolidArrow : faLocationArrow}
-            size={26}
-            color={focusedOnPlayer ? '#fff' : config.primary}
-          />
+          <RecenterIcon away={!focusedOnPlayer} reducedMotion={reducedMotion} />
         </Pressable>
       </View>
 
@@ -375,8 +327,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         style={StyleSheet.absoluteFill}
         mapStyle={TPS_MAP_STYLE}
         logoEnabled={false}
-        attributionEnabled
-        attributionPosition={{ bottom: 8, left: 8 }}
+        attributionEnabled={false}
         compassEnabled={false}
         rotateEnabled
         pitchEnabled={false}
@@ -434,6 +385,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         )}
         <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
       </MapView>
+      {/* Map data credit, in the game's own type instead of the stock (i) button. */}
+      <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
+        onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }}
+        hitSlop={8} style={styles.attribution}>
+        <Text style={styles.attributionText}>© OpenStreetMap</Text>
+      </Pressable>
       {covered && (
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, {
           opacity: cover, transform: [{ scale: cover.interpolate({ inputRange: [0, 1], outputRange: [1.06, 1] }) }] }]}>
@@ -450,7 +407,25 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   );
 }
 
+/** The compass nudges once when you pan away, so the way back is noticed. */
+function RecenterIcon({ away, reducedMotion }: { readonly away: boolean; readonly reducedMotion: boolean }) {
+  const turn = useSharedValue(0);
+  useEffect(() => {
+    if (!away || reducedMotion) { turn.value = 0; return; }
+    turn.value = withSequence(withTiming(-18, { duration: 120 }), withSpring(0, { damping: 6, stiffness: 240 }));
+  }, [away, reducedMotion, turn]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value}deg` }] }));
+  return <Reanimated.View style={style}><GameIcon name="map" size={32} /></Reanimated.View>;
+}
+
 const styles = StyleSheet.create({
+  recenter: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: BRAND.blueBright, borderWidth: 3, borderColor: BRAND.white, ...SHADOW.card },
+  recenterAway: { backgroundColor: BRAND.gold },
+  recenterPressed: { transform: [{ scale: 0.94 }] },
+  attribution: { position: 'absolute', left: 8, bottom: 6, zIndex: 4, paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.7)' },
+  attributionText: { fontFamily: 'Knockout', fontSize: 10, color: BRAND.navySoft },
   cover: { zIndex: 5, backgroundColor: '#0768b9' },
   centerOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -505,7 +480,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 15,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: config.primary,
+    borderBottomColor: BRAND.blue,
     zIndex: 1,
   },
   sharkImage: {

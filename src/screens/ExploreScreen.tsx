@@ -513,8 +513,14 @@ export default function ExploreScreen() {
     }
   }, [park?.id]);
 
-  // Fetch gym battle data
+  // Fetch gym battle data. Owner and generation guards: a slow answer for an
+  // earlier park or player never lands on the current map.
+  const gymGeneration = useRef(0);
+  const gymOwner = `${player?.id ?? ''}:${park?.id ?? ''}`;
+  const gymOwnerRef = useRef(gymOwner); gymOwnerRef.current = gymOwner;
   const fetchGymData = useCallback(async () => {
+    const generation = ++gymGeneration.current;
+    const owner = gymOwner;
     if (!park?.id) {
       setGymData(null);
       setSwords([]);
@@ -525,39 +531,42 @@ export default function ExploreScreen() {
         getGym(park.id).catch(() => null),
         getSwords(park.id).catch(() => ({ swords: [] })),
       ]);
+      if (generation !== gymGeneration.current || owner !== gymOwnerRef.current) return;
       setGymData(gym);
       setSwords(swordsData.swords);
     } catch (error) {
       console.log('Gym data fetch error:', error);
     }
-  }, [park?.id]);
+  }, [park?.id, gymOwner]);
 
   // Check player team and sword count on mount
   useEffect(() => {
+    let current = true;
+    setPlayerTeam(null);
+    setPlayerSwordCount(0);
     const checkTeamAndSwords = async () => {
       try {
         const team = await getMyTeam();
+        if (!current) return;
         setPlayerTeam(team);
-        
-        // Also fetch sword count
         const swordsData = await getMySwords();
-        setPlayerSwordCount(swordsData.swords);
+        if (current) setPlayerSwordCount(swordsData.swords);
       } catch (error) {
         console.log('Team/swords check error:', error);
       }
     };
     if (player) {
-      checkTeamAndSwords();
+      void checkTeamAndSwords();
     }
+    return () => { current = false; };
   }, [player?.id]);
 
   // Fetch gym data when park changes and refresh periodically (even without team - to show marker)
   useEffect(() => {
-    if (park?.id) {
-      fetchGymData();
-      const interval = setInterval(fetchGymData, 30000); // Refresh every 30s
-      return () => clearInterval(interval);
-    }
+    if (!park?.id) { setGymData(null); setSwords([]); return; }
+    void fetchGymData();
+    const interval = setInterval(fetchGymData, 30000); // Refresh every 30s
+    return () => { clearInterval(interval); gymGeneration.current++; };
   }, [park?.id, fetchGymData]);
 
   // Handle gym marker press
