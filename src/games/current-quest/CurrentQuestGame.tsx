@@ -64,7 +64,7 @@ import { ArrowPad, BottomBar, DeadSheet, type DeadSheetInfo } from './Controls';
 import { HUD_ROW_H, QuestHud, RUN_BAR_H, type HudState } from './QuestHud';
 import { GhostRail } from './GhostRail';
 import { RAIL_H, ShowdownRail, type RailRacer } from './ShowdownRail';
-import { CqResultsCard, ResultsVeil, type CqResultsSummary, type PodiumRow } from './ResultsCard';
+import { CqResultsCard, ResultsVeil, type CqResultsSummary, type PodiumRow, type RouteCompare } from './ResultsCard';
 import { StakeCard } from './StakeCard';
 import { ShareCard, type ShareCardData, type ShareCardHandle } from './ShareCard';
 import {
@@ -1363,6 +1363,7 @@ export default function CurrentQuestGame({
           ? `You beat ${challenge.name}!` : `${challenge.name}: ${challenge.shells} shells, ${challenge.strokes} strokes`) : strokesLine,
         podium: null,
         shareLabel: context === 'daily' ? 'Share Daily' : trial ? 'Share ride' : null,
+        routes: compareRoutes(run, lastResult),
       });
       setResult({
         score: shells,
@@ -1376,6 +1377,23 @@ export default function CurrentQuestGame({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [center, burst, later, reducedMotion, camera, banner, context, knobs.profile, knobs.rings, runSeed, attempt, ghost, tier.tierJs, progress, runKey, today, chartNodeId, node, trial, challenge, parkName, themeId]);
+
+  /** Results: your final-voyage route beside the par route (non-sealed Puzzle contexts only; 0.A.14). */
+  const compareRoutes = (run: RunState, last: VoyageResult): RouteCompare | null => {
+    if (trial || showdown || context === 'daily' || scored) return null;
+    const b = run.boards[run.boards.length - 1];
+    if (b.id.startsWith('sealed')) return null;
+    const mine = routeOf(b, run.voyage);
+    const sol = solveBoard(b);
+    const acts = last.shellGolden && sol.solutionGold.length ? sol.solutionGold : sol.solution;
+    const par: number[] = [b.start];
+    let pos = b.start; let mask = 0; let gold = false;
+    acts.forEach((a, i) => {
+      const sim = simulateStroke(b, pos, mask, gold, tideAt(b.P, i, run.voyage.phase), a === A_TREAD ? -1 : a);
+      par.push(...sim.path.slice(1)); pos = sim.pos; mask = sim.mask; gold = sim.golden;
+    });
+    return { tiles: b.tiles, H: heightOf(b), chest: b.chest, mine, par, mineStrokes: last.strokes, parStrokes: acts.length };
+  };
 
   /** Route recap (missed Par, unscored contexts): your route as INK dots, the par route as a gold brush. */
   const showRecap = useCallback((run: RunState, index: number) => {

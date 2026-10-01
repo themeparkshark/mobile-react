@@ -20,6 +20,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, ZoomIn,
 } from 'react-native-reanimated';
+import { Canvas, Circle, Group, Path, Rect, RoundedRect, Skia } from '@shopify/react-native-skia';
 import { CQ } from './theme';
 import { sfxPearl, sfxShells, sfxChest } from './audio';
 import { CQH } from './cqHaptics';
@@ -58,6 +59,59 @@ export interface CqResultsSummary {
   podium: PodiumRow[] | null;
   /** Labels for the extra buttons this context offers. */
   shareLabel: string | null;
+  /** Final voyage routes (Snakebird / Supercell, non-sealed Puzzle contexts): yours beside the par route. */
+  routes?: RouteCompare | null;
+}
+
+export interface RouteCompare {
+  tiles: string;
+  H: number;
+  chest: number;
+  mine: number[];
+  par: number[];
+  mineStrokes: number;
+  parStrokes: number;
+}
+
+const MINI = 11;
+
+/** A tiny top-down board with one route: water, coral dots, current stripes, the chest, the route. */
+function RouteMini({ r, cells, color, label }: { r: RouteCompare; cells: number[]; color: string; label: string }) {
+  const w = MINI * 5;
+  const h = MINI * r.H;
+  const route = React.useMemo(() => {
+    const p = Skia.Path.Make();
+    cells.forEach((c, k) => {
+      const x = (c % 5) * MINI + MINI / 2;
+      const y = Math.floor(c / 5) * MINI + MINI / 2;
+      if (k === 0) p.moveTo(x, y); else p.lineTo(x, y);
+    });
+    return p;
+  }, [cells]);
+  const start = cells[0] ?? 0;
+  return (
+    <View style={styles.mini} accessibilityLabel={label}>
+      <Canvas style={{ width: w + 4, height: h + 4 }}>
+        <RoundedRect x={0} y={0} width={w + 4} height={h + 4} r={5} color={CQ.ink} />
+        <RoundedRect x={2} y={2} width={w} height={h} r={4} color="#8fe3fa" />
+        <Group transform={[{ translateX: 2 }, { translateY: 2 }]}>
+          {r.tiles.split('').map((t, i) => {
+            const x = (i % 5) * MINI;
+            const y = Math.floor(i / 5) * MINI;
+            if (t === '#') return <Circle key={`t${i}`} cx={x + MINI / 2} cy={y + MINI / 2} r={MINI * 0.36} color={CQ.rock} />;
+            if ('^>v<'.includes(t)) return <Rect key={`t${i}`} x={x + 1} y={y + 1} width={MINI - 2} height={MINI - 2} color="#d9f6ff" />;
+            if (t === 's') return <Circle key={`t${i}`} cx={x + MINI / 2} cy={y + MINI / 2} r={MINI * 0.32} color={CQ.sand} />;
+            return null;
+          })}
+          <Rect x={(r.chest % 5) * MINI + 1.5} y={Math.floor(r.chest / 5) * MINI + 2.5} width={MINI - 3} height={MINI - 5} color={CQ.gold} />
+          <Path path={route} color={CQ.ink} style="stroke" strokeWidth={4.5} strokeJoin="round" strokeCap="round" />
+          <Path path={route} color={color} style="stroke" strokeWidth={2.5} strokeJoin="round" strokeCap="round" />
+          <Circle cx={(start % 5) * MINI + MINI / 2} cy={Math.floor(start / 5) * MINI + MINI / 2} r={2.6} color={CQ.ink} />
+        </Group>
+      </Canvas>
+      <Text style={styles.miniTxt}>{label}</Text>
+    </View>
+  );
 }
 
 interface Props {
@@ -141,6 +195,8 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, onChal
               style={[styles.coin, { left: 60 + ((i * 37) % 120) - 30, top: 54 + ((i * 23) % 22) }]} />
           )) : null}
         </View>
+        <View style={styles.gridWrap}>
+        {s.routes ? <RouteMini r={s.routes} cells={s.routes.mine} color="#ffffff" label={`You: ${s.routes.mineStrokes}`} /> : null}
         <View style={styles.grid}>
           {s.grid.map((row, v) => (
             <View key={`v${v}`} style={styles.gridRow}>
@@ -160,6 +216,8 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, onChal
               })}
             </View>
           ))}
+        </View>
+        {s.routes ? <RouteMini r={s.routes} cells={s.routes.par} color={CQ.gold} label={`Par: ${s.routes.parStrokes}`} /> : null}
         </View>
         <View style={styles.stars}>
           {[0, 1, 2].map((i) => (
@@ -257,6 +315,9 @@ const styles = StyleSheet.create({
   chestSmall: { width: 80, height: 66 },
   coin: { position: 'absolute', width: 28, height: 28, resizeMode: 'contain' },
   grid: { gap: 2, marginTop: 2 },
+  gridWrap: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  mini: { alignItems: 'center' },
+  miniTxt: { fontFamily: 'Knockout', fontSize: 11, color: CQ.navy, marginTop: 2 },
   gridRow: { flexDirection: 'row', gap: 4, justifyContent: 'center' },
   socketBox: { width: 34, height: 34 },
   socket: { width: 34, height: 34, resizeMode: 'contain' },
