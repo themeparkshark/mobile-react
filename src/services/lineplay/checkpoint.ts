@@ -41,6 +41,21 @@ export interface LinePlayCheckpoint {
   rewards: SessionRewards | null;
   rewardsPending: boolean;
   currentQuestProof?: CurrentQuestProof | null;
+  /** Queue bonus claims already celebrated, so a restart never replays FX. */
+  bonusSeen?: string[];
+  /** A bonus-round proof (with its attempt id) waiting for the network. */
+  bonusQuestProof?: CurrentQuestProof | null;
+}
+
+function isBonusProof(value: unknown): boolean {
+  const proof = value as CurrentQuestProof | null;
+  return Boolean(proof && typeof proof.attempt_id === 'string' && proof.attempt_id.length <= 64 &&
+    Number.isInteger(proof.seed) && proof.seed >= 0 && proof.seed <= 0xffffffff &&
+    Number.isInteger(proof.score) && proof.score >= 200 && proof.score <= 1800 &&
+    Number.isInteger(proof.duration_seconds) && proof.duration_seconds >= 1 && proof.duration_seconds <= 3600 &&
+    Array.isArray(proof.paths) && proof.paths.length >= 2 && proof.paths.length <= 3 &&
+    proof.paths.every(path => Array.isArray(path) && path.length >= 7 && path.length <= 100 &&
+      path.every(index => Number.isInteger(index) && index >= 0 && index <= 24)));
 }
 
 export function checkpointKey(playerId: number, rideId: number): string {
@@ -106,6 +121,9 @@ export function parseCheckpoint(raw: string | null, playerId: number, rideId: nu
         !Array.isArray(value.currentQuestProof.paths) || value.currentQuestProof.paths.length !== 3 ||
         !value.currentQuestProof.paths.every(path => Array.isArray(path) && path.length >= 7 &&
           path.length <= 100 && path.every(index => Number.isInteger(index) && index >= 0 && index <= 24)))) ||
+      (value.bonusSeen !== undefined && (!Array.isArray(value.bonusSeen) || value.bonusSeen.length > 40 ||
+        !value.bonusSeen.every(key => typeof key === 'string' && key.length <= 120))) ||
+      (value.bonusQuestProof !== undefined && value.bonusQuestProof !== null && !isBonusProof(value.bonusQuestProof)) ||
       !['active', 'complete'].includes(value.state) ||
       (value.serverSessionId !== null && typeof value.serverSessionId !== 'string') ||
       !Number.isFinite(value.verifiedEligibleSeconds) || value.verifiedEligibleSeconds < 0 ||

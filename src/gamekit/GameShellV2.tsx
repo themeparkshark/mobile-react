@@ -1,5 +1,5 @@
 /**
- * GameShellV2.tsx — the successor to the 1142-line MiniGameShell.
+ * GameShellV2.tsx: the successor to the 1142-line MiniGameShell.
  *
  * Responsibilities (games stay thin and just render their play field):
  *   - Consistent header (title, subtitle, live score, close).
@@ -53,7 +53,7 @@ import { ScoreDisplay } from './ScoreDisplay';
 import { ParticleField, type ParticleHandle } from './Particles';
 import { Haptic } from './Haptics';
 import { playSfx } from './SFX';
-import { LinePlayMovementContext } from './LinePlayMovementContext';
+import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovementContext';
 import { RideChallengeContext } from './RideChallengeContext';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 
@@ -72,7 +72,7 @@ export interface GameResult {
   /** Best combo reached (surfaced on the results screen). */
   maxCombo?: number;
   /**
-   * Extra metadata forwarded verbatim as the 2nd arg of onComplete — this is
+   * Extra metadata forwarded verbatim as the 2nd arg of onComplete: this is
    * what carries {score, duration, seed} to the server-authoritative reward
    * path. Never compute rewards on the client.
    */
@@ -113,7 +113,7 @@ interface GameShellV2Props {
   /** Fired when the shell pauses / resumes (games should freeze their loop). */
   onPause?: (reason?: string) => void;
   onResume?: () => void;
-  /** Preserved external contract — matches MiniGameSelector's expectation. */
+  /** Preserved external contract: matches MiniGameSelector's expectation. */
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   /** Player closed / quit without a win. */
   onClose: () => void;
@@ -292,11 +292,14 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       Haptic.tickSelection();
     }, [onResume, phase, linePlayMovement]);
 
+    // lineMovePolicy 'passive' is the default: walking in a queue never pauses
+    // a round. Only an explicit 'pause' opt-in (a QA preview) freezes here.
+    const pauseForMovement = shouldPauseForMovement(linePlayMovement);
     useEffect(() => {
-      if (visible && linePlayMovement?.moving && (phase === 'playing' || phase === 'countdown')) {
+      if (visible && pauseForMovement && (phase === 'playing' || phase === 'countdown')) {
         doPause(LINE_MOVING_TOAST);
       }
-    }, [visible, linePlayMovement?.moving, phase, doPause]);
+    }, [visible, pauseForMovement, phase, doPause]);
 
     useEffect(() => {
       if (!visible) return;
@@ -472,6 +475,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                 />
                 {result?.maxCombo && result.maxCombo > 1 ? (
                   <Text style={styles.comboLine}>Best combo x{result.maxCombo}</Text>
+                ) : null}
+                {won && linePlayMovement?.justForFunNote ? (
+                  <View style={styles.funNote}>
+                    <Text style={styles.funNoteText}>{linePlayMovement.justForFunNote.text}</Text>
+                    <TouchableOpacity accessibilityRole="button" style={styles.funNoteTile}
+                      onPress={linePlayMovement.justForFunNote.onPress}>
+                      <Text style={styles.funNoteTileText}>{linePlayMovement.justForFunNote.actionLabel}</Text>
+                    </TouchableOpacity>
+                  </View>
                 ) : null}
                 <TouchableOpacity
                   style={[styles.sheetBtn, styles.primaryBtn, styles.claimBtn]}
@@ -678,6 +690,11 @@ const styles = StyleSheet.create({
   starRow: { flexDirection: 'row', marginBottom: 14 },
   star: { fontSize: 48, marginHorizontal: 4 },
   comboLine: { color: GAME_COLORS.blue, fontSize: 14, fontWeight: '800', marginTop: 6 },
+  funNote: { marginTop: 10, alignItems: 'center', gap: 6 },
+  funNoteText: { color: GAME_COLORS.blue, fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  funNoteTile: { minHeight: 36, paddingHorizontal: 14, borderRadius: 12, justifyContent: 'center',
+    borderWidth: 2, borderColor: '#fec90e', backgroundColor: '#fff8dc' },
+  funNoteTileText: { color: '#075083', fontSize: 13, fontWeight: '900' },
   claimBtn: { marginTop: 18 },
   confetti: { ...StyleSheet.absoluteFillObject },
 });

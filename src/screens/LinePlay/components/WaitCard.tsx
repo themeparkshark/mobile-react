@@ -1,5 +1,5 @@
 /**
- * WaitCard — compact top card for a LinePlay session.
+ * WaitCard: compact top card for a LinePlay session.
  * Shows ride name, posted wait, elapsed time, and server-counted nearby time.
  * Park-themed art slot (image_url) with a graceful gradient fallback.
  */
@@ -14,6 +14,9 @@ import HapticPatterns from '../../../helpers/hapticPatterns';
 import { partCountdown } from '../../../services/lineplay/partCountdown';
 import Svg, { Circle } from 'react-native-svg';
 import { GameIcon, type GameIconName } from '../../../ui';
+import type { LineBonusSummary } from '../../../api/endpoints/me/inline-timer/types';
+import { bonusDoneToday, nextBonusSeconds, ringInfoCopy, ringPill, visiblePips,
+  type PipState } from '../../../services/lineplay/bonusRounds';
 
 /** A detail line with its art, never an emoji. */
 function HintLine({ icon, children }: { icon: GameIconName; children: string }) {
@@ -61,6 +64,50 @@ export interface WaitCardProps {
   readonly currentQuestProofPending?: boolean;
   /** Opens the quick-game picker; omitted when no game is available. */
   readonly onPlayBonus?: () => void;
+  /** Queue Bonus Rounds block (null while the server flag is off). */
+  readonly bonus?: LineBonusSummary | null;
+  /** A game is mounted: the ring's idle loops (bob, glint, pulse) rest. */
+  readonly gameOpen?: boolean;
+}
+
+const GOLD = '#fec90e';
+
+/** Three pips: hollow = future slot, glowing = open, solid = claimed. Hidden slots are not drawn. */
+function PipRow({ pips }: { pips: readonly PipState[] }) {
+  return <View style={styles.pipRow} accessible
+    accessibilityLabel={`${pips.filter(pip => pip === 'claimed').length} of ${pips.length} bonus Parts claimed`}>
+    {pips.map((pip, index) => <View key={index} style={[styles.pip,
+      pip === 'open' && styles.pipOpen, pip === 'claimed' && styles.pipClaimed]} />)}
+  </View>;
+}
+
+/**
+ * The Bonus gem at 6 o'clock: a slow bob and a glint while idle, CHARGED
+ * (brighter, a slow pulse) when the client predicts the threshold. Only the
+ * server's answer pops it. Reduced motion and an open game keep it still.
+ */
+function BonusGem({ charged, still }: { charged: boolean; still: boolean }) {
+  const bob = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (still) { bob.setValue(0); pulse.setValue(1); return; }
+    const loop = charged
+      ? Animated.loop(Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.08, duration: 450, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 450, useNativeDriver: true }),
+      ]))
+      : Animated.loop(Animated.sequence([
+        Animated.timing(bob, { toValue: 1, duration: 1200, useNativeDriver: true }),
+        Animated.timing(bob, { toValue: 0, duration: 1200, useNativeDriver: true }),
+      ]));
+    loop.start();
+    return () => loop.stop();
+  }, [charged, still, bob, pulse]);
+  const translateY = bob.interpolate({ inputRange: [0, 1], outputRange: [0, -1.5] });
+  return <Animated.View pointerEvents="none" style={[styles.gemSlot,
+    { opacity: charged ? 1 : 0.92, transform: [{ translateY }, { scale: Animated.multiply(pulse, charged ? 1.3 : 1) }] }]}>
+    <GameIcon name="sparkle" size={18} />
+  </Animated.View>;
 }
 
 function fmt(seconds: number): string {
@@ -100,8 +147,17 @@ export default function WaitCard({
   currentQuestVerified = false,
   currentQuestProofPending = false,
   onPlayBonus,
+  bonus = null,
+  gameOpen = false,
 }: WaitCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then(value => { if (alive) setReducedMotion(value); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
   const [partBurst, setPartBurst] = useState(0);
   const previousCredited = useRef<number | null>(null);
   const burstTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -145,6 +201,16 @@ export default function WaitCard({
   const ringProgress = !rewardTrackingAvailable ? 0
     : atCap ? 1 : Math.max(0, Math.min(1, countdown.progressSeconds / interval));
   const earned = creditedParts ?? 0;
+  const bonusOn = Boolean(bonus?.enabled) && rewardTrackingAvailable && !completed;
+  const pips = bonusOn ? visiblePips(bonus) : [];
+  const bonusDone = bonusOn && bonusDoneToday(bonus);
+  const pill = bonusOn ? ringPill(bonus) : null;
+  const toBonus = bonusOn ? nextBonusSeconds(bonus, verifiedEligibleSeconds, verifiedPresenceAt, Date.now()) : null;
+  const charged = toBonus === 0;
+  // Out of range is the only thing that changes the ring. Walking never does.
+  const outOfRange = !completed && rewardConnectionIssue === 'nearby';
+  const playLabel = bonusOn && (pill === 'BONUS OPEN' || toBonus != null || bonus?.saved) ? 'PLAY FOR BONUS'
+    : bonusOn ? 'PLAY' : rewardTrackingAvailable ? 'PLAY FOR BONUS' : 'QUEUE ARCADE';
   // Games still work everywhere; say plainly when this ride pays no Parts.
   const noPartsHere = !completed && !rewardTrackingAvailable && (lineRewardsReady === false || rewardUnavailable);
   // One plain status line; the fine print lives behind the details toggle.
@@ -207,6 +273,14 @@ export default function WaitCard({
           <View style={styles.compactCopy} accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
             <Text style={styles.compactHeadline}>{headline}{rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}</Text>
             {noPartsHere && <Text style={styles.compactNote} numberOfLines={1}>No Parts at this ride</Text>}
+            {bonusOn && <View style={styles.bonusRow}>
+              {bonusDone ? <Text style={styles.bonusDone} numberOfLines={1}>Bonus Parts done at this ride today</Text>
+                : <PipRow pips={pips} />}
+              {pill ? <View style={styles.compactPill}><Text style={styles.pillText}>{pill}</Text></View>
+                : toBonus != null && !bonusDone ? <View style={[styles.miniGem, charged && styles.miniGemCharged]}>
+                  <GameIcon name="sparkle" size={14} /></View> : null}
+              {outOfRange && <Text style={styles.compactNote} numberOfLines={1}>Step back into the line area</Text>}
+            </View>}
             {partBurst > 0 && <Text style={styles.compactBurst}>+{partBurst} RIDE PART{partBurst === 1 ? '' : 'S'}!</Text>}
           </View>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
@@ -215,8 +289,8 @@ export default function WaitCard({
             <Text style={styles.detailsButtonText}>{expanded ? 'Hide' : 'Details'}</Text>
           </Pressable>
         </View> : <View style={styles.meterRow}>
-          <View style={{ width: RING, height: RING }}
-            accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
+          <View style={[{ width: RING, height: RING }, outOfRange && styles.ringOutOfRange]}
+            accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}${pill ? ` ${pill}.` : ''}`}>
             <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
               <Circle cx={RING / 2} cy={RING / 2} r={RING_R} stroke="rgba(255,255,255,0.22)"
                 strokeWidth={RING_STROKE} fill="none" />
@@ -227,12 +301,25 @@ export default function WaitCard({
             </Svg>
             <Animated.View style={[styles.gemWrap, { transform: [{ scale: burstScale }] }]}>
               <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.gem} />
-              <Text style={styles.gemCount}>{earned}</Text>
+              {!bonusOn && <Text style={styles.gemCount}>{earned}</Text>}
             </Animated.View>
+            {bonusOn && !bonusDone && toBonus != null && <BonusGem charged={charged}
+              still={reducedMotion || gameOpen || outOfRange} />}
+            {pill && <View pointerEvents="none" style={styles.pill}>
+              <Text style={styles.pillText}>{pill}</Text>
+            </View>}
           </View>
           <View style={styles.meterCopy}>
             <Text style={styles.meterHeadline} numberOfLines={1} adjustsFontSizeToFit>{headline}</Text>
-            <Text style={styles.meterSub}>{subline}</Text>
+            <Text style={styles.meterSub}>{outOfRange && bonusOn ? 'Step back into the line area' : subline}</Text>
+            {bonusOn && <View style={styles.bonusRow}>
+              <GameIcon name="parts" size={18} />
+              <Text style={styles.bonusRowCount}>x{earned}</Text>
+              <View style={styles.hairline} />
+              {bonusDone ? <Text style={styles.bonusDone} numberOfLines={1}>Bonus Parts done at this ride today</Text>
+                : <PipRow pips={pips} />}
+              {bonus?.saved && pill !== 'WIN SAVED' && <View style={styles.savedChip}><Text style={styles.savedChipText}>SAVED</Text></View>}
+            </View>}
             {partBurst > 0 && <Text style={styles.partBurstText}>+{partBurst} RIDE PART{partBurst === 1 ? '' : 'S'}!</Text>}
           </View>
         </View>}
@@ -241,7 +328,7 @@ export default function WaitCard({
           <Pressable accessibilityRole="button" accessibilityLabel={rewardTrackingAvailable ? "Open queue games for bonus rewards" : "Open queue games"}
             onPress={onPlayBonus} disabled={paused}
             style={({ pressed }) => [styles.playButton, paused && styles.playButtonDisabled, pressed && styles.playButtonPressed]}>
-            <Text style={styles.playButtonText}>{rewardTrackingAvailable ? 'PLAY FOR BONUS' : 'QUEUE ARCADE'}</Text>
+            <Text style={styles.playButtonText}>{playLabel}</Text>
           </Pressable>
         )}
 
@@ -268,13 +355,19 @@ export default function WaitCard({
               . This is not your remaining time.
             </Text>
           )}
-          {rewardTrackingAvailable && <Text style={styles.waitSourceHint}>
+          {rewardTrackingAvailable && !bonusOn && <Text style={styles.waitSourceHint}>
             {`Verified time near the ride: ${fmt(verifiedEligibleSeconds)}. One Ride Part per ${Math.round(interval / 60)} minutes, up to ${sessionPartCap} per line.`}
           </Text>}
+          {bonusOn && <View style={styles.hintLine}>
+            <GameIcon name="info" size={18} />
+            <Text style={[styles.waitSourceHint, styles.hintLineText]}>
+              {`Verified time ${fmt(verifiedEligibleSeconds)}. ${ringInfoCopy(interval, sessionPartCap, true)}`}
+            </Text>
+          </View>}
           {rewardTrackingAvailable && masteryBonusAvailable && (
             <HintLine icon="star">Coin mastery: your first Part here today earns +1 bonus Part.</HintLine>
           )}
-          {rewardTrackingAvailable && currentQuestBonusEnabled && (
+          {rewardTrackingAvailable && currentQuestBonusEnabled && !bonusOn && (
             <HintLine icon="shark">
               {currentQuestVerified ? 'Current Quest verified: bonus Part on the way.'
                 : currentQuestProofPending ? 'Current Quest played. Checking your route.'
@@ -317,6 +410,25 @@ const styles = StyleSheet.create({
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0,
   },
   meterCopy: { flex: 1 },
+  ringOutOfRange: { opacity: 0.4 },
+  gemSlot: { position: 'absolute', bottom: -4, left: RING / 2 - 9, width: 18, height: 18 },
+  pill: { position: 'absolute', top: -8, right: -26, backgroundColor: GOLD, borderColor: '#08305f',
+    borderWidth: 3, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
+  pillText: { fontFamily: 'Knockout', fontSize: 13, color: '#08305f', letterSpacing: 0.4 },
+  bonusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  bonusRowCount: { fontFamily: 'Knockout', fontSize: 15, color: '#fff' },
+  hairline: { width: StyleSheet.hairlineWidth, height: 14, backgroundColor: 'rgba(255,255,255,0.6)' },
+  pipRow: { flexDirection: 'row', gap: 6 },
+  pip: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, borderColor: GOLD },
+  pipOpen: { backgroundColor: 'rgba(254,201,14,0.55)', shadowColor: GOLD, shadowOpacity: 0.9,
+    shadowRadius: 4, shadowOffset: { width: 0, height: 0 } },
+  pipClaimed: { backgroundColor: GOLD },
+  compactPill: { backgroundColor: GOLD, borderColor: '#08305f', borderWidth: 2, borderRadius: 8, paddingHorizontal: 5 },
+  miniGem: { opacity: 0.85 },
+  miniGemCharged: { opacity: 1, transform: [{ scale: 1.3 }] },
+  bonusDone: { flexShrink: 1, fontFamily: 'Knockout', fontSize: 12, color: '#e4f7ff' },
+  savedChip: { borderWidth: 2, borderColor: GOLD, borderRadius: 8, paddingHorizontal: 5 },
+  savedChipText: { fontFamily: 'Knockout', fontSize: 11, color: GOLD },
   meterHeadline: { fontFamily: 'Shark', fontSize: 32, color: '#ffcf3b',
     textShadowColor: '#7a3d00', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0 },
   meterSub: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff', marginTop: 2 },

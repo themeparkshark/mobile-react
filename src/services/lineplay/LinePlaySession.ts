@@ -1,5 +1,5 @@
 /**
- * LinePlaySession — the in-queue session state machine.
+ * LinePlaySession: the in-queue session state machine.
  *
  * Lifecycle:
  *   idle -> detected -> active <-> paused(manual)
@@ -23,7 +23,7 @@
  *   - Read the shared LocationContext stream for queue heads-ups and exit
  *     detection; this class never creates its own watcher.
  *
- * IMPORTANT — this is a plain controller class, framework-agnostic. The screen
+ * IMPORTANT: this is a plain controller class, framework-agnostic. The screen
  * subscribes to it and feeds it location samples from useContext(LocationContext).
  * That satisfies "subscribe, don't create new watchers": we consume the app's
  * existing location state rather than spinning up another watchPositionAsync.
@@ -42,10 +42,15 @@ import heartbeatInLineTimer from '../../api/endpoints/me/inline-timer/heartbeat'
 import readInLineTimer from '../../api/endpoints/me/inline-timer/read';
 import chooseLineSignal from '../../api/endpoints/me/inline-timer/signal';
 import guessCrewPuzzle from '../../api/endpoints/me/inline-timer/puzzle';
-import submitCurrentQuest, { type CurrentQuestProof } from '../../api/endpoints/me/inline-timer/currentQuest';
+import submitCurrentQuest, { startCurrentQuestAttempt, type CurrentQuestAttempt,
+  type CurrentQuestProof } from '../../api/endpoints/me/inline-timer/currentQuest';
 import { voteParkProject, type ParkProject } from '../../api/endpoints/me/park-projects';
 import type { LineSignalSummary } from '../../api/endpoints/me/inline-timer/types';
-import type { LineSessionResponse } from '../../api/endpoints/me/inline-timer/types';
+import type { LineBonusClaim, LineBonusEncore, LineBonusSummary,
+  LineSessionResponse } from '../../api/endpoints/me/inline-timer/types';
+import { ExitSpeedDetector, forcedHeartbeatDelaysMs, isWalkingSample, nextBonusSeconds,
+  takeNewBonusEvents } from './bonusRounds';
+import type { CurrentTier } from '../../games/current-quest/logic';
 import { RidePartType } from '../../models/ride-part-type';
 import { linePlayRewardQueue, subscribeLinePlayRewardRecovery } from './rewardRecovery';
 import {
@@ -147,6 +152,12 @@ export interface AccrualDisplay {
   readonly progressToNextTick: number;
 }
 
+/** A server-confirmed bonus moment for the screen to celebrate once. */
+export type BonusFxEvent =
+  | { readonly id: number; readonly kind: 'claim'; readonly claim: LineBonusClaim }
+  | { readonly id: number; readonly kind: 'encore'; readonly encore: LineBonusEncore }
+  | { readonly id: number; readonly kind: 'perk'; readonly perk: { readonly kind: 'mastery' | 'queue_crew'; readonly parts: number } };
+
 export interface SessionRewards {
   readonly coinAssetId?: number | null;
   readonly durationSeconds: number;
@@ -157,6 +168,13 @@ export interface SessionRewards {
   readonly masteryBonusParts: number;
   readonly crewPuzzleBonusParts: number;
   readonly currentQuestBonusParts: number;
+  /** Queue Bonus Rounds (0 / null on older servers). */
+  readonly bonusRoundParts?: number;
+  readonly liveParts?: number | null;
+  readonly encoreXp?: number;
+  readonly encoreEnergy?: number;
+  readonly bonusParkDayUsed?: number | null;
+  readonly bonusParkDayCap?: number | null;
 }
 
 export type RewardConnectionIssue = 'nearby' | 'network' | 'sign_in';
@@ -242,6 +260,16 @@ export interface SessionSnapshot {
   readonly gameOpen: boolean;
   readonly boardingAt: number | null;
   readonly crewRelay: CrewRelayProgress | null;
+  /** Queue Bonus Rounds block from the server (null while the flag is off). */
+  readonly bonus: LineBonusSummary | null;
+  /** Server-confirmed claims waiting for their celebration (each plays once). */
+  readonly bonusFx: readonly BonusFxEvent[];
+  /** The guest is walking with the line. A signal only: nothing pauses for it. */
+  readonly moving: boolean;
+  /** Sustained 2 m/s for 20 s: they left the line. RESUME brings them back. */
+  readonly leftLine: boolean;
+  /** The open Current Quest bonus attempt, if any. */
+  readonly questAttempt: CurrentQuestAttempt | null;
 }
 
 type Listener = (snap: SessionSnapshot) => void;
@@ -568,6 +596,21 @@ export class LinePlaySession {
   private graceHeldMs: number | null = null;
   private boardingAt: number | null = null;
   private crewRelay: CrewRelayProgress | null = null;
+  private bonus: LineBonusSummary | null = null;
+  private bonusSeen: string[] = [];
+  private bonusFx: BonusFxEvent[] = [];
+  private bonusFxSeq = 0;
+  private processedBonus = new WeakSet<object>();
+  private questAttempt: CurrentQuestAttempt | null = null;
+  private questAttemptRequest: Promise<CurrentQuestAttempt | null> | null = null;
+  private bonusQuestProof: CurrentQuestProof | null = null;
+  private bonusQuestSubmission: Promise<void> | null = null;
+  private lastWalkingAt = 0;
+  private sawSpeed = false;
+  private clientLeftLine = false;
+  private readonly exitDetector = new ExitSpeedDetector();
+  private forcedHeartbeatTimers: ReturnType<typeof setTimeout>[] = [];
+  private forcedThreshold: number | null = null;
 
   private listeners = new Set<Listener>();
 
@@ -703,7 +746,147 @@ export class LinePlaySession {
       gameOpen: this.gameOpen,
       boardingAt: this.boardingAt,
       crewRelay: this.crewRelay,
+      bonus: this.bonus,
+      bonusFx: this.bonusFx,
+      moving: this.isMoving(),
+      leftLine: this.clientLeftLine || Boolean(this.bonus?.motion?.left_line),
+      questAttempt: this.questAttempt,
     };
+  }
+
+  /** Walking with the line in the last few seconds (OS speed), else the server's view. */
+  private isMoving(now = Date.now()): boolean {
+    if (this.sawSpeed) return now - this.lastWalkingAt <= 5_000;
+    return Boolean(this.bonus?.motion?.moving);
+  }
+
+  // -- Queue Bonus Rounds ---------------------------------------------------
+
+  /**
+   * Fold a server bonus block in. New claims become celebrations exactly once
+   * (seen set in the checkpoint), and the next threshold arms the forced
+   * heartbeats that make the gem pop on time.
+   */
+  private applyBonus(next: LineBonusSummary | null | undefined): void {
+    if (next === undefined) return;
+    this.bonus = next;
+    if (!next) {
+      this.clearForcedHeartbeats();
+      return;
+    }
+    const sessionId = this.serverSessionId;
+    if (sessionId && !this.processedBonus.has(next)) {
+      this.processedBonus.add(next);
+      const events = takeNewBonusEvents(sessionId, next, this.bonusSeen);
+      this.bonusSeen = [...events.seen];
+      for (const claim of events.claims) this.bonusFx.push({ id: ++this.bonusFxSeq, kind: 'claim', claim });
+      for (const encore of events.encores) this.bonusFx.push({ id: ++this.bonusFxSeq, kind: 'encore', encore });
+      for (const perk of events.perks) this.bonusFx.push({ id: ++this.bonusFxSeq, kind: 'perk', perk });
+      this.bonusFx = this.bonusFx.slice(-12);
+    }
+    this.scheduleForcedHeartbeats();
+  }
+
+  /** The screen played (or skipped) a celebration. */
+  consumeBonusFx(id: number): void {
+    const before = this.bonusFx.length;
+    this.bonusFx = this.bonusFx.filter(event => event.id !== id);
+    if (this.bonusFx.length !== before) {
+      this.persistCheckpoint();
+      this.emit();
+    }
+  }
+
+  /** "Looks like you left the line": RESUME once they are back. */
+  resumeAfterLeftLine(): void {
+    if (!this.clientLeftLine) return;
+    this.clientLeftLine = false;
+    this.exitDetector.reset();
+    this.emit();
+    if (this.lastSample && isRecentQueueSample(this.lastSample)) void this.heartbeat(this.lastSample);
+  }
+
+  private clearForcedHeartbeats(): void {
+    this.forcedHeartbeatTimers.forEach(clearTimeout);
+    this.forcedHeartbeatTimers = [];
+    this.forcedThreshold = null;
+  }
+
+  /** At the predicted threshold, heartbeat at +2 s and +5 s so the pop lands within about 3 s. */
+  private scheduleForcedHeartbeats(): void {
+    const next = this.bonus?.enabled ? this.bonus.next_opens_at_eligible_seconds : null;
+    if (next == null || (this.state !== 'active' && this.state !== 'paused')) {
+      this.clearForcedHeartbeats();
+      return;
+    }
+    if (this.forcedThreshold === next) return;
+    this.clearForcedHeartbeats();
+    const remaining = nextBonusSeconds(this.bonus, this.verifiedEligibleSeconds,
+      this.lastSuccessfulPresenceUpdateAt || null, Date.now());
+    if (remaining == null || remaining > 15 * 60) return;
+    this.forcedThreshold = next;
+    for (const delay of forcedHeartbeatDelaysMs(remaining)) {
+      this.forcedHeartbeatTimers.push(setTimeout(() => {
+        if (this.disposed || this.state === 'complete') return;
+        const sample = this.lastSample;
+        if (sample && isRecentQueueSample(sample)) void this.heartbeat(sample);
+      }, delay));
+    }
+  }
+
+  /**
+   * Get this round's server seed and tier before Current Quest opens. Walking
+   * guests may get the Stroll tier; they are never stopped. Null when bonus
+   * rounds are off (the game then plays its usual board).
+   */
+  async prepareBonusQuest(): Promise<CurrentQuestAttempt | null> {
+    if (!this.bonus?.enabled || !this.bonus.sources.current_quest || !this.serverSessionId ||
+        this.state !== 'active') return null;
+    if (this.questAttemptRequest) return this.questAttemptRequest;
+    const sessionId = this.serverSessionId;
+    // Replace an unfinished round (the server only does so after 20 s of play),
+    // but never one whose proof is still on its way.
+    const replace = this.questAttempt != null && this.bonusQuestProof?.attempt_id !== this.questAttempt.attempt_id;
+    const request = startCurrentQuestAttempt(sessionId, this.isMoving(), replace)
+      .then(attempt => {
+        if (this.serverSessionId !== sessionId) return null;
+        this.questAttempt = attempt;
+        this.emit();
+        return attempt;
+      })
+      .catch(error => {
+        console.info('[LinePlaySession] bonus round seed unavailable', (error as { response?: { status?: number } })?.response?.status ?? 'network');
+        return null;
+      })
+      .finally(() => { this.questAttemptRequest = null; });
+    this.questAttemptRequest = request;
+    return request;
+  }
+
+  /** Submit a bonus-round win; the server replays it and pays a slot, a save or Encore. */
+  private submitBonusQuest(proof: CurrentQuestProof): void {
+    this.bonusQuestProof = proof;
+    this.persistCheckpoint();
+    if (this.bonusQuestSubmission || !this.serverSessionId) return;
+    const sessionId = this.serverSessionId;
+    this.bonusQuestSubmission = submitCurrentQuest(sessionId, proof)
+      .then(response => {
+        if (this.serverSessionId !== sessionId) return;
+        if (response?.verified) {
+          this.bonusQuestProof = null;
+          if (this.questAttempt?.attempt_id === proof.attempt_id) this.questAttempt = null;
+        }
+        this.applyBonus(response?.bonus);
+        this.persistCheckpoint();
+        this.emit();
+      })
+      .catch(error => {
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        // A refused proof will never verify; a network error retries later.
+        if (status === 422 || status === 409 || status === 404) this.bonusQuestProof = null;
+        console.warn('[LinePlaySession] bonus round proof pending:', status ?? error);
+      })
+      .finally(() => { this.bonusQuestSubmission = null; });
   }
 
   private persistCheckpoint(): void {
@@ -737,6 +920,8 @@ export class LinePlaySession {
       rewards: this.rewards,
       rewardsPending: this.rewardsPending,
       currentQuestProof: this.currentQuestProof,
+      bonusSeen: this.bonusSeen,
+      bonusQuestProof: this.bonusQuestProof,
     };
     this.checkpointWrites = this.checkpointWrites.then(() => writeCheckpoint(data))
       .catch(error => console.warn('[LinePlaySession] checkpoint unavailable:', error));
@@ -767,11 +952,16 @@ export class LinePlaySession {
    * first play keeps the playlist board, every replay deals a new one, and
    * the counter survives an app restart through the checkpoint.
    */
-  beginGame(item: Extract<ActivityItem, { kind: 'minigame' }>): { seed: number; difficulty: QueueDifficulty; plays: number } {
+  beginGame(item: Extract<ActivityItem, { kind: 'minigame' }>): { seed: number; difficulty: QueueDifficulty; plays: number; tier: CurrentTier } {
     const plays = Math.max(0, this.gamePlays[item.id] ?? 0);
     const difficulty = this.gameDifficulty[item.gameId] ?? 1;
     let seed: number;
-    if (item.gameId === 'current' && this.currentQuestBonusEnabled && !this.currentQuestVerified &&
+    let tier: CurrentTier = 'standard';
+    if (item.gameId === 'current' && this.questAttempt && this.bonus?.enabled) {
+      // A bonus round replays the server's own seed at the server's tier.
+      seed = this.questAttempt.seed;
+      tier = this.questAttempt.tier;
+    } else if (item.gameId === 'current' && this.currentQuestBonusEnabled && !this.currentQuestVerified &&
         this.currentQuestSeed != null) {
       // The bonus proof must replay the server's own route.
       seed = this.currentQuestSeed;
@@ -786,7 +976,7 @@ export class LinePlaySession {
       this.persistCheckpoint();
       this.emit();
     }
-    return { seed, difficulty, plays };
+    return { seed, difficulty, plays, tier };
   }
 
   /** A 2+ star finish makes the next round of that game a step harder; the best run is kept. */
@@ -883,6 +1073,17 @@ export class LinePlaySession {
 
   /** Keep proof through an outage; the completion request carries it again. */
   recordCurrentQuest(meta?: Record<string, unknown>): void {
+    const attempt = this.questAttempt;
+    if (attempt && this.bonus?.enabled && meta && meta.seed === attempt.seed) {
+      const { score, duration, paths } = meta;
+      if (!Number.isInteger(score) || !Number.isInteger(duration) || !Array.isArray(paths) ||
+          paths.length !== attempt.voyages ||
+          !paths.every(path => Array.isArray(path) && path.length >= 7 && path.length <= 100 &&
+            path.every(index => Number.isInteger(index) && index >= 0 && index <= 24))) return;
+      this.submitBonusQuest({ attempt_id: attempt.attempt_id, seed: attempt.seed, score: score as number,
+        duration_seconds: Math.max(1, duration as number), paths: paths as number[][] });
+      return;
+    }
     if (!this.currentQuestBonusEnabled || !this.serverSessionId ||
         this.currentQuestSeed == null || !meta || this.currentQuestVerified) return;
     const { seed, score, duration, paths } = meta;
@@ -1139,6 +1340,9 @@ export class LinePlaySession {
     this.rewards = saved?.rewards ?? null;
     this.rewardsPending = saved?.rewardsPending ?? false;
     this.currentQuestProof = saved?.currentQuestProof ?? null;
+    this.bonusSeen = saved?.bonusSeen ?? [];
+    this.bonusQuestProof = saved?.bonusQuestProof ?? null;
+    this.bonusFx = [];
     this.currentQuestVerified = false;
     this.currentQuestSeed = null;
     this.currentQuestBonusEnabled = false;
@@ -1252,6 +1456,7 @@ export class LinePlaySession {
     this.currentQuestVerified = result.current_quest_verified ?? false;
     this.applySignal(result.signal);
     this.applyParkProject(result.park_project);
+    this.applyBonus(result.bonus);
     this.startedAt = Date.parse(result.started_at) || this.startedAt;
     if (result.status === 'completed') {
       void deactivateQueueBackgroundHeartbeat(result.session_id).catch(error =>
@@ -1274,6 +1479,9 @@ export class LinePlaySession {
         this.currentQuestProof.seed === this.currentQuestSeed) {
       this.recordCurrentQuest({ ...this.currentQuestProof,
         duration: this.currentQuestProof.duration_seconds });
+    }
+    if (result.status === 'active' && this.bonus?.enabled && this.bonusQuestProof && !this.bonusQuestSubmission) {
+      this.submitBonusQuest(this.bonusQuestProof);
     }
   }
 
@@ -1350,7 +1558,8 @@ export class LinePlaySession {
     if (this.heartbeatInFlight) return;
     this.heartbeatInFlight = true;
     try {
-      const result = await heartbeatInLineTimer(this.serverSessionId, sample.latitude, sample.longitude);
+      const result = await heartbeatInLineTimer(this.serverSessionId, sample.latitude, sample.longitude,
+        sample.accuracyMeters);
       this.lastSuccessfulPresenceUpdateAt = Date.now();
       this.awaySamples = 0;
       this.firstAwayAt = null;
@@ -1445,6 +1654,7 @@ export class LinePlaySession {
     try {
       const response = await guessCrewPuzzle(this.serverSessionId, request.id, request.symbols);
       this.applySignal(response.signal);
+      this.applyBonus(response.bonus ?? undefined);
       this.puzzleRequest = null;
     } catch (error) {
       const response = (error as { response?: { status?: number; data?: { message?: string } } })?.response;
@@ -1623,6 +1833,8 @@ export class LinePlaySession {
 
     if (this.serverStartInFlight) await this.serverStartInFlight;
     if (this.currentQuestSubmission) await this.currentQuestSubmission;
+    if (this.bonusQuestSubmission) await this.bonusQuestSubmission;
+    this.clearForcedHeartbeats();
     if (!this.serverSessionId && this.lastSample) {
       await this.connectServer(this.lastSample, true);
     }
@@ -1698,6 +1910,12 @@ export class LinePlaySession {
       mastery_bonus_parts?: number;
       crew_puzzle_bonus_parts?: number;
       current_quest_bonus_parts?: number;
+      bonus_round_parts?: number;
+      live_parts?: number;
+      encore_xp?: number;
+      encore_energy?: number;
+      bonus_park_day_used?: number;
+      bonus_park_day_cap?: number;
     },
   ): void {
     this.rewards = {
@@ -1710,6 +1928,12 @@ export class LinePlaySession {
       masteryBonusParts: rewards.mastery_bonus_parts ?? 0,
       crewPuzzleBonusParts: rewards.crew_puzzle_bonus_parts ?? 0,
       currentQuestBonusParts: rewards.current_quest_bonus_parts ?? 0,
+      bonusRoundParts: rewards.bonus_round_parts ?? 0,
+      liveParts: rewards.live_parts ?? null,
+      encoreXp: rewards.encore_xp ?? 0,
+      encoreEnergy: rewards.encore_energy ?? 0,
+      bonusParkDayUsed: rewards.bonus_park_day_used ?? null,
+      bonusParkDayCap: rewards.bonus_park_day_cap ?? null,
     };
     this.rewardsPending = false;
     this.emit();
@@ -1798,12 +2022,25 @@ export class LinePlaySession {
     this.crewRelay = null;
     this.lastSample = null;
     this.advanceTrail = [];
+    this.clearForcedHeartbeats();
+    this.bonus = null;
+    this.bonusSeen = [];
+    this.bonusFx = [];
+    this.questAttempt = null;
+    this.questAttemptRequest = null;
+    this.bonusQuestProof = null;
+    this.bonusQuestSubmission = null;
+    this.lastWalkingAt = 0;
+    this.sawSpeed = false;
+    this.clientLeftLine = false;
+    this.exitDetector.reset();
     this.emit();
   }
 
-  /** Full teardown — call when the session controller is discarded. */
+  /** Full teardown: call when the session controller is discarded. */
   dispose(): void {
     this.disposed = true;
+    this.clearForcedHeartbeats();
     this.stopTicking();
     if (this.graceTimer) clearTimeout(this.graceTimer);
     this.unsubscribeRecovery();
@@ -1831,6 +2068,15 @@ export class LinePlaySession {
       void this.connectServer(sample);
     }
     if (this.state !== 'active') return;
+
+    // Walking is a signal for the chip and quieter celebrations, never a pause.
+    if (typeof sample.speedMps === 'number' && sample.speedMps >= 0) this.sawSpeed = true;
+    if (isWalkingSample({ ...sample, timestamp: now })) this.lastWalkingAt = now;
+    if (this.bonus?.enabled && !this.clientLeftLine &&
+        this.exitDetector.feed({ timestamp: now, speedMps: sample.speedMps, accuracyMeters: sample.accuracyMeters })) {
+      this.clientLeftLine = true;
+      this.emit();
+    }
 
     const accuracy = sample.accuracyMeters;
     if (typeof accuracy !== 'number' || accuracy < 0 || accuracy > ADVANCE_MAX_ACCURACY_METERS) return;
