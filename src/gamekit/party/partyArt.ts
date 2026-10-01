@@ -59,6 +59,17 @@ export const BOARD = {
   ribbon: require('../../../assets/images/ribbon.png'),
 } as const;
 
+/**
+ * Splash bubble (design 7.1.4, 13.11): gate-passed pipeline art from Alex's
+ * references (studio art/line-party, @3x exports): the idle soap bubble that
+ * seals a hole, the crack wobble (pop f0/f1) and the burst (f2/f3).
+ */
+export const BUBBLE = {
+  idle: require('../../assets/games/party/soap_bubble.png'),
+  crack: [require('../../assets/games/party/lp_bubble_pop_f0.png'), require('../../assets/games/party/lp_bubble_pop_f1.png')],
+  burst: [require('../../assets/games/party/lp_bubble_burst_f2.png'), require('../../assets/games/party/lp_bubble_burst_f3.png')],
+} as const;
+
 /** Team ring colours (bright world palette, never purple or neon). */
 export const TEAM_RING: Record<string, string> = {
   blue: '#1f8fff',

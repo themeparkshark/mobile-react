@@ -2,7 +2,7 @@
 /**
  * The sidecar bundle (tools/build-sim-bundle.mjs) is the only thing the server
  * scores with, so: the bundle is deterministic, it matches the TS sources, and
- * every golden vector (208 seeds x 4 logs per game) replays exactly on both.
+ * every golden vector (208 seeds x 5 logs per game) replays exactly on both.
  */
 const assert = require('node:assert/strict');
 const test = require('node:test');
@@ -23,6 +23,12 @@ test('the bundle hash is stable across builds', async () => {
   const b = buildBundle();
   assert.equal(a.hash, b.hash);
   assert.match(a.name, /^party-sims\.[0-9a-f]{12}\.cjs$/);
+});
+
+test('the app ships the hash of the bundle it plays (run build-sim-bundle --app after any sim change)', async () => {
+  const { buildBundle } = await import(path.join(root, 'tools/build-sim-bundle.mjs'));
+  const shipped = loadTs('src/games-registry/simBundle.ts').SIM_BUNDLE;
+  assert.equal(shipped, buildBundle().hash);
 });
 
 for (const key of Object.keys(registry)) {
@@ -48,7 +54,21 @@ for (const key of Object.keys(registry)) {
         checked++;
       }
       assert.deepEqual(JSON.parse(JSON.stringify(src.botTaps(boardA, v.seed, v.seat, v.profile))), v.logs.bot.taps);
+      // Ghosts that receive Splashes, the Splash earn list and the band check match too.
+      assert.deepEqual(JSON.parse(JSON.stringify(bun.botTaps(boardB, v.seed, v.seat, v.profile, 0, v.incoming))), v.logs.ghost_incoming.taps);
+      assert.equal(bun.bandCheck(boardB), v.band, `${key} seed ${v.seed} band`);
+      assert.equal(bun.bandOk(boardB), v.band_ok);
+      for (const log of Object.values(v.logs)) assert.deepEqual(JSON.parse(JSON.stringify(bun.splashEarned(bun.resolve(boardB, log.taps)))), log.splashes);
+      // Room settle (SNATCH), key moments and the prefix replay match on both engines.
+      const names = Object.keys(v.logs);
+      for (const [sim, board] of [[src, boardA], [bun, boardB]]) {
+        const settle = sim.settle(names.map((n) => sim.resolve(board, v.logs[n].taps)));
+        assert.deepEqual(JSON.parse(JSON.stringify(settle)), v.settle, `${key} seed ${v.seed} settle`);
+        names.forEach((n, j) => assert.deepEqual(JSON.parse(JSON.stringify(sim.explain(board, v.logs[n].taps, settle, j))), v.logs[n].explain ?? null, `${key} seed ${v.seed} ${n} explain`));
+        const pr = sim.resolve(board, v.logs.human.taps, v.prefix.until_ms);
+        assert.equal(sim.resultHash(pr), v.prefix.hash, `${key} seed ${v.seed} prefix`);
+      }
     }
-    assert.ok(checked >= 800);
+    assert.ok(checked >= 1000);
   });
 }

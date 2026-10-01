@@ -32,21 +32,39 @@ function lcg(seed) {
   return () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0);
 }
 
-/** A thumb in a moving line: real hits, late taps, bumps, double taps. */
+/** A thumb in a moving line: hits around the mark, early and late taps, bumps, mashes, bubbles landing. */
 function humanTaps(sim, board, seed) {
   const next = lcg(seed ^ 0x5bd1e995);
   const taps = [];
-  const holes = sim.key === 'bonk_race' ? 9 : 4;
   if (sim.key === 'bonk_race') {
+    const end = sim.roundMs - 1;
     for (const s of board) {
       const roll = next() % 100;
-      if (s.kind === 'lure' ? roll < 20 : roll < 70) taps.push([Math.min(sim.roundMs, s.at + 150 + (next() % 1000)), s.hole]);
+      // Off the mark by -300..+400 ms, Shared Goldens tighter (people go for the downbeat).
+      const off = s.sg > 0 ? (next() % 241) - 100 : (next() % 701) - 300;
+      if (s.kind === 'lure' ? roll < 20 : roll < 72) taps.push([Math.max(0, Math.min(end, s.mark + off)), s.hole]);
       if (roll > 92) {
-        const t = Math.min(sim.roundMs, s.at + (next() % 400));
-        for (let k = 0; k < 3; k++) taps.push([Math.min(sim.roundMs, t + k * 85), next() % holes]);
+        const t = Math.min(end, s.at + (next() % 400));
+        for (let k = 0; k < 3; k++) taps.push([Math.min(end, t + k * 85), next() % 9]);
       }
     }
-  } else if (sim.key === 'lagoon_dash') {
+    // Half the logs take Splashes: landings on half-bar downbeats, then 0-3 taps that may clear them.
+    if (next() % 2 === 0) {
+      const count = 1 + (next() % 3);
+      let half = 2 + (next() % 6);
+      for (let n = 1; n <= count && half < 22; n++) {
+        const land = Math.floor((half * 4 * 220590) / 1000);
+        taps.push([land, 1000 + n]);
+        const k = next() % 4;
+        for (let j = 0; j < k; j++) taps.push([Math.min(end, land + 200 + j * 180), next() % 9]);
+        half += 3 + (next() % 8);
+      }
+    }
+    taps.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+    // One landing per n, at most 400 entries.
+    return taps.slice(0, sim.maxTaps);
+  }
+  if (sim.key === 'lagoon_dash') {
     // A walker's thumb: a slow solver line with stray swipes (bumps, wrong turns) and late undos mixed in.
     const base = sim.botTaps(board, (seed ^ 0x55aa) >>> 0, 5, 'rookie');
     for (const tap of base) {
@@ -56,16 +74,32 @@ function humanTaps(sim, board, seed) {
       if (roll < 6) taps.push([Math.min(sim.roundMs, tap[0] + 1400 + (next() % 400)), 5]);
       if (roll === 99) taps.push([Math.min(sim.roundMs, tap[0] + 2000), 6]);
     }
-  } else {
-    for (const q of board) {
-      const roll = next() % 100;
-      if (roll < 15) taps.push([q.unlockAt + (next() % 200), next() % 4]); // bump before the guard
-      if (roll < 85) taps.push([Math.min(sim.roundMs, q.unlockAt + 300 + (next() % 6000)), roll < 60 ? q.correct : next() % q.choices]);
-      if (roll > 70) taps.push([Math.min(sim.roundMs, q.unlockAt + 6500 + (next() % 2000)), next() % 4]); // late tap
-    }
+    taps.sort((a, b) => a[0] - b[0]);
+    return taps.slice(0, sim.maxTaps);
+  }
+  for (const q of board) {
+    const roll = next() % 100;
+    if (roll < 15) taps.push([q.unlockAt + (next() % 200), 10 + (next() % 4)]); // bump around the guard
+    if (roll < 85) taps.push([Math.min(sim.roundMs - 1, q.unlockAt + 300 + (next() % 6000)), 10 + (roll < 60 ? q.correct : next() % q.choices)]);
+    if (roll > 70) taps.push([Math.min(sim.roundMs - 1, q.closeAt + (next() % 2000)), 10 + (next() % 4)]); // late tap
   }
   taps.sort((a, b) => a[0] - b[0]);
   return taps.slice(0, sim.maxTaps);
+}
+
+/** Splashes due on a ghost seat: 0-3 landings on half-bar downbeats. */
+function incomingFor(sim, seed) {
+  if (sim.key !== 'bonk_race') return [];
+  const next = lcg(seed ^ 0x2545f491);
+  const out = [];
+  let half = 3 + (next() % 5);
+  const count = next() % 4;
+  // Numbered from 5 so a ghost-filled human log (landings 1-3 of its own) never repeats an n.
+  for (let n = 5; n < 5 + count && half < 22; n++) {
+    out.push([Math.floor((half * 4 * 220590) / 1000), n]);
+    half += 2 + (next() % 9);
+  }
+  return out;
 }
 
 function main() {
@@ -81,23 +115,36 @@ function main() {
       const seat = i % 4;
       const profile = profiles[i % 3];
       const human = humanTaps(sim, board, seed);
+      const incoming = incomingFor(sim, seed);
       const until = 1000 + ((i * 977) % (sim.roundMs - 2000));
       const logs = {
         human,
         bot: sim.botTaps(board, seed, seat, profile),
-        ghost_fill: sim.ghostFill(board, seed, seat, human, until, profile),
+        ghost_fill: sim.ghostFill(board, seed, seat, human, until, profile, incoming.filter(([t]) => t >= until)),
+        ghost_incoming: sim.botTaps(board, seed, seat, profile, 0, incoming),
         empty: [],
       };
-      const out = { seed, seat, profile, until_ms: until, logs: {} };
+      const out = { seed, seat, profile, until_ms: until, incoming, band: sim.bandCheck(board), band_ok: sim.bandOk(board), logs: {} };
+      const results = [];
       for (const [name, taps] of Object.entries(logs)) {
         const r = sim.resolve(board, taps);
-        out.logs[name] = { taps, score: r.score, hash: sim.resultHash(r) };
+        results.push(r);
+        out.logs[name] = { taps, score: r.score, hash: sim.resultHash(r), splashes: sim.splashEarned(r) };
       }
+      // The four logs as one room: SNATCH settle, then each seat's key moment.
+      const settle = sim.settle(results);
+      out.settle = JSON.parse(JSON.stringify(settle));
+      Object.keys(logs).forEach((name, j) => {
+        out.logs[name].explain = JSON.parse(JSON.stringify(sim.explain(board, logs[name], settle, j)));
+      });
+      // Prefix resolve (Bonk Royale splits) on the human log.
+      const pr = sim.resolve(board, human, until);
+      out.prefix = { until_ms: until, score: pr.score, hash: sim.resultHash(pr) };
       return out;
     });
     const file = path.join(outDir, `${sim.key}.json`);
     fs.writeFileSync(file, JSON.stringify({ game: sim.key, sim_version: sim.version, round_ms: sim.roundMs, sim_bundle: hash, vectors }));
-    console.log(`${sim.key}@${sim.version}: ${vectors.length} seeds x 4 logs -> ${path.relative(root, file)} (${fs.statSync(file).size} bytes)`);
+    console.log(`${sim.key}@${sim.version}: ${vectors.length} seeds x 5 logs -> ${path.relative(root, file)} (${fs.statSync(file).size} bytes)`);
   }
 }
 
