@@ -51,7 +51,10 @@ export type HapticIntent =
   | 'success'
   | 'warning'
   | 'hitSoft'
-  | 'hitRigid';
+  /** A crisp, short thunk (expo Rigid): the GOOD hit in Line Party. */
+  | 'hitRigid'
+  /** A soft, dull bump (expo Soft): a gentle error that never reads as failure (a lure, Butterfingers). */
+  | 'softBump';
 
 /** Minimum ms between fires of the same intent. Tuned per intent below. */
 const DEBOUNCE_MS: Record<HapticIntent, number> = {
@@ -64,6 +67,7 @@ const DEBOUNCE_MS: Record<HapticIntent, number> = {
   warning: 250,
   hitSoft: 45,
   hitRigid: 45,
+  softBump: 60,
 };
 
 const lastFiredAt: Record<HapticIntent, number> = {
@@ -76,6 +80,7 @@ const lastFiredAt: Record<HapticIntent, number> = {
   warning: 0,
   hitSoft: 0,
   hitRigid: 0,
+  softBump: 0,
 };
 
 let enabled = true;
@@ -118,6 +123,9 @@ function run(intent: HapticIntent): void {
     case 'hitRigid':
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid ?? Haptics.ImpactFeedbackStyle.Heavy);
       return;
+    case 'softBump':
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+      return;
   }
 }
 
@@ -148,6 +156,7 @@ export const Haptic: Record<HapticIntent, () => void> = {
   warning: () => haptic('warning'),
   hitSoft: () => haptic('hitSoft'),
   hitRigid: () => haptic('hitRigid'),
+  softBump: () => haptic('softBump'),
 };
 
 // =============================================================================

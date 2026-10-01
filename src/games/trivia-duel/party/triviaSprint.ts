@@ -1,36 +1,50 @@
 /**
- * triviaSprint.ts: the Line Party "Trivia Sprint" round (Trivia Duel live, design
- * 4.5 / 10), as a pure, integer-only simulation shared with the server.
+ * triviaSprint.ts: the Line Party "Trivia Sprint" round (sim `trivia_sprint`
+ * v3, design rev 7 section 7.2), a pure, integer-only simulation shared with
+ * the server (Node sidecar bundle, PHP port TriviaSprintSim, golden vectors).
  *
- * Every phone in a line room builds the same 3-question timeline from the
- * server's seed, answers on its own board and submits a tap log of
- * [ms since GO, choice]. The server runs a line-for-line PHP port
- * (TriviaSprintSim, to be added next to BonkRaceSim by the backend owner) and
- * the golden vectors in tools/tests/fixtures/party/trivia_sprint_vectors.json
- * keep the two ports identical.
+ * 15 bars on the room loop's beat grid = 26,470 board-ms. Three questions of
+ * 5 bars each: read 3 beats, answer 14 beats, reveal 3 beats. Every phone
+ * builds the same questions from the server's seed; each player sees the
+ * tiles in their own order (tileOrder, display only: the log always carries
+ * the canonical choice as code 10 + index), so a neighbour's screen gives
+ * nothing away.
  *
- * Content is only the verified opening-year fact table, so the server needs no
- * authored question pool: True or Tall Tale, "which opened first" pairs and
- * 3-way Which Opened First. Answers stay face-down until each unlock; a lock is
- * final; speed is points; the streak multiplies.
+ * Speed points use LOCAL board-ms from your own question reveal, so latency
+ * never decides points: a correct answer inside the 4-beat floor (1,764 ms)
+ * scores 500, then it decays linearly to 200 at window close. Streak bonus
+ * only (+100 / +200 / +300 for 2 / 3 / 4+ correct in a row). No First Fin,
+ * no 50/50 Chomp. A lock is final; taps before the 120 ms bump guard or on a
+ * spent question are ignored, never punished.
+ *
+ * Content is the verified opening-year fact table (True or Tall Tale, "which
+ * opened first" pairs and 3-way Which Opened First), so the server needs no
+ * authored pool.
  *
  * Rules for this file: integers only, no Math.random, no Date, no floats in
  * state. Math.floor only on non-negative values (equals PHP intdiv).
- * Walk-safe: taps before the unlock guard or on a spent question are ignored,
- * never punished (a bump in line costs nothing).
  */
 
-export const TRIVIA_SPRINT_VERSION = 1;
+export const TRIVIA_SPRINT_VERSION = 3;
 export const QUESTIONS = 3;
-export const SLOT_MS = 9000;
-export const FIRST_SHOW_MS = 400;
-export const READ_MS = 1200;
-export const JITTER_MAX = 250;
-export const WINDOW_MS = 6500;
+export const EIGHTH_UMS = 220590;
+export function grid(k: number): number {
+  return Math.floor((k * EIGHTH_UMS) / 1000);
+}
+/** Per question, in eighths: read 6 (3 beats), answer 28 (14 beats), reveal 6 (3 beats) = 5 bars. */
+export const READ_EIGHTHS = 6;
+export const ANSWER_EIGHTHS = 28;
+export const REVEAL_EIGHTHS = 6;
+export const Q_EIGHTHS = READ_EIGHTHS + ANSWER_EIGHTHS + REVEAL_EIGHTHS;
+export const ROUND_MS = grid(QUESTIONS * Q_EIGHTHS);
+/** Inside the 4-beat floor every correct answer scores the full 500. */
+export const FLOOR_MS = grid(8);
 export const GUARD_MS = 120;
-export const GRACE_MS = 600;
-export const HORIZON_MS = 5000;
-export const ROUND_MS = FIRST_SHOW_MS + QUESTIONS * SLOT_MS;
+export const SPEED_MAX = 500;
+export const SPEED_MIN = 200;
+export const STREAK_BONUS = [0, 0, 100, 200, 300] as const;
+/** Answer codes in the log: 10 + canonical choice index. */
+export const ANSWER_CODE = 10;
 export const MAX_TAPS = 60;
 
 /** Verified facts (mirrors engine/facts.ts: id, short label, opening year). */
@@ -57,24 +71,29 @@ export interface SprintQuestion {
   shift: number;
   choices: number;
   correct: number;
+  /** Board-ms the prompt appears (read 3 beats). */
   showAt: number;
+  /** Board-ms the tiles open: your own reveal, the zero of speed points. */
   unlockAt: number;
+  /** Board-ms answers close (14 beats later); the reveal plays until the next showAt. */
   closeAt: number;
 }
 
-/** [ms since GO, choice] */
+/** [board-ms since GO, 10 + canonical choice] */
 export type SprintTap = [number, number];
 
 export interface SprintResult {
   score: number;
   hits: number;
   maxStreak: number;
-  /** per question: chosen index or -1 */
+  /** per question: canonical choice or -1 */
   picks: number[];
-  /** per question: lock ms from unlock or -1 */
+  /** per question: lock ms from your own reveal, or -1 */
   reactions: number[];
-  /** per question: points */
+  /** per question: speed points + streak bonus */
   points: number[];
+  /** sum of streak bonuses */
+  streakBonus: number;
 }
 
 /** mulberry32 (identical to bonkRace.rng and the PHP Mulberry32). */
@@ -111,9 +130,9 @@ export function buildQuestions(seed: number): SprintQuestion[] {
   const used: number[] = [];
   for (let i = 0; i < QUESTIONS; i++) {
     const kind: SprintKind = i === 0 ? 'truetale' : i === 1 ? 'pair' : 'opened';
-    const showAt = FIRST_SHOW_MS + i * SLOT_MS;
-    const unlockAt = showAt + READ_MS + (next() % (JITTER_MAX + 1));
-    const closeAt = unlockAt + WINDOW_MS;
+    const showAt = grid(i * Q_EIGHTHS);
+    const unlockAt = grid(i * Q_EIGHTHS + READ_EIGHTHS);
+    const closeAt = grid(i * Q_EIGHTHS + READ_EIGHTHS + ANSWER_EIGHTHS);
     if (kind === 'truetale') {
       let f = next() % SPRINT_FACTS.length;
       while (used.indexOf(f) >= 0) f = (f + 1) % SPRINT_FACTS.length;
@@ -152,31 +171,26 @@ export function validTaps(taps: unknown): taps is SprintTap[] {
     if (!Array.isArray(tap) || tap.length !== 2) return false;
     const [t, c] = tap;
     if (!Number.isInteger(t) || !Number.isInteger(c)) return false;
-    if (t < 0 || t > ROUND_MS || c < 0 || c > 3 || t < last) return false;
+    if (t < 0 || t >= ROUND_MS || c < ANSWER_CODE || c > ANSWER_CODE + 3 || t < last) return false;
     last = t;
   }
   return true;
 }
 
-/** Speed 0-100 in steps of 5 (integer port of engine/scoring speedPoints). */
-export function sprintSpeed(t: number): number {
-  if (t <= GRACE_MS) return 100;
-  if (t >= HORIZON_MS) return 0;
-  const raw = Math.floor((100 * (HORIZON_MS - t)) / (HORIZON_MS - GRACE_MS));
-  return Math.floor(raw / 5) * 5;
-}
-
-/** Streak multiplier in tenths: 1 = x1.0, 2 = x1.2, 3+ = x1.5 (Hot Streak). */
-export function sprintMultTenths(streak: number): number {
-  return streak >= 3 ? 15 : streak === 2 ? 12 : 10;
+/** Speed points for a correct lock `dt` ms after your own reveal: 500 inside the floor, then linear to 200 at close. */
+export function sprintSpeed(dt: number, windowMs: number): number {
+  if (dt <= FLOOR_MS) return SPEED_MAX;
+  if (dt >= windowMs) return SPEED_MIN;
+  return SPEED_MAX - Math.floor(((SPEED_MAX - SPEED_MIN) * (dt - FLOOR_MS)) / (windowMs - FLOOR_MS));
 }
 
 export function resolve(qs: SprintQuestion[], taps: SprintTap[]): SprintResult {
-  const r: SprintResult = { score: 0, hits: 0, maxStreak: 0, picks: qs.map(() => -1), reactions: qs.map(() => -1), points: qs.map(() => 0) };
-  for (const [t, c] of taps) {
+  const r: SprintResult = { score: 0, hits: 0, maxStreak: 0, picks: qs.map(() => -1), reactions: qs.map(() => -1), points: qs.map(() => 0), streakBonus: 0 };
+  for (const [t, code] of taps) {
+    const c = code - ANSWER_CODE;
     for (const q of qs) {
       if (t < q.unlockAt + GUARD_MS || t >= q.closeAt) continue;
-      if (r.picks[q.id] >= 0 || c >= q.choices) break;
+      if (r.picks[q.id] >= 0 || c < 0 || c >= q.choices) break;
       r.picks[q.id] = c;
       r.reactions[q.id] = t - q.unlockAt;
       break;
@@ -188,7 +202,9 @@ export function resolve(qs: SprintQuestion[], taps: SprintTap[]): SprintResult {
       streak += 1;
       if (streak > r.maxStreak) r.maxStreak = streak;
       r.hits += 1;
-      const pts = Math.floor(((100 + sprintSpeed(r.reactions[q.id])) * sprintMultTenths(streak)) / 10);
+      const bonus = STREAK_BONUS[Math.min(streak, STREAK_BONUS.length - 1)];
+      const pts = sprintSpeed(r.reactions[q.id], q.closeAt - q.unlockAt) + bonus;
+      r.streakBonus += bonus;
       r.points[q.id] = pts;
       r.score += pts;
     } else streak = 0;
@@ -196,13 +212,32 @@ export function resolve(qs: SprintQuestion[], taps: SprintTap[]): SprintResult {
   return r;
 }
 
+/**
+ * This player's tile order for one question (display only): a seeded
+ * permutation of the canonical choices from the round seed, the question and
+ * the player id, so side-by-side phones never show the same layout pattern.
+ * order[slot] = canonical choice shown in that slot.
+ */
+export function tileOrder(seed: number, question: SprintQuestion, userId: number): number[] {
+  const next = rng((seed + (question.id + 1) * 7919 + (userId % 1000003) * 104729) % 4294967296);
+  const order: number[] = [];
+  for (let i = 0; i < question.choices; i++) order.push(i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = next() % (i + 1);
+    const tmp = order[i];
+    order[i] = order[j];
+    order[j] = tmp;
+  }
+  return order;
+}
+
 export type SprintBotProfile = 'rookie' | 'regular' | 'ace';
 
 /** House crew (Captain Fin and friends): accuracy % and lock-time spread per profile. */
 export const SPRINT_BOTS: Record<SprintBotProfile, { acc: number; reactMin: number; reactSpread: number }> = {
-  rookie: { acc: 58, reactMin: 2400, reactSpread: 2600 },
-  regular: { acc: 72, reactMin: 1700, reactSpread: 2000 },
-  ace: { acc: 86, reactMin: 1100, reactSpread: 1400 },
+  rookie: { acc: 58, reactMin: 1900, reactSpread: 3000 },
+  regular: { acc: 72, reactMin: 1300, reactSpread: 2400 },
+  ace: { acc: 86, reactMin: 900, reactSpread: 1600 },
 };
 
 export function botSeed(seed: number, seat: number): number {
@@ -210,7 +245,7 @@ export function botSeed(seed: number, seat: number): number {
 }
 
 export function botTaps(qs: SprintQuestion[], seed: number, seat: number, profile: SprintBotProfile, fromMs = 0): SprintTap[] {
-  const p = SPRINT_BOTS[profile];
+  const p = SPRINT_BOTS[profile] ?? SPRINT_BOTS.regular;
   const next = rng(botSeed(seed, seat));
   const taps: SprintTap[] = [];
   for (const q of qs) {
@@ -220,7 +255,7 @@ export function botTaps(qs: SprintQuestion[], seed: number, seat: number, profil
     if (q.unlockAt < fromMs) continue;
     const at = q.unlockAt + react;
     if (at >= q.closeAt) continue;
-    taps.push([at, roll < p.acc ? q.correct : wrong]);
+    taps.push([at, ANSWER_CODE + (roll < p.acc ? q.correct : wrong)]);
   }
   return taps;
 }
@@ -233,7 +268,7 @@ export function ghostFill(qs: SprintQuestion[], seed: number, seat: number, own:
 }
 
 export function resultHash(r: SprintResult): string {
-  const text = [r.score, r.hits, r.maxStreak, r.picks.join('.'), r.reactions.join('.'), r.points.join('.')].join('|');
+  const text = [r.score, r.hits, r.maxStreak, r.picks.join('.'), r.reactions.join('.'), r.points.join('.'), r.streakBonus].join('|');
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);

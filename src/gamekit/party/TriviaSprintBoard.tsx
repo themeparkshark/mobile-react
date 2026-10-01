@@ -1,17 +1,19 @@
 /**
- * TriviaSprintBoard: Trivia Duel live inside a Line Party room. Everyone in
- * the line answers the same 3 server-seeded questions on the room clock:
- * tiles are face-down until each unlock, one tap locks, speed is points, the
- * streak multiplies. The server replays the tap log (TriviaSprintSim), so this
- * board's score is advisory only. Walk-safe: taps during the read-lock or on a
- * locked question do nothing.
+ * TriviaSprintBoard: Trivia Duel live inside a Line Party room (sim
+ * trivia_sprint v3). Everyone in the line answers the same 3 seeded questions
+ * on the room's beat grid: tiles are face-down until each unlock, one tap
+ * locks, speed is points (500 inside the 4-beat floor, down to 200 at close),
+ * and a streak adds a flat bonus. Each phone shows the tiles in its own order
+ * (tileOrder); the log always carries the canonical choice as code 10 + index.
+ * The room replays the tap log, so this board's score is advisory only.
+ * Walk-safe: taps during the read-lock or on a locked question do nothing.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { runOnJS } from 'react-native-reanimated';
 import { Haptic } from '../Haptics';
 import {
-  buildQuestions, botTaps, GUARD_MS, questionText, resolve, sprintMultTenths, sprintSpeed,
+  ANSWER_CODE, buildQuestions, botTaps, GUARD_MS, questionText, resolve, sprintSpeed, STREAK_BONUS, tileOrder,
   type SprintBotProfile, type SprintTap,
 } from '../../games/trivia-duel/party/triviaSprint';
 import { Tile, type TileState } from '../../games/trivia-duel/ui/Tile';
@@ -21,10 +23,13 @@ import { OutlinedText } from '../../games/trivia-duel/ui/Overlays';
 
 export interface TriviaSprintBoardProps {
   seed: number;
+  /** This player's id: seeds the per-player tile order. */
+  userId?: number;
   goAt: number;
   durationMs: number;
   perfNow: () => number;
-  onTap: (choice: number) => number | null;
+  /** Records a log code (10 + canonical choice); returns the board ms it was logged at, or null. */
+  onTap: (code: number) => number | null;
   onProgress?: (score: number, streak: number) => void;
   onTick?: (boardMs: number, score: number) => void;
   autoplay?: SprintBotProfile | null;
@@ -34,12 +39,12 @@ export interface TriviaSprintBoardProps {
 
 type QPhase = 'wait' | 'read' | 'live' | 'reveal';
 
-function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, autoplay, boardClock }: TriviaSprintBoardProps) {
+function TriviaSprintBoard({ seed, userId = 0, goAt, perfNow, onTap, onProgress, onTick, autoplay, boardClock }: TriviaSprintBoardProps) {
   registerDuelAudio();
   const qs = useMemo(() => buildQuestions(seed), [seed]);
   const [qi, setQi] = useState(0);
   const [phase, setPhase] = useState<QPhase>('wait');
-  const [ticker, setTicker] = useState(200);
+  const [ticker, setTicker] = useState(500);
   const [width, setWidth] = useState(360);
   const [flyUp, setFlyUp] = useState<string | null>(null);
   const taps = useRef<SprintTap[]>([]);
@@ -53,20 +58,27 @@ function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, aut
   const mine = result();
   const q = qs[qi];
   const text = questionText(q);
+  // order[slot] = canonical choice shown in that slot (display only).
+  const orders = useMemo(() => qs.map((x) => tileOrder(seed, x, userId)), [qs, seed, userId]);
+  const order = orders[qi];
 
+  /** `choice` is canonical (the slot was already mapped through tileOrder). */
   const tap = useCallback((choice: number) => {
     const qq = qs[qiRef.current];
     if (phaseRef.current !== 'live') return;
+    if (choice < 0 || choice >= qq.choices) return;
     if (mine.picks[qq.id] >= 0 || resolve(qs, taps.current).picks[qq.id] >= 0) return;
-    const t = onTap(choice);
+    const t = onTap(ANSWER_CODE + choice);
     if (t === null || t < qq.unlockAt + GUARD_MS) return;
-    taps.current.push([t, choice]);
+    taps.current.push([t, ANSWER_CODE + choice]);
     sfx(CUE.lockIn);
     Haptic.hitMedium();
   }, [mine.picks, onTap, qs]);
   const tapRef = useRef(tap);
   tapRef.current = tap;
-  const onJSTap = useCallback((i: number) => tapRef.current(i), []);
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
+  const onJSTap = useCallback((slot: number) => tapRef.current(ordersRef.current[qiRef.current]?.[slot] ?? -1), []);
   const onTapUI = useCallback((i: number) => {
     'worklet';
     runOnJS(onJSTap)(i);
@@ -91,12 +103,14 @@ function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, aut
           const r = resolve(qs, taps.current);
           const pts = r.points[cq.id];
           if (pts > 0) {
-            sfxLadder(CUE.correct, sprintSpeed(r.reactions[cq.id]) >= 70 ? 1 : 0);
+            sfxLadder(CUE.correct, sprintSpeed(r.reactions[cq.id], cq.closeAt - cq.unlockAt) >= 400 ? 1 : 0);
+            // Trivia haptic signature: correct rises (success, then a medium hit), wrong is one soft bump.
             Haptic.success();
+            setTimeout(() => Haptic.hitMedium(), 120);
             setFlyUp(`+${pts}`);
           } else if (r.picks[cq.id] >= 0) {
             sfx(CUE.wrong, { volume: 0.55 });
-            Haptic.comboHeavy();
+            Haptic.hitSoft();
             setFlyUp(null);
           }
           if (r.score !== lastScore.current) {
@@ -109,12 +123,12 @@ function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, aut
       }
       if (ph === 'live') {
         const elapsed = t - cq.unlockAt;
-        setTicker(100 + sprintSpeed(elapsed));
+        setTicker(sprintSpeed(Math.max(0, elapsed), cq.closeAt - cq.unlockAt));
         const sec = Math.ceil((cq.closeAt - t) / 1000);
         if (sec <= 3 && sec !== lastSec) { lastSec = sec; sfx(CUE.tickHeavy, { volume: 0.6 }); }
       }
       while (autoIdx.current < auto.length && auto[autoIdx.current][0] <= t) {
-        tapRef.current(auto[autoIdx.current][1]);
+        tapRef.current(auto[autoIdx.current][1] - ANSWER_CODE);
         autoIdx.current += 1;
       }
       onTick?.(t, lastScore.current);
@@ -124,11 +138,13 @@ function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, aut
     return () => cancelAnimationFrame(raf);
   }, [auto, boardClock, goAt, onProgress, onTick, perfNow, qs]);
 
-  const picked = mine.picks[q.id];
+  const pickedCanon = mine.picks[q.id];
+  const picked = pickedCanon >= 0 ? order.indexOf(pickedCanon) : -1;
+  const correctSlot = order.indexOf(q.correct);
   const tileW = (width - 12) / (q.choices === 2 ? 2 : 1);
   const states: TileState[] = Array.from({ length: q.choices }, (_, i) => {
     if (phase === 'wait' || phase === 'read') return 'down';
-    if (phase === 'reveal') return i === q.correct ? 'correct' : i === picked ? 'wrong' : 'reveal-dim';
+    if (phase === 'reveal') return i === correctSlot ? 'correct' : i === picked ? 'wrong' : 'reveal-dim';
     if (picked >= 0) return i === picked ? 'locked' : 'dim';
     return 'up';
   });
@@ -144,13 +160,13 @@ function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, aut
         <View style={styles.head}>
           <Text style={styles.round}>{`QUESTION ${qi + 1} OF ${qs.length}`}</Text>
           {phase === 'live' && picked < 0 ? <Text style={styles.ticker}>{`+${ticker}`}</Text> : null}
-          {streakNow >= 2 ? <Text style={styles.streak}>{`x${(sprintMultTenths(streakNow + 1) / 10).toFixed(1)}`}</Text> : null}
+          {streakNow >= 1 ? <Text style={styles.streak}>{`STREAK +${STREAK_BONUS[Math.min(streakNow + 1, STREAK_BONUS.length - 1)]}`}</Text> : null}
         </View>
         <Text style={styles.q} numberOfLines={3}>{text.prompt}</Text>
         {phase === 'read' ? <View style={styles.readBar} /> : null}
       </View>
       <View style={[styles.tiles, { flexDirection: q.choices === 2 ? 'row' : 'column' }]}>
-        {text.choices.map((c, i) => (
+        {order.map((canon) => text.choices[canon]).map((c, i) => (
           <View key={`${q.id}-${i}`} style={{ margin: 6 }}>
             <Tile
               index={i}

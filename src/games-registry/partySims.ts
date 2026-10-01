@@ -8,6 +8,10 @@
  * Every entry is pure and integer-only: build(seed) makes the shared board,
  * resolve(board, taps) scores a tap log, botTaps/ghostFill play empty or
  * dropped seats, and resultHash is the events hash compared with zero tolerance.
+ *
+ * Rev 7: bonk_race v3 (beat judgement, Splash landings as log codes
+ * 1000 + n, band check), trivia_sprint v3 (beat grid, answer codes 10-13,
+ * local-board-ms speed points, streak bonus only).
  */
 import * as bonk from '../games/party/bonkRace';
 import * as sprint from '../games/trivia-duel/party/triviaSprint';
@@ -23,10 +27,28 @@ export interface PartySim<Board = unknown, Result extends { score: number } = { 
   maxTaps: number;
   build(seed: number): Board;
   validTaps(taps: unknown): boolean;
-  resolve(board: Board, taps: SimTap[]): Result;
-  botTaps(board: Board, seed: number, seat: number, profile: SimProfile, fromMs?: number): SimTap[];
-  ghostFill(board: Board, seed: number, seat: number, own: SimTap[], untilMs: number, profile: SimProfile): SimTap[];
+  /** untilMs resolves a prefix (Bonk Royale splits): only taps before it count. */
+  resolve(board: Board, taps: SimTap[], untilMs?: number): Result;
+  /**
+   * `incoming`: Splashes due on this board at or after fromMs/untilMs as
+   * [land board-ms, n] (Bonk Race only); the ghost logs, cracks and pops them.
+   */
+  botTaps(board: Board, seed: number, seat: number, profile: SimProfile, fromMs?: number, incoming?: Array<[number, number]>): SimTap[];
+  ghostFill(board: Board, seed: number, seat: number, own: SimTap[], untilMs: number, profile: SimProfile, incoming?: Array<[number, number]>): SimTap[];
   resultHash(result: Result): string;
+  /**
+   * Room-level settle for head-to-head bonuses (Bonk Race SNATCH). Takes each
+   * seat's resolve() result in seat order (null = not competing) and returns
+   * the bonus per seat plus whatever detail the results screen needs.
+   */
+  settle(results: Array<Result | null>): { bonus: number[]; detail: unknown };
+  /** The single biggest lost-points moment of one log (design 7.1.5), or null. */
+  explain(board: Board, taps: SimTap[], settle: { bonus: number[]; detail: unknown } | null, seat: number): unknown;
+  /** Board-ms of every streak hit that earned a Splash (Bonk Race; [] elsewhere). */
+  splashEarned(result: Result): number[];
+  /** Perfect-read score of a board, and whether it sits inside the ranked band (design 9.3, 11.2). */
+  bandCheck(board: Board): number;
+  bandOk(board: Board): boolean;
 }
 
 export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
@@ -41,6 +63,14 @@ export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
     botTaps: bonk.botTaps,
     ghostFill: bonk.ghostFill,
     resultHash: bonk.resultHash,
+    settle: (results) => {
+      const s = bonk.settleShared(results.map((r) => (r ? r.sgOffsets : null)));
+      return { bonus: s.bonus, detail: s.golds };
+    },
+    explain: (board, taps, settle, seat) => bonk.explain(board, taps, settle ? { bonus: settle.bonus, golds: settle.detail as bonk.SharedSettle['golds'] } : null, seat),
+    splashEarned: bonk.splashEarned,
+    bandCheck: bonk.bandCheck,
+    bandOk: bonk.bandOk,
   },
   trivia_sprint: {
     key: 'trivia_sprint',
@@ -49,10 +79,15 @@ export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
     maxTaps: sprint.MAX_TAPS,
     build: sprint.buildQuestions,
     validTaps: sprint.validTaps,
-    resolve: sprint.resolve,
+    resolve: (board, taps, untilMs) => sprint.resolve(board, untilMs === undefined ? taps : taps.filter(([t]) => t < untilMs)),
     botTaps: sprint.botTaps,
     ghostFill: sprint.ghostFill,
     resultHash: sprint.resultHash,
+    settle: (results) => ({ bonus: results.map(() => 0), detail: null }),
+    explain: () => null,
+    splashEarned: () => [],
+    bandCheck: () => 0,
+    bandOk: () => true,
   },
 };
 

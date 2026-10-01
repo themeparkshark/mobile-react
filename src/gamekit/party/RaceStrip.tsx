@@ -34,6 +34,8 @@ export interface RacerLine {
   ghost: boolean;
   away: boolean;
   emote?: { id: EmoteId; key: string } | null;
+  /** The Shared Golden (1-5) this seat was last stamped SNATCHED on (display only). */
+  snatched?: number;
 }
 
 const NUMERAL_COLOR = ['#ffcf3b', '#7cc6f5', '#ff8a5c', '#ffffff'];
@@ -76,8 +78,27 @@ function Chip({ line }: { line: RacerLine }) {
       </View>
       <Text numberOfLines={1} style={[styles.name, line.me && styles.nameMe]}>{line.me ? 'YOU' : line.name}</Text>
       <Score value={line.score} me={line.me} />
+      {line.snatched ? <SnatchTag key={line.snatched} /> : null}
       {line.ghost ? <Text style={styles.tag}>GHOST</Text> : line.seat.kind === 'bot' ? <Text style={styles.tagBot}>CREW</Text> : <View style={styles.tagSpacer} />}
     </View>
+  );
+}
+
+/** SNATCHED slams onto the winner's chip one beat after the window, then fades. */
+function SnatchTag() {
+  const s = useSharedValue(1.8);
+  const o = useSharedValue(1);
+  useEffect(() => {
+    s.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.back(2)) });
+    o.value = withSequence(withTiming(1, { duration: 1300 }), withTiming(0, { duration: 250 }));
+  }, [o, s]);
+  const style = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ scale: s.value }, { rotate: '-8deg' }] }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.snatchWrap, style]}>
+      <View style={styles.snatch}>
+        <Text style={styles.snatchText}>SNATCHED</Text>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -134,4 +155,7 @@ const styles = StyleSheet.create({
   tag: { fontFamily: FONT.body, fontSize: 10, color: BRAND.navy, backgroundColor: BRAND.sky, paddingHorizontal: 6, borderRadius: 6, overflow: 'hidden', marginTop: 2 },
   tagBot: { fontFamily: FONT.body, fontSize: 10, color: BRAND.navy, backgroundColor: BRAND.cream, paddingHorizontal: 6, borderRadius: 6, overflow: 'hidden', marginTop: 2 },
   tagSpacer: { height: 14 },
+  snatchWrap: { position: 'absolute', top: 18, alignSelf: 'center' },
+  snatch: { backgroundColor: BRAND.white, borderColor: BRAND.gold, borderWidth: 3, borderRadius: 10, paddingHorizontal: 6 },
+  snatchText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.gold, letterSpacing: 0.6, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0.1 },
 });

@@ -2,8 +2,12 @@
  * LineParty: live multiplayer for the people in one ride's line.
  *
  *   lobby -> 3-2-1 on the server's clock -> a micro-round on parallel boards
- *   with a live scoreboard and stickers -> server-verified results -> the next
- *   round, 5 to a Party Series (best 4 count, FINAL ROUND x2) -> the crown
+ *   with a live scoreboard and stickers -> verified results -> the next
+ *   round, 3 to a Party Series (crew rooms can pick 5; FINAL ROUND x2) -> the crown
+ *
+ * Rev 7: Bonk Race is judged on the beat, and a 10-streak throws a Splash the
+ * server aims at the leader; a Splash aimed at you lands in the tray band and
+ * seals one of your holes under a bubble (two taps clear it).
  *
  * The line is always moving, so the room never pauses and movement never
  * stops a board. A HOLD (the pause button, or the phone going to the
@@ -21,11 +25,11 @@ import SharkLoader from '../../ui/SharkLoader';
 import { BRAND, FONT } from '../../ui/tokens';
 import { haptic } from '../Haptics';
 import { playSfx } from '../SFX';
-import { buildTimeline, type BotProfile } from '../../games/party/bonkRace';
-import { partySim, PARTY_SIMS } from '../../games-registry/partySims';
+import { botTaps, buildTimeline, resolve, type BotProfile } from '../../games/party/bonkRace';
+import { partySim } from '../../games-registry/partySims';
 import type { PartyClient } from '../net/PartyClient';
 import { usePartyState } from '../net/useParty';
-import { displayName, placementOf } from '../net/roomState';
+import { displayName, incomingFor, placementOf } from '../net/roomState';
 import { useLineHeadsUp } from '../motion/QueueMotion';
 import GameIcon from '../../ui/GameIcon';
 import type { EmoteId } from '../net/partyTypes';
@@ -34,7 +38,8 @@ import TriviaSprintBoard from './TriviaSprintBoard';
 import PartyLobby from './PartyLobby';
 import PartyResults from './PartyResults';
 import RaceStrip, { type RacerLine } from './RaceStrip';
-import { BOARD, STICKERS, STICKER_LABEL } from './partyArt';
+import { provisionalBonus, provisionalSnatch, stampAt, type SeatReactions } from './sharedGolden';
+import { BOARD, BUBBLE, STICKERS, STICKER_LABEL } from './partyArt';
 
 export interface LinePartyProps {
   client: PartyClient;
@@ -46,6 +51,7 @@ export interface LinePartyProps {
 
 const ERROR_COPY: Record<string, { title: string; message: string }> = {
   NOT_IN_QUEUE: { title: 'Get in line first', message: 'Line Party opens once you are in this ride\'s line.' },
+  UPDATE_READY: { title: 'Update ready', message: 'A quick update is ready. Update the app to keep playing Line Party.' },
   NETWORK: { title: 'Park signal is weak', message: 'We will keep trying. Your spot in line is safe.' },
 };
 
@@ -111,14 +117,29 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   const [boardT, setBoardT] = useState(-3000);
   const [myScore, setMyScore] = useState(0);
   const spawns = useMemo(() => (local?.spawns.length ? local.spawns : round ? buildTimeline(round.seed) : []), [local?.roundId, round?.seed]);
-  const game = partySim(round?.game ?? 'bonk_race') ?? PARTY_SIMS.bonk_race;
-  // The shared board for this round, built once per seed (bots and the race strip score against it).
-  const board = useMemo(() => (round ? (local?.roundId === round.id && local.board ? local.board : game.build(round.seed)) : null), [round?.id, round?.seed, game, local?.board]);
-  const botLogs = useMemo(() => {
-    const m = new Map<number, [number, number][]>();
-    if (board) round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, game.botTaps(board, round.seed, s.seat, s.profile)); });
+  // Crew seats play their own deterministic logs, bubbles included (display only; the server replays the same).
+  const crewIncoming = useMemo(() => {
+    const m = new Map<number, Array<[number, number]>>();
+    round?.seats.forEach((s) => { if (s.kind === 'bot') m.set(s.seat, incomingFor(state, s.seat)); });
     return m;
-  }, [round?.id, game, board]);
+  }, [round?.id, state.attacks]);
+  const botLogs = useMemo(() => {
+    const m = new Map<number, ReturnType<typeof botTaps>>();
+    round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, botTaps(spawns, round.seed, s.seat, s.profile, 0, crewIncoming.get(s.seat) ?? [])); });
+    return m;
+  }, [round?.id, spawns, crewIncoming]);
+  // Trivia Sprint rounds: the same seat logic, scored by the sprint sim (no Splashes, no SNATCH).
+  const sprint = round?.game === 'trivia_sprint' ? partySim('trivia_sprint') : null;
+  const sprintBoard = useMemo(() => (sprint && round ? (local?.roundId === round.id && local.board ? local.board : sprint.build(round.seed)) : null), [round?.id, round?.seed, sprint, local?.board]);
+  const sprintBots = useMemo(() => {
+    const m = new Map<number, [number, number][]>();
+    if (sprint && sprintBoard && round) round.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, sprint.botTaps(sprintBoard, round.seed, s.seat, s.profile)); });
+    return m;
+  }, [round?.id, sprint, sprintBoard]);
+  const mySeat = client.mySeat();
+  const incoming = useMemo(() => incomingFor(state, mySeat), [state.attacks, mySeat]);
+  const onLanding = useCallback((n: number) => client.recordLanding(n), [client]);
+  const onSplash = useCallback((ms: number) => { void client.splash(ms); }, [client]);
   const perfNow = useCallback(() => (globalThis.performance?.now ? globalThis.performance.now() : Date.now()), []);
 
   // Board clock for the HUD when the board is not mounted (ghosting, spectating).
@@ -129,6 +150,43 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
 
   const onTick = useCallback((t: number, score: number) => { setBoardT(t); setMyScore(score); }, []);
   const onProgress = useCallback((score: number, streak: number) => { setMyScore(score); client.reportProgress(score, streak); }, [client]);
+
+  // Shared Golden SNATCH (design 7.1.3): my reaction goes out at once; one beat
+  // after each window this phone stamps the fastest seat it knows about.
+  const [mySg, setMySg] = useState<number[]>([-1, -1, -1, -1, -1]);
+  const [snatchedKey, setSnatchedKey] = useState(0);
+  const [stampTags, setStampTags] = useState<Record<string, number>>({});
+  const stamped = useRef(new Set<number>());
+  useEffect(() => { setMySg([-1, -1, -1, -1, -1]); stamped.current = new Set(); setStampTags({}); }, [round?.id]);
+  const onShared = useCallback((sg: number, offsetMs: number) => {
+    client.reportSnatch(sg, offsetMs);
+    setMySg((prev) => prev.map((v, i) => (i === sg - 1 && v < 0 ? offsetMs : v)));
+  }, [client]);
+  const botSg = useMemo(() => {
+    const m = new Map<number, number[]>();
+    botLogs.forEach((log, seat) => m.set(seat, resolve(spawns, log).sgOffsets));
+    return m;
+  }, [botLogs, spawns]);
+  const reactions: SeatReactions[] = useMemo(() => (round?.seats ?? []).map((seat) => {
+    if (seat.kind === 'bot') return { key: `b:${seat.name}`, sg: botSg.get(seat.seat) ?? null };
+    if (seat.user_id === state.userId) return { key: 'me', sg: mySg };
+    return { key: `u:${seat.user_id}`, sg: seat.user_id !== undefined ? state.rivals[seat.user_id]?.sg ?? null : null };
+  }), [botSg, mySg, round?.seats, state.rivals, state.userId]);
+  useEffect(() => {
+    for (let n = 1; n <= 5; n++) {
+      if (boardT < stampAt(n) || stamped.current.has(n)) continue;
+      stamped.current.add(n);
+      const winners = provisionalSnatch(n, reactions);
+      if (winners.includes('me')) {
+        setSnatchedKey(n);
+        haptic('success');
+        playSfx('star', 0.9);
+      }
+      if (winners.length) setStampTags((prev) => ({ ...prev, ...Object.fromEntries(winners.map((k) => [k, n])) }));
+    }
+  }, [boardT, reactions]);
+  const bonusNow = useMemo(() => provisionalBonus(boardT, reactions), [boardT, reactions]);
+  const pipColors = useMemo(() => (round?.seats ?? []).map((_, i) => SEAT_COLORS[i % SEAT_COLORS.length]), [round?.seats]);
 
   const lines: RacerLine[] = useMemo(() => {
     if (!round) return [];
@@ -142,8 +200,8 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         score = myScore;
         ghost = state.ghostedRoundId === round.id;
       } else if (seat.kind === 'bot') {
-        const log = botLogs.get(seat.seat) ?? [];
-        score = board ? game.resolve(board, log.filter(([t]) => t <= boardT)).score : 0;
+        if (sprint && sprintBoard) score = sprint.resolve(sprintBoard, (sprintBots.get(seat.seat) ?? []).filter(([t]) => t <= boardT)).score;
+        else score = resolve(spawns, (botLogs.get(seat.seat) ?? []).filter(([t]) => t <= boardT)).score;
       } else {
         const rival = seat.user_id !== undefined ? state.rivals[seat.user_id] : undefined;
         const member = state.room?.members.find((m) => m.id === seat.user_id);
@@ -152,13 +210,16 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         away = member?.state === 'away';
       }
       const key = seat.kind === 'bot' ? `b:${seat.name}` : `u:${seat.user_id}`;
+      const stampKey = me ? 'me' : key;
+      score += bonusNow[stampKey] ?? 0;
+      const snatched = stampTags[stampKey];
       const seriesPoints = state.room?.series?.standings.find((r) => r.key === key)?.points;
       const name = seat.kind === 'bot' ? seat.name : displayName(state, seat.user_id, seat.name);
-      return { seat, name, seriesPoints, score, me, ghost, away, emote: seat.user_id !== undefined ? emoteBy.get(seat.user_id) ?? null : null };
+      return { seat, name, seriesPoints, score, me, ghost, away, snatched, emote: seat.user_id !== undefined ? emoteBy.get(seat.user_id) ?? null : null };
     });
     const all = raw.map((r) => r.score);
     return raw.map((r) => ({ ...r, placement: placementOf(r.score, all) }));
-  }, [board, boardT, botLogs, game, myScore, round, spawns, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
+  }, [boardT, bonusNow, botLogs, sprint, sprintBoard, sprintBots, myScore, round, spawns, stampTags, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
 
   const phase = state.phase;
   const playing = (phase === 'countdown' || phase === 'playing') && local && local.roundId === round?.id && !local.ended;
@@ -169,10 +230,10 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
 
   return (
     <View style={styles.race}>
-      <SeriesPill round={round} />
+      <SeriesPill round={round} roundsTotal={state.room?.series?.rounds_total ?? 3} />
       <RaceStrip lines={lines} />
       <View style={styles.hud}>
-        <Text style={styles.myScore}>{myScore.toLocaleString('en-US')}</Text>
+        <Text style={styles.myScore}>{(myScore + (bonusNow.me ?? 0)).toLocaleString('en-US')}</Text>
         <View style={styles.hudRight}>
           <Pressable
             accessibilityRole="button"
@@ -188,14 +249,15 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         </View>
       </View>
       <View style={styles.boardWrap}>
-        {playing && local && round?.game === 'trivia_sprint' ? (
+        {playing && local && sprint ? (
           <TriviaSprintBoard
             key={local.roundId}
             seed={local.seed}
+            userId={state.userId ?? 0}
             goAt={local.goAt}
             durationMs={local.durationMs}
             perfNow={perfNow}
-            onTap={(choice) => client.recordTap(choice)}
+            onTap={(code) => client.recordTap(code)}
             onProgress={onProgress}
             onTick={onTick}
             autoplay={autoplay}
@@ -214,13 +276,20 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
             onTick={onTick}
             autoplay={autoplay}
             boardClock={boardClock}
+            pipColors={pipColors}
+            onShared={onShared}
+            snatchedKey={snatchedKey}
+            incoming={incoming}
+            onLanding={onLanding}
+            onSplash={onSplash}
           />
         ) : null}
+        {playing && !sprint ? <SplashTray client={client} boardT={boardT} mySeat={mySeat} lines={lines} /> : null}
         {state.hold && phase === 'playing' ? <HoldOverlay client={client} /> : null}
         {phase === 'countdown' && local ? <CountIn boardT={boardT} late={local.lateStart} /> : null}
-        {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round for you. Only your best 4 rounds count, so this one is free." /> : null}
+        {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round from your score. You keep the result, and you are back for the next round." /> : null}
         {phase === 'spectating' ? <Banner title="NEXT ROUND IS YOURS" sub="This race started before you joined. Cheer them on." /> : null}
-        {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Checking every board on the server..." big /> : null}
+        {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Captain Fin is checking every board..." big /> : null}
       </View>
       <View style={styles.stickers}>
         <MiniStickers onEmote={onEmote} />
@@ -229,13 +298,49 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   );
 }
 
+/** Bright seat colors for the Shared Golden pip ring (no violet, no dark surfaces). */
+const SEAT_COLORS = ['#ffcf3b', '#7cc6f5', '#ff8a5c', '#1fc8b8', '#ffffff', '#ffe07a', '#9be15d', '#ff9fc4'];
+
 /** ROUND 2 OF 5, or the gold FINAL ROUND x2 on round five. */
-function SeriesPill({ round }: { round: { series_round: number | null; final: boolean } | null }) {
+function SeriesPill({ round, roundsTotal = 3 }: { round: { series_round: number | null; final: boolean } | null; roundsTotal?: number }) {
   if (!round?.series_round) return null;
   return (
     <Animated.View key={round.series_round} entering={ZoomIn.springify().damping(11)} style={[styles.pill, round.final && styles.pillFinal]}>
-      <Text style={[styles.pillText, round.final && styles.pillTextFinal]}>{round.final ? 'FINAL ROUND  x2 POINTS' : `ROUND ${round.series_round} OF 5`}</Text>
+      <Text style={[styles.pillText, round.final && styles.pillTextFinal]}>{round.final ? 'FINAL ROUND  x2 POINTS' : `ROUND ${round.series_round} OF ${roundsTotal}`}</Text>
     </Animated.View>
+  );
+}
+
+/**
+ * The tray band (design 14.1, 13.11): Splashes on their way to me show a
+ * bubble with a landing ring closing on land_ms; my own Splash shows who it
+ * was aimed at. Display only: the board applies landings on its own clock.
+ */
+function SplashTray({ client, boardT, mySeat, lines }: { client: PartyClient; boardT: number; mySeat: number | null; lines: RacerLine[] }) {
+  const state = usePartyState(client);
+  const round = state.room?.round;
+  if (!round) return null;
+  const incoming = state.attacks.filter((a) => a.to_seat === mySeat && a.status === 'sent' && a.land_ms > boardT - 300);
+  const outgoing = state.attacks.filter((a) => a.from_seat === mySeat && boardT - a.land_ms < 900);
+  const nameOf = (seat: number) => lines.find((l) => l.seat.seat === seat)?.name ?? 'the leader';
+  const next = incoming[0];
+  const sent = outgoing[outgoing.length - 1];
+  if (!next && !sent) return null;
+  return (
+    <View pointerEvents="none" style={styles.tray}>
+      {next ? (
+        <Animated.View key={`in-${next.attack_id}`} entering={ZoomIn.springify().damping(12)} style={[styles.trayChip, styles.trayIncoming]}>
+          <Image source={BUBBLE.idle} style={styles.trayBubble} />
+          <Text style={styles.trayText}>{`SPLASH IN ${Math.max(0, Math.ceil((next.land_ms - boardT) / 441))}`}</Text>
+        </Animated.View>
+      ) : null}
+      {sent && !next ? (
+        <Animated.View key={`out-${sent.attack_id}`} entering={ZoomIn.springify().damping(12)} style={styles.trayChip}>
+          <Image source={BUBBLE.idle} style={styles.trayBubble} />
+          <Text style={styles.trayText}>{`SPLASH AT ${nameOf(sent.to_seat).toUpperCase()}`}</Text>
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 
@@ -280,7 +385,7 @@ function HeadsUp({ enabled }: { enabled: boolean }) {
   const show = useLineHeadsUp(enabled);
   if (!show) return null;
   return (
-    <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(300)} style={styles.headsUp} pointerEvents="none">
+    <Animated.View entering={FadeIn.duration(180)} style={styles.headsUp} pointerEvents="none">
       <GameIcon name="queue" size={18} />
       <Text style={styles.headsUpText}>Line's moving. Heads up!</Text>
     </Animated.View>
@@ -323,7 +428,9 @@ function CountIn({ boardT, late }: { boardT: number; late: boolean }) {
 
 function Banner({ title, sub, big }: { title: string; sub: string; big?: boolean }) {
   return (
-    <Animated.View entering={ZoomIn.springify().damping(12)} exiting={FadeOut} style={styles.bannerWrap} pointerEvents="none">
+    // No exiting animation: under load a Reanimated exit can strand the banner
+    // behind the next round's board (seen in the v2 two-sim lab). It just unmounts.
+    <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.bannerWrap} pointerEvents="none">
       <Text style={[styles.bannerTitle, big && { fontSize: 52 }]}>{title}</Text>
       <Text style={styles.bannerSub}>{sub}</Text>
     </Animated.View>
@@ -383,6 +490,11 @@ function WrapUp({ reason, onClose }: { reason: string | null; onClose: () => voi
 const outline = { textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 };
 
 const styles = StyleSheet.create({
+  tray: { position: 'absolute', top: 4, left: 0, right: 0, alignItems: 'center' },
+  trayChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.white, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 4 },
+  trayIncoming: { backgroundColor: '#dff4ff' },
+  trayBubble: { width: 30, height: 30 },
+  trayText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy, letterSpacing: 0.5 },
   root: { flex: 1, backgroundColor: BRAND.blue },
   tint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,104,185,0.18)' },
   safe: { flex: 1, paddingTop: 54 },
