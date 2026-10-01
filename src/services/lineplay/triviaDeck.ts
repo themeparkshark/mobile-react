@@ -35,6 +35,7 @@ export function toTriviaQuestions(deck: Pick<ServerTriviaDeck, 'questions'>): Tr
       difficulty: row.difficulty,
       fact: row.fact ?? undefined,
       source: row.source || undefined,
+      deck: typeof row.deck === 'string' ? row.deck : undefined,
     });
   }
   return out;

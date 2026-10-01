@@ -27,7 +27,7 @@ const session = load('src/services/lineplay/LinePlaySession.ts', {
 });
 const clue = load('src/services/lineplay/chapterClue.ts');
 const content = load('src/services/lineplay/content.ts', { './chapters': chapters,
-  './triviaDeck': { cachedServerTrivia: () => [] } });
+  './triviaDeck': { cachedServerTrivia: () => [] }, './triviaHistory': { recentTriviaIds: () => new Map(), markTriviaSeen() {}, dealtTriviaId() {} } });
 const triviaSources = load('src/games/trivia/sources.ts', {
   '../../services/lineplay/content': content,
   './config': { DEFAULT_QUESTION_SECONDS: 15, LIFELINE_ENABLED: false, LINEPLAY_ROUND_QUESTIONS: 5 },

@@ -105,6 +105,7 @@ import { crewRelayEpilogue } from '../../services/lineplay/crewRelay';
 import type { LinePlayChapter } from '../../services/lineplay/chapters';
 import { linePlayPages, queueArcadeDestinations } from '../../services/lineplay/presentation';
 import { personalizeChapterFinale, resolveChapterClue } from '../../services/lineplay/chapterClue';
+import { useGroupPlay, type GroupTurnLaunch } from './group/useGroupPlay';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 /** Returning after this long away gets a quick "welcome back" heads up. */
@@ -419,7 +420,10 @@ export default function LinePlayScreen() {
   }, [session]);
 
   const [activeGame, setActiveGame] =
-    useState<(Extract<ActivityItem, { kind: 'minigame' }> & { difficulty: QueueDifficulty; tier?: CurrentTier }) | null>(null);
+    useState<(Extract<ActivityItem, { kind: 'minigame' }> & { difficulty: QueueDifficulty; tier?: CurrentTier;
+      /** Play together: this game is one player's pass-and-play turn (L3). */
+      groupTurn?: boolean; kidRound?: boolean }) | null>(null);
+  const groupPlayRef = useRef<ReturnType<typeof useGroupPlay> | null>(null);
 
   // A full-screen game hides every sheet: hold the wrap-up countdown for it.
   useEffect(() => { session.setGameOpen(activeGame != null); }, [activeGame != null, session]);
@@ -441,12 +445,16 @@ export default function LinePlayScreen() {
           parkId: ride.parkId,
           chapterId: snapshot.chapter?.id,
           seed: activeGame.seed,
+          // A kid's turn deals the kids deck and easy cards first.
+          kids: activeGame.kidRound === true,
         })
       : null,
-  [activeGame?.id, activeGame?.seed, activeGame?.gameId, ride?.rideId, ride?.parkId, snapshot.chapter?.id]);
+  [activeGame?.id, activeGame?.seed, activeGame?.gameId, activeGame?.kidRound, ride?.rideId, ride?.parkId, snapshot.chapter?.id]);
 
   const handlePlayGame = useCallback((item: Extract<ActivityItem, { kind: 'minigame' }>) => {
     if (session.getState() !== 'active') return;
+    // A crew on one phone: the same game becomes a pass-and-play round (L3).
+    if (groupPlayRef.current?.wantsRound(item)) { groupPlayRef.current.startRound(item); return; }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // The session owns replay variety: the first play keeps the saved board,
     // each replay deals a new one, and the count survives a restart.
@@ -483,11 +491,17 @@ export default function LinePlayScreen() {
 
   const renderActiveGame = () => {
     if (!activeGame || !ride) return null;
+    const groupTurn = activeGame.groupTurn === true;
+    const finishTurn = (multiplier: number, meta?: Record<string, unknown>) => {
+      const score = typeof meta?.score === 'number' ? meta.score : null;
+      groupPlayRef.current?.finishTurn(starsFromMultiplier(multiplier), score);
+      handleGameDone();
+    };
     const common = {
       visible: true,
       seed: activeGame.seed,
-      onClose: handleGameDone,
-      onComplete: (multiplier: number, meta?: Record<string, unknown>) => {
+      onClose: groupTurn ? () => finishTurn(0) : handleGameDone,
+      onComplete: groupTurn ? finishTurn : (multiplier: number, meta?: Record<string, unknown>) => {
         if (activeGame.gameId === 'current') session.recordCurrentQuest(meta);
         session.recordGameResult(activeGame.gameId, starsFromMultiplier(multiplier));
         handleActivityCompleted(activeGame.id);
@@ -498,9 +512,11 @@ export default function LinePlayScreen() {
       case 'tap': return <WhackAShark {...common} difficulty={activeGame.difficulty} taskName={ride.rideName} />;
       case 'timing': return <RhythmTapGame visible seed={activeGame.seed}
         onClose={common.onClose} onComplete={common.onComplete} />;
-      case 'memory': return <MemoryGame {...common} deckId={snapshot.chapter?.finale.memoryDeckId} taskName={ride.rideName} />;
+      case 'memory': return <MemoryGame {...common} deckId={snapshot.chapter?.finale.memoryDeckId} taskName={ride.rideName}
+        difficulty={activeGame.kidRound ? 0 : undefined} />;
       case 'shark': return <SharkySwim {...common} difficulty={activeGame.difficulty} />;
-      case 'banana': return <BananaBasketGame {...common} difficulty={Math.max(2, activeGame.difficulty) as QueueDifficulty} />;
+      case 'banana': return <BananaBasketGame {...common}
+        difficulty={(activeGame.kidRound ? 1 : Math.max(2, activeGame.difficulty)) as QueueDifficulty} />;
       case 'current': return <CurrentQuestGame {...common} taskName={ride.rideName} tier={activeGame.tier} />;
       case 'showdown': return <SharkShowdown {...common} rideId={ride.rideId} parkId={ride.parkId}
         chapterId={snapshot.chapter?.id} rideName={ride.rideName} />;
@@ -654,6 +670,23 @@ export default function LinePlayScreen() {
       bestStars: snapshot.gameBestStars[choice.gameId as keyof typeof snapshot.gameBestStars],
     }));
   showToastRef.current = showToast;
+
+  // -- Play together (L3): session start, crew, pass-and-play turns ----------
+  const openGroupTurn = useCallback((launch: GroupTurnLaunch) => {
+    if (session.getState() !== 'active') return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveGame({ ...launch.item, seed: launch.seed, difficulty: launch.difficulty,
+      groupTurn: true, kidRound: launch.kidRound });
+  }, [session]);
+  const groupPlay = useGroupPlay({
+    session, snapshot,
+    playerId: player?.id ?? null,
+    ownerName: player?.username ?? null,
+    pages: activityPages,
+    gameOpen: activeGame != null,
+    openTurn: openGroupTurn,
+  });
+  groupPlayRef.current = groupPlay;
 
   // -- Queue Bonus Rounds presentation ------------------------------------
   const bonus = snapshot.bonus?.enabled ? snapshot.bonus : null;
@@ -924,6 +957,8 @@ export default function LinePlayScreen() {
           }}
           onOpenProject={() => setProjectOpen(true)} />}
 
+        {groupPlay.strip}
+
         {/* Activity area (bottom) */}
         <View style={styles.activityArea}>
           {snapshot.state === 'complete' ? (
@@ -953,6 +988,14 @@ export default function LinePlayScreen() {
                 bonusParkDayCap: snapshot.rewards.bonusParkDayCap,
               } : null}
               heroInventory={snapshot.bonus?.enabled ? player?.inventory ?? null : null}
+              groupSlot={groupPlay.recapSlot({
+                realMinutes: snapshot.boardingConfirmed && snapshot.boardingAt != null && snapshot.startedAt != null
+                  ? (snapshot.boardingAt - snapshot.startedAt) / 60_000 : snapshot.elapsedSeconds / 60,
+                postedMinutes: snapshot.waitSource === 'estimate' ? null : snapshot.plannedWaitMinutes,
+                partsEarned: snapshot.rewards ? snapshot.rewards.rideParts.reduce((n, p) => n + p.quantity, 0) : null,
+                rewardsConfirmed: snapshot.rewards != null,
+                coin: recapCoin,
+              })}
               onOpenInventory={() => RootNavigation.navigate('Inventory')}
               rewardsPending={snapshot.rewardsPending}
               rewardsConfirmed={snapshot.rewards != null}
@@ -1196,6 +1239,8 @@ export default function LinePlayScreen() {
         reducedMotion={reducedFx}
         onCue={fireCue}
         onDone={id => session.consumeBonusFx(id)} />}
+
+      {groupPlay.overlays}
 
       <QueueToast message={toast} onDone={() => setToast(null)} />
 

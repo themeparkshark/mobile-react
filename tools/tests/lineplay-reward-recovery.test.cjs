@@ -44,6 +44,7 @@ test('pending queue rewards survive screen teardown, repeated failures, and app 
     });
     return compile('src/services/lineplay/rewardRecovery.ts', {
       '../../api/endpoints/me/inline-timer/complete': { default: complete },
+      '../../api/endpoints/me/inline-timer/start': { default: async () => { throw new Error('unused'); } },
       './RedeemRetryQueue': queue,
     });
   };

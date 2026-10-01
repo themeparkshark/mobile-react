@@ -70,6 +70,7 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     './replay': require('./helpers/lineplay-replay.cjs'),
     './bonusRounds': require('./helpers/lineplay-bonus-rounds.cjs'),
     './triviaDeck': { primeTriviaDeck: async (...args) => { calls.triviaPrimed.push(args); } },
+    './triviaHistory': { primeTriviaHistory: async (...args) => { (calls.triviaHistoryPrimed ??= []).push(args); } },
     './checkpoint': {
       readCheckpoint: async () => saved,
       writeCheckpoint: async value => { calls.written.push(JSON.parse(JSON.stringify(value))); },
@@ -81,8 +82,14 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
         return backgroundPermission.granted;
       },
       deactivateQueueBackgroundHeartbeat: async id => { calls.backgroundStopped.push(id); },
+      takeBackgroundTrail: async () => [],
     },
     '../../games/trivia/config': { LINEPLAY_ROUND_QUESTIONS: 5 },
+    '../../api/endpoints/me/inline-timer/sync': asDefault(async (...args) => {
+      calls.sync = (calls.sync ?? 0) + 1; return server;
+    }),
+    './checkpointCredit': require('./helpers/lineplay-checkpoint-credit.cjs'),
+    './queuePedometer': { prepareQueuePedometer: async () => {}, readQueueSteps: async () => null },
   };
   const moduleRef = { exports: {} };
   vm.runInNewContext(code, {
