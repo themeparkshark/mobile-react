@@ -1523,9 +1523,12 @@ function updateEntities(s: SimState, du: number, pdu: number): void {
   'worklet';
   const ahead = aheadU(s);
   const spd = s.speedEff >> 8;
-  // 600ms of travel at full speed (a Float's slow drift must not shorten it).
+  // 600ms of travel at full speed (a Float's slow drift must not shorten it),
+  // plus 2 steps of margin: the speed ramp and the speed-based anchor pan move
+  // the view edge forward while the badge is up, which could shave a step.
   const sb = s.speed >> 8;
-  const badgeLead = idiv((spd > sb ? spd : sb) * 6, 10);
+  const bv = spd > sb ? spd : sb;
+  const badgeLead = idiv(bv * 6, 10) + idiv(bv, 30);
   for (let i = 0; i < ENT_CAP; i++) {
     const t = s.et[i];
     if (t === E_NONE) continue;
@@ -1906,6 +1909,10 @@ function stepInner(s: SimState): void {
       s.phase = PH_PLAY;
       s.phaseSteps = 0;
       s.vy = 0;
+      // The pocket is "look up" time: the Bubble Float idle count restarts at
+      // its exit, so a player gets the full 1.8s to put a thumb back down
+      // instead of being floated on the first lead-in step.
+      if (!s.holding) s.lastPress = s.step;
       emit(s, EV_POCKET_END, s.sprint, 0, 0, 0);
     }
     return;

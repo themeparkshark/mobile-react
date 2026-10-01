@@ -628,3 +628,21 @@ test('input cap (11e): expert feathering at 8 taps/s plus Dashes passes; 31 even
   const p = { ...golden.vectors[0].proof, inputs: core.encodeInputs(spam), steps_total: Math.max(golden.vectors[0].proof.steps_total, 300) };
   assert.equal(verify.verifySwimProof(p).reason, 'input_rate');
 });
+
+test('a Tide Pocket is look-up time: Bubble Float never arms on pocket exit, only after a full 1.8s idle in play', () => {
+  const s = fresh();
+  run(s, 200, null, busy);
+  core.spawn(s, core.E_GATE, (s.dist >> 8) + 20, 500, core.G_TIDE, 0, 0);
+  run(s, 20, null, busy);
+  assert.equal(s.phase, core.PH_POCKET);
+  // The player lets go and looks up for the whole pocket.
+  if (s.holding) core.applyInput(s, core.IN_RELEASE, 0, 0);
+  const ev = run(s, core.POCKET_QUEUE - s.phaseSteps);
+  assert.ok(has(ev, core.EV_POCKET_END));
+  core.setCourse(s, [], 20000);
+  const early = run(s, core.FLOAT_ARM - 2);
+  assert.equal(has(early, core.EV_FLOAT_IN), false, 'no float on the first lead-in steps');
+  assert.equal(s.float, 0);
+  const late = run(s, 6);
+  assert.ok(has(late, core.EV_FLOAT_IN), 'a real 1.8s glance-away still floats');
+});
