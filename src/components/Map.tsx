@@ -230,7 +230,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           homes: homes.features, buildings: buildings.features, roads: roads.features },
           { north, south, east, west }, zoom));
         setGlints(buildWaterGlints(water.features, { north, south, east, west }, zoom, 6));
-        setLampPoints(buildLampPoints(roads.features, { north, south, east, west }, zoom));
+        const lamps = buildLampPoints(roads.features, { north, south, east, west }, zoom);
+        setLampPoints(lamps);
       } catch { /* map not ready yet; the next camera change retries */ }
     }, 250);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -459,8 +460,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {light.lamps >= 0.05 && lampPoints.features.length > 0 && (
           <ShapeSource id="tps-lamps" shape={lampPoints}>
             <CircleLayer id="tps-lamp-glow" style={{ circleColor: '#ffc95e', circleBlur: 1,
-              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 5, 17, 9, 19, 26],
-              circleOpacity: 0.62 * light.lamps, circlePitchAlignment: 'map' }} />
+              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 7, 17, 13, 19, 34],
+              circleOpacity: 0.7 * light.lamps, circlePitchAlignment: 'map' }} />
             <CircleLayer id="tps-lamp-core" style={{ circleColor: '#fff3c4', circleBlur: 0.4,
               circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 1, 17, 1.6, 19, 3.6],
               circleOpacity: 0.9 * light.lamps }} />
@@ -471,12 +472,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <ShapeSource id="tps-crowd-haze" shape={crowdHaze}>
             <HeatmapLayer id="tps-crowd-haze" style={{
               heatmapWeight: ['get', 'w'],
-              heatmapIntensity: ['interpolate', ['linear'], ['zoom'], 15, 0.6, 19, 1.1],
-              heatmapRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 15, 22, 17, 55, 19, 150],
+              heatmapIntensity: ['interpolate', ['linear'], ['zoom'], 15, 0.5, 19, 0.9],
+              heatmapRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 15, 16, 17, 38, 19, 100],
+              // Barely there at the edge, a warm shimmer in the middle: air over a crowd, not a warning.
               heatmapColor: ['interpolate', ['linear'], ['heatmap-density'],
-                0, 'rgba(255,214,120,0)', 0.25, 'rgba(255,214,120,0.18)', 0.55, 'rgba(255,176,82,0.34)',
-                0.8, 'rgba(255,132,72,0.42)', 1, 'rgba(255,104,78,0.48)'],
-              heatmapOpacity: 0.7,
+                0, 'rgba(255,214,120,0)', 0.3, 'rgba(255,214,120,0.06)', 0.6, 'rgba(255,186,96,0.16)',
+                0.85, 'rgba(255,150,84,0.24)', 1, 'rgba(255,124,84,0.3)'],
+              heatmapOpacity: 0.8,
               heatmapOpacityTransition: { duration: 1200, delay: 0 },
             }} />
           </ShapeSource>

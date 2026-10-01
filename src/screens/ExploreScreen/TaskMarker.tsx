@@ -7,7 +7,6 @@ import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { hash01, withinBudget } from '../../components/map/alive/ambientBudget';
 import { waitGlow, type WaitGlow as WaitGlowLook } from '../../components/map/alive/parkPulse';
 import { arrivalBurstAllowed } from '../../components/map/alive/presence';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { Marker } from '../../components/map/Marker';
 import RideTeamFlag from '../../components/map/RideTeamFlag';
 import Countdown, { zeroPad } from 'react-countdown';
@@ -114,20 +113,11 @@ function FloatingCoin({ seed, moving }: { readonly seed: number; readonly moving
   </>;
 }
 
-/** A soft radial pool of light (static SVG; motion comes from the wrapping view). */
-function GlowPool({ id, color, width, height }: { id: string; color: string; width: number; height: number }) {
-  return (
-    <Svg width={width} height={height}>
-      <Defs>
-        <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%">
-          <Stop offset="0" stopColor={color} stopOpacity={0.95} />
-          <Stop offset="0.55" stopColor={color} stopOpacity={0.4} />
-          <Stop offset="1" stopColor={color} stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Ellipse cx={width / 2} cy={height / 2} rx={width / 2} ry={height / 2} fill={`url(#${id})`} />
-    </Svg>
-  );
+const GLOW = require('../../../assets/images/map/fx/glow.png');
+
+/** A soft pool of light: one tinted radial texture (GPU composited; motion comes from the wrapping view). */
+function GlowPool({ color, width, height }: { color: string; width: number; height: number }) {
+  return <Image source={GLOW} tintColor={color} style={{ width, height }} contentFit="fill" />;
 }
 
 /**
@@ -144,7 +134,7 @@ function WaitGlow({ id, glow, moving }: { readonly id: number; readonly glow: Wa
   });
   return (
     <Animated.View pointerEvents="none" style={[styles.waitGlow, style]}>
-      <GlowPool id={`wait-${id}`} color={glow.color} width={104} height={40} />
+      <GlowPool color={glow.color} width={104} height={40} />
     </Animated.View>
   );
 }
@@ -162,7 +152,7 @@ function LampGlow({ id, level, moving }: { readonly id: number; readonly level: 
   });
   return (
     <Animated.View pointerEvents="none" style={[styles.lampGlow, style]}>
-      <GlowPool id={`lamp-${id}`} color="#ffcf72" width={124} height={64} />
+      <GlowPool color="#ffcf72" width={124} height={64} />
     </Animated.View>
   );
 }

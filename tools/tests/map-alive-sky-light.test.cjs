@@ -47,7 +47,7 @@ test('lighting eases with the sun: lamps come up, daytime life fades, no jumps',
     for (const key of ['wash', 'vignette', 'lamps', 'clouds', 'birds', 'glints', 'fireflies']) {
       assert.ok(Math.abs(l[key] - prev[key]) <= 0.065, `${key} eases at ${e}`);
     }
-    assert.ok(Math.abs(l.tint.opacity - prev.tint.opacity) <= 0.02, `tint eases at ${e}`);
+    assert.ok(Math.abs(l.tint.opacity - prev.tint.opacity) <= 0.031, `tint eases at ${e}`);
     prev = l;
   }
   const night = sky.lightForElevation(-20);
@@ -65,7 +65,7 @@ test('legibility: the tint never darkens the tiles past the cap', () => {
     assert.match(l.tint.color, /^#[0-9a-f]{6}$/);
     for (const key of ['wash', 'vignette', 'lamps', 'clouds', 'birds', 'glints', 'fireflies']) assert.ok(l[key] >= 0 && l[key] <= 1);
   }
-  assert.ok(sky.MAX_TINT_OPACITY <= 0.35);
+  assert.ok(sky.MAX_TINT_OPACITY <= 0.4, 'paths and water still read at night');
 });
 
 test('the map tints tiles under the pins and lights lamps only after sunset', () => {

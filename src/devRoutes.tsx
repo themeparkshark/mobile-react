@@ -30,6 +30,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'CrewRelayPreview', getComponent: () => require('./screens/LinePlay/CrewRelayPreviewScreen').default },
       { name: 'ParkProjectPreview', getComponent: () => require('./screens/ExploreScreen/ParkProjectPreviewScreen').default },
       { name: 'TripGoalPreview', getComponent: () => require('./screens/ExploreScreen/TripGoalPreviewScreen').default },
+      { name: 'MapAlivePreview', getComponent: () => require('./screens/ExploreScreen/MapAlivePreviewScreen').default },
       { name: 'ParkDayRecapPreview', getComponent: () => require('./screens/ParkDayRecapPreviewScreen').default },
       { name: 'CrewGridPreview', getComponent: () => require('./screens/LinePlay/CrewGridPreviewScreen').default },
       { name: 'SetCollectionPreview', getComponent: () => require('./screens/SetCollectionPreviewScreen').default },
@@ -49,6 +50,7 @@ export function devInitialRoute(): string | null {
   if (!__DEV__) return null;
   const on = (value: string | undefined) => value === '1';
   const table: readonly (readonly [boolean, string])[] = [
+    [on(process.env.EXPO_PUBLIC_MAP_ALIVE_PREVIEW), 'MapAlivePreview'],
     [on(process.env.EXPO_PUBLIC_BOSS_MAP_PREVIEW), 'BossMapPreview'],
     [on(process.env.EXPO_PUBLIC_BOSS_MECHANICS_PREVIEW), 'BossMechanicsPreview'],
     [on(process.env.EXPO_PUBLIC_SHELF_ARRIVAL_PREVIEW), 'ShelfArrivalPreview'],

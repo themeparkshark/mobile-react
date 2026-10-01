@@ -8,7 +8,7 @@
  */
 import { Image } from 'expo-image';
 import { memo, useContext, useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import { SoundEffectContext } from '../../../context/SoundEffectProvider';
 import { haptic } from '../../../gamekit/Haptics';
@@ -25,6 +25,7 @@ const POP = 0.18;
 const HANG = 0.26;
 const LAND = 0.78;
 const COIN = 44;
+const TAG_WIDTH = 190;
 
 function TrailStar({ p, from, to, lag, size }: { p: SharedValue<number>; from: Point; to: Point; lag: number; size: number }) {
   const style = useAnimatedStyle(() => {
@@ -56,6 +57,9 @@ export const CoinCollectFlight = memo(function CoinCollectFlight({ from, to, coi
   readonly onDone: () => void;
 }) {
   const { playSound } = useContext(SoundEffectContext);
+  const { width: screenWidth } = useWindowDimensions();
+  // Keep the label on screen: the shelf button sits near the right edge.
+  const tagX = Math.max(8, Math.min(screenWidth - TAG_WIDTH - 8, to.x - TAG_WIDTH / 2));
   const p = useSharedValue(reducedMotion ? LAND : 0);
   const tag = useSharedValue(0);
   useEffect(() => {
@@ -100,7 +104,7 @@ export const CoinCollectFlight = memo(function CoinCollectFlight({ from, to, coi
   });
   const tagStyle = useAnimatedStyle(() => ({
     opacity: tag.value,
-    transform: [{ translateX: to.x - 90 }, { translateY: to.y - 74 - tag.value * 10 }, { scale: 0.8 + tag.value * 0.2 }],
+    transform: [{ translateX: tagX }, { translateY: to.y - 74 - tag.value * 10 }, { scale: 0.8 + tag.value * 0.2 }],
   }));
 
   return (
@@ -126,7 +130,7 @@ const styles = StyleSheet.create({
   coin: { width: COIN, height: COIN },
   coinImage: { width: COIN, height: COIN },
   ring: { width: 60, height: 60, borderRadius: 30, borderWidth: 4 },
-  tag: { width: 180, alignItems: 'center' },
+  tag: { width: TAG_WIDTH, alignItems: 'center' },
   tagText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy, backgroundColor: BRAND.gold, overflow: 'hidden',
     borderRadius: 10, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 10, paddingVertical: 3 },
 });
