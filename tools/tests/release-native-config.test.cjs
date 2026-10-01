@@ -72,8 +72,8 @@ test('OTA runtime is fingerprint based on both the native and config side', () =
   assert.equal(expoPlist.EXUpdatesRuntimeVersion, 'file:fingerprint');
   assert.equal(expoPlist.EXUpdatesCheckOnLaunch, 'ALWAYS');
   assert.equal(expoPlist.EXUpdatesLaunchWaitMs, 0);
-  assert.match(appConfig, /runtimeVersion: \{ policy: 'fingerprint' \}/);
-  assert.doesNotMatch(appConfig, /runtimeVersion: '/);
+  assert.match(appConfig, /runtimeVersion: process\.env\.TPS_INTERNAL_TUNNEL_BUILD === '1' \? 'internal-tunnel-1\.6\.0' : \{ policy: 'fingerprint' \}/);
+  assert.doesNotMatch(appConfig, /runtimeVersion: '/); // store builds never pin a static runtime
   assert.doesNotMatch(appConfig, /bitcode/);
   assert.doesNotMatch(appConfig, /buildNumber/);
 });

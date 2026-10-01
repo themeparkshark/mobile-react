@@ -47,7 +47,11 @@ export default {
   // Fingerprint runtime: an OTA update only reaches binaries whose native
   // code matches the JS it was built against. The native side reads the
   // build-time fingerprint (Expo.plist EXUpdatesRuntimeVersion file:fingerprint).
-  runtimeVersion: { policy: 'fingerprint' },
+  // Store builds use the fingerprint policy. The internal tester profile (EAS
+  // "internal-tunnel") pins a fixed label: EAS installs pods and rewrites the
+  // bare ios/ project before CONFIGURE_EXPO_UPDATES, so a local fingerprint can
+  // never match there, and these builds never receive OTA updates anyway.
+  runtimeVersion: process.env.TPS_INTERNAL_TUNNEL_BUILD === '1' ? 'internal-tunnel-1.6.0' : { policy: 'fingerprint' },
   updates: {
     url: 'https://u.expo.dev/aaf6495c-456b-4fbd-afb5-d429c1472ddb',
     // One check per cold start, downloaded in the background and applied on
