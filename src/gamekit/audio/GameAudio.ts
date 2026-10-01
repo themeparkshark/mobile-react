@@ -35,6 +35,7 @@ import {
 import { beatMapFromBpm, type BeatMap } from '../core/beatMap';
 import { AudioApiBackend, ExpoAvBackend, HybridBackend, audioApiAvailable, type AudioBackend } from './backends';
 import { CHRIS_BEDS, CHRIS_CUES, type BedDef, type CueDef } from './chrisBank';
+import { routePan, type AudioRoute } from '../core/audioRoute';
 
 export interface PlayOptions {
   /** 0..1 multiplier on the cue gain. */
@@ -79,12 +80,19 @@ class GameAudioEngine {
   private nextId = 1;
   private sfxEnabled = true;
   private musicEnabled = true;
-  private masterVolume = 1;
+  /** Dev only: EXPO_PUBLIC_STUDIO_MUTE=1 keeps studio simulators silent (master gain pinned to 0). */
+  private readonly studioMute = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_STUDIO_MUTE === '1';
+  private masterVolume = this.studioMute ? 0 : 1;
   private busGain: Record<Bus, number> = { ...BUS_DEFAULT };
   private ducks: Duck[] = [];
   private duckTimer: ReturnType<typeof setInterval> | null = null;
   globalVoices = DEFAULT_GLOBAL_VOICES;
   private groupCaps = new Map<string, number>();
+  /** Output route (useAudioRoute keeps it live). Pan only plays on a private route (Whack v5). */
+  route: AudioRoute = 'unknown';
+  /** Force panning on regardless of route (dev tester only). */
+  panOverride: boolean | null = null;
+  private routeListeners = new Set<(r: AudioRoute) => void>();
   /** Dev overlay / tests: every accepted play. */
   onPlay: ((name: string, info: { voices: number; backend: string }) => void) | null = null;
   readonly music: MusicDirector;
@@ -222,7 +230,7 @@ class GameAudioEngine {
   }
 
   setMasterVolume(v: number): void {
-    this.masterVolume = Math.max(0, Math.min(1, v));
+    this.masterVolume = this.studioMute ? 0 : Math.max(0, Math.min(1, v));
     this.backend?.setMasterGain(this.masterVolume);
   }
 
@@ -300,7 +308,7 @@ class GameAudioEngine {
     const token = backend.play(key, {
       gain,
       rate: semitonesToRate(semis),
-      pan: backend.supportsPan ? opts.pan ?? 0 : 0,
+      pan: backend.supportsPan ? this.effectivePan(opts.pan ?? 0) : 0,
       delayMs: opts.delayMs ?? 0,
       startMs: def.startMs ?? 0,
       durationMs,
@@ -362,6 +370,24 @@ class GameAudioEngine {
   activeVoices(): number {
     this.prune(Date.now());
     return this.active.length;
+  }
+
+  setRoute(route: AudioRoute): void {
+    if (route === this.route) return;
+    this.route = route;
+    this.routeListeners.forEach((f) => f(route));
+  }
+
+  onRouteChange(f: (r: AudioRoute) => void): () => void {
+    this.routeListeners.add(f);
+    return () => this.routeListeners.delete(f);
+  }
+
+  /** The pan that will actually play (0 on the speaker unless the tester overrides). */
+  effectivePan(pan: number): number {
+    if (this.panOverride === true) return Math.max(-1, Math.min(1, pan));
+    if (this.panOverride === false) return 0;
+    return routePan(this.route, pan);
   }
 
   /** Duck the music bus: attack to -db, hold, release. Deepest duck wins. */
@@ -460,12 +486,35 @@ export class MusicDirector {
   async positionMs(): Promise<number> {
     const b = this.engine.backend;
     if (!b || !this.current) return 0;
+    if (b.positionIsCheap?.(this.deck)) {
+      try {
+        return await b.musicPosition(this.deck);
+      } catch {
+        return this.elapsedMs();
+      }
+    }
+    // expo-av position reads are cached for 2 s and extrapolated in between:
+    // each one is a main-thread AVPlayer status call, and a burst of them
+    // during a reveal is the pattern that deadlocked AVFoundation (Trivia).
+    const now = Date.now();
+    const c = this.posCache;
+    if (c && c.bed === this.current && now - c.wall < 2000) {
+      const def = this.engine.bed(this.current);
+      const p = c.pos + (now - c.wall);
+      const end = def?.loopEndMs ?? 0;
+      const start = def?.loopStartMs ?? 0;
+      return end > start && p >= end ? start + ((p - start) % (end - start)) : p;
+    }
     try {
-      return await b.musicPosition(this.deck);
+      const pos = await b.musicPosition(this.deck);
+      this.posCache = { bed: this.current, pos, wall: Date.now() };
+      return pos;
     } catch {
       return this.elapsedMs();
     }
   }
+
+  private posCache: { bed: string; pos: number; wall: number } | null = null;
 
   private gainFor(name: string): number {
     const def = this.engine.bed(name);
@@ -508,6 +557,7 @@ export class MusicDirector {
     if (this.current) b.musicStop(old, fadeMs);
     this.deck = next;
     this.current = name;
+    this.posCache = null;
     this.paused = false;
     this.startedAt = Date.now() - fromMs;
     const lp = this.state === 'muffled' && !b.supportsFilter && def.lowpassSrc !== undefined;
@@ -525,7 +575,7 @@ export class MusicDirector {
    * Switch beds on the next beat or bar of the current bed (musical
    * transitions: main -> intense at a level up, -> boss).
    */
-  async switchTo(name: string, at: 'now' | 'beat' | 'bar' = 'bar', fadeMs = 300): Promise<void> {
+  async switchTo(name: string, at: 'now' | 'beat' | 'bar' = 'bar', fadeMs = 300, keepPosition = false): Promise<void> {
     if (this.switchTimer) clearTimeout(this.switchTimer);
     const clock = this.clock();
     const b = this.engine.backend;
@@ -536,8 +586,10 @@ export class MusicDirector {
     const pos = await b.musicPosition(this.deck);
     const target = nextGridMs(clock, pos, at === 'bar' ? clock.beatsPerBar : 1, 40);
     const wait = Math.max(0, target - pos - fadeMs / 2);
-    // Keep phase: the new bed starts at the same bar position.
-    const from = barMs(clock) > 0 ? target % barMs(clock) : 0;
+    // Keep phase: the new bed starts at the same bar position. Stem layers of
+    // one mix (same length, sample-aligned) keep the absolute position (Current Quest).
+    const loopEnd = this.engine.bed(name)?.loopEndMs ?? 0;
+    const from = keepPosition && loopEnd > 0 ? target % loopEnd : barMs(clock) > 0 ? target % barMs(clock) : 0;
     this.switchTimer = setTimeout(() => void this.play(name, fadeMs, from), wait);
   }
 

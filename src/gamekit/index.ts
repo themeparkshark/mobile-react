@@ -181,3 +181,23 @@ export { useFinisher } from './fx/useFinisher';
 export type { FinisherDeps, FinisherAt } from './fx/useFinisher';
 export { useThermal } from './perf/useThermal';
 export type { ThermalHandle } from './perf/useThermal';
+
+// Engine pass 5: on twos and line boil, mesh sprites, beat layers, audio routes,
+// gyro parallax, fly-to-score, camera/governor presets, unified shell props.
+export * from './core/twos';
+export * from './core/mesh';
+export * from './core/beatLayers';
+export * from './core/audioRoute';
+export * from './core/parallax';
+export * from './core/scoreFx';
+export { fxFlyToUI } from './fx/FxStage';
+export { MeshSprite, useMeshPoints, toPoints } from './fx/MeshSprite';
+export type { MeshSpriteProps } from './fx/MeshSprite';
+export { BoilRing, BoilPolyline } from './fx/BoilRing';
+export type { BoilRingProps, BoilPolylineProps } from './fx/BoilRing';
+export { BeatLayerPlayer, useBeatLayers } from './audio/BeatLayers';
+export type { BeatLayerOptions } from './audio/BeatLayers';
+export { useAudioRoute, followAudioRoute, readAudioRoute } from './audio/useAudioRoute';
+export { useGyroParallax } from './motion/useGyroParallax';
+export type { GyroParallax, GyroParallaxOptions } from './motion/useGyroParallax';
+export type { ShellResultsArgs, CountdownStyle, CountdownScrim } from './GameShellV2';

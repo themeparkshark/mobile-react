@@ -25,6 +25,7 @@ import {
   BUS_QUEUED,
   busDue,
   busOffer,
+  busShouldCancelTail,
   busStats,
   configureHapticBus,
   createHapticBus,
@@ -33,7 +34,7 @@ import {
 } from './core/hapticBus';
 import {
   AHAP_LIBRARY,
-  fallbackSteps,
+  hapticFallbackFor,
   patternBusStrength,
   toAhap,
   type AhapJson,
@@ -206,8 +207,8 @@ export function configureHaptics(cfg: HapticBusPreset | Partial<HapticBusConfig>
 }
 
 /** Bus counters (fired / dropped / queued / preempted) for the dev overlay. */
-export function hapticBusStats(): { fired: number; dropped: number; queued: number; preempted: number } {
-  return busStats(bus);
+export function hapticBusStats(): { fired: number; dropped: number; queued: number; preempted: number; tailCuts: number } {
+  return { ...busStats(bus), tailCuts };
 }
 
 export function firePrimitive(p: HapticPrimitive): void {
@@ -239,21 +240,40 @@ export function playHaptic(pattern: HapticPatternName | HapticStep[], opts: Patt
   if (!steps || steps.length === 0) return false;
   const priority = opts.priority ?? (opts.tell ? HP.telegraph : HP.own);
   const lead = opts.alignToAudio ? offsetMs : 0;
-  return offerToBus(priority, patternStrength(steps), opts, () => playSteps(steps, lead));
+  return offerToBus(priority, patternStrength(steps), opts, () => playSteps(steps, lead, priority));
 }
 
-function playSteps(steps: readonly HapticStep[], lead: number): void {
+/** The pattern whose later pulses are still pending (Whack v5 tail cancel). */
+let playing: { priority: number; timers: ReturnType<typeof setTimeout>[]; endsAt: number } | null = null;
+
+function playSteps(steps: readonly HapticStep[], lead: number, priority: number = HP.own): void {
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  let last = 0;
   for (const step of steps) {
     const at = step.at + lead;
+    last = Math.max(last, at);
     if (at <= 0) firePrimitive(step.p);
-    else setTimeout(() => firePrimitive(step.p), at);
+    else timers.push(setTimeout(() => firePrimitive(step.p), at));
   }
+  if (timers.length > 0) playing = { priority, timers, endsAt: Date.now() + last };
 }
+
+function cutTailFor(priority: number): void {
+  const p = playing;
+  if (!p || Date.now() > p.endsAt) return;
+  if (!busShouldCancelTail(bus, p.priority, priority)) return;
+  for (const t of p.timers) clearTimeout(t);
+  playing = null;
+  tailCuts += 1;
+}
+
+let tailCuts = 0;
 
 function offerToBus(priority: number, strength: number, opts: PatternOptions & { input?: boolean }, play: () => void): boolean {
   const now = Date.now();
-  const verdict = busOffer(bus, now, { priority, strength, tell: opts.tell, input: opts.input, payload: play });
+  const verdict = busOffer(bus, now, { priority, strength, tell: opts.tell, input: opts.input, payload: { play, priority } });
   if (verdict === BUS_FIRE) {
+    cutTailFor(priority);
     play();
     return true;
   }
@@ -262,7 +282,11 @@ function offerToBus(priority: number, strength: number, opts: PatternOptions & {
     busTimer = setTimeout(() => {
       busTimer = null;
       const due = busDue(bus, Date.now());
-      if (due && typeof due.payload === 'function') (due.payload as () => void)();
+      const job = due?.payload as { play: () => void; priority: number } | undefined;
+      if (job) {
+        cutTailFor(job.priority);
+        job.play();
+      }
     }, Math.max(0, bus.queue.dueAt - now));
     return true;
   }
@@ -301,7 +325,7 @@ export function hasNativeHaptics(): boolean {
  */
 export function playPattern(
   pattern: AhapPatternName | HapticPatternDef,
-  opts: PatternOptions & { input?: boolean } = {},
+  opts: PatternOptions & { input?: boolean; fallback?: HapticStep[] } = {},
 ): boolean {
   if (!enabled) return false;
   if (opts.tell && !tellsEnabled) return false;
@@ -325,7 +349,7 @@ export function playPattern(
         // Fall through to the preset fallback.
       }
     }
-    playSteps(fallbackSteps(def), lead);
+    playSteps(opts.fallback ?? hapticFallbackFor(typeof pattern === 'string' ? pattern : null, def), lead, priority);
   });
 }
 

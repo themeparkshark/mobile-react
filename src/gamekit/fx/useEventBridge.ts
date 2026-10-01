@@ -14,7 +14,7 @@
  * on the same frame.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { runOnJS, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { createEventRing, drainEvents, type EventRing } from '../core/eventRing';
 
@@ -36,5 +36,6 @@ export function useEventBridge(onEvents: (batch: number[]) => void, capacity = 2
     const batch = drainEvents(r);
     runOnJS(deliver)(batch);
   }, [ring, deliver]);
-  return { ring, flush };
+  // Stable handle: gestures and runtimes memoize on it (a new object per render rebuilt them every frame).
+  return useMemo(() => ({ ring, flush }), [ring, flush]);
 }

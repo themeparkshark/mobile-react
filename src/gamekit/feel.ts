@@ -29,7 +29,7 @@ import type { StampLayerHandle, StampOptions } from './fx/StampLayer';
 import type { FxStageHandle, FlyUpOptions } from './fx/FxStage';
 import type { CameraRig } from './fx/useCamera';
 import type { GameClockHandle } from './useGameClock';
-import { govFlash, govHitStop, govPunch, govScreenEvent, govShake, type FxGovernor } from './core/fxGovernor';
+import { FLASH_MERGED, govFlash, govHitStop, govPunch, govScreenEvent, govShake, type FxGovernor } from './core/fxGovernor';
 
 export interface FeelBurst {
   emitter: EmitterName;
@@ -185,7 +185,8 @@ export function fireFeel(def: FeelDef, at: FeelAt, deps: FeelDeps): void {
       const want = def.flash.peak ?? 0.35;
       const peak = !screenOk ? 0 : gov ? govFlash(gov, now, want, prio, force) : want;
       if (peak > 0) fx.flash({ ...def.flash, peak });
-      else if (!def.bloom) fx.bloom(x, y, { color: def.flash.color, radius: 140, peak: 0.6 });
+      // A merged flash (Whack v5) already reads as part of the live one: no bloom either.
+      else if (!def.bloom && !(gov && screenOk && gov.lastFlashVerdict === FLASH_MERGED)) fx.bloom(x, y, { color: def.flash.color, radius: 140, peak: 0.6 });
     }
     if (def.bloom) fx.bloom(x, y, def.bloom);
     if (def.vignette && screenOk) fx.vignette(def.vignette);

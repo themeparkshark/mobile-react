@@ -26,6 +26,12 @@ Demos (dev MiniGameTester):
   the finisher cam (Final Bonk, Ride win, Match point), the haptic priority bus
   per game, Banana's screen-event cap, the thermal ladder and the results card
   with bucket tallies. `DEMO=feellab` boots into its tour.
+- **"Studio Engine Lab: Juice Lab"** (`demo/JuiceLab.tsx`, pass 5): on-twos vs
+  smooth stars, a boiled ring, Alex's Sharky frame on the tail mesh, the Whack
+  pop frame with head-row follow-through, fly-to-score with a digit roll,
+  camera and flash presets, the Whack beat-layer kit over the bed, gyro
+  parallax, route-gated pan, haptic tail cuts and Trivia signatures.
+  `DEMO=juicelab` boots into its tour.
 
 ## Map
 
@@ -65,6 +71,13 @@ Demos (dev MiniGameTester):
 | Thermal ladder | `core/thermal.ts`, `perf/useThermal.ts` | nominal/fair/serious/critical over the whole session, native signal hook, 120 Hz to 60-step |
 | Screen cap | `core/fxGovernor.ts` `govScreenEvent` | at most N screen-space moments per window (Banana 2 per 250 ms) |
 | Voice groups, Rez snap | `core/audioMix.ts`, `GameAudio.setGroupCaps`, `playQuantized` | shared caps per group, audio-only 16th snapping |
+| On twos, line boil | `core/twos.ts`, particle `twos`/`flipbook`, `fx/BoilRing.tsx`, `clock.twosFrame` | 12 fps drawing frames, staggered re-picks, 3-set line boil |
+| Mesh sprites | `core/mesh.ts`, `fx/MeshSprite.tsx` | tail wave, head-row follow-through with caps, spine chain, stretch checks |
+| Fly-to-score | `core/scoreFx.ts`, `flyUp(..., { to })`, `onFlyUpArrive` | overshoot, tilt, hold, curve to the score, digit roll |
+| Presets | `CAMERA_PRESETS`, `GOVERNOR_PRESETS`, `cam.configure` | per-game shake decay and flash rules, Whack flash merge |
+| Beat layers | `core/beatLayers.ts`, `audio/BeatLayers.ts` | escalating percussion kits on a 25 ms / 150 ms look-ahead scheduler |
+| Audio routes | `core/audioRoute.ts`, `audio/useAudioRoute.ts` | headphone-only pan, Line Party speaker policy, Lead Speaker |
+| Gyro parallax | `core/parallax.ts`, `motion/useGyroParallax.ts` | 0.3 Hz low-pass, learned resting hold, walk-gated |
 
 ## A game in 60 lines
 
@@ -677,6 +690,173 @@ counts.
 with accelerating coin ticks climbing 0 to +12 semitones (`tallySchedule`).
 `starStepMs` puts the star slams on the stinger's beat (Whack: 464 ms at 129.2 BPM).
 
+## Engine pass 5
+
+### Upstreamed from the game branches (merge these and drop your local patches)
+
+Three game branches had fixed the same engine bugs three different ways. The
+engine now has one root fix for each:
+
+- **audio-api AudioParam crash** (Whack, Boss and Memory each patched it):
+  the backend never calls `cancelScheduledValues`, `setValueAtTime` or any
+  `*RampToValueAtTime`. It writes `.value` and runs fades as 16 ms JS steps
+  (`rampParamValue`). A test fails if automation calls come back.
+- **expo-av deck deadlock** (Trivia): music volume writes are serialized and
+  coalesced per deck, ramps step every 90 ms, and position reads are cached for
+  2 s and extrapolated (loop-aware) unless the deck is on audio-api.
+- **Stable handles** (Whack): `useEventBridge` and `useGameClock` return the
+  same object every render.
+- **Particles** (Boss): `kill()` sits above `claim()` for the Reanimated plugin.
+- **Shell props** (Memory, Trivia, Sharky, Current Quest, Rhythm): one API,
+  old names still accepted.
+
+| Prop | Use |
+|---|---|
+| `countdownStyle` | `'full'` 3-2-1-GO (default), `'go'` (Current Quest), `'none'` (Parade Beat counts in itself; `introCountdown={false}` still works) |
+| `countdownScrim` | `'default'`, `'light'`, `'none'` (Trivia keeps the stage readable) |
+| `hideHeaderScore` / `headerScore` | hide the header score, or put your own node there |
+| `renderResults(args)` | own the results surface; args carry `result`, `stars`, `won`, `wrapReason`, `claim`, `rematch`, `challenge` |
+| `resultExtras` (alias `resultsExtra`), `pauseExtras`, `challengeLabel`, `GameResult.note` | rows under the card, hold-sheet settings, button label, a coaching line |
+| Rematch | clear `result` after Play again and the shell runs a fresh start count |
+
+`GameAudio.music.switchTo(name, at, fadeMs, keepPosition)` keeps the absolute
+position for sample-aligned stems (Current Quest).
+
+### On twos and line boil
+
+```ts
+const clock = useGameClock({});                     // clock.fxMs, clock.twosFrame (12 fps grid)
+fx.current.burst('stars', x, y);                    // stars, impact, sparkles, ink, puff, shards, hearts, glints are on twos
+fx.current.emitDef({ ...EMITTERS.stars, twos: false }, x, y);                 // smooth, for comparison
+fx.current.emitDef({ ...EMITTERS.puff, sprite: S, frames: 4, flipbook: true }, x, y);  // flipbook on twos
+<BoilRing cx={x} cy={y} r={rSv} fxMs={clock.fxMs} color="#ffcf3b" amp={1.5} />    // world 1.5 pt
+<BoilPolyline xs={xs} ys={ys} fxMs={clock.fxMs} amp={0.75} />                       // reading surface 0.75 pt
+```
+
+A drawing re-picks rotation (+/-8 deg) and scale (+/-6%) every 83 ms with a
+staggered phase while its position moves every frame (Whack v5). Rings and
+text stay smooth. Reduced motion turns the boil off. `IMPACT_FRAME_MS` (33)
+is the wall time of an impact frame, never "1 frame".
+
+### Mesh sprites
+
+```ts
+const grid = useMemo(() => createMeshGrid(4, 12, 150, 150), []);
+const pts = useMeshPoints(grid, clock.fxMs, (out, t) => {
+  'worklet';
+  deformTailWave(grid, out, t, { fromU: 0.6, axis: 'y', tailAtEnd: true, wavelengths: 0.7, ...SHARKY_TAIL.holding });
+});
+<MeshSprite image={alexFrame} grid={grid} points={pts} x={x} y={y} />
+```
+
+- `deformTailWave`: Sharky's rear 40% (`SHARKY_TAIL` holding / sinking /
+  settling / overdrive), Current Quest's body wave with `fromU: 0`.
+- `deformRowFollow`: Whack head-row follow-through, clamped to 6%
+  displacement, 3 deg shear and 1% breathing, base row planted.
+- `createSpineChain` / `stepSpineChain` / `kickSpineChain` / `deformSpine`:
+  Boss tentacles (damping 8, stiffness 140, tip at most 10 pt, beat quiver).
+- `meshMaxStretch` stays under 0.1 so Alex's line weight varies under 10%.
+
+Drawn frames carry the acting; the mesh only adds follow-through.
+
+### Fly-to-score and digit roll
+
+```tsx
+<FxStage ref={fx} ... onFlyUpArrive={(n) => rollScore()} />
+fx.current.flyUp('+150', x, y, { size: 'lg', color: '#ffcf3b', to: { x: scoreX, y: scoreY } });
+const [shown, squashY] = digitRollAt(from, to, nowMs - landedAt);   // 200 ms, 1.12 squash
+```
+
+Pop to 1.3 with a 6 deg tilt (alternating sides), hold 250 ms, curve to the
+score in 350 ms (`flyToPose`, tested).
+
+### Camera and governor presets
+
+```ts
+const cam = useCamera({ width, height, timeScale: clock.fxScale, config: CAMERA_PRESETS.whack, walking });
+cam.configure(CAMERA_PRESETS.boss);              // runtime swap
+const gov = useMemo(() => createFxGovernor({ ...GOVERNOR_PRESETS.whack, calm }), [calm]);
+```
+
+`CAMERA_PRESETS`: whack (16 pt, 250 ms linear decay, no cap), boss (squared,
+1.6/s, no cap), sharky, banana, lineParty, trivia, rhythm. New camera config:
+`decayMs` (linear to zero from the latest add), `exponent`, `maxShakeMs: 0`
+for no cap.
+
+`GOVERNOR_PRESETS`: whack (334 ms, 3 per second, merge), trivia (2 per match
+at 35%), currentQuest (1 per 2 s at 20%), lineParty, sharky, banana, memory,
+boss, rhythm. With `flashMerge`, a flash inside the gap joins the live one, so
+the feel layer adds no bloom (`g.lastFlashVerdict === FLASH_MERGED`).
+
+### Haptics: tail cuts, explicit fallbacks, signatures
+
+- Whack bus preset: a fired event of priority 8+ (`WHACK_PRIO.quick`,
+  `decoy`) cancels the remaining pulses of a lower pattern still playing.
+  `hapticBusStats().tailCuts` counts them.
+- `FALLBACK_STEPS`: re-timed expo lists (crit and counter rigid at 0 and 110,
+  purr soft x3 at 110 ms, golden tell, champ slam, boss defeat success then
+  heavy at 450, Boss first-pulse-only). `playPattern(name, { fallback })`
+  overrides per call. Others still merge under 100 ms.
+- `hapticSignature(steps)` counts the pulses you actually feel (success is a
+  rising double). `triviaCorrect` = success + medium at 120 ms (3 rising
+  pulses); `triviaWrong` = one soft. The rule is a unit test.
+- `onBeatWindow(phaseMs, beatMs, 33)`: Banana's on-beat Light gate.
+
+### Beat layers (escalating music without new music)
+
+```ts
+const layers = useBeatLayers('whack', playing);           // kits: whack, rhythmFever, bananaGoldenHour, lineParty
+layers.setLevel(whackLayerLevel(multiplier, fever));      // x1.5 hat 8ths, x2 clap 2+4, x2.5 shaker 16ths, x3 rim, fever swell
+layers.setLevel(0);                                       // combo break: queued hits are stopped too
+```
+
+A 25 ms tick schedules every hit in the next 150 ms from the bed's real
+position (unwrapped across loops), so it re-syncs every bar. On audio-api
+each hit is a sample-accurate `start(when)`. It plays Chris's one-shots:
+`ui.tap`, `fx.firework` (firework_pop.mp3), `fx.coinTick` (coin.mp3 0-90 ms),
+`ui.select`, `fx.whooshRev` (whoosh.mp3 reversed offline, 590 ms; it starts
+early so its peak lands on the 4-bar line). Studio kits fall back to Chris
+until Dustin approves `sh_clap`, `rh_tamb` and `sh_glock`. Loop edits must be
+bar-exact (they are).
+
+### Audio routes
+
+```ts
+const route = useAudioRoute();          // 'speaker' | 'wired' | 'bluetooth' | 'receiver' | 'airplay' | 'car' | 'unknown'
+GameAudio.play('wh_bonk', { pan: -0.6 });   // panned only on headphones; centred on the speaker
+musicAllowed({ route, roomKind: 'crew', isHost, musicSetting });   // Line Party speaker policy
+raceAudioRole(route, seat, firstSpeakerSeat);                      // Parade Beat Lead Speaker / Pocket seat
+```
+
+Uses react-native-audio-api's `AudioManager.getDevicesInfo` and `routeChange`
+(already in the binary). `GameAudio.panOverride` forces pan for the tester.
+Pan is now 0 until a private route is known.
+
+### Gyro parallax
+
+```ts
+const par = useGyroParallax({ active: playing, enabled: !walk.walking && !reducedMotion });
+const backdrop = useDerivedValue(() => [{ translateX: par.x.value * PARALLAX_LAYERS.whack.backdrop }]);
+```
+
+0.3 Hz low-pass, a slowly learned resting hold (a phone held at 40 degrees is
+not a tilt), eases home while walking. `source` feeds a trace or the
+simulator. The HUD never moves.
+
+### Design name to engine API
+
+| Design asks for | Engine |
+|---|---|
+| `useHitStop`, `useLocalFreeze` (Sharky) | `clock.hitStop`, `clock.localStop` |
+| `useCameraRig` | `useCamera` + `CAMERA_PRESETS` |
+| `useRenderInterpolation` | `useGameClock({ onFrame: (alpha) => ... })` |
+| `useFixedView` | `fitView` / `screenToView` |
+| `twosFrame` (Trivia) | `clock.twosFrame`, `twosFrame(fxMs)` |
+| `meshSprite.ts` (Whack Wave 2) | `core/mesh.ts` + `fx/MeshSprite.tsx` |
+| flash governor 334 / 3 / merge | `GOVERNOR_PRESETS.whack` |
+| headphone-gated StereoPanner | `useAudioRoute` + `GameAudio.effectivePan` |
+| percussion layers on the audio clock | `useBeatLayers` |
+
 ## Tests
 
 - `tools/tests/gamekit-engine-core.test.cjs` covers RNG, easing, clock, camera,
@@ -692,5 +872,10 @@ with accelerating coin ticks climbing 0 to +12 semitones (`tallySchedule`).
 - `tools/tests/gamekit-engine-pass4.test.cjs` covers the haptic bus presets,
   AHAP export and fallback, stamps, finisher plans, the thermal ladder, the
   screen-event cap through `fireFeel`, voice groups, Rez snapping and tallies.
+- `tools/tests/gamekit-engine-pass5.test.cjs` covers twos and boil, particle
+  twos, fly-to-score and digit roll, camera and governor presets, haptic tail
+  cuts (runtime), explicit fallbacks, Trivia signatures, meshes, parallax,
+  routes, beat layers and their player, route-gated pan, the unified shell
+  props and the upstreamed fixes.
 - `tools/tests/game-shell-presentation.test.cjs` covers the QUEUE REALITY shell
   flows.
