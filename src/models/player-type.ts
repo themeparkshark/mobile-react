@@ -28,6 +28,8 @@ export interface PlayerType {
   readonly park_coins_count: number;
   readonly ride_coins_collected?: number;
   readonly coin_upgrades?: number;
+  /** Ride Masters standings (progression v2). */
+  readonly ride_masters?: { readonly crowned: number; readonly boss_clears: number; readonly polish_stars: number; readonly coin_levels: number };
   readonly screen_name: string;
   readonly token: string;
   readonly total_experience: number;

@@ -4,8 +4,13 @@
  * from the brand palette only: no neon, no pink, no purple. Level 1 is the
  * coin as Alex drew it, so it is "Classic", never "Basic".
  *
- * Names match the server (PlayerCoinLevel::TIER_NAMES).
+ * Progression v2 (progression.md 9.1) runs to Level 10. Names match the
+ * server (config/progression.php tiers). The server still decides the max a
+ * client may reach (max_level), so an old build or v2 switched off shows 5.
  */
+export type CoinStand = 'none' | 'wave' | 'wave_foam' | 'gold_trim' | 'pennant' | 'crown_dais';
+export type CoinShelfFx = 'none' | 'shimmer' | 'rays' | 'starburst' | 'enamel' | 'wave' | 'glints' | 'inlay' | 'crown_flip';
+
 export interface CoinTier {
   readonly level: number;
   readonly name: string;
@@ -21,22 +26,42 @@ export interface CoinTier {
   readonly shimmer: boolean;
   /** Short line for "next level unlocks". */
   readonly look: string;
+  /** Idle shelf effect on the shared clock. */
+  readonly fx: CoinShelfFx;
+  /** Stand under the coin (Lv6+). */
+  readonly stand: CoinStand;
+  /** The crown sits on top (Lv10). */
+  readonly crown: boolean;
+  /** Level-up burst: a soft rim glow (Lv2-5) or the capped flash and shatter (Lv6+). */
+  readonly burst: 'glow' | 'shatter';
 }
 
 export const COIN_TIERS: readonly CoinTier[] = [
   { level: 1, name: 'Classic', ring: '#ffffff', ringDeep: '#ffcf3b', halo: 'rgba(255,255,255,0.85)', ringWidth: 3, shimmer: false,
-    look: 'The coin as it was first drawn' },
+    look: 'The coin as it was first drawn', fx: 'none', stand: 'none', crown: false, burst: 'glow' },
   { level: 2, name: 'Silver', ring: '#e3eef8', ringDeep: '#8fa9c2', halo: 'rgba(227,238,248,0.7)', ringWidth: 3, shimmer: true,
-    look: 'A polished silver rim with a shimmer' },
+    look: 'A polished silver rim with a shimmer', fx: 'shimmer', stand: 'none', crown: false, burst: 'glow' },
   { level: 3, name: 'Gold', ring: '#ffcf3b', ringDeep: '#d99a00', halo: 'rgba(255,207,59,0.45)', ringWidth: 3, shimmer: true,
-    look: 'A gold rim that catches the light' },
+    look: 'A gold rim that catches the light', fx: 'shimmer', stand: 'none', crown: false, burst: 'glow' },
   { level: 4, name: 'Prismatic', ring: '#5fd0ff', ringDeep: '#0879ca', halo: 'rgba(95,208,255,0.45)', ringWidth: 4, shimmer: true,
-    look: 'A bright water-blue rim with light rays' },
+    look: 'A bright water-blue rim with light rays', fx: 'rays', stand: 'none', crown: false, burst: 'glow' },
   { level: 5, name: 'Legendary', ring: '#ffb400', ringDeep: '#c26a00', halo: 'rgba(255,180,0,0.5)', ringWidth: 4, shimmer: true,
-    look: 'A blazing gold rim with a sunburst' },
+    look: 'A blazing gold rim with a sunburst', fx: 'starburst', stand: 'none', crown: false, burst: 'glow' },
+  { level: 6, name: 'Sapphire', ring: '#2f7fe0', ringDeep: '#0b3d91', halo: 'rgba(47,127,224,0.4)', ringWidth: 4, shimmer: true,
+    look: 'A sapphire enamel rim on a white wave stand', fx: 'enamel', stand: 'wave', crown: false, burst: 'shatter' },
+  { level: 7, name: 'Tidal', ring: '#5fd0ff', ringDeep: '#0b5fa8', halo: 'rgba(95,208,255,0.5)', ringWidth: 5, shimmer: true,
+    look: 'A rolling wave around the rim and foam bubbles', fx: 'wave', stand: 'wave_foam', crown: false, burst: 'shatter' },
+  { level: 8, name: 'Starlight', ring: '#fff4d6', ringDeep: '#d99a00', halo: 'rgba(255,244,214,0.75)', ringWidth: 5, shimmer: true,
+    look: 'Three stars orbit a gold-trim stand', fx: 'glints', stand: 'gold_trim', crown: false, burst: 'shatter' },
+  { level: 9, name: 'Royal', ring: '#ffcf3b', ringDeep: '#1f5fbf', halo: 'rgba(31,95,191,0.35)', ringWidth: 5, shimmer: true,
+    look: 'A gold rim with blue enamel and a pennant', fx: 'inlay', stand: 'pennant', crown: false, burst: 'shatter' },
+  { level: 10, name: 'Shark Crown', ring: '#ffcf3b', ringDeep: '#0b3d91', halo: 'rgba(255,207,59,0.55)', ringWidth: 6, shimmer: true,
+    look: 'A double rim, the crown and a Boss Trophy socket', fx: 'crown_flip', stand: 'crown_dais', crown: true, burst: 'shatter' },
 ];
 
 export const MAX_COIN_LEVEL = COIN_TIERS.length;
+/** Level 5: Legendary on both curves, and the top for old builds. */
+export const LEGENDARY_COIN_LEVEL = 5;
 
 /** Clamp any level (including unknown or 0) into the tier table. */
 export function coinTier(level: number | null | undefined): CoinTier {

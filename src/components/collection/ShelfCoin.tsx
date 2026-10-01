@@ -8,6 +8,7 @@
  * `igniteKey` plays the "just upgraded / just landed" ignite: ring pulse,
  * squash and settle, sparkles. Reduced motion shows the finished state only.
  */
+import CoinStand from '../coin/CoinStand';
 import { Image } from 'expo-image';
 import { memo, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -106,6 +107,8 @@ function ShelfCoin({ coinUrl, level, size, phase = 0, igniteKey, dimmed = false 
 
   return (
     <View style={{ width: size, height: size }} pointerEvents="none">
+      {/* Progression v2: Lv6+ stand under the coin (stand, shadow, rim, art, crown). */}
+      <CoinStand level={tier.level} size={size} layer="stand" />
       <View style={[styles.contact, { width: size * 0.74, height: size * 0.16, left: size * 0.13, bottom: -size * 0.07,
         borderRadius: size }]} />
       <Animated.View style={[StyleSheet.absoluteFill, { borderRadius: size }, pulseStyle,
@@ -122,6 +125,7 @@ function ShelfCoin({ coinUrl, level, size, phase = 0, igniteKey, dimmed = false 
           <Animated.View style={[styles.shimmer, { width: size * 0.22, height: size * 1.6, top: -size * 0.3 }, shimmerStyle]} />
         </View>
       </Animated.View>
+      <CoinStand level={tier.level} size={size} layer="crown" />
       {SPARKLE_PATHS.map(([dx, dy], index) => (
         <SparkleBit key={index} progress={sparkle} dx={dx * size} dy={dy * size} size={size * 0.32}
           left={size / 2 - size * 0.16} top={size / 2 - size * 0.16} />

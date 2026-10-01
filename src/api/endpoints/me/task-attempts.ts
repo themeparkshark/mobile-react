@@ -1,3 +1,4 @@
+import type { PerkChipData } from '../../../components/coin/progressionModel';
 import client from '../../client';
 
 export type TaskAttemptGame = 'tap' | 'timing' | 'memory' | 'trivia' | 'photo';
@@ -73,6 +74,10 @@ export interface TaskAttempt {
     first_catch?: boolean;
     /** XP before the VIP bonus. */
     base_xp?: number;
+    /** Coin perk procs the server paid on this win (progression v2): chips only, never computed here. */
+    perks?: PerkChipData[];
+    /** Ticket Back returned the Ticket this win spent. */
+    ticket_back?: number;
   } | null;
   expires_at: string;
 }

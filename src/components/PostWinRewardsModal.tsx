@@ -1,4 +1,6 @@
 import { useContext, useEffect, useRef, useState } from 'react';
+import PerkChipRow from './coin/PerkChip';
+import type { PerkChipData } from './coin/progressionModel';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import Modal from 'react-native-modal';
@@ -49,6 +51,8 @@ interface Props {
   /** Ride Control outcome of this win (team power, flip, captain), or a nudge to pick a team. */
   rideControl?: RideControlReward | null;
   rush?: RushReward | null;
+  /** Coin perk procs on this win (progression v2), exactly as the server returned them. */
+  perks?: readonly PerkChipData[];
   playerId?: number | null;
   earnedStamp?: Pick<StampData, 'id' | 'name' | 'rewards'> | null;
   nextRideTicketEarned?: number;
@@ -152,6 +156,7 @@ export default function PostWinRewardsModal({
   earnedEdition,
   rideControl,
   rush,
+  perks = [],
   playerId,
   earnedStamp,
   nextRideTicketEarned = 0,
@@ -348,6 +353,9 @@ export default function PostWinRewardsModal({
               {chips.map((chip, index) => <RewardChip key={chip.label} {...chip} index={index} enter={enter}
                 reduced={reducedMotion} started={caught} />)}
             </View>}
+
+            {/* Coin perk procs stamp in after the Parts count-up (server chips only). */}
+            <PerkChipRow perks={perks} start={caught} reduced={reducedMotion} />
 
             <Animated.View style={lowerStyle}>
               {rush && (

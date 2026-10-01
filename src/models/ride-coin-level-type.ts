@@ -1,3 +1,4 @@
+import type { CoinBossBlock, PerkTrackRow } from '../components/coin/progressionModel';
 import { RidePartType } from './ride-part-type';
 
 /**
@@ -44,6 +45,17 @@ export interface RideCoinLevelType {
   // Appearance
   readonly current_frame_url?: string;
   readonly next_frame_url?: string;
+
+  // Progression v2 (S2): present only when the server runs the Level 10 curve
+  // for this build. The app shows what the server sends and never computes perks.
+  readonly tier?: string;
+  readonly next_tier?: string | null;
+  readonly perk_track?: readonly PerkTrackRow[];
+  readonly parts_banked?: number;
+  readonly xp_to_next_level?: number;
+  readonly crowned?: boolean;
+  readonly polish?: { readonly stars: number; readonly next_cost: number | null };
+  readonly boss?: CoinBossBlock | null;
 }
 
 /**

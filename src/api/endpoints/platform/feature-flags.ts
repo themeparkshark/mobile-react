@@ -9,8 +9,10 @@ export type FeatureFlagName =
   | 'adventure_ticket'
   | 'game_proof'
   | 'park_projects'
+  | 'progression_v2'
   | 'queue_tickets'
   | 'ride_coin_editions'
+  | 'ride_boss'
   | 'ride_rescue_pass'
   | 'vip_sync';
 

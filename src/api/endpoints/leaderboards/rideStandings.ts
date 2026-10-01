@@ -1,7 +1,7 @@
 import client from '../../client';
 import { PlayerType } from '../../../models/player-type';
 
-export type RideStandingsMetric = 'today' | 'collection' | 'mastery';
+export type RideStandingsMetric = 'today' | 'collection' | 'mastery' | 'masters';
 
 export interface RideStandings {
   data: PlayerType[];

@@ -5,6 +5,14 @@ const { loadTs } = require('./helpers/ts-module.cjs');
 const challengeCopy = loadTs('src/components/rewards/challengeCopy.ts');
 const postWinModel = loadTs('src/components/rewards/postWinModel.ts');
 const coinTiers = loadTs('src/constants/coinTiers.ts');
+// Progression v2 (S2): the pure coin model and the app-wide limiters the sheet now uses.
+const progressionModel = loadTs('src/components/coin/progressionModel.ts');
+const progressionStubs = {
+  './coin/progressionModel': progressionModel,
+  '../gamekit/Haptics': { queueHaptic() {} },
+  '../audio/sfxLimiter': { playLimited: (_name, _request, play) => { play(); return true; }, SFX_PRIORITY: { whoosh: 1, tap: 2, land: 3 } },
+  '../hooks/usePresentationQueue': { usePresentationSlot: () => ({ visible: false, done() {} }) },
+};
 function recoveredWin() {
   const navigation = [], prefetches = [], milestoneReads = [];
   const attempt = { id: 10, task_id: 104, task_type: 'task', status: 'won', ticket_cost: 1,
@@ -29,6 +37,7 @@ function recoveredWin() {
     '../services/collection/earnedShelf': require('./helpers/earned-shelf.cjs'),
     '../constants/coinTiers': coinTiers,
     '../screens/LeaderboardsScreen/standingsCache': { markStandingsStale: () => { standingsMarks.count++; } },
+    ...progressionStubs,
   }, { open: true, park: { id: 1 }, redeemable: { type: 'task', model: { id: 104, name: 'Forbidden Journey' } },
     close() { view.props.open = false; }, onPress() {} });
   return { view, navigation, prefetches, milestoneReads, standingsMarks, game: () => view.find(node => node.type === 'react-native-modal'),
@@ -132,6 +141,7 @@ function coinUpgrade({ success = false, reduced = true } = {}) {
     '../hooks/useReducedGameMotion': { default: () => reduced },
     '../helpers/haptics': { impactAsync() {}, notificationAsync() {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} },
     '../constants/coinTiers': coinTiers,
+    ...progressionStubs,
   }, { visible: true, rideCoin: { id: 13, ride_name: 'Forbidden Journey', current_level: 1, max_level: 5,
     is_unlocked: true, parts_to_next_level: 2, energy_to_next_level: 10, next_level_perks: [], current_perks: [] },
     playerEnergy: 160, playerParts: 4, onClose() {}, onLevelUp() { calls++; return request; } });
@@ -145,6 +155,7 @@ test('a coin that cannot power up offers its one next step, never a dead end', (
     'lottie-react-native': {}, '../helpers/haptics': {}, '../config': {}, './HoloCoinPreview': {}, './Ribbon': {},
     './YellowButton': {}, './CoinUpgradeDemo': {}, '../context/AuthProvider': {}, '../context/SoundEffectProvider': {},
     '../hooks/useReducedGameMotion': {}, '../ui/GameIcon': {}, '../RootNavigation': {},
+    ...progressionStubs, './coin/CoinStand': {}, './coin/Crowning': {}, './coin/LevelUpBurst': {}, './coin/PerkTrack': {},
   });
   assert.equal(missingResourceAction(1, 40).label, 'Get 1 Ride Part');
   assert.equal(missingResourceAction(3, 0).label, 'Get 3 Ride Parts');

@@ -8,9 +8,11 @@ const { plain } = require('./helpers/plain.cjs');
 
 test('coin tiers are brand blue, white and gold; level 1 is Classic; unknown levels clamp', () => {
   const tiers = loadTs('src/constants/coinTiers.ts');
-  assert.deepEqual(plain(tiers.COIN_TIERS.map(t => t.name)), ['Classic', 'Silver', 'Gold', 'Prismatic', 'Legendary']);
+  // Progression v2 (S2): ten tiers, matching config/progression.php on the server.
+  assert.deepEqual(plain(tiers.COIN_TIERS.map(t => t.name)), ['Classic', 'Silver', 'Gold', 'Prismatic', 'Legendary',
+    'Sapphire', 'Tidal', 'Starlight', 'Royal', 'Shark Crown']);
   assert.equal(tiers.coinTier(0).name, 'Classic');
-  assert.equal(tiers.coinTier(99).name, 'Legendary');
+  assert.equal(tiers.coinTier(99).name, 'Shark Crown');
   assert.equal(tiers.coinLevelLabel(3), 'Level 3 · Gold');
   const neon = /#(ec4899|a78bfa|c4b5fd|c084fc|8b5cf6|f472b6|9c27b0)/i;
   for (const file of ['src/constants/coinTiers.ts', 'src/components/CoinUpgradeDemo.tsx', 'src/components/CoinLevelingModal.tsx',

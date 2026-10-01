@@ -11,8 +11,6 @@ import {
   View,
 } from 'react-native';
 import Modal from 'react-native-modal';
-import Lottie from 'lottie-react-native';
-import * as Haptics from '../helpers/haptics';
 import config from '../config';
 import HoloCoinPreview from './HoloCoinPreview';
 import Ribbon from './Ribbon';
@@ -24,6 +22,15 @@ import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { COIN_TIERS, coinTier } from '../constants/coinTiers';
 import GameIcon from '../ui/GameIcon';
+import { queueHaptic } from '../gamekit/Haptics';
+import { playLimited, SFX_PRIORITY } from '../audio/sfxLimiter';
+import { usePresentationSlot } from '../hooks/usePresentationQueue';
+import type { LevelUpResult } from '../api/endpoints/me/ride-coins/level-up';
+import CoinStand from './coin/CoinStand';
+import Crowning from './coin/Crowning';
+import LevelUpBurst from './coin/LevelUpBurst';
+import PerkTrack from './coin/PerkTrack';
+import { LEVEL_UP_ACTS, levelRibbon, levelUpFx, revealCard, type LevelUpFx, type LevelUpUnlocks } from './coin/progressionModel';
 import type { CollectedRideCoin } from '../api/endpoints/me/ride-coins/show';
 
 const SHORT_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -42,7 +49,8 @@ interface Props {
   playerEnergy: number;
   playerParts: number;
   onClose: () => void;
-  onLevelUp: (rideCoinId: number) => Promise<boolean>;
+  /** true / the server's level-up reply on success, false on failure. */
+  onLevelUp: (rideCoinId: number) => Promise<boolean | LevelUpResult>;
   onFeature: (assetId: number | null) => Promise<boolean>;
   onPlayInLine?: () => void;
 }
@@ -52,7 +60,8 @@ type ModalState = 'preview' | 'confirm' | 'leveling' | 'success' | 'maxed';
 // Tier names, colours and looks come from the one tier token file.
 const TIER_NAMES = COIN_TIERS.map(tier => tier.name);
 const TIER_VISUAL_REWARDS = COIN_TIERS.map(tier => tier.look);
-const TIER_COLORS = COIN_TIERS.map(tier => tier.ring === '#ffffff' ? tier.ringDeep : tier.ringDeep);
+const TIER_COLORS = COIN_TIERS.map(tier => tier.ringDeep);
+const TOP_TIER = COIN_TIERS.length - 1;
 
 /** The one next step when a coin cannot power up yet (never a dead end). */
 export function missingResourceAction(missingParts: number, missingEnergy: number): { label: string; kind: 'parts' | 'energy' } | null {
@@ -104,7 +113,13 @@ export default function CoinLevelingModal({
   const successScale = useRef(new Animated.Value(0)).current;
   const successRotate = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
-  const confettiRef = useRef<Lottie>(null);
+  // Progression v2 level-up: three acts, the burst, the reveal and the Crowning.
+  const [fx, setFx] = useState<LevelUpFx | null>(null);
+  const [burstKey, setBurstKey] = useState(0);
+  const [unlocks, setUnlocks] = useState<LevelUpUnlocks | null>(null);
+  const [levelXp, setLevelXp] = useState(0);
+  const [crowningId, setCrowningId] = useState<string | null>(null);
+  const crowningSlot = usePresentationSlot(crowningId, 'crowning', 'coin_shelf');
   const pendingLinePlayRef = useRef(false);
   const pendingExploreRef = useRef(false);
   const [showPartsHelp, setShowPartsHelp] = useState(false);
@@ -120,6 +135,7 @@ export default function CoinLevelingModal({
       setShowEditions(false);
       setFeatureError(false);
       setUpgradeError(null);
+      setFx(null); setUnlocks(null); setLevelXp(0);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
       setState(isMax ? 'maxed' : 'preview');
     }
@@ -163,12 +179,13 @@ export default function CoinLevelingModal({
   const currentLevel = rideCoin.current_level;
   const nextLevel = Math.min(currentLevel + 1, rideCoin.max_level);
   const isMaxLevel = currentLevel >= rideCoin.max_level;
-  const tierColor = TIER_COLORS[Math.min(currentLevel - 1, 4)];
-  const nextTierColor = TIER_COLORS[Math.min(nextLevel - 1, 4)];
-  const tierName = TIER_NAMES[Math.min(currentLevel - 1, 4)];
-  const nextTierName = TIER_NAMES[Math.min(nextLevel - 1, 4)];
-  const nextVisualReward = TIER_VISUAL_REWARDS[Math.min(nextLevel - 1, 4)];
+  const tierColor = TIER_COLORS[Math.min(currentLevel - 1, TOP_TIER)];
+  const nextTierColor = TIER_COLORS[Math.min(nextLevel - 1, TOP_TIER)];
+  const tierName = TIER_NAMES[Math.min(currentLevel - 1, TOP_TIER)];
+  const nextTierName = TIER_NAMES[Math.min(nextLevel - 1, TOP_TIER)];
+  const nextVisualReward = TIER_VISUAL_REWARDS[Math.min(nextLevel - 1, TOP_TIER)];
 
+  const reveal = state === 'success' ? revealCard(unlocks, levelXp) : null;
   const hasEnergy = playerEnergy >= rideCoin.energy_to_next_level;
   const hasParts = playerParts >= rideCoin.parts_to_next_level;
   const canLevelUp = !isMaxLevel && rideCoin.is_unlocked && hasEnergy && hasParts;
@@ -184,9 +201,10 @@ export default function CoinLevelingModal({
     setUpgradeError(null);
 
     setState('leveling');
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }
+    setUnlocks(null);
+    setLevelXp(0);
+    const plan = levelUpFx(nextLevel, rideCoin.parts_to_next_level, { reducedMotion });
+    setFx(plan);
 
     // Phase 1: Coin shakes and charges up
     const shake = Animated.loop(
@@ -199,14 +217,14 @@ export default function CoinLevelingModal({
 
     const chargeUp = Animated.timing(progressAnim, {
       toValue: 1,
-      duration: 1600,
+      duration: LEVEL_UP_ACTS.charge.end,
       easing: Easing.inOut(Easing.ease),
       useNativeDriver: false,
     });
 
     const scaleUp = Animated.timing(coinScale, {
-      toValue: 1.15,
-      duration: 1600,
+      toValue: 1.12,
+      duration: LEVEL_UP_ACTS.charge.end,
       easing: Easing.inOut(Easing.ease),
       useNativeDriver: true,
     });
@@ -218,31 +236,34 @@ export default function CoinLevelingModal({
     const charged = reducedMotion ? Promise.resolve() : new Promise<void>((resolve) => {
       charge.start(() => resolve());
     });
-    const chargeTicks = Platform.OS === 'ios' && !reducedMotion ? [
-      [400, Haptics.ImpactFeedbackStyle.Light],
-      [800, Haptics.ImpactFeedbackStyle.Medium],
-      [1200, Haptics.ImpactFeedbackStyle.Heavy],
-    ].map(([ms, style]) => setTimeout(() => Haptics.impactAsync(style as any), ms as number)) : [];
+    // Light 300, Medium 600, Heavy 900 through the app-wide haptic gate.
+    const chargeTicks = plan.haptics.filter(tick => tick.intent !== 'success')
+      .map(tick => setTimeout(() => queueHaptic(tick.intent), tick.at));
 
     upgradeTimers.current = chargeTicks;
     // Phase 2: Flash + success
     try {
-      const [success] = await Promise.all([onLevelUp(rideCoin.id), charged]);
+      const [outcome] = await Promise.all([onLevelUp(rideCoin.id), charged]);
       stopUpgradeEffects();
       if (!mounted.current) return;
+      const result = typeof outcome === 'object' && outcome ? outcome : null;
+      const success = outcome === true || !!result?.success;
 
       if (success) {
-        playSound(require('../../assets/sounds/reward.mp3'));
-        if (Platform.OS === 'ios') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
+        playLimited('coin-level-up', { priority: SFX_PRIORITY.land, durationMs: 900 },
+          () => { playSound(require('../../assets/sounds/reward.mp3')); });
+        queueHaptic('success');
+        setUnlocks(result?.unlocks ?? null);
+        setLevelXp(result?.xp ?? 0);
+        setBurstKey(key => key + 1);
+        // Level 10: the Crowning takes the screen when the PresentationQueue allows it.
+        if (plan.crowning) setCrowningId(`crowning:${rideCoin.id}:${Date.now()}`);
 
         // Stop shake, big pop
         shakeAnim.setValue(0);
         coinScale.setValue(0.5);
 
         setState('success');
-        if (!reducedMotionRef.current) confettiRef.current?.play();
 
         const celebration = Animated.parallel([
           Animated.spring(coinScale, { toValue: 1, friction: 4, tension: 100, useNativeDriver: true }),
@@ -272,9 +293,7 @@ export default function CoinLevelingModal({
       shakeAnim.setValue(0);
       coinScale.setValue(1);
       progressAnim.setValue(0);
-      if (Platform.OS === 'ios') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
+      queueHaptic('failBuzz');
     } finally {
       upgradeBusy.current = false;
     }
@@ -337,20 +356,6 @@ export default function CoinLevelingModal({
       statusBarTranslucent
       style={{ margin: 0, alignItems: 'center', justifyContent: 'center' }}
     >
-      {/* Confetti overlay: only render during success to avoid artifact */}
-      {state === 'success' && !reducedMotion && (
-        <Lottie
-          ref={confettiRef}
-          source={require('../../assets/animations/confetti.json')}
-          autoPlay={false}
-          loop={false}
-          style={{
-            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            zIndex: 100, pointerEvents: 'none',
-          }}
-        />
-      )}
-
       <Animated.View style={{
         opacity: fadeIn,
         transform: [{ translateY: slideUp }],
@@ -360,8 +365,8 @@ export default function CoinLevelingModal({
       }}>
         {/* ── Ribbon Header ── */}
         <Ribbon text={
-          state === 'success' ? 'Level Up!' :
-          isMaxLevel ? 'Legendary' :
+          state === 'success' ? levelRibbon(nextLevel) :
+          isMaxLevel ? tierName :
           rideCoin.ride_name
         } />
 
@@ -407,12 +412,18 @@ export default function CoinLevelingModal({
                     activeOpacity={0.8}
                     onPress={() => state !== 'leveling' && setHoloVisible(true)}
                   >
-                    <CoinUpgradeDemo
-                      level={state === 'success' ? nextLevel : currentLevel}
-                      coinUrl={rideCoin.coin_url}
-                      size={120}
-                      showLabel={false}
-                    />
+                    <View style={{ alignItems: 'center', justifyContent: 'center', marginTop: (state === 'success' ? nextLevel : currentLevel) >= 10 ? 26 : 0,
+                      marginBottom: (state === 'success' ? nextLevel : currentLevel) >= 6 ? 14 : 0 }}>
+                      <CoinStand level={state === 'success' ? nextLevel : currentLevel} size={120} layer="stand" />
+                      <CoinUpgradeDemo
+                        level={state === 'success' ? nextLevel : currentLevel}
+                        coinUrl={rideCoin.coin_url}
+                        size={120}
+                        showLabel={false}
+                      />
+                      <CoinStand level={state === 'success' ? nextLevel : currentLevel} size={120} layer="crown" />
+                      <LevelUpBurst fx={fx} size={120} playKey={burstKey} />
+                    </View>
                   </TouchableOpacity>
                 </Animated.View>
 
@@ -477,15 +488,19 @@ export default function CoinLevelingModal({
                   </TouchableOpacity>
                 )}
 
+                {!!rideCoin.perk_track?.length && !showEditions && (state === 'preview' || state === 'maxed') && (
+                  <PerkTrack track={rideCoin.perk_track} currentLevel={currentLevel} reduced={reducedMotion} />
+                )}
+
                 {/* ── Level Progress Dots ── */}
-                <View style={{
+                {!rideCoin.perk_track?.length && <View style={{
                   flexDirection: 'row',
                   gap: 5,
                   marginBottom: 8,
                 }}>
                   {Array.from({ length: rideCoin.max_level }).map((_, i) => {
                     const filled = state === 'success' ? i < nextLevel : i < currentLevel;
-                    const dotColor = TIER_COLORS[Math.min(i, 4)];
+                    const dotColor = TIER_COLORS[Math.min(i, TOP_TIER)];
                     return (
                       <View key={i} style={{
                         width: 14, height: 14, borderRadius: 7,
@@ -505,7 +520,7 @@ export default function CoinLevelingModal({
                       </View>
                     );
                   })}
-                </View>
+                </View>}
 
                 {/* ── Your rides: the ride journal behind this coin ── */}
                 {yourRides && yourRides.count > 0 && (state === 'preview' || state === 'maxed') && !showEditions && (
@@ -852,8 +867,21 @@ export default function CoinLevelingModal({
                         {nextVisualReward}
                       </Text>
 
-                      {/* New perks unlocked */}
-                      {rideCoin.next_level_perks.length > 0 && (
+                      {/* Progression v2 reveal: the perk or milestone card and its chips (server data). */}
+                      {reveal && (
+                        <View style={{ marginTop: 10, width: '100%', backgroundColor: '#ffffff', borderRadius: 12,
+                          borderWidth: 2, borderColor: '#ffcf3b', padding: 10, alignItems: 'center' }}>
+                          <Text style={{ fontFamily: 'Shark', fontSize: 16, color: '#05346e', textAlign: 'center' }}>{reveal.title}</Text>
+                          <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: '#19496B', textAlign: 'center', marginTop: 2 }}>{reveal.line}</Text>
+                          {reveal.chips.length > 0 && <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 6 }}>
+                            {reveal.chips.map(chip => <Text key={chip} style={{ fontFamily: 'Shark', fontSize: 13, color: '#05346e',
+                              backgroundColor: '#fff5d6', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3, overflow: 'hidden' }}>{chip}</Text>)}
+                          </View>}
+                        </View>
+                      )}
+
+                      {/* New perks unlocked (legacy curve) */}
+                      {!reveal && rideCoin.next_level_perks.length > 0 && (
                         <View style={{ marginTop: 12, width: '100%' }}>
                           <Text style={{
                             fontFamily: 'Knockout', fontSize: 11,
@@ -901,7 +929,7 @@ export default function CoinLevelingModal({
                         color: '#9D6300',
                         marginBottom: 4,
                       }}>
-                        LEGENDARY
+                        {tierName.toUpperCase()}
                       </Text>
                       <Text style={{
                         fontFamily: 'Knockout', fontSize: 14,
@@ -911,6 +939,11 @@ export default function CoinLevelingModal({
                       }}>
                         This coin has reached maximum power!
                       </Text>
+                      {typeof rideCoin.parts_banked === 'number' && (
+                        <Text style={{ fontFamily: 'Knockout', fontSize: 14, color: '#19496B', textAlign: 'center', marginBottom: 8 }}>
+                          Parts banked: {rideCoin.parts_banked}{rideCoin.polish?.next_cost ? `. Next Trophy Polish: ${rideCoin.polish.next_cost} Parts` : ''}
+                        </Text>
+                      )}
 
                       {/* All perks */}
                       {rideCoin.current_perks.length > 0 && (
@@ -958,6 +991,12 @@ export default function CoinLevelingModal({
           </ScrollView>
         </View>
       </Animated.View>
+
+      {crowningSlot.visible && (
+        <Crowning rideName={rideCoin.ride_name} coinUrl={rideCoin.coin_url} boss={rideCoin.boss ?? null}
+          reduced={reducedMotion} playSound={playSound}
+          onDone={() => { crowningSlot.done(); setCrowningId(null); }} />
+      )}
 
       <HoloCoinPreview
         visible={holoVisible}

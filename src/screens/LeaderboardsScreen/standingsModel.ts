@@ -95,7 +95,7 @@ export function experienceScore(
   return Number(player.total_experience) || 0;
 }
 
-export type RideMetric = 'today' | 'collection' | 'mastery';
+export type RideMetric = 'today' | 'collection' | 'mastery' | 'masters';
 
 /** Copy for the Rides tab: the line under the pills, the empty state and the score unit. */
 export function rideMetricCopy(metric: RideMetric, parkDay: string | null | undefined, available: number) {
@@ -115,6 +115,16 @@ export function rideMetricCopy(metric: RideMetric, parkDay: string | null | unde
       emptyMessage: 'Nobody has a ride coin from this park yet. Win a ride challenge to claim the top spot.',
       unit: 'ride coins',
       detail: 'Ride coins collected',
+    };
+  }
+  if (metric === 'masters') {
+    // Ride Masters (progression v2): crowns first, then Ride Boss clears, polish, levels.
+    return {
+      caption: 'Ride Masters: Level 10 coins crowned at this park',
+      emptyTitle: 'Be the first Ride Master',
+      emptyMessage: 'Nobody has crowned a ride coin here yet. Level a favorite ride to 10 to take the top spot.',
+      unit: 'crowns',
+      detail: 'Crowned coins',
     };
   }
   return {

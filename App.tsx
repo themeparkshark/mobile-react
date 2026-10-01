@@ -75,6 +75,7 @@ import { ThemeProvider } from './src/context/ThemeProvider';
 import CurrencyFlyProvider from './src/context/CurrencyFlyProvider';
 import { TutorialProvider } from './src/components/Tutorial';
 import LinePlayRewardRecovery from './src/services/lineplay/LinePlayRewardRecovery';
+import RemintNoticeModal from './src/components/RemintNoticeModal';
 
 export default function App() {
   if (__DEV__ && process.env.EXPO_PUBLIC_ERROR_FALLBACK_PREVIEW === '1') {
@@ -100,6 +101,8 @@ export default function App() {
                               <TutorialProvider>
                                 <ToastProvider>
                                   <Root />
+                                  {/* Progression v2: the one-time re-mint card, through the PresentationQueue. */}
+                                  <RemintNoticeModal />
                                 </ToastProvider>
                               </TutorialProvider>
                             </CurrencyFlyProvider>

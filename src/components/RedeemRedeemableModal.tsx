@@ -28,6 +28,7 @@ import { getStamps, type StampData } from '../api/endpoints/me/stamps';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
+import { serverPerkChips, type PerkChipData } from './coin/progressionModel';
 import ChallengeStatusCard from './rewards/ChallengeStatusCard';
 import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
 import { challengeRibbon, outOfTicketsCopy, type TicketSources } from './rewards/challengeCopy';
@@ -133,6 +134,7 @@ export default function RedeemRedeemableModal({
   const [earnedEdition, setEarnedEdition] = useState<EarnedCoinEdition | null>(null);
   const [rideControl, setRideControl] = useState<RideControlReward | null>(null);
   const [rush, setRush] = useState<RushReward | null>(null);
+  const [perkChips, setPerkChips] = useState<PerkChipData[]>([]);
   const [earnedFirstCoinStamp, setEarnedFirstCoinStamp] = useState<StampData | null>(null);
   const [nextRideTicketEarned, setNextRideTicketEarned] = useState(0);
   const [postWinCoin, setPostWinCoin] = useState<RideCoinLevelType | null>(null);
@@ -203,6 +205,7 @@ export default function RedeemRedeemableModal({
       setEarnedEdition(null);
       setRideControl(null);
       setRush(null);
+      setPerkChips([]);
       setEarnedFirstCoinStamp(null);
       setPostWinCoin(null);
       setPostWinEnergy(null);
@@ -254,6 +257,7 @@ export default function RedeemRedeemableModal({
       setEarnedEdition(attempt.rewards.coin_edition ?? null);
       setRideControl(attempt.rewards.ride_control ?? null);
       setRush(attempt.rewards.rush ?? null);
+      setPerkChips(serverPerkChips(attempt.rewards.perks));
       setNextRideTicketEarned(attempt.rewards.next_ride_ticket_earned ?? 0);
       setEarnedFirstCoinStamp(null);
       if (attempt.rewards.coin_times_collected === 1) {
@@ -847,6 +851,7 @@ export default function RedeemRedeemableModal({
         earnedEdition={earnedEdition}
         rideControl={rideControl}
         rush={rush}
+        perks={perkChips}
         playerId={player?.id ?? null}
         earnedStamp={earnedFirstCoinStamp}
         nextRideTicketEarned={nextRideTicketEarned}

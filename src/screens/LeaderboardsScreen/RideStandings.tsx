@@ -13,19 +13,24 @@ import { ParkType } from '../../models/park-type';
 import { PlayerType } from '../../models/player-type';
 import { BRAND, GameIcon, SharkLoader, textPreset, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
+import { useProgressionFlags } from '../../services/progression/progressionFlags';
 import { StandingsInvite, StandingsListCard, StandingsRow } from './StandingsRow';
 import { defaultStandingsPark, rideMetricCopy, standingsStatus, type RideMetric, type StandingsStatus } from './standingsModel';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 
-const METRICS: readonly { key: RideMetric; label: string; icon: GameIconName }[] = [
+const BASE_METRICS: readonly { key: RideMetric; label: string; icon: GameIconName }[] = [
   { key: 'today', label: 'TODAY', icon: 'timer' },
   { key: 'collection', label: 'COLLECT', icon: 'coin' },
   { key: 'mastery', label: 'MASTER', icon: 'star' },
 ];
+/** Ride Masters (progression v2) is a segment here, never a new top-level tab (economy review K6). */
+const MASTERS_METRIC = { key: 'masters' as RideMetric, label: 'CROWNS', icon: 'crown' as GameIconName };
 
 /** A segmented pill row with a gold slider that springs to the chosen metric. */
-function MetricPills({ value, onChange }: { readonly value: RideMetric; readonly onChange: (metric: RideMetric) => void }) {
+function MetricPills({ value, onChange, metrics }: { readonly value: RideMetric; readonly onChange: (metric: RideMetric) => void;
+  readonly metrics: readonly { key: RideMetric; label: string; icon: GameIconName }[] }) {
+  const METRICS = metrics;
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
   const [width, setWidth] = useState(0);
@@ -78,6 +83,8 @@ export default function RideStandings() {
   const [refreshing, setRefreshing] = useState(false);
   const [parksReload, setParksReload] = useState(0);
   const scopeRef = useRef('');
+  const { progressionV2 } = useProgressionFlags();
+  const metrics = progressionV2 ? [...BASE_METRICS, MASTERS_METRIC] : BASE_METRICS;
 
   const parkId = defaultStandingsPark({
     chosenParkId, locationParkId: currentPark?.id, playerParkId: player?.current_park_id, parkIds: parks.map(p => p.id),
@@ -122,8 +129,9 @@ export default function RideStandings() {
 
   const copy = rideMetricCopy(metric, parkDay, available);
   const detailFor = (entry: PlayerType) => metric === 'today' ? copy.detail
-    : metric === 'mastery' ? `${entry.ride_coins_collected ?? 0} ride coins`
-      : `${entry.coin_upgrades ?? 0} upgrade levels`;
+    : metric === 'masters' ? `${entry.ride_masters?.boss_clears ?? 0} boss clears · ${entry.ride_masters?.polish_stars ?? 0} polish`
+      : metric === 'mastery' ? `${entry.ride_coins_collected ?? 0} ride coins`
+        : `${entry.coin_upgrades ?? 0} upgrade levels`;
 
   return (
     <ScrollView
@@ -142,7 +150,7 @@ export default function RideStandings() {
             items={parks.map(park => ({ label: park.display_name ?? park.name, value: park.id }))}
           />
         </View>
-        <MetricPills value={metric} onChange={setMetric} />
+        <MetricPills value={metric} onChange={setMetric} metrics={metrics} />
         <Text style={[textPreset('bodySmall', 'onBlue'), { textAlign: 'center', marginBottom: 14,
           textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }]}>
           {copy.caption}
@@ -164,7 +172,7 @@ export default function RideStandings() {
               onAction={() => RootNavigation.navigate('Explore')} icon="ride" />
           ) : players.map((entry, index) => (
             <StandingsRow key={entry.id} player={entry} rank={index + 1} index={index} highlight enterDelayBase={80}
-              score={Number(entry.park_coins) || 0} scoreIcon={metric === 'today' ? 'ride' : metric === 'collection' ? 'coin' : 'star'}
+              score={Number(entry.park_coins) || 0} scoreIcon={metric === 'today' ? 'ride' : metric === 'collection' ? 'coin' : metric === 'masters' ? 'crown' : 'star'}
               detail={detailFor(entry)} isMe={entry.id === player?.id} />
           ))}
         </StandingsListCard>

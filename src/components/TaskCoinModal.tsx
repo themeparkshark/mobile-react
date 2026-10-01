@@ -209,7 +209,8 @@ export default function TaskCoinModal({
               upgradedDuringVisit.current = true;
               if (player?.id) upsertCoin(player.id, result.ride_coin);
             }
-            return ok;
+            // The reply carries the v2 reveal (unlocks, level-up XP) for the sheet.
+            return ok ? result : false;
           } catch (error) {
             // A response can be lost after the atomic upgrade commits. Read it
             // back before offering a retry of the same expected level.

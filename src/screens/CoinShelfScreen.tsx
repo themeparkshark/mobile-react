@@ -26,12 +26,18 @@ import GameIcon from '../ui/GameIcon';
 import SharkLoader from '../ui/SharkLoader';
 
 const PREVIEW_COINS: CollectedRideCoin[] = [
-  { id: 1, ride_id: 1, ride_name: 'Space Coaster', coin_url: '', current_level: 1, max_level: 5, times_collected: 1,
+  { id: 1, ride_id: 1, ride_name: 'Space Coaster', coin_url: '', current_level: 1, max_level: 10, times_collected: 1,
     available_parts: 2, energy_to_next_level: 10, parts_to_next_level: 2, required_parts: [], player_level_required: 1,
     is_unlocked: true, current_perks: [], next_level_perks: [], park_id: 1, park_name: 'Sample Park' },
-  { id: 2, ride_id: 2, ride_name: 'River Boats', coin_url: '', current_level: 3, max_level: 5, times_collected: 4,
+  { id: 2, ride_id: 2, ride_name: 'River Boats', coin_url: '', current_level: 3, max_level: 10, times_collected: 4,
     available_parts: 1, energy_to_next_level: 50, parts_to_next_level: 12, required_parts: [], player_level_required: 1,
     is_unlocked: true, current_perks: [], next_level_perks: [], park_id: 1, park_name: 'Sample Park' },
+  // Progression v2: Lv5, 6, 8 and 10 on one shelf (stands, crown).
+  ...[[3, 'Pirate Cove', 5], [4, 'Wave Racer', 6], [5, 'Star Flyer', 8], [6, 'Harbor Boss Coaster', 10]].map(([id, name, level]) => ({
+    id: id as number, ride_id: id as number, ride_name: name as string, coin_url: '', current_level: level as number, max_level: 10,
+    times_collected: 6, available_parts: 0, energy_to_next_level: 0, parts_to_next_level: 0, required_parts: [],
+    player_level_required: 1, is_unlocked: true, current_perks: [], next_level_perks: [], park_id: 1, park_name: 'Sample Park',
+  })),
 ];
 
 /** Where a focusCoin link should go: the coin's park shelf, when we know the park. */

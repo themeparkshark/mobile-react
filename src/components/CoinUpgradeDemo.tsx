@@ -23,7 +23,7 @@ const PRISMATIC_COLORS = ['#5fd0ff', '#ffffff', '#0879ca', '#ffcf3b', '#bfe5ff',
 const EARNED_RIM_COLORS = COIN_TIERS.map(tier => tier.ring);
 
 export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor, animate = true, showLabel = true }: Props) {
-  const cfg = LEVEL_CONFIG[Math.min(level - 1, 4)];
+  const cfg = LEVEL_CONFIG[Math.min(level - 1, LEVEL_CONFIG.length - 1)];
   const effectArea = size * 1.5; // total effect zone
   const [reducedMotion, setReducedMotion] = useState(true);
 
@@ -428,7 +428,7 @@ export default function CoinUpgradeDemo({ level, coinUrl, size = 70, labelColor,
           height: size,
           borderRadius: size / 2,
           borderWidth: level === 1 ? 2 : 4,
-          borderColor: EARNED_RIM_COLORS[Math.min(level - 1, 4)],
+          borderColor: EARNED_RIM_COLORS[Math.min(level - 1, EARNED_RIM_COLORS.length - 1)],
           ...Platform.select({
             ios: {
               shadowColor: level >= 5 ? '#ffb400' : level >= 4 ? '#5fd0ff' : level >= 3 ? '#fbbf24' : '#05346e',
