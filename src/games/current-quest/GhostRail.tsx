@@ -1,6 +1,6 @@
 /**
  * Async ghost race rail (design 14.3): your shark and your best run on this
- * exact seed ride a 3-voyage track. Rail only: the ghost's route is never
+ * exact seed ride a 2- or 3-voyage track. Rail only: the ghost's route is never
  * drawn on your board, and split-delta chips at each clear compare strokes,
  * never routes. Rank keys never use raw time.
  */
@@ -26,10 +26,10 @@ function ghostProgress(g: GhostRun, elapsed: number): number {
   return done;
 }
 
-function Racer({ source, frac, label, ghost }: { source: number; frac: number; label: string; ghost?: boolean }) {
+function Racer({ source, frac, label, ghost, total }: { source: number; frac: number; label: string; ghost?: boolean; total: number }) {
   const x = useSharedValue(frac);
   useEffect(() => { x.value = withSpring(frac, { damping: 14, stiffness: 120 }); }, [frac, x]);
-  const st = useAnimatedStyle(() => ({ left: `${Math.min(1, x.value / 3) * 88}%` }));
+  const st = useAnimatedStyle(() => ({ left: `${Math.min(1, x.value / total) * 88}%` }));
   return (
     <Animated.View style={[styles.racer, st]}>
       <Image source={source} style={[styles.avatar, ghost && styles.ghost]} />
@@ -38,19 +38,19 @@ function Racer({ source, frac, label, ghost }: { source: number; frac: number; l
   );
 }
 
-export const GhostRail = React.memo(function GhostRail({ ghost, elapsedMs, voyage, cleared }: {
-  ghost: GhostRun; elapsedMs: number; voyage: number; cleared: number;
+export const GhostRail = React.memo(function GhostRail({ ghost, elapsedMs, voyage, cleared, total = 3 }: {
+  ghost: GhostRun; elapsedMs: number; voyage: number; cleared: number; total?: number;
 }) {
   const g = ghostProgress(ghost, elapsedMs);
   const you = Math.max(cleared, Math.min(voyage + 0.5, cleared + 0.5));
   return (
     <View style={styles.wrap} pointerEvents="none" accessibilityLabel={`Racing your ghost: ${ghost.shells} shells last time`}>
       <View style={styles.track}>
-        {[1, 2].map((k) => <View key={`t${k}`} style={[styles.tick, { left: `${(k / 3) * 88 + 4}%` }]} />)}
-        <Text style={styles.goal}>{`Ghost: ${ghost.shells}/9`}</Text>
+        {Array.from({ length: total - 1 }, (_, i) => i + 1).map((k) => <View key={`t${k}`} style={[styles.tick, { left: `${(k / total) * 88 + 4}%` }]} />)}
+        <Text style={styles.goal}>{`Ghost: ${ghost.shells}/${total * 3}`}</Text>
       </View>
-      <Racer source={GHOST} frac={g} label="ghost" ghost />
-      <Racer source={YOU} frac={you} label="you" />
+      <Racer source={GHOST} frac={g} label="ghost" ghost total={total} />
+      <Racer source={YOU} frac={you} label="you" total={total} />
     </View>
   );
 });

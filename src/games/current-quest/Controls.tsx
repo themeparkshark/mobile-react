@@ -1,7 +1,10 @@
 /**
- * Thumb-zone controls (design 7.1, 7.4): Undo, Tread (hold 250 ms), Tide Tip,
- * Restart (2-tap), Arrows toggle; the walk-safe arrow pad; the stall card.
- * Targets grow from 48 to 56 px while walking. No emoji anywhere.
+ * Thumb-zone controls (design v5 7.1, 7.4): Undo (tap = one, hold = scrub
+ * back one stroke every 250 ms), Tread (hold 250 ms), Tide Tip (Trial: costs
+ * 2 strokes, 2-tap confirm), Restart (free in both profiles, 2-tap confirm),
+ * Arrows toggle; the walk-safe arrow pad; the stall card with the near-miss
+ * line and the wrong-turn marker. Targets grow from 48 to 56 px while walking.
+ * No emoji anywhere.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -17,6 +20,8 @@ const MAGNIFIER = require('../../assets/games/current-quest/magnifier.png');
 const RING = require('../../assets/games/current-quest/life_ring.png');
 
 export const TREAD_HOLD_MS = 250;
+export const SCRUB_HOLD_MS = 300;
+export const SCRUB_STEP_MS = 250;
 
 interface BarProps {
   big: boolean;
@@ -27,9 +32,13 @@ interface BarProps {
   hasTide: boolean;
   tipPulse: boolean;
   tipDisabled: boolean;
+  /** Budget strokes a tip costs (Trial 2, Puzzle 0). */
+  tipCost: number;
   arrows: boolean;
   disabled: boolean;
   onUndo: () => void;
+  /** Hold-to-scrub started / ended (tint and tape-rewind pitch). */
+  onScrub?: (on: boolean) => void;
   onTreadArm: () => void;
   onTreadCommit: () => void;
   onTreadCancel: (early: boolean) => void;
@@ -100,7 +109,7 @@ export const BottomBar = React.memo(function BottomBar(p: BarProps) {
     p.onRestart();
   };
   const tip = () => {
-    if (p.trial && !confirmTip) {
+    if (p.tipCost > 0 && !confirmTip) {
       setConfirmTip(true);
       timers.current.push(setTimeout(() => setConfirmTip(false), 2600));
       return;
@@ -109,11 +118,48 @@ export const BottomBar = React.memo(function BottomBar(p: BarProps) {
     p.onTip();
   };
 
+  // Undo: tap = one undo; hold 300 ms = scrub (Braid / Hitman GO), one stroke every 250 ms.
+  const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrubbed = useRef(false);
+  const stopScrub = () => {
+    if (scrubTimer.current) clearTimeout(scrubTimer.current);
+    scrubTimer.current = null;
+  };
+  useEffect(() => () => stopScrub(), []);
+  const undoIn = () => {
+    scrubbed.current = false;
+    stopScrub();
+    const step = () => {
+      scrubbed.current = true;
+      if (!scrubTimer.current) p.onScrub?.(true);
+      p.onUndo();
+      scrubTimer.current = setTimeout(step, SCRUB_STEP_MS);
+    };
+    scrubTimer.current = setTimeout(step, SCRUB_HOLD_MS);
+  };
+  const undoOut = () => {
+    const was = scrubbed.current;
+    stopScrub();
+    if (was) p.onScrub?.(false);
+    else p.onUndo();
+  };
+
   return (
     <View style={[styles.bar, p.big && styles.barBig]}>
-      <Conch size={size} label={p.undos ? `Undo ${p.undos}` : 'Undo'} onPress={p.onUndo} disabled={p.disabled || !p.canUndo} accessibilityLabel="Undo last stroke">
-        <View style={styles.flip}><GameIcon name="retry" size={size * 0.5} /></View>
-      </Conch>
+      <View style={styles.conchWrap}>
+        <Pressable
+          disabled={p.disabled || !p.canUndo}
+          accessibilityRole="button"
+          accessibilityLabel="Undo last stroke. Hold to rewind several."
+          onPressIn={undoIn}
+          onPressOut={undoOut}
+          hitSlop={4}
+          style={({ pressed }) => [styles.conch, { width: size, height: size, borderRadius: size / 2 }, pressed && styles.pressed, (p.disabled || !p.canUndo) && styles.disabled]}
+        >
+          <View style={styles.flip}><GameIcon name="retry" size={size * 0.5} /></View>
+        </Pressable>
+        <Text style={[styles.conchLabel, (p.disabled || !p.canUndo) && styles.disabledTxt]} numberOfLines={1}>{p.undos ? `Undo ${p.undos}` : 'Undo'}</Text>
+      </View>
       {p.hasTide ? (
         <View style={styles.conchWrap}>
           <Pressable
@@ -149,14 +195,15 @@ export const BottomBar = React.memo(function BottomBar(p: BarProps) {
         </View>
       ) : null}
       <Animated.View style={pulseStyle}>
-        <Conch size={size} label="Tip" onPress={tip} disabled={p.disabled || p.tipDisabled} accessibilityLabel={p.trial ? 'Tide tip, uses a life ring' : 'Tide tip, loses the Par shell'}
-          badge={p.trial ? String(p.rings) : null} confirm={confirmTip ? 'Tip uses a ring' : null}>
+        <Conch size={size} label="Tip" onPress={tip} disabled={p.disabled || p.tipDisabled}
+          accessibilityLabel={p.tipCost > 0 ? `Tide tip, costs ${p.tipCost} strokes and the Par shell` : 'Tide tip, loses the Par shell'}
+          badge={p.tipCost > 0 ? `-${p.tipCost}` : null} confirm={confirmTip ? `Tip: costs ${p.tipCost} strokes` : null}>
           <Image source={MAGNIFIER} style={{ width: size * 0.5, height: size * 0.54 }} />
         </Conch>
       </Animated.View>
-      <Conch size={size} label="Restart" onPress={restart} disabled={p.disabled || (p.trial && p.rings <= 0)} accessibilityLabel="Restart voyage"
-        confirm={confirmRestart ? (p.trial ? 'Use a ring?' : 'Restart voyage?') : null}>
-        {p.trial ? <Image source={RING} style={{ width: size * 0.5, height: size * 0.5 }} /> : <GameIcon name="retry" size={size * 0.5} />}
+      <Conch size={size} label="Restart" onPress={restart} disabled={p.disabled || !p.canUndo} accessibilityLabel="Restart voyage"
+        confirm={confirmRestart ? 'Tap again to restart' : null}>
+        <GameIcon name="retry" size={size * 0.5} />
       </Conch>
       <Conch size={size} label={p.arrows ? 'Swipe' : 'Arrows'} onPress={p.onToggleArrows} accessibilityLabel={p.arrows ? 'Switch to swipe' : 'Switch to arrow buttons'}>
         <View style={p.arrows ? undefined : styles.rotUp}><GameIcon name="arrow" size={size * 0.46} /></View>
@@ -197,39 +244,66 @@ export function ArrowPad({ big, onArm, onCommit, onDisarm, disabled }: {
 
 // ---------------------------------------------------------------------------
 
-export function StallCard({ trial, rings, nearMiss, hintShown, onUndo, onRestart, onContinue }: {
-  trial: boolean; rings: number; nearMiss: string | null; hintShown: boolean;
+export function StallCard({ trial, rings, nearMiss, hintShown, wrongTurn, onUndo, onRestart, onContinue }: {
+  trial: boolean; rings: number; nearMiss: string | null; hintShown: boolean; wrongTurn: boolean;
   onUndo: () => void; onRestart: () => void; onContinue: () => void;
 }) {
+  const lines: string[] = [];
+  if (wrongTurn) lines.push('The red X marks where the route went wrong.');
+  if (hintShown) lines.push('The gold footprint shows a first stroke that works.');
   return (
     <Animated.View entering={SlideInDown.springify().damping(14)} style={styles.stall}>
       <Text style={styles.stallTitle}>{nearMiss ?? 'Out of strokes'}</Text>
-      <Text style={styles.stallBody}>
-        {hintShown ? 'The golden footprint shows a first stroke that works. ' : ''}
-        {trial ? (rings > 0 ? 'Grab a ring for 2 more strokes, or start the voyage fresh.' : 'No rings left.') : 'Undo a stroke or start the voyage fresh. No penalty.'}
-      </Text>
+      {lines.length ? <Text style={styles.stallBody}>{lines.join(' ')}</Text> : <View style={{ height: 8 }} />}
       <View style={styles.stallRow}>
         {trial ? (
           <Pressable onPress={onContinue} disabled={rings <= 0} style={({ pressed }) => [styles.stallBtn, styles.stallPrimary, pressed && styles.pressed, rings <= 0 && styles.disabled]}
             accessibilityRole="button" accessibilityLabel="Use a ring for two more strokes">
             <Image source={RING} style={styles.stallIcon} />
-            <Text style={styles.stallPrimaryTxt}>+2 strokes</Text>
+            <Text style={styles.stallPrimaryTxt}>Use a ring: +2 strokes</Text>
           </Pressable>
         ) : (
-          <Pressable onPress={onUndo} style={({ pressed }) => [styles.stallBtn, styles.stallPrimary, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Undo">
-            <View style={styles.flip}><GameIcon name="retry" size={22} /></View>
-            <Text style={styles.stallPrimaryTxt}>Undo</Text>
-          </Pressable>
+          <>
+            <Pressable onPress={onUndo} style={({ pressed }) => [styles.stallBtn, styles.stallPrimary, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel="Undo">
+              <View style={styles.flip}><GameIcon name="retry" size={22} /></View>
+              <Text style={styles.stallPrimaryTxt}>Undo</Text>
+            </Pressable>
+            <Pressable onPress={onRestart} style={({ pressed }) => [styles.stallBtn, pressed && styles.pressed]}
+              accessibilityRole="button" accessibilityLabel="Restart voyage">
+              <GameIcon name="retry" size={22} />
+              <Text style={styles.stallTxt}>Restart</Text>
+            </Pressable>
+          </>
         )}
-        <Pressable onPress={onRestart} disabled={trial && rings <= 0} style={({ pressed }) => [styles.stallBtn, pressed && styles.pressed, trial && rings <= 0 && styles.disabled]}
-          accessibilityRole="button" accessibilityLabel="Restart voyage">
-          {trial ? <Image source={RING} style={styles.stallIcon} /> : <GameIcon name="retry" size={22} />}
-          <Text style={styles.stallTxt}>Restart</Text>
-        </Pressable>
       </View>
     </Animated.View>
   );
 }
+
+/** The stroke budget as a row of bubbles (E11): spent ones pop empty, par is ticked in gold. */
+export const StrokeBar = React.memo(function StrokeBar({ limit, spent, par, hot, width }: {
+  limit: number; spent: number; par: number; hot: boolean; width: number;
+}) {
+  const n = Math.max(1, limit);
+  const gap = 3;
+  const size = Math.max(9, Math.min(17, (width - 92 - gap * n) / n));
+  return (
+    <View style={[styles.strokeBar, hot && styles.strokeBarHot]} accessibilityLabel={`${spent} of ${limit} strokes used, par ${par}`}>
+      <View style={styles.bubbleRow}>
+        {Array.from({ length: n }, (_, k) => {
+          const used = k < spent;
+          return (
+            <View key={`b${k}`} style={{ width: size, alignItems: 'center' }}>
+              <View style={[styles.bub, { width: size, height: size, borderRadius: size / 2 }, used ? styles.bubUsed : hot ? styles.bubHot : null]} />
+              {k === par - 1 ? <View style={styles.parTick} /> : null}
+            </View>
+          );
+        })}
+      </View>
+      <Text style={[styles.strokeTxt, hot && styles.strokeTxtHot]}>{`${spent} / ${limit}`}</Text>
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   bar: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'flex-start', paddingTop: 6, paddingHorizontal: 6, paddingBottom: 26 },
@@ -264,4 +338,16 @@ const styles = StyleSheet.create({
   stallPrimaryTxt: { fontFamily: 'Shark', fontSize: 18, color: CQ.navy },
   stallTxt: { fontFamily: 'Shark', fontSize: 18, color: CQ.navy },
   stallIcon: { width: 24, height: 24, resizeMode: 'contain' },
+  strokeBar: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.88)', borderWidth: 2, borderColor: CQ.ink,
+  },
+  strokeBarHot: { backgroundColor: '#ffe3df', borderColor: CQ.coral },
+  bubbleRow: { flexDirection: 'row', gap: 3, alignItems: 'flex-start' },
+  bub: { backgroundColor: '#bfeefe', borderWidth: 1.5, borderColor: CQ.ink },
+  bubUsed: { backgroundColor: 'rgba(255,255,255,0.3)', borderColor: 'rgba(47,47,58,0.35)' },
+  bubHot: { backgroundColor: '#ffc2ba' },
+  parTick: { width: 4, height: 6, borderRadius: 2, backgroundColor: CQ.gold, borderWidth: 1, borderColor: CQ.ink, marginTop: 1 },
+  strokeTxt: { fontFamily: 'Shark', fontSize: 17, color: CQ.navy },
+  strokeTxtHot: { color: CQ.coral },
 });

@@ -13,7 +13,8 @@
  *   to Chris's closest sound until Dustin approves them by ear.
  */
 
-import { GameAudio } from '../../gamekit/audio/GameAudio';
+import { GameAudio, type PlayOptions } from '../../gamekit/audio/GameAudio';
+import { nextBarMs } from '../../gamekit/core/audioMix';
 import { registerStudioAudio } from '../../gamekit/audio/studioLibrary';
 import type { CueDef } from '../../gamekit/audio/chrisBank';
 
@@ -36,11 +37,14 @@ export function registerCqAudio(): void {
   registerSequences();
 }
 
+/** Every cue is loaded into the voice pool at game open; nothing loads mid-play (11.5). */
 export const CQ_PRELOAD = [
   'cq_swim', 'cq_aim', 'cq_pearl', 'cq_golden_pearl', 'cq_current_grab', 'cq_spit_out', 'sk_bump', 'cq_upstream',
   'cq_lock_rattle', 'cq_tread', 'cq_undo', 'cq_riptide', 'cq_beached', 'cq_chest_open', 'sh_wave_wash', 'sh_thud',
-  'cq_ring_on', 'cq_ring_lost', 'cq_whirlpool', 'cq_shell_tick', 'sh_heads_up', 'sh_bubble_pop',
-  'cq_carry_1', 'cq_carry_2', 'cq_carry_3', 'cq_carry_4', 'cq_carry_5', 'cq_carry_6',
+  'cq_ring_on', 'cq_ring_lost', 'cq_whirlpool', 'cq_shell_tick', 'sh_heads_up', 'sh_bubble_pop', 'cq_tide_turn_short',
+  'cq_ink', 'cq_surf_sting', 'cq_surge_4bar', 'cq_amb_lagoon', 'cq_win',
+  ...Array.from({ length: 10 }, (_, k) => `cq_carry_${k + 1}`),
+  ...Array.from({ length: 10 }, (_, k) => `cq_carry_${k + 1}_rip`),
   'cq_shells_1', 'cq_shells_2', 'cq_shells_3', 'ui.complete', 'fx.purchase', 'fx.whoosh', 'ui.press',
 ];
 
@@ -48,7 +52,7 @@ export const BED_OPEN = 'cq_bed_open';
 export const BED_CALM = 'cq_bed_calm';
 export const BED_LOW = 'cq_bed_lowstrokes';
 
-function play(id: string, opts?: { volume?: number; delayMs?: number }): void {
+function play(id: string, opts?: PlayOptions): void {
   try {
     GameAudio.play(id, opts);
   } catch {
@@ -66,15 +70,22 @@ export function sfxSwim(step: number): void {
   try { GameAudio.playLadder('cq_swim', Math.max(0, Math.min(4, step))); } catch { /* noop */ }
 }
 
-/** One baked file for the whole carry (grab + slide + ladder ticks + spit-out). */
-export function sfxCarry(tiles: number): void {
-  const n = Math.max(1, Math.min(6, tiles));
-  if (GameAudio.hasCue(`cq_carry_${n}`)) play(`cq_carry_${n}`);
+/** One baked file for the whole carry (grab + slide + ladder ticks + hand-off whooshes + spit-out); Riptide strokes use the gold `_rip` take. */
+export function sfxCarry(tiles: number, riptide = false): void {
+  const n = Math.max(1, Math.min(10, tiles));
+  const id = riptide && GameAudio.hasCue(`cq_carry_${n}_rip`) ? `cq_carry_${n}_rip` : `cq_carry_${n}`;
+  if (GameAudio.hasCue(id)) play(id);
   else {
     play('cq_current_grab');
     play('cq_spit_out', { delayMs: 60 + 75 * n + 40 });
   }
 }
+
+/** A fast-forwarded carry: only its spit-out lands, so sound never lags the picture (7.3). */
+export function sfxSpitOut(): void { play('cq_spit_out'); }
+
+/** Riptide hand-off between two current runs. */
+export function sfxHandoff(): void { play('cq_surf_sting', { volume: 0.55 }); }
 
 export function sfxPearl(step: number, delayMs = 0): void {
   try { GameAudio.playLadder('cq_pearl', Math.max(0, Math.min(9, step)), { delayMs }); } catch { /* noop */ }
@@ -98,9 +109,19 @@ export function sfxUnlock(): void {
 }
 
 export function sfxChest(): void { play('cq_chest_open'); }
+/** Full tide turn (first of a voyage, Splash). */
 export function sfxTide(): void { play('sh_wave_wash', { volume: 0.8 }); }
+/** Compact tide turn: a short sting so later turns never become wallpaper (F5). */
+export function sfxTideShort(): void { play('cq_tide_turn_short', { volume: 0.85 }); }
 export function sfxTread(): void { play('cq_tread'); }
-export function sfxUndo(): void { play('cq_undo'); }
+/** Tape-rewind undo; a hold-to-scrub rises a step per stroke (rate step only on the scrub, never the ladders). */
+export function sfxUndo(step = 0): void { play('cq_undo', { pitch: Math.min(3, Math.max(0, step)) * 2 }); }
+/** Wrong-turn X stamp on the stall card (-6 dB bump). */
+export function sfxWrongTurn(): void { play('cq_ink', { volume: 0.7 }); }
+/** Ambient lagoon bed (-30 LUFS, 20 s) under everything from GO to results. */
+export function sfxAmbience(): void { play('cq_amb_lagoon', { volume: 0.9 }); }
+/** Win cadence cut from the bed (Extreme Fever and 3-star finales). */
+export function sfxWin(): void { play('cq_win', { volume: 0.85 }); }
 export function sfxBeached(): void { play('cq_beached'); }
 export function sfxStall(): void { play('sh_thud'); }
 export function sfxRingOn(): void { play('cq_ring_on'); }
@@ -110,10 +131,16 @@ export function sfxTip(): void { play('sh_heads_up'); }
 export function sfxButton(): void { play('ui.press', { volume: 0.7 }); }
 export function sfxTransition(): void { play('fx.whoosh', { volume: 0.9 }); }
 
+/** Riptide stroke: the whoosh now, the 4-bar percussion surge on the bed's NEXT downbeat (11.2). */
 export function sfxRiptide(): void {
   play('cq_riptide');
-  play('cq_surge_4bar', { volume: 0.9 });
   GameAudio.duck(4, 40, 250, 300);
+  const clock = GameAudio.music.clock();
+  if (!clock) { play('cq_surge_4bar', { volume: 0.9 }); return; }
+  void GameAudio.music.positionMs().then((pos) => {
+    const at = nextBarMs(clock, pos, 40);
+    play('cq_surge_4bar', { volume: 0.9, delayMs: Math.max(0, at - pos) });
+  }).catch(() => play('cq_surge_4bar', { volume: 0.9 }));
 }
 
 /** Mid-run clear: baked shell tally (1..3 chimes on the ladder). */
@@ -123,10 +150,9 @@ export function sfxShells(n: number): void {
   else for (let i = 0; i < k; i++) play('cq_shell_tick', { delayMs: i * 110 });
 }
 
-/** Final clear: Chris's purchase success, then the win cadence cut from the bed. */
+/** Final clear: Chris's purchase success (the win cadence joins on 3 stars or Extreme Fever). */
 export function sfxFinalClear(): void {
   play('fx.purchase');
-  play('cq_win', { delayMs: 350, volume: 0.85 });
 }
 
 export function sfxLeftover(n: number): void {
@@ -140,9 +166,15 @@ export function sfxTally(n: number): void {
   if (GameAudio.hasCue(`cq_tally_${k}`)) play(`cq_tally_${k}`);
 }
 
-/** Which layer of the lagoon bed fits the moment (design 11.2). */
-export function bedFor(tideLow: boolean, left: number, riptide: boolean): string {
+/**
+ * Which layer of the lagoon bed fits the moment (design 11.2): the tom
+ * heartbeat at 2 strokes left, the open layer during a Riptide surge, the calm
+ * layer at LOW tide (the percussion audibly thins) and while thinking idle
+ * (6 s without input), the open layer otherwise.
+ */
+export function bedFor(tideLow: boolean, left: number, riptide: boolean, idleThin = false): string {
   if (left <= 2 && left >= 0) return BED_LOW;
   if (riptide) return BED_OPEN;
+  if (idleThin) return BED_CALM;
   return tideLow ? BED_CALM : BED_OPEN;
 }

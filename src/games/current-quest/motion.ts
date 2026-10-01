@@ -12,6 +12,9 @@ export const POSE_DASH = 1;
 export const POSE_OUCH = 2;
 export const POSE_CHEER = 3;
 export const POSE_DIZZY = 4;
+/** Belly-down surf ride: every carry, including vertical ones (design v5 F1). */
+export const POSE_SURF = 5;
+export const POSE_COUNT = 6;
 
 export const PLAN_IDLE = 0;
 export const PLAN_STROKE = 1;
@@ -53,8 +56,10 @@ export interface MotionPlan {
   /** Bump target x,y (bump plans). */
   bx: number;
   by: number;
-  /** Plan speed multiplier (undo replays at 1.6x). */
+  /** Plan speed multiplier (undo replays at 1.6x; a buffered commit plays the rest at 2x). */
   speed: number;
+  /** 1 on a Riptide stroke: corkscrew roll and gold trail (ordinary carries never spin). */
+  rip: number;
 }
 
 export interface SharkFrame {
@@ -83,7 +88,7 @@ export interface SharkFrame {
 
 export function idlePlan(x: number, y: number, facing = 1): MotionPlan {
   'worklet';
-  return { kind: PLAN_IDLE, t0: 0, pts: [x, y], carry: 0, facing, dive: 0, beached: 0, wasBeached: 0, bx: x, by: y, speed: 1 };
+  return { kind: PLAN_IDLE, t0: 0, pts: [x, y], carry: 0, facing, dive: 0, beached: 0, wasBeached: 0, bx: x, by: y, speed: 1, rip: 0 };
 }
 
 export function newFrame(): SharkFrame {
@@ -170,7 +175,8 @@ export function evalShark(p: MotionPlan, t: number, idleT: number, out: SharkFra
   if (p.kind === PLAN_IDLE || n < 1) {
     out.x = endX;
     out.y = endY + bob;
-    if (p.beached) { out.pose = POSE_DIZZY; out.rot = 1.22 * (p.facing > 0 ? 1 : -1) * 0.25; out.waveA = 0.6; }
+    // Beached flop: the bump-ouch pose tipped 70 deg onto its side (P1 dizzy stand-in).
+    if (p.beached) { out.pose = POSE_DIZZY; out.rot = 1.22 * (p.facing > 0 ? 1 : -1); out.y = endY + 4; out.waveA = 0.6; }
     return;
   }
 
@@ -291,7 +297,7 @@ export function evalShark(p: MotionPlan, t: number, idleT: number, out: SharkFra
   }
   if (carry > 0 && tt < rideEnd) {
     const rt = tt - travelEnd;
-    out.pose = POSE_DASH;
+    out.pose = POSE_SURF;
     out.waveA = 1.5;
     out.waveF = 1.6;
     out.carrying = 1;
@@ -320,12 +326,13 @@ export function evalShark(p: MotionPlan, t: number, idleT: number, out: SharkFra
     out.facing = facing;
     out.x = ax + (bx - ax) * k;
     out.y = ay + (by - ay) * k;
-    const horiz = Math.abs(bx - ax) > Math.abs(by - ay);
-    out.sx = horiz ? 1.15 : 0.92;
-    out.sy = horiz ? 0.92 : 1.15;
+    // Stretch along the body axis ramps 1.0 -> 1.25 over the first tile and holds (F7).
+    const ramp = clamp01(f);
+    out.sx = 1 + 0.25 * ramp;
+    out.sy = 1 - 0.1 * ramp;
     out.rot = tiltFor(bx - ax, by - ay) * facing;
-    // Corkscrew roll on 4+ tile chains (read from the side, face stays visible).
-    if (carry >= 4) {
+    // Corkscrew roll on Riptide strokes only (read from the side, face stays visible).
+    if (p.rip) {
       const mid = clamp01((f / carry - 0.25) / 0.5);
       out.roll = 1 - 0.4 * Math.sin(mid * Math.PI);
     }
@@ -353,9 +360,11 @@ export function evalShark(p: MotionPlan, t: number, idleT: number, out: SharkFra
     out.y = lastY + (uy / len) * cellLen * over * s * (carry > 0 ? 1 : 0.5) + bob * clamp01(st);
     const imp = clamp01(1 - st * 3);
     const horiz = Math.abs(ux) > Math.abs(uy);
-    out.sx = horiz ? 1 - 0.14 * imp : 1 + 0.1 * imp;
-    out.sy = horiz ? 1 + 0.1 * imp : 1 - 0.14 * imp;
-    out.pose = st < 0.4 ? POSE_DASH : POSE_IDLE;
+    // 1-frame squash against the wall (scaleX 0.80) on a spit-out, softer on a plain landing.
+    const squash = carry > 0 ? 0.2 : 0.12;
+    out.sx = horiz ? 1 - squash * imp : 1 + 0.1 * imp;
+    out.sy = horiz ? 1 + 0.1 * imp : 1 - squash * imp;
+    out.pose = st < 0.4 ? (carry > 0 ? POSE_SURF : POSE_DASH) : POSE_IDLE;
     out.rot = tiltFor(ux, uy) * facing * (1 - outQuad(st));
     out.waveA = 3.5;
     out.waveF = 1.6;
@@ -377,7 +386,7 @@ export function evalShark(p: MotionPlan, t: number, idleT: number, out: SharkFra
   if (p.beached) {
     const k = clamp01(rest / 160);
     out.pose = POSE_DIZZY;
-    out.rot = 1.22 * k * (facing > 0 ? 1 : -1) * 0.25;
+    out.rot = 1.22 * k * (facing > 0 ? 1 : -1);
     out.sy = 1 - 0.08 * k;
     out.waveA = 0.6;
     out.done = rest >= 160;
@@ -408,10 +417,15 @@ export function meshIndices(cols = MESH_COLS, rows = MESH_ROWS): number[] {
   return idx;
 }
 
-/** Texture coordinates in image pixels for an image of w x h. */
-export function meshTextures(w: number, h: number, cols = MESH_COLS, rows = MESH_ROWS): { x: number; y: number }[] {
+/** Texture coordinates in image pixels for an image of w x h (mirror: the art faces left, so u runs right to left). */
+export function meshTextures(w: number, h: number, cols = MESH_COLS, rows = MESH_ROWS, mirror = false): { x: number; y: number }[] {
   const out: { x: number; y: number }[] = [];
-  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) out.push({ x: (c / (cols - 1)) * w, y: (r / (rows - 1)) * h });
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const u = c / (cols - 1);
+      out.push({ x: (mirror ? 1 - u : u) * w, y: (r / (rows - 1)) * h });
+    }
+  }
   return out;
 }
 

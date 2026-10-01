@@ -165,6 +165,8 @@ interface GameShellV2Props {
   pauseOnLineMove?: boolean;
   /** 'countdown' = quick 3-2-1 after a hold (default); 'instant' = none. */
   resumeStyle?: 'countdown' | 'instant';
+  /** Start count: 'full' = 3-2-1-GO (default); 'go' = a single GO for games with no clock (Current Quest). */
+  countdownStyle?: 'full' | 'go';
   /** Game id for snapshots and proof meta, e.g. 'whack'. */
   gameId?: string;
   /** Session key (game + ride + attempt) for interruption snapshots. */
@@ -205,6 +207,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       onRematch,
       onChallenge,
       resumeStyle = 'countdown',
+      countdownStyle = 'full',
       gameId,
       sessionKey,
       getSnapshot,
@@ -219,7 +222,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
-    const [countText, setCountText] = useState('3');
+    const firstCount = countdownStyle === 'go' ? 'GO!' : '3';
+    const [countText, setCountText] = useState(firstCount);
     const [pauseReason, setPauseReason] = useState<string | undefined>();
     const [holdReason, setHoldReason] = useState<HoldReason | null>(null);
     const [wrap, setWrap] = useState<{ reason: WrapUpReason; result: GameResult } | null>(null);
@@ -266,7 +270,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       startedRef.current = false;
       claimedRef.current = false;
       setPhase('countdown');
-      setCountText('3');
+      setCountText(firstCount);
       setWrap(null);
       setHoldReason(null);
       resultsScale.value = 0.7;
@@ -310,7 +314,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     useEffect(() => {
       if (phase !== 'countdown' || !visible) return;
       clearCountdown();
-      const steps = ['3', '2', '1', 'GO!'];
+      const steps = countdownStyle === 'go' ? ['GO!'] : ['3', '2', '1', 'GO!'];
       steps.forEach((label, i) => {
         const t = setTimeout(() => {
           setCountText(label);
@@ -325,7 +329,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       }, steps.length * COUNTDOWN.stepMs - (COUNTDOWN.stepMs - COUNTDOWN.goMs));
       countdownTimers.current.push(done);
       return clearCountdown;
-    }, [phase, visible, beginPlay, clearCountdown, punchCount]);
+    }, [phase, visible, beginPlay, clearCountdown, punchCount, countdownStyle]);
 
     // -- Transition to results when the game (or a wrap-up) reports one. ----
     useEffect(() => {
@@ -363,7 +367,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       claimedRef.current = false;
       resultsScale.value = 0.7;
       resultsOpacity.value = 0;
-      setCountText('3');
+      setCountText(firstCount);
       setPhase('countdown');
     }, [result, phase, wrap, resultsScale, resultsOpacity]);
 
@@ -420,7 +424,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       if (phase !== 'paused') return;
       if (!startedRef.current) {
         setPhase('countdown');
-        setCountText('3');
+        setCountText(firstCount);
         setPauseReason(undefined);
         setHoldReason(null);
         Haptic.tickSelection();
@@ -551,7 +555,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
     const resumeAfterQuitCancel = useCallback(() => {
       setPhase(startedRef.current ? 'playing' : 'countdown');
-      if (!startedRef.current) setCountText('3');
+      if (!startedRef.current) setCountText(firstCount);
       setPauseReason(undefined);
       setHoldReason(null);
       if (startedRef.current) onResume?.();

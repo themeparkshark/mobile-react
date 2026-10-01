@@ -23,7 +23,7 @@ export const CQ = {
   sky: '#bfe9ff',
 } as const;
 
-/** Layout of the board canvas for a given available width. */
+/** Layout of the board canvas for a given available width and board height. */
 export interface BoardLayout {
   /** Canvas size. */
   readonly cw: number;
@@ -35,27 +35,47 @@ export interface BoardLayout {
   /** Sand rim thickness and its front face height. */
   readonly rim: number;
   readonly face: number;
-  /** Play area size (5 cells). */
+  /** Play area width (5 cells) and height (rows cells). */
+  readonly pw: number;
+  readonly ph: number;
+  /** Rows on this board (5, 6 or 7). */
+  readonly rows: number;
+  /** Legacy alias of pw (square boards). */
   readonly size: number;
 }
 
-export function boardLayout(availableWidth: number, maxHeight = Infinity): BoardLayout {
-  const margin = 10;
-  const rim = 10;
-  let size = Math.min(availableWidth - 2 * (margin + rim) - 8, 360);
+/**
+ * Cell = min((width - margins) / 5, availableHeight / rows, 76) (design 10.2).
+ * On a 375 pt phone a 5x7 Treasure board lands at about 64 to 68 pt cells and
+ * never goes under 60 pt when the height allows; the rim and margins shrink
+ * first on small screens.
+ */
+export function boardLayout(availableWidth: number, maxHeight = Infinity, rows = 5): BoardLayout {
+  const margin = availableWidth < 360 ? 6 : 10;
+  const rim = availableWidth < 360 ? 8 : 10;
   const topPad = 0.34;
   const face = 12;
-  // Fit height too (small phones): canvas height = top overlap + rims + face.
-  const heightFor = (s: number) => (s / 5) * topPad + rim * 2 + s + face + margin * 2;
-  while (heightFor(size) > maxHeight && size > 220) size -= 4;
-  const cell = size / 5;
-  const cw = size + 2 * (margin + rim);
+  const chrome = (cell: number) => cell * topPad + rim * 2 + face + margin * 2;
+  let cell = Math.min((availableWidth - 2 * (margin + rim) - 4) / 5, 76);
+  // Fit height too: canvas height = top overlap + rims + face + rows cells.
+  while (cell * rows + chrome(cell) > maxHeight && cell > 44) cell -= 1;
+  const pw = cell * 5;
+  const ph = cell * rows;
+  const cw = pw + 2 * (margin + rim);
   const ax = margin + rim;
   const ay = margin + rim + cell * topPad;
-  const ch = ay + size + rim + face + margin;
-  return { cw, ch, ax, ay, cell, rim, face, size };
+  const ch = ay + ph + rim + face + margin;
+  return { cw, ch, ax, ay, cell, rim, face, pw, ph, rows, size: pw };
 }
 
 export function cellCenter(l: BoardLayout, i: number): { x: number; y: number } {
   return { x: l.ax + ((i % 5) + 0.5) * l.cell, y: l.ay + (Math.floor(i / 5) + 0.5) * l.cell };
+}
+
+/** The cell under a board-local point, or -1 outside the play area. */
+export function cellAt(l: BoardLayout, x: number, y: number): number {
+  const c = Math.floor((x - l.ax) / l.cell);
+  const r = Math.floor((y - l.ay) / l.cell);
+  if (c < 0 || c > 4 || r < 0 || r >= l.rows) return -1;
+  return r * 5 + c;
 }

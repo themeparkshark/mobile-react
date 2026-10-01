@@ -1,13 +1,16 @@
 /**
- * LagoonBoard: the whole Current Quest diorama in one Skia canvas (design 8, 9).
+ * LagoonBoard: the whole Current Quest diorama in one Skia canvas (design v5 8, 9).
  *
- * Orthographic oblique board: flat toon water with the cell grid in the
- * shader, a sandy island rim whose front face carries the tide waterline,
- * hand-drawn current strips with scrolling foam, sandbar mounds that breach at
- * low tide, y-sorted uprights (Alex-style coral, chest, pearls) and the shark
- * drawn as a deforming mesh of the pose art (body wave, tail follow-through,
- * pose swaps). Everything animates on the UI thread from shared values; React
- * renders only when the board itself changes.
+ * Orthographic oblique board, always 5 columns and 5 to 7 rows: flat toon
+ * water with the cell grid in the shader, a sandy island rim whose front face
+ * carries the tide waterline, Alex-style hand-drawn current foam strips that
+ * scroll with the flow, sandbar mounds that crossfade between their wet (HIGH)
+ * and dry (LOW) pipeline sprites, y-sorted uprights (three coral variants,
+ * chest with its pearl-socket badge, pearls) and the red-cap shark drawn as a
+ * deforming mesh of five pose images (body wave, tail follow-through, pose
+ * swaps). Every procedural shape is an ink brush stroke (9.13). Everything
+ * animates on the UI thread from shared values; React renders only when the
+ * board itself changes.
  */
 
 import React, { useMemo } from 'react';
@@ -17,12 +20,13 @@ import {
   type SkFont, type SkImage, type SkPoint,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, useFrameCallback, type SharedValue } from 'react-native-reanimated';
-import { currentDir, type Board } from './rules';
+import { cellsOf, currentDir, heightOf, MAX_H, type Board } from './rules';
 import {
   evalShark, meshIndices, meshTextures, meshVertices, newFrame,
-  POSE_CHEER, POSE_DASH, POSE_DIZZY, POSE_IDLE, POSE_OUCH,
+  POSE_CHEER, POSE_COUNT, POSE_DASH, POSE_DIZZY, POSE_IDLE, POSE_OUCH, POSE_SURF,
   type MotionPlan, type SharkFrame,
 } from './motion';
+import { InkStrip, ringPts, spiralPts, waveLinePts, xMarkPts } from './InkStrip';
 import { CQ, type BoardLayout } from './theme';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +42,10 @@ export interface PreviewSV {
   rot: number;
   beached: number;
   clears: number;
+  /** 1 when this stroke would be a Riptide stroke (gold path, "RIPTIDE!"). */
+  rip: number;
+  /** Icons along the dotted path: x, y, kind (0 pearl, 1 golden, 2 tide turn, 3 unlock). */
+  icons: number[];
 }
 
 export interface BannerSV {
@@ -63,8 +71,8 @@ export interface BoardSV {
   rattleT: SharedValue<number>;
   armed: SharedValue<number>;
   previews: SharedValue<PreviewSV[]>;
-  flow: SharedValue<number>;
-  riptide: SharedValue<number>;
+  /** Riptide surge glow 0..1 (gold rim pulse, foam x2) for 4 bars after a Riptide stroke. */
+  surge: SharedValue<number>;
   gridA: SharedValue<number>;
   undoTint: SharedValue<number>;
   breath: SharedValue<number>;
@@ -74,6 +82,7 @@ export interface BoardSV {
   hint: SharedValue<number[]>;
   hintT0: SharedValue<number>;
   swirl: SharedValue<number>;
+  /** Riptide ribbon: last positions as x,y pairs. */
   trail: SharedValue<number[]>;
   /** Current-run flare: fx ms the carry started and which run index. */
   flareT: SharedValue<number>;
@@ -82,15 +91,38 @@ export interface BoardSV {
   walking: SharedValue<number>;
   /** Nervous idle at 2 strokes left. */
   nervous: SharedValue<number>;
+  /** Pearls banked so far (chest socket badge) and when the last one landed. */
+  banked: SharedValue<number>;
+  bankT: SharedValue<number>;
+  /** Route recap (missed Par): your path and the par path as x,y pairs, and its fx start. */
+  recap: SharedValue<number[]>;
+  recapPar: SharedValue<number[]>;
+  recapT0: SharedValue<number>;
+  /** Wrong-turn X: [x, y] or [], stamped at wrongT0. */
+  wrong: SharedValue<number[]>;
+  wrongT0: SharedValue<number>;
+  /** Full tide sweep (first turn of a voyage, Splash): fx start and direction (+1 to LOW). */
+  sweepT0: SharedValue<number>;
+  /** Glance tour at voyage start (chest glint, golden sparkle, shark ring). */
+  tourT0: SharedValue<number>;
+  /** fx ms of the last player input (idle personalities start 6 s after it). */
+  idleSince: SharedValue<number>;
+  /** Coral sway impulses: pairs (cell, fx t0). */
+  sway: SharedValue<number[]>;
 }
 
 export interface BoardImages {
-  swim: SkImage | null;
+  idle: SkImage | null;
   dash: SkImage | null;
+  surf: SkImage | null;
   ouch: SkImage | null;
   cheer: SkImage | null;
-  dizzy: SkImage | null;
-  rock: SkImage | null;
+  coralA: SkImage | null;
+  coralB: SkImage | null;
+  coralC: SkImage | null;
+  sand: SkImage | null;
+  sandWet: SkImage | null;
+  foam: SkImage | null;
   pearl: SkImage | null;
   golden: SkImage | null;
   chestClosed: SkImage | null;
@@ -121,7 +153,7 @@ float noise(float2 p) {
 
 half4 main(float2 p) {
   float2 q = p / 64.0;
-  float n = noise(q + float2(uTime * 0.06, uTime * 0.035)) * 0.62 + noise(q * 2.3 - float2(uTime * 0.045, -uTime * 0.03)) * 0.38;
+  float n = noise(q + float2(uTime * 0.05, uTime * 0.03)) * 0.62 + noise(q * 2.3 - float2(uTime * 0.04, -uTime * 0.025)) * 0.38;
   float ridge = 1.0 - abs(n * 2.0 - 1.0);
   float band = step(0.8, ridge);
   float2 a0 = uArea.xy;
@@ -140,7 +172,6 @@ half4 main(float2 p) {
     float dc = length(d2);
     float tick = (1.0 - smoothstep(0.0, 1.2, abs(dc - 5.0))) * step(d2.x, 7.0) * step(d2.y, 7.0);
     col = mix(col, float3(1.0), tick * 0.22 * uGrid);
-    // Very soft depth toward the centre of each cell (reads as water, not paper).
     col = mix(col, float3(0.20, 0.70, 0.90), 0.05 * (1.0 - length(fract(g) - 0.5) * 1.4));
   }
   col = col + uBright;
@@ -154,30 +185,34 @@ const waterEffect = Skia.RuntimeEffect.Make(WATER_SKSL);
 // ---------------------------------------------------------------------------
 // Static geometry per board
 
-interface CurrentRun {
+export interface CurrentRun {
   cells: number[];
   dir: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+  /** Centre and length/thickness in board px (local frame rotated to the flow). */
+  cx: number;
+  cy: number;
+  len: number;
+  th: number;
 }
 
-function runsOf(board: Board, l: BoardLayout): CurrentRun[] {
+const DR = [-1, 0, 1, 0];
+const DC = [0, 1, 0, -1];
+
+/** Maximal same-direction current chains, in a stable order (also used by the game for the flare). */
+export function runsOf(board: Board, l: BoardLayout | null): CurrentRun[] {
   const runs: CurrentRun[] = [];
   const seen = new Set<number>();
-  for (let i = 0; i < 25; i++) {
+  const H = heightOf(board);
+  const n = cellsOf(board);
+  const at = (r: number, c: number) => (r < 0 || r >= H || c < 0 || c > 4 ? -1 : r * 5 + c);
+  for (let i = 0; i < n; i++) {
     const d = currentDir(board.tiles[i]);
     if (d < 0 || seen.has(i)) continue;
-    // Walk back to the run's entry, then forward.
     let start = i;
     const back = (d + 2) % 4;
     for (;;) {
-      const r = Math.floor(start / 5) + [-1, 0, 1, 0][back];
-      const c = (start % 5) + [0, 1, 0, -1][back];
-      if (r < 0 || r > 4 || c < 0 || c > 4) break;
-      const p = r * 5 + c;
-      if (currentDir(board.tiles[p]) !== d || seen.has(p)) break;
+      const p = at(Math.floor(start / 5) + DR[back], (start % 5) + DC[back]);
+      if (p < 0 || currentDir(board.tiles[p]) !== d || seen.has(p)) break;
       start = p;
     }
     const cells: number[] = [];
@@ -185,34 +220,31 @@ function runsOf(board: Board, l: BoardLayout): CurrentRun[] {
     for (;;) {
       cells.push(p);
       seen.add(p);
-      const r = Math.floor(p / 5) + [-1, 0, 1, 0][d];
-      const c = (p % 5) + [0, 1, 0, -1][d];
-      if (r < 0 || r > 4 || c < 0 || c > 4) break;
-      const q = r * 5 + c;
-      if (currentDir(board.tiles[q]) !== d || seen.has(q)) break;
+      const q = at(Math.floor(p / 5) + DR[d], (p % 5) + DC[d]);
+      if (q < 0 || currentDir(board.tiles[q]) !== d || seen.has(q)) break;
       p = q;
     }
-    const rs = cells.map((x) => Math.floor(x / 5));
-    const cs = cells.map((x) => x % 5);
-    const r0 = Math.min(...rs);
-    const r1 = Math.max(...rs);
-    const c0 = Math.min(...cs);
-    const c1 = Math.max(...cs);
-    const th = l.cell * 0.62;
-    const horiz = d === 1 || d === 3;
-    const x = horiz ? l.ax + c0 * l.cell + l.cell * 0.08 : l.ax + (c0 + 0.5) * l.cell - th / 2;
-    const y = horiz ? l.ay + (r0 + 0.5) * l.cell - th / 2 : l.ay + r0 * l.cell + l.cell * 0.08;
-    const w = horiz ? (c1 - c0 + 1) * l.cell - l.cell * 0.16 : th;
-    const h = horiz ? th : (r1 - r0 + 1) * l.cell - l.cell * 0.16;
-    runs.push({ cells, dir: d, x, y, w, h });
+    const cell = l ? l.cell : 1;
+    const ax = l ? l.ax : 0;
+    const ay = l ? l.ay : 0;
+    const first = cells[0];
+    const last = cells[cells.length - 1];
+    const cx = ax + ((((first % 5) + (last % 5)) / 2) + 0.5) * cell;
+    const cy = ay + (((Math.floor(first / 5) + Math.floor(last / 5)) / 2) + 0.5) * cell;
+    runs.push({ cells, dir: d, cx, cy, len: cells.length * cell - cell * 0.1, th: cell * 0.66 });
   }
   return runs;
 }
 
 // ---------------------------------------------------------------------------
 
-const POSE_SIDE = [true, true, false, false, false];
+/** Side poses swim along x; upright poses stand. Surf faces left in the art, so its texture is mirrored. */
+const POSE_SIDE = [false, true, false, false, false, true];
+const POSE_MIRROR = [false, false, false, false, false, true];
+/** Facing of each image as drawn (after the mirror): +1 looks right. */
+const POSE_NATIVE = [1, 1, -1, 1, -1, 1];
 const MESH_IDX = meshIndices();
+const ROWS = Array.from({ length: MAX_H }, (_, r) => r);
 
 interface Props {
   board: Board;
@@ -221,29 +253,45 @@ interface Props {
   font: SkFont | null;
   sv: BoardSV;
   reducedMotion: boolean;
+  /** Lite perf tier: no ambient life, half the foam. */
+  lite?: boolean;
   /** Run failed (Trial): 30% desaturation, never darkened. */
   desaturate?: boolean;
 }
 
 function poseImage(images: BoardImages, pose: number): SkImage | null {
-  return pose === POSE_DASH ? images.dash : pose === POSE_OUCH ? images.ouch : pose === POSE_CHEER ? images.cheer : pose === POSE_DIZZY ? images.dizzy : images.swim;
+  if (pose === POSE_DASH) return images.dash;
+  if (pose === POSE_SURF) return images.surf;
+  if (pose === POSE_OUCH || pose === POSE_DIZZY) return images.ouch;
+  if (pose === POSE_CHEER) return images.cheer;
+  return images.idle;
 }
 
 /** Draw size of a pose image at this cell size (side poses by width, upright by height). */
 function poseSize(img: SkImage | null, side: boolean, cell: number): { w: number; h: number } {
   if (!img) return { w: cell, h: cell * 0.6 };
   const aspect = img.width() / img.height();
-  if (side) { const w = cell * 1.34; return { w, h: w / aspect }; }
-  const h = cell * 1.3;
+  if (side) { const w = cell * 1.36; return { w, h: w / aspect }; }
+  const h = cell * 1.32;
   return { w: h * aspect, h };
 }
 
-function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, desaturate = false }: Props) {
+function hashCell(i: number, salt: number): number {
+  let h = (i * 2654435761 + salt * 40503) >>> 0;
+  h ^= h >>> 13;
+  return h >>> 0;
+}
+
+function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, lite = false, desaturate = false }: Props) {
+  const H = heightOf(board);
   const runs = useMemo(() => runsOf(board, l), [board, l]);
   const sands = useMemo(() => board.tiles.split('').map((t, i) => (t === 's' ? i : -1)).filter((i) => i >= 0), [board]);
   const rocks = useMemo(() => board.tiles.split('').map((t, i) => (t === '#' ? i : -1)).filter((i) => i >= 0), [board]);
+  const goldenXY = useMemo(() => (board.golden >= 0
+    ? [l.ax + ((board.golden % 5) + 0.5) * l.cell, l.ay + (Math.floor(board.golden / 5) + 0.5) * l.cell] : [-1, -1]), [board, l]);
+  const chestXY = useMemo(() => [l.ax + ((board.chest % 5) + 0.5) * l.cell, l.ay + (Math.floor(board.chest / 5) + 0.5) * l.cell], [board, l]);
 
-  // Frame clock: fx time (freezes with hit-stop), shark evaluation, pickups.
+  // Frame clock: fx time (freezes with hit-stop), shark evaluation, pickups, idle personality.
   const frame = useMemo(() => newFrame(), []);
   useFrameCallback((info) => {
     'worklet';
@@ -255,12 +303,35 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
     const p = sv.plan.value;
     if (p.t0 < 0) { p.t0 = t; }
     evalShark(p, t - p.t0, t, frame);
-    // Nervous idle: faster fins and a glance toward the counter.
-    if (sv.nervous.value > 0 && frame.pose === POSE_IDLE) {
+    const resting = p.kind === 0 && frame.done && !p.beached;
+    if (sv.nervous.value > 0 && resting) {
+      // Nervous idle: fin flap x2, faster body wave, a glance toward the counter every 1.5 s.
       frame.waveF = 1.3;
-      frame.waveA = 3;
+      frame.waveA = 3.2;
       const glance = (t % 1500) < 200 ? 1 : 0;
-      frame.rot += glance * -0.08 * frame.facing;
+      frame.rot += glance * -0.1 * frame.facing;
+    } else if (resting && sv.walking.value < 0.5) {
+      // Idle personalities (Threes / Monument Valley), also the soft pre-Tip nudge.
+      // They only ever look at the golden pearl or the chest, never the best move.
+      const idle = t - sv.idleSince.value;
+      if (idle > 6000) {
+        const cyc = (idle - 6000) % 8000;
+        if (cyc < 1200 && goldenXY[0] >= 0 && !(sv.picks.value[board.pearls.length] >= 0)) {
+          frame.facing = goldenXY[0] >= frame.x ? 1 : -1;
+          frame.rot += Math.sin(Math.min(1, cyc / 200) * Math.PI / 2) * (goldenXY[1] < frame.y ? -0.12 : 0.12) * frame.facing;
+        } else if (cyc >= 2000 && cyc < 2300) {
+          frame.waveA = 6;
+          frame.waveF = 3.2;
+        } else if (cyc >= 4000 && cyc < 4600) {
+          const k = Math.sin(((cyc - 4000) / 600) * Math.PI);
+          const dx = chestXY[0] - frame.x;
+          const dy = chestXY[1] - frame.y;
+          const d = Math.hypot(dx, dy) || 1;
+          frame.x += (dx / d) * 6 * k;
+          frame.y += (dy / d) * 6 * k;
+          frame.facing = dx >= 0 ? 1 : -1;
+        }
+      }
     }
     // Tail follow-through spring toward the body angle change.
     const target = -frame.rot * 0.9 + (frame.carrying ? 0 : Math.sin(t / 1000 * 1.4) * 0.05);
@@ -285,8 +356,8 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
       }
       if (changed) { sv.picks.value = picks.slice(); sv.pickQueue.value = q.slice(); }
     }
-    // Riptide ribbon trail (last 10 positions).
-    if (sv.riptide.value > 0.01 && frame.carrying) {
+    // Riptide ribbon trail (last 10 positions) while a Riptide carry runs.
+    if (p.rip && frame.carrying) {
       const tr = sv.trail.value;
       tr.push(frame.x, frame.y);
       if (tr.length > 20) tr.splice(0, tr.length - 20);
@@ -301,7 +372,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
   // ---- water
   const waterUniforms = useDerivedValue(() => ({
     uSize: vec(l.cw, l.ch),
-    uArea: [l.ax, l.ay, l.size, l.size],
+    uArea: [l.ax, l.ay, l.pw, l.ph],
     uCell: l.cell,
     uTime: sv.fxT.value / 1000,
     uGrid: sv.gridA.value,
@@ -319,82 +390,85 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
   });
   const riseTransform = useDerivedValue(() => [{ translateY: (1 - riseK.value) * 16 }]);
   const riseOpacity = useDerivedValue(() => Math.min(1, riseK.value * 1.6));
-  const rowRise = [0, 1, 2, 3, 4].map((r) =>
+  const rowRise = ROWS.map((r) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useDerivedValue(() => {
-      const e = (sv.fxT.value - sv.riseT0.value - 60 - r * 45) / 300;
+      const e = (sv.fxT.value - sv.riseT0.value - 60 - r * 40) / 300;
       if (e >= 1) return [{ translateY: 0 }, { scaleY: 1 }];
-      if (e <= 0) return [{ translateY: 14 }, { scaleY: 0.6 }];
+      if (e <= 0) return [{ translateY: 12 }, { scaleY: 0.6 }];
       const s = 1 - Math.exp(-6 * e) * Math.cos(e * Math.PI * 2.4);
-      return [{ translateY: (1 - s) * 14 }, { scaleY: 0.6 + 0.4 * s }];
+      return [{ translateY: (1 - s) * 12 }, { scaleY: 0.6 + 0.4 * s }];
     }));
-  const rowOpacity = [0, 1, 2, 3, 4].map((r) =>
+  const rowOpacity = ROWS.map((r) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useDerivedValue(() => {
-      const e = (sv.fxT.value - sv.riseT0.value - 60 - r * 45) / 160;
+      const e = (sv.fxT.value - sv.riseT0.value - 60 - r * 40) / 160;
       return e <= 0 ? 0 : e >= 1 ? 1 : e;
     }));
 
   // ---- rim and tide waterline (9.6)
   const rimPath = useMemo(() => {
-    const outer = Skia.RRectXY(Skia.XYWHRect(l.ax - l.rim, l.ay - l.rim, l.size + l.rim * 2, l.size + l.rim * 2), 20, 20);
-    const inner = Skia.RRectXY(Skia.XYWHRect(l.ax, l.ay, l.size, l.size), 12, 12);
+    const outer = Skia.RRectXY(Skia.XYWHRect(l.ax - l.rim, l.ay - l.rim, l.pw + l.rim * 2, l.ph + l.rim * 2), 20, 20);
+    const inner = Skia.RRectXY(Skia.XYWHRect(l.ax, l.ay, l.pw, l.ph), 12, 12);
     const p = Skia.Path.Make();
     p.addRRect(outer);
     p.addRRect(inner);
     p.setFillType(1); // even-odd
     return p;
   }, [l]);
-  const poolRect = useMemo(() => Skia.RRectXY(Skia.XYWHRect(4, l.ay - l.rim - 8, l.cw - 8, l.size + l.rim * 2 + l.face + 16), 26, 26), [l]);
-  const poolGlow = useMemo(() => Skia.RRectXY(Skia.XYWHRect(0, l.ay - l.rim - 12, l.cw, l.size + l.rim * 2 + l.face + 24), 30, 30), [l]);
-  const innerRRect = useMemo(() => Skia.RRectXY(Skia.XYWHRect(l.ax, l.ay, l.size, l.size), 12, 12), [l]);
-  const faceY = l.ay + l.size + l.rim;
+  const poolRect = useMemo(() => Skia.RRectXY(Skia.XYWHRect(4, l.ay - l.rim - 8, l.cw - 8, l.ph + l.rim * 2 + l.face + 16), 26, 26), [l]);
+  const poolGlow = useMemo(() => Skia.RRectXY(Skia.XYWHRect(0, l.ay - l.rim - 12, l.cw, l.ph + l.rim * 2 + l.face + 24), 30, 30), [l]);
+  const innerRRect = useMemo(() => Skia.RRectXY(Skia.XYWHRect(l.ax, l.ay, l.pw, l.ph), 12, 12), [l]);
+  const faceY = l.ay + l.ph + l.rim;
   const faceWaterY = useDerivedValue(() => faceY + sv.tideDrop.value);
   const faceWetH = useDerivedValue(() => Math.max(0, sv.tideDrop.value - 3));
   const faceWaterH = useDerivedValue(() => l.face + 4 - sv.tideDrop.value);
-  const ripGlow = useDerivedValue(() => sv.riptide.value * (0.25 + 0.15 * Math.sin(sv.fxT.value / 1000 * Math.PI * 2 * 1.48)));
+  // Riptide surge: bright gold glow along the inside of the rim, pulsing on the bed's beat (89 BPM).
+  const ripGlow = useDerivedValue(() => sv.surge.value * (0.25 + 0.15 * Math.sin(sv.fxT.value / 1000 * Math.PI * 2 * 1.485)));
 
-  // ---- currents: foam streaks scrolling along each run
-  const foamPaths = runs.map((run, ri) =>
+  // ---- currents: one hand-drawn foam strip per run, UV-scrolled at 0.5 tiles/s
+  const foamTex = images.foam;
+  const foamScale = useMemo(() => {
+    if (!foamTex) return 1;
+    return (l.cell * 0.66) / foamTex.height();
+  }, [foamTex, l.cell]);
+  const runScroll = runs.map((run, ri) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useDerivedValue(() => {
-      const path = Skia.Path.Make();
-      const t = sv.fxT.value / 1000;
-      const horiz = run.dir === 1 || run.dir === 3;
-      const sign = run.dir === 1 || run.dir === 2 ? 1 : -1;
-      const len = horiz ? run.w : run.h;
-      const thick = horiz ? run.h : run.w;
-      let speed = 0.5 * (1 + sv.riptide.value);
       const flare = sv.flareRun.value === ri ? Math.max(0, 1 - (sv.fxT.value - sv.flareT.value) / 400) : 0;
-      speed *= 1 + flare * 2;
-      const spacing = l.cell * 0.5;
-      const segLen = l.cell * 0.26;
-      for (let lane = 0; lane < 3; lane++) {
-        const off = (lane - 1) * thick * 0.26;
-        const phase = ((t * speed * l.cell + lane * spacing * 0.37) % spacing + spacing) % spacing;
-        for (let s = -spacing; s < len + spacing; s += spacing) {
-          const along = sign > 0 ? s + phase : len - (s + phase);
-          const a0 = Math.max(2, along - segLen / 2);
-          const a1 = Math.min(len - 2, along + segLen / 2);
-          if (a1 - a0 < 3) continue;
-          if (horiz) path.addRRect(Skia.RRectXY(Skia.XYWHRect(run.x + a0, run.y + thick / 2 + off - 1.6, a1 - a0, 3.2), 1.6, 1.6));
-          else path.addRRect(Skia.RRectXY(Skia.XYWHRect(run.x + thick / 2 + off - 1.6, run.y + a0, 3.2, a1 - a0), 1.6, 1.6));
-        }
-      }
-      return path;
+      const speed = 0.5 * (1 + sv.surge.value) * (1 + flare * 2);
+      const tileW = foamTex ? foamTex.width() * foamScale : l.cell * 3;
+      const off = ((sv.fxT.value / 1000) * speed * l.cell) % tileW;
+      return [{ translateX: -run.len / 2 + off - tileW }, { translateY: -run.th / 2 }, { scale: foamScale }];
     }));
   const runAlpha = runs.map((_, ri) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useDerivedValue(() => {
       const flare = sv.flareRun.value === ri ? Math.max(0, 1 - (sv.fxT.value - sv.flareT.value) / 400) : 0;
-      return 0.72 + 0.28 * Math.max(flare, sv.riptide.value);
+      return 0.78 + 0.22 * Math.max(flare, sv.surge.value);
     }));
   const chevronBob = useDerivedValue(() => Math.sin(sv.fxT.value / 1000 * Math.PI * 2 * 1.4) * 2);
 
-  // ---- sandbars: water over the mound at HIGH, dry with a wet shoreline at LOW
-  const sandWaterAlpha = useDerivedValue(() => 0.55 * (1 - sv.tideDrop.value / 8));
-  const sandLift = useDerivedValue(() => [{ translateY: -3 * (sv.tideDrop.value / 8) }]);
-  const shoreAlpha = useDerivedValue(() => sv.tideDrop.value / 8);
+  // ---- sandbars: wet sprite at HIGH, dry sprite with a wet shoreline at LOW
+  const dryAlpha = useDerivedValue(() => Math.min(1, sv.tideDrop.value / 8));
+  const wetAlpha = useDerivedValue(() => 1 - Math.min(1, sv.tideDrop.value / 8));
+  const sandLift = useDerivedValue(() => [{ translateY: -2 * (sv.tideDrop.value / 8) }]);
+  const shoreAlpha = useDerivedValue(() => Math.max(0, (sv.tideDrop.value - 4) / 4));
+
+  // ---- coral sway (idle +/-1 deg; impulse when a carry passes or the shark bumps it)
+  const rockSway = rocks.map((cell) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => {
+      const t = sv.fxT.value;
+      let a = reducedMotion ? 0 : Math.sin(t / 1000 * Math.PI * 2 * 0.3 + cell) * 0.017;
+      const im = sv.sway.value;
+      for (let k = 0; k + 1 < im.length; k += 2) {
+        if (im[k] !== cell) continue;
+        const e = (t - im[k + 1]) / 1000;
+        if (e >= 0 && e < 1.2) a += Math.exp(-5 * e) * Math.sin(e * Math.PI * 2 * 2.2) * 0.1;
+      }
+      return a;
+    }));
 
   // ---- pickups
   const nP = board.pearls.length;
@@ -424,10 +498,21 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
     }));
   const pickBob = [0, 1, 2, 3].map((k) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    useDerivedValue(() => [{ translateY: Math.sin(sv.fxT.value / 1000 * Math.PI * 2 / 1.8 + k * 1.3) * 2 }]));
+    useDerivedValue(() => {
+      // High and dry: a pearl on a dry sandbar stops bobbing.
+      const cell = k < nP ? board.pearls[k] : board.golden;
+      const dry = cell >= 0 && board.tiles[cell] === 's' && sv.tideDrop.value > 6;
+      return [{ translateY: dry ? 0 : Math.sin(sv.fxT.value / 1000 * Math.PI * 2 / 1.8 + k * 1.3) * 2 }];
+    }));
   const goldenSpark = useDerivedValue(() => {
     const ph = (sv.fxT.value % 700) / 700;
-    return ph < 0.35 ? Math.sin((ph / 0.35) * Math.PI) : 0;
+    const tour = sv.fxT.value - sv.tourT0.value;
+    const tourK = tour >= 150 && tour < 400 ? Math.sin(((tour - 150) / 250) * Math.PI) : 0;
+    return Math.max(ph < 0.35 ? Math.sin((ph / 0.35) * Math.PI) : 0, tourK);
+  });
+  const goldenSparkScale = useDerivedValue<number>(() => {
+    const tour = sv.fxT.value - sv.tourT0.value;
+    return tour >= 150 && tour < 400 ? 1.6 : 1;
   });
   const dryGlint = useDerivedValue(() => {
     if (sv.tideDrop.value < 6) return 0;
@@ -471,30 +556,46 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
     if (sv.chest.value > 0 && ut >= 0) { rot += Math.sin(ut / 30) * 0.2 * Math.max(0, 1 - ut / 200); dy = ut * 0.05; }
     return [{ rotate: rot }, { translateY: dy }];
   });
-  const chestGlow = useDerivedValue(() => (sv.chest.value === 1 ? 0.35 + 0.15 * Math.sin(sv.fxT.value / 200) : 0));
+  // Unlocked: the lid peeks open with a thin gold glow in the gap; tour: a chest glint.
+  const chestGlow = useDerivedValue(() => {
+    const tour = sv.fxT.value - sv.tourT0.value;
+    const tourK = tour >= 0 && tour < 260 ? Math.sin((tour / 260) * Math.PI) * 0.7 : 0;
+    return Math.max(sv.chest.value === 1 ? 0.35 + 0.15 * Math.sin(sv.fxT.value / 200) : 0, tourK);
+  });
+  // Pearl-socket badge over the padlock (9.7): fills as pearls bank.
+  const socketFill = [0, 1, 2].map((k) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => (sv.banked.value > k ? 1 : 0)));
+  const socketPop = [0, 1, 2].map((k) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => {
+      const e = (sv.fxT.value - sv.bankT.value) / 220;
+      const pop = sv.banked.value === k + 1 && e >= 0 && e < 1 ? Math.sin(e * Math.PI) * 0.45 : 0;
+      return 1 + pop;
+    }));
+  const socketAlpha = useDerivedValue(() => (sv.chest.value === 2 ? 0 : sv.chest.value === 1 ? Math.max(0, 1 - (sv.fxT.value - sv.unlockT.value) / 500) : 1));
 
   // ---- shark mesh
   const sharkImage = useDerivedValue(() => {
     const p = sv.shark.value.pose;
-    return p === POSE_DASH ? images.dash : p === POSE_OUCH ? images.ouch : p === POSE_CHEER ? images.cheer : p === POSE_DIZZY ? images.dizzy : images.swim;
+    return p === POSE_DASH ? images.dash : p === POSE_SURF ? images.surf : p === POSE_OUCH || p === POSE_DIZZY ? images.ouch : p === POSE_CHEER ? images.cheer : images.idle;
   });
-  const texs = useMemo(() => [0, 1, 2, 3, 4].map((pose) => {
+  const texs = useMemo(() => Array.from({ length: POSE_COUNT }, (_, pose) => {
     const img = poseImage(images, pose);
-    return img ? meshTextures(img.width(), img.height()) : meshTextures(1, 1);
+    return img ? meshTextures(img.width(), img.height(), undefined, undefined, POSE_MIRROR[pose]) : meshTextures(1, 1);
   }), [images]);
   const textures = useDerivedValue(() => texs[sv.shark.value.pose] ?? texs[0]);
   const vertsOut = useMemo(() => new Array(30).fill(0).map(() => ({ x: 0, y: 0 })), []);
-  const sizes = useMemo(() => [0, 1, 2, 3, 4].map((pose) => poseSize(poseImage(images, pose), POSE_SIDE[pose], l.cell)), [images, l.cell]);
+  const sizes = useMemo(() => Array.from({ length: POSE_COUNT }, (_, pose) => poseSize(poseImage(images, pose), POSE_SIDE[pose], l.cell)), [images, l.cell]);
   const vertices = useDerivedValue<SkPoint[]>(() => {
     const f = sv.shark.value;
     const sz = sizes[f.pose] ?? sizes[0];
     // Anchor: side poses float at the cell centre, upright poses stand on it.
-    const lift = POSE_SIDE[f.pose] ? -l.cell * 0.06 : -l.cell * 0.2;
-    const ff = { ...f, y: f.y + lift };
+    const lift = POSE_SIDE[f.pose] ? -l.cell * 0.04 : -l.cell * 0.2;
+    const ff = { ...f, y: f.y + lift, facing: f.facing * POSE_NATIVE[f.pose] };
     meshVertices(ff, sz.w, sz.h, POSE_SIDE[f.pose], sv.fxT.value, sv.tail.value, vertsOut);
     return vertsOut.map((v) => vec(v.x, v.y));
   });
-  const sharkAlpha = useDerivedValue(() => sv.shark.value.alpha);
   const shadowRect = useDerivedValue(() => {
     const f = sv.shark.value;
     const w = l.cell * 0.9 * (f.carrying ? 0.7 : 1) * f.scale;
@@ -507,38 +608,11 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
   });
   const sharkRow = useDerivedValue(() => {
     const r = Math.floor((sv.shark.value.y - l.ay) / l.cell + 0.15);
-    return r < 0 ? 0 : r > 4 ? 4 : r;
+    return r < 0 ? 0 : r > H - 1 ? H - 1 : r;
   });
-  const slotAlpha = [0, 1, 2, 3, 4].map((r) =>
+  const slotAlpha = ROWS.map((r) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useDerivedValue(() => (sharkRow.value === r ? sv.shark.value.alpha : 0)));
-
-  // Riptide ribbon trail.
-  const trailPath = useDerivedValue(() => {
-    const p = Skia.Path.Make();
-    const tr = sv.trail.value;
-    for (let k = 0; k + 1 < tr.length; k += 2) {
-      if (k === 0) p.moveTo(tr[k], tr[k + 1]); else p.lineTo(tr[k], tr[k + 1]);
-    }
-    return p;
-  });
-  const trailAlpha = useDerivedValue(() => (sv.trail.value.length > 3 ? 0.7 : 0));
-
-  // Flow pips above the shark (3 small shells).
-  const pipPos = useDerivedValue(() => {
-    const f = sv.shark.value;
-    return [f.x, f.y - l.cell * 0.62];
-  });
-  const pipFill = [0, 1, 2].map((k) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useDerivedValue(() => (sv.flow.value > k ? (sv.riptide.value > 0.5 ? CQ.gold : '#ffffff') : 'rgba(255,255,255,0.35)')));
-  const pipCx = [0, 1, 2].map((k) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useDerivedValue(() => pipPos.value[0] + (k - 1) * 11));
-  const pipCy = [0, 1, 2].map((k) =>
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useDerivedValue(() => pipPos.value[1] + (k === 1 ? -4 : 0)));
-  const pipAlpha = useDerivedValue(() => (sv.flow.value > 0 && sv.shark.value.alpha > 0.5 ? 1 : 0));
 
   // ---- preview (7.2): gold dotted carry path + 45% ghost; coral when no way home
   const armedPreview = useDerivedValue(() => {
@@ -551,31 +625,52 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
     const out: SkPoint[] = [];
     if (!pv || !pv.valid) return out;
     const pts = pv.pts;
+    const march = (sv.fxT.value / 60) % 13;
     for (let k = 0; k + 3 < pts.length; k += 2) {
       const x0 = pts[k]; const y0 = pts[k + 1]; const x1 = pts[k + 2]; const y1 = pts[k + 3];
       const len = Math.hypot(x1 - x0, y1 - y0);
       const steps = Math.max(1, Math.round(len / 13));
-      for (let s = k === 0 ? 1 : 0; s < steps; s++) out.push(vec(x0 + ((x1 - x0) * s) / steps, y0 + ((y1 - y0) * s) / steps));
+      for (let s = k === 0 ? 1 : 0; s < steps; s++) {
+        const u = Math.min(1, (s + march / 13) / steps);
+        out.push(vec(x0 + (x1 - x0) * u, y0 + (y1 - y0) * u));
+      }
     }
     return out;
   });
-  const previewColor = useDerivedValue(() => (armedPreview.value && armedPreview.value.red ? CQ.coral : CQ.gold));
+  const previewColor = useDerivedValue(() => (armedPreview.value && armedPreview.value.red ? CQ.coral : armedPreview.value && armedPreview.value.rip ? '#fff3a6' : CQ.gold));
   const previewOn = useDerivedValue(() => (armedPreview.value && armedPreview.value.valid ? 1 : 0));
+  const previewDotW = useDerivedValue(() => (armedPreview.value && armedPreview.value.rip ? 9 : 7));
+  const previewInkW = useDerivedValue(() => previewDotW.value + 3);
   const ghostRect = useDerivedValue(() => {
     const pv = armedPreview.value;
     const sz = sizes[0];
     const x = pv ? pv.lx : -999;
-    const y = pv ? pv.ly - l.cell * 0.06 : -999;
+    const y = pv ? pv.ly - l.cell * 0.2 : -999;
     return Skia.XYWHRect(x - sz.w / 2, y - sz.h / 2, sz.w, sz.h);
   });
   const ghostTransform = useDerivedValue(() => {
     const pv = armedPreview.value;
     if (!pv) return [{ scaleX: 1 }];
-    return [{ translateX: pv.lx }, { translateY: pv.ly }, { scaleX: pv.facing }, { rotate: pv.rot }, { translateX: -pv.lx }, { translateY: -pv.ly }];
+    const rot = pv.beached ? 1.22 * pv.facing : pv.rot;
+    return [{ translateX: pv.lx }, { translateY: pv.ly }, { scaleX: pv.facing }, { rotate: rot }, { translateX: -pv.lx }, { translateY: -pv.ly }];
   });
   const ghostGold = useDerivedValue(() => (armedPreview.value && armedPreview.value.valid && !armedPreview.value.red ? 0.45 : 0));
   const ghostRed = useDerivedValue(() => (armedPreview.value && armedPreview.value.valid && armedPreview.value.red ? 0.55 : 0));
   const clearGlint = useDerivedValue(() => (armedPreview.value && armedPreview.value.clears ? 0.55 + 0.25 * Math.sin(sv.fxT.value / 90) : 0));
+  // Icons along the path (Into the Breach full outcome): pearl, golden, tide turn, unlock.
+  const iconXY = [0, 1, 2, 3, 4].map((k) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => {
+      const pv = armedPreview.value;
+      const ic = pv && pv.valid ? pv.icons : [];
+      return k * 3 + 2 < ic.length ? [ic[k * 3], ic[k * 3 + 1], ic[k * 3 + 2]] : [-999, -999, -1];
+    }));
+  const iconKindA = [0, 1, 2, 3].map((kind) => [0, 1, 2, 3, 4].map((k) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => (iconXY[k].value[2] === kind ? 1 : 0))));
+  const iconTf = [0, 1, 2, 3, 4].map((k) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => [{ translateX: iconXY[k].value[0] }, { translateY: iconXY[k].value[1] - l.cell * 0.36 }]));
 
   // Tip footprints.
   const hintPts = useDerivedValue<SkPoint[]>(() => {
@@ -590,23 +685,132 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
     return e > 1 ? 0 : 0.85 * (1 - e * e) * (0.75 + 0.25 * Math.sin(sv.fxT.value / 120));
   });
 
-  // Stall swirl under the shark.
-  const swirlPath = useDerivedValue(() => {
-    const p = Skia.Path.Make();
-    const f = sv.shark.value;
+  // Stall swirl under the shark (brush spiral, INK edge, slowly rotating).
+  const swirlPts = useDerivedValue(() => {
     const k = sv.swirl.value;
-    if (k <= 0.01) return p;
-    const rot = sv.fxT.value / 600;
-    for (let s = 0; s < 44; s++) {
-      const a = rot + s * 0.32;
-      const r = 4 + s * 0.85 * k;
-      const x = f.x + Math.cos(a) * r;
-      const y = f.y + l.cell * 0.12 + Math.sin(a) * r * 0.45;
-      if (s === 0) p.moveTo(x, y); else p.lineTo(x, y);
+    if (k <= 0.01) return [];
+    const f = sv.shark.value;
+    return spiralPts(f.x, f.y + l.cell * 0.12, k, sv.fxT.value / 600, 0.45);
+  });
+  const swirlAlpha = useDerivedValue(() => sv.swirl.value * 0.55);
+
+  // Riptide ribbon (gold brush, INK outer edge).
+  const trailAlpha = useDerivedValue<number>(() => (sv.trail.value.length > 3 ? 0.9 : 0));
+
+  // Route recap (missed Par): par route as a gold brush, yours as INK dots, drawn on over 500 ms.
+  const recapK = useDerivedValue(() => {
+    const e = (sv.fxT.value - sv.recapT0.value) / 500;
+    return e < 0 ? 0 : e > 1 ? 1 : e;
+  });
+  const recapAlpha = useDerivedValue(() => {
+    const e = sv.fxT.value - sv.recapT0.value;
+    if (e < 0 || !sv.recapPar.value.length) return 0;
+    return e < 1100 ? 1 : Math.max(0, 1 - (e - 1100) / 300);
+  });
+  const recapMine = useDerivedValue<SkPoint[]>(() => {
+    const pts = sv.recap.value;
+    const out: SkPoint[] = [];
+    const n = pts.length / 2;
+    const upto = Math.ceil(n * recapK.value);
+    for (let k = 0; k + 3 < pts.length && k / 2 < upto; k += 2) {
+      const x0 = pts[k]; const y0 = pts[k + 1]; const x1 = pts[k + 2]; const y1 = pts[k + 3];
+      const steps = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / 11));
+      for (let s = 0; s < steps; s++) out.push(vec(x0 + ((x1 - x0) * s) / steps, y0 + ((y1 - y0) * s) / steps));
     }
+    return out;
+  });
+
+  // Wrong-turn X: stamped (scale 1.4 -> 1, 120 ms) and held while the stall card is up.
+  const wrongPts = useDerivedValue(() => {
+    const w = sv.wrong.value;
+    if (w.length < 2) return [];
+    const e = Math.min(1, Math.max(0, (sv.fxT.value - sv.wrongT0.value) / 120));
+    return xMarkPts(w[0], w[1], l.cell * 0.26, 1.4 - 0.4 * e);
+  });
+  const wrongAlpha = useDerivedValue<number>(() => (sv.wrong.value.length >= 2 && sv.fxT.value >= sv.wrongT0.value ? 1 : 0));
+
+  // Tide sweep (full turn only): a foam-capped brush wave crossing left to right in 500 ms.
+  const sweepK = useDerivedValue(() => {
+    const e = (sv.fxT.value - sv.sweepT0.value) / 500;
+    return e < 0 || e > 1 ? -1 : e;
+  });
+  const sweepPts = useDerivedValue(() => {
+    const k = sweepK.value;
+    if (k < 0) return [];
+    const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    return waveLinePts(l.ax - 6 + (l.pw + 12) * e, l.ay - 4, l.ay + l.ph + 4, sv.fxT.value, 4);
+  });
+  const sweepAlpha = useDerivedValue(() => (sweepK.value < 0 ? 0 : Math.min(1, Math.sin(sweepK.value * Math.PI) * 2)));
+
+  // Glance tour shark ring (300 to 500 ms) and the resume re-find pulse share one brush ring.
+  const tourRingPts = useDerivedValue(() => {
+    const e = sv.fxT.value - sv.tourT0.value;
+    if (e < 280 || e > 560) return [];
+    const k = (e - 280) / 280;
+    const f = sv.shark.value;
+    return ringPts(f.x, f.y, l.cell * (0.35 + 0.25 * k), -1.2 + k);
+  });
+  const tourRingAlpha = useDerivedValue(() => {
+    const e = sv.fxT.value - sv.tourT0.value;
+    return e < 280 || e > 560 ? 0 : Math.sin(((e - 280) / 280) * Math.PI);
+  });
+
+  // Ambient life (9.7): fish shadows under the water, a gull shadow every ~30 s.
+  const fishLanes = useMemo(() => {
+    const out: { row: number; dir: number; period: number; phase: number }[] = [];
+    for (let k = 0; k < 2; k++) {
+      const row = hashCell(k + 7, board.tiles.length + board.start) % H;
+      out.push({ row, dir: k % 2 ? -1 : 1, period: 6000 + (hashCell(k, board.chest) % 4000), phase: hashCell(k + 3, board.golden + 9) % 6000 });
+    }
+    return out;
+  }, [board, H]);
+  const fishPos = fishLanes.map((lane) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => {
+      const t = sv.fxT.value + lane.phase;
+      const cyc = t % (lane.period + 3000);
+      if (cyc > lane.period) return [-999, -999, 0];
+      const k = cyc / lane.period;
+      const x = lane.dir > 0 ? l.ax - l.cell + (l.pw + 2 * l.cell) * k : l.ax + l.pw + l.cell - (l.pw + 2 * l.cell) * k;
+      const y = l.ay + (lane.row + 0.5) * l.cell + Math.sin(t / 700) * 4;
+      const sharkRowNow = Math.floor((sv.shark.value.y - l.ay) / l.cell);
+      const hide = sharkRowNow === lane.row || sv.shark.value.carrying > 0;
+      return [x, y, hide ? 0 : Math.min(1, Math.sin(k * Math.PI) * 3)];
+    }));
+  const fishPaths = fishLanes.map((lane, i) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => {
+      const [x, y] = fishPos[i].value;
+      const p = Skia.Path.Make();
+      const s = l.cell * 0.22;
+      const wig = Math.sin(sv.fxT.value / 120) * s * 0.25;
+      p.addOval(Skia.XYWHRect(x - s, y - s * 0.42, s * 2, s * 0.84));
+      p.moveTo(x - lane.dir * s * 0.9, y);
+      p.lineTo(x - lane.dir * s * 1.6, y - s * 0.5 + wig);
+      p.lineTo(x - lane.dir * s * 1.6, y + s * 0.5 + wig);
+      p.close();
+      return p;
+    }));
+  const fishAlpha = fishLanes.map((_, i) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useDerivedValue(() => fishPos[i].value[2] * 0.12));
+  const gullPath = useDerivedValue(() => {
+    const p = Skia.Path.Make();
+    const t = (sv.fxT.value + 9000) % 30000;
+    if (t > 1600) return p;
+    const k = t / 1600;
+    const x = -40 + (l.cw + 80) * k;
+    const y = l.ay + l.ph * (0.85 - 0.6 * k);
+    const s = l.cell * 0.55;
+    const flap = Math.sin(t / 90) * s * 0.18;
+    p.moveTo(x - s, y - flap);
+    p.quadTo(x - s * 0.4, y - s * 0.35, x, y);
+    p.quadTo(x + s * 0.4, y - s * 0.35, x + s, y - flap);
+    p.quadTo(x + s * 0.4, y - s * 0.1, x, y + s * 0.12);
+    p.quadTo(x - s * 0.4, y - s * 0.1, x - s, y - flap);
+    p.close();
     return p;
   });
-  const swirlAlpha = useDerivedValue(() => sv.swirl.value * 0.35);
 
   // Banners (10.3): Shark font, gold fill, 4 px INK stroke.
   const bannerText = useDerivedValue(() => sv.banner.value.text);
@@ -623,7 +827,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
     const w = font.getTextWidth(bannerText.value);
     return (l.cw - w) / 2;
   });
-  const bannerY = l.ay + l.size * 0.42;
+  const bannerY = l.ay + l.ph * 0.42;
   const bannerTransform = useDerivedValue(() => [
     { translateX: l.cw / 2 }, { translateY: bannerY }, { scale: bannerK.value }, { rotate: -0.05 },
     { translateX: -l.cw / 2 }, { translateY: -bannerY },
@@ -643,30 +847,42 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
 
   const cellX = (i: number) => l.ax + (i % 5) * l.cell;
   const cellY = (i: number) => l.ay + Math.floor(i / 5) * l.cell;
+  const coralFor = (i: number): SkImage | null => {
+    const v = hashCell(i, board.tiles.length) % 3;
+    return (v === 0 ? images.coralA : v === 1 ? images.coralB : images.coralC) ?? images.coralA;
+  };
 
   // Uprights per row, back to front (y-sorted), with the shark slotted into its row.
-  const rows = [0, 1, 2, 3, 4].map((r) => {
+  const rows = ROWS.slice(0, H).map((r) => {
     const items: React.ReactNode[] = [];
     for (let c = 0; c < 5; c++) {
       const i = r * 5 + c;
       const x = cellX(i);
       const y = cellY(i);
-      if (rocks.includes(i) && images.rock) {
-        const w = l.cell * 1.02;
-        const h = (w * images.rock.height()) / images.rock.width();
+      const ri = rocks.indexOf(i);
+      const img = ri >= 0 ? coralFor(i) : null;
+      if (ri >= 0 && img) {
+        const w = l.cell * 1.04;
+        const h = (w * img.height()) / img.width();
+        const baseX = x + l.cell / 2;
+        const baseY = y + l.cell * 0.94;
         items.push(
           <Group key={`rock${i}`}>
             <Oval x={x + l.cell * 0.08} y={y + l.cell * 0.66} width={l.cell * 0.84} height={l.cell * 0.28} color="rgba(31,143,209,0.25)" />
-            <Image image={images.rock} x={x + (l.cell - w) / 2} y={y + l.cell * 0.94 - h} width={w} height={h} fit="contain" />
+            <Group transform={useRotAt(rockSway[ri], baseX, baseY)}>
+              <Image image={img} x={x + (l.cell - w) / 2} y={baseY - h} width={w} height={h} fit="contain" />
+            </Group>
           </Group>,
         );
       }
       if (i === board.chest) {
         const w = l.cell * 1.02;
-        const img = images.chestClosed;
-        const h = img ? (w * img.height()) / img.width() : w * 0.8;
+        const cimg = images.chestClosed;
+        const h = cimg ? (w * cimg.height()) / cimg.width() : w * 0.8;
         const openImg = images.chestOpen;
         const oh = openImg ? (w * 1.05 * openImg.height()) / openImg.width() : h;
+        const sockR = l.cell * 0.085;
+        const sockY = chestBottom - h * 1.02;
         items.push(
           <Group key="chest" transform={chestTransform} origin={vec(chestCx, chestBottom)}>
             <Oval x={chestCx - l.cell * 0.46} y={chestBottom - l.cell * 0.14} width={l.cell * 0.92} height={l.cell * 0.24} color="rgba(31,143,209,0.28)" />
@@ -674,13 +890,37 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
               <BlurMask blur={10} style="normal" />
             </Circle>
             <Group opacity={closedAlpha}>
-              {img ? <Image image={img} x={chestCx - w / 2} y={chestBottom - h} width={w} height={h} fit="contain" /> : null}
+              {cimg ? <Image image={cimg} x={chestCx - w / 2} y={chestBottom - h} width={w} height={h} fit="contain" /> : null}
             </Group>
             <Group opacity={openAlpha}>
               {openImg ? <Image image={openImg} x={chestCx - (w * 1.05) / 2} y={chestBottom - oh} width={w * 1.05} height={oh} fit="contain" /> : null}
             </Group>
             <Group opacity={lockAlpha} transform={lockTransform} origin={vec(chestCx, chestBottom - h * 0.5)}>
               {images.padlock ? <Image image={images.padlock} x={chestCx - l.cell * 0.2} y={chestBottom - h * 0.62} width={l.cell * 0.4} height={l.cell * 0.46} fit="contain" /> : null}
+            </Group>
+            {/* Pearl sockets in an arc over the padlock: the requirement lives on the chest itself. */}
+            <Group opacity={socketAlpha}>
+              {board.pearls.map((_, k) => {
+                const n = board.pearls.length;
+                const sx = chestCx + (k - (n - 1) / 2) * sockR * 2.5;
+                const sy = sockY + Math.abs(k - (n - 1) / 2) * sockR * 0.7;
+                return (
+                  <Group key={`sock${k}`} transform={useScaleAt(socketPop[k], sx, sy)}>
+                    <Circle cx={sx} cy={sy} r={sockR + 1.5} color={CQ.ink} opacity={0.85} />
+                    <Circle cx={sx} cy={sy} r={sockR - 0.5} color={CQ.goldDeep} />
+                    {images.pearl ? (
+                      <>
+                        <Group opacity={0.4}>
+                          <Image image={images.pearl} x={sx - sockR * 0.9} y={sy - sockR * 0.9} width={sockR * 1.8} height={sockR * 1.8} fit="contain" />
+                        </Group>
+                        <Group opacity={socketFill[k]}>
+                          <Image image={images.pearl} x={sx - sockR * 1.1} y={sy - sockR * 1.1} width={sockR * 2.2} height={sockR * 2.2} fit="contain" />
+                        </Group>
+                      </>
+                    ) : null}
+                  </Group>
+                );
+              })}
             </Group>
           </Group>,
         );
@@ -689,20 +929,20 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
       const isGolden = i === board.golden;
       if ((pk >= 0 || isGolden) && (isGolden ? images.golden : images.pearl)) {
         const slot = isGolden ? nP : pk;
-        const img = (isGolden ? images.golden : images.pearl) as SkImage;
+        const pimg = (isGolden ? images.golden : images.pearl) as SkImage;
         const s = l.cell * (isGolden ? 0.6 : 0.46);
-        const hImg = (s * img.height()) / img.width();
+        const hImg = (s * pimg.height()) / pimg.width();
         const cx = x + l.cell / 2;
         const cy = y + l.cell * 0.52;
         items.push(
           <Group key={`pk${i}`} transform={pickBob[slot]}>
             <Group opacity={pickAlpha[slot]} transform={useScaleAt(pickScale[slot], cx, cy)}>
               <Oval x={cx - s * 0.42} y={cy + hImg * 0.34} width={s * 0.84} height={s * 0.22} color="rgba(31,143,209,0.28)" />
-              <Image image={img} x={cx - s / 2} y={cy - hImg / 2} width={s} height={hImg} fit="contain" />
+              <Image image={pimg} x={cx - s / 2} y={cy - hImg / 2} width={s} height={hImg} fit="contain" />
               {isGolden ? (
-                <Group opacity={goldenSpark}>
+                <Group opacity={goldenSpark} transform={useScaleAt(goldenSparkScale, cx + s * 0.34, cy - hImg * 0.36)}>
                   <Path path={sparklePath(cx + s * 0.34, cy - hImg * 0.36, s * 0.22)} color="#ffffff" />
-                  <Path path={sparklePath(cx + s * 0.34, cy - hImg * 0.36, s * 0.22)} color={CQ.ink} style="stroke" strokeWidth={1.2} />
+                  <Path path={sparklePath(cx + s * 0.34, cy - hImg * 0.36, s * 0.22)} color={CQ.ink} style="stroke" strokeWidth={2} />
                 </Group>
               ) : board.tiles[i] === 's' ? (
                 <Group opacity={dryGlint}>
@@ -725,10 +965,13 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
     </Group>
   );
 
+  const ghostImg = images.idle;
+  const foamImg = images.foam;
+  const iconSize = l.cell * 0.32;
+
   return (
     <Canvas style={{ width: l.cw, height: l.ch }} pointerEvents="none">
       <Group layer={desaturate ? <Paint><ColorMatrix matrix={desatMatrix} /></Paint> : undefined}>
-        {/* Open water around the island + play water with grid (one shader). */}
         {/* Soft lagoon pool around the island (the backdrop shows beyond it). */}
         <RoundedRect rect={poolGlow} color="rgba(143,227,250,0.55)">
           <BlurMask blur={8} style="normal" />
@@ -740,51 +983,73 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
         ) : <RoundedRect rect={poolRect} color={CQ.water} />}
         <RoundedRect rect={poolRect} color="rgba(255,255,255,0.7)" style="stroke" strokeWidth={2} />
 
+        {/* Ambient: fish shadows glide under the water, a gull shadow crosses now and then. */}
+        {!lite && !reducedMotion ? (
+          <Group>
+            {fishLanes.map((_, i) => (
+              <Path key={`fish${i}`} path={fishPaths[i]} color="#0b6f99" opacity={fishAlpha[i]}>
+                <BlurMask blur={3} style="normal" />
+              </Path>
+            ))}
+          </Group>
+        ) : null}
+
         <Group transform={riseTransform} opacity={riseOpacity}>
           {/* Island rim with its front face; the waterline on the face is the tide read. */}
-          <Rect x={l.ax - l.rim + 6} y={faceY - 2} width={l.size + l.rim * 2 - 12} height={l.face + 2} color={CQ.wetSand} />
-          <Rect x={l.ax - l.rim + 6} y={faceY - 2} width={l.size + l.rim * 2 - 12} height={faceWetH} color={CQ.sand} />
-          <Rect x={l.ax - l.rim + 6} y={faceWaterY} width={l.size + l.rim * 2 - 12} height={faceWaterH} color="rgba(63,193,239,0.92)" />
-          <Rect x={l.ax - l.rim + 6} y={faceWaterY} width={l.size + l.rim * 2 - 12} height={2} color="rgba(255,255,255,0.85)" />
+          <Rect x={l.ax - l.rim + 6} y={faceY - 2} width={l.pw + l.rim * 2 - 12} height={l.face + 2} color={CQ.wetSand} />
+          <Rect x={l.ax - l.rim + 6} y={faceY - 2} width={l.pw + l.rim * 2 - 12} height={faceWetH} color={CQ.sand} />
+          <Rect x={l.ax - l.rim + 6} y={faceWaterY} width={l.pw + l.rim * 2 - 12} height={faceWaterH} color="rgba(63,193,239,0.92)" />
+          <Rect x={l.ax - l.rim + 6} y={faceWaterY} width={l.pw + l.rim * 2 - 12} height={2} color="rgba(255,255,255,0.85)" />
           <Path path={rimPath} color={CQ.sand} />
           <Path path={rimPath} color={CQ.ink} style="stroke" strokeWidth={2} />
-          <RoundedRect rect={innerRRect} color={CQ.gold} style="stroke" strokeWidth={5} opacity={ripGlow} blendMode="plus" />
+          <RoundedRect rect={innerRRect} color={CQ.gold} style="stroke" strokeWidth={6} opacity={ripGlow} blendMode="plus" />
 
-          {/* Current strips: one per run, foam streaks scroll with the flow. */}
+          {/* Current strips: one hand-drawn foam strip per run, scrolling with the flow. */}
           {runs.map((run, ri) => {
-            const rr = Skia.RRectXY(Skia.XYWHRect(run.x, run.y, run.w, run.h), Math.min(run.w, run.h) / 2, Math.min(run.w, run.h) / 2);
+            const rot = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][run.dir];
+            const rr = Skia.RRectXY(Skia.XYWHRect(-run.len / 2, -run.th / 2, run.len, run.th), run.th / 2, run.th / 2);
             return (
-              <Group key={`run${ri}`} opacity={runAlpha[ri]}>
+              <Group key={`run${ri}`} opacity={runAlpha[ri]} transform={[{ translateX: run.cx }, { translateY: run.cy }, { rotate: rot }]}>
                 <RoundedRect rect={rr} color={CQ.current} />
-                <Group clip={rr}>
-                  <Path path={foamPaths[ri]} color="rgba(255,255,255,0.92)" />
-                </Group>
+                {foamImg ? (
+                  <Group clip={rr}>
+                    <Group transform={runScroll[ri]}>
+                      <Rect x={0} y={0} width={(run.len * 3) / foamScale + foamImg.width() * 2} height={foamImg.height()}>
+                        <ImageShader image={foamImg} tx="repeat" ty="decal" fm="linear" />
+                      </Rect>
+                    </Group>
+                  </Group>
+                ) : null}
                 <RoundedRect rect={rr} color={CQ.ink} style="stroke" strokeWidth={2} />
               </Group>
             );
           })}
 
-          {/* Sandbar mounds (drawn as terrain, under a water layer at HIGH). */}
+          {/* Sandbar mounds: the wet sprite (submerged, HIGH) crossfades to the dry one (LOW). */}
           {sands.map((i) => {
             const cx = cellX(i) + l.cell / 2;
-            const cy = cellY(i) + l.cell * 0.56;
-            const rx = l.cell * 0.44;
-            const ry = l.cell * 0.3;
+            const w = l.cell * 0.98;
+            const dry = images.sand;
+            const wet = images.sandWet;
+            const hd = dry ? (w * dry.height()) / dry.width() : w * 0.7;
+            const hw = wet ? (w * wet.height()) / wet.width() : hd;
+            const bottom = cellY(i) + l.cell * 0.9;
             return (
               <Group key={`sand${i}`}>
-                <Group transform={sandLift}>
-                  <Oval x={cx - rx} y={cy - ry + 5} width={rx * 2} height={ry * 2} color={CQ.wetSand} />
-                  <Oval x={cx - rx} y={cy - ry} width={rx * 2} height={ry * 2} color={CQ.sand} />
-                  <Oval x={cx - rx * 0.72} y={cy - ry * 0.35} width={rx * 1.44} height={ry * 1.05} color="rgba(217,179,110,0.55)" style="stroke" strokeWidth={1.5} />
-                  <Oval x={cx - rx * 0.42} y={cy - ry * 0.05} width={rx * 0.84} height={ry * 0.6} color="rgba(217,179,110,0.45)" style="stroke" strokeWidth={1.2} />
-                  <Oval x={cx - rx * 0.55} y={cy - ry * 0.7} width={rx * 0.62} height={ry * 0.42} color="rgba(255,255,255,0.55)" />
-                  <Oval x={cx - rx} y={cy - ry} width={rx * 2} height={ry * 2 + 5} color={CQ.ink} style="stroke" strokeWidth={2} />
-                  <Group opacity={shoreAlpha}>
-                    <Oval x={cx - rx - 3} y={cy - ry - 2} width={rx * 2 + 6} height={ry * 2 + 9} color={CQ.shoreline} style="stroke" strokeWidth={3} />
-                    <Oval x={cx - rx - 6} y={cy - ry - 4} width={rx * 2 + 12} height={ry * 2 + 13} color="rgba(255,255,255,0.8)" style="stroke" strokeWidth={1.5} />
-                  </Group>
+                <Group opacity={shoreAlpha}>
+                  <Oval x={cx - w * 0.5} y={bottom - hd * 0.42} width={w} height={hd * 0.5} color={CQ.shoreline} />
+                  <Oval x={cx - w * 0.54} y={bottom - hd * 0.46} width={w * 1.08} height={hd * 0.58} color="rgba(255,255,255,0.75)" style="stroke" strokeWidth={2} />
                 </Group>
-                <Oval x={cx - rx - 2} y={cy - ry - 2} width={rx * 2 + 4} height={ry * 2 + 9} color={CQ.water} opacity={sandWaterAlpha} />
+                {wet ? (
+                  <Group opacity={wetAlpha}>
+                    <Image image={wet} x={cx - w / 2} y={bottom - hw} width={w} height={hw} fit="contain" />
+                  </Group>
+                ) : null}
+                {dry ? (
+                  <Group opacity={dryAlpha} transform={sandLift}>
+                    <Image image={dry} x={cx - w / 2} y={bottom - hd} width={w} height={hd} fit="contain" />
+                  </Group>
+                ) : null}
               </Group>
             );
           })}
@@ -794,13 +1059,14 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
             const e = run.cells[0];
             const cx = cellX(e) + l.cell / 2;
             const cy = cellY(e) + l.cell / 2;
-            const w = l.cell * 0.62;
-            const h = (w * (images.chevron as SkImage).height()) / (images.chevron as SkImage).width();
+            const cw = l.cell * 0.58;
+            const chev = images.chevron as SkImage;
+            const chh = (cw * chev.height()) / chev.width();
             const rot = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][run.dir];
             return (
               <Group key={`chev${ri}`} transform={[{ translateX: cx }, { translateY: cy }, { rotate: rot }]}>
                 <Group transform={useBob(chevronBob)}>
-                  <Image image={images.chevron} x={-w / 2} y={-h / 2} width={w} height={h} fit="contain" />
+                  <Image image={chev} x={-cw / 2} y={-chh / 2} width={cw} height={chh} fit="contain" />
                 </Group>
               </Group>
             );
@@ -812,7 +1078,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
           <Points points={hintPts} mode="points" color={CQ.ink} strokeWidth={17} strokeCap="round" />
           <Points points={hintPts} mode="points" color={CQ.gold} strokeWidth={13} strokeCap="round" />
         </Group>
-        <Path path={swirlPath} color="#ffffff" style="stroke" strokeWidth={3} opacity={swirlAlpha} />
+        <InkStrip pts={swirlPts} alpha={swirlAlpha} color="#ffffff" head={2} tail={6} taperIn={0.05} />
 
         {/* Seabed contact shadow + depth tint under the shark. */}
         <Oval rect={depthRect} color="rgba(31,143,209,0.10)" />
@@ -820,17 +1086,24 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
           <BlurMask blur={6} style="normal" />
         </Oval>
 
-        {/* Riptide ribbon. */}
-        <Path path={trailPath} color={CQ.gold} style="stroke" strokeWidth={9} strokeCap="round" strokeJoin="round" opacity={trailAlpha} />
+        {/* Riptide ribbon: tapering gold brush with an INK edge. */}
+        <InkStrip pts={sv.trail} alpha={trailAlpha} color={CQ.gold} head={0} tail={10} taperIn={0} />
 
-        {/* Preview path (gold dots, INK rim). */}
+        {/* Route recap: the par route (gold brush) under your route (INK dots). */}
+        <InkStrip pts={sv.recapPar} progress={recapK} alpha={recapAlpha} color={CQ.gold} head={7} tail={9} taperIn={0.04} />
+        <Group opacity={recapAlpha}>
+          <Points points={recapMine} mode="points" color="#ffffff" strokeWidth={7} strokeCap="round" />
+          <Points points={recapMine} mode="points" color={CQ.ink} strokeWidth={4} strokeCap="round" />
+        </Group>
+
+        {/* Preview path (gold dots marching along the route, INK rim). */}
         <Group opacity={previewOn}>
-          <Points points={previewDots} mode="points" color={CQ.ink} strokeWidth={10} strokeCap="round" />
-          <Points points={previewDots} mode="points" color={previewColor} strokeWidth={7} strokeCap="round" />
+          <Points points={previewDots} mode="points" color={CQ.ink} strokeWidth={previewInkW} strokeCap="round" />
+          <Points points={previewDots} mode="points" color={previewColor} strokeWidth={previewDotW} strokeCap="round" />
         </Group>
 
         {/* Uprights, y-sorted by row, shark slotted into its row. */}
-        {[0, 1, 2, 3, 4].map((r) => (
+        {ROWS.slice(0, H).map((r) => (
           <Group key={`row${r}`}>
             <Group transform={rowRise[r]} origin={vec(l.cw / 2, l.ay + (r + 1) * l.cell)} opacity={rowOpacity[r]}>
               {rows[r]}
@@ -839,14 +1112,14 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
           </Group>
         ))}
 
-        {/* Ghost shark at the landing tile. */}
-        {images.swim ? (
+        {/* Ghost shark at the landing tile (beached flop if the sand dries under it). */}
+        {ghostImg ? (
           <Group transform={ghostTransform}>
             <Group opacity={ghostGold}>
-              <Image image={images.swim} rect={ghostRect} fit="contain" />
+              <Image image={ghostImg} rect={ghostRect} fit="contain" />
             </Group>
             <Group opacity={ghostRed} layer={<Paint><ColorMatrix matrix={redTint} /></Paint>}>
-              <Image image={images.swim} rect={ghostRect} fit="contain" />
+              <Image image={ghostImg} rect={ghostRect} fit="contain" />
             </Group>
           </Group>
         ) : null}
@@ -854,15 +1127,44 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
           <BlurMask blur={8} style="normal" />
         </Circle>
 
-        {/* Flow pips above the shark. */}
-        <Group opacity={pipAlpha}>
-          {[0, 1, 2].map((k) => (
-            <Group key={`pip${k}`}>
-              <Circle cx={pipCx[k]} cy={pipCy[k]} r={5.5} color={CQ.ink} />
-              <Circle cx={pipCx[k]} cy={pipCy[k]} r={4} color={pipFill[k]} />
-            </Group>
-          ))}
-        </Group>
+        {/* Path icons: pearl / golden / tide turn / unlock, where they would happen. */}
+        {[0, 1, 2, 3, 4].map((k) => (
+          <Group key={`icon${k}`} transform={iconTf[k]}>
+            <Circle cx={0} cy={0} r={iconSize * 0.62} color={CQ.ink} opacity={previewOn} />
+            <Circle cx={0} cy={0} r={iconSize * 0.62 - 2} color="#fff8e4" opacity={previewOn} />
+            {images.pearl ? (
+              <Group opacity={iconKindA[0][k]}>
+                <Image image={images.pearl} x={-iconSize / 2} y={-iconSize / 2} width={iconSize} height={iconSize} fit="contain" />
+              </Group>
+            ) : null}
+            {images.golden ? (
+              <Group opacity={iconKindA[1][k]}>
+                <Image image={images.golden} x={-iconSize / 2} y={-iconSize / 2} width={iconSize} height={iconSize} fit="contain" />
+              </Group>
+            ) : null}
+            {images.sandWet ? (
+              <Group opacity={iconKindA[2][k]}>
+                <Image image={images.sandWet} x={-iconSize / 2} y={-iconSize / 2} width={iconSize} height={iconSize} fit="contain" />
+              </Group>
+            ) : null}
+            {images.padlock ? (
+              <Group opacity={iconKindA[3][k]}>
+                <Image image={images.padlock} x={-iconSize / 2} y={-iconSize / 2} width={iconSize} height={iconSize} fit="contain" />
+              </Group>
+            ) : null}
+          </Group>
+        ))}
+
+        {/* Wrong-turn X (stall card), tide sweep wave, glance-tour ring. */}
+        <InkStrip pts={wrongPts} alpha={wrongAlpha} color={CQ.coral} head={9} tail={6} taperIn={0.08} />
+        <InkStrip pts={sweepPts} alpha={sweepAlpha} color="#ffffff" head={7} tail={7} taperIn={0.05} />
+        <InkStrip pts={tourRingPts} alpha={tourRingAlpha} color={CQ.gold} head={6} tail={2} taperIn={0.05} />
+
+        {!lite && !reducedMotion ? (
+          <Path path={gullPath} color="#0b6f99" opacity={0.08}>
+            <BlurMask blur={4} style="normal" />
+          </Path>
+        ) : null}
 
         {/* Banners. */}
         {font ? (
@@ -879,6 +1181,12 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, de
 function useScaleAt(scale: SharedValue<number>, cx: number, cy: number) {
   return useDerivedValue(() => [
     { translateX: cx }, { translateY: cy }, { scale: scale.value }, { translateX: -cx }, { translateY: -cy },
+  ]);
+}
+
+function useRotAt(rot: SharedValue<number>, cx: number, cy: number) {
+  return useDerivedValue(() => [
+    { translateX: cx }, { translateY: cy }, { skewX: rot.value }, { translateX: -cx }, { translateY: -cy },
   ]);
 }
 
