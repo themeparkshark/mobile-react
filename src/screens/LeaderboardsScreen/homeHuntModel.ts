@@ -10,7 +10,7 @@ export type StandingsTabKey = 'coins' | 'rides' | 'xp' | 'hunt';
 export interface StandingsTabSpec { readonly key: StandingsTabKey; readonly label: string; readonly icon: GameIconName }
 
 const BASE_TABS: readonly StandingsTabSpec[] = [
-  { key: 'coins', label: 'Park Coins', icon: 'coin' },
+  { key: 'coins', label: 'Coins Won', icon: 'coin' },
   { key: 'rides', label: 'Rides', icon: 'ride' },
   { key: 'xp', label: 'Experience', icon: 'xp' },
 ];

@@ -15,6 +15,8 @@ import {
   faLayerGroup, 
   faBook,
   faGamepad,
+  faCircleQuestion,
+  faGear,
 } from '@fortawesome/free-solid-svg-icons';
 import * as RootNavigation from '../RootNavigation';
 import config from '../config';
@@ -57,6 +59,20 @@ const MENU_ITEMS: MenuItem[] = [
     icon: faGamepad,
     color: '#09268f',
     screen: 'SharkPark',
+  },
+  {
+    id: 'help',
+    label: 'How to Play',
+    icon: faCircleQuestion,
+    color: '#0768b9',
+    screen: 'HowToPlay',
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    icon: faGear,
+    color: '#3d5f8c',
+    screen: 'Settings',
   },
 ];
 

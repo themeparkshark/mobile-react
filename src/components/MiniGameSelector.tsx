@@ -17,6 +17,9 @@ import { SharkySwim } from '../games/sharky';
 import { BananaBasketGame } from '../games/banana-basket';
 import { TaskAttemptGame, TaskGameProof } from '../api/endpoints/me/task-attempts';
 import { getLinePlayChapter } from '../services/lineplay/chapters';
+import { useHelp } from './help/HelpProvider';
+import GameIntroCard from './help/GameIntroCard';
+import { gameIntroTip } from '../services/help/helpTopics';
 
 const USE_QUEUE_KIT_GAMES = true;
 
@@ -57,6 +60,15 @@ export default function MiniGameSelector({
   const [selectedGame, setSelectedGame] = useState<MiniGameType | null>(null);
   const gameMountedAt = useRef(0);
   const exitPromptOpen = useRef(false);
+  // First time a player meets each game type: a how-to card before it starts.
+  const { tipsReady, hasSeenTip, markTipSeen } = useHelp();
+  const [introGame, setIntroGame] = useState<MiniGameType | null>(null);
+  const introChecked = useRef<MiniGameType | null>(null);
+  if (visible && selectedGame && tipsReady && introChecked.current !== selectedGame) {
+    introChecked.current = selectedGame;
+    if (!hasSeenTip(gameIntroTip(selectedGame))) setIntroGame(selectedGame);
+  }
+  const showIntro = visible && !!selectedGame && introGame === selectedGame;
 
   const handleQuit = useCallback((resume: () => void) => {
     if (isPractice || rewardMode !== 'task-attempt') {
@@ -83,13 +95,18 @@ export default function MiniGameSelector({
   }, [isPractice, rewardMode, onClose]);
 
   useEffect(() => {
-    if (visible && selectedGame) gameMountedAt.current = Date.now();
-  }, [visible, selectedGame]);
+    if (visible && selectedGame && !showIntro) gameMountedAt.current = Date.now();
+  }, [visible, selectedGame, showIntro]);
+  useEffect(() => {
+    if (showIntro && selectedGame) markTipSeen(gameIntroTip(selectedGame));
+  }, [showIntro, selectedGame, markTipSeen]);
 
   useEffect(() => {
     console.log('🎮 MiniGameSelector useEffect:', { visible, preferredGame, selectedGame });
     if (!visible) {
       setSelectedGame(null);
+      setIntroGame(null);
+      introChecked.current = null;
       return;
     }
 
@@ -150,6 +167,10 @@ export default function MiniGameSelector({
   );
 
   if (!visible || !selectedGame) return null;
+
+  if (showIntro) {
+    return <GameIntroCard kind={selectedGame} onStart={() => setIntroGame(null)} />;
+  }
 
   // A Ticket was already spent when the server created this attempt.
   // The attempt resolve call is the only path that awards its coin.

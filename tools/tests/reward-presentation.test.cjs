@@ -145,7 +145,7 @@ function coinUpgrade({ success = false, reduced = true } = {}) {
   }, { visible: true, rideCoin: { id: 13, ride_name: 'Forbidden Journey', current_level: 1, max_level: 5,
     is_unlocked: true, parts_to_next_level: 2, energy_to_next_level: 10, next_level_perks: [], current_perks: [] },
     playerEnergy: 160, playerParts: 4, onClose() {}, onLevelUp() { calls++; return request; } });
-  const power = () => view.find(node => node.type === './YellowButton' && node.props.text === 'Power Up!');
+  const power = () => view.find(node => node.type === './YellowButton' && node.props.text === 'Level Up!');
   return { view, power, get calls() { return calls; }, confirm() { resolve(success); } };
 }
 test('a coin that cannot power up offers its one next step, never a dead end', () => {
@@ -155,7 +155,7 @@ test('a coin that cannot power up offers its one next step, never a dead end', (
     'lottie-react-native': {}, '../helpers/haptics': {}, '../config': {}, './HoloCoinPreview': {}, './Ribbon': {},
     './YellowButton': {}, './CoinUpgradeDemo': {}, '../context/AuthProvider': {}, '../context/SoundEffectProvider': {},
     '../hooks/useReducedGameMotion': {}, '../ui/GameIcon': {}, '../RootNavigation': {}, '../services/purchases': { storeAvailable: () => false },
-    ...progressionStubs, './coin/CoinStand': {}, './coin/Crowning': {}, './coin/LevelUpBurst': {}, './coin/PerkTrack': {},
+    ...progressionStubs, './coin/CoinStand': {}, './coin/Crowning': {}, './coin/LevelUpBurst': {}, './coin/PerkTrack': {}, './help/OneTimeTip': {},
   });
   assert.equal(missingResourceAction(1, 40).label, 'Get 1 Ride Part');
   assert.equal(missingResourceAction(3, 0).label, 'Get 3 Ride Parts');
@@ -271,7 +271,7 @@ test('repeat summary fills the parts meter, pops ready to power up and offers th
     coinProgress:{current_level:1,max_level:5,is_unlocked:true,available_parts:4,parts_to_next_level:2,energy_to_next_level:10}});
   view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();
   assert.equal(view.motions.length,0);
-  assert.ok(view.find(n=>n.props?.children==='READY TO POWER UP'));
+  assert.ok(view.find(n=>n.props?.children==='READY TO LEVEL UP'));
   const button=view.find(n=>n.type==='./YellowButton'); assert.equal(button.props.text,'Upgrade Your Coin');
   button.props.onPress(); assert.equal(opened,true);
 });

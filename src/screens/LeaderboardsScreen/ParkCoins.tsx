@@ -129,7 +129,8 @@ export default function ParkCoins() {
   }
 
   return (
-    <ScrollView>
+    // Bottom room so the last card (the empty-board invite too) clears the tab bar.
+    <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
       <FloatingParticles count={10} />
       <StandingsPodium
         podium={slots.podium}

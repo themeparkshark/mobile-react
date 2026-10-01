@@ -19,7 +19,7 @@ export interface HomeIntroStep {
 export const HOME_INTRO_STEPS: readonly HomeIntroStep[] = [
   {
     title: 'Finds pop up near you',
-    body: 'Treats appear on the map around you, even at home. Each one leaves after a while, so watch its timer.',
+    body: 'Finds appear on the map around you, even at home. Each one leaves after a while, so watch its timer.',
     art: require('../../../assets/images/prep-items/churros/churro_18.png'),
     badge: 'leaves in 21 min',
   },
@@ -41,6 +41,14 @@ function storageKey(playerId: number) {
   return `${HOME_INTRO_KEY}:${playerId}`;
 }
 
+const replayListeners = new Set<(playerId: number) => void>();
+
+/** How to play > Replay tutorials: show the three cards again on the next home visit. */
+export async function replayHomeIntro(playerId: number): Promise<void> {
+  await AsyncStorage.removeItem(storageKey(playerId)).catch(() => undefined);
+  replayListeners.forEach(listener => listener(playerId));
+}
+
 /** Loads whether this player has seen the intro. Null while unknown. */
 export function useHomeIntroSeen(playerId: number | null | undefined): [boolean | null, () => void] {
   const [seen, setSeen] = useState<boolean | null>(null);
@@ -52,7 +60,9 @@ export function useHomeIntroSeen(playerId: number | null | undefined): [boolean 
       .then(value => { if (alive) setSeen(value === '1'); })
       // Storage trouble should never trap a player behind the intro.
       .catch(() => { if (alive) setSeen(true); });
-    return () => { alive = false; };
+    const onReplay = (id: number) => { if (alive && id === playerId) setSeen(false); };
+    replayListeners.add(onReplay);
+    return () => { alive = false; replayListeners.delete(onReplay); };
   }, [playerId]);
   const markSeen = () => {
     setSeen(true);

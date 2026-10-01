@@ -102,6 +102,10 @@ import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSp
 import { useTutorial } from '../components/Tutorial';
 import SignInButtons from '../components/SignInButtons';
 import { GameIcon, GameRichText } from '../ui';
+import { useHelp } from '../components/help/HelpProvider';
+import OneTimeTip from '../components/help/OneTimeTip';
+import HelpButton from '../components/help/HelpButton';
+import { mapTipReady, parkTipFor } from '../services/help/tipGate';
 
 dayjs.extend(require('dayjs/plugin/isBetween'));
 
@@ -230,6 +234,7 @@ function ExploreScreen() {
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
   const { startTutorial, hasCompleted, isReady, isActive } = useTutorial();
+  const { explain } = useHelp();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
   const [adventureOccluded, setAdventureOccluded] = useState(false);
@@ -783,6 +788,14 @@ function ExploreScreen() {
     caughtThisSession, firstFindLineDone: hasCompleted('home_first_find'),
   };
   const homeIntroAllowed = homeIntroMayPresent(homeIntroQueue);
+  const parkTip = parkTipFor({ inPark: !!park, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
+    rideCoinInRange: activeRedeemable?.type === 'task' || activeRedeemable?.type === 'secret_task' });
+  const parkTipReady = mapTipReady({
+    mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
+    dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
+    bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
+    adventureOpen: adventureOccluded, coinFlying: !!pendingCollect || !!collectFlight,
+  });
   // Would present but for a find: home finds hold their auto-open until the intro is seen.
   const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false });
 
@@ -812,7 +825,7 @@ function ExploreScreen() {
               ))}
             {park && (
               <TopbarColumn>
-                <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
+                <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Park Tickets" flyTarget="tickets" />
               </TopbarColumn>
             )}
             {/* TRAVEL MODE: Coins | TRAVEL MODE | Tickets */}
@@ -825,20 +838,23 @@ function ExploreScreen() {
                   )}
                 </TopbarColumn>
                 <TopbarColumn>
-                  <Text style={{
-                    fontSize: 16,
-                    color: 'white',
-                    fontFamily: 'Shark',
-                    textTransform: 'uppercase',
-                    letterSpacing: 2,
-                    textShadowColor: '#05346e',
-                    textShadowOffset: { width: 2, height: 2 },
-                    textShadowRadius: 0,
-                    textAlign: 'center',
-                  }}>Travel Mode</Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Travel Mode" accessibilityHint="Explains Travel Mode"
+                    hitSlop={8} onPress={() => explain('travel_mode')}>
+                    <Text style={{
+                      fontSize: 16,
+                      color: 'white',
+                      fontFamily: 'Shark',
+                      textTransform: 'uppercase',
+                      letterSpacing: 2,
+                      textShadowColor: '#05346e',
+                      textShadowOffset: { width: 2, height: 2 },
+                      textShadowRadius: 0,
+                      textAlign: 'center',
+                    }}>Travel Mode</Text>
+                  </Pressable>
                 </TopbarColumn>
                 <TopbarColumn>
-                  <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Tickets" flyTarget="tickets" />
+                  <Currency image={TICKET_ICON} count={player.tickets ?? 0} name="Park Tickets" flyTarget="tickets" />
                 </TopbarColumn>
               </>
             )}
@@ -921,6 +937,8 @@ function ExploreScreen() {
               zIndex: 10,
             }}
           >
+            {/* How to play, reachable at the park too (the home menu is not shown here). */}
+            <HelpButton topic="park" size={44} style={{ marginBottom: 10, marginLeft: 13 }} label="How to play at the park" />
             {/* Queue Times - moved from right side */}
             <View style={{ marginBottom: 8 }}>
               <Button
@@ -1039,8 +1057,10 @@ function ExploreScreen() {
           >
             {/* Energy and Swords: bright pills in the header's Currency language. */}
             <View style={{ marginBottom: 12, gap: 6, alignItems: 'flex-end' }}>
-              <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0} />
-              <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0} />
+              <MapResourcePill icon="energy" label="Energy" count={player?.energy ?? 0}
+                onPress={() => explain('energy', { count: player?.energy ?? 0 })} />
+              <MapResourcePill icon="swords" label="Swords" count={playerSwordCount} muted={playerSwordCount === 0}
+                onPress={() => explain('swords', { count: playerSwordCount })} />
             </View>
             {/* Profile Avatar - navigates to Park Profile */}
             {player && (
@@ -1065,6 +1085,13 @@ function ExploreScreen() {
           marginTop: -8,
         }}
       >
+        {/* One-time Finn tips: the park welcome, then the first ride coin in range. Never over a game or dialog. */}
+        {player && parkTip && (
+          <OneTimeTip key={parkTip} id={parkTip} ready={parkTipReady}
+            style={parkTip === 'coin_in_range'
+              ? { position: 'absolute', left: 12, right: 12, bottom: 196, zIndex: 40 }
+              : { position: 'absolute', left: 12, right: 12, top: 132, zIndex: 40 }} />
+        )}
         {/* Ride Control floats over the map so the map runs right up to the header. */}
         {player && (
           <View style={{ position: 'absolute', top: 12, left: 0, right: 0, zIndex: 25 }} pointerEvents="box-none">

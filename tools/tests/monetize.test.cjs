@@ -198,7 +198,7 @@ test('the shop copy is honest: real prices, no random rewards, Parts never sold,
   const { grantsText, countdownText } = loadTs('src/screens/StoreScreen/SuppliesShop.tsx', {
     'expo-haptics': {}, react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native': { StyleSheet: { create: s => s } },
     'react-native-reanimated': { default: {}, FadeInUp: {} }, '../../context/AuthProvider': {}, '../../api/endpoints/me/shop': {},
-    '../../api/endpoints/me/ad-rewards': {}, '../../services/purchases': {}, '../../services/ads': {}, '../../ui': { BRAND: {} },
+    '../../api/endpoints/me/ad-rewards': {}, '../../services/purchases': {}, '../../services/ads': {}, '../../ui': { BRAND: {} }, '../../components/help/OneTimeTip': {}, '../../components/help/HelpProvider': {},
   });
   assert.equal(grantsText({ tickets: 15, coins: 1500, energy: 150, rescue_passes: 2 }),
     '15 Park Tickets, 1,500 Shark Coins, 150 Energy and 2 Rescue Passes');

@@ -28,6 +28,9 @@ import { getAdSummary, type AdSummary } from '../../api/endpoints/me/ad-rewards'
 import { buyShopProduct, loadShopPrices, onShopDelivered, storeAvailable, type ShopPrice } from '../../services/purchases';
 import { adsAvailable, rewardText, watchForReward } from '../../services/ads';
 import { BRAND, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../../ui';
+import OneTimeTip from '../../components/help/OneTimeTip';
+import { useHelp } from '../../components/help/HelpProvider';
+import type { GlossaryKey } from '../../services/help/glossary';
 
 const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
 
@@ -40,6 +43,9 @@ const CURRENCY: Record<keyof ShopGrants, { icon: GameIconName; one: string; many
   rescue_passes: { icon: 'gift', one: 'Rescue Pass', many: 'Rescue Passes' },
 };
 const ORDER: (keyof ShopGrants)[] = ['tickets', 'coins', 'energy', 'rescue_passes'];
+const WALLET_TERM: Record<keyof ShopGrants, GlossaryKey> = {
+  tickets: 'tickets', coins: 'coins', energy: 'energy', rescue_passes: 'rescue_pass',
+};
 
 /** "15 Park Tickets, 1,500 Shark Coins and 2 Rescue Passes". */
 export function grantsText(grants: ShopGrants): string {
@@ -67,6 +73,7 @@ function useNow(intervalMs: number) {
 
 export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const { player, refreshPlayer } = useContext(AuthContext);
+  const { hasSeenTip, explain } = useHelp();
   const canBuy = storeAvailable();
   const vip = !!player?.is_subscribed;
   const [catalog, setCatalog] = useState<ShopCatalog | null>(null);
@@ -184,15 +191,24 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
 
   return (
     <ScrollView ref={scroll} contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
-      <View style={st.wallet} accessible accessibilityLabel={`You have ${grantsText(catalog.wallet)}`}>
+      <View style={st.wallet}>
         {ORDER.map(k => (
-          <View key={k} style={st.walletChip}>
+          // Each balance explains itself, like the map's pills.
+          <Pressable key={k} style={st.walletChip} accessibilityRole="button"
+            accessibilityLabel={`${(catalog.wallet[k] ?? 0).toLocaleString('en-US')} ${CURRENCY[k].many}`}
+            accessibilityHint="Explains what this is"
+            onPress={() => explain(WALLET_TERM[k], { count: catalog.wallet[k] ?? 0 })}>
             <GameIcon name={CURRENCY[k].icon} size={22} />
             <Text style={st.walletText}>{(catalog.wallet[k] ?? 0).toLocaleString('en-US')}</Text>
-          </View>
+          </Pressable>
         ))}
       </View>
 
+      {/* First visit: what Supplies is, once. Then, at the first ad offer, that ads are optional. */}
+      <OneTimeTip id="supplies_tab" ready={status === 'ready' && !busy} compact style={{ marginBottom: 10 }} />
+      {showDaily && !vip && daily.remaining > 0 && hasSeenTip('supplies_tab') && (
+        <OneTimeTip id="bonus_ads" ready={status === 'ready' && !busy} compact style={{ marginBottom: 10 }} />
+      )}
       {showDaily && (
         <Animated.View entering={FadeInUp.springify().damping(15)} style={st.freeCard}>
           <GameIcon name="ticket" size={40} />
@@ -207,6 +223,8 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
           {daily.remaining > 0 && (
             <GameButton label={vip ? 'Claim' : 'Watch'} size="compact" fullWidth={false} icon={vip ? 'member' : 'play'}
               loading={busy === 'daily_ticket'} disabled={!!busy} onPress={() => void claimDailyTicket()}
+              // A fixed width: an unsized art button grows to its cap and squeezes the copy to one word a line.
+              style={{ width: 118 }}
               accessibilityLabel={vip ? 'Claim your free daily Ticket' : 'Watch an ad for a free Park Ticket'} />
           )}
         </Animated.View>

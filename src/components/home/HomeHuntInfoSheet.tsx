@@ -26,7 +26,7 @@ export function useHomeHuntInfo(active: boolean): { info: HomeHuntInfo | null; e
 }
 
 /** A bottom sheet of server-written lines. Section titles are fixed; the lines come from the server verbatim. */
-export default function HomeHuntInfoSheet({ visible, title, sections, loading, error, onRetry, onClose }: {
+export default function HomeHuntInfoSheet({ visible, title, sections, loading, error, onRetry, onClose, moreLabel, onMore }: {
   readonly visible: boolean;
   readonly title: string;
   readonly sections: readonly InfoSection[];
@@ -34,6 +34,9 @@ export default function HomeHuntInfoSheet({ visible, title, sections, loading, e
   readonly error?: boolean;
   readonly onRetry?: () => void;
   readonly onClose: () => void;
+  /** Optional second action under Got it, e.g. "Open How to play". */
+  readonly moreLabel?: string;
+  readonly onMore?: () => void;
 }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -64,6 +67,9 @@ export default function HomeHuntInfoSheet({ visible, title, sections, loading, e
               </View>
             ))}
             <GameButton label="Got it" variant="secondary" onPress={onClose} style={{ alignSelf: 'center', marginTop: 4 }} />
+            {onMore && moreLabel ? (
+              <GameButton label={moreLabel} variant="ghost" icon="info" onPress={onMore} style={{ alignSelf: 'center', marginTop: 4 }} />
+            ) : null}
           </ScrollView>
         )}
       </View>
