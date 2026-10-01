@@ -953,7 +953,16 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
     return (l.cw - w) / 2;
   });
   const bannerY = l.ay + l.ph * 0.42;
+  // J4: a tide banner (kind 2) rides the crest of the sweep wave instead of sitting mid-board.
+  const bannerDy = useDerivedValue(() => {
+    if (sv.banner.value.kind !== 2) return 0;
+    const k = Math.max(0, Math.min(1, (sv.fxT.value - sv.banner.value.t0) / 500));
+    const e = Math.sin((k * Math.PI) / 2);
+    const crest = l.ay + l.ph + l.rim - (l.ph + l.rim + 6) * e;
+    return Math.max(l.ay + 18, crest - 22) - bannerY;
+  });
   const bannerTransform = useDerivedValue(() => [
+    { translateY: bannerDy.value },
     { translateX: l.cw / 2 }, { translateY: bannerY }, { scale: bannerK.value }, { rotate: -0.05 },
     { translateX: -l.cw / 2 }, { translateY: -bannerY },
   ]);
