@@ -1,0 +1,5 @@
+# EAS rewrites these during every build (version bump, signing profiles),
+# so they must not change the runtime fingerprint.
+ios/*/Info.plist
+ios/*.xcodeproj/project.pbxproj
+ios/*/Supporting/Expo.plist
