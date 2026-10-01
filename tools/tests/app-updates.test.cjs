@@ -71,3 +71,18 @@ test('source has no restart prompt or in-session reload', () => {
   const source = read('src/hooks/useAppUpdates.ts');
   assert.doesNotMatch(source, /reloadAsync\(|Alert\.alert|Restart Now/);
 });
+
+test('internal tester channel checks within a minute of returning; store channels keep the 6 hour cadence', () => {
+  const { mod } = loadHook();
+  assert.equal(mod.foregroundCheckInterval('internal-tunnel'), 60 * 1000);
+  assert.equal(mod.foregroundCheckInterval('testflight'), 6 * 60 * 60 * 1000);
+  assert.equal(mod.foregroundCheckInterval(null), 6 * 60 * 60 * 1000);
+  assert.equal(mod.shouldCheckOnForeground(0, 61 * 1000, false, mod.foregroundCheckInterval('internal-tunnel')), true);
+  assert.equal(mod.shouldCheckOnForeground(0, 61 * 1000, false, mod.foregroundCheckInterval('production')), false);
+});
+
+test('the hook reads the channel cadence and still never reloads mid-session', () => {
+  const src = read('src/hooks/useAppUpdates.ts');
+  assert.match(src, /foregroundCheckInterval\(Updates\.channel\)/);
+  assert.doesNotMatch(src, /reloadAsync\(/);
+});

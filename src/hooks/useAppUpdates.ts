@@ -15,9 +15,15 @@ import * as Updates from 'expo-updates';
  * drops queue-play state, and the old restart prompt crashed Fabric.
  */
 export const FOREGROUND_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** Internal tester builds (channel "internal-tunnel") pick up fixes within a minute of returning to the app. */
+export const INTERNAL_FOREGROUND_CHECK_INTERVAL_MS = 60 * 1000;
 
-export function shouldCheckOnForeground(lastCheckAt: number, now: number, inFlight: boolean): boolean {
-  return !inFlight && now - lastCheckAt >= FOREGROUND_CHECK_INTERVAL_MS;
+export function foregroundCheckInterval(channel: string | null | undefined): number {
+  return channel === 'internal-tunnel' ? INTERNAL_FOREGROUND_CHECK_INTERVAL_MS : FOREGROUND_CHECK_INTERVAL_MS;
+}
+
+export function shouldCheckOnForeground(lastCheckAt: number, now: number, inFlight: boolean, interval = FOREGROUND_CHECK_INTERVAL_MS): boolean {
+  return !inFlight && now - lastCheckAt >= interval;
 }
 
 export async function fetchUpdateForNextLaunch(updates: Pick<typeof Updates, 'checkForUpdateAsync' | 'fetchUpdateAsync'>): Promise<boolean> {
@@ -37,7 +43,7 @@ export function useAppUpdates() {
     const onChange = (state: AppStateStatus) => {
       if (state !== 'active') return;
       const now = Date.now();
-      if (!shouldCheckOnForeground(lastCheckAt.current, now, inFlight.current)) return;
+      if (!shouldCheckOnForeground(lastCheckAt.current, now, inFlight.current, foregroundCheckInterval(Updates.channel))) return;
       lastCheckAt.current = now;
       inFlight.current = true;
       fetchUpdateForNextLaunch(Updates)
