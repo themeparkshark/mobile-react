@@ -67,7 +67,7 @@ type Props = {
   readonly landed: boolean;
   readonly reduced: boolean;
   readonly isMe?: boolean;
-  /** False on Near Me boards: Hunter Names never open a profile. */
+  /** False on Near Me boards: they never open a profile. */
   readonly interactive?: boolean;
 };
 

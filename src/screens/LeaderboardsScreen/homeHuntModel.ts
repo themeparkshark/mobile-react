@@ -57,8 +57,8 @@ export interface HuntRowModel {
 }
 
 /**
- * Build a row from a board row. Near Me uses ONLY the Hunter Name (`name`):
- * no username, screen name, user id or coordinates are read, and there is no
+ * Build a row from a board row. Near Me uses ONLY `name` (the approved
+ * username) and rank: no user id or coordinates are read, and there is no
  * Player navigation. Friends rows may open the friend's profile.
  */
 export function huntRowModel(row: HuntBoardRow, view: HuntBoardView): HuntRowModel {
@@ -145,34 +145,23 @@ export function countdownText(endsAt: string | null | undefined, now: number): s
   return `${Math.max(1, mins)}m`;
 }
 
-/** Birth years for the wheel, newest first. There is no default selection. */
-export function birthYearOptions(currentYear: number, span = 100): readonly number[] {
-  const years: number[] = [];
-  for (let year = currentYear; year > currentYear - span; year -= 1) years.push(year);
-  return years;
-}
-
-/** The age question appears when the server asks for it, until it is answered or skipped. */
-export function shouldAskAge(week: Pick<HomeHuntWeek, 'needs_age'> | null | undefined, handledThisSession: boolean): boolean {
-  return week?.needs_age === true && !handledThisSession;
-}
-
 export interface HuntSettingsState {
-  readonly visibilityEnabled: boolean;
+  readonly boardName: string;
+  readonly namePending: boolean;
   readonly visibilityValue: boolean;
-  readonly rerollsLeft: number;
-  readonly canReroll: boolean;
   readonly nudgeValue: boolean;
 }
 
-/** Toggle states for the settings block. The visibility toggle is only live for 13 and up. */
+/**
+ * Settings block state. There is no age question: every player can turn Near Me
+ * off, and everyone shows by default. The name is the server's `board_name`.
+ */
 export function huntSettingsState(week: Partial<HomeHuntWeek> | null | undefined): HuntSettingsState {
-  const rerolls = Math.max(0, Number(week?.rerolls_left) || 0);
+  const name = typeof week?.board_name === 'string' ? week.board_name.trim() : '';
   return {
-    visibilityEnabled: week?.can_toggle_visibility === true,
-    visibilityValue: week?.near_me_visible === true,
-    rerollsLeft: rerolls,
-    canReroll: rerolls > 0,
+    boardName: name || '--',
+    namePending: name === 'Player',
+    visibilityValue: week?.near_me_visible !== false,
     nudgeValue: week?.friend_nudge_enabled === true,
   };
 }

@@ -2,8 +2,9 @@
 /**
  * Home Hunt Standings tab: three tabs when the server flag is off, four when
  * it is on; the flag comes from one cached GET /me/home-hunt/week; Near Me
- * rows are built from the Hunter Name only and never open a profile; the age
- * question has no default; this wave never asks for notification permission.
+ * rows show the server's `name` (the approved username) and rank only and never
+ * open a profile; there is no age question and no Hunter Name; this wave never
+ * asks for notification permission.
  */
 const assert = require('node:assert/strict');
 const test = require('node:test');
@@ -34,19 +35,22 @@ test('LeaderboardScreen builds its tabs from the flag and mounts Home Hunt', () 
   assert.doesNotMatch(source, /const TABS/);
 });
 
-test('near me rows use only the Hunter Name and never open a profile', () => {
+test('near me rows show the board name and rank only and never open a profile', () => {
   const row = {
-    rank: 4, name: 'Sunny Coaster 42', points: 340, finds: 12, is_me: false,
-    // A misbehaving server must still not leak identity into a Near Me row.
+    rank: 4, name: 'coaster_fan', points: 340, finds: 12, is_me: false,
+    // A misbehaving server must still not leak an id or another name into a Near Me row.
     username: 'realperson', screen_name: 'RealPerson', user_id: 991, avatar_url: 'https://x/a.png', inventory: null,
+    latitude: 28.5, longitude: -81.3,
   };
   const view = plain(model.huntRowModel(row, 'zone'));
-  assert.equal(view.name, 'Sunny Coaster 42');
+  assert.equal(view.name, 'coaster_fan');
+  assert.equal(view.rank, 4);
   assert.equal(view.playerId, null);
-  assert.equal(view.avatar.screen_name, 'Sunny Coaster 42');
+  assert.equal(view.avatar.screen_name, 'coaster_fan');
   assert.ok(view.avatar.id < 0, 'near me avatars use a negative placeholder id');
   const text = JSON.stringify(view);
   assert.ok(!text.includes('realperson') && !text.includes('RealPerson') && !text.includes('991'));
+  assert.ok(!text.includes('28.5') && !text.includes('-81.3'), 'no coordinates');
 });
 
 test('friends rows may open the friend profile', () => {
@@ -57,9 +61,9 @@ test('friends rows may open the friend profile', () => {
 
 test('the sticky You row and podium split come from the board', () => {
   const board = { kind: 'zone', rows: [1, 2, 3, 4, 5].map(rank => ({ rank, name: `H${rank}`, points: 100 - rank, finds: rank })),
-    me: { rank: 9, name: 'Me Hunter 7', points: 40, finds: 3 } };
+    me: { rank: 9, name: 'shark_me', points: 40, finds: 3 } };
   const me = model.huntMeRow(board, 'zone');
-  assert.equal(me.name, 'Me Hunter 7');
+  assert.equal(me.name, 'shark_me');
   assert.equal(me.isMe, true);
   const slots = model.huntPodium(model.huntRows(board, 'zone'));
   assert.deepEqual(plain(slots.podium.map(p => p && p.rank)), [1, 2, 3]);
@@ -84,34 +88,37 @@ test('tier progress, countdown and rank movement', () => {
   assert.equal(model.rankMovement(null, 9), 'same');
 });
 
-test('the age question is asked once, has no default year and offers newest years first', () => {
-  assert.equal(model.shouldAskAge({ needs_age: true }, false), true);
-  assert.equal(model.shouldAskAge({ needs_age: true }, true), false);
-  assert.equal(model.shouldAskAge({ needs_age: false }, false), false);
-  assert.equal(model.shouldAskAge(null, false), false);
-  const years = model.birthYearOptions(2026);
-  assert.equal(years[0], 2026);
-  assert.equal(years.length, 100);
-  const sheet = read('src/screens/LeaderboardsScreen/HomeHuntAgeSheet.tsx');
-  assert.match(sheet, /useState<number \| null>\(null\)/, 'no year is selected by default');
-  assert.match(sheet, /ageSkip/, 'skip is always offered');
+test('there is no age question and no Hunter Name anywhere in the app', () => {
+  assert.equal(model.shouldAskAge, undefined);
+  assert.equal(model.birthYearOptions, undefined);
+  const fs = require('node:fs');
+  const path = require('node:path');
+  assert.equal(fs.existsSync(path.join(__dirname, '../../src/screens/LeaderboardsScreen/HomeHuntAgeSheet.tsx')), false);
+  for (const file of ['src/screens/LeaderboardsScreen/HomeHunt.tsx', 'src/screens/LeaderboardsScreen/homeHuntModel.ts',
+    'src/api/endpoints/me/homeHunt.ts', 'src/constants/homeHuntCopy.ts']) {
+    assert.doesNotMatch(read(file), /birth_?year|needs_age|age_skipped|AgeSheet|ageQuestion|hunter_name|Hunter Name|reroll/i, file);
+  }
 });
 
-test('visibility toggle is live only when the server allows it; rerolls and nudge default off', () => {
-  const locked = model.huntSettingsState({ can_toggle_visibility: false, near_me_visible: false, rerolls_left: 0 });
-  assert.equal(locked.visibilityEnabled, false);
-  assert.equal(locked.canReroll, false);
-  assert.equal(locked.nudgeValue, false);
-  const open = model.huntSettingsState({ can_toggle_visibility: true, near_me_visible: true, rerolls_left: 3, friend_nudge_enabled: true });
-  assert.equal(open.visibilityEnabled, true);
-  assert.equal(open.visibilityValue, true);
-  assert.equal(open.rerollsLeft, 3);
-  assert.equal(model.settingsErrorMessage({ response: { data: { message: 'No rerolls left' } } }, 'x'), 'No rerolls left');
+test('everyone can turn Near Me off, it defaults on, and the nudge defaults off', () => {
+  const fresh = model.huntSettingsState({ board_name: 'shark_me' });
+  assert.equal(fresh.visibilityValue, true);
+  assert.equal(fresh.nudgeValue, false);
+  assert.equal(fresh.boardName, 'shark_me');
+  assert.equal(fresh.namePending, false);
+  const off = model.huntSettingsState({ board_name: 'Player', near_me_visible: false, friend_nudge_enabled: true });
+  assert.equal(off.visibilityValue, false);
+  assert.equal(off.nudgeValue, true);
+  assert.equal(off.namePending, true);
+  assert.equal(model.huntSettingsState(null).boardName, '--');
+  assert.match(read('src/screens/LeaderboardsScreen/HomeHunt.tsx'), /value=\{settings\.visibilityValue\} disabled=\{savingSettings\}/,
+    'the Near Me toggle is never locked');
+  assert.equal(model.settingsErrorMessage({ response: { data: { message: 'Could not save' } } }, 'x'), 'Could not save');
   assert.equal(model.settingsErrorMessage(new Error('boom'), 'fallback'), 'fallback');
 });
 
 test('this wave saves the friend nudge preference and never asks for notification permission', () => {
-  for (const file of ['src/screens/LeaderboardsScreen/HomeHunt.tsx', 'src/screens/LeaderboardsScreen/HomeHuntAgeSheet.tsx',
+  for (const file of ['src/screens/LeaderboardsScreen/HomeHunt.tsx',
     'src/screens/LeaderboardsScreen/homeHuntModel.ts', 'src/api/endpoints/me/homeHunt.ts']) {
     assert.doesNotMatch(read(file), /requestPermissions|expo-notifications|requestPermissionsAsync/, file);
   }

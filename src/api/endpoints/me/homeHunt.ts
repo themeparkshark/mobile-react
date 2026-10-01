@@ -29,16 +29,15 @@ export interface HomeHuntWeek {
   readonly tier?: HuntTier | null;
   readonly next_tier?: { readonly label: string; readonly points_needed: number } | null;
   readonly rank_line?: string | null;
-  readonly hunter_name?: string;
+  /** The player's own name as public boards show it: the approved username, or "Player". */
+  readonly board_name?: string;
   readonly near_me_visible?: boolean;
-  readonly can_toggle_visibility?: boolean;
-  readonly needs_age?: boolean;
-  readonly rerolls_left?: number;
   readonly friend_nudge_enabled?: boolean;
 }
 
 export interface HuntBoardRow {
   readonly rank: number;
+  /** The approved username ("Player" while it waits for approval). */
   readonly name: string;
   readonly points: number;
   readonly finds: number;
@@ -88,19 +87,13 @@ export interface HomeHuntInfo {
 }
 
 export interface HomeHuntSettingsBody {
-  readonly birth_year?: number;
-  readonly age_skipped?: boolean;
   readonly home_hunt_visible?: boolean;
   readonly friend_nudge_enabled?: boolean;
-  readonly reroll_name?: boolean;
 }
 
 export interface HomeHuntSettings {
-  readonly hunter_name: string;
+  readonly board_name: string;
   readonly near_me_visible: boolean;
-  readonly can_toggle_visibility: boolean;
-  readonly needs_age: boolean;
-  readonly rerolls_left: number;
   readonly friend_nudge_enabled: boolean;
 }
 

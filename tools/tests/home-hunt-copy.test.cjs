@@ -17,7 +17,6 @@ const NEW_FILES = [
   'src/components/home/homeHuntInfoModel.ts',
   'src/components/home/homeHuntResultsModel.ts',
   'src/screens/LeaderboardsScreen/HomeHunt.tsx',
-  'src/screens/LeaderboardsScreen/HomeHuntAgeSheet.tsx',
   'src/screens/LeaderboardsScreen/homeHuntModel.ts',
   'src/screens/LeaderboardsScreen/homeHuntWeekCache.ts',
   'src/screens/SetCollection/SetHuntSections.tsx',
@@ -64,7 +63,10 @@ test('no anti-cheat thresholds are taught in app copy', () => {
   assert.doesNotMatch(copy, /\b(12 m\/s|45 m\/s|100 m|1000 m|speed|burst|mocked|teleport|strike)\b/i);
 });
 
-test('the Near Me board types carry no username field', () => {
+test('the Near Me board types carry the name and rank, never a raw username field, ids or coordinates', () => {
   const api = read('src/api/endpoints/me/homeHunt.ts');
-  assert.doesNotMatch(api, /username/i);
+  // Public boards show the approved username through `name`; there is no separate username field.
+  assert.doesNotMatch(api, /readonly (username|screen_name|latitude|longitude|lat|lng)\b/i);
+  assert.match(api, /interface HuntBoardRow \{\s+readonly rank: number;[\s\S]*?readonly name: string;/);
+  assert.match(api, /Near Me rows never carry a user id/);
 });
