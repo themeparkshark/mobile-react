@@ -319,7 +319,14 @@ export default function MemoryGame({
     'mm_flip', 'mm_match', 'mm_sharp_twinkle', 'mm_scout_tick', 'mm_slip', 'mm_board_clear', 'mm_glimpse',
     'mm_overtime_hit', 'mm_strike', 'mm_peek_bank', 'mm_peek_use', 'sh_tier_up', 'sh_fever_start', 'sh_fever_end',
     'sh_camera', 'sh_seagull', 'sh_wave_wash', 'ui_tick', 'coin_tick', 'sh_whistle',
+    // Everything else this game can play, so nothing decodes mid-run (audio-api
+    // 0.6.5 can abort when a buffer decodes while new nodes are created).
+    'fx.coin', 'fx.reward', 'fx.whoosh', 'mm_lose', 'sh_shield_pop', 'ui.select',
+    ...Array.from({ length: 13 }, (_, i) => `coin_tick_${String(i).padStart(2, '0')}`),
   ]);
+  useEffect(() => {
+    void GameAudio.preloadBeds(['mm_loop_main', 'mm_loop_showtime', 'mm_loop_overtime']).catch(() => undefined);
+  }, []);
   useEffect(() => {
     GameAudio.registerCues({
       mm_shelf_drop: { src: SHELF_DROP, bus: 'sfx', maxVoices: 3, cooldownMs: 40, durationMs: 300, approved: false, fallback: 'ui.confirm', note: 'ElevenLabs shelfDrop (memory/mm_shelf_drop), pending Dustin by-ear OK' },
@@ -846,7 +853,7 @@ export default function MemoryGame({
       score: finalScore,
       stars,
       maxCombo: e.maxChain,
-      message: !won ? (r.mode === 'timeAttack' ? `BOARD ${e.board}` : 'SO CLOSE!')
+      message: !won ? (r.mode === 'timeAttack' ? `BOARD ${e.board}` : r.mode === 'daily' ? `${e.pairs}/${e.pairsTotal} PAIRS` : 'SO CLOSE!')
         : e.turns <= parFor(e.pairsTotal) - 1 ? 'PERFECT!' : stars >= 3 ? 'SHARP!' : 'CLEARED!',
       stats: [
         { label: 'MEMORY', value: grades.memory },
@@ -1493,7 +1500,10 @@ export default function MemoryGame({
           const y = slotCenter(g, row * g.cols).y;
           fx.current?.burst('splash', g.grid.x, y, { count: 10 });
           fx.current?.burst('splash', g.grid.x + g.grid.w, y, { count: 10 });
-          setWells((w) => w.slice());
+          // Gold empty wells slide with the row (5.4): rebuild them from the engine.
+          const nextWells: number[] = [];
+          for (let s2 = 0; s2 < e.n; s2++) if (e.know[s2] === K_MATCHED) nextWells.push(s2);
+          setWells(nextWells);
           break;
         }
         case 'boardClear':
