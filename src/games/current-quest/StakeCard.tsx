@@ -5,7 +5,7 @@
  * (+50% coins), 8 shells = Tide Master Ride (double coins). No new economy.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { CQ } from './theme';
@@ -22,13 +22,16 @@ export const STAKE_TIERS = [
 ] as const;
 
 export function StakeCard({ onDone }: { onDone: () => void }) {
+  // The parent re-renders often (HUD, rail); the 1.2 s timer must not restart with it.
+  const done = useRef(onDone);
+  done.current = onDone;
   useEffect(() => {
-    const t = setTimeout(onDone, STAKE_MS);
+    const t = setTimeout(() => done.current(), STAKE_MS);
     return () => clearTimeout(t);
-  }, [onDone]);
+  }, []);
   return (
     <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(160)} style={styles.scrim}>
-      <Pressable style={styles.fill} onPress={onDone} accessibilityLabel="Ride stakes. Tap to start.">
+      <Pressable style={styles.fill} onPress={() => done.current()} accessibilityLabel="Ride stakes. Tap to start.">
         <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.card}>
           <Text style={styles.title}>Ride Challenge</Text>
           <View style={styles.row}>

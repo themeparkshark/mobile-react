@@ -131,10 +131,10 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, onChal
       <View style={[styles.card, { width: '100%' }]}>
         <Image source={CHEER} style={styles.cheer} />
         <Text style={styles.title}>{s.title}</Text>
-        <View style={styles.chestRow}>
+        <View style={[styles.chestRow, s.podium && styles.chestRowSmall]}>
           <Animated.View style={[styles.light, lightSt]} pointerEvents="none" />
           <Animated.View style={chestSt}>
-            <Image source={open ? CHEST_OPEN : CHEST_CLOSED} style={styles.chest} />
+            <Image source={open ? CHEST_OPEN : CHEST_CLOSED} style={[styles.chest, s.podium && styles.chestSmall]} />
           </Animated.View>
           {open && s.coinPour > 0 ? Array.from({ length: Math.min(12, s.coinPour) }, (_, i) => (
             <Animated.Image key={`c${i}`} source={COIN} entering={ZoomIn.delay(d(i * 60)).springify().damping(9)}
@@ -172,8 +172,8 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, onChal
           ))}
         </View>
         {s.stamp ? (
-          <Animated.View entering={skip ? undefined : ZoomIn.delay(d(starsAt + stars * STAR_STEP)).springify().damping(9)} style={styles.stamp}>
-            <Text style={styles.stampTxt}>{s.stamp}</Text>
+          <Animated.View entering={skip ? undefined : ZoomIn.delay(d(starsAt + stars * STAR_STEP)).springify().damping(9)}>
+            <View style={styles.stamp}><Text style={styles.stampTxt}>{s.stamp}</Text></View>
           </Animated.View>
         ) : null}
         {s.podium ? (
@@ -253,6 +253,8 @@ const styles = StyleSheet.create({
   chestRow: { height: 104, width: 220, alignItems: 'center', justifyContent: 'center' },
   light: { position: 'absolute', width: 200, height: 120, borderRadius: 100, backgroundColor: '#ffffff' },
   chest: { width: 112, height: 96, resizeMode: 'contain' },
+  chestRowSmall: { height: 70 },
+  chestSmall: { width: 80, height: 66 },
   coin: { position: 'absolute', width: 28, height: 28, resizeMode: 'contain' },
   grid: { gap: 2, marginTop: 2 },
   gridRow: { flexDirection: 'row', gap: 4, justifyContent: 'center' },

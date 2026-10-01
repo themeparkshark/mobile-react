@@ -811,19 +811,19 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
   // Shield dome (0.A.6): a bubble bobbing with the shark; it pops into shards when it takes a Splash.
   const shieldRect = useDerivedValue(() => {
     const f = sv.shark.value;
-    const r = l.cell * 0.62 * (1 + 0.03 * Math.sin(sv.fxT.value / 300));
-    return Skia.XYWHRect(f.x - r, f.y - r - l.cell * 0.12, r * 2, r * 2);
+    const r = l.cell * 0.54 * (1 + 0.03 * Math.sin(sv.fxT.value / 300));
+    return Skia.XYWHRect(f.x - r, f.y - r - l.cell * 0.16, r * 2, r * 2);
   });
   const shieldAlpha = useDerivedValue(() => {
     const pop = sv.fxT.value - sv.shieldPopT.value;
     if (pop >= 0 && pop < 220) return 1 - pop / 220;
-    return sv.shield.value * 0.75;
+    return sv.shield.value * 0.6;
   });
   // Tide warning pip over the shark at 1 move left (0.A.2: a warning only, the medallion is the counter).
   const pipXY = useDerivedValue(() => {
     const f = sv.shark.value;
     const k = 1 + 0.25 * Math.max(0, Math.sin((sv.fxT.value / 500) * Math.PI));
-    return [{ translateX: f.x }, { translateY: f.y - l.cell * 0.78 }, { scale: k }];
+    return [{ translateX: f.x + l.cell * 0.34 }, { translateY: f.y - l.cell * 0.92 }, { scale: k }];
   });
   const pipAlpha = useDerivedValue(() => (sv.tidePip.value > 0 && sv.shark.value.done ? 1 : 0));
   const pipLowA = useDerivedValue(() => (sv.tidePip.value === 1 ? 1 : 0));
@@ -1292,15 +1292,15 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
           </Group>
         ) : null}
         <Group transform={pipXY} opacity={pipAlpha}>
-          <Circle cx={0} cy={0} r={l.cell * 0.2} color={CQ.ink} />
-          <Circle cx={0} cy={0} r={l.cell * 0.2 - 2} color="#ffffff" />
+          <Circle cx={0} cy={0} r={l.cell * 0.24} color={CQ.ink} />
+          <Circle cx={0} cy={0} r={l.cell * 0.24 - 2} color={CQ.gold} />
           <Group opacity={pipLowA}>
-            <Path path={moundPath(0, 2, l.cell * 0.13)} color={CQ.sand} />
-            <Path path={moundPath(0, 2, l.cell * 0.13)} color={CQ.ink} style="stroke" strokeWidth={2} />
+            <Path path={moundPath(0, 3, l.cell * 0.17)} color={CQ.sand} />
+            <Path path={moundPath(0, 3, l.cell * 0.17)} color={CQ.ink} style="stroke" strokeWidth={2} />
           </Group>
           <Group opacity={pipHighA}>
-            <Path path={wavePath(0, 0, l.cell * 0.13)} color="#2fb6ec" />
-            <Path path={wavePath(0, 0, l.cell * 0.13)} color={CQ.ink} style="stroke" strokeWidth={2} />
+            <Path path={wavePath(0, 0, l.cell * 0.17)} color="#2fb6ec" />
+            <Path path={wavePath(0, 0, l.cell * 0.17)} color={CQ.ink} style="stroke" strokeWidth={2} />
           </Group>
         </Group>
 

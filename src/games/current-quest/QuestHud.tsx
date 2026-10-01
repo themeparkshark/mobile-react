@@ -31,6 +31,7 @@ const RING_ART = require('../../assets/games/current-quest/life_ring_v2.png');
 const SOCKET_ART = require('../../assets/games/current-quest/shell_socket.png');
 const MEDALLION_ART = require('../../assets/games/current-quest/tide_medallion.png');
 const SHARK_FONT = require('../../../assets/fonts/shark-random-funnyness-2.ttf');
+// Strokes-left digits: big enough to read from a 1 s glance at arm's length.
 
 export interface HudState {
   voyage: number;
@@ -84,7 +85,7 @@ export const StrokeMedallion = React.memo(function StrokeMedallion({ left, limit
   left: number; limit: number; par: number; spentPar: number; trial: boolean; rings: number; ringsMax: number;
 }) {
   const art = useImage(RING_ART);
-  const font = useFont(SHARK_FONT, 26);
+  const font = useFont(SHARK_FONT, 24);
   const hot = left <= 3;
   const pop = useSharedValue(1);
   useEffect(() => {
@@ -100,39 +101,33 @@ export const StrokeMedallion = React.memo(function StrokeMedallion({ left, limit
   const frac = Math.max(0, Math.min(1, left / total));
   const cx = MED / 2;
   const cy = MED / 2;
-  const r = MED / 2 - 3;
+  const r = MED / 2 - 2.5;
   const start = -Math.PI / 2;
   // Drain arc: what is left, clockwise from 12 o'clock.
   const arc = useMemo(() => arcPath(cx, cy, r, start, start + Math.PI * 2 * frac), [frac]); // eslint-disable-line react-hooks/exhaustive-deps
   // Gold notch where the par stroke sits on the arc (strokes left at par = limit - par).
   const parLeft = Math.max(0, total - spentPar);
   const na = start + Math.PI * 2 * (parLeft / total);
-  const notch = useMemo(() => {
-    const p = Skia.Path.Make();
-    p.moveTo(cx + Math.cos(na) * (r - 6), cy + Math.sin(na) * (r - 6));
-    p.lineTo(cx + Math.cos(na) * (r + 3), cy + Math.sin(na) * (r + 3));
-    return p;
-  }, [na]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nx = cx + Math.cos(na) * r;
+  const ny = cy + Math.sin(na) * r;
   const label = String(Math.max(0, left));
   const tw = font ? font.getTextWidth(label) : 0;
   void par;
   return (
     <View style={styles.medWrap} accessibilityLabel={`${left} strokes left, par ${par}`}>
       <Animated.View style={st}>
-        <Canvas style={{ width: MED, height: MED }}>
-          {art ? <SkiaImage image={art} x={1} y={1} width={MED - 2} height={MED - 2} fit="contain" /> : null}
-          <Circle cx={cx} cy={cy} r={r - 9} color="#ffffff" opacity={0.92} />
-          <Path path={arc} color={CQ.ink} style="stroke" strokeWidth={7} strokeCap="round" />
-          <Path path={arc} color={hot ? CQ.coral : '#7fdaf7'} style="stroke" strokeWidth={4} strokeCap="round" />
-          <Path path={notch} color={CQ.ink} style="stroke" strokeWidth={5} strokeCap="round" />
-          <Path path={notch} color={CQ.gold} style="stroke" strokeWidth={3} strokeCap="round" />
-          {font ? (
-            <Group>
-              <SkiaText text={label} x={cx - tw / 2} y={cy + 9} font={font} color={CQ.ink} style="stroke" strokeWidth={5} strokeJoin="round" />
-              <SkiaText text={label} x={cx - tw / 2} y={cy + 9} font={font} color={hot ? CQ.coral : CQ.gold} />
-            </Group>
-          ) : null}
-        </Canvas>
+        {art && font ? <Canvas style={{ width: MED, height: MED }}>
+          <Path path={arc} color={CQ.ink} style="stroke" strokeWidth={6} strokeCap="round" />
+          <Path path={arc} color={hot ? CQ.coral : '#7fdaf7'} style="stroke" strokeWidth={3} strokeCap="round" />
+          <SkiaImage image={art} x={6} y={6} width={MED - 12} height={MED - 12} fit="contain" />
+          <Circle cx={cx} cy={cy} r={MED * 0.2} color="#ffffff" />
+          <Circle cx={nx} cy={ny} r={3.6} color={CQ.ink} />
+          <Circle cx={nx} cy={ny} r={2.4} color={CQ.gold} />
+          <Group>
+            <SkiaText text={label} x={cx - tw / 2} y={cy + 9} font={font} color={CQ.ink} style="stroke" strokeWidth={5} strokeJoin="round" />
+            <SkiaText text={label} x={cx - tw / 2} y={cy + 9} font={font} color={hot ? CQ.coral : CQ.gold} />
+          </Group>
+        </Canvas> : <View style={{ width: MED, height: MED }} />}
       </Animated.View>
       {trial ? (
         <View style={styles.ringRow}>
@@ -185,22 +180,28 @@ export const ShellSockets = React.memo(function ShellSockets({ shells, parLost, 
 
 const TIDE = 52;
 
+/** HIGH: deep water up to a three-scallop wavy line (reads as "full" at a glance). */
 function waveGlyph(cx: number, cy: number, s: number) {
   const p = Skia.Path.Make();
-  p.moveTo(cx - s, cy + s * 0.25);
-  p.cubicTo(cx - s * 0.6, cy - s * 0.55, cx - s * 0.05, cy - s * 0.55, cx + s * 0.1, cy - s * 0.05);
-  p.cubicTo(cx + s * 0.2, cy + s * 0.25, cx + s * 0.55, cy + s * 0.2, cx + s * 0.55, cy - s * 0.1);
-  p.cubicTo(cx + s * 0.8, cy + s * 0.15, cx + s, cy + s * 0.25, cx + s, cy + s * 0.25);
-  p.lineTo(cx + s, cy + s * 0.6);
-  p.lineTo(cx - s, cy + s * 0.6);
+  const top = cy - s * 0.35;
+  p.moveTo(cx - s, top);
+  for (let k = 0; k < 3; k++) {
+    const x0 = cx - s + (k * 2 * s) / 3;
+    const w = (2 * s) / 3;
+    p.quadTo(x0 + w * 0.25, top - s * 0.32, x0 + w * 0.5, top);
+    p.quadTo(x0 + w * 0.75, top + s * 0.32, x0 + w, top);
+  }
+  p.lineTo(cx + s, cy + s);
+  p.lineTo(cx - s, cy + s);
   p.close();
   return p;
 }
 
+/** LOW: a dry sand mound standing out of a thin strip of water. */
 function moundGlyph(cx: number, cy: number, s: number) {
   const p = Skia.Path.Make();
-  p.moveTo(cx - s, cy + s * 0.45);
-  p.cubicTo(cx - s * 0.6, cy - s * 0.45, cx + s * 0.6, cy - s * 0.45, cx + s, cy + s * 0.45);
+  p.moveTo(cx - s, cy + s * 0.55);
+  p.cubicTo(cx - s * 0.7, cy - s * 0.65, cx + s * 0.7, cy - s * 0.65, cx + s, cy + s * 0.55);
   p.close();
   return p;
 }
@@ -227,10 +228,13 @@ export const TideMedallion = React.memo(function TideMedallion({ low, P, movesTo
   const face = TIDE * 0.3;
   // P pips around the rim: filled = moves still to go before the turn.
   const pips = useMemo(() => Array.from({ length: P }, (_, k) => {
-    const a = -Math.PI / 2 + ((k + 0.5) / P) * Math.PI * 1.2 - Math.PI * 0.6;
-    return { x: cx + Math.cos(a) * (TIDE * 0.47), y: cy + Math.sin(a) * (TIDE * 0.47) - 2, on: k < movesToTurn };
+    // Lower-left arc (the next-state inset owns 5 o'clock, the art's loop owns 12).
+    const a = Math.PI * (0.62 + (0.5 * (k + 0.5)) / P);
+    return { x: cx + Math.cos(a) * (face + 6), y: cy + Math.sin(a) * (face + 6), on: k < movesToTurn };
   }), [P, movesToTurn]); // eslint-disable-line react-hooks/exhaustive-deps
-  const glyph = useMemo(() => (low ? moundGlyph(cx, cy + 2, face * 0.85) : waveGlyph(cx, cy, face * 0.85)), [low]); // eslint-disable-line react-hooks/exhaustive-deps
+  const glyph = useMemo(() => (low ? moundGlyph(cx, cy + 1, face * 0.95) : waveGlyph(cx, cy, face)), [low]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lowWater = useMemo(() => waveGlyph(cx, cy + face * 0.95, face), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const faceClip = useMemo(() => { const p = Skia.Path.Make(); p.addCircle(cx, cy, face); return p; }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const next = useMemo(() => (low ? waveGlyph(TIDE * 0.84, TIDE * 0.82, 6) : moundGlyph(TIDE * 0.84, TIDE * 0.82, 6)), [low]);
   return (
     <Pressable
@@ -242,12 +246,15 @@ export const TideMedallion = React.memo(function TideMedallion({ low, P, movesTo
       style={styles.tideWrap}
     >
       <Animated.View style={st}>
-        <Canvas style={{ width: TIDE, height: TIDE }}>
-          {art ? <SkiaImage image={art} x={4} y={0} width={TIDE - 8} height={TIDE} fit="contain" /> : null}
+        {art ? <Canvas key={`tide${P}`} style={{ width: TIDE, height: TIDE }}>
+          <SkiaImage image={art} x={4} y={0} width={TIDE - 8} height={TIDE} fit="contain" />
           <Circle cx={cx} cy={cy} r={face + 2} color={CQ.ink} />
-          <Circle cx={cx} cy={cy} r={face} color={low ? CQ.sand : '#7fdaf7'} />
-          <Path path={glyph} color={low ? '#e9c98a' : '#2fb6ec'} />
-          <Path path={glyph} color={CQ.ink} style="stroke" strokeWidth={2} strokeJoin="round" />
+          <Circle cx={cx} cy={cy} r={face} color={low ? '#bfeefe' : '#e8f8ff'} />
+          <Group clip={faceClip}>
+            <Path path={lowWater} color="#7fdaf7" opacity={low ? 1 : 0} />
+            <Path path={glyph} color={low ? CQ.sand : '#2fb6ec'} />
+            <Path path={glyph} color={low ? CQ.ink : '#ffffff'} style="stroke" strokeWidth={2} strokeJoin="round" />
+          </Group>
           {pips.map((p, k) => (
             <Group key={`pip${k}`}>
               <Circle cx={p.x} cy={p.y} r={3.6} color={CQ.ink} />
@@ -259,7 +266,7 @@ export const TideMedallion = React.memo(function TideMedallion({ low, P, movesTo
           <Circle cx={TIDE * 0.84} cy={TIDE * 0.84} r={7.5} color={low ? '#7fdaf7' : CQ.sand} />
           <Path path={next} color={low ? '#2fb6ec' : '#e9c98a'} />
           <Path path={next} color={CQ.ink} style="stroke" strokeWidth={2} />
-        </Canvas>
+        </Canvas> : <View style={{ width: TIDE, height: TIDE }} />}
       </Animated.View>
       {tag ? <Text style={styles.tideTag}>{`${low ? 'HIGH' : 'LOW'} in ${movesToTurn}`}</Text> : null}
     </Pressable>
