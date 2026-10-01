@@ -62,7 +62,17 @@ export function useMapAliveEngine({ focused, paused, light }: {
     return () => subscription.remove();
   }, []);
 
-  const [governor, setGovernor] = useState<FrameGovernor>(GOVERNOR_START);
+  // The governor's counters change every 2 s window; only its strain changes
+  // what renders. Counters live in a ref so a healthy map does not re-render
+  // (with every marker under it) 30 times a minute.
+  const governorRef = useRef<FrameGovernor>(GOVERNOR_START);
+  const [governor, setGovernorState] = useState<FrameGovernor>(GOVERNOR_START);
+  const setGovernor = useCallback((update: (state: FrameGovernor) => FrameGovernor) => {
+    const next = update(governorRef.current);
+    const strainChanged = next.strain !== governorRef.current.strain;
+    governorRef.current = next;
+    if (strainChanged) setGovernorState(next);
+  }, []);
   // Development QA on a loaded simulator can pin the tier (EXPO_PUBLIC_MAP_ALIVE_TIER=full|lite); Reduce Motion still wins.
   const pinned = __DEV__ ? process.env.EXPO_PUBLIC_MAP_ALIVE_TIER : undefined;
   const governed = aliveTier({ reducedMotion, strain: governor.strain });
@@ -76,13 +86,13 @@ export function useMapAliveEngine({ focused, paused, light }: {
     if (governor.strain !== 2) return;
     const timer = setInterval(() => setGovernor(state => governIdle(state, Date.now())), 15_000);
     return () => clearInterval(timer);
-  }, [governor.strain]);
+  }, [governor.strain, setGovernor]);
 
   const windows = useRef(0);
   const onWindow = useCallback((avgMs: number) => {
     if (__DEV__ && ++windows.current % 5 === 0) console.log(`MAP_ALIVE fps=${(1000 / avgMs).toFixed(1)} frame=${avgMs.toFixed(1)}ms`);
     setGovernor(state => governFrames(state, avgMs, Date.now()));
-  }, []);
+  }, [setGovernor]);
 
   const clock = useSharedValue(0);
   const elapsed = useSharedValue(0);

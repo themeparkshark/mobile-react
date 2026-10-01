@@ -156,3 +156,12 @@ test('the ambient clock rate is time based: 30 updates a second at 60 Hz and on 
   const engine = read('src/components/map/alive/MapAliveContext.tsx');
   assert.match(engine, /if \(clockStepDue\(sinceStep\.value, stepS\.value\)\) \{\s*sinceStep\.value = 0;\s*clock\.value = elapsed\.value;/);
 });
+
+test('the frame governor re-renders the map only when its strain changes', () => {
+  const engine = read('src/components/map/alive/MapAliveContext.tsx');
+  assert.match(engine, /const strainChanged = next\.strain !== governorRef\.current\.strain;\s*governorRef\.current = next;\s*if \(strainChanged\) setGovernorState\(next\);/);
+  // A healthy window updates counters only.
+  const healthy = budget.governFrames(budget.GOVERNOR_START, 16, 0);
+  assert.equal(healthy.strain, budget.GOVERNOR_START.strain);
+  assert.notEqual(healthy, budget.GOVERNOR_START, 'counters move, so the state object is new every window');
+});
