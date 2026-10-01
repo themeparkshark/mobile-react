@@ -755,8 +755,11 @@ function ExploreScreen() {
       {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
       {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && hasCompleted('onboarding') && chestReady &&
         <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} />}
-      {/* Home Mode: Show prep items map instead of "Not at Park" message */}
-      {player && parkLoaded && !park && permissionGranted && (
+      {/* Home Mode: the map always renders without a park, even before the
+          first park check settles (it shows the park-check card until then).
+          Gating it on parkLoaded left a blank grey screen whenever park state
+          was cleared without a finished lookup. */}
+      {player && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed} />
       )}

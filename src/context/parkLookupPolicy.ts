@@ -42,3 +42,46 @@ export function shouldRefreshParkLookup(
   }
   return elapsed >= 30_000 || distanceMeters(location, previous) >= 25;
 }
+
+/*
+ * Leaving a park needs sustained evidence. A guest standing inside Disneyland
+ * must never drop to Travel Mode on one bad GPS fix (indoors, under a canopy,
+ * right after the watcher restarts), a timeout or a network error.
+ */
+export const LEAVE_PARK_OUTSIDE_CHECKS = 2;
+export const LEAVE_PARK_MIN_MS = 45_000;
+/** An outside reading from a fix this coarse does not count toward leaving. */
+export const LEAVE_PARK_MAX_ACCURACY_M = 100;
+
+export interface ParkPresence<P> {
+  readonly park: P | undefined;
+  /** When the first countable outside reading arrived while at a park. */
+  readonly outsideSince: number | null;
+  readonly outsideChecks: number;
+}
+
+export interface ParkLookupResult<P> {
+  readonly outcome: ParkLookupOutcome;
+  readonly park?: P | null;
+  readonly at: number;
+  readonly accuracyMeters?: number | null;
+}
+
+export const NO_PARK_PRESENCE: ParkPresence<never> = { park: undefined, outsideSince: null, outsideChecks: 0 };
+
+/** The park the map shows after one lookup. Entering or switching is instant; leaving is sticky. */
+export function nextParkPresence<P>(state: ParkPresence<P>, result: ParkLookupResult<P>): ParkPresence<P> {
+  if (result.outcome === 'error') return state;
+  if (result.outcome === 'park' && result.park) {
+    return { park: result.park, outsideSince: null, outsideChecks: 0 };
+  }
+  if (!state.park) return { park: undefined, outsideSince: null, outsideChecks: 0 };
+  const accuracy = result.accuracyMeters;
+  if (accuracy != null && (!Number.isFinite(accuracy) || accuracy > LEAVE_PARK_MAX_ACCURACY_M)) return state;
+  const outsideSince = state.outsideSince ?? result.at;
+  const outsideChecks = state.outsideChecks + 1;
+  if (outsideChecks >= LEAVE_PARK_OUTSIDE_CHECKS && result.at - outsideSince >= LEAVE_PARK_MIN_MS) {
+    return { park: undefined, outsideSince: null, outsideChecks: 0 };
+  }
+  return { park: state.park, outsideSince, outsideChecks };
+}

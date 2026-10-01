@@ -7,7 +7,8 @@ import { LocationType } from '../models/location-type';
 import { ParkType } from '../models/park-type';
 import { AuthContext } from './AuthProvider';
 import { setDevModeEnabled, setDevLocation as setGlobalDevLocation } from '../helpers/dev-location-store';
-import { shouldRefreshParkLookup, type ParkLookupRecord } from './parkLookupPolicy';
+import { nextParkPresence, NO_PARK_PRESENCE, shouldRefreshParkLookup, type ParkLookupRecord,
+  type ParkPresence } from './parkLookupPolicy';
 
 // Smoothing factor for heading (lower = smoother but laggier, higher = more responsive but jittery)
 // Tuned for snappy but stable
@@ -76,7 +77,11 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [location, setLocation] = useState<LocationType>();
   const latestLocationSampleRef = useRef<(LocationType & { timestamp: number;
     accuracyMeters?: number | null; speedMps?: number | null }) | null>(null);
-  const [park, setPark] = useState<ParkType>();
+  const [park, setParkState] = useState<ParkType>();
+  // Sticky park state: entering is instant, leaving needs sustained outside
+  // readings (see nextParkPresence). Only reset() and an account change clear it.
+  const presenceRef = useRef<ParkPresence<ParkType>>(NO_PARK_PRESENCE);
+  const clearPark = () => { presenceRef.current = NO_PARK_PRESENCE; setParkState(undefined); };
   const { player, refreshPlayer } = useContext(AuthContext);
   const [parkLoaded, setParkLoaded] = useState<boolean>(false);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(false);
@@ -291,10 +296,15 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
       try {
         const newPark = await currentPark(coordinates.latitude, coordinates.longitude);
         if (currentPlayerIdRef.current !== playerId) return;
-        parkLookupRef.current = { ...coordinates, at: Date.now(), outcome: newPark ? 'park' : 'outside' };
+        const at = Date.now();
+        parkLookupRef.current = { ...coordinates, at, outcome: newPark ? 'park' : 'outside' };
         setParkLookupRecord(parkLookupRef.current);
+        presenceRef.current = nextParkPresence(presenceRef.current, {
+          outcome: newPark ? 'park' : 'outside', park: newPark, at,
+          accuracyMeters: latestLocationSampleRef.current?.accuracyMeters,
+        });
+        setParkState(presenceRef.current.park);
         setParkLoaded(true);
-        setPark(newPark ?? undefined);
         if ((newPark?.welcome_tickets_granted ?? 0) > 0) {
           try {
             await refreshPlayer();
@@ -318,21 +328,34 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return lookup;
   };
 
+  // Never clears the park. At launch this is called before the first GPS fix,
+  // and a slow fix (10 s or more in a crowded park) used to land after the
+  // watcher had already found the park, then wipe it: Travel Mode and a blank
+  // map at Disneyland. Reads the newest fix through refs, not a stale closure.
   const requestPark = async () => {
-    if (!location) {
-      await requestLocation();
-      setParkLoaded(false);
-      setPark(undefined);
+    const known = lastLocationRef.current ?? location;
+    if (known) {
+      await lookupParkAt(known);
       return;
     }
-    await lookupParkAt(location);
+    const fresh = await getCurrentLocation();
+    if (!fresh) return;
+    if (!lastLocationRef.current) {
+      lastLocationRef.current = fresh;
+      debouncedSetLocation(fresh);
+    }
+    await lookupParkAt(lastLocationRef.current);
   };
 
+  // A different account (or sign-out) starts over; the same player never does.
+  const parkOwnerRef = useRef(player?.id);
   useEffect(() => {
+    if (parkOwnerRef.current === player?.id) return;
+    parkOwnerRef.current = player?.id;
     parkLookupRef.current = null;
     setParkLookupRecord(null);
     setParkLoaded(false);
-    setPark(undefined);
+    clearPark();
   }, [player?.id]);
 
   useEffect(() => {
@@ -497,7 +520,7 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     setParkLookupRecord(null);
     setLocation(undefined);
     setParkLoaded(false);
-    setPark(undefined);
+    clearPark();
     setHeading(null);
     smoothedHeadingRef.current = null;
     lastLocationRef.current = null;
