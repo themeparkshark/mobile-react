@@ -47,6 +47,7 @@ export function StakeCard({ onDone }: { onDone: () => void }) {
               </Animated.View>
             ))}
           </View>
+          <Text style={styles.rule}>Every stroke counts. A life ring gives 2 strokes.</Text>
         </Animated.View>
       </Pressable>
     </Animated.View>
@@ -56,9 +57,10 @@ export function StakeCard({ onDone }: { onDone: () => void }) {
 const styles = StyleSheet.create({
   scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.35)', zIndex: 40 },
   fill: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  card: { width: '90%', paddingVertical: 14, paddingHorizontal: 10, borderRadius: 24, backgroundColor: CARD_CREAM, borderWidth: 4, borderColor: CQ.gold, alignItems: 'center' },
+  card: { width: '90%', paddingVertical: 14, paddingHorizontal: 10, borderRadius: 24, backgroundColor: CARD_CREAM, borderWidth: 4, borderColor: CQ.gold, alignItems: 'center', shadowColor: CQ.ink, shadowOpacity: 0.25, shadowRadius: 0, shadowOffset: { width: 0, height: 4 } },
   title: { fontFamily: 'Shark', fontSize: 24, color: CQ.navy },
-  row: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  row: { flexDirection: 'row', gap: 8, marginTop: 8, alignSelf: 'stretch' },
+  rule: { marginTop: 10, fontFamily: 'Knockout', fontSize: 13, color: CQ.navy, textAlign: 'center', opacity: 0.85 },
   tier: { flex: 1, alignItems: 'center' },
   stack: { width: 52, height: 66, alignItems: 'center', justifyContent: 'flex-end' },
   coin: { position: 'absolute', width: 48, height: 48, resizeMode: 'contain' },

@@ -121,7 +121,16 @@ export interface BoardSV {
   /** Par buoy beside the chest (0.A.14, Cut the Rope): the par target (0 hides it), and fx ms it sank (Par lost). */
   parBuoy: SharedValue<number>;
   parSinkT: SharedValue<number>;
+  /** Showdown podium (J16): up to 4 racers' final routes (x,y pairs) drawn on together over 2 s from podiumT0. */
+  podium?: SharedValue<number[]>[];
+  podiumT0?: SharedValue<number>;
+  /** Race the Author ghost (0.A.1): the ghost's latest stroke path (x,y pairs; [] = hidden) and when it started. */
+  authorPts?: SharedValue<number[]>;
+  authorT0?: SharedValue<number>;
 }
+
+/** Alex shark colours for the podium trails (classic, blue, green, orange). */
+export const RACER_COLORS = ['#e8473b', '#2f7fe0', '#3dbb5a', '#ff9a2e'] as const;
 
 export interface BoardImages {
   idle: SkImage | null;
@@ -760,6 +769,15 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
   // Riptide ribbon (gold brush, INK outer edge).
   const trailAlpha = useDerivedValue<number>(() => (sv.trail.value.length > 3 ? 0.9 : 0));
 
+  // Podium trails (J16): every racer's final route at once, drawn on over 2 s.
+  const podiumK = useDerivedValue(() => {
+    const t0 = sv.podiumT0 ? sv.podiumT0.value : -1;
+    if (t0 < 0) return 0;
+    const e = (sv.fxT.value - t0) / 2000;
+    return e <= 0 ? 0 : e >= 1 ? 1 : 1 - (1 - e) * (1 - e);
+  });
+  const podiumA = useDerivedValue<number>(() => (sv.podiumT0 && sv.podiumT0.value >= 0 ? 0.92 : 0));
+
   // Route recap (missed Par): par route as a gold brush, yours as INK dots, drawn on over 500 ms.
   const recapK = useDerivedValue(() => {
     const e = (sv.fxT.value - sv.recapT0.value) / 500;
@@ -1125,6 +1143,23 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
   );
 
   const ghostImg = images.idle;
+  // Race the Author ghost: a gold 50% shark that swims the author's stroke each time you swim yours (turn-synced, no clock).
+  const authorTf = useDerivedValue(() => {
+    const pts = sv.authorPts ? sv.authorPts.value : [];
+    const n = pts.length / 2;
+    if (n < 1) return [{ translateX: -9999 }, { translateY: -9999 }];
+    const dur = 160 + 85 * Math.max(0, n - 2);
+    const e = n === 1 ? 1 : Math.max(0, Math.min(1, (sv.fxT.value - (sv.authorT0 ? sv.authorT0.value : 0)) / dur));
+    const f = e * (n - 1);
+    const i = Math.min(Math.max(0, n - 2), Math.floor(f));
+    const u = n === 1 ? 0 : f - i;
+    const x = n === 1 ? pts[0] : pts[2 * i] + (pts[2 * i + 2] - pts[2 * i]) * u;
+    const y = n === 1 ? pts[1] : pts[2 * i + 1] + (pts[2 * i + 3] - pts[2 * i + 1]) * u;
+    const dx = n === 1 ? 1 : pts[2 * i + 2] - pts[2 * i];
+    return [{ translateX: x }, { translateY: y - l.cell * 0.2 }, { scaleX: dx < -0.5 ? -1 : 1 }];
+  });
+  const authorA = useDerivedValue<number>(() => (sv.authorPts && sv.authorPts.value.length >= 2 ? 0.5 : 0));
+  const goldTint = useMemo(() => [0.5, 0.3, 0.2, 0, 0.25, 0.4, 0.3, 0.1, 0, 0.18, 0.1, 0.1, 0.1, 0, 0, 0, 0, 0, 1, 0], []);
   const foamImg = images.foam;
   const iconSize = l.cell * 0.32;
 
@@ -1257,6 +1292,9 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
         {/* Riptide ribbon: tapering gold brush with an INK edge. */}
         <InkStrip pts={sv.trail} alpha={trailAlpha} color={CQ.gold} head={0} tail={10} taperIn={0} />
 
+        {sv.podium ? sv.podium.map((pts, k) => (
+          <InkStrip key={`pod${k}`} pts={pts} progress={podiumK} alpha={podiumA} color={RACER_COLORS[k % 4]} head={6 - k * 0.6} tail={8 - k * 0.6} taperIn={0.04} />
+        )) : null}
         {/* Route recap: the par route (gold brush) under your route (INK dots). */}
         <InkStrip pts={sv.recapPar} progress={recapK} alpha={recapAlpha} color={CQ.gold} head={7} tail={9} taperIn={0.04} />
         <Group opacity={recapAlpha}>
@@ -1310,6 +1348,11 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
           ) : null}
         </Group>
 
+        {ghostImg ? (
+          <Group transform={authorTf} opacity={authorA} layer={<Paint><ColorMatrix matrix={goldTint} /></Paint>}>
+            <Image image={ghostImg} x={-sizes[0].w / 2} y={-sizes[0].h / 2} width={sizes[0].w} height={sizes[0].h} fit="contain" />
+          </Group>
+        ) : null}
         {/* Ghost shark at the landing tile (beached flop if the sand dries under it). */}
         {ghostImg ? (
           <Group transform={ghostTransform}>

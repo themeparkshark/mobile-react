@@ -48,6 +48,7 @@ import {
   type Board, type CqEvent, type CurrentQuestProofV3, type RunState, type VoyageResult,
 } from './rules';
 import { canClear, distanceFrom, firstDeadState, hintFrom, solveBoard } from './solver';
+import { authorRoute } from './author';
 import { boardById, boardRefs, dailySeed, isScored, knobsFor, pickRun, voyagesFor, type RunContext } from './library';
 import {
   addGhost, dailyNumber, ghostFor, hintOf, isNewBest, liveStreak, loadProgress, localDate, recordDaily, saveProgress, withBest,
@@ -133,6 +134,22 @@ function deriveSeed(base: number, attempt: number): number {
 /** Seed for retry `attempt` (1..4) of a run issued with `base` (server mirrors this). */
 export { deriveSeed };
 
+/** The surviving route of a voyage as board cells (each stroke's full carry path), rebuilt from its undo stack. */
+function routeOf(board: Board, v: { pos: number; mask: number; golden: boolean; moves: number; phase: number; stack: readonly { pos: number; mask: number; golden: boolean; moves: number }[] }): number[] {
+  const states = [...v.stack.map((x) => ({ pos: x.pos, mask: x.mask, golden: x.golden, moves: x.moves })), { pos: v.pos, mask: v.mask, golden: v.golden, moves: v.moves }];
+  const cells: number[] = [states[0].pos];
+  for (let k = 0; k + 1 < states.length; k++) {
+    const a = states[k];
+    const b = states[k + 1];
+    const tide = tideAt(board.P, a.moves, v.phase);
+    for (const d of [0, 1, 2, 3]) {
+      const sim = simulateStroke(board, a.pos, a.mask, a.golden, tide, d);
+      if (!sim.bump && sim.pos === b.pos && sim.mask === b.mask) { cells.push(...sim.path.slice(1)); break; }
+    }
+  }
+  return cells;
+}
+
 function emptyShells(n: number): boolean[][] { return Array.from({ length: n }, () => [false, false, false]); }
 
 /** Which shell to name in the NEXT STAR tease ("Par on the Deep board = 3 stars"). */
@@ -207,6 +224,12 @@ export default function CurrentQuestGame({
   const ghost = useMemo<GhostRun | null>(() => (progress && !showdown && context !== 'daily' ? ghostFor(progress, runSeed, context) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [runSeed, context, progress === null, boardsKey]);
+  // Race the Author (0.A.1): a chart node with a verified Gold sends the author route as a ghost.
+  const authorActs = useMemo<number[]>(() => {
+    if (context !== 'chart' || !chartNodeId || !progress || (progress.chart[chartNodeId]?.medal ?? 0) < 3 || !boards) return [];
+    return authorRoute(boards[0]);
+  }, [context, chartNodeId, progress === null, boards]); // eslint-disable-line react-hooks/exhaustive-deps
+  const authorShown = useRef(0);
   const thresholds = context === 'chart' ? { one: 1, two: 2, three: 3 } : starThresholds(voyagesN);
   const tiers: [number, number] = [thresholds.two, thresholds.three];
   const runKey = context === 'chart' ? `chart:${chartNodeId}` : context;
@@ -318,6 +341,10 @@ export default function CurrentQuestGame({
     lowK: useSharedValue(0),
     parBuoy: useSharedValue(0),
     parSinkT: useSharedValue(-1e9),
+    podium: [useSharedValue<number[]>([]), useSharedValue<number[]>([]), useSharedValue<number[]>([]), useSharedValue<number[]>([])],
+    podiumT0: useSharedValue(-1),
+    authorPts: useSharedValue<number[]>([]),
+    authorT0: useSharedValue(0),
   };
   const svRef = useRef(sv);
   svRef.current = sv;
@@ -457,6 +484,28 @@ export default function CurrentQuestGame({
   const boardOrigin = useRef({ x: 0, y: 0 });
   const toField = useCallback((x: number, y: number) => ({ x: x + boardOrigin.current.x, y: y + boardOrigin.current.y }), []);
   const cellPx = () => layoutRef.current?.cell ?? 60;
+
+  /** The author ghost follows your surviving stroke count: stroke k of yours, stroke k of the author's. */
+  const syncAuthor = useCallback((run: RunState, reset = false) => {
+    const s = svRef.current;
+    if (!authorActs.length || !s.authorPts) return;
+    const b = currentBoard(run);
+    const k = Math.min(authorActs.length, run.voyage.stack.length);
+    if (!reset && k === authorShown.current) return;
+    let pos = b.start; let mask = 0; let gold = false; let path: number[] = [pos];
+    for (let i = 0; i < k; i++) {
+      const a = authorActs[i];
+      const sim = simulateStroke(b, pos, mask, gold, tideAt(b.P, i, 0), a === A_TREAD ? -1 : a);
+      path = sim.path; pos = sim.pos; mask = sim.mask; gold = sim.golden;
+    }
+    const stepped = !reset && k === authorShown.current + 1;
+    const cells = stepped ? path : [pos];
+    const pts: number[] = [];
+    for (const c of cells) { const q = center(c); pts.push(q.x, q.y); }
+    s.authorPts.value = pts;
+    if (s.authorT0) s.authorT0.value = s.fxT.value;
+    authorShown.current = k;
+  }, [authorActs, center]);
 
   // ---- HUD sync ---------------------------------------------------------------------------
   const rankOf = useCallback((): { place: number; of: number } | null => {
@@ -657,9 +706,15 @@ export default function CurrentQuestGame({
     const deep = b.slot === 'treasure';
     const label = SLOT_LABEL[b.slot] ?? 'Voyage';
     const objective = run.index === 0 ? (trial ? 'Every stroke counts.' : 'Beat par, find the gold.') : null;
+    if (authorActs.length) {
+      const rip = b.authorRiptide;
+      setRibbon({ title: 'Race the Author', sub: `Author: Gold${rip ? ` + ${rip} Riptide${rip === 1 ? '' : 's'}` : ''}, ${authorActs.length} strokes`, key: Date.now(), gold: true });
+      later(2200, () => setRibbon(null));
+      return;
+    }
     setRibbon({ title: `${label}: ${b.title ?? b.name}`, sub: b.teach ?? objective, key: Date.now(), gold: deep });
     later(b.teach ? 2600 : 900, () => setRibbon(null));
-  }, [later, trial]);
+  }, [later, trial, authorActs]);
 
   const beginVoyage = useCallback((run: RunState, rise: boolean) => {
     const s = svRef.current;
@@ -699,13 +754,14 @@ export default function CurrentQuestGame({
     refreshPreviews(run);
     setBedFor(run);
     showRibbon(run);
+    syncAuthor(run, true);
     // A splashed voyage plays the full tide sweep into its phase as the tray rises (9.6).
     if (run.voyage.phase !== 0) later(rise ? 420 : 60, () => { s.sweepT0.value = s.fxT.value; sfxTide(); CQH.soft(); });
     readyAt.current[run.index] = Math.max(0, Date.now() + (rise ? 720 : 0) - startedAt.current);
     // Input is live from the first frame (the rise is only 0.4 s and buffered commits wait for it).
     busyUntil.current = Date.now() + (rise ? 420 : 0);
     lastStrokeAt.current = Date.now();
-  }, [center, layoutFor, syncBoardVisuals, syncHud, refreshPreviews, setBedFor, showRibbon, later]);
+  }, [center, layoutFor, syncBoardVisuals, syncHud, refreshPreviews, setBedFor, showRibbon, later, syncAuthor]);
 
   // New run whenever the boards change (fresh open, play again, retry).
   useEffect(() => {
@@ -718,6 +774,9 @@ export default function CurrentQuestGame({
     surgeUntil.current = 0;
     svRef.current.surge.value = 0;
     svRef.current.shield.value = 0;
+    if (svRef.current.podiumT0) svRef.current.podiumT0.value = -1;
+    svRef.current.podium?.forEach((x) => { x.value = []; });
+    camera.frame(1);
     setResult(null);
     setSummary(null);
     setFailed(false);
@@ -1153,8 +1212,25 @@ export default function CurrentQuestGame({
     const s = svRef.current;
     const p = s.shark.value;
     s.plan.value = { ...idlePlan(p.x, p.y, p.facing), kind: PLAN_CHEER, t0: -1 };
+    // Podium (J16): every racer's final route at once as a brush trail in their shark colour, camera pulls back.
+    const last = r.boards.length - 1;
+    const lb = r.boards[last];
+    r.racers.forEach((x, k) => {
+      if (k > 3) return;
+      const onLast = x.run.complete || x.run.index === last;
+      const cells = onLast ? routeOf(lb, x.run.voyage) : [];
+      const pts: number[] = [];
+      // A small per-racer offset so overlapping routes stay readable side by side.
+      const off = (k - 1.5) * cellPx() * 0.07;
+      for (const c of cells) { const q = center(c); pts.push(q.x + off, q.y + off); }
+      (s.podium as NonNullable<typeof s.podium>)[k].value = pts.length >= 4 ? pts : [];
+    });
+    later(450, () => {
+      s.podiumT0!.value = s.fxT.value;
+      if (!reducedMotion) camera.frame(0.92);
+    });
     const proof = proofOf(run, now, done ? starsFor(shells, true, run.boards.length) : 0, !done && run.failed);
-    later(2200, () => {
+    later(2700, () => {
       setSummary({
         title: done ? (place === 1 ? (tie ? 'Shared crown!' : 'Ghost Race won!') : `${['1st', '2nd', '3rd', '4th'][place - 1]} place`) : 'Out of time',
         grid: shellsRef.current.map((x) => x.slice()), stars, failed: false, newBest: false, nextStar: null,
@@ -1585,6 +1661,7 @@ export default function CurrentQuestGame({
     busyUntil.current = Date.now() + Math.min(dur, 900);
     syncHud(next);
     refreshPreviews(next);
+    syncAuthor(next);
     if (!stroked && !next.voyage.stalled) later(Math.min(dur, 600), () => { const r = runRef.current; if (r) checkDead(r); });
     lastCommitAt.current = Date.now();
     later(Math.min(dur, 900) + 10, () => {
@@ -1593,7 +1670,7 @@ export default function CurrentQuestGame({
       if (b !== null) applyNowRef.current(b);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center, reducedMotion, camera, later, presentStroke, presentClear, presentStall, presentFail, trial, syncBoardVisuals, burst, toField, syncHud, refreshPreviews, swayNear, checkDead, presentRoom, showdown, dead]);
+  }, [center, reducedMotion, camera, later, presentStroke, presentClear, presentStall, presentFail, trial, syncBoardVisuals, burst, toField, syncHud, refreshPreviews, swayNear, checkDead, presentRoom, showdown, dead, syncAuthor]);
   const applyNowRef = useRef(applyNow);
   applyNowRef.current = applyNow;
 
@@ -1825,6 +1902,14 @@ export default function CurrentQuestGame({
     if (context === 'ride' && run && run.voyage.strokes === 0 && run.index === 0) setStake(true);
     if (run && run.voyage.strokes === 0) { showRibbon(run); svRef.current.tourT0.value = svRef.current.fxT.value + 100; }
   }, [restore.snapshot, showRibbon, context]);
+  // Ride Challenge: the stake card is the pre-start, then GO (0.A.5); the shell's own count is off for rides.
+  const onStakeDone = useCallback(() => {
+    setStake(false);
+    banner('GO!', PRI_GOLDEN, 0, 650);
+    CQH.medium();
+    lastStrokeAt.current = Date.now();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const handlePause = useCallback(() => {
     playing.current = false;
     buffered.current = null;
@@ -1996,7 +2081,7 @@ export default function CurrentQuestGame({
       result={result}
       thresholds={thresholds}
       resumeStyle="instant"
-      countdownStyle="go"
+      countdownStyle={context === 'ride' ? 'none' : 'go'}
       countdownScrim="light"
       resultsScrim="none"
       renderResults={renderResults}
@@ -2126,7 +2211,7 @@ export default function CurrentQuestGame({
           ) : null}
           {result ? <ResultsVeil /> : null}
         </View>
-        {stake ? <StakeCard onDone={() => setStake(false)} /> : null}
+        {stake ? <StakeCard onDone={onStakeDone} /> : null}
         {share ? <ShareCard ref={shareRef} data={share} /> : null}
         {layout ? <FxStage ref={fx} width={field?.w ?? layout.cw} height={field?.h ?? layout.ch} timeScale={clock.fxScale} reducedMotion={reducedMotion} capacity={lite ? 120 : 200} style={styles.fx} /> : null}
       </GestureHandlerRootView>

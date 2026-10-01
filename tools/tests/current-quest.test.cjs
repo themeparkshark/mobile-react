@@ -1140,3 +1140,20 @@ test('chart v0: 24 nodes in 2 chapters, teach first, Deep last, live boards; cha
   assert.equal(CH.markOf({ medal: 3, shells: 3 }), 'ink');
   assert.equal(CH.markOf(undefined), 'none');
 });
+
+test('author route (0.A.1): an optimal Gold route carrying the board\'s authorRiptide Riptide strokes, on every live chart-sized board', () => {
+  let checked = 0;
+  for (const b of LIVE.slice(0, 60)) {
+    const sol = S.solveBoard(b);
+    if (!sol.solvable || b.golden < 0) continue;
+    const route = loadTs('src/games/current-quest/author.ts').authorRoute(b);
+    const { run } = play(b, route);
+    assert.equal(run.complete, true, `${b.id} author route clears`);
+    const r = run.results[0];
+    assert.equal(r.shellGolden, true, `${b.id} author route banks the golden pearl`);
+    assert.equal(r.strokes, sol.parGold, `${b.id} author route is a Gold route`);
+    assert.equal(r.ripStrokes, sol.authorRiptide, `${b.id} author route has authorRiptide Riptides`);
+    checked++;
+  }
+  assert.ok(checked >= 20, `checked ${checked}`);
+});
