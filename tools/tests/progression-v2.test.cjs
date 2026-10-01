@@ -154,7 +154,7 @@ test('progression flags default off and load once', async () => {
 test('new progression copy has no em dashes, no emoji and never says Dressing Room', () => {
   for (const file of NEW_FILES) {
     const src = fs.readFileSync(file, 'utf8');
-    assert.doesNotMatch(src, /—/, `${file} has an em dash`);
+    assert.doesNotMatch(src, /\u2014/, `${file} has an em dash`);
     assert.doesNotMatch(src, /\p{Extended_Pictographic}/u, `${file} has an emoji`);
     assert.doesNotMatch(src, /Dressing Room/i, file);
   }
