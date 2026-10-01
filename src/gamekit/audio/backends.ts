@@ -70,6 +70,40 @@ interface AvVoice {
   stopTimer: ReturnType<typeof setTimeout> | null;
 }
 
+/**
+ * One expo-av music deck. Volume writes are serialized and coalesced: every
+ * expo-av setStatus re-applies the AVPlayer rate, and a flood of them (30 ms
+ * ramps, ducks on every reveal) racing the player's time observer deadlocked
+ * AVFoundation on the main thread (setRate vs currentTime, seen on the
+ * simulator after a rematch). At most one write is in flight per deck; the
+ * latest wanted volume wins, and tiny changes are skipped.
+ */
+interface AvDeck {
+  sound: Audio.Sound;
+  gain: number;
+  ramp: ReturnType<typeof setInterval> | null;
+  sent: number;
+  want: number;
+  busy: boolean;
+  dead: boolean;
+}
+
+function pushDeckVolume(d: AvDeck, v: number): void {
+  d.want = Math.max(0, Math.min(1, v));
+  if (d.busy || d.dead) return;
+  if (Math.abs(d.want - d.sent) < 0.01 && !(d.want === 0 && d.sent !== 0)) return;
+  d.busy = true;
+  const target = d.want;
+  d.sound.setVolumeAsync(target).catch(() => undefined).finally(() => {
+    d.sent = target;
+    d.busy = false;
+    if (Math.abs(d.want - d.sent) >= 0.01 || (d.want === 0 && d.sent !== 0)) pushDeckVolume(d, d.want);
+  });
+}
+
+/** Ramp step for expo-av decks (ms): coarse on purpose, see AvDeck. */
+const AV_RAMP_STEP_MS = 90;
+
 export class ExpoAvBackend implements AudioBackend {
   readonly name = 'expo-av' as const;
   readonly supportsPan = false;
@@ -77,7 +111,7 @@ export class ExpoAvBackend implements AudioBackend {
   readonly latencyMs = 80;
   private pools = new Map<string, AvVoice[]>();
   private sources = new Map<string, number>();
-  private decks = new Map<string, { sound: Audio.Sound; gain: number; ramp: ReturnType<typeof setInterval> | null }>();
+  private decks = new Map<string, AvDeck>();
   private tokens = new Map<number, AvVoice>();
   private nextToken = 1;
   private master = 1;
@@ -170,13 +204,16 @@ export class ExpoAvBackend implements AudioBackend {
     const src = this.sources.get(key);
     if (src === undefined) return;
     this.musicStop(deck, 0);
+    const v0 = a.fadeMs > 0 ? 0 : a.gain * this.master;
     void Audio.Sound.createAsync(src, {
       shouldPlay: true,
       isLooping: a.loop,
       positionMillis: a.fromMs,
-      volume: a.fadeMs > 0 ? 0 : a.gain * this.master,
+      volume: v0,
+      // Fewer status callbacks on the main thread (see AvDeck).
+      progressUpdateIntervalMillis: 5000,
     }).then(({ sound }) => {
-      this.decks.set(deck, { sound, gain: a.fadeMs > 0 ? 0 : a.gain, ramp: null });
+      this.decks.set(deck, { sound, gain: a.fadeMs > 0 ? 0 : a.gain, ramp: null, sent: v0, want: v0, busy: false, dead: false });
       if (a.fadeMs > 0) this.musicGain(deck, a.gain, a.fadeMs);
     }).catch(() => undefined);
   }
@@ -187,21 +224,21 @@ export class ExpoAvBackend implements AudioBackend {
     if (d.ramp) clearInterval(d.ramp);
     d.ramp = null;
     const from = d.gain;
-    if (rampMs <= 0) {
+    if (rampMs <= AV_RAMP_STEP_MS) {
       d.gain = gain;
-      d.sound.setVolumeAsync(Math.max(0, Math.min(1, gain * this.master))).catch(() => undefined);
+      pushDeckVolume(d, gain * this.master);
       return;
     }
     const started = Date.now();
     d.ramp = setInterval(() => {
       const t = Math.min(1, (Date.now() - started) / rampMs);
       d.gain = from + (gain - from) * t;
-      d.sound.setVolumeAsync(Math.max(0, Math.min(1, d.gain * this.master))).catch(() => undefined);
+      pushDeckVolume(d, d.gain * this.master);
       if (t >= 1 && d.ramp) {
         clearInterval(d.ramp);
         d.ramp = null;
       }
-    }, 30);
+    }, AV_RAMP_STEP_MS);
   }
 
   musicStop(deck: string, fadeMs: number): void {
@@ -210,7 +247,8 @@ export class ExpoAvBackend implements AudioBackend {
     this.decks.delete(deck);
     if (d.ramp) clearInterval(d.ramp);
     const kill = () => {
-      d.sound.stopAsync().catch(() => undefined);
+      d.dead = true;
+      // unloadAsync stops the player itself; one native call instead of two.
       d.sound.unloadAsync().catch(() => undefined);
     };
     if (fadeMs <= 0) {
@@ -221,12 +259,12 @@ export class ExpoAvBackend implements AudioBackend {
     const started = Date.now();
     const iv = setInterval(() => {
       const t = Math.min(1, (Date.now() - started) / fadeMs);
-      d.sound.setVolumeAsync(Math.max(0, from * (1 - t) * this.master)).catch(() => undefined);
+      pushDeckVolume(d, from * (1 - t) * this.master);
       if (t >= 1) {
         clearInterval(iv);
         kill();
       }
-    }, 30);
+    }, AV_RAMP_STEP_MS);
   }
 
   async musicPosition(deck: string): Promise<number> {

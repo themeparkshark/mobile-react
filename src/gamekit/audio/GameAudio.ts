@@ -429,12 +429,22 @@ export class MusicDirector {
   async positionMs(): Promise<number> {
     const b = this.engine.backend;
     if (!b || !this.current) return 0;
+    // Native position reads are cached for 2s and extrapolated in between:
+    // each expo-av read is a main-thread AVPlayer status call, and a burst of
+    // them during a reveal is the pattern that deadlocked AVFoundation.
+    const now = Date.now();
+    const c = this.posCache;
+    if (c && c.bed === this.current && now - c.wall < 2000) return c.pos + (now - c.wall);
     try {
-      return await b.musicPosition(this.deck);
+      const pos = await b.musicPosition(this.deck);
+      this.posCache = { bed: this.current, pos, wall: Date.now() };
+      return pos;
     } catch {
       return this.elapsedMs();
     }
   }
+
+  private posCache: { bed: string; pos: number; wall: number } | null = null;
 
   private gainFor(name: string): number {
     const def = this.engine.bed(name);
@@ -477,6 +487,7 @@ export class MusicDirector {
     if (this.current) b.musicStop(old, fadeMs);
     this.deck = next;
     this.current = name;
+    this.posCache = null;
     this.paused = false;
     this.startedAt = Date.now() - fromMs;
     const lp = this.state === 'muffled' && !b.supportsFilter && def.lowpassSrc !== undefined;
