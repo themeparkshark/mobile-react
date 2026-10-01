@@ -415,6 +415,14 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         regionWillChangeDebounceTime={0}
         onRegionWillChange={(feature) => {
           if (!feature.properties?.isUserInteraction) return;
+          // The moment a finger moves the map, stop following: the shark becomes a
+          // map marker at its real spot (it is at screen center right now, so the
+          // swap is invisible) and slides with the map. Waiting for the gesture to
+          // end let GPS and heading ticks yank the camera back mid-drag.
+          if (followRef.current) {
+            followRef.current = false;
+            setFocusedOnPlayer(false);
+          }
           onPress?.();
         }}
         onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap(); }}
@@ -423,12 +431,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           void projectGuide();
           const zoom = Number(feature.properties?.zoomLevel);
           if (Number.isFinite(zoom)) onZoomChange?.(zoom);
-          // A real pan (not a pinch around the shark) drops follow mode.
-          if (!feature.properties?.isUserInteraction || !followRef.current || !location) return;
+          // A pinch or a tap that left the shark centered (within ~8 m) goes back
+          // to following; a real pan stays put until the recenter button.
+          if (!feature.properties?.isUserInteraction || followRef.current || !location) return;
           const [lng, lat] = feature.geometry.coordinates;
-          if (Math.abs(lat - location.latitude) > 0.0005 || Math.abs(lng - location.longitude) > 0.0005) {
-            followRef.current = false;
-            setFocusedOnPlayer(false);
+          if (Math.abs(lat - location.latitude) < 0.00007 && Math.abs(lng - location.longitude) < 0.00007) {
+            followRef.current = true;
+            setFocusedOnPlayer(true);
           }
         }}
         onPress={() => {
