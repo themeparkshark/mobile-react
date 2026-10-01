@@ -7,7 +7,7 @@
  * what we hold, and round pushes only when they are for the current or a newer
  * round. Live rival scores are display telemetry and never decide anything.
  */
-import type { EmoteEvent, ProgressWhisper, RoomSnapshot, RoundSummary } from './partyTypes';
+import type { SnatchWhisper, EmoteEvent, ProgressWhisper, RoomSnapshot, RoundSummary } from './partyTypes';
 
 export type PartyPhase =
   | 'idle'
@@ -33,6 +33,8 @@ export interface RivalProgress {
   receivedAt: number;
   /** Their phone handed the seat to their ghost (backgrounded or left). */
   ghost?: boolean;
+  /** Shared Golden reactions whispered so far (-1 = not hit yet). */
+  sg?: number[];
 }
 
 export interface MyEntry {
@@ -163,7 +165,28 @@ export function applyProgress(state: PartyState, w: ProgressWhisper, receivedAt:
   if (!round || w.r !== round.round_no) return state;
   const prev = state.rivals[w.u];
   if (prev && prev.round === w.r && prev.t > w.t) return state;
-  return { ...state, rivals: { ...state.rivals, [w.u]: { score: w.s, streak: w.k, t: w.t, round: w.r, receivedAt } } };
+  const sg = mergeSg(prev && prev.round === w.r ? prev.sg : undefined, w.g);
+  return { ...state, rivals: { ...state.rivals, [w.u]: { score: w.s, streak: w.k, t: w.t, round: w.r, receivedAt, ...(sg ? { sg } : {}) } } };
+}
+
+/** A reaction, once known, never changes (it is a fact of the replayed log). */
+function mergeSg(a: number[] | undefined, b: number[] | undefined): number[] | undefined {
+  if (!a) return b ? [...b] : undefined;
+  if (!b) return a;
+  return a.map((v, i) => (v >= 0 ? v : b[i] ?? -1));
+}
+
+/** An immediate SNATCH whisper (display only). */
+export function applySnatch(state: PartyState, w: SnatchWhisper, receivedAt: number): PartyState {
+  if (w.u === state.userId) return state;
+  const round = state.room?.round;
+  if (!round || w.r !== round.round_no || w.sg < 1 || w.sg > 5 || !Number.isInteger(w.ms) || w.ms < 0) return state;
+  const prev = state.rivals[w.u];
+  const base = prev && prev.round === w.r ? prev : { score: 0, streak: 0, t: 0, round: w.r, receivedAt };
+  const sg = [...(base.sg ?? [-1, -1, -1, -1, -1])];
+  if (sg[w.sg - 1] >= 0) return state;
+  sg[w.sg - 1] = w.ms;
+  return { ...state, rivals: { ...state.rivals, [w.u]: { ...base, sg } } };
 }
 
 export const EMOTE_TTL_MS = 2600;

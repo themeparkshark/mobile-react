@@ -48,6 +48,15 @@ for (const key of Object.keys(registry)) {
         checked++;
       }
       assert.deepEqual(JSON.parse(JSON.stringify(src.botTaps(boardA, v.seed, v.seat, v.profile))), v.logs.bot.taps);
+      // Room settle (SNATCH), key moments and the prefix replay match on both engines.
+      const names = Object.keys(v.logs);
+      for (const [sim, board] of [[src, boardA], [bun, boardB]]) {
+        const settle = sim.settle(names.map((n) => sim.resolve(board, v.logs[n].taps)));
+        assert.deepEqual(JSON.parse(JSON.stringify(settle)), v.settle, `${key} seed ${v.seed} settle`);
+        names.forEach((n, j) => assert.deepEqual(JSON.parse(JSON.stringify(sim.explain(board, v.logs[n].taps, settle, j))), v.logs[n].explain ?? null, `${key} seed ${v.seed} ${n} explain`));
+        const pr = sim.resolve(board, v.logs.human.taps, v.prefix.until_ms);
+        assert.equal(sim.resultHash(pr), v.prefix.hash, `${key} seed ${v.seed} prefix`);
+      }
     }
     assert.ok(checked >= 800);
   });

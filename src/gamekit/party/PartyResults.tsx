@@ -29,6 +29,7 @@ import { displayName, type PartyState } from '../net/roomState';
 import { BOT_SHARK } from './partyArt';
 import SeatAvatar from './SeatAvatar';
 import EmoteBar, { EmotePop } from './EmoteBar';
+import { lossLine, nearMiss, starLabel } from './resultCopy';
 
 export interface PartyResultsProps {
   state: PartyState;
@@ -73,7 +74,10 @@ function detailFor(r: SeatResult): string {
   if (r.filled_by === 'ghost') return 'GHOST FINISHED IT';
   if (r.kind === 'bot') return 'HOUSE CREW';
   if (r.stats.hits === undefined) return `${r.stats.maxStreak ?? 0} IN A ROW`;
-  return `${r.stats.hits ?? 0} BONKS  ·  BEST STREAK ${r.stats.maxStreak ?? 0}`;
+  const snatches = Math.floor((r.shared_bonus ?? 0) / 200);
+  return snatches > 0
+    ? `${r.stats.hits ?? 0} BONKS  ·  ${snatches} SNATCH${snatches > 1 ? 'ES' : ''} +${r.shared_bonus}`
+    : `${r.stats.hits ?? 0} BONKS  ·  BEST STREAK ${r.stats.maxStreak ?? 0}`;
 }
 
 function Row({ r, index, me, emote, name }: { r: SeatResult; index: number; me: boolean; emote?: { id: EmoteId; key: string }; name: string }) {
@@ -90,6 +94,7 @@ function Row({ r, index, me, emote, name }: { r: SeatResult; index: number; me: 
       <View style={styles.who}>
         <Text numberOfLines={1} style={[styles.name, me && styles.nameMe]}>{me ? 'YOU' : name}</Text>
         <Text style={styles.detail}>{detailFor(r)}</Text>
+        {starLabel(r.star) ? <Text style={styles.star}>{starLabel(r.star)}</Text> : null}
       </View>
       <View style={styles.right}>
         <CountUp to={r.score} delay={200 + 120 * index} />
@@ -122,6 +127,8 @@ function PartyResults({ state, serverNow, onRematch, onEmote, onLeave }: PartyRe
   const crowned = finished && series?.crown_user_id === state.userId;
   const headline = finished ? (crowned ? 'SERIES CROWN!' : 'SERIES OVER!')
     : !mine ? 'RESULTS' : isNoContest(mine.verdict) ? 'ROUND SKIPPED' : mine.placement === 1 ? 'YOU WIN!' : mine.placement === 2 ? 'SO CLOSE!' : 'NICE RUN!';
+  const lesson = lossLine(mine, results);
+  const close = !finished && nearMiss(mine, results);
   const nameOf = (userId: number | null | undefined, fallback: string | null | undefined, kind: string) =>
     kind === 'bot' ? fallback ?? 'Crew' : displayName(state, userId, fallback);
 
@@ -137,9 +144,16 @@ function PartyResults({ state, serverNow, onRematch, onEmote, onLeave }: PartyRe
           {results.map((r, i) => <Row key={r.seat} r={r} index={i} me={r.user_id === state.userId} name={nameOf(r.user_id, r.name, r.kind)} emote={r.user_id ? emoteBy.get(r.user_id) : undefined} />)}
         </View>
       )}
+      {!finished && lesson ? (
+        <Animated.View entering={FadeInDown.delay(420).springify().damping(14)} style={styles.lesson}>
+          <Text style={styles.lessonText}>{lesson}</Text>
+        </Animated.View>
+      ) : null}
       {series ? <SeriesTable series={series} nameOf={nameOf} me={state.userId} /> : null}
       <View style={styles.buttons}>
-        <GameButton label={me?.ready ? 'READY!' : finished ? 'PLAY AGAIN' : 'NEXT ROUND'} icon="retry" onPress={onRematch} disabled={!!me?.ready} />
+        <View style={close ? styles.bigger : undefined}>
+          <GameButton label={me?.ready ? 'READY!' : finished ? 'PLAY AGAIN' : close ? 'REMATCH' : 'NEXT ROUND'} icon="retry" onPress={onRematch} disabled={!!me?.ready} />
+        </View>
         {secs !== null ? <Text style={styles.next}>{finished ? `New series in ${secs}s` : `Next round in ${secs}s`}</Text> : null}
       </View>
       <EmoteBar onSend={onEmote} />
@@ -240,6 +254,10 @@ const styles = StyleSheet.create({
   name: { fontFamily: FONT.display, fontSize: 18, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   nameMe: { color: BRAND.gold },
   detail: { fontFamily: FONT.body, fontSize: 12, color: BRAND.cream, letterSpacing: 0.6, marginTop: 2 },
+  star: { alignSelf: 'flex-start', marginTop: 3, fontFamily: FONT.body, fontSize: 10, color: BRAND.navy, backgroundColor: BRAND.goldLight, borderRadius: 6, overflow: 'hidden', paddingHorizontal: 6, letterSpacing: 0.6 },
+  bigger: { transform: [{ scale: 1.18 }], marginVertical: 6 },
+  lesson: { marginTop: 10, alignSelf: 'center', backgroundColor: BRAND.white, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
+  lessonText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.navy, textAlign: 'center' },
   right: { alignItems: 'flex-end' },
   score: { fontFamily: FONT.display, fontSize: 24, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1, fontVariant: ['tabular-nums'] },
   points: { fontFamily: FONT.body, fontSize: 12, color: BRAND.goldLight, letterSpacing: 0.8 },

@@ -23,10 +23,19 @@ export interface PartySim<Board = unknown, Result extends { score: number } = { 
   maxTaps: number;
   build(seed: number): Board;
   validTaps(taps: unknown): boolean;
-  resolve(board: Board, taps: SimTap[]): Result;
+  /** untilMs resolves a prefix (Bonk Royale splits): only taps before it count. */
+  resolve(board: Board, taps: SimTap[], untilMs?: number): Result;
   botTaps(board: Board, seed: number, seat: number, profile: SimProfile, fromMs?: number): SimTap[];
   ghostFill(board: Board, seed: number, seat: number, own: SimTap[], untilMs: number, profile: SimProfile): SimTap[];
   resultHash(result: Result): string;
+  /**
+   * Room-level settle for head-to-head bonuses (Bonk Race SNATCH). Takes each
+   * seat's resolve() result in seat order (null = not competing) and returns
+   * the bonus per seat plus whatever detail the results screen needs.
+   */
+  settle(results: Array<Result | null>): { bonus: number[]; detail: unknown };
+  /** The single biggest lost-points moment of one log (design 7.1.5), or null. */
+  explain(board: Board, taps: SimTap[], settle: { bonus: number[]; detail: unknown } | null, seat: number): unknown;
 }
 
 export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
@@ -41,6 +50,11 @@ export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
     botTaps: bonk.botTaps,
     ghostFill: bonk.ghostFill,
     resultHash: bonk.resultHash,
+    settle: (results) => {
+      const s = bonk.settleShared(results.map((r) => (r ? r.sgReactions : null)));
+      return { bonus: s.bonus, detail: s.golds };
+    },
+    explain: (board, taps, settle, seat) => bonk.explain(board, taps, settle ? { bonus: settle.bonus, golds: settle.detail as bonk.SharedSettle['golds'] } : null, seat),
   },
   trivia_sprint: {
     key: 'trivia_sprint',
@@ -49,10 +63,12 @@ export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
     maxTaps: sprint.MAX_TAPS,
     build: sprint.buildQuestions,
     validTaps: sprint.validTaps,
-    resolve: sprint.resolve,
+    resolve: (board, taps, untilMs) => sprint.resolve(board, untilMs === undefined ? taps : taps.filter(([t]) => t < untilMs)),
     botTaps: sprint.botTaps,
     ghostFill: sprint.ghostFill,
     resultHash: sprint.resultHash,
+    settle: (results) => ({ bonus: results.map(() => 0), detail: null }),
+    explain: () => null,
   },
 };
 

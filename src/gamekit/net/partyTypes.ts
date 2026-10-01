@@ -60,9 +60,41 @@ export interface SeatResult extends Seat {
     hits?: number;
     quick?: number;
     goldens?: number;
+    sgHits?: number;
     maxStreak?: number;
     lureHits?: number;
+    sgReactions?: number[];
+    barScores?: number[];
   };
+  /** Bonk Race v2: the board's own score; `score` = board_score + shared_bonus. */
+  board_score?: number;
+  /** +200 per Shared Golden SNATCH, settled room-wide by the server replay. */
+  shared_bonus?: number;
+  /** explain(): the biggest lost-points moment of this seat's log (design 7.1.5). */
+  key_moment?: KeyMoment | null;
+  /** Star Player highlight (design 8.3). */
+  star?: StarHighlight | null;
+}
+
+export interface KeyMoment {
+  kind: 'lure' | 'butterfingers' | 'golden_escaped' | 'shared_missed' | 'snatch_missed' | 'none';
+  bar: number;
+  at: number;
+  cost: number;
+  byMs: number;
+}
+
+export interface StarHighlight {
+  category: 'snatches' | 'longest_streak' | 'goldens' | 'cleanest' | 'best_bar';
+  value: number;
+  bar?: number;
+}
+
+/** Per Shared Golden: the winning replayed reaction and the seats that snatched it. */
+export interface SharedGoldResult {
+  sg: number;
+  reaction: number;
+  winners: number[];
 }
 
 export interface RoundSummary {
@@ -80,6 +112,8 @@ export interface RoundSummary {
   status: 'scheduled' | 'finalized';
   seats: Seat[];
   results: SeatResult[] | null;
+  /** Bonk Race v2 SNATCH settle; winners are indexes into `seats`. */
+  shared?: SharedGoldResult[] | null;
 }
 
 export interface SeriesStanding {
@@ -179,4 +213,20 @@ export interface ProgressWhisper {
   k: number;
   t: number;
   r: number;
+  /** Shared Golden reactions so far (-1 = not hit), so a dropped SNATCH whisper heals. */
+  g?: number[];
+}
+
+/**
+ * Sent the moment a player bonks a Shared Golden (design 7.1.3), so every phone
+ * can stamp SNATCHED one beat after the window. Display only: the server's
+ * settle of the replayed logs is final.
+ */
+export interface SnatchWhisper {
+  u: number;
+  r: number;
+  /** 1-5: the Shared Golden of bar 2/4/6/8/10 */
+  sg: number;
+  /** replayed-style reaction: tap board-ms minus spawn board-ms */
+  ms: number;
 }
