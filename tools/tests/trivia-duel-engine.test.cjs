@@ -540,3 +540,17 @@ test('ghost rows keep DEAD HEAT blind-pick times through encode/decode', () => {
   assert.equal(back.rows[2].answerMs, 642);
   assert.ok(match.encodeGhost(g).length < 1024);
 });
+
+test('decisive marks a lead flip or a Final tie-break, never the first points of a match', () => {
+  let t = match.createTally();
+  let res = match.resolveRound('queue', quickRound(), { choice: 2, lockMs: 500 }, { choice: 0, lockMs: 900 }, t);
+  assert.equal(res.decisive, false, 'round 1 from 0-0 is not decisive');
+  t = match.createTally();
+  t.me.score = 100; t.opp.score = 250;
+  res = match.resolveRound('queue', quickRound(), { choice: 2, lockMs: 500 }, { choice: 0, lockMs: 900 }, t);
+  assert.equal(res.decisive, true, 'a flip from behind is decisive');
+  t = match.createTally();
+  t.me.score = 300; t.opp.score = 300;
+  res = match.resolveRound('queue', quickRound('final'), { choice: 2, lockMs: 500, stake: 0 }, { choice: 0, lockMs: 900, stake: 0 }, t);
+  assert.equal(res.decisive, true, 'breaking a tie in the Final is decisive');
+});
