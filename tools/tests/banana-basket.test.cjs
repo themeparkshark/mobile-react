@@ -362,8 +362,10 @@ test('the ball gate (5.1): x3/x4 only with a live ball in full rules; lock on a 
   s.chain = 25;
   assert.equal(sim.gatedTier(s), 4);
   const { ev } = traced(cfg({ seed: 5 }), bots.BOT_HUMAN);
-  const lock = first(ev, sim.EV_GATE, (e) => e.a === 1);
-  if (lock) assert.ok(first(ev, sim.EV_GATE, (e) => e.a === 2 && e.clock >= lock.clock), 'the next bounce unlocks');
+  // Every lock with time left for a re-serve (6 s) and a bounce is followed by an unlock.
+  for (const lock of ev.filter((e) => e.k === sim.EV_GATE && e.a === 1 && e.clock < 2688 - 480)) {
+    assert.ok(first(ev, sim.EV_GATE, (e) => e.a === 2 && e.clock >= lock.clock), 'the next bounce unlocks');
+  }
 });
 
 test('free-ball pail (3.5): one save per ball life, resets the bounce count and Gold Ball, re-serves on the beat', () => {
