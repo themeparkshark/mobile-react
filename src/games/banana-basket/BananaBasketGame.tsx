@@ -862,7 +862,6 @@ function BananaRun({
       stats: [
         { label: 'BALL SHARE', value: `${share}%` },
         { label: 'BEST JUGGLE', value: `${s.bestLife}` },
-        { label: 'BEST CHAIN', value: `${s.maxChain}` },
         { label: 'PERFECT', value: `${s.perfects}` },
       ],
       meta: {

@@ -97,7 +97,7 @@ const BLUE = '#2d9cff';
 const TIER_COLORS = [INK, INK, BLUE, GOLD, CORAL];
 const TIME_X = 112;
 const TIME_W = 262;
-const TRACK_Y = 98;
+const TRACK_Y = 116;
 const CHIP_Y = LANE_Y - 168;
 
 export interface FieldImages {
@@ -703,10 +703,18 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const flashOp = useDerivedValue(() => {
     tick.value;
     const v = vis.value;
-    const sil = v.t - v.silhouetteT;
-    if (sil >= 0 && sil < 34) return 0.95;
-    const f = v.t - v.flashT;
-    return f >= 0 && f < 34 ? (reducedMotion ? 0.15 : 0.5) : 0;
+    // Only the puffer hit whitens the whole shark (one frame).
+    const sil = v.rt - v.silhouetteT;
+    return sil >= 0 && sil < 34 ? (reducedMotion ? 0.15 : 0.95) : 0;
+  });
+  // PERFECT / POP impact frame on the basket's front lip (1 frame).
+  const lipOp = useDerivedValue(() => {
+    tick.value;
+    const v = vis.value;
+    const l = v.rt - v.lipT;
+    const f = v.rt - v.flashT;
+    if (l >= 0 && l < 20) return reducedMotion ? 0.15 : 0.85;
+    return f >= 0 && f < 20 ? (reducedMotion ? 0.1 : 0.4) : 0;
   });
   const flashOn = (a: number, b: number) => useDerivedValue(() => {
     tick.value;
@@ -940,26 +948,26 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     return p;
   }, []);
   // Foreground bunting strings across the top corners (lean with Crosswind).
-  const bunting = useDerivedValue(() => {
+  const buntingFor = (parity: number) => useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const lean = s.twist === 1 ? s.wind * 6 : 0;
     const p = Skia.Path.Make();
-    for (const side of [0, 1]) {
-      const x0 = side === 0 ? -10 : FIELD_W + 10;
-      const x1 = side === 0 ? 110 : FIELD_W - 110;
-      for (let i = 0; i < 5; i++) {
-        const u = (i + 0.5) / 5;
-        const x = x0 + (x1 - x0) * u + lean;
-        const y = 54 + Math.sin(u * Math.PI) * 18 + (side === 0 ? u * 10 : (1 - u) * 10);
-        p.moveTo(x - 8, y);
-        p.lineTo(x + 8, y);
-        p.lineTo(x + lean * 0.4, y + 16);
-        p.close();
-      }
+    for (let i = 0; i < 12; i++) {
+      if (i % 2 !== parity) continue;
+      const u = (i + 0.5) / 12;
+      const x = -10 + (FIELD_W + 20) * u;
+      const y = FIELD_H - 34 + Math.sin(u * Math.PI * 2) * 5;
+      p.moveTo(x - 9, y);
+      p.lineTo(x + 9, y);
+      p.lineTo(x + lean * 0.6, y + 18);
+      p.close();
     }
     return p;
   });
+
+  const buntA = buntingFor(0);
+  const buntB = buntingFor(1);
 
   // -- Golden Hour ------------------------------------------------------------------------------
   const goldAmt = useDerivedValue(() => {
@@ -1421,7 +1429,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const wobble = tt >= -400 && tt < 400 && !reducedMotion ? Math.sin(tt / 30) * 0.12 * (1 - Math.abs(tt) / 400) : 0;
     const ph = (s.clock % STEPS_BEAT) / STEPS_BEAT;
     const rattle = reducedMotion ? 0 : -Math.max(0, Math.cos(ph * Math.PI * 2)) * 1.5;
-    return [{ translateX: x }, { translateY: trackY + 4 + rattle }, { rotate: wobble }, { translateX: -30 }, { translateY: -60 }];
+    return [{ translateX: x }, { translateY: trackY + 4 + rattle }, { rotate: wobble }, { translateX: -24 }, { translateY: -48 }];
   });
   const finnY = useDerivedValue(() => {
     tick.value;
@@ -1431,7 +1439,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const bob = reducedMotion ? 0 : -Math.max(0, Math.cos(ph * Math.PI * 2)) * 2;
     const bt = v.t - v.badgeT;
     const hop = bt >= 0 && bt < 300 && !reducedMotion ? -Math.sin((bt / 300) * Math.PI) * 10 : 0;
-    return -26 + bob + hop;
+    return -18 + bob + hop;
   });
   const gullShadow = useDerivedValue(() => {
     tick.value;
@@ -1580,8 +1588,8 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
           </Group>
           {im.cart ? (
             <Group transform={cartTransform}>
-              {im.finn ? <SkImage image={im.finn} x={14} y={finnY} width={34} height={34} /> : null}
-              <SkImage image={im.cart} x={0} y={0} width={60} height={62} />
+              {im.finn ? <SkImage image={im.finn} x={11} y={finnY} width={26} height={26} /> : null}
+              <SkImage image={im.cart} x={0} y={0} width={48} height={50} />
             </Group>
           ) : null}
           {/* Landing shadows, puffer coral shadows, gull shadow, ball marker, Excellent rings */}
@@ -1684,6 +1692,13 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
                 <BlendColor color="#ffffff" mode="srcIn" />
               </SkImage>
             ) : null}
+            {im.basket ? (
+              <Group clip={rect(0, rimY - 10, BW, 34)}>
+                <SkImage image={im.basket} x={0} y={0} width={BW} height={BASKET_H} opacity={lipOp}>
+                  <BlendColor color="#ffffff" mode="srcIn" />
+                </SkImage>
+              </Group>
+            ) : null}
             <Path path={seams} color="#8a5a2b" />
             <Path path={zoneFlash} color="#ffffff" opacity={0.95} />
             <Circle cx={BW / 2} cy={rimY - 2} r={notchGlowR} color={GOLD} opacity={notchGlowOp} />
@@ -1746,11 +1761,11 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
           <Rect x={-40} y={skyTop - 40} width={FIELD_W + 80} height={LANE_Y - 40 - skyTop} color="#ffffff" opacity={washOp} />
           {/* Frozen prompt: thumb glyph */}
           <Group opacity={frozenOp}>
-            <Circle cx={frozenX} cy={LANE_Y + 150} r={frozenRingR} style="stroke" strokeWidth={6} color={INK} opacity={0.5} />
-            <Circle cx={frozenX} cy={LANE_Y + 150} r={frozenRingR} style="stroke" strokeWidth={4} color="#ffffff" />
-            <Circle cx={frozenX} cy={LANE_Y + 150} r={13} color="#ffffff" />
-            <Circle cx={frozenX} cy={LANE_Y + 150} r={13} style="stroke" strokeWidth={3} color={INK} />
-            {fontSmall ? <Text x={holdX} y={LANE_Y + 205} text="HOLD TO PLAY" font={fontSmall} color={INK} /> : null}
+            <Circle cx={frozenX} cy={LANE_Y + 128} r={frozenRingR} style="stroke" strokeWidth={6} color={INK} opacity={0.5} />
+            <Circle cx={frozenX} cy={LANE_Y + 128} r={frozenRingR} style="stroke" strokeWidth={4} color="#ffffff" />
+            <Circle cx={frozenX} cy={LANE_Y + 128} r={13} color="#ffffff" />
+            <Circle cx={frozenX} cy={LANE_Y + 128} r={13} style="stroke" strokeWidth={3} color={INK} />
+            {fontSmall ? <Text x={holdX} y={LANE_Y + 176} text="HOLD TO PLAY" font={fontSmall} color={INK} /> : null}
           </Group>
           {/* Lock ring at the thumb's last touch point (fills over the remaining lock) */}
           <Group opacity={lockOpRing}>
@@ -1771,8 +1786,10 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
           <Rect x={5} y={skyTop + 5} width={FIELD_W - 10} height={FIELD_H - skyTop - 10} style="stroke" strokeWidth={3} color="#fff1c4" />
         </Group>
         {/* Foreground bunting (parallax-free HUD-adjacent, leans with Crosswind) */}
-        <Path path={bunting} color="#ffffff" opacity={0.9} />
-        <Path path={bunting} style="stroke" strokeWidth={2} color={INK} opacity={0.7} />
+        <Path path={buntA} color={BLUE} opacity={0.95} />
+        <Path path={buntB} color="#ffffff" opacity={0.95} />
+        <Path path={buntA} style="stroke" strokeWidth={2} color={INK} opacity={0.7} />
+        <Path path={buntB} style="stroke" strokeWidth={2} color={INK} opacity={0.7} />
 
         {/* Top band: hearts, time bar, star meter */}
         {im.heart ? (

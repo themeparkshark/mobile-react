@@ -70,6 +70,9 @@ export const QUEUE1_PUFFER = 896;
 export const BREATHER_START = 1904;
 export const LUCKY_FROM = 1456;
 export const FORK_FROM = 896;
+/** Fork geometry: the bunch lands within FORK_DT steps of the ball contact, at least FORK_DX fu away. */
+export const FORK_DT = 2;
+export const FORK_DX = 170;
 
 // Rulesets (6.1, 6.4, 11.2).
 export const R_INTRO = 0;

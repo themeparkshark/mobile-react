@@ -123,17 +123,19 @@ export function createBot(kind: number, seed: number): Bot {
     b.aim = 0;
   } else if (kind === BOT_CASUAL) {
     b.react = 27;
-    b.finger = 28;
+    b.finger = 20;
     b.aimUniform = 30;
-    b.lapseEvery = 600;
+    b.lapseEvery = 360;
     b.ball = BALL_FALLING;
     b.aim = 0;
   } else if (kind === BOT_HUMAN || kind === BOT_LINE_WALKER || kind === BOT_HUMAN_NO_BALL) {
+    // Engaged human, about 5 runs in (5.5): 180-250 ms, 85% speed, sd 14 fu,
+    // +120 ms and sd x2 while the ball is airborne, divided attention (lapses).
     b.react = 11 + rngBelow(b.rng, 5);
-    b.finger = 34;
-    b.aimSd = 14;
+    b.finger = 26;
+    b.aimSd = 16;
     b.airPenalty = 7;
-    b.lapseEvery = 600;
+    b.lapseEvery = 360;
     b.ball = kind === BOT_HUMAN_NO_BALL ? BALL_NONE : BALL_JUGGLE;
     b.aim = 1;
     b.forkBall = 60;
@@ -315,6 +317,7 @@ export function botInput(s: SimState, b: Bot): number {
   }
   if (b.lapseLeft > 0) {
     b.lapseLeft--;
+    b.touch = b.touch && 1;
     return b.x * 16;
   }
   const bx = s.bx >> 8;

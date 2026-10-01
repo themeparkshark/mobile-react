@@ -67,6 +67,8 @@ export const TRAIL_N = 10;
 export interface Vis {
   /** Presentation ms (freezes with the world). */
   t: number;
+  /** Real ms (never freezes): flashes and impact frames use it, so a hit-stop never holds a white frame. */
+  rt: number;
   /** Cloud clock (10% speed while frozen). */
   cloudT: number;
   frozenMs: number;
@@ -79,6 +81,8 @@ export interface Vis {
   poseT: number;
   flashT: number;
   silhouetteT: number;
+  /** PERFECT impact frame: the basket's front lip only (7.0). */
+  lipT: number;
   chipT: number;
   chipGain: number;
   badgeT: number;
@@ -199,6 +203,7 @@ export function createVis(): Vis {
   };
   return {
     t: 0,
+    rt: 0,
     cloudT: 0,
     frozenMs: 0,
     lean: 0,
@@ -210,6 +215,7 @@ export function createVis(): Vis {
     poseT: -1e6,
     flashT: -1e6,
     silhouetteT: -1e6,
+    lipT: -1e6,
     chipT: -1e6,
     chipGain: 0,
     badgeT: -1e6,
@@ -322,15 +328,16 @@ export function visEvents(v: Vis, s: SimState, reducedMotion: boolean): void {
         v.perfStreak += 1;
         if (v.pose === POSE_IDLE || v.pose === POSE_GRIN) setPose(v, POSE_GRIN, 180);
         if (!reducedMotion) {
-          v.silhouetteT = v.t;
+          v.lipT = v.rt;
           v.powT = v.t;
           v.powX = a;
           v.powY = LANE_Y - 18;
         }
-        if (v.perfStreak >= 3 && screenOk(v, SE_PERFECT)) stamp(v, ST_PERFECT, v.perfStreak, a);
+        // PERFECT stamps only on a 3+ streak, at 3 and then every 5th (no stamp spam).
+        if ((v.perfStreak === 3 || (v.perfStreak > 3 && v.perfStreak % 5 === 0)) && screenOk(v, SE_PERFECT)) stamp(v, ST_PERFECT, v.perfStreak, a);
       } else if (grade < G_POP) v.perfStreak = 0;
       if (grade === G_POP || grade === G_GOLD_POP) {
-        v.flashT = v.t;
+        v.flashT = v.rt;
         if (screenOk(v, SE_POP)) stamp(v, ST_POP, kind === K_LUCKY ? 1 : 0, a);
       }
     } else if (k === EV_EDGE) {
@@ -352,7 +359,7 @@ export function visEvents(v: Vis, s: SimState, reducedMotion: boolean): void {
       v.powX = a;
       v.powY = LANE_Y - 30;
       setPose(v, POSE_BONKED, 120);
-      v.silhouetteT = v.t;
+      v.silhouetteT = v.rt;
       v.heartT = v.t;
       v.heartIdx = b;
       screenOk(v, SE_HIT);
@@ -368,11 +375,11 @@ export function visEvents(v: Vis, s: SimState, reducedMotion: boolean): void {
       v.zoneT = v.t;
       v.zoneIdx = b;
     } else if (k === EV_GOLD_BALL) {
-      v.flashT = v.t;
+      v.flashT = v.rt;
     } else if (k === EV_BALL_POP) {
-      v.flashT = v.t;
+      v.flashT = v.rt;
     } else if (k === EV_BONK) {
-      v.flashT = v.t;
+      v.flashT = v.rt;
       v.powT = v.t;
       v.powX = a;
       v.powY = c === 2 ? LANE_Y - 60 : LANE_Y - 150;
@@ -484,6 +491,7 @@ export function visFrame(v: Vis, s: SimState, frameMs: number, running: boolean)
   const scale = s.done ? 1 : (s.holdTs * s.fxTs) / 65536;
   const dt = frameMs * scale;
   v.t += dt;
+  v.rt += frameMs;
   v.cloudT += frameMs * (frozen ? 0.1 : 1);
   if (frozen && running) v.frozenMs += frameMs;
   else {

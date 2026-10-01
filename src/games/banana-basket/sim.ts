@@ -30,7 +30,7 @@ import {
   PUFFER_TELL_QUEUE, PUFFER_TELL_RIDE, QUEUE_SETS, QUEUE_STAR_Q8, R_INTRO, RESERVE_GRACE, RESERVE_GRACE_UNTIL,
   RESERVE_LATE, RESERVE_TELL, S_BONKED, S_DUNK, S_EDGE, S_FALL, S_FREE, S_HANG, S_MISS, S_PASS, S_POP, S_REEL,
   SET_STEPS, SNAP, SPAWN_Y, STARS_RIDE, STEPS_BAR, STEPS_BEAT, SUB, SWEEP, TIER_AT, TWIST_GIANT, WIDE_ZONE, ZONE_CENTER,
-  ZONE_INNER, ZONE_OUTER, MAX_PRIZES,
+  ZONE_INNER, ZONE_OUTER, MAX_PRIZES, PRIZE_Y_MAX,
 } from './constants';
 import { absInt, clampInt, floorDiv, signInt } from './fixed';
 import { ballIsLive, gatedTier } from './state';
@@ -609,8 +609,10 @@ function stepBall(s: SimState, dt: number): void {
   for (let i = 0; i < MAX_ITEMS; i++) {
     if (s.iSt[i] !== S_FALL || s.iFlag[i] === 1) continue;
     const kind = s.iKind[i];
-    if (s.iY[i] > (LANE_Y - 30) * SUB) continue;
-    const r = BALL_R + (itemSize(s, kind) >> 1) - 6;
+    // Falling items pop only in the sky band (the ball is a skill shot, not a vacuum);
+    // puffers can be BONKed until they are near the rim.
+    if (s.iY[i] > (kind === K_PUFFER ? LANE_Y - 30 : PRIZE_Y_MAX) * SUB) continue;
+    const r = BALL_R + (itemSize(s, kind) >> 1) - (kind === K_PUFFER ? 6 : 14);
     const dx = (s.iX[i] - s.bX) >> 8;
     const dy = (s.iY[i] - s.bY) >> 8;
     if (dx * dx + dy * dy > r * r) continue;

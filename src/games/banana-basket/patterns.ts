@@ -21,7 +21,7 @@ import {
   PRIZE_Y_MAX, PRIZE_Y_MIN, PUFFER_CLEAR, PUFFER_MIN_FALL_QUEUE, PUFFER_MIN_FALL_RIDE, QUEUE1_PUFFER, R_INTRO, REACH_SLACK,
   REACT_STEPS, REMIX_START, RIDE_PRIZE, RIDE_PUFFER, S_FALL, S_FREE, S_HANG, SERVE_BOUNCES, SERVE_STEP, SPAWN_Y, STEPS_BAR,
   STEPS_BEAT, STEPS_HALF, SUB, TAN_Q8, THREAT_CAP_QUEUE, THREAT_CAP_RIDE, TIPOVER_START, TWIST_GIANT, TWIST_LOWGRAV,
-  TWIST_PRIZES, WIND_SUB, ZONE_MID, TWIST_CROSSWIND,
+  TWIST_PRIZES, WIND_SUB, ZONE_MID, TWIST_CROSSWIND, FORK_DT, FORK_DX,
 } from './constants';
 import { absInt, clampInt, floorDiv, rngBelow, rngRange, rngWeighted } from './fixed';
 import { G_BALL, G_BALL_LO, MAXDX, TRAVEL, TRAVEL_MAX, VY_BALL, VY_BALL_LO } from './tables';
@@ -776,13 +776,16 @@ function placeFork(s: SimState, c: number, phase: number): boolean {
     s.fkWinN = 0;
   }
   if (s.fkWinN >= 2) return false;
-  const land = s.bPredStep + rngRange(s.rng, -8, 8);
+  // A real choice: the bunch lands within 2 steps of the ball's contact and far
+  // enough that the zone (62) and the bounce band (88) can never both cover it.
+  // (Doc says +-10 steps; at SWEEP 40 fu/step the basket crosses 200 fu in 4.)
+  const land = s.bPredStep + rngRange(s.rng, -FORK_DT, FORK_DT);
   const at = spawnFor(s, K_BUNCH, phase, land);
-  if (at < c || at > c + 2) return false;
+  if (at !== c) return false;
   const bx = s.bPredX >> 8;
   const dir = bx < 200 ? 1 : -1;
-  const fx = clampInt(bx + dir * rngRange(s.rng, 150, 200), BASKET_MIN, BASKET_MAX);
-  if (absInt(fx - bx) < 150) return false;
+  const fx = clampInt(bx + dir * rngRange(s.rng, FORK_DX, FORK_DX + 40), BASKET_MIN, BASKET_MAX);
+  if (absInt(fx - bx) < FORK_DX) return false;
   addItem(s, at, K_BUNCH, fx, 0, 2, phase);
   s.fkOn = 1;
   s.fkStep = land;

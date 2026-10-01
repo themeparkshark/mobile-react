@@ -96,7 +96,8 @@ export function TeachCard({ card, ready }: { card: CardInfo; ready: boolean }) {
   const hintStyle = useAnimatedStyle(() => ({ opacity: hint.value }));
   return (
     <View style={styles.wrap} pointerEvents="none">
-      <Animated.View style={[styles.card, cardStyle]}>
+      <Animated.View style={[styles.cardWrap, cardStyle]}>
+        <View style={styles.card} collapsable={false}>
         <Animated.View style={artStyle}>
           <Image source={frame === 0 ? card.image : card.image2} style={styles.art} resizeMode="contain" />
         </Animated.View>
@@ -105,6 +106,7 @@ export function TeachCard({ card, ready }: { card: CardInfo; ready: boolean }) {
         ))}
         <Text style={styles.title}>{card.title}</Text>
         <Animated.Text style={[styles.hint, hintStyle]}>TOUCH TO PLAY</Animated.Text>
+        </View>
       </Animated.View>
     </View>
   );
@@ -112,8 +114,10 @@ export function TeachCard({ card, ready }: { card: CardInfo; ready: boolean }) {
 
 const styles = StyleSheet.create({
   wrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.28)' },
+  cardWrap: { width: '82%' },
   card: {
-    width: '82%',
+    width: '100%',
+    overflow: 'hidden',
     backgroundColor: '#fff8e4',
     borderRadius: 24,
     borderWidth: 4,
