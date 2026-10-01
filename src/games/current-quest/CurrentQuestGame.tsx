@@ -150,6 +150,18 @@ function routeOf(board: Board, v: { pos: number; mask: number; golden: boolean; 
   return cells;
 }
 
+/**
+ * Is this voyage's Par shell gone, and which par target is live? The solver says whether either
+ * route can still finish inside its par (display only, cached graph): the buoy sinks and the
+ * Par socket cracks the moment neither can.
+ */
+function parState(b: Board, v: RunState['voyage']): { lost: boolean; target: number } {
+  const plainOk = v.strokes + distanceFrom(b, v, false) <= v.parT;
+  const goldOk = b.golden >= 0 && v.strokes + distanceFrom(b, v, true) <= v.parGoldT;
+  const lost = v.undos > 0 || v.tips > 0 || v.continues > 0 || (!v.cleared && !plainOk && !goldOk);
+  return { lost, target: v.golden || (!plainOk && goldOk) ? v.parGoldT : v.parT };
+}
+
 function emptyShells(n: number): boolean[][] { return Array.from({ length: n }, () => [false, false, false]); }
 
 /** Which shell to name in the NEXT STAR tease ("Par on the Deep board = 3 stars"). */
@@ -540,7 +552,7 @@ export default function CurrentQuestGame({
       shells: shellsRef.current.map((s) => s.slice()),
       hasGolden: b.golden >= 0,
       goldenTaken: v.golden,
-      parLost: v.undos > 0 || v.tips > 0 || v.continues > 0,
+      parLost: parState(b, v).lost,
       hasTide: b.P > 0,
       tideLow: tideAt(b.P, tideMoves(run), v.phase) === TIDE_LOW,
       P: b.P,
@@ -555,9 +567,8 @@ export default function CurrentQuestGame({
     // Par buoy (0.A.14): shows the par target, sinks with a gurgle the moment Par is lost.
     const s = svRef.current;
     // Par = strokes <= par, or <= parGold once the golden pearl is banked; it is gone only when neither can still hold.
-    const goldReach = v.golden || b.golden >= 0;
-    const lost = v.undos > 0 || v.tips > 0 || v.continues > 0 || v.strokes > (goldReach ? v.parGoldT : v.parT);
-    s.parBuoy.value = v.golden || (goldReach && v.strokes >= v.parT) ? v.parGoldT : v.parT;
+    const { lost, target } = parState(b, v);
+    s.parBuoy.value = target;
     if (lost && s.parSinkT.value < 0) {
       s.parSinkT.value = s.fxT.value;
       sfxParSink();
