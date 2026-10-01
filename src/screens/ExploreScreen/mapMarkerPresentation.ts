@@ -20,15 +20,19 @@ export function markerRingColor({ rush, team, urgent, near }: {
   return near ? RING.gold : RING.blue;
 }
 
-export type MarkerBadge = 'rush' | 'adventure' | 'goal' | 'new' | 'level' | null;
+export type MarkerBadge = 'rush' | 'adventure' | 'goal' | 'limited' | 'new' | 'level' | null;
 
-/** One badge per island. Rush beats the adventure, the adventure beats the goal; then collection state. */
-export function markerBadge({ rush, adventure, goal, owned }: {
-  rush: boolean; adventure: boolean; goal: boolean; owned: boolean; selected?: boolean;
+/**
+ * One badge per island. Rush beats the adventure, the adventure beats the goal,
+ * the goal beats a limited coin's leave date; then collection state.
+ */
+export function markerBadge({ rush, adventure, goal, owned, limited = false }: {
+  rush: boolean; adventure: boolean; goal: boolean; owned: boolean; limited?: boolean; selected?: boolean;
 }): MarkerBadge {
   if (rush) return 'rush';
   if (adventure) return 'adventure';
   if (goal) return 'goal';
+  if (limited) return 'limited';
   return owned ? 'level' : 'new';
 }
 

@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import GameIcon from '../ui/GameIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { limitedDayLabel } from '../services/collection/limitedCoins';
 
 interface Props {
   readonly parkName: string;
@@ -16,6 +17,12 @@ interface Props {
   readonly ridePassportCollected?: number;
   readonly ridePassportAvailable?: number;
   readonly onOpenRidePassport?: () => void;
+  /** The limited rotation in play, counted apart from the permanent coins above. */
+  readonly limitedCollected?: number;
+  readonly limitedAvailable?: number;
+  /** Last park-local day of the rotation, YYYY-MM-DD. */
+  readonly limitedEndsOn?: string | null;
+  readonly onBrowseLimited?: () => void;
   readonly onBrowseSecrets?: () => void;
   readonly onOpenStampBook?: () => void;
   readonly nextRideName?: string | null;
@@ -45,7 +52,8 @@ interface Props {
 
 /** The slim park header: park, one Ride Coins count, and one next step. */
 export default function ParkCollectionHeader({ parkName, isOwnPark = true, collected, available, completionRate,
-  ridePassportCollected, ridePassportAvailable, onOpenRidePassport, onBrowseSecrets, onOpenStampBook,
+  ridePassportCollected, ridePassportAvailable, onOpenRidePassport, limitedCollected = 0, limitedAvailable = 0,
+  limitedEndsOn, onBrowseLimited, onBrowseSecrets, onOpenStampBook,
   nextRideName, nextRideOwned, ownedGoalHint, nearbyRideName, ticketsNeeded = 0,
   rescuePassAvailable = false, goalStale = false,
   goalReportedDown = false, alternateRideName, nearbyReportedOpen = false,
@@ -56,6 +64,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
     : Math.max(0, Math.min(100, Number.isFinite(completionRate) ? completionRate : 0));
   const passportComplete = typeof ridePassportAvailable === 'number' && ridePassportAvailable > 0 &&
     (ridePassportCollected ?? 0) >= ridePassportAvailable;
+  const limitedLeaves = limitedDayLabel(limitedEndsOn);
 
   // Count tick: a quick pop and a gold flash when a landed coin adds to the shelf.
   const pop = useSharedValue(1);
@@ -121,6 +130,12 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
             <GameIcon name="ride" size={20} />
             <Text style={styles.chipText}>PASSPORT {ridePassportCollected ?? 0}/{ridePassportAvailable}</Text>
           </Pressable>}
+        {limitedAvailable > 0 && <Pressable style={styles.chip} onPress={onBrowseLimited} disabled={!onBrowseLimited}
+          hitSlop={6} accessibilityRole={onBrowseLimited ? 'button' : undefined}
+          accessibilityLabel={`Limited coins this rotation, ${limitedCollected} of ${limitedAvailable}${limitedLeaves ? `, leaving ${limitedLeaves}` : ''}${onBrowseLimited ? '. View limited shelf.' : ''}`}>
+          <GameIcon name="timer" size={18} />
+          <Text style={styles.chipText}>LIMITED {limitedCollected}/{limitedAvailable}</Text>
+        </Pressable>}
         {!!onBrowseSecrets && <Pressable style={styles.chip} onPress={onBrowseSecrets} hitSlop={6}
           accessibilityRole="button" accessibilityLabel={`${secretMilestones} secret coins found. View secret shelf.`}>
           <GameIcon name="lock" size={18} />

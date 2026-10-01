@@ -73,20 +73,27 @@ test('coin links still pointing at the All Parks screen forward to the coin’s 
 });
 
 test('a park shelf prefetch is used once and only while fresh', async () => {
-  let reads = 0;
+  let reads = 0, limitedDown = false;
   const stub = { __esModule: true, default: async () => { reads++; return []; } };
   const prefetch = loadTs('src/services/collection/parkShelfPrefetch.ts', {
     '../../api/endpoints/parks/getArchivedTasks': stub, '../../api/endpoints/parks/getSecretTasks': stub,
     '../../api/endpoints/parks/getTasks': stub, '../../api/endpoints/players/parks/getCompletedArchivedTasks': stub,
     '../../api/endpoints/players/parks/getCompletedSecretTasks': stub, '../../api/endpoints/players/parks/getCompletedTasks': stub,
     '../../api/endpoints/players/visited-parks/getPark': { __esModule: true, default: async () => { reads++; return { id: 1 }; } },
+    '../../api/endpoints/parks/getLimitedTasks': { __esModule: true, default: async () => {
+      reads++; if (limitedDown) throw new Error('404'); return [{ id: 9, limited: { active: false, ends_at: null, returns: true } }];
+    } },
   });
-  prefetch.prefetchParkShelf(1, 5, 1000); assert.equal(reads, 7);
+  prefetch.prefetchParkShelf(1, 5, 1000); assert.equal(reads, 8);
   const first = await prefetch.loadParkShelf(1, 5, 1000 + prefetch.MAX_AGE_MS);
-  assert.equal(first.visitedPark.id, 1); assert.equal(reads, 7, 'the prefetch was reused');
-  await prefetch.loadParkShelf(1, 5, 1000 + prefetch.MAX_AGE_MS); assert.equal(reads, 14, 'a prefetch is consumed once');
+  assert.equal(first.visitedPark.id, 1); assert.equal(reads, 8, 'the prefetch was reused');
+  assert.equal(first.limited[0].id, 9);
+  await prefetch.loadParkShelf(1, 5, 1000 + prefetch.MAX_AGE_MS); assert.equal(reads, 16, 'a prefetch is consumed once');
   prefetch.prefetchParkShelf(1, 5, 0);
-  await prefetch.loadParkShelf(1, 5, prefetch.MAX_AGE_MS + 1); assert.equal(reads, 28, 'a stale prefetch is ignored');
+  await prefetch.loadParkShelf(1, 5, prefetch.MAX_AGE_MS + 1); assert.equal(reads, 32, 'a stale prefetch is ignored');
+  // A server without rotations (or a failed limited read) still opens the shelf.
+  limitedDown = true;
+  assert.deepEqual(plain((await prefetch.loadParkShelf(1, 5)).limited), []);
 });
 
 test('park days read as calendar dates, never raw ISO strings', () => {

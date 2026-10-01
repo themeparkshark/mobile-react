@@ -14,6 +14,9 @@ import type { RideContext } from './LinePlaySession';
 
 const norm = (s: string) => s.toLowerCase().trim();
 
+/** Catalog lookup key for a ride or coin name. */
+export const normalizeRideName = norm;
+
 /** Legacy coin labels that clearly refer to one catalog ride in that park. */
 // ui-copy-allow(phrase): catalog lookup keys matched against ride names, never rendered.
 const TASK_RIDE_ALIASES: Readonly<Record<number, Readonly<Record<string, string>>>> = {
@@ -38,6 +41,13 @@ const TASK_RIDE_ALIASES: Readonly<Record<number, Readonly<Record<string, string>
     "soarin'": "soarin' around the world",
   },
 };
+
+/** Catalog ride names (normalized) a coin label can mean: its own name, then a reviewed alias. */
+export function rideKeysForTask(parkId: number, taskName: string): string[] {
+  const key = norm(taskName);
+  const alias = TASK_RIDE_ALIASES[parkId]?.[key];
+  return alias ? [key, alias] : [key];
+}
 
 /** Authored queue chapters whose coin exists before reward geofences are cataloged. */
 const OFFLINE_MAP_CHAPTERS: Readonly<Record<number, Readonly<Record<string, string>>>> = {
@@ -68,6 +78,11 @@ async function getRideNameMap(parkId: number): Promise<Map<string, RideType>> {
   }
 }
 
+/** The park's ride catalog (the same cached request), for the Coin Guide's Line Play rows. */
+export async function loadParkRides(parkId: number): Promise<RideType[]> {
+  return [...(await getRideNameMap(parkId)).values()];
+}
+
 /** Warm the ride lookup while guests read the park checklist. */
 export async function prefetchRideCatalog(parkId: number): Promise<void> {
   try { await getRideNameMap(parkId); } catch { /* Games-only fallback stays available. */ }
@@ -86,8 +101,7 @@ export async function resolveRideContext(
 ): Promise<RideContext | null> {
   try {
     const map = await getRideNameMap(parkId);
-    const taskName = norm(rideName);
-    const ride = map.get(taskName) ?? map.get(TASK_RIDE_ALIASES[parkId]?.[taskName] ?? '');
+    const ride = rideKeysForTask(parkId, rideName).map(key => map.get(key)).find(Boolean);
     if (!ride) return null;
     return {
       rideId: ride.id,

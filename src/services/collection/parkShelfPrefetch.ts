@@ -1,5 +1,5 @@
 /**
- * The park shelf's seven lists, loaded together. The post-win summary starts
+ * The park shelf's eight lists, loaded together. The post-win summary starts
  * this request while the player reads the receipt, so the Park screen opens
  * with its shelf already in hand and the coin can fly straight to its slot.
  *
@@ -7,6 +7,7 @@
  * any later focus, reads the server again.
  */
 import getArchivedTasks from '../../api/endpoints/parks/getArchivedTasks';
+import getLimitedTasks from '../../api/endpoints/parks/getLimitedTasks';
 import getSecretTasks from '../../api/endpoints/parks/getSecretTasks';
 import getTasks from '../../api/endpoints/parks/getTasks';
 import getCompletedArchivedTasks from '../../api/endpoints/players/parks/getCompletedArchivedTasks';
@@ -25,6 +26,8 @@ export interface ParkShelfData {
   readonly completedSecret: SecretTaskType[];
   readonly archived: TaskType[];
   readonly completedArchived: TaskType[];
+  /** Every limited coin, in rotation or not. Empty on a server without rotations. */
+  readonly limited: TaskType[];
 }
 
 export const MAX_AGE_MS = 20_000;
@@ -37,8 +40,9 @@ export function fetchParkShelf(park: number, player: number): Promise<ParkShelfD
     getVisitedPark(park, player), getTasks(park), getSecretTasks(park),
     getCompletedTasks(park, player), getCompletedSecretTasks(park, player),
     getArchivedTasks(park), getCompletedArchivedTasks(park, player),
-  ]).then(([visitedPark, available, secret, completed, completedSecret, archived, completedArchived]) =>
-    ({ visitedPark, available, secret, completed, completedSecret, archived, completedArchived }));
+    getLimitedTasks(park).catch(() => [] as TaskType[]),
+  ]).then(([visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited]) =>
+    ({ visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited }));
 }
 
 /** Start loading a park shelf now (fire and forget). */

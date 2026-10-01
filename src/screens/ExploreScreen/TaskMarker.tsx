@@ -18,6 +18,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { BRAND, GameIcon } from '../../ui';
 import { formatDistance } from './adventureTicketPresentation';
 import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentation';
+import { limitedLabel } from '../../services/collection/limitedCoins';
 
 const LANDMARKS: Record<LandmarkId, number> = {
   shark: require('../../../assets/images/map/landmarks/shark.png'),
@@ -157,7 +158,9 @@ function TaskMarker({
 
   // Rush gold, a held ride its team colour, red only in the last 5 minutes, gold in reach, else blue.
   const ringColor = markerRingColor({ rush: !!rush, team: control ? TEAMS[control.controller].color : null, urgent: timerUrgent, near: near || playable });
-  const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, selected: isSelected });
+  // A limited coin on the map is in rotation: "Limited · leaves Oct 31".
+  const limited = task.limited?.active ? limitedLabel(task.limited) : null;
+  const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, limited: !!limited, selected: isSelected });
   const showTimer = expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
   const kinds = useMemo(() => {
     const base = ambient && !reducedMotion ? ambienceNow(look.ambience) : [];
@@ -213,7 +216,7 @@ function TaskMarker({
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={press}
-      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${clusterCount ? `${clusterCount} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
+      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${clusterCount ? `${clusterCount} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${minsLeft !== null ? `Bonus opportunity: ${minsLeft} minutes left. ` : ''}Show ride on the map.`}
       stopPropagation={true}
       anchor={{ x: 0.5, y: 0.9 }}
     >
@@ -227,6 +230,10 @@ function TaskMarker({
         )}
         {!isSelected && badge === 'adventure' && <View style={styles.adventureBadge}><GameIcon name="ticket" size={13} /><Text style={styles.adventureText}>ADVENTURE</Text></View>}
         {!isSelected && badge === 'goal' && <View style={styles.goalBadge}><Text style={styles.goalText}>MY GOAL</Text></View>}
+        {!isSelected && badge === 'limited' && limited && <View style={styles.limitedSlot}>
+          <View style={styles.limitedBadge}><GameIcon name="timer" size={12} />
+            <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text></View>
+        </View>}
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
         {!isSelected && showTimer && (
           <View style={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent, badge !== 'new' && badge !== 'level' && styles.timerLow]}>
@@ -256,8 +263,8 @@ function TaskMarker({
                       <Text style={styles.tooltipDetail}>{ticketCost} {ticketCost === 1 ? 'Ticket' : 'Tickets'}</Text>
                     </>}
                   </View>
-                  {(status || isTripGoal || adventure) && <Text style={styles.tooltipWait} numberOfLines={1}>
-                    {[adventure ? 'Adventure ride' : isTripGoal ? 'My goal' : null, status].filter(Boolean).join(' · ')}
+                  {(status || isTripGoal || adventure || limited) && <Text style={styles.tooltipWait} numberOfLines={1}>
+                    {[adventure ? 'Adventure ride' : isTripGoal ? 'My goal' : null, status, limited].filter(Boolean).join(' · ')}
                   </Text>}
                 </View>
               </View>
@@ -308,6 +315,11 @@ const styles = StyleSheet.create({
   adventureBadge: { position: 'absolute', top: -24, zIndex: 22, flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: BRAND.white, borderRadius: 9, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
   adventureText: { color: BRAND.navy, fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
+  // Wider than the island so "LIMITED · LEAVES OCT 31" never clips.
+  limitedSlot: { position: 'absolute', top: -24, left: -44, right: -44, zIndex: 22, alignItems: 'center' },
+  limitedBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 9,
+    paddingHorizontal: 6, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
+  limitedText: { color: BRAND.navy, fontSize: 10, fontFamily: 'Knockout', letterSpacing: 0.5 },
   newBadge: { position: 'absolute', top: 2, right: 2, zIndex: 22 },
   levelPip: { position: 'absolute', bottom: 2, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 3,
     backgroundColor: BRAND.blueBright, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },

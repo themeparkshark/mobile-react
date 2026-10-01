@@ -12,7 +12,8 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { SecretTaskType } from '../models/secret-task-type';
-import { TaskType } from '../models/task-type';
+import { TaskType, type LimitedWindow } from '../models/task-type';
+import { limitedDayLabel } from '../services/collection/limitedCoins';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import MysteryCoinArtwork from './MysteryCoinArtwork';
@@ -33,11 +34,14 @@ interface Props {
   kind?: 'ride' | 'coin';
   /** Highlight the empty socket as the player's goal. */
   isGoal?: boolean;
+  /** A limited coin's rotation (Coin Map 2.0); out of rotation it cannot be played. */
+  limited?: LimitedWindow | null;
 }
 
 /** Copy for the missing coin, by what kind of place earns it. */
-export function unfoundCoinCopy({ isSecret, isArchived, isResting, kind }: {
+export function unfoundCoinCopy({ isSecret, isArchived, isResting, kind, limited }: {
   isSecret: boolean; isArchived: boolean; isResting: boolean; kind?: 'ride' | 'coin';
+  limited?: LimitedWindow | null;
 }): { ribbon: string; hint: string; challenge: string } {
   if (isSecret) return {
     ribbon: 'Secret Coin',
@@ -51,12 +55,23 @@ export function unfoundCoinCopy({ isSecret, isArchived, isResting, kind }: {
     hint: 'This coin is from a past event. It may come back in a future event.',
     challenge: 'Event Challenge',
   };
+  if (limited) {
+    const day = limitedDayLabel(limited.ends_on);
+    return {
+      ribbon: 'Limited Coin',
+      hint: !limited.active
+        ? 'This limited coin is out of rotation. It returns in a later rotation.'
+        : day ? `Here until ${day}. Win its challenge before it rotates out.`
+        : 'Win its challenge before this rotation ends.',
+      challenge: kind === 'ride' ? 'Ride Challenge' : 'Coin Challenge',
+    };
+  }
   return kind === 'ride'
     ? { ribbon: 'Ride Coin', hint: 'Win this ride’s challenge at the ride to add its coin to your shelf.', challenge: 'Ride Challenge' }
     : { ribbon: 'Park Coin', hint: 'Win this spot’s challenge in the park to add its coin to your shelf.', challenge: 'Coin Challenge' };
 }
 
-export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger, size = 62, kind, isGoal = false }: Props) {
+export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger, size = 62, kind, isGoal = false, limited }: Props) {
   const [visible, setVisible] = useState(false);
   const [afterClose, setAfterClose] = useState<'map' | 'line' | null>(null);
   const [goalBusy, setGoalBusy] = useState(false);
@@ -64,8 +79,9 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
   const { playSound } = useContext(SoundEffectContext);
   const reducedMotion = useReducedGameMotion();
   const isRestingSecret = isSecret && 'is_active' in task && task.is_active === false;
-  const copy = unfoundCoinCopy({ isSecret, isArchived, isResting: isRestingSecret, kind });
-  const playable = !isSecret && !isArchived;
+  const copy = unfoundCoinCopy({ isSecret, isArchived, isResting: isRestingSecret, kind, limited });
+  const outOfRotation = !!limited && !limited.active;
+  const playable = !isSecret && !isArchived && !outOfRotation;
 
   const handleOpen = () => {
     setGoalError(false);
@@ -93,8 +109,8 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
   return (
     <>
       <Pressable onPress={handleOpen} accessibilityRole="button"
-        accessibilityLabel={`${task.name} ride coin, ${isRestingSecret ? 'secret, resting this week' : isSecret ? 'secret' : isArchived ? 'archived' : 'undiscovered'}`}
-        style={{ opacity: isRestingSecret ? 0.68 : 1 }}>
+        accessibilityLabel={`${task.name} ride coin, ${isRestingSecret ? 'secret, resting this week' : isSecret ? 'secret' : isArchived ? 'archived' : outOfRotation ? 'limited, returns later' : 'undiscovered'}`}
+        style={{ opacity: isRestingSecret || outOfRotation ? 0.68 : 1 }}>
         {trigger ?? (isSecret || !task.coin_url
           ? <MysteryCoinArtwork size={size} variant={isSecret ? 'secret' : isArchived ? 'archived' : 'normal'} />
           : <CoinSocket size={size} coinUrl={task.coin_url} goal={isGoal} />)}
@@ -172,7 +188,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                 {copy.hint}
               </Text>
 
-              {!isSecret && !isArchived && (
+              {playable && (
                 <View style={{ alignSelf: 'stretch', backgroundColor: '#edfaff',
                   borderColor: '#bceaff', borderWidth: 2,
                   borderRadius: 14, padding: 14, marginBottom: 16 }}>

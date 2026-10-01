@@ -6,7 +6,10 @@ export interface RideType {
   slug: string;
   park_id: number;
   park_name: string | null;
-  type: 'coaster' | 'dark_ride' | 'flat_ride' | 'water_ride' | 'show' | 'walk_through' | 'transport' | 'other';
+  type: 'coaster' | 'dark_ride' | 'flat_ride' | 'water_ride' | 'show' | 'walk_through' | 'transport' | 'other'
+    | 'attraction' | 'ride' | 'restaurant';
+  /** The coin task this ride earns, when linked (older servers omit it). */
+  task_id?: number | null;
   lat: number | null;
   lng: number | null;
   image_url: string | null;

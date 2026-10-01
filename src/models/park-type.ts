@@ -18,6 +18,11 @@ export interface ParkType {
   readonly ride_passport_available?: number;
   readonly ride_passport_completion_rate?: number | null;
   readonly ride_passport_task_ids?: number[];
+  /** The limited rotation in play, counted apart from the permanent coins. */
+  readonly limited_coins_collected?: number;
+  readonly limited_coins_available?: number;
+  readonly limited_ends_at?: string | null;
+  readonly limited_ends_on?: string | null;
   readonly secret_tasks_count: number;
   readonly stores: StoreType[];
   readonly tasks_count: number;
