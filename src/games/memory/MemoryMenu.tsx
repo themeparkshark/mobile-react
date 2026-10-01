@@ -28,7 +28,9 @@ import { MM } from './theme';
 import { dailyDeckId, dailyFaceSeed, dailyLayoutSeed, dayKey, liveStreak, parGhost } from './modes/daily';
 import { fetchDailyGhosts, pickGhost } from './modes/dailyApi';
 import { emptyAlbum, type Album } from './modes/album';
-import { loadAlbum, loadDaily, loadPersonalBest, loadPlayerKey, loadRankHistory, loadStreak, type DailyRecord } from './storage';
+import { loadAlbum, loadDaily, loadHeat, loadMastery, loadPersonalBest, loadPlayerKey, loadRankHistory, loadStreak, saveHeat, type DailyRecord } from './storage';
+import { heatUnlocked } from './modes/mastery';
+import { NO_HEAT, type HeatToggles } from './modes/unlocks';
 
 const BARKER_WAVE = require('../../assets/games/memory/studio/barker_wave.png');
 const BOOTH = require('../../assets/games/memory/studio/booth_frame.png');
@@ -83,8 +85,15 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
   const [sharks, setSharks] = useState(0);
   const [lobbyOnline, setLobbyOnline] = useState(false);
   const [tick, setTick] = useState(() => secondsToTick(Date.now()));
+  const [heat, setHeat] = useState<HeatToggles>(NO_HEAT);
+  const [heatOk, setHeatOk] = useState(false);
+  const toggleHeat = (k: keyof HeatToggles) => {
+    Haptic.tickSelection();
+    setHeat((h) => { const n = { ...h, [k]: !h[k] }; void saveHeat(n); return n; });
+  };
   const rideDeck = taskName ? deckId ?? deckIdForRideName(taskName) : deckId ?? null;
   const dailyDeck = deckById(dailyDeckId(today, rideDeck)) ?? deckById('park')!;
+  const taDeck = deckById(rideDeck ?? 'park') ?? deckById('park')!;
 
   useEffect(() => {
     let live = true;
@@ -95,6 +104,8 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
     void loadAlbum().then((a) => live && setAlbum(a));
     void fetchDailyGhosts(today).then((g) => live && setGhost(pickGhost(g)));
     void loadRankHistory().then((h) => live && setRank(memoryRank(h)));
+    void loadHeat().then((h) => live && setHeat(h));
+    void loadMastery().then((m) => live && setHeatOk(heatUnlocked(m[taDeck.id] ?? 0)));
     return () => { live = false; };
   }, [today]);
 
@@ -176,7 +187,15 @@ function BoothMenu({ taskName, deckId, onPick, onClose }: { taskName?: string; d
         <View style={[styles.cards, { paddingBottom: insets.bottom + 14 }]}>
           <BoothCard index={0} reducedMotion={reducedMotion} onPress={() => go({ kind: 'timeAttack' })}
             title="Time Attack" body="Race the clock. Every clean board grows." icon={STOPWATCH}
-            right={best > 0 || rank !== 'none' ? <Stat label={RANK_LABEL[rank]} value={best > 0 ? best.toLocaleString() : '-'} /> : null} />
+            right={heatOk ? (
+              <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                <Text style={styles.badge}>{`HEAT${heat.seagull && heat.tide ? ' +60%' : heat.seagull || heat.tide ? ' +25%' : ''}`}</Text>
+                <View style={{ flexDirection: 'row', gap: 4 }}>
+                  <HeatChip label="GULL" on={heat.seagull} onPress={() => toggleHeat('seagull')} />
+                  <HeatChip label="TIDE" on={heat.tide} onPress={() => toggleHeat('tide')} />
+                </View>
+              </View>
+            ) : best > 0 || rank !== 'none' ? <Stat label={RANK_LABEL[rank]} value={best > 0 ? best.toLocaleString() : '-'} /> : null} />
           <BoothCard index={1} reducedMotion={reducedMotion} onPress={() => go({ kind: 'steal' })}
             title="Steal Duel" body={lobbyOnline ? lobbyLine(tick, sharks) : 'One shared board. Steal pairs your rival reveals. Practice vs the house shark.'}
             icon={SHARK_TOKEN}
@@ -206,6 +225,14 @@ function Stat({ label, value }: { label: string; value: string }) {
       <Text style={styles.statLabel}>{label}</Text>
       <Text style={styles.statValue}>{value}</Text>
     </View>
+  );
+}
+
+function HeatChip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={6} style={[styles.heatChip, on && styles.heatOn]} accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={`${label} heat`}>
+      <Text style={[styles.heatText, on && { color: '#ffffff' }]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -253,6 +280,9 @@ function BoothCard({ index, title, body, icon, right, onPress, gold, reducedMoti
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#35a8e6' },
+  heatChip: { minWidth: 46, height: 30, borderRadius: 10, borderWidth: 2, borderColor: MM.ink, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  heatOn: { backgroundColor: MM.urgent, borderColor: '#ffffff' },
+  heatText: { fontFamily: 'Shark', fontSize: 12, color: MM.navyText },
   top: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
   close: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#ffffff', borderWidth: 3, borderColor: '#05346e', alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, textAlign: 'center', fontFamily: 'Shark', fontSize: 30, color: '#ffffff', textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },

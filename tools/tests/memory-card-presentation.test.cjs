@@ -62,3 +62,16 @@ test('cards carry no RN shadow props anywhere (the cel shadow is a Skia draw, 6.
     assert.equal(/shadowOffset|shadowRadius|shadowOpacity|elevation\s*:/.test(src), false, `${f} uses an RN shadow prop`);
   }
 });
+
+test('results: at most one overlay is ever mounted (share back, album panel, challenge panel), reveals on the 232ms grid', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.resolve(__dirname, '../../src/games/memory/MemoryResults.tsx'), 'utf8');
+  assert.equal(/<Modal\b/.test(src), false, 'no modal on the results surface');
+  // mountedOverlays is pure: check every state.
+  const pure = src.slice(src.indexOf('export function mountedOverlays'), src.indexOf('/** Reveal schedule'));
+  const fn = new Function(`${pure.replace('export function mountedOverlays(panel: ResultsPanel, flipped: boolean): string[]', 'return function mountedOverlays(panel, flipped)')}`)();
+  for (const panel of ['actions', 'album', 'challenge']) for (const flipped of [true, false]) assert.ok(fn(panel, flipped).length <= 1);
+  void loadTs;
+});

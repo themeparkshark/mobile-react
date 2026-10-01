@@ -263,3 +263,65 @@ test('Memory Rank from the best board across the last 10 runs', () => {
   assert.equal(U.memoryRank([6, 7, 6]), 'goldBarker');
   assert.equal(U.memoryRank([6, 6, 6, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]), 'none', 'only the last 10 count');
 });
+
+// -----------------------------------------------------------------------------
+// Mode mapping, Final Pair budget, results invariants, mastery, layout
+// -----------------------------------------------------------------------------
+
+const M = loadTs('src/games/memory/modes/mode.ts');
+const MA = loadTs('src/games/memory/modes/mastery.ts');
+const LY = loadTs('src/games/memory/layout.ts');
+
+test('mode mapping: party -> race, explicit mode wins, difficulty 0 with no mode is Warm-up (never Ride Sprint)', () => {
+  assert.equal(M.resolveMemoryMode({ party: {}, mode: 'ride' }), 'race');
+  assert.equal(M.resolveMemoryMode({ mode: 'ride', difficulty: 1 }), 'ride', 'MiniGameSelector paid');
+  assert.equal(M.resolveMemoryMode({ difficulty: 1 }), 'timeAttack', 'MiniGameSelector queue, LinePlayScreen, CrewRelayPreviewScreen');
+  assert.equal(M.resolveMemoryMode({}), 'timeAttack');
+  assert.equal(M.resolveMemoryMode({ difficulty: 0 }), 'warmup', "TutorialProvider: Finn's warm-up");
+  assert.equal(M.resolveMemoryMode({ devMode: 'daily', mode: 'ride' }), 'daily');
+  assert.equal(M.resolveMemoryMode({ devMode: 'nonsense', mode: 'ride' }), 'ride');
+});
+
+test('Final Pair: last tap to Coin Catch within 3.9s unskipped, about 1.5s when skipped after 600ms, all on the 8th grid', () => {
+  for (let coins = 0; coins <= 8; coins++) {
+    const s = M.finalPairSchedule(coins);
+    assert.ok(s.handoff <= M.FINAL_BUDGET_MS, `coins ${coins}: ${s.handoff}`);
+    assert.equal(s.beat2 - s.beat1, M.EIGHTH_MS);
+    assert.equal(s.beat3 - s.beat2, M.EIGHTH_MS);
+  }
+  const k = M.finalSkipSchedule();
+  assert.ok(M.FINAL_SKIP_AFTER_MS + k.handoff <= 1600, 'skip lands around 1.5s');
+  assert.equal(M.RIDE_HANDOFF_MS, 350);
+});
+
+test('mastery: XP per deck and levels at 10/25/45/70; Heat from L2, charm from L3', () => {
+  assert.deepEqual([0, 9, 10, 25, 45, 70, 200].map(MA.levelFor), [1, 1, 2, 3, 4, 5, 5]);
+  assert.equal(MA.xpFor('timeAttack', { boardsCleared: 3 }), 3);
+  assert.equal(MA.xpFor('ride', { cleared: true, stars: 3 }), 4);
+  assert.equal(MA.xpFor('ride', { cleared: true, stars: 2 }), 2);
+  assert.equal(MA.xpFor('ride', { cleared: false }), 0);
+  assert.equal(MA.xpFor('daily', { cleared: true }), 3);
+  const r = MA.addXp({ park: 8 }, 'park', 3);
+  assert.equal(r.before, 1);
+  assert.equal(r.after, 2);
+  assert.equal(MA.heatUnlocked(9), false);
+  assert.equal(MA.heatUnlocked(10), true);
+  assert.equal(MA.charmUnlocked(25), true);
+});
+
+test('booth wrap hugs the grid at 4x2, 4x3, 4x4, 4x5: lip clear of cards, cards >= 64pt, booth in the bottom, bulbs in 3 segments', () => {
+  for (const [W, H] of [[375, 640], [393, 700], [440, 780]]) {
+    for (const rows of [2, 3, 4, 5]) {
+      const g = LY.boothGeo(W, H, 4, rows, { bottomInset: 20, peek: rows > 2 });
+      assert.ok(Math.min(g.cw, g.ch) >= 63.9, `${W}x${H} 4x${rows}: card ${g.cw}x${g.ch}`);
+      assert.ok(g.awning.y + g.awning.h <= g.grid.y - 7.9, 'the awning lip never touches a card');
+      assert.ok(g.counter.y >= g.grid.y + g.grid.h, 'the counter is the bottom border');
+      assert.ok(g.posts[0].x + g.posts[0].w <= g.grid.x && g.posts[1].x >= g.grid.x + g.grid.w, 'posts are the side borders');
+      assert.ok(g.rope.y > g.awning.y + g.awning.h - 10 && g.rope.y < g.grid.y, 'the rope runs below the lip, above the cards');
+      assert.equal(g.prize.length, rows * 2);
+      assert.ok([0, 1, 2].every((sgm) => g.bulbs.some((b) => b.seg === sgm)));
+      assert.ok(g.counter.y + g.counter.h <= H, 'inside the field');
+      if (g.peek) assert.ok(g.peek.y >= g.grid.y + g.grid.h, 'Peek never covers a card');
+    }
+  }
+});

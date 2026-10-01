@@ -270,3 +270,6 @@ export async function takeDailyIntro(day: string): Promise<boolean> {
   await writeJson('intro', day);
   return true;
 }
+
+export const loadMastery = () => readJson<Record<string, number>>('mastery', {});
+export const saveMastery = (m: Record<string, number>) => writeJson('mastery', m);

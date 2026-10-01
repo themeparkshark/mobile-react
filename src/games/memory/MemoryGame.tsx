@@ -110,6 +110,8 @@ import {
   loadAlbum,
   loadHeat,
   loadLedger,
+  loadMastery,
+  saveMastery,
   loadPersonalBest,
   loadRideRecord,
   loadTaRuns,
@@ -128,6 +130,7 @@ import type { DailySummary, RunRewards } from './MemoryExtras';
 import { recordRun, rideKeyFor, stampRide, type RunMatch } from './modes/album';
 import { applyRankedDay, earnsStamp, pairsAfter, railDelta, railDeltaLabel, type DailyGhost, type StreakState } from './modes/daily';
 import { EMPTY_LEDGER, NO_HEAT, SYSTEM_HINT, SYSTEM_LABEL, planBoard, recordBoard, type HeatToggles, type SystemId, type UnlockLedger } from './modes/unlocks';
+import { addXp, xpFor } from './modes/mastery';
 import { EIGHTH_MS, FINAL_SKIP_AFTER_MS, SIXTEENTH_MS, finalPairSchedule, resolveMemoryMode, type MemoryMode } from './modes/mode';
 import { SIGNAL_TURNS, PENDING_STOP_MS, signalModeFor } from './charged';
 import { SHARKS } from '../../gamekit/party/partyArt';
@@ -962,6 +965,14 @@ export default function MemoryGame({
       }
       const extra: string[] = [];
       if (upgraded && edition) extra.push(`UPGRADED TO ${edition.toUpperCase()}`);
+      if (r.mode === 'timeAttack' || r.mode === 'ride' || r.mode === 'daily') {
+        const xp = xpFor(r.mode, { boardsCleared: r.cleared, cleared: won, stars });
+        if (xp > 0) {
+          const m = addXp(await loadMastery(), deck.id, xp);
+          await saveMastery(m.mastery);
+          extra.push(m.after > m.before ? `${deck.label.toUpperCase()} MASTERY LEVEL ${m.after}` : `+${xp} MASTERY XP`);
+        }
+      }
       const data: MemoryResultsData = {
         mode: r.mode === 'race' ? 'race' : r.mode,
         banner,
