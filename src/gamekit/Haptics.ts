@@ -57,7 +57,9 @@ export type HapticIntent =
   | 'success'
   | 'warning'
   | 'hitSoft'
-  | 'hitRigid';
+  | 'hitRigid'
+  /** Line Party's gentle error bump: an alias of hitSoft. */
+  | 'softBump';
 
 /** Minimum ms between fires of the same intent. Tuned per intent below. */
 const DEBOUNCE_MS: Record<HapticIntent, number> = {
@@ -70,6 +72,7 @@ const DEBOUNCE_MS: Record<HapticIntent, number> = {
   warning: 250,
   hitSoft: 45,
   hitRigid: 45,
+  softBump: 60,
 };
 
 const lastFiredAt: Record<HapticIntent, number> = {
@@ -82,6 +85,7 @@ const lastFiredAt: Record<HapticIntent, number> = {
   warning: 0,
   hitSoft: 0,
   hitRigid: 0,
+  softBump: 0,
 };
 
 let enabled = true;
@@ -118,6 +122,7 @@ function run(intent: HapticIntent): void {
     case 'failBuzz':
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
+    case 'softBump':
     case 'hitSoft':
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft ?? Haptics.ImpactFeedbackStyle.Light);
       return;
@@ -154,6 +159,7 @@ export const Haptic: Record<HapticIntent, () => void> = {
   warning: () => haptic('warning'),
   hitSoft: () => haptic('hitSoft'),
   hitRigid: () => haptic('hitRigid'),
+  softBump: () => haptic('softBump'),
 };
 
 /** Minimum spacing between two gated haptics, app-wide. */
@@ -165,6 +171,7 @@ export const HAPTIC_PRIORITY: Record<HapticIntent, number> = {
   tapLight: 1,
   hitSoft: 1,
   hitRigid: 2,
+  softBump: 1,
   hitMedium: 2,
   warning: 2,
   comboHeavy: 3,
