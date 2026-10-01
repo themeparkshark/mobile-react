@@ -137,6 +137,8 @@ function listingFromManifest(game, manifest) {
     const f = { stem, file, full, meta };
     if (parts.length > 1 && (parts[0] === 'music' || parts[0] === 'beds')) out.music.push({ ...f, sub: parts[0] });
     else if (parts.length > 1 && parts[0] === 'lanes') out.lanes.push(f);
+    // Per-row tell renders and v4 tell phrases: one cue per file, kept in their subfolder.
+    else if (parts.length === 2 && (parts[0] === 'phrases' || parts[0] === 'tells')) out.top.push({ ...f, file: parts.join('/') });
     else if (parts.length === 1) out.top.push(f);
   }
   return out;
