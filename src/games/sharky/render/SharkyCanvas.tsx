@@ -271,13 +271,8 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
         continue;
       }
       if (et === E_GATE) {
-        if (s.ep1[i] === G_SPLIT) continue;
-        const big = s.ep1[i] === G_RIDE || s.ep1[i] === G_FINISH;
-        if (!big) continue; // Tide Gates are the bubble arch + bunting (Gates layer).
-        const h = 360;
-        const w = h * rects[SPR_POLE * 4 + 2] / Math.max(1, rects[SPR_POLE * 4 + 3]);
-        put(SPR_POLE, vx, FLOOR_Y + 10 - h / 2, w, 0, 1);
-        put(SPR_POLE, vx, SURFACE_Y - 10 + h / 2, w, Math.PI, 1);
+        // Every gate is its arch set piece plus the bunting line (Gates layer);
+        // the old marquee poles cluttered the arch opening.
         continue;
       }
       if (et === E_COIN) {
