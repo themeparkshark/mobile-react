@@ -31,6 +31,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import { defendGym } from '../../api/endpoints/gym-battle';
+import { friendlyActionError } from '../../services/match/matchLink';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -312,7 +313,7 @@ export default function DefendMiniGameModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setResult({
         points: 0,
-        message: error.response?.data?.error || error.message || 'Something went wrong!',
+        message: friendlyActionError(error, 'Something went wrong!'),
       });
       setGameState('finished');
     }

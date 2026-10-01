@@ -20,6 +20,7 @@ import Animated, {
 import { checkinGym } from '../../api/endpoints/gym-battle';
 import { battleHUDEvents } from './battleHUDEvents';
 import { GameIcon } from '../../ui';
+import { friendlyActionError } from '../../services/match/matchLink';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -112,7 +113,7 @@ export default function TapMiniGameModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setResult({
         points: 0,
-        message: error.response?.data?.error || error.message || 'Something went wrong!',
+        message: friendlyActionError(error, 'Something went wrong!'),
       });
       setGameState('finished');
     }

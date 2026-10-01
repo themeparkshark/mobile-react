@@ -22,6 +22,9 @@ import { AttackPips, BossHpBar, BossSheetSkeleton, TeamDamage, TopFighters } fro
 import BossWinCard from './BossWinCard';
 import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll from '../../hooks/useLivePoll';
+import useMatchLink from '../../hooks/useMatchLink';
+import MatchLinkBanner from '../match/MatchLinkBanner';
+import { LINK_COPY, type LinkPhase } from '../../services/match/matchLink';
 import { idlePollInterval } from '../../hooks/useUserIdle';
 
 /** Poll the park's raid while at a park. `loaded` is false until the first answer for this player and park. */
@@ -40,13 +43,22 @@ export function useParkRaid(parkId: number | null | undefined, { focused = true,
     generation.current += 1; // A confirmed attack invalidates any older in-flight poll.
     setSelection({ scope, state });
   }, [scope]);
+  // The link outlives refresh (it retries through a ref), so declare it first.
+  const refreshRef = useRef<() => void>(() => undefined);
+  const link = useMatchLink(() => refreshRef.current(), scope, focused && !!parkId && !!player?.id);
   const refresh = useCallback(() => {
     if (!parkId || !player?.id) return;
     const request = ++generation.current;
     getParkRaid(parkId).then(state => {
-      if (mounted.current && current.current === scope && generation.current === request) setSelection({ scope, state });
-    }).catch(() => undefined);
+      if (!mounted.current || current.current !== scope) return;
+      link.ok();
+      if (generation.current === request) setSelection({ scope, state });
+    }).catch(error => {
+      // A failed poll keeps the last raid on screen and says so; it never fakes an empty one.
+      if (mounted.current && current.current === scope) link.fail(error);
+    });
   }, [parkId, scope]);
+  refreshRef.current = refresh;
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; generation.current += 1; };
@@ -62,7 +74,8 @@ export function useParkRaid(parkId: number | null | undefined, { focused = true,
   const state = selection?.scope === scope ? selection.state : null;
   const names = state?.raid?.team_names;
   useEffect(() => applyTeamNames(names), [names]);
-  return { raid: state?.raid ?? null, nextAt: state?.next_at ?? null, loaded: !!state, refresh, setState };
+  return { raid: state?.raid ?? null, nextAt: state?.next_at ?? null, loaded: !!state, refresh, setState,
+    link: link.phase, retryLink: link.retryNow };
 }
 
 function meters(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
@@ -100,7 +113,7 @@ export const PRESENCE: Record<PresenceReason, string> = {
 };
 
 /** Boss sheet (who's fighting, HP, your attacks), the Boss Brawl, and the victory/escape moment. */
-export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService, onCelebrationDismiss, onMapOcclusionChange, presentationAvailable = true, loading = false }: {
+export default function BossRaidFlow({ raid, parkId, open, onClose, onState, recoveryService, onCelebrationDismiss, onMapOcclusionChange, presentationAvailable = true, loading = false, link = 'live', onRetryLink }: {
   readonly raid: BossRaid | null;
   readonly parkId: number | null;
   readonly open: boolean;
@@ -113,6 +126,9 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   readonly presentationAvailable?: boolean;
   /** The raid is still loading: the sheet shows its skeleton instead of "no boss". */
   readonly loading?: boolean;
+  /** Is the raid poll reaching the park? Reconnecting shows a chip; lost offers a free way out. */
+  readonly link?: LinkPhase;
+  readonly onRetryLink?: () => void;
 }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
@@ -233,7 +249,9 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   const active = raid?.status === 'active' && new Date(raid.ends_at).getTime() > now;
   const needsPass = remote && raid && !raid.remote.joined;
   const maxAttacks = raid?.max_attacks ?? 5;
-  const blocked = !playerId ? 'Sign in to join the fight.' : !raid || !active ? 'The fight is over.'
+  const blocked = !playerId ? 'Sign in to join the fight.'
+    : link === 'lost' ? `${LINK_COPY.lostTitle}.` : link === 'reconnecting' ? LINK_COPY.reconnecting
+    : !raid || !active ? 'The fight is over.'
     : atThisPark && !validLocation && !away ? 'Waiting for your location…'
     : raid.you.attacks_left <= 0 ? `You've used all ${maxAttacks} attacks. Cheer them on!`
       : energy < raid.energy_cost ? `Need ${raid.energy_cost} Energy to attack`
@@ -278,7 +296,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   ) : null;
   const emptyView = <View style={[styles.sheet, styles.sheetContent]}>
     <View style={styles.grabber} />
-    {loading && !receiptBlocked ? <BossSheetSkeleton /> : <>
+    {link !== 'live' && <MatchLinkBanner phase={link} onRetry={() => onRetryLink?.()} onLeave={closeSheet} leaveLabel="Leave fight" />}
+    {loading && !receiptBlocked ? (link === 'lost' ? null : <BossSheetSkeleton />) : <>
       <Text style={styles.name}>Your boss brawl</Text>
       {receiptBlocked && recovery.snapshot ? <BossAttackStatus snapshot={recovery.snapshot} onRetry={() => { void recovery.retry(); }} />
         : <Text style={styles.you}>{note ?? 'No boss is fighting here right now.'}</Text>}
@@ -325,6 +344,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
                 <Text style={styles.where} numberOfLines={1}>at {raid.ride_name}</Text>
               </View>
             </View>
+            <MatchLinkBanner phase={link} onRetry={() => onRetryLink?.()} onLeave={closeSheet} leaveLabel="Leave fight" />
             <View style={{ marginTop: 12 }}><BossHpBar hpLeft={raid.hp_left} hpMax={raid.hp_max} /></View>
             <Text style={styles.hpText}>{raid.hp_left.toLocaleString()} / {raid.hp_max.toLocaleString()} HP  ·  {raid.fighters} {raid.fighters === 1 ? 'shark' : 'sharks'} fighting</Text>
 
