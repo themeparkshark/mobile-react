@@ -129,6 +129,7 @@ export default function FindOriginalAccount({ visible, onClose }: Props) {
         ? [{ text: RECOVERY_COPY.done }]
         : [{ text: RECOVERY_COPY.close, style: 'cancel' }]}
       onAnswer={finish}
+      avoidKeyboard
       testID="find-original-account"
     >
       {state.step === 'identify' && (
