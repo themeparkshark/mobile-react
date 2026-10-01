@@ -93,26 +93,31 @@ test('feature flags are read with a bounded timeout and a malformed answer rejec
   }
 });
 
-test('VIP sync posts once and trusts only a well-formed server answer', async () => {
+test('VIP sync sends Apple signed transactions and trusts only a well-formed server answer', async () => {
   const calls = [];
-  let data = { data: { subscribed: true, synced: true } };
+  let data = { data: { subscribed: true, synced: true, expires_at: '2026-11-01T00:00:00Z' } };
   let failure;
-  const syncVip = load('src/api/endpoints/me/vip-sync.ts', {
+  const api = load('src/api/endpoints/me/vip-sync.ts', {
     '../../client': { async post(url, body, config) {
-      calls.push([url, body, config.timeout]);
+      calls.push([url, body ?? null, config.timeout]);
       if (failure) throw failure;
       return { data };
     } },
-  }).default;
+  });
+  const syncVip = api.default;
 
-  assert.deepEqual(plain(await syncVip()), { subscribed: true, synced: true });
-  assert.deepEqual(plain(calls), [['/me/vip/sync', null, 15000]]);
+  assert.deepEqual(plain(await syncVip(['h.p.s'])), { subscribed: true, synced: true, expiresAt: '2026-11-01T00:00:00Z' });
+  assert.deepEqual(plain(calls), [['/me/vip/sync', { signed_transactions: ['h.p.s'] }, 15000]]);
+  await syncVip();
+  assert.deepEqual(plain(calls[1]), ['/me/vip/sync', null, 15000]);
   data = { data: { subscribed: false } };
-  assert.deepEqual(plain(await syncVip()), { subscribed: false, synced: false });
+  assert.deepEqual(plain(await syncVip(['a.b.c'])), { subscribed: false, synced: false, expiresAt: null });
   data = { data: {} };
-  await assert.rejects(syncVip(), /malformed/);
-  failure = Object.assign(new Error('unavailable'), { response: { status: 503, data: { code: 'VIP_SYNC_UNAVAILABLE' } } });
-  await assert.rejects(syncVip(), error => error === failure);
+  await assert.rejects(syncVip(['a.b.c']), /malformed/);
+  failure = Object.assign(new Error('taken'), { response: { status: 409, data: { code: 'VIP_OWNED_BY_OTHER_PLAYER' } } });
+  await assert.rejects(syncVip(['a.b.c']), error => error === failure);
+  assert.equal(api.vipSyncErrorCode(failure), 'VIP_OWNED_BY_OTHER_PLAYER');
+  assert.equal(api.vipSyncErrorCode(new Error('offline')), null);
 });
 
 test('immediate deletion opts in explicitly, sends App-Version and the Apple code, and rejects anything unconfirmed', async () => {
