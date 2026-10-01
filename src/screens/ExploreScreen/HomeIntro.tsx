@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image, type ImageSource } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameButton, SHADOW } from '../../ui';
 
@@ -68,35 +68,40 @@ export default function HomeIntro({ onDone }: { readonly onDone: () => void }) {
   const step = HOME_INTRO_STEPS[index];
   const last = index === HOME_INTRO_STEPS.length - 1;
   return (
-    <Animated.View style={styles.scrim} entering={reducedMotion ? undefined : FadeIn.duration(180)}
-      exiting={reducedMotion ? undefined : FadeOut.duration(140)} accessibilityViewIsModal>
-      <View style={styles.card}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Skip the intro" hitSlop={10}
-          onPress={onDone} style={styles.skip}>
-          <Text style={styles.skipText}>SKIP</Text>
-        </Pressable>
-        <Text style={styles.kicker}>HOW HOME FINDS WORK · {index + 1} OF {HOME_INTRO_STEPS.length}</Text>
-        <Animated.View key={index} style={styles.artWell}
-          entering={reducedMotion ? undefined : FadeIn.duration(160)}>
-          <Image source={step.art} style={styles.art} contentFit="contain" />
-          {step.badge && <View style={[styles.badge, index === 1 && styles.badgeGold]}>
-            <Text style={[styles.badgeText, index === 1 && styles.badgeTextGold]}>{step.badge}</Text>
-          </View>}
-        </Animated.View>
-        <Text style={styles.title} accessibilityRole="header">{step.title}</Text>
-        <Text style={styles.body}>{step.body}</Text>
-        <View style={styles.dots} accessibilityElementsHidden>
-          {HOME_INTRO_STEPS.map((_, dot) => <View key={dot} style={[styles.dot, dot === index && styles.dotOn]} />)}
+    // A real modal so the intro sits above the menu button, the map chips and
+    // the tab bar (inside the map it drew under the hamburger, which poked
+    // into the card's corner).
+    <Modal transparent visible statusBarTranslucent animationType={reducedMotion ? 'none' : 'fade'}
+      onRequestClose={onDone}>
+      <View style={styles.scrim} accessibilityViewIsModal>
+        <View style={styles.card}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip the intro" hitSlop={10}
+            onPress={onDone} style={styles.skip}>
+            <Text style={styles.skipText}>SKIP</Text>
+          </Pressable>
+          <Text style={styles.kicker}>HOW HOME FINDS WORK · {index + 1} OF {HOME_INTRO_STEPS.length}</Text>
+          <Animated.View key={index} style={styles.artWell}
+            entering={reducedMotion ? undefined : FadeIn.duration(160)}>
+            <Image source={step.art} style={styles.art} contentFit="contain" />
+            {step.badge && <View style={[styles.badge, index === 1 && styles.badgeGold]}>
+              <Text style={[styles.badgeText, index === 1 && styles.badgeTextGold]}>{step.badge}</Text>
+            </View>}
+          </Animated.View>
+          <Text style={styles.title} accessibilityRole="header">{step.title}</Text>
+          <Text style={styles.body}>{step.body}</Text>
+          <View style={styles.dots} accessibilityElementsHidden>
+            {HOME_INTRO_STEPS.map((_, dot) => <View key={dot} style={[styles.dot, dot === index && styles.dotOn]} />)}
+          </View>
+          <GameButton label={last ? "Let's hunt" : 'Next'} size="compact"
+            onPress={() => (last ? onDone() : setIndex(index + 1))} />
         </View>
-        <GameButton label={last ? "Let's hunt" : 'Next'} size="compact"
-          onPress={() => (last ? onDone() : setIndex(index + 1))} />
       </View>
-    </Animated.View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  scrim: { ...StyleSheet.absoluteFillObject, zIndex: 40, backgroundColor: BRAND.scrim,
+  scrim: { flex: 1, backgroundColor: BRAND.scrim,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   card: { width: '100%', maxWidth: 360, alignItems: 'center', backgroundColor: BRAND.cream, borderRadius: 24,
     borderWidth: 4, borderColor: BRAND.white, paddingTop: 16, paddingBottom: 18, paddingHorizontal: 18, ...SHADOW.card },
@@ -113,7 +118,8 @@ const styles = StyleSheet.create({
   badgeText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.white },
   badgeTextGold: { color: BRAND.navy },
   title: { marginTop: 22, fontFamily: 'Shark', fontSize: 24, color: BRAND.navy, textAlign: 'center' },
-  body: { marginTop: 6, fontFamily: 'Knockout', fontSize: 16, lineHeight: 21, color: BRAND.navySoft, textAlign: 'center' },
+  // Three lines tall on every step, so the card and its button do not jump between steps.
+  body: { marginTop: 6, minHeight: 63, fontFamily: 'Knockout', fontSize: 16, lineHeight: 21, color: BRAND.navySoft, textAlign: 'center' },
   dots: { flexDirection: 'row', gap: 6, marginTop: 14, marginBottom: 12 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: BRAND.skyDeep },
   dotOn: { width: 22, backgroundColor: BRAND.blueBright },

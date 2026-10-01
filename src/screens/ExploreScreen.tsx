@@ -749,12 +749,15 @@ function ExploreScreen() {
     rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
     otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
   });
-  const homeIntroAllowed = homeIntroMayPresent({
+  const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
     otherModalOpen: showTooFarModal || showCommunityCenterModal, chestShowing: dailyGiftOccluded,
     caughtThisSession, firstFindLineDone: hasCompleted('home_first_find'),
-  });
+  };
+  const homeIntroAllowed = homeIntroMayPresent(homeIntroQueue);
+  // Would present but for a find: home finds hold their auto-open until the intro is seen.
+  const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false });
 
   return (
     <Wrapper>
@@ -849,7 +852,8 @@ function ExploreScreen() {
       {player && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
-          introAllowed={mapFocused && homeIntroAllowed} onIntroOpenChange={setHomeIntroOpen} />
+          introAllowed={mapFocused && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
+          onIntroOpenChange={setHomeIntroOpen} />
       )}
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}

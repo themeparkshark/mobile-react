@@ -71,6 +71,12 @@ interface Props {
   homeLocationConfirmed: boolean;
   /** The screen's overlay queue allows the first-time intro right now. */
   introAllowed?: boolean;
+  /**
+   * The intro could show if no find were open. While it is unseen and eligible,
+   * finds do not auto-open, so a first-time player reads how finds work before
+   * the first find pops up (the find used to win the race and the intro waited).
+   */
+  introEligible?: boolean;
   onIntroOpenChange?: (open: boolean) => void;
 }
 
@@ -79,7 +85,7 @@ interface Props {
  * This is the at-home gameplay experience.
  */
 export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, onIntroOpenChange }: Props) {
+  introAllowed = false, introEligible = false, onIntroOpenChange }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [playerStats, setPlayerStats] = useState<PlayerStatsType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -271,6 +277,8 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
 
     // Never auto-open a find for a map that is off screen or backgrounded.
     if (!screenFocused.current || AppState.currentState !== 'active') return;
+    // The first-time intro goes first; this re-runs once it is seen.
+    if (introSeen !== true && introEligible) return;
 
     const checkNearby = async () => {
       try {
@@ -289,7 +297,8 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     let active = true;
     checkNearby();
     return () => { active = false; };
-  }, [homeLocationConfirmed, location?.latitude, location?.longitude, prepItems, onPrepItemNearby, loadError]);
+  }, [homeLocationConfirmed, location?.latitude, location?.longitude, prepItems, onPrepItemNearby, loadError,
+    introSeen, introEligible]);
 
   // Filter to only show active items
   const activePrepItems = prepItems.filter((item) => {

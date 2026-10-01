@@ -20,8 +20,10 @@ import Box from './RedeemModal/Box';
 import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import config from '../config';
+import { BRAND } from '../ui';
 import HapticPatterns from '../helpers/hapticPatterns';
 import prepItemImage from '../helpers/prepItemImages';
+import { findDisplayName } from '../screens/ExploreScreen/homeFindCopy';
 import type { RedeemPrepItemResponseType } from '../models/redeem-prep-item-response-type';
 
 // Local asset icons for currency fly (must be hoisted to module level)
@@ -303,6 +305,7 @@ export default function PrepItemRedeemModal({
     5: '#5a4a1a',   // Legendary
   };
 
+  const displayName = findDisplayName(prepItem.name, prepItem.set_name);
   const rarityConfig = {
     label: ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'][prepItem.rarity - 1] || 'Common',
     color: [null, '#4CAF50', config.secondary, '#0a9a78', '#E91E63', '#FFD700'][prepItem.rarity] || '#4CAF50',
@@ -413,7 +416,7 @@ export default function PrepItemRedeemModal({
           {/* Ribbon Header */}
           <Ribbon text={showRewards
             ? pickupOutcome?.replayed ? 'Already collected' : 'Collected!'
-            : 'Prep Item'} />
+            : prepItem.is_new_variant ? 'New find!' : 'Find'} />
 
           {/* Main Content Box - matches task modal structure exactly */}
           <View
@@ -496,7 +499,7 @@ export default function PrepItemRedeemModal({
                     <Box
                       background={require('../../assets/images/screens/explore/starburst.png')}
                       image={itemImage}
-                      text={prepItem.name}
+                      text={displayName}
                       type="task"
                       pulse
                     />
@@ -615,7 +618,8 @@ export default function PrepItemRedeemModal({
                       style={{
                         fontFamily: 'Shark',
                         fontSize: 28,
-                        color: config.tertiary,
+                        // Gold text vanished on the gold uncommon and legendary cards.
+                        color: prepItem.rarity === 2 || prepItem.rarity === 5 ? BRAND.white : config.tertiary,
                         textAlign: 'center',
                         textTransform: 'uppercase',
                         textShadowColor: '#05346e',
@@ -639,7 +643,7 @@ export default function PrepItemRedeemModal({
                         marginBottom: 8,
                       }}
                     >
-                      {prepItem.name}
+                      {displayName}
                     </Text>
 
                     {!!pickupOutcome?.project_update?.points_awarded && (
@@ -817,7 +821,7 @@ export default function PrepItemRedeemModal({
             {/* Button outside inner content - matches task modal exactly */}
             <View style={{ marginTop: 8 }}>
               <YellowButton
-                text={showRewards ? pickupOutcome?.replayed ? 'Back to map' : 'Awesome!' : (isCollecting ? 'Collecting...' : unavailable ? 'Back to map' : collectError ? 'Retry' : 'Collect')}
+                text={showRewards ? pickupOutcome?.replayed ? 'Back to map' : 'Awesome!' : (isCollecting ? 'Grabbing...' : unavailable ? 'Back to map' : collectError ? 'Retry' : 'Grab it')}
                 onPress={showRewards || unavailable ? handleDone : handleCollect}
                 disabled={!showRewards && isCollecting}
               />
