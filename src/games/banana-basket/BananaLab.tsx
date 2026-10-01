@@ -2,8 +2,8 @@
  * BananaLab (dev only): pick a Banana Basket mode to play or watch.
  *
  * Boot straight into it with EXPO_PUBLIC_RIDE_GAME_PREVIEW=1 and
- * EXPO_PUBLIC_BANANA_LAB=menu (or ride, queue, ride-bot, queue-bot,
- * finn, ride-fresh). "fresh" clears the saved Banana progress first so the
+ * EXPO_PUBLIC_BANANA_LAB=menu (or ride, ride-intro, ride-full, queue-u1/u2/u3,
+ * queue-u3-tw1..tw4, heat, ride-full-bot, queue-bot, finn, ride-fresh). "fresh" clears the saved Banana progress first so the
  * teaching cards and the queue unlock gate replay from run 1.
  */
 
@@ -12,19 +12,31 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BananaBasketGame } from './BananaBasketGame';
 import { PROGRESS_KEY } from './constants';
+import { LocalHeatTransport, type HeatRound } from './heat';
 
-type LabMode = { mode: 'ride' | 'queue'; difficulty: 1 | 2 | 3; autoplay: boolean; finn: boolean; deck: string; unlock?: number };
+function labHeat(): { round: HeatRound; transport: LocalHeatTransport } {
+  const t = new LocalHeatTransport('lab', 4000);
+  const startAt = Date.now() + 4000;
+  return { round: { roundId: Math.floor(startAt / 1000), rideId: 'lab', seed: (startAt >>> 0) ^ 0x5eed, twist: 1, startAt, durationBars: 24 }, transport: t };
+}
+
+type LabMode = {
+  mode: 'ride' | 'queue' | 'heat'; difficulty: 1 | 2 | 3; autoplay: boolean; finn: boolean; deck: string; unlock?: number;
+  rules?: 'ride_intro' | 'ride'; twist?: number;
+};
 
 function parse(cmd: string): LabMode | null {
   const c = cmd.toLowerCase();
   if (!c || c === 'menu' || c === '1') return null;
   return {
-    mode: c.includes('queue') ? 'queue' : 'ride',
+    mode: c.includes('queue') ? 'queue' : c.includes('heat') ? 'heat' : 'ride',
+    rules: c.includes('intro') ? 'ride_intro' : c.includes('full') ? 'ride' : undefined,
+    twist: c.includes('tw1') ? 1 : c.includes('tw2') ? 2 : c.includes('tw3') ? 3 : c.includes('tw4') ? 4 : undefined,
     difficulty: c.includes('d1') ? 1 : c.includes('d3') ? 3 : 2,
     autoplay: c.includes('bot'),
     finn: c.includes('finn'),
     deck: c.includes('ocean') ? 'ocean' : 'park',
-    unlock: c.includes('u1') ? 1 : c.includes('u3') ? 3 : undefined,
+    unlock: c.includes('u1') ? 1 : c.includes('u2') ? 2 : c.includes('u3') ? 3 : undefined,
   };
 }
 
@@ -52,6 +64,9 @@ export default function BananaLab({ command, onClose }: { command: string; onClo
           autoplay={run.autoplay}
           staffGhost={run.finn}
           unlock={run.unlock}
+          rules={run.rules}
+          twist={run.twist}
+          heat={run.mode === 'heat' ? labHeat() : null}
           seed={20260930 + n}
           onComplete={(mult, meta) => {
             const m = meta as { score?: number; verifiedLocally?: boolean } | undefined;
@@ -75,13 +90,20 @@ export default function BananaLab({ command, onClose }: { command: string; onClo
         <Image source={require('../../assets/games/banana-basket/v2/shark_hold.png')} style={styles.hero} resizeMode="contain" />
         <Text style={styles.title}>BANANA LAB</Text>
         {last ? <Text style={styles.last}>{last}</Text> : null}
-        <Item label="Ride Challenge (d2)" m={base} />
+        <Item label="First Ride (ride_intro)" m={{ ...base, rules: 'ride_intro' }} />
+        <Item label="Ride Challenge, full rules (d2)" m={{ ...base, rules: 'ride' }} />
         <Item label="Ride Challenge (d1)" m={{ ...base, difficulty: 1 }} />
         <Item label="Ride Challenge (d3)" m={{ ...base, difficulty: 3 }} />
-        <Item label="Queue run" m={{ ...base, mode: 'queue' }} />
-        <Item label="Queue run, water deck" m={{ ...base, mode: 'queue', deck: 'ocean' }} />
+        <Item label="Queue run (next unlock)" m={{ ...base, mode: 'queue' }} />
+        <Item label="Queue run 1" m={{ ...base, mode: 'queue', unlock: 1 }} />
+        <Item label="Queue run 2: Gull Set" m={{ ...base, mode: 'queue', unlock: 2 }} />
+        <Item label="Queue ranked: Crosswind" m={{ ...base, mode: 'queue', unlock: 3, twist: 1 }} />
+        <Item label="Queue ranked: Giant Bananas" m={{ ...base, mode: 'queue', unlock: 3, twist: 2 }} />
+        <Item label="Queue ranked: Low Gravity" m={{ ...base, mode: 'queue', unlock: 3, twist: 3 }} />
+        <Item label="Queue ranked: Prize Party" m={{ ...base, mode: 'queue', unlock: 3, twist: 4 }} />
+        <Item label="Line Heat (local, 3 Finns)" m={{ ...base, mode: 'heat' }} />
         <Item label="Ride vs staff ghost Finn" m={{ ...base, finn: true }} />
-        <Item label="Bot plays Ride" m={{ ...base, autoplay: true }} />
+        <Item label="Bot plays Ride (full)" m={{ ...base, rules: 'ride', autoplay: true }} />
         <Item label="Bot plays Queue" m={{ ...base, mode: 'queue', autoplay: true }} />
         <TouchableOpacity style={[styles.item, styles.reset]} onPress={() => { AsyncStorage.removeItem(PROGRESS_KEY).catch(() => undefined); setLast('Progress reset'); }}>
           <Text style={styles.itemText}>Reset Banana progress</Text>

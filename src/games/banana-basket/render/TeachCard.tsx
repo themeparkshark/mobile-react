@@ -1,85 +1,77 @@
 /**
- * Teaching cards (Mario Party) and queue set cards. A card is a forced
+ * Teaching cards (design 6.5, WarioWare rule: one line, 4 words max, a
+ * 2-frame demo) and queue set cards. A card is a forced
  * freeze: the sim is not stepping while it shows, and it leaves on the next
  * touch after its minimum time (1.2 s teaching, 1.5 s set card). Bright
  * card, never a dark veil. Art is Alex's / gate-passed only.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import {
-  CARD_BALL, CARD_BEACH, CARD_BREEZY, CARD_FINGER, CARD_GOLDEN, CARD_GULLS, CARD_PUFFER, CARD_RIM, CARD_SET_BASE,
-  CARD_SPLASH,
+  CARD_AIM, CARD_BALL, CARD_CATCH, CARD_GATE, CARD_GOLDEN, CARD_GULL, CARD_HEAT, CARD_PAIL, CARD_PUFFER, CARD_SET_BASE,
 } from '../constants';
 
 const IMG = {
   ball: require('../../../assets/games/banana-basket/v2/ball.png'),
-  puffer: require('../../../assets/games/banana-basket/v2/puffer_full.png'),
+  puffer: require('../../../assets/games/banana-basket/v2/puffer.png'),
+  pufferFull: require('../../../assets/games/banana-basket/v2/puffer_full.png'),
   coin: require('../../../assets/games/banana-basket/v2/coin.png'),
   banana: require('../../../assets/games/banana-basket/v2/banana.png'),
   bunch: require('../../../assets/games/banana-basket/v2/bunch.png'),
-  finger: require('../../../assets/games/banana-basket/v2/finger.png'),
+  basket: require('../../../assets/games/banana-basket/v2/basket.png'),
+  pail: require('../../../assets/games/banana-basket/v2/pail.png'),
   shark: require('../../../assets/games/banana-basket/v2/shark_hold.png'),
   cheer: require('../../../assets/games/banana-basket/v2/shark_cheer.png'),
   gull: require('../../../assets/games/banana-basket/v2/gull_glide.png'),
+  gullUp: require('../../../assets/games/banana-basket/v2/gull_up.png'),
+  streak: require('../../../assets/games/banana-basket/v2/streak.png'),
 };
 
 export interface CardInfo {
   id: number;
+  /** WarioWare rule (6.5): one line, 4 words max. */
   title: string;
-  body: string;
+  /** 2-frame demo: the art alternates between these. */
   image: ImageSourcePropType;
-  /** Lines for set cards (banked score, chain kept, next). */
+  image2: ImageSourcePropType;
+  /** Lines for set cards (banked score, chain kept). */
   lines?: string[];
   minMs: number;
 }
 
-export const TWIST_CARD: Record<number, { title: string; body: string }> = {
-  [CARD_BREEZY]: { title: 'PARK TWIST: BREEZY', body: 'The wind pushes snacks sideways. Watch the drift.' },
-  [CARD_BEACH]: { title: 'PARK TWIST: BEACH PARTY', body: 'Ball bounces pay double and the ball comes back fast.' },
-  [CARD_SPLASH]: { title: 'PARK TWIST: SPLASHDOWN', body: 'Listen for the gurgle. Stay out of the ripples or your chain freezes.' },
-  [CARD_GULLS]: { title: 'PARK TWIST: GULL SEASON', body: 'Leave the shadow before the gull dives.' },
-};
-
-export function cardInfo(id: number, extra?: { setScore?: number; chain?: number; twistCard?: number; nextSet?: number; gullSet?: boolean }): CardInfo {
+export function cardInfo(id: number, extra?: { setScore?: number; chain?: number; gullSet?: boolean }): CardInfo {
   if (id >= CARD_SET_BASE) {
     const set = id - CARD_SET_BASE;
-    const lines: string[] = [];
+    const lines: string[] = [`SET ${set} BANKED`];
     if (extra?.setScore !== undefined) lines.push(`SCORE ${extra.setScore}`);
     if (extra?.chain) lines.push(`CHAIN ${extra.chain} KEPT`);
-    let title = `SET ${set} DONE`;
-    let body = 'Shuffle forward, then touch to start the next set.';
-    let image = set === 2 ? IMG.bunch : IMG.cheer;
-    if (set === 1 && extra?.gullSet) {
-      title = 'NEXT: GULL SET!';
-      body = 'Listen for the squawk. Slide out of the shadow before the gull dives.';
-      image = IMG.gull;
-      lines.unshift('SET 1 DONE');
-    } else if (set === 1 && extra?.twistCard && TWIST_CARD[extra.twistCard]) {
-      title = TWIST_CARD[extra.twistCard].title;
-      body = TWIST_CARD[extra.twistCard].body;
-      lines.unshift(`SET 1 DONE`);
-    } else if (set === 2) {
-      title = 'NEXT: CART TIP-OVER!';
-      body = 'The snack cart dumps a shower. Then FINAL RUSH.';
-      lines.unshift('SET 2 DONE');
-    }
-    return { id, title, body, image, lines, minMs: 1500 };
+    if (set === 1 && extra?.gullSet) return { id, title: 'NEXT: GULL SET!', image: IMG.gull, image2: IMG.gullUp, lines, minMs: 1500 };
+    if (set === 2) return { id, title: 'CART TIP-OVER!', image: IMG.bunch, image2: IMG.banana, lines, minMs: 1500 };
+    return { id, title: 'NEXT SET!', image: IMG.puffer, image2: IMG.pufferFull, lines, minMs: 1500 };
   }
   switch (id) {
+    case CARD_CATCH:
+      return { id, title: 'CATCH!', image: IMG.banana, image2: IMG.basket, minMs: 1200 };
     case CARD_BALL:
-      return { id, title: 'KEEP THE BALL UP', body: 'Bounce it off your basket. The ball is the key: x3 and x4 only count while it stays up.', image: IMG.ball, minMs: 1200 };
+      return { id, title: 'KEEP IT UP!', image: IMG.ball, image2: IMG.basket, minMs: 1200 };
+    case CARD_AIM:
+      return { id, title: 'AIM WITH THE RIM!', image: IMG.basket, image2: IMG.coin, minMs: 1200 };
     case CARD_PUFFER:
-      return { id, title: 'DODGE THE PUFFERFISH', body: 'Listen for the creak and watch the coral shadow. A hit costs a heart.', image: IMG.puffer, minMs: 1200 };
+      return { id, title: 'DODGE!', image: IMG.puffer, image2: IMG.pufferFull, minMs: 1200 };
     case CARD_GOLDEN:
-      return { id, title: 'GOLDEN HOUR!', body: 'Three coins light it up. Every catch pays more and the basket gets wider.', image: IMG.coin, minMs: 1200 };
-    case CARD_RIM:
-      return { id, title: 'RIM ROLL', body: 'Close ones roll in on the rim. Nudge toward it for a SAVE!', image: IMG.banana, minMs: 1200 };
-    case CARD_FINGER:
-      return { id, title: 'FOAM FINGER', body: 'Snacks curve into your basket for 6 seconds.', image: IMG.finger, minMs: 1200 };
+      return { id, title: 'GOLDEN HOUR!', image: IMG.coin, image2: IMG.cheer, minMs: 1200 };
+    case CARD_GATE:
+      return { id, title: 'BALL UNLOCKS x3!', image: IMG.ball, image2: IMG.streak, minMs: 1200 };
+    case CARD_GULL:
+      return { id, title: 'DUCK THE GULL!', image: IMG.gull, image2: IMG.gullUp, minMs: 1200 };
+    case CARD_PAIL:
+      return { id, title: 'PAIL SAVES ONCE!', image: IMG.pail, image2: IMG.ball, minMs: 1200 };
+    case CARD_HEAT:
+      return { id, title: 'SAME LINE, SAME RACE!', image: IMG.cheer, image2: IMG.shark, minMs: 1200 };
     default:
-      return { id, title: 'HEADS UP', body: '', image: IMG.shark, minMs: 1200 };
+      return { id, title: 'HEADS UP!', image: IMG.shark, image2: IMG.cheer, minMs: 1200 };
   }
 }
 
@@ -87,6 +79,11 @@ export function TeachCard({ card, ready }: { card: CardInfo; ready: boolean }) {
   const pop = useSharedValue(0.6);
   const bob = useSharedValue(0);
   const hint = useSharedValue(0);
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setFrame((f) => 1 - f), 420);
+    return () => clearInterval(id);
+  }, []);
   useEffect(() => {
     pop.value = withSpring(1, { damping: 10, stiffness: 260 });
     bob.value = withRepeat(withSequence(withTiming(-8, { duration: 380, easing: Easing.inOut(Easing.quad) }), withTiming(0, { duration: 380, easing: Easing.inOut(Easing.quad) })), -1);
@@ -101,13 +98,12 @@ export function TeachCard({ card, ready }: { card: CardInfo; ready: boolean }) {
     <View style={styles.wrap} pointerEvents="none">
       <Animated.View style={[styles.card, cardStyle]}>
         <Animated.View style={artStyle}>
-          <Image source={card.image} style={styles.art} resizeMode="contain" />
+          <Image source={frame === 0 ? card.image : card.image2} style={styles.art} resizeMode="contain" />
         </Animated.View>
         {card.lines?.map((l) => (
           <Text key={l} style={styles.line}>{l}</Text>
         ))}
         <Text style={styles.title}>{card.title}</Text>
-        <Text style={styles.body}>{card.body}</Text>
         <Animated.Text style={[styles.hint, hintStyle]}>TOUCH TO PLAY</Animated.Text>
       </Animated.View>
     </View>
@@ -128,7 +124,7 @@ const styles = StyleSheet.create({
   },
   art: { width: 120, height: 120, marginBottom: 6 },
   line: { fontFamily: 'Shark', fontSize: 18, color: '#0768b9', marginBottom: 2 },
-  title: { fontFamily: 'Shark', fontSize: 26, color: '#23263a', textAlign: 'center', marginTop: 4 },
+  title: { fontFamily: 'Shark', fontSize: 34, color: '#23263a', textAlign: 'center', marginTop: 4 },
   body: { fontFamily: 'Knockout', fontSize: 18, color: '#23263a', textAlign: 'center', marginTop: 6, lineHeight: 22 },
   hint: { fontFamily: 'Shark', fontSize: 18, color: '#ff6b5c', marginTop: 12 },
 });

@@ -1,14 +1,21 @@
 /**
- * Banana Basket field: ONE Skia canvas, everything driven by shared values
- * (zero React renders during play).
+ * Banana Basket field (design rev 8, sections 7 and 12.2): ONE Skia canvas,
+ * everything driven by shared values (zero React renders during play).
  *
- * Layers (back to front): sky + posterized rays, Alex's clouds, hills and the
- * plaza, the coaster track, splat decals, landing shadows and Excellent rings,
- * the shark (pose layers) and the banana pile, the basket, falling items (one
- * <Atlas> draw), the juggle ball and its predicted arc, Golden Hour frame,
- * then the HUD (time bar, hearts, coin meter, chain badge, score chip,
- * stamps, rival strip). The camera transforms the world group only; the HUD
- * never shakes or scales.
+ * World layers (back to front, inside the camera group): sky + posterized
+ * rays, Alex's clouds (wobble on the beat), hills and the flat plaza (the AI
+ * plate waits for Dustin's OK, 7.8), splat decals, the coaster track with
+ * hanging-prize strings, Finn's snack cart, landing shadows / Excellent rings
+ * / coral puffer shadows / gull shadow / blue ball marker, the free-ball
+ * pail, the shark (Rig B key holds, 18 deg lean, cap and squash), Golden Hour
+ * halo underlays, items and prizes (one Atlas draw, hidden by the Veil),
+ * the pile and splats (second Atlas draw), the basket (counter-rotated so the
+ * rim stays within 4 deg) with its gold notch and 4 zone seams, the aim
+ * ghost-line, the ribbon trail and the ball, gulls, POW flipbook, the parked
+ * shield bubble, the head chip, the Veil, and the lock ring at the thumb.
+ *
+ * HUD (no camera): Golden Hour frame, hearts, time bar, star meter with
+ * notches and NEXT STAR, set pips, the rival portrait / heat strip, stamps.
  *
  * All drawing is in field units (400 x 720 logical): the root group scales
  * by k = width / 400 and adds extra sky on tall phones.
@@ -17,42 +24,25 @@
 import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import {
-  Atlas,
-  BlendColor,
-  Canvas,
-  Circle,
-  Group,
-  Image as SkImage,
-  LinearGradient,
-  Oval,
-  Path,
-  Rect,
-  RoundedRect,
-  Skia,
-  Text,
-  rect,
-  useFont,
-  useImage,
-  useRSXformBuffer,
-  useRectBuffer,
-  vec,
-  type SkFont,
-  type SkImage as SkImageT,
-  type Transforms3d,
+  Atlas, BlendColor, Canvas, Circle, Group, Image as SkImage, LinearGradient, Oval, Path, Rect, RoundedRect, Skia, Text,
+  rect, useFont, useImage, useRSXformBuffer, useRectBuffer, vec, type SkImage as SkImageT, type Transforms3d,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { useSpriteAtlas } from '../../../gamekit/fx/SpriteAtlas';
 import {
-  BALL_ARC_BOUNCES, BALL_R, CARD_SET_BASE, FIELD_H, FIELD_W, HALF_ZONE, ITEM_SIZE, K_BANANA, K_BUNCH, K_COIN, K_FINGER,
-  K_GIFT, K_LUCKY, K_PUFFER, K_WATCH, LANE_Y, METER_PIPS, PERFECT_D, PLAZA_Y, S_BONKED, S_DUNK, S_FALL, S_FREE, S_MISS,
-  S_PASS, S_POP, S_RIM, SUB, TIER_AT,
+  BALL_ARC_BOUNCES, BALL_R, FIELD_H, FIELD_W, HALF_ZONE, ITEM_SIZE, K_BANANA, K_BUNCH, K_COIN, K_LUCKY, K_PUFFER, LANE_Y,
+  LOCK_STEPS, MAX_PRIZES, PERFECT_D, PLAZA_Y, PRIZE_R, S_BONKED, S_DUNK, S_FALL, S_FREE, S_HANG, S_MISS, S_PASS, S_POP,
+  S_REEL, STEPS_BEAT, SUB, TWIST_GIANT, ZONE_CENTER, ZONE_INNER,
 } from '../constants';
-import { MAX_ITEMS, MODE_QUEUE, gatedTier, tierOf, type SimState } from '../state';
+import { MAX_ITEMS, MODE_QUEUE, ballIsLive, gatedTier, tierOf, type SimState } from '../state';
+import { gullX, gullY, zoneOf } from '../sim';
+import { pailX, zoneArc } from '../patterns';
 import {
-  MAX_SPLATS, POSE_BONKED, POSE_CHEER, POSE_CHOMP, POSE_DIZZY, POSE_FIST, POSE_HOP, POSE_IDLE, POSE_LEAN, POSE_SLUMP,
-  POSE_STRAIN, STAMP_TEXT, ST_GOLDEN, ST_NONE, ST_PERFECT, ST_RUSH, ST_TIME, ST_OUT, stampIsBig, type Vis,
+  MAX_SPLATS, POSE_BONKED, POSE_CHEER, POSE_CHOMP, POSE_DIZZY, POSE_FIST, POSE_GRIN, POSE_HOP, POSE_IDLE, POSE_SLUMP,
+  POSE_STRAIN, STAMP_TEXT, ST_GOLDEN, ST_NONE, ST_OUT, ST_POP, ST_TIME, stampIsBig, type Vis,
 } from './vis';
 import type { Ghost } from '../ghost';
+import type { HeatStripEntry } from '../heat';
 
 export interface FieldLayout {
   width: number;
@@ -79,14 +69,13 @@ const SP_BUNCH = 1;
 const SP_COIN = 2;
 const SP_PUFFER = 3;
 const SP_PUFFER_FULL = 4;
-const SP_GIFT = 5;
-const SP_FINGER = 6;
-const SP_WATCH = 7;
+const SP_JUICE = 5;
+const SP_GLINT = 6;
 
 const SLOT_ITEMS = MAX_ITEMS;
+const SLOTS_A = SLOT_ITEMS + MAX_PRIZES;
 const SLOT_PILE = 12;
-const SLOT_SPLAT = MAX_SPLATS;
-const SLOTS = SLOT_ITEMS + SLOT_PILE + SLOT_SPLAT;
+const SLOTS_B = SLOT_PILE + MAX_SPLATS;
 const PILE_AT = [1, 3, 6, 8, 11, 15, 20, 25, 32, 40, 50, 64];
 
 const SHARK_H = 150;
@@ -97,39 +86,42 @@ const POSE_S = 0.27;
 const POSE_W = 640 * POSE_S;
 const POSE_H = 600 * POSE_S;
 /** Fin grip line per drawn pose (canvas px), index = POSE_* id. */
-const FIN_Y = [360, 367, 360, 360, 360, 450, 412, 367, 450, 360];
+const FIN_Y = [360, 380, 360, 360, 360, 450, 360, 367, 450, 360];
 const BASKET_W = 142;
 const BASKET_H = (BASKET_W * 332) / 384;
 const BASKET_RIM = 0.3;
 const INK = '#23263a';
-const CORAL = '#ff6b5c';
+const CORAL = '#ff5a4e';
 const GOLD = '#fec90e';
-const TIER_COLORS = ['#2d9cff', '#2d9cff', '#2d9cff', GOLD, CORAL, CORAL];
-/** Time bar inner width (fu): the top band is hearts + time only. */
+const BLUE = '#2d9cff';
+const TIER_COLORS = [INK, INK, BLUE, GOLD, CORAL];
+const TIME_X = 112;
 const TIME_W = 262;
+const TRACK_Y = 98;
+const CHIP_Y = LANE_Y - 168;
 
 export interface FieldImages {
   poseIdle: SkImageT | null;
   poseHop: SkImageT | null;
-  poseLean: SkImageT | null;
   poseChomp: SkImageT | null;
   poseFlinch: SkImageT | null;
+  poseCheer: SkImageT | null;
   sharkFacepalm: SkImageT | null;
   cart: SkImageT | null;
+  finn: SkImageT | null;
   gullGlide: SkImageT | null;
   gullUp: SkImageT | null;
   plop: (SkImageT | null)[];
   pow: (SkImageT | null)[];
   fxSheet: SkImageT | null;
-  sharkHold: SkImageT | null;
-  sharkCheer: SkImageT | null;
-  sharkBonked: SkImageT | null;
   sharkDizzy: SkImageT | null;
   sharkFist: SkImageT | null;
   basket: SkImageT | null;
   ball: SkImageT | null;
   heart: SkImageT | null;
   coin: SkImageT | null;
+  crown: SkImageT | null;
+  pail: SkImageT | null;
   timer: SkImageT | null;
   rush: SkImageT | null;
   streak: SkImageT | null;
@@ -143,9 +135,8 @@ export function useFieldImages(): FieldImages & { atlasSources: (SkImageT | null
   const coin = useImage(require('../../../assets/games/banana-basket/v2/coin.png'));
   const puffer = useImage(require('../../../assets/games/banana-basket/v2/puffer.png'));
   const pufferFull = useImage(require('../../../assets/games/banana-basket/v2/puffer_full.png'));
-  const gift = useImage(require('../../../assets/games/banana-basket/v2/gift.png'));
-  const finger = useImage(require('../../../assets/games/banana-basket/v2/finger.png'));
-  const timer = useImage(require('../../../assets/games/banana-basket/v2/timer.png'));
+  const juice = useImage(require('../../../assets/games/banana-basket/v2/juice_a.png'));
+  const glint = useImage(require('../../../assets/games/banana-basket/v2/glint.png'));
   const plop0 = useImage(require('../../../assets/games/banana-basket/v2/plop_0.png'));
   const plop1 = useImage(require('../../../assets/games/banana-basket/v2/plop_1.png'));
   const plop2 = useImage(require('../../../assets/games/banana-basket/v2/plop_2.png'));
@@ -156,31 +147,31 @@ export function useFieldImages(): FieldImages & { atlasSources: (SkImageT | null
   return {
     poseIdle: useImage(require('../../../assets/games/banana-basket/v2/pose_idle.png')),
     poseHop: useImage(require('../../../assets/games/banana-basket/v2/pose_hop.png')),
-    poseLean: useImage(require('../../../assets/games/banana-basket/v2/pose_lean.png')),
     poseChomp: useImage(require('../../../assets/games/banana-basket/v2/pose_chomp.png')),
     poseFlinch: useImage(require('../../../assets/games/banana-basket/v2/pose_flinch.png')),
+    poseCheer: useImage(require('../../../assets/games/banana-basket/v2/pose_cheer.png')),
     sharkFacepalm: useImage(require('../../../assets/games/banana-basket/v2/shark_facepalm.png')),
     cart: useImage(require('../../../assets/games/banana-basket/v2/cart.png')),
+    finn: useImage(require('../../../assets/games/banana-basket/v2/finn.png')),
     gullGlide: useImage(require('../../../assets/games/banana-basket/v2/gull_glide.png')),
     gullUp: useImage(require('../../../assets/games/banana-basket/v2/gull_up.png')),
     plop: [plop0, plop1, plop2, plop3],
     pow: [powS, powM, powL],
     fxSheet: useImage(require('../../../assets/games/banana-basket/v2/fx_sheet.png')),
-    sharkHold: useImage(require('../../../assets/games/banana-basket/v2/shark_hold.png')),
-    sharkCheer: useImage(require('../../../assets/games/banana-basket/v2/shark_cheer.png')),
-    sharkBonked: useImage(require('../../../assets/games/banana-basket/v2/shark_bonked.png')),
     sharkDizzy: useImage(require('../../../assets/games/banana-basket/v2/shark_dizzy.png')),
     sharkFist: useImage(require('../../../assets/games/banana-basket/v2/shark_fist.png')),
     basket: useImage(require('../../../assets/games/banana-basket/v2/basket.png')),
     ball: useImage(require('../../../assets/games/banana-basket/v2/ball.png')),
     heart: useImage(require('../../../assets/games/banana-basket/v2/heart.png')),
     coin,
-    timer,
+    crown: useImage(require('../../../assets/games/banana-basket/v2/crown.png')),
+    pail: useImage(require('../../../assets/games/banana-basket/v2/pail.png')),
+    timer: useImage(require('../../../assets/games/banana-basket/v2/timer.png')),
     rush: useImage(require('../../../assets/games/banana-basket/v2/rush.png')),
     streak: useImage(require('../../../assets/games/banana-basket/v2/streak.png')),
     cloud: useImage(require('../../../../assets/images/screens/explore/cloud.png')),
     starburst: useImage(require('../../../../assets/images/screens/explore/starburst.png')),
-    atlasSources: [banana, bunch, coin, puffer, pufferFull, gift, finger, timer],
+    atlasSources: [banana, bunch, coin, puffer, pufferFull, juice, glint],
   };
 }
 
@@ -190,9 +181,6 @@ function spriteFor(kind: number, puff: number): number {
   if (kind === K_BUNCH || kind === K_LUCKY) return SP_BUNCH;
   if (kind === K_COIN) return SP_COIN;
   if (kind === K_PUFFER) return puff >= 2 ? SP_PUFFER_FULL : SP_PUFFER;
-  if (kind === K_GIFT) return SP_GIFT;
-  if (kind === K_FINGER) return SP_FINGER;
-  if (kind === K_WATCH) return SP_WATCH;
   return SP_BANANA;
 }
 
@@ -209,6 +197,41 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+/** Render-only prize sway and its drop / pop / reel animation. Returns [x, y, scale, alpha]. */
+function prizePose(s: SimState, v: Vis, h: number, out: number[]): void {
+  'worklet';
+  const st = s.hSt[h];
+  const x0 = s.hX[h];
+  const y0 = s.hY[h];
+  const age = v.t - v.prizeT[h];
+  const sway = Math.sin(v.t / 420 + h * 1.7) * 4;
+  if (st === S_HANG) {
+    // 300 ms spring down from the clip on the track.
+    const u = clamp01(age / 300);
+    const y = TRACK_Y + (y0 - TRACK_Y) * easeOutBack(u);
+    out[0] = x0 + sway * u;
+    out[1] = y;
+    out[2] = 1;
+    out[3] = 1;
+  } else if (st === S_POP) {
+    // The string snaps and the prize flies to the basket (200 ms).
+    const u = clamp01((s.hT[h] / 256) / 12);
+    const bx = s.bx / SUB;
+    out[0] = x0 + (bx - x0) * u * u;
+    out[1] = y0 + (LANE_Y - 10 - y0) * u * u - Math.sin(u * Math.PI) * 40;
+    out[2] = 1 + 0.3 * Math.sin(u * Math.PI);
+    out[3] = 1 - u * 0.4;
+  } else if (st === S_REEL) {
+    const u = clamp01((s.hT[h] / 256) / 18);
+    out[0] = x0 + sway;
+    out[1] = y0 + (TRACK_Y - y0) * (u * u * (3 - 2 * u));
+    out[2] = 1 - 0.3 * u;
+    out[3] = 1 - u;
+  } else {
+    out[3] = 0;
+  }
+}
+
 export interface FieldProps {
   layout: FieldLayout;
   sim: SharedValue<SimState>;
@@ -220,33 +243,55 @@ export interface FieldProps {
   ghost: SharedValue<Ghost | null>;
   ghostName: string;
   reducedMotion: boolean;
+  /** Star targets [1, 2, 3, crown] for this ruleset (crown 0 = none). */
+  targets: readonly number[];
+  /** The thumb's last touch point (fu): the lock ring draws here. */
+  thumb: SharedValue<{ x: number; y: number }>;
+  /** Line Heat live strip (null outside heats). */
+  strip?: SharedValue<HeatStripEntry[] | null>;
 }
 
 export const BananaField = React.memo(function BananaField(props: FieldProps) {
-  const { layout, sim, vis, tick, images, camera, cameraOrigin, ghost, ghostName, reducedMotion } = props;
+  const { layout, sim, vis, tick, images, camera, cameraOrigin, ghost, ghostName, reducedMotion, targets, thumb, strip } = props;
   const { k, oy, width, height } = layout;
   const atlas = useSpriteAtlas(images.atlasSources, { cell: 256 });
-  const font = useFont(require('../../../../assets/fonts/shark-random-funnyness-2.ttf'), 30);
+  const font = useFont(require('../../../../assets/fonts/shark-random-funnyness-2.ttf'), 28);
   const fontSmall = useFont(require('../../../../assets/fonts/shark-random-funnyness-2.ttf'), 17);
+  const fontTiny = useFont(require('../../../../assets/fonts/shark-random-funnyness-2.ttf'), 13);
   const fontStamp = useFont(require('../../../../assets/fonts/shark-random-funnyness-2.ttf'), 40);
 
   const root = useMemo(() => [{ translateY: oy }, { scale: k }], [k, oy]);
   const skyTop = -oy / k;
+  const tgt = useMemo(() => targets.slice(0, 4), [targets]);
+  const meterMax = useMemo(() => Math.max(1, (tgt[3] > 0 ? tgt[3] : tgt[2] * 1.15)), [tgt]);
 
-  // -- items, pile and splats: one Atlas draw ---------------------------------------------
+  // -- veil (ranked runs, 3.2): 150 ms after time stops, airborne things fade under a white wash ------
+  const veil = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const v = vis.value;
+    if (!s.ranked || s.done) return 0;
+    if (s.holdTs === 0) return clamp01((v.frozenMs - 150) / 150);
+    // Fade back in over the last 6 steps of the ramp-up.
+    return s.holdTs < 205 ? clamp01((205 - s.holdTs) / 146) * (v.frozenMs > 0 ? 1 : 0) : 0;
+  });
+  const itemsOp = useDerivedValue(() => 1 - veil.value);
+  const washOp = useDerivedValue(() => veil.value * 0.45);
+
+  // -- items + prizes: Atlas A; pile + splats: Atlas B --------------------------------------
   const rects = atlas?.rects;
-  const sprites = useRectBuffer(SLOTS, (r, i) => {
+  const spritesA = useRectBuffer(SLOTS_A, (r, i) => {
     'worklet';
     tick.value;
     if (!rects) return;
     const s = sim.value;
     let idx = SP_BANANA;
     if (i < SLOT_ITEMS) idx = s.iSt[i] === S_FREE ? SP_BANANA : spriteFor(s.iKind[i], s.iPuff[i]);
-    else if (i < SLOT_ITEMS + SLOT_PILE) idx = (i - SLOT_ITEMS) % 4 === 3 ? SP_BUNCH : SP_BANANA;
+    else idx = s.hKind[i - SLOT_ITEMS] === K_LUCKY ? SP_BUNCH : SP_COIN;
     const src = rects[idx];
     r.setXYWH(src.x, src.y, src.width, src.height);
   });
-  const transforms = useRSXformBuffer(SLOTS, (xf, i) => {
+  const transformsA = useRSXformBuffer(SLOTS_A, (xf, i) => {
     'worklet';
     tick.value;
     if (!rects) return;
@@ -266,7 +311,8 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
       }
       const kind = s.iKind[i];
       idx = spriteFor(kind, s.iPuff[i]);
-      size = ITEM_SIZE[kind];
+      size = kind === K_BANANA && s.twist === TWIST_GIANT ? 72 : ITEM_SIZE[kind];
+      if (s.iFlag[i] === 1) size *= 1.15;
       x = s.iX[i] / SUB;
       y = s.iY[i] / SUB;
       const ageMs = (s.iAge[i] / 256) * 16.67;
@@ -276,16 +322,10 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
       if (kind === K_COIN) rot = Math.sin(ageMs / 180) * 0.25;
       if (kind === K_PUFFER) {
         size = s.iPuff[i] === 0 ? 46 : s.iPuff[i] === 1 ? 58 : 68;
-        rot = Math.sin(ageMs / 32) * 0.1;
+        // Wobble +-6 deg at 5 Hz.
+        rot = reducedMotion ? 0 : Math.sin(ageMs / 32) * 0.1;
       }
-      if (st === S_RIM) {
-        const side = s.iSide[i] >= 0 ? 1 : -1;
-        const off = Math.max(-(HALF_ZONE + 4), Math.min(HALF_ZONE + 4, x - bx));
-        const roll = s.iT[i] / 256 / 8;
-        x = bx + off * (1 - roll * 0.5);
-        y = LANE_Y - size * 0.32;
-        rot = side * Math.sin(v.t / 40) * 0.14;
-      } else if (st === S_DUNK) {
+      if (st === S_DUNK) {
         const u = clamp01(s.iT[i] / 256 / 6);
         x = x + (bx - x) * u;
         y = LANE_Y - 8 + u * 22;
@@ -298,11 +338,57 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
         size *= 1 + 0.2 * Math.sin(u * Math.PI);
       } else if (st === S_BONKED) {
         rot = ((s.iT[i] / 256) * 16.67 * 540 * Math.PI) / 180000;
-      } else if (st === S_PASS || st === S_MISS) {
-        // keeps falling past the rim toward the plaza
+      } else if (st === S_MISS && kind === K_BANANA && y > LANE_Y + 80) {
+        // squashes flat on the plaza
+        size *= 0.9;
       }
-    } else if (i < SLOT_ITEMS + SLOT_PILE) {
-      const n = i - SLOT_ITEMS;
+    } else {
+      const h = i - SLOT_ITEMS;
+      if (s.hSt[h] === S_FREE) {
+        xf.set(0, 0, -5000, -5000);
+        return;
+      }
+      const o = [0, 0, 1, 1];
+      prizePose(s, v, h, o);
+      if (o[3] <= 0.02) {
+        xf.set(0, 0, -5000, -5000);
+        return;
+      }
+      idx = s.hKind[h] === K_LUCKY ? SP_BUNCH : SP_COIN;
+      size = (s.hKind[h] === K_LUCKY ? 74 : 60) * o[2];
+      x = o[0];
+      y = o[1];
+      rot = reducedMotion ? 0 : Math.sin(v.t / 420 + h * 1.7) * 0.08;
+    }
+    const src = rects[idx];
+    const sc = size / Math.max(src.width, src.height);
+    const c = Math.cos(rot) * sc;
+    const sn = Math.sin(rot) * sc;
+    const hw = src.width / 2;
+    const hh = src.height / 2;
+    xf.set(c, sn, x - (c * hw - sn * hh), y - (sn * hw + c * hh));
+  });
+  const spritesB = useRectBuffer(SLOTS_B, (r, i) => {
+    'worklet';
+    if (!rects) return;
+    const idx = i < SLOT_PILE ? (i % 4 === 3 ? SP_BUNCH : SP_BANANA) : SP_BANANA;
+    const src = rects[idx];
+    r.setXYWH(src.x, src.y, src.width, src.height);
+  });
+  const transformsB = useRSXformBuffer(SLOTS_B, (xf, i) => {
+    'worklet';
+    tick.value;
+    if (!rects) return;
+    const s = sim.value;
+    const v = vis.value;
+    let x = 0;
+    let y = 0;
+    let size = 0;
+    let rot = 0;
+    let idx = SP_BANANA;
+    const bx = s.bx / SUB;
+    if (i < SLOT_PILE) {
+      const n = i;
       const count = s.catches;
       if (count < PILE_AT[n]) {
         xf.set(0, 0, -5000, -5000);
@@ -316,17 +402,20 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
       y = LANE_Y + 4 - row * 13 + sag * 0.3;
       size = 42 + row * 2;
       rot = ((n * 47) % 60 - 30) * (Math.PI / 180);
+      // Top sprites jostle on a catch (2 fu spring, impulse from basket vx).
       const jig = v.t - v.squashT;
-      if (jig >= 0 && jig < 140 && n >= Math.max(0, count - 3)) rot += Math.sin(jig / 18) * 0.1;
-      if (count > 40 && n >= 8) y -= 6;
+      if (jig >= 0 && jig < 180 && n >= Math.max(0, count - 3)) {
+        const imp = Math.max(-1, Math.min(1, s.bv / 5000));
+        rot += Math.sin(jig / 18) * 0.12 * Math.exp(-jig / 90);
+        x += imp * 2 * Math.exp(-jig / 90);
+      }
     } else {
-      const n = i - SLOT_ITEMS - SLOT_PILE;
+      const n = i - SLOT_PILE;
       if (v.splatT[n] < -1e5) {
         xf.set(0, 0, -5000, -5000);
         return;
       }
       idx = SP_BANANA;
-      // A squashed banana lying flat in its juice puddle (the miss decal).
       const age = v.t - v.splatT[n];
       x = v.splatX[n];
       y = v.splatY[n] - 4;
@@ -339,9 +428,77 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const sn = Math.sin(rot) * sc;
     const hw = src.width / 2;
     const hh = src.height / 2;
+    // Splats squash flat (scaleY 0.4).
+    if (i >= SLOT_PILE) {
+      xf.set(c, sn * 0.4, x - (c * hw - sn * hh), y - (sn * hw + c * hh) * 0.4);
+      return;
+    }
     xf.set(c, sn, x - (c * hw - sn * hh), y - (sn * hw + c * hh));
   });
-  // -- shadows, Excellent rings, puffer shadows, ball arc ----------------------------------
+
+  // -- strings for hanging prizes (one ink path) ----------------------------------------------
+  const strings = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const v = vis.value;
+    const p = Skia.Path.Make();
+    const o = [0, 0, 1, 1];
+    for (let h = 0; h < MAX_PRIZES; h++) {
+      if (s.hSt[h] !== S_HANG && s.hSt[h] !== S_REEL) continue;
+      prizePose(s, v, h, o);
+      const top = s.hX[h];
+      p.moveTo(top, TRACK_Y + 2);
+      p.quadTo((top + o[0]) / 2 + 3, (TRACK_Y + o[1]) / 2, o[0], o[1] - (s.hKind[h] === K_LUCKY ? 30 : 24));
+      p.addCircle(top, TRACK_Y + 2, 4);
+    }
+    return p;
+  });
+  // Lucky Bunch gold halo underlay + an orbiting sparkle.
+  const luckyHalo = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const v = vis.value;
+    const p = Skia.Path.Make();
+    const o = [0, 0, 1, 1];
+    for (let h = 0; h < MAX_PRIZES; h++) {
+      if (s.hSt[h] !== S_HANG || s.hKind[h] !== K_LUCKY) continue;
+      prizePose(s, v, h, o);
+      p.addCircle(o[0], o[1], 42);
+      const a = v.t / 180 + h;
+      p.addCircle(o[0] + Math.cos(a) * 42, o[1] + Math.sin(a) * 42, 5);
+    }
+    return p;
+  });
+  // Golden Hour halo underlays (7.4): gold discs under every item, prize and the shark.
+  const halos = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const p = Skia.Path.Make();
+    if (s.ghQ === 0) return p;
+    const o = [0, 0, 1, 1];
+    for (let i = 0; i < MAX_ITEMS; i++) {
+      if (s.iSt[i] !== S_FALL || s.iKind[i] === K_PUFFER) continue;
+      p.addCircle(s.iX[i] / SUB, s.iY[i] / SUB, ITEM_SIZE[s.iKind[i]] * 0.5 + 6);
+    }
+    for (let h = 0; h < MAX_PRIZES; h++) {
+      if (s.hSt[h] !== S_HANG) continue;
+      prizePose(s, vis.value, h, o);
+      p.addCircle(o[0], o[1], 36);
+    }
+    return p;
+  });
+  const haloOp = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const v = vis.value;
+    if (s.ghQ === 0) return 0;
+    const left = s.ghEnd - s.clock;
+    // The last 3 beats blink on 8th notes.
+    if (left < 3 * STEPS_BEAT && !reducedMotion) return Math.floor(s.clock / 14) % 2 === 0 ? 0.85 : 0.35;
+    return 0.85 * clamp01((v.t - v.ghStartT) / 200);
+  });
+
+  // -- shadows, rings, puffer shadows, ball marker ---------------------------------------------
   const shadows = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -350,25 +507,8 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
       if (s.iSt[i] !== S_FALL || s.iKind[i] === K_PUFFER) continue;
       const prog = clamp01(s.iAge[i] / 256 / Math.max(1, s.iLand[i]));
       const w = 20 + 36 * prog;
-      const x = s.iX[i] / SUB + (s.iVx[i] / SUB) * Math.max(0, s.iLand[i] - s.iAge[i] / 256);
-      p.addOval(rect(x - w / 2, LANE_Y + 22 - w * 0.14, w, w * 0.28));
-    }
-    return p;
-  });
-  const shadowOpacity = 0.18;
-  // Lucky Bunch: a gold halo with an orbiting sparkle (it reads as "a shinier bunch").
-  const luckyHalo = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const t = vis.value.t;
-    const p = Skia.Path.Make();
-    for (let i = 0; i < MAX_ITEMS; i++) {
-      if (s.iSt[i] !== S_FALL || (s.iKind[i] !== K_LUCKY && !(s.iKind[i] === K_BUNCH && s.iFlag[i] === 1))) continue;
       const x = s.iX[i] / SUB;
-      const y = s.iY[i] / SUB;
-      p.addCircle(x, y, 40);
-      const a = t / 180 + i;
-      p.addCircle(x + Math.cos(a) * 40, y + Math.sin(a) * 40, 5);
+      p.addOval(rect(x - w / 2, LANE_Y + 22 - w * 0.14, w, w * 0.28));
     }
     return p;
   });
@@ -409,45 +549,132 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     tick.value;
     return rings(sim.value, true);
   });
-  const arc = useDerivedValue(() => {
+
+  // -- aim ghost-line (3.4): first 3 bounces of each life, from 24 steps before contact --------------
+  const aimLine = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const p = Skia.Path.Make();
-    if (s.bOn !== 1 || s.bRun >= BALL_ARC_BOUNCES || s.bVy >= 0) return p;
-    let x = s.bX;
-    let y = s.bY;
-    let vx = s.bVx;
-    let vy = s.bVy;
-    for (let n = 1; n <= 28; n++) {
-      vy += s.bG;
-      y += vy;
-      x += vx;
-      if (n % 4 === 0) p.addCircle(x / SUB, y / SUB, 4.5);
+    if (s.bOn !== 1 || s.bVy <= 0 || s.bPredStep < 0 || s.bN >= BALL_ARC_BOUNCES) return p;
+    const left = s.bPredStep - s.clock;
+    if (left > 24 || left < 0) return p;
+    const z = zoneOf(s.bPredX - s.bx);
+    const ax: number[] = [];
+    const ay: number[] = [];
+    for (let i = 0; i < 100; i++) {
+      ax.push(0);
+      ay.push(0);
+    }
+    const kk = zoneArc(s, s.bPredX, s.bN + 1, z, ax, ay);
+    const n = kk < 40 ? kk : 40;
+    for (let m = 2; m < n; m += 3) {
+      p.addCircle(ax[m], ay[m], 3.6);
+      // Ends in a ring when it would hit a hanging prize.
+      for (let h = 0; h < MAX_PRIZES; h++) {
+        if (s.hSt[h] !== S_HANG) continue;
+        const dx = ax[m] - s.hX[h];
+        const dy = ay[m] - s.hY[h];
+        if (dx * dx + dy * dy <= (BALL_R + PRIZE_R) * (BALL_R + PRIZE_R)) {
+          p.addCircle(s.hX[h], s.hY[h], PRIZE_R + 8);
+          return p;
+        }
+      }
     }
     return p;
   });
+  const aimOp = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const left = s.bPredStep - s.clock;
+    return clamp01((26 - left) / 8);
+  });
+  const ballMarker = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const p = Skia.Path.Make();
+    if (s.bOn !== 1 || s.bPredStep < 0) return p;
+    const x = s.bPredX / SUB;
+    const near = clamp01(1 - (s.bPredStep - s.clock) / 70);
+    const w = 22 + 30 * near;
+    p.addOval(rect(x - w / 2, LANE_Y + 22 - w * 0.16, w, w * 0.32));
+    return p;
+  });
+
+  // -- ribbon trail (7.2) -----------------------------------------------------------------------
+  const trail = useDerivedValue(() => {
+    tick.value;
+    const v = vis.value;
+    const p = Skia.Path.Make();
+    const n = v.trailN;
+    if (n < 3 || reducedMotion) return p;
+    const len = v.trailX.length;
+    const head = (v.trailHead - 1 + len) % len;
+    // A tapered ribbon: offset both sides by a width that shrinks along the tail.
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const j = (head - i + len) % len;
+      xs.push(v.trailX[j]);
+      ys.push(v.trailY[j]);
+    }
+    const lx: number[] = [];
+    const ly: number[] = [];
+    const rx: number[] = [];
+    const ry: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const a = i === 0 ? 0 : i - 1;
+      const b = i === n - 1 ? n - 1 : i + 1;
+      let dx = xs[b] - xs[a];
+      let dy = ys[b] - ys[a];
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      dx /= d;
+      dy /= d;
+      const w = 9 * (1 - i / n);
+      lx.push(xs[i] - dy * w);
+      ly.push(ys[i] + dx * w);
+      rx.push(xs[i] + dy * w);
+      ry.push(ys[i] - dx * w);
+    }
+    p.moveTo(lx[0], ly[0]);
+    for (let i = 1; i < n; i++) p.lineTo(lx[i], ly[i]);
+    for (let i = n - 1; i >= 0; i--) p.lineTo(rx[i], ry[i]);
+    p.close();
+    return p;
+  });
+  const trailColor = useDerivedValue(() => {
+    tick.value;
+    const n = sim.value.bN;
+    return sim.value.bGold ? GOLD : n >= 20 ? CORAL : n >= 10 ? GOLD : n >= 5 ? BLUE : '#ffffff';
+  });
 
   // -- shark and basket ---------------------------------------------------------------------
-  // Hold poses hang from the fin grip line on the rim, so a pose swap never
-  // moves the basket; the hop squashes the body up off its tail.
   const sharkTransform = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const v = vis.value;
     const bx = s.bx / SUB;
     const speed = Math.abs(s.bv) / SUB;
-    const breathe = speed <= 1 && !reducedMotion ? 1 + 0.015 * Math.sin(v.t / 320) : 1;
+    // Beat-locked idle (Cuphead): breathing on the 900/7 BPM grid from the sim clock.
+    const ph = (s.clock % STEPS_BEAT) / STEPS_BEAT;
+    const amp = reducedMotion ? 0.5 : 1;
+    const breathe = speed <= 1 ? 1 + 0.02 * amp * Math.sin(ph * Math.PI * 2) : 1;
     const sq = squash(v);
     const land = v.t - v.hopLand;
-    const hopSq = land >= 0 && land < 120 && !reducedMotion ? 1 - 0.06 * Math.sin((land / 120) * Math.PI) : 1;
+    const hopSq = land >= 0 && land < 70 && !reducedMotion ? 1 - 0.12 * Math.sin((land / 70) * Math.PI) : 1;
+    // Smear: a 1-frame 1.15 stretch entering a key hold.
+    const pt = v.t - v.poseT;
+    const smear = pt >= 0 && pt < 17 && !reducedMotion ? 1.15 : 1;
+    // Speed-cap tell: 1-frame 1.08 stretch along vx on the first sweep step.
+    const st = v.t - v.sweepStartT;
+    const sweepStretch = st >= 0 && st < 17 && !reducedMotion ? 1.08 : 1;
     const sag = Math.min(10, Math.floor(s.catches / 10) * 2) * 0.4;
     const fin = FIN_Y[v.show] * POSE_S;
     return [
       { translateX: bx },
       { translateY: LANE_Y - 34 + sag },
       { rotate: (v.lean * Math.PI) / 180 },
-      { scaleX: (v.face / sq) * (2 - hopSq) },
-      { scaleY: sq * breathe * hopSq },
+      { scaleX: (v.face / sq) * (2 - hopSq) * sweepStretch },
+      { scaleY: sq * breathe * hopSq * smear },
       { translateX: -POSE_W / 2 },
       { translateY: -fin },
     ];
@@ -465,10 +692,10 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const p = vis.value.show;
     return p === a || p === b ? 1 : 0;
   });
-  const opIdle = showOp(POSE_IDLE, POSE_IDLE);
+  const opIdle = showOp(POSE_IDLE, POSE_GRIN);
   const opHop = showOp(POSE_HOP, POSE_STRAIN);
-  const opLean = showOp(POSE_LEAN, POSE_LEAN);
-  const opChomp = showOp(POSE_CHOMP, POSE_CHEER);
+  const opChomp = showOp(POSE_CHOMP, POSE_CHOMP);
+  const opCheer = showOp(POSE_CHEER, POSE_CHEER);
   const opFlinch = showOp(POSE_BONKED, POSE_BONKED);
   const opDizzy = showOp(POSE_DIZZY, POSE_DIZZY);
   const opFist = showOp(POSE_FIST, POSE_FIST);
@@ -479,18 +706,26 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const sil = v.t - v.silhouetteT;
     if (sil >= 0 && sil < 34) return 0.95;
     const f = v.t - v.flashT;
-    return f >= 0 && f < 34 ? (reducedMotion ? 0.15 : 0.55) : 0;
+    return f >= 0 && f < 34 ? (reducedMotion ? 0.15 : 0.5) : 0;
   });
   const flashOn = (a: number, b: number) => useDerivedValue(() => {
     tick.value;
     const p = vis.value.show;
     return p === a || p === b ? flashOp.value : 0;
   });
-  const flIdle = flashOn(POSE_IDLE, POSE_IDLE);
+  const flIdle = flashOn(POSE_IDLE, POSE_GRIN);
   const flHop = flashOn(POSE_HOP, POSE_STRAIN);
-  const flLean = flashOn(POSE_LEAN, POSE_LEAN);
-  const flChomp = flashOn(POSE_CHOMP, POSE_CHEER);
+  const flChomp = flashOn(POSE_CHOMP, POSE_CHOMP);
+  const flCheer = flashOn(POSE_CHEER, POSE_CHEER);
   const flFlinch = flashOn(POSE_BONKED, POSE_BONKED);
+  // Invulnerability blink (10 Hz) after a puffer hit.
+  const sharkOp = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    if (s.invulnQ <= 0 || reducedMotion) return 1;
+    return Math.floor(vis.value.t / 50) % 2 === 0 ? 1 : 0.35;
+  });
+  // The basket stays level: rim angle = clamp(lean * 0.2, +-4 deg); the puffer hit kicks it 18 deg.
   const basketTransform = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -498,31 +733,81 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const bx = s.bx / SUB;
     const sq = squash(v);
     const sag = Math.min(10, Math.floor(s.catches / 10) * 2) * 0.4;
-    const hitTilt = v.t - v.silhouetteT < 400 ? Math.sin((v.t - v.silhouetteT) / 50) * 0.3 * (1 - (v.t - v.silhouetteT) / 400) : 0;
+    const ht = v.t - v.heartT;
+    const hitTilt = ht >= 0 && ht < 420 ? Math.sin(ht / 50) * 0.31 * Math.exp(-ht / 140) : 0;
+    const rim = Math.max(-4, Math.min(4, v.lean * 0.2));
+    const st = v.t - v.stealT;
+    const knock = st >= 0 && st < 300 && !reducedMotion ? Math.sin((st / 300) * Math.PI) * 40 * (v.gullEdge > 200 ? -1 : 1) : 0;
     return [
-      { translateX: bx },
+      { translateX: bx + knock },
       { translateY: LANE_Y + BASKET_H * (1 - BASKET_RIM) + sag },
-      { rotate: (v.lean * 0.5 * Math.PI) / 180 + hitTilt },
+      { rotate: (rim * Math.PI) / 180 + hitTilt },
       { scaleX: 1 / sq },
       { scaleY: sq },
       { translateX: -BASKET_W / 2 },
       { translateY: -BASKET_H },
     ];
   });
+  // Zone seams at +-13 and +-41 fu; the contacted zone flashes white for 2 frames.
+  const seams = useMemo(() => {
+    const p = Skia.Path.Make();
+    const rimY = BASKET_H * BASKET_RIM;
+    for (const d of [-ZONE_INNER - 1, -ZONE_CENTER - 1, ZONE_CENTER + 1, ZONE_INNER + 1]) {
+      const x = BASKET_W / 2 + d * (BASKET_W / (HALF_ZONE * 2 + 18));
+      p.addRRect(Skia.RRectXY(rect(x - 1.6, rimY - 9, 3.2, 14), 1.6, 1.6));
+    }
+    return p;
+  }, []);
+  const zoneFlash = useDerivedValue(() => {
+    tick.value;
+    const v = vis.value;
+    const p = Skia.Path.Make();
+    const t = v.t - v.zoneT;
+    if (t < 0 || t > 50) return p;
+    const rimY = BASKET_H * BASKET_RIM;
+    const scale = BASKET_W / (HALF_ZONE * 2 + 18);
+    const edges = [-88, -41, -13, 13, 41, 88];
+    const z = v.zoneIdx;
+    const a = z === 0 ? edges[0] : z === 1 ? edges[1] : z === 2 ? edges[2] : z === 3 ? edges[3] : edges[4];
+    const b = z === 0 ? edges[1] : z === 1 ? edges[2] : z === 2 ? edges[3] : z === 3 ? edges[4] : edges[5];
+    p.addRRect(Skia.RRectXY(rect(BASKET_W / 2 + a * scale, rimY - 8, (b - a) * scale, 10), 5, 5));
+    return p;
+  });
+
   // -- ball -------------------------------------------------------------------------------------
   const ballTransform = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const v = vis.value;
-    if (s.bOn !== 1) return [{ translateX: -500 }, { translateY: -500 }];
+    if (s.bOn !== 1) {
+      // In the pail after a save: the ball rides the pail until its kick.
+      if (s.bKeep === 1) {
+        const px = pailX(s.clock);
+        return [{ translateX: px }, { translateY: PLAZA_Y - 30 }, { scale: 0.8 }, { translateX: -BALL_R }, { translateY: -BALL_R }];
+      }
+      return [{ translateX: -500 }, { translateY: -500 }];
+    }
     const t = v.t - v.ballSquashT;
-    const sq = t >= 0 && t < 140 ? 1 - 0.2 * Math.sin((t / 140) * Math.PI) : 1;
+    // Contact squash 1.30 x 0.70 for 70 ms, then a spring.
+    let sx = 1;
+    let sy = 1;
+    if (t >= 0 && t < 70 && !reducedMotion) {
+      sx = 1.3;
+      sy = 0.7;
+    } else if (t >= 70 && t < 230 && !reducedMotion) {
+      const u = (t - 70) / 160;
+      const w = Math.exp(-4 * u) * Math.cos(10 * u);
+      sx = 1 + 0.3 * w * 0.5;
+      sy = 1 - 0.3 * w * 0.5;
+    }
+    // Spin by zone (render-only), decays.
+    const spin = (s.bX / SUB) / BALL_R + (v.zoneIdx - 2) * Math.max(0, 1 - (v.t - v.zoneT) / 1500) * ((v.t - v.zoneT) / 80);
     return [
       { translateX: s.bX / SUB },
       { translateY: s.bY / SUB },
-      { rotate: (s.bX / SUB) / BALL_R },
-      { scaleX: 2 - sq },
-      { scaleY: sq },
+      { scaleX: sx },
+      { scaleY: sy },
+      { rotate: reducedMotion ? 0 : spin },
       { translateX: -BALL_R },
       { translateY: -BALL_R },
     ];
@@ -530,6 +815,59 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const goldBallOp = useDerivedValue(() => {
     tick.value;
     return sim.value.bOn === 1 && sim.value.bGold ? 1 : 0;
+  });
+  const ballRingColor = useDerivedValue(() => {
+    tick.value;
+    const n = sim.value.bN;
+    return n >= 20 ? CORAL : n >= 10 ? GOLD : n >= 5 ? BLUE : '#ffffff';
+  });
+  const ballRingOp = useDerivedValue(() => {
+    tick.value;
+    return sim.value.bOn === 1 && sim.value.bN > 0 ? 1 : 0;
+  });
+  const ballRingW = useDerivedValue(() => {
+    tick.value;
+    const t = vis.value.t - vis.value.ringT;
+    return t >= 0 && t < 160 ? 6 - 2.5 * (t / 160) : 3.5;
+  });
+  // Juggle counter under the ball from 5 bounces (BEST JUGGLE).
+  const juggleText = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    return s.bOn === 1 && s.bN >= 5 ? `${s.bN}` : '';
+  });
+  const juggleX = useDerivedValue(() => {
+    tick.value;
+    const w = fontSmall ? fontSmall.measureText(juggleText.value).width : 10;
+    return sim.value.bX / SUB - w / 2;
+  });
+  const juggleY = useDerivedValue(() => {
+    tick.value;
+    return sim.value.bY / SUB + BALL_R + 20;
+  });
+
+  // -- the free-ball pail (3.5) --------------------------------------------------------------------
+  const pailOp = useDerivedValue(() => {
+    tick.value;
+    return sim.value.hasPail ? 1 : 0;
+  });
+  const pailTransform = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const v = vis.value;
+    const x = pailX(s.clock);
+    const t = v.t - v.pailT;
+    const pop = t >= 0 && t < 220 ? 1 + 0.18 * Math.sin((t / 220) * Math.PI) : 1;
+    return [{ translateX: x }, { translateY: PLAZA_Y + 4 }, { scale: pop }, { translateX: -26 }, { translateY: -50 }];
+  });
+  const pailUsedOp = useDerivedValue(() => {
+    tick.value;
+    return sim.value.pailUsed ? 0.55 : 0;
+  });
+  const pailShine = useDerivedValue(() => {
+    tick.value;
+    const t = vis.value.t - vis.value.pailT;
+    return t >= 0 && t < 300 ? 1 - t / 300 : 0;
   });
 
   // -- world ambience ------------------------------------------------------------------------
@@ -542,6 +880,14 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const c1 = cloudX(8, 40);
   const c2 = cloudX(12, 260);
   const c3 = cloudX(18, 480);
+  const cloudBob = useDerivedValue(() => {
+    tick.value;
+    const ph = (sim.value.clock % STEPS_BEAT) / STEPS_BEAT;
+    return reducedMotion ? 0 : -Math.max(0, Math.cos(ph * Math.PI * 2)) * 1;
+  });
+  const cY1 = useDerivedValue(() => 150 + cloudBob.value);
+  const cY2 = useDerivedValue(() => 210 - cloudBob.value);
+  const cY3 = useDerivedValue(() => 128 + cloudBob.value);
   const rayRot = useDerivedValue(() => {
     tick.value;
     return reducedMotion ? [{ rotate: 0 }] : [{ rotate: (vis.value.cloudT / 1000) * 0.1 }];
@@ -565,7 +911,6 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     return p;
   }, []);
   const plazaTiles = useMemo(() => {
-    // Soft paving stripes in the plaza (the thumb zone under the basket).
     const p = Skia.Path.Make();
     for (let r = 0; r < 6; r++) {
       const y = LANE_Y + 52 + r * 34;
@@ -581,50 +926,72 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   }, []);
   const track = useMemo(() => {
     const p = Skia.Path.Make();
-    p.moveTo(-20, 98);
-    p.cubicTo(80, 84, 150, 110, 210, 96);
-    p.cubicTo(270, 82, 330, 104, 420, 92);
+    p.moveTo(-20, TRACK_Y);
+    p.cubicTo(80, TRACK_Y - 14, 150, TRACK_Y + 12, 210, TRACK_Y - 2);
+    p.cubicTo(270, TRACK_Y - 16, 330, TRACK_Y + 6, 420, TRACK_Y - 6);
     return p;
   }, []);
   const ties = useMemo(() => {
     const p = Skia.Path.Make();
     for (let x = -10; x < 420; x += 22) {
-      const y = 96 + Math.sin(x / 40) * 5;
+      const y = TRACK_Y - 2 + Math.sin(x / 40) * 5;
       p.addRect(rect(x, y - 2, 6, 14));
     }
     return p;
   }, []);
+  // Foreground bunting strings across the top corners (lean with Crosswind).
+  const bunting = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const lean = s.twist === 1 ? s.wind * 6 : 0;
+    const p = Skia.Path.Make();
+    for (const side of [0, 1]) {
+      const x0 = side === 0 ? -10 : FIELD_W + 10;
+      const x1 = side === 0 ? 110 : FIELD_W - 110;
+      for (let i = 0; i < 5; i++) {
+        const u = (i + 0.5) / 5;
+        const x = x0 + (x1 - x0) * u + lean;
+        const y = 54 + Math.sin(u * Math.PI) * 18 + (side === 0 ? u * 10 : (1 - u) * 10);
+        p.moveTo(x - 8, y);
+        p.lineTo(x + 8, y);
+        p.lineTo(x + lean * 0.4, y + 16);
+        p.close();
+      }
+    }
+    return p;
+  });
 
-  // -- Golden Hour and Rush ------------------------------------------------------------------
+  // -- Golden Hour ------------------------------------------------------------------------------
   const goldAmt = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const v = vis.value;
-    if (s.ghQ > 0) {
-      const inT = clamp01((v.t - v.ghStartT) / 300);
-      const left = s.ghQ / 256;
-      const blink = left < 90 ? (Math.floor(v.t / 125) % 2 === 0 ? 0.6 : 1) : 1;
-      return inT * blink;
-    }
+    if (s.ghQ > 0) return clamp01((v.t - v.ghStartT) / 300);
     return clamp01(1 - (v.t - v.ghEndT) / 300);
   });
   const burstTransform = useDerivedValue(() => {
     tick.value;
-    const s = sim.value;
     const v = vis.value;
     const g = goldAmt.value;
-    const sc = g * (1.4 * Math.min(1, easeOutBack(clamp01((v.t - v.ghStartT) / 350))));
+    const sc = g * Math.min(1, easeOutBack(clamp01((v.t - v.ghStartT) / 350)));
     return [
-      { translateX: s.bx / SUB },
-      { translateY: LANE_Y - 10 },
+      { translateX: v.cartPos },
+      { translateY: TRACK_Y - 20 },
       { rotate: reducedMotion ? 0 : (v.t / 1000) * 0.52 },
-      { scale: Math.max(0.001, sc * 0.5) },
+      { scale: Math.max(0.001, sc * 0.45) },
       { translateX: -395 },
       { translateY: -397 },
     ];
   });
-  const burstOpacity = useDerivedValue(() => goldAmt.value * 0.45);
+  const burstOpacity = useDerivedValue(() => goldAmt.value * 0.4);
   const frameOpacity = useDerivedValue(() => goldAmt.value);
+  const sheenOp = useDerivedValue(() => goldAmt.value * 0.35);
+  const sheenX = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const u = ((s.clock - s.setStart) % (STEPS_BEAT * 4)) / (STEPS_BEAT * 4);
+    return -40 + u * (BASKET_W + 80);
+  });
 
   // -- HUD ---------------------------------------------------------------------------------
   const timeFrac = useDerivedValue(() => {
@@ -642,7 +1009,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     tick.value;
     const s = sim.value;
     if (s.rushOn) return CORAL;
-    return s.ghQ > 0 ? '#ffd23f' : GOLD;
+    return GOLD;
   });
   const timePulse = useDerivedValue(() => {
     tick.value;
@@ -654,7 +1021,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     tick.value;
     const v = vis.value;
     if (v.frozenMs < 200) return -60;
-    return ((v.cloudT / 1200) % 1) * 240 - 40;
+    return ((v.cloudT / 1200) % 1) * 240 + TIME_X - 40;
   });
   const heartOp = (i: number) => useDerivedValue(() => {
     tick.value;
@@ -671,7 +1038,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const t = v.t - v.heartT;
     const sc = v.heartIdx === i && t >= 0 && t < 260 ? 1 + 0.3 * Math.sin((t / 260) * Math.PI) : 1;
     const cx = 22 + i * 30;
-    return [{ translateX: cx }, { translateY: 26 }, { scale: sc }, { translateX: -13 }, { translateY: -12 }];
+    return [{ translateX: cx }, { translateY: 24 }, { scale: sc }, { translateX: -13 }, { translateY: -12 }];
   });
   const h0 = heartOp(0);
   const h1 = heartOp(1);
@@ -679,59 +1046,111 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const hs0 = heartScale(0);
   const hs1 = heartScale(1);
   const hs2 = heartScale(2);
-  // -- the basket is the HUD for the chain (design 7.1, D-14) ----------------------------------
-  // Chip on the front lip: tier stamp left ("x3"), latest gain right for 600 ms.
-  const chipText = useDerivedValue(() => {
+
+  // Star meter (Angry Birds 2): score on a fill bar with 1/2/3-star and crown notches.
+  const meterScore = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    const v = vis.value;
-    const t = gatedTier(s);
-    const gain = v.t - v.chipT < 600 && v.chipGain > 0 ? `+${v.chipGain}` : '';
-    if (t <= 1) return gain || `${s.chain}`;
-    return gain ? `x${t} ${gain}` : `x${t}`;
+    return s.score + s.bonus;
   });
-  const chipColor = useDerivedValue(() => {
+  const meterFillW = useDerivedValue(() => TIME_W * clamp01(meterScore.value / meterMax));
+  const meterFillColor = useDerivedValue(() => {
+    const sc = meterScore.value;
+    return sc >= tgt[2] ? GOLD : sc >= tgt[0] ? BLUE : '#7cc8ff';
+  });
+  const scoreText = useDerivedValue(() => `${meterScore.value}`);
+  const nextText = useDerivedValue(() => {
+    const sc = meterScore.value;
+    for (let i = 0; i < 4; i++) {
+      if (tgt[i] > 0 && sc < tgt[i]) return i < 3 ? `NEXT STAR +${tgt[i] - sc}` : `CROWN +${tgt[i] - sc}`;
+    }
+    return '';
+  });
+  const notchScale = (i: number) => useDerivedValue(() => {
     tick.value;
-    const s = sim.value;
-    if (s.chainFreezeQ > 0) return '#2d9cff';
-    return TIER_COLORS[gatedTier(s)] === TIER_COLORS[1] && gatedTier(s) === 1 ? INK : TIER_COLORS[gatedTier(s)];
+    const v = vis.value;
+    const t = v.t - v.notchT;
+    const pop = v.notchIdx === i && t >= 0 && t < 260 ? 1 + 0.4 * Math.sin((t / 260) * Math.PI) : 1;
+    const x = TIME_X + 2 + TIME_W * clamp01(tgt[i] / meterMax);
+    return [{ translateX: x }, { translateY: 51 }, { scale: pop }];
+  });
+  const notchLit = (i: number) => useDerivedValue(() => (meterScore.value >= tgt[i] && tgt[i] > 0 ? 1 : 0));
+  const n0 = notchScale(0);
+  const n1 = notchScale(1);
+  const n2 = notchScale(2);
+  const n3 = notchScale(3);
+  const l0 = notchLit(0);
+  const l1 = notchLit(1);
+  const l2 = notchLit(2);
+  const l3 = notchLit(3);
+  const crownOp = useDerivedValue(() => 0.45 + 0.55 * l3.value);
+
+  // -- the head chip (7.6): tier, Coin Meter ring, padlock when the ball gate holds -------------------
+  const chipX = useDerivedValue(() => {
+    tick.value;
+    // A 60 ms lag behind the shark.
+    return Math.max(70, Math.min(330, sim.value.bx / SUB));
   });
   const chipTransform = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const v = vis.value;
-    const t = v.t - v.chipT;
-    let pop = t >= 0 && t < 180 ? 1 + 0.12 * Math.sin((t / 180) * Math.PI) : 1;
+    const ct = v.t - v.chipT;
+    let pop = ct >= 0 && ct < 180 ? 1 + 0.12 * Math.sin((ct / 180) * Math.PI) : 1;
     const bt = v.t - v.badgeT;
-    if (bt >= 0 && bt < 260) pop = Math.max(pop, 1 + 0.45 * Math.sin((bt / 260) * Math.PI) * (1 - bt / 520));
+    if (bt >= 0 && bt < 260) pop = Math.max(pop, 1 + 0.4 * Math.sin((bt / 260) * Math.PI));
+    const beat = (s.clock % STEPS_BEAT) / STEPS_BEAT;
+    const pulse = reducedMotion ? 1 : 1 + 0.04 * Math.max(0, Math.cos(beat * Math.PI * 2));
     const st = v.t - v.badgeShakeT;
-    const shake = st >= 0 && st < 180 && !reducedMotion ? Math.sin(st / 15) * 6 * (1 - st / 180) : 0;
-    return [{ translateX: s.bx / SUB + shake }, { translateY: LANE_Y + 66 }, { scale: pop }];
+    let shake = st >= 0 && st < 180 && !reducedMotion ? Math.sin(st / 15) * 6 * (1 - st / 180) : 0;
+    // Golden Hour wind-up: the chip shakes +-3 fu until the beat.
+    if (v.ghArmT > v.ghStartT && s.ghArmAt >= 0 && !reducedMotion) shake += Math.sin(v.t / 12) * 3;
+    return [{ translateX: chipX.value + shake }, { translateY: CHIP_Y }, { scale: pop * pulse }];
   });
-  const chipX = useDerivedValue(() => {
-    const t = chipText.value;
-    return fontSmall ? -fontSmall.measureText(t).width / 2 : -10;
+  const tierText = useDerivedValue(() => {
+    tick.value;
+    return `x${gatedTier(sim.value)}`;
   });
-  const chipPillW = useDerivedValue(() => {
-    const t = chipText.value;
-    return (fontSmall ? fontSmall.measureText(t).width : 20) + 20;
+  const tierColor = useDerivedValue(() => {
+    tick.value;
+    return TIER_COLORS[gatedTier(sim.value)];
   });
-  const chipPillX = useDerivedValue(() => -chipPillW.value / 2);
-  // Locked "x3" plate with a ball icon: the ball gate is holding the tier at x2.
   const lockOp = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    const held = tierOf(s.chain) > 2 && !(s.bOn === 1 && s.bN > 0);
-    return held ? 1 : 0;
+    return s.full === 1 && tierOf(s.chain) > 2 && !ballIsLive(s) ? 1 : 0;
   });
-  const lockTransform = useDerivedValue(() => {
+  const meterArcs = (i: number) => useDerivedValue(() => {
     tick.value;
-    const v = vis.value;
-    const t = v.t - v.lockT;
-    const swing = t >= 0 && t < 600 && !reducedMotion ? Math.sin(t / 60) * 0.5 * (1 - t / 600) : 0;
-    return [{ translateX: chipPillX.value - 30 }, { translateY: -2 }, { rotate: swing }];
+    const p = Skia.Path.Make();
+    p.addArc(rect(16 - 15, -15, 30, 30), -90 + i * 120 + 6, 108);
+    return p;
   });
-  // Shards of the plate cracking off on unlock.
+  const arc0 = meterArcs(0);
+  const arc1 = meterArcs(1);
+  const arc2 = meterArcs(2);
+  const pipOp = (i: number) => useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    if (s.ghQ > 0 || s.ghArmAt >= 0) return 1;
+    return s.meter > i ? 1 : 0.15;
+  });
+  const p0 = pipOp(0);
+  const p1 = pipOp(1);
+  const p2 = pipOp(2);
+  const ringDim = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    return s.full === 1 && s.rushOn ? 0.4 : 1;
+  });
+  // Ready sparkle at 2 of 3 pips (Brawl Stars): a beat-locked glint on the ring.
+  const readyOp = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    if (s.meter !== 2 || s.ghQ > 0 || s.rushOn) return 0;
+    const ph = (s.clock % STEPS_BEAT) / STEPS_BEAT;
+    return ph < 0.3 ? 1 - ph / 0.3 : 0;
+  });
   const shardOp = useDerivedValue(() => {
     tick.value;
     const t = vis.value.t - vis.value.unlockT;
@@ -739,13 +1158,12 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   });
   const shardTransformA = useDerivedValue(() => {
     const t = Math.max(0, vis.value.t - vis.value.unlockT) / 1000;
-    return [{ translateX: chipPillX.value - 40 - t * 120 }, { translateY: -10 - t * 160 + t * t * 900 }, { rotate: -t * 9 }];
+    return [{ translateX: -40 - t * 120 }, { translateY: -10 - t * 160 + t * t * 900 }, { rotate: -t * 9 }];
   });
   const shardTransformB = useDerivedValue(() => {
     const t = Math.max(0, vis.value.t - vis.value.unlockT) / 1000;
-    return [{ translateX: chipPillX.value - 20 + t * 60 }, { translateY: -6 - t * 220 + t * t * 900 }, { rotate: t * 11 }];
+    return [{ translateX: -22 + t * 110 }, { translateY: -10 - t * 140 + t * t * 900 }, { rotate: t * 8 }];
   });
-  // Rim flame at x3+ (design: small at x3, full at x4).
   const flameOp = useDerivedValue(() => {
     tick.value;
     return gatedTier(sim.value) >= 3 ? 1 : 0;
@@ -765,68 +1183,88 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   });
   const notchGlowR = useDerivedValue(() => 10 + 10 * vis.value.notch);
   const notchGlowOp = useDerivedValue(() => 0.45 * vis.value.notch);
-  const bankX = useDerivedValue(() => {
+
+  // -- parked shield bubble, lock ring, CLOSE CALL speed lines, sweep dust ------------------------------
+  const shieldOp = useDerivedValue(() => {
     tick.value;
-    return sim.value.bx / SUB + 40;
+    const v = vis.value;
+    const t = v.t - v.shieldT;
+    return t >= 0 && t < 140 ? 1 - t / 140 : 0;
   });
-  // Coin Meter: 3 pips stamped on the wicker.
-  const pipOp = (i: number) => useDerivedValue(() => {
+  const shieldR = useDerivedValue(() => {
+    const t = Math.max(0, vis.value.t - vis.value.shieldT);
+    return 70 + t * 0.12;
+  });
+  const shieldCx = useDerivedValue(() => {
+    tick.value;
+    return sim.value.bx / SUB;
+  });
+  const lockOpRing = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
-    return s.ghQ > 0 || s.meter > i ? 1 : 0;
+    return s.parked && s.queued ? 1 : 0;
   });
-  const p0 = pipOp(0);
-  const p1 = pipOp(1);
-  const p2 = pipOp(2);
-  const bankText = useDerivedValue(() => {
+  const lockArc = useDerivedValue(() => {
     tick.value;
-    const b = sim.value.banked;
-    return b > 0 ? `+${b * 250}` : '';
+    const s = sim.value;
+    const p = Skia.Path.Make();
+    if (!(s.parked && s.queued)) return p;
+    const u = clamp01(s.fullRun / LOCK_STEPS);
+    const t = thumb.value;
+    p.addArc(rect(t.x - 28, t.y - 28, 56, 56), -90, 360 * u);
+    return p;
+  });
+  const lockRing = useDerivedValue(() => {
+    tick.value;
+    const p = Skia.Path.Make();
+    const t = thumb.value;
+    p.addCircle(t.x, t.y, 28);
+    return p;
+  });
+  const speedLines = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const v = vis.value;
+    const p = Skia.Path.Make();
+    if (reducedMotion) return p;
+    const ct = v.t - v.closeT;
+    if (ct >= 0 && ct < 260) {
+      for (let i = 0; i < 6; i++) {
+        const y = LANE_Y - 120 + i * 22;
+        const x = v.closeX + (i % 2 === 0 ? -1 : 1) * (40 + ct * 0.4);
+        p.moveTo(x - 30, y);
+        p.lineTo(x + 30, y);
+      }
+    }
+    if (v.wasSweeping) {
+      // Speed-cap tell: 4 speed lines behind the shark.
+      const dir = s.bv > 0 ? -1 : 1;
+      const bx = s.bx / SUB;
+      for (let i = 0; i < 4; i++) {
+        const y = LANE_Y - 70 + i * 18;
+        p.moveTo(bx + dir * (70 + i * 6), y);
+        p.lineTo(bx + dir * (110 + i * 10), y);
+      }
+    }
+    return p;
+  });
+  const dust = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const v = vis.value;
+    const p = Skia.Path.Make();
+    if (!v.wasSweeping || reducedMotion) return p;
+    const dir = s.bv > 0 ? -1 : 1;
+    const bx = s.bx / SUB;
+    const ph = (v.t % 50) / 50;
+    for (let i = 0; i < 3; i++) {
+      const r = 7 + (i + ph) * 4;
+      p.addCircle(bx + dir * (60 + (i + ph) * 16), LANE_Y + 40 - i * 4, r);
+    }
+    return p;
   });
 
-  // Stamps.
-  const stampText = useDerivedValue(() => {
-    tick.value;
-    const v = vis.value;
-    const age = v.t - v.stampT;
-    const hold = v.stamp === ST_TIME || v.stamp === ST_OUT ? 100000 : v.stamp === ST_GOLDEN || v.stamp === ST_RUSH ? 1450 : 900;
-    if (v.stamp === ST_NONE || age > hold) return '';
-    const base = STAMP_TEXT[v.stamp] ?? '';
-    return v.stamp === ST_PERFECT && v.stampSuffix >= 3 ? `${base} x${v.stampSuffix}` : base;
-  });
-  const stampTransform = useDerivedValue(() => {
-    tick.value;
-    const v = vis.value;
-    const age = v.t - v.stampT;
-    const big = stampIsBig(v.stamp);
-    let sc = 1;
-    if (age < 110) sc = 0.5 + 0.7 * easeOutBack(age / 110) * (big ? 1.1 : 1);
-    else if (age < 180) sc = 1.2 - 0.2 * ((age - 110) / 70);
-    if (big && age < 180 && (v.stamp === ST_TIME || v.stamp === ST_OUT)) sc = 2 - easeOutBack(age / 180);
-    const w = fontStamp ? fontStamp.measureText(stampText.value).width : 100;
-    const scaleFit = Math.min(1, 360 / Math.max(1, w));
-    if (big) return [{ translateX: 200 }, { translateY: 300 }, { scale: sc * scaleFit * 1.1 }, { translateX: -w / 2 }];
-    const bx = Math.max(110, Math.min(290, sim.value.bx / SUB));
-    return [{ translateX: bx }, { translateY: LANE_Y - 170 - (age < 600 ? age / 30 : 20) }, { scale: sc * scaleFit * 0.62 }, { translateX: -w / 2 }];
-  });
-  const stampColor = useDerivedValue(() => {
-    tick.value;
-    const st = vis.value.stamp;
-    if (st === ST_GOLDEN) return GOLD;
-    if (st === ST_RUSH || st === ST_OUT) return CORAL;
-    return '#ffffff';
-  });
-  const stampOpacity = useDerivedValue(() => {
-    tick.value;
-    const v = vis.value;
-    const age = v.t - v.stampT;
-    const hold = v.stamp === ST_TIME || v.stamp === ST_OUT ? 100000 : v.stamp === ST_GOLDEN || v.stamp === ST_RUSH ? 1450 : 900;
-    if (age > hold) return 0;
-    if (age > hold - 150) return (hold - age) / 150;
-    return 1;
-  });
-
-  // Frozen: a pulsing prompt above the basket after 600 ms.
+  // Frozen prompt (unranked) / thumb glyph under the veil.
   const frozenOp = useDerivedValue(() => {
     tick.value;
     const v = vis.value;
@@ -838,6 +1276,10 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     return sim.value.bx / SUB;
   });
   const frozenRingR = useDerivedValue(() => 30 + 8 * Math.abs(Math.sin(vis.value.cloudT / 220)));
+  const holdX = useDerivedValue(() => {
+    tick.value;
+    return sim.value.bx / SUB - (fontSmall ? fontSmall.measureText('HOLD TO PLAY').width / 2 : 40);
+  });
 
   // Set pips (queue).
   const setOp = (i: number) => useDerivedValue(() => {
@@ -851,29 +1293,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const set2 = setOp(2);
   const isQueue = useDerivedValue(() => (sim.value.mode === MODE_QUEUE ? 1 : 0));
 
-  // Power-up ring (Foam Finger).
-  const powerOp = useDerivedValue(() => {
-    tick.value;
-    return sim.value.fingerQ > 0 ? 1 : 0;
-  });
-  const powerArc = useDerivedValue(() => {
-    tick.value;
-    const f = sim.value.fingerQ / 256 / 360;
-    const p = Skia.Path.Make();
-    p.addArc(rect(12, LANE_Y + 150, 44, 44), -90, 360 * clamp01(f));
-    return p;
-  });
-  const fingerMagnet = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
-    const p = Skia.Path.Make();
-    if (s.fingerQ <= 0 && s.ghQ <= 0) return p;
-    const r = s.fingerQ > 0 ? 120 : 60;
-    p.addOval(rect(s.bx / SUB - r, LANE_Y - 60, r * 2, 80));
-    return p;
-  });
-
-  // Rival strip (ghost).
+  // Rival portrait (ghost rounds): their shark reacting at YOUR clock step, score, tug bar; rail tick.
   const ghostOp = useDerivedValue(() => (ghost.value ? 1 : 0));
   const ghostX = useDerivedValue(() => {
     tick.value;
@@ -893,97 +1313,126 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const mine = sim.value.score;
     const theirs = g.sim.score;
     const f = mine + theirs > 0 ? mine / (mine + theirs) : 0.5;
-    return 72 * f;
+    return 84 * f;
   });
   const ghostRim = useDerivedValue(() => {
     tick.value;
     const g = ghost.value;
-    return g && g.sim.ghQ > 0 ? GOLD : '#2d9cff';
+    return g && g.sim.ghQ > 0 ? GOLD : BLUE;
   });
   const ghostHype = useDerivedValue(() => {
     tick.value;
     const g = ghost.value;
-    return g && g.sim.perfStreak >= 3 ? 1 : 0;
+    return g && (g.sim.ghQ > 0 || gatedTier(g.sim) >= 3) ? 1 : 0;
   });
   const ghostCalm = useDerivedValue(() => 1 - ghostHype.value);
   const ghostScoreX = useDerivedValue(() => {
     const t = ghostScoreText.value;
-    return 354 - (fontSmall ? fontSmall.measureText(t).width / 2 : 10);
+    return 346 - (fontSmall ? fontSmall.measureText(t).width / 2 : 10);
   });
-  const ghostNameX = useDerivedValue(() => 354 - (fontSmall ? fontSmall.measureText(ghostName).width / 2 : 10));
-  const holdX = useDerivedValue(() => {
-    tick.value;
-    return sim.value.bx / SUB - (fontSmall ? fontSmall.measureText('HOLD TO PLAY').width / 2 : 40);
-  });
+  const ghostNameX = useDerivedValue(() => 346 - (fontTiny ? fontTiny.measureText(ghostName).width / 2 : 10));
   const ghostTickX = useDerivedValue(() => ghostX.value - 3);
-  const ghostBasketTransform = useDerivedValue(() => [
-    { translateX: ghostX.value * 0.9 + 20 - 18 },
-    { translateY: 58 },
-  ]);
 
-  const splashLines = useDerivedValue(() => {
+  // Line Heat strip (11.2): up to 8 chips ranked by live score; frozen chips show a thumb glyph.
+  const stripPath = (lit: boolean) => useDerivedValue(() => {
     tick.value;
-    const s = sim.value;
-    const v = vis.value;
     const p = Skia.Path.Make();
-    if (s.sSt === 1) {
-      const x = s.sX / SUB;
-      const u = (s.sQ / 256) / 54;
-      for (let r = 0; r < 3; r++) {
-        const rr = ((u * 3 + r / 3) % 1) * 55;
-        p.addOval(rect(x - rr, PLAZA_Y - 10 - rr * 0.25, rr * 2, rr * 0.5));
-      }
+    const list = strip ? strip.value : null;
+    if (!list) return p;
+    for (let i = 0; i < list.length && i < 8; i++) {
+      if ((list[i].me === true) !== lit) continue;
+      p.addCircle(30 + i * 48, 76, list[i].me ? 15 : 13);
     }
-    void v;
     return p;
   });
-  const splashColor = useDerivedValue(() => {
+  const stripOthers = stripPath(false);
+  const stripMe = stripPath(true);
+  const stripOp = useDerivedValue(() => (strip && strip.value ? 1 : 0));
+  const stripLabels = useDerivedValue(() => {
     tick.value;
-    const s = sim.value;
-    const u = (s.sQ / 256) / 54;
-    return u < 0.5 ? '#ffffff' : u < 0.85 ? GOLD : CORAL;
+    const list = strip ? strip.value : null;
+    if (!list) return '';
+    let t = '';
+    for (let i = 0; i < list.length && i < 8; i++) t += `${i + 1}`.padEnd(6, ' ');
+    return t;
   });
-
-  // -- ball: bounce ring on the ball, blue landing marker on the rim line -----------------------
-  const ballRingColor = useDerivedValue(() => {
+  const stripFrozen = useDerivedValue(() => {
     tick.value;
-    const n = sim.value.bN;
-    return n >= 20 ? CORAL : n >= 10 ? GOLD : n >= 5 ? '#2d9cff' : '#ffffff';
-  });
-  const ballRingOp = useDerivedValue(() => {
-    tick.value;
-    return sim.value.bOn === 1 && sim.value.bN > 0 ? 1 : 0;
-  });
-  const ballRingW = useDerivedValue(() => {
-    tick.value;
-    const t = vis.value.t - vis.value.ringT;
-    return t >= 0 && t < 160 ? 6 - 2.5 * (t / 160) : 3.5;
-  });
-  const ballMarker = useDerivedValue(() => {
-    tick.value;
-    const s = sim.value;
     const p = Skia.Path.Make();
-    if (s.bOn !== 1 || s.bPredStep < 0) return p;
-    const x = s.bPredX / SUB;
-    const near = clamp01(1 - (s.bPredStep - s.clock) / 70);
-    const w = 22 + 30 * near;
-    p.addOval(rect(x - w / 2, LANE_Y + 22 - w * 0.16, w, w * 0.32));
+    const list = strip ? strip.value : null;
+    if (!list) return p;
+    for (let i = 0; i < list.length && i < 8; i++) {
+      if (!list[i].frozen) continue;
+      p.addRRect(Skia.RRectXY(rect(30 + i * 48 - 4, 70, 8, 12), 4, 4));
+    }
     return p;
   });
 
-  // -- the snack cart on the coaster track (it tosses the ball and drops the snacks) ------------
+  // -- stamps --------------------------------------------------------------------------------------
+  const stampText = useDerivedValue(() => {
+    tick.value;
+    const v = vis.value;
+    const age = v.t - v.stampT;
+    const hold = v.stamp === ST_TIME || v.stamp === ST_OUT ? 100000 : v.stamp === ST_GOLDEN ? 1450 : 800;
+    if (v.stamp === ST_NONE || age > hold) return '';
+    return STAMP_TEXT[v.stamp] ?? '';
+  });
+  const stampTransform = useDerivedValue(() => {
+    tick.value;
+    const v = vis.value;
+    const age = v.t - v.stampT;
+    const big = stampIsBig(v.stamp);
+    let sc = 1;
+    if (age < 110) sc = 0.5 + 0.7 * easeOutBack(age / 110) * (big ? 1.1 : 1);
+    else if (age < 180) sc = 1.2 - 0.2 * ((age - 110) / 70);
+    if (big && age < 180 && (v.stamp === ST_TIME || v.stamp === ST_OUT)) sc = 2 - easeOutBack(age / 180);
+    if (v.stamp === ST_POP && v.stampSuffix === 1) sc *= 1.3;
+    const w = fontStamp ? fontStamp.measureText(stampText.value).width : 100;
+    const scaleFit = Math.min(1, 360 / Math.max(1, w));
+    if (big) return [{ translateX: 200 }, { translateY: 300 }, { scale: sc * scaleFit * 1.1 }, { translateX: -w / 2 }];
+    const x = Math.max(110, Math.min(290, v.stampX));
+    return [{ translateX: x }, { translateY: LANE_Y - 210 - (age < 600 ? age / 30 : 20) }, { scale: sc * scaleFit * 0.62 }, { translateX: -w / 2 }];
+  });
+  const stampColor = useDerivedValue(() => {
+    tick.value;
+    const st = vis.value.stamp;
+    if (st === ST_GOLDEN) return GOLD;
+    if (st === ST_OUT) return CORAL;
+    return '#ffffff';
+  });
+  const stampOpacity = useDerivedValue(() => {
+    tick.value;
+    const v = vis.value;
+    const age = v.t - v.stampT;
+    const hold = v.stamp === ST_TIME || v.stamp === ST_OUT ? 100000 : v.stamp === ST_GOLDEN ? 1450 : 800;
+    if (age > hold) return 0;
+    if (age > hold - 150) return (hold - age) / 150;
+    return 1;
+  });
+
+  // -- snack cart + Finn, gull -------------------------------------------------------------------------
   const cartTransform = useDerivedValue(() => {
     tick.value;
     const v = vis.value;
+    const s = sim.value;
     const x = v.cartPos;
-    const trackY = 96 + Math.sin(x / 40) * 5;
-    const tt = v.t - v.cartT;
-    const wobble = tt >= -400 && tt < 300 && !reducedMotion ? Math.sin(tt / 30) * 0.12 * (1 - Math.abs(tt) / 400) : 0;
-    const rattle = reducedMotion ? 0 : Math.sin(v.t / 55) * 0.8;
+    const trackY = TRACK_Y - 2 + Math.sin(x / 40) * 5;
+    const tt = v.t - Math.max(v.cartT, v.serveTellT);
+    const wobble = tt >= -400 && tt < 400 && !reducedMotion ? Math.sin(tt / 30) * 0.12 * (1 - Math.abs(tt) / 400) : 0;
+    const ph = (s.clock % STEPS_BEAT) / STEPS_BEAT;
+    const rattle = reducedMotion ? 0 : -Math.max(0, Math.cos(ph * Math.PI * 2)) * 1.5;
     return [{ translateX: x }, { translateY: trackY + 4 + rattle }, { rotate: wobble }, { translateX: -30 }, { translateY: -60 }];
   });
-
-  // -- gull: plaza shadow telegraph, glide in, dive, steal -------------------------------------
+  const finnY = useDerivedValue(() => {
+    tick.value;
+    const s = sim.value;
+    const v = vis.value;
+    const ph = (s.clock % STEPS_BEAT) / STEPS_BEAT;
+    const bob = reducedMotion ? 0 : -Math.max(0, Math.cos(ph * Math.PI * 2)) * 2;
+    const bt = v.t - v.badgeT;
+    const hop = bt >= 0 && bt < 300 && !reducedMotion ? -Math.sin((bt / 300) * Math.PI) * 10 : 0;
+    return -26 + bob + hop;
+  });
   const gullShadow = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -1006,31 +1455,36 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
     const s = sim.value;
     const v = vis.value;
     if (s.gSt === 1 || s.gSt === 2) return 1;
-    return v.t - v.gullT < 700 && v.gullPhase !== 0 ? 1 : 0;
+    return v.t - v.gullT < 600 && v.gullPhase >= 3 ? 1 : 0;
   });
   const gullTransform = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const v = vis.value;
-    const tx = s.gSt > 0 ? s.gX / SUB : v.gullX;
-    let x = tx;
-    let y = 160;
+    let x = v.gullX;
+    let y = 150;
     let rot = 0;
+    let face = v.gullEdge > 200 ? 1 : -1;
     if (s.gSt === 1) {
+      // Wing flash at the entry edge, circling high.
       const u = clamp01((s.gQ / 256) / Math.max(1, s.gLen));
-      x = FIELD_W + 60 - (FIELD_W + 60 - tx) * u;
-      y = 150 + Math.sin(u * Math.PI) * -30 + u * 40 + (reducedMotion ? 0 : Math.sin(v.t / 80) * 12);
+      const edge = v.gullEdge > 200 ? FIELD_W - 30 : 30;
+      x = edge + (reducedMotion ? 0 : Math.sin(v.t / 300) * 18);
+      y = 140 + Math.sin(u * Math.PI) * -12;
     } else if (s.gSt === 2) {
-      const u = clamp01((s.gQ / 256) / 8);
-      y = 190 + (LANE_Y - 60 - 190) * u * u;
-      rot = 0.5 * u;
+      x = gullX(s);
+      y = gullY(s);
+      rot = 0.45 * face;
     } else {
-      const u = clamp01((v.t - v.gullT) / 700);
-      x = tx - u * 260;
-      y = LANE_Y - 60 - u * 360;
-      rot = -0.3;
+      const u = clamp01((v.t - v.gullT) / 600);
+      // Bonked back (6) the way it came, or flies off after the steal / whiff.
+      const back = v.gullPhase === 6 ? 1 : 0;
+      x = v.gullX + (v.gullEdge - v.gullX) * u * (back ? 1 : 0.6);
+      y = LANE_Y - 40 - u * 380;
+      rot = back ? u * 8 : -0.3 * face;
+      if (!back) face = -face;
     }
-    return [{ translateX: x }, { translateY: y }, { rotate: rot }, { translateX: -45 }, { translateY: -24 }];
+    return [{ translateX: x }, { translateY: y }, { rotate: rot }, { scaleX: face }, { translateX: -45 }, { translateY: -24 }];
   });
   const gullFlap = useDerivedValue(() => {
     tick.value;
@@ -1075,6 +1529,7 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const im = images;
   const BW = BASKET_W;
   const rimY = BASKET_H * BASKET_RIM;
+  const notchXs = [0, 1, 2, 3];
   return (
     <Canvas style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
       <Group transform={root}>
@@ -1090,48 +1545,24 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
           </Group>
           {im.cloud ? (
             <>
-              <SkImage image={im.cloud} x={c1} y={150} width={116} height={77} opacity={0.95} />
-              <SkImage image={im.cloud} x={c2} y={210} width={82} height={54} opacity={0.9} />
-              <SkImage image={im.cloud} x={c3} y={128} width={62} height={41} opacity={0.85} />
+              <SkImage image={im.cloud} x={c1} y={cY1} width={116} height={77} opacity={0.95} />
+              <SkImage image={im.cloud} x={c2} y={cY2} width={82} height={54} opacity={0.9} />
+              <SkImage image={im.cloud} x={c3} y={cY3} width={62} height={41} opacity={0.85} />
             </>
           ) : null}
-          {/* Hills and the plaza */}
-          <Oval x={-120} y={392} width={360} height={170} color="#8fdc7a" />
-          <Oval x={170} y={402} width={360} height={170} color="#7bd06a" />
-          <Path path={hillInk} style="stroke" strokeWidth={3} color="#4fae5a" opacity={0.6} />
+          {/* Hills and the flat-painted plaza (the AI plate ships only with Dustin's OK) */}
+          <Oval x={-120} y={392} width={360} height={170} color="#a9e59a" />
+          <Oval x={170} y={402} width={360} height={170} color="#98dc88" />
+          <Path path={hillInk} style="stroke" strokeWidth={3} color="#6cbf6e" opacity={0.5} />
           <Rect x={-40} y={470} width={FIELD_W + 80} height={FIELD_H - 470 + 200} color="#f6d9a6" />
           <Path path={plazaTiles} color="#f1cd92" />
           <Rect x={-40} y={470} width={FIELD_W + 80} height={6} color="#e8b979" />
           <Rect x={-40} y={LANE_Y + 14} width={FIELD_W + 80} height={20} color="#ffffff" opacity={0.55} />
           <Path path={railTicks} color="#ffffff" opacity={0.9} />
           <Rect x={-40} y={PLAZA_Y - 4} width={FIELD_W + 80} height={4} color="#e0a868" />
-          <Path path={splatPuddles} color="#ffd23f" opacity={0.75} />
+          <Path path={splatPuddles} color="#fff4c8" opacity={0.85} />
           <Path path={splatPuddles} style="stroke" strokeWidth={2.5} color={INK} opacity={0.55} />
-          {/* Coaster track and Finn's snack cart */}
-          <Path path={ties} color="#c9563f" />
-          <Path path={track} style="stroke" strokeWidth={7} color={INK} />
-          <Path path={track} style="stroke" strokeWidth={4} color="#ff7a59" />
-          {im.cart ? (
-            <Group transform={cartTransform}>
-              <SkImage image={im.cart} x={0} y={0} width={60} height={62} />
-            </Group>
-          ) : null}
-          {/* Splash ripples (water decks, v2.1) */}
-          <Path path={splashLines} style="stroke" strokeWidth={3} color={splashColor} />
-          {/* Landing shadows, puffer coral shadows, gull shadow, ball marker, Excellent rings */}
-          <Path path={shadows} color="#0b2a55" opacity={shadowOpacity} />
-          <Path path={pufferShadows} color={CORAL} opacity={pufferPulse} />
-          <Path path={pufferShadows} style="stroke" strokeWidth={3} color={INK} opacity={0.7} />
-          <Path path={gullShadow} color={gullShadowColor} opacity={0.55} />
-          <Path path={gullShadow} style="stroke" strokeWidth={3} color={INK} opacity={0.7} />
-          <Path path={ballMarker} color="#2d9cff" opacity={0.25} />
-          <Path path={ballMarker} style="stroke" strokeWidth={5} color={INK} opacity={0.6} />
-          <Path path={ballMarker} style="stroke" strokeWidth={3} color="#2d9cff" />
-          <Path path={ringsWhite} style="stroke" strokeWidth={5} color={INK} opacity={0.6} />
-          <Path path={ringsWhite} style="stroke" strokeWidth={2.5} color="#ffffff" />
-          <Path path={ringsGold} style="stroke" strokeWidth={5} color={INK} />
-          <Path path={ringsGold} style="stroke" strokeWidth={3} color={GOLD} />
-          {/* Golden Hour starburst behind the basket band */}
+          {/* Golden Hour: Alex's starburst spins behind the cart */}
           {im.starburst ? (
             <Group transform={burstTransform} opacity={burstOpacity}>
               <SkImage image={im.starburst} x={0} y={0} width={790} height={794}>
@@ -1139,59 +1570,125 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
               </SkImage>
             </Group>
           ) : null}
-          <Path path={fingerMagnet} style="stroke" strokeWidth={2} color={GOLD} opacity={0.6} />
-          {/* The shark: hold poses hang from the fin line on the rim */}
-          <Group transform={sharkTransform}>
-            {im.poseIdle ? <SkImage image={im.poseIdle} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opIdle} /> : null}
-            {im.poseHop ? <SkImage image={im.poseHop} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opHop} /> : null}
-            {im.poseLean ? <SkImage image={im.poseLean} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opLean} /> : null}
-            {im.poseChomp ? <SkImage image={im.poseChomp} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opChomp} /> : null}
-            {im.poseFlinch ? <SkImage image={im.poseFlinch} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opFlinch} /> : null}
-            {/* Impact frame: one-frame white silhouette of the pose on screen */}
-            {im.poseIdle ? <SkImage image={im.poseIdle} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flIdle}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
-            {im.poseHop ? <SkImage image={im.poseHop} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flHop}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
-            {im.poseLean ? <SkImage image={im.poseLean} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flLean}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
-            {im.poseChomp ? <SkImage image={im.poseChomp} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flChomp}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
-            {im.poseFlinch ? <SkImage image={im.poseFlinch} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flFlinch}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
+          {/* Coaster track, prize strings, Finn's snack cart */}
+          <Path path={ties} color="#2d6fd6" opacity={0.85} />
+          <Path path={track} style="stroke" strokeWidth={7} color={INK} />
+          <Path path={track} style="stroke" strokeWidth={4} color="#ffffff" />
+          <Group opacity={itemsOp}>
+            <Path path={strings} style="stroke" strokeWidth={3.2} color={INK} />
+            <Path path={strings} style="stroke" strokeWidth={1.4} color="#ffffff" />
+          </Group>
+          {im.cart ? (
+            <Group transform={cartTransform}>
+              {im.finn ? <SkImage image={im.finn} x={14} y={finnY} width={34} height={34} /> : null}
+              <SkImage image={im.cart} x={0} y={0} width={60} height={62} />
+            </Group>
+          ) : null}
+          {/* Landing shadows, puffer coral shadows, gull shadow, ball marker, Excellent rings */}
+          <Path path={shadows} color="#0b2a55" opacity={0.18} />
+          <Path path={pufferShadows} color={CORAL} opacity={pufferPulse} />
+          <Path path={pufferShadows} style="stroke" strokeWidth={3} color={INK} opacity={0.7} />
+          <Path path={gullShadow} color={gullShadowColor} opacity={0.55} />
+          <Path path={gullShadow} style="stroke" strokeWidth={3} color={INK} opacity={0.7} />
+          <Path path={ballMarker} color={BLUE} opacity={0.25} />
+          <Path path={ballMarker} style="stroke" strokeWidth={5} color={INK} opacity={0.6} />
+          <Path path={ballMarker} style="stroke" strokeWidth={3} color={BLUE} />
+          <Path path={ringsWhite} style="stroke" strokeWidth={5} color={INK} opacity={0.6} />
+          <Path path={ringsWhite} style="stroke" strokeWidth={2.5} color="#ffffff" />
+          <Path path={ringsGold} style="stroke" strokeWidth={5} color={INK} />
+          <Path path={ringsGold} style="stroke" strokeWidth={3} color={GOLD} />
+          {/* The free-ball pail on the plaza */}
+          {im.pail ? (
+            <Group opacity={pailOp}>
+              <Group transform={pailTransform}>
+                <SkImage image={im.pail} x={0} y={0} width={52} height={56} />
+                <RoundedRect x={4} y={2} width={44} height={12} r={6} color="#cfd8e3" opacity={pailUsedOp} />
+                <RoundedRect x={4} y={2} width={44} height={12} r={6} style="stroke" strokeWidth={2.5} color={INK} opacity={pailUsedOp} />
+                <SkImage image={im.pail} x={0} y={0} width={52} height={56} opacity={pailShine}>
+                  <BlendColor color="#ffffff" mode="srcIn" />
+                </SkImage>
+              </Group>
+            </Group>
+          ) : null}
+          {/* Sweep dust (speed-cap tell) */}
+          <Path path={dust} color="#fff8e4" opacity={0.85} />
+          <Path path={dust} style="stroke" strokeWidth={2.5} color={INK} opacity={0.6} />
+          {/* The shark (Rig B): key holds hang from the fin line on the rim */}
+          <Group opacity={sharkOp}>
+            <Group transform={sharkTransform}>
+              {im.poseIdle ? <SkImage image={im.poseIdle} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opIdle} /> : null}
+              {im.poseHop ? <SkImage image={im.poseHop} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opHop} /> : null}
+              {im.poseChomp ? <SkImage image={im.poseChomp} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opChomp} /> : null}
+              {im.poseCheer ? <SkImage image={im.poseCheer} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opCheer} /> : null}
+              {im.poseFlinch ? <SkImage image={im.poseFlinch} x={0} y={0} width={POSE_W} height={POSE_H} opacity={opFlinch} /> : null}
+              {/* Impact frame: one-frame white silhouette of the pose on screen */}
+              {im.poseIdle ? <SkImage image={im.poseIdle} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flIdle}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
+              {im.poseHop ? <SkImage image={im.poseHop} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flHop}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
+              {im.poseChomp ? <SkImage image={im.poseChomp} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flChomp}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
+              {im.poseCheer ? <SkImage image={im.poseCheer} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flCheer}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
+              {im.poseFlinch ? <SkImage image={im.poseFlinch} x={0} y={0} width={POSE_W} height={POSE_H} opacity={flFlinch}><BlendColor color="#ffffff" mode="srcIn" /></SkImage> : null}
+            </Group>
           </Group>
           <Group transform={bodyTransform}>
             {im.sharkDizzy ? <SkImage image={im.sharkDizzy} x={0} y={0} width={SHARK_W * 0.96} height={SHARK_H} opacity={opDizzy} /> : null}
             {im.sharkFist ? <SkImage image={im.sharkFist} x={0} y={0} width={SHARK_W} height={SHARK_H} opacity={opFist} /> : null}
             {im.sharkFacepalm ? <SkImage image={im.sharkFacepalm} x={-14} y={0} width={(SHARK_H * 551) / 768} height={SHARK_H} opacity={opSlump} /> : null}
           </Group>
-          <Path path={luckyHalo} style="stroke" strokeWidth={6} color={INK} opacity={0.5} />
-          <Path path={luckyHalo} style="stroke" strokeWidth={3.5} color={GOLD} />
-          {/* Items, pile, splats: one Atlas draw */}
-          <Atlas image={atlas.image} sprites={sprites} transforms={transforms} />
-          {/* Basket in front of the pile, with the rim notch and the wicker coin pips */}
+          {/* Head chip: tier, Coin Meter ring, padlocked ball when the gate holds (drawn behind items at 85%) */}
+          {fontSmall ? (
+            <Group transform={chipTransform} opacity={0.92}>
+              <RoundedRect x={-46} y={-17} width={92} height={34} r={17} color="#ffffff" />
+              <RoundedRect x={-46} y={-17} width={92} height={34} r={17} style="stroke" strokeWidth={3.5} color={INK} />
+              <Text x={-38} y={8} text={tierText} font={fontSmall} color={tierColor} />
+              <Group transform={[{ translateX: 10 }]} opacity={ringDim}>
+                <Path path={arc0} style="stroke" strokeWidth={5} color={GOLD} opacity={p0} />
+                <Path path={arc1} style="stroke" strokeWidth={5} color={GOLD} opacity={p1} />
+                <Path path={arc2} style="stroke" strokeWidth={5} color={GOLD} opacity={p2} />
+                {im.coin ? <SkImage image={im.coin} x={6} y={-10} width={20} height={20} /> : null}
+                <Circle cx={30} cy={-12} r={4} color="#ffffff" opacity={readyOp} />
+              </Group>
+              <Group opacity={lockOp}>
+                <RoundedRect x={-48} y={-36} width={30} height={22} r={7} color="#dff3ff" />
+                <RoundedRect x={-48} y={-36} width={30} height={22} r={7} style="stroke" strokeWidth={2.5} color={INK} />
+                {im.ball ? <SkImage image={im.ball} x={-42} y={-34} width={18} height={18} /> : null}
+              </Group>
+              <Group opacity={shardOp}>
+                <Group transform={shardTransformA}><RoundedRect x={-10} y={-8} width={20} height={16} r={4} color="#dff3ff" /><RoundedRect x={-10} y={-8} width={20} height={16} r={4} style="stroke" strokeWidth={2.5} color={INK} /></Group>
+                <Group transform={shardTransformB}><RoundedRect x={-10} y={-8} width={20} height={16} r={4} color="#dff3ff" /><RoundedRect x={-10} y={-8} width={20} height={16} r={4} style="stroke" strokeWidth={2.5} color={INK} /></Group>
+              </Group>
+            </Group>
+          ) : null}
+          {/* Golden Hour halos under items and prizes */}
+          <Path path={halos} color={GOLD} opacity={haloOp} />
+          <Group opacity={itemsOp}>
+            <Path path={luckyHalo} style="stroke" strokeWidth={6} color={INK} opacity={0.5} />
+            <Path path={luckyHalo} style="stroke" strokeWidth={3.5} color={GOLD} />
+            {/* Items and hanging prizes: one Atlas draw (hidden by the Veil) */}
+            <Atlas image={atlas.image} sprites={spritesA} transforms={transformsA} />
+          </Group>
+          {/* Pile and splat decals */}
+          <Atlas image={atlas.image} sprites={spritesB} transforms={transformsB} />
+          {/* Basket (counter-rotated, level rim) with the gold notch and the 4 zone seams */}
           <Group transform={basketTransform}>
             {im.basket ? <SkImage image={im.basket} x={0} y={0} width={BW} height={BASKET_H} /> : null}
             {im.basket ? (
-              <SkImage image={im.basket} x={0} y={0} width={BW} height={BASKET_H} opacity={goldAmt}>
-                <BlendColor color="rgba(255,205,40,0.55)" mode="srcATop" />
-              </SkImage>
+              <Group clip={rect(0, 0, BW, BASKET_H)}>
+                <SkImage image={im.basket} x={0} y={0} width={BW} height={BASKET_H} opacity={goldAmt}>
+                  <BlendColor color="rgba(255,205,40,0.45)" mode="srcATop" />
+                </SkImage>
+                <Rect x={sheenX} y={0} width={40} height={BASKET_H} color="#ffffff" opacity={sheenOp} />
+              </Group>
             ) : null}
             {im.basket ? (
               <SkImage image={im.basket} x={0} y={0} width={BW} height={BASKET_H} opacity={flashOp}>
                 <BlendColor color="#ffffff" mode="srcIn" />
               </SkImage>
             ) : null}
+            <Path path={seams} color="#8a5a2b" />
+            <Path path={zoneFlash} color="#ffffff" opacity={0.95} />
             <Circle cx={BW / 2} cy={rimY - 2} r={notchGlowR} color={GOLD} opacity={notchGlowOp} />
             <RoundedRect x={BW / 2 - 13} y={rimY - 8} width={26} height={11} r={4} color={INK} />
             <RoundedRect x={BW / 2 - 11} y={rimY - 6} width={22} height={7} r={3} color={GOLD} opacity={notchOp} />
-            {[0, 1, 2].map((i) => (
-              <Group key={i}>
-                <Circle cx={BW / 2 - 26 + i * 26} cy={rimY + 30} r={10} color="#fff8e4" opacity={0.92} />
-                <Circle cx={BW / 2 - 26 + i * 26} cy={rimY + 30} r={10} style="stroke" strokeWidth={2.5} color={INK} />
-              </Group>
-            ))}
-            {im.coin ? (
-              <>
-                <SkImage image={im.coin} x={BW / 2 - 37} y={rimY + 19} width={22} height={22} opacity={p0} />
-                <SkImage image={im.coin} x={BW / 2 - 11} y={rimY + 19} width={22} height={22} opacity={p1} />
-                <SkImage image={im.coin} x={BW / 2 + 15} y={rimY + 19} width={22} height={22} opacity={p2} />
-              </>
-            ) : null}
           </Group>
           {/* Rim flame at x3+ */}
           {im.streak ? (
@@ -1204,9 +1701,15 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
           {im.plop[1] ? <SkImage image={im.plop[1]} x={plopX} y={LANE_Y - 44} width={68} height={68} opacity={plop1} /> : null}
           {im.plop[2] ? <SkImage image={im.plop[2]} x={plopX} y={LANE_Y - 44} width={68} height={68} opacity={plop2} /> : null}
           {im.plop[3] ? <SkImage image={im.plop[3]} x={plopX} y={LANE_Y - 44} width={68} height={68} opacity={plop3} /> : null}
-          {/* Ball + predicted arc (first 3 bounces of the run) + bounce ring */}
-          <Path path={arc} color="#ffffff" />
-          <Path path={arc} style="stroke" strokeWidth={2} color={INK} />
+          {/* Aim ghost-line, ribbon trail, ball, bounce ring, juggle counter */}
+          <Group opacity={aimOp}>
+            <Path path={aimLine} color="#ffffff" />
+            <Path path={aimLine} style="stroke" strokeWidth={2} color={INK} />
+          </Group>
+          <Group opacity={itemsOp}>
+            <Path path={trail} color={trailColor} opacity={0.9} />
+            <Path path={trail} style="stroke" strokeWidth={2.5} color={INK} opacity={0.8} />
+          </Group>
           {im.ball ? (
             <Group transform={ballTransform}>
               <SkImage image={im.ball} x={0} y={0} width={BALL_R * 2} height={BALL_R * 2} />
@@ -1215,41 +1718,50 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
               <Circle cx={BALL_R} cy={BALL_R} r={BALL_R - 1} style="stroke" strokeWidth={4} color={GOLD} opacity={goldBallOp} />
             </Group>
           ) : null}
+          {fontSmall ? (
+            <>
+              <Text x={juggleX} y={juggleY} text={juggleText} font={fontSmall} color={INK} style="stroke" strokeWidth={5} />
+              <Text x={juggleX} y={juggleY} text={juggleText} font={fontSmall} color="#ffffff" />
+            </>
+          ) : null}
           {/* Gull (queue Gull Set) */}
           <Group transform={gullTransform}>
             {im.gullGlide ? <SkImage image={im.gullGlide} x={0} y={0} width={90} height={46} opacity={gullGlideOp} /> : null}
             {im.gullUp ? <SkImage image={im.gullUp} x={0} y={-20} width={90} height={89} opacity={gullUpOp} /> : null}
           </Group>
+          {/* CLOSE CALL and sweep speed lines */}
+          <Path path={speedLines} style="stroke" strokeWidth={5} color={INK} opacity={0.5} strokeCap="round" />
+          <Path path={speedLines} style="stroke" strokeWidth={2.5} color="#ffffff" strokeCap="round" />
           {/* Ink POW flipbook (PERFECT, puffer hit, BONK) */}
           {im.pow[0] ? <SkImage image={im.pow[0]} x={powX} y={powY} width={90} height={98} opacity={pow0} /> : null}
           {im.pow[1] ? <SkImage image={im.pow[1]} x={powX} y={powY} width={90} height={98} opacity={pow1} /> : null}
           {im.pow[2] ? <SkImage image={im.pow[2]} x={powX} y={powY} width={90} height={98} opacity={pow2} /> : null}
-          {/* Chip on the basket lip: tier stamp + latest gain, locked x3 plate */}
-          {fontSmall ? (
-            <Group transform={chipTransform}>
-              <RoundedRect x={chipPillX} y={-15} width={chipPillW} height={28} r={14} color="#ffffff" />
-              <RoundedRect x={chipPillX} y={-15} width={chipPillW} height={28} r={14} style="stroke" strokeWidth={4} color={INK} />
-              <Text x={chipX} y={6} text={chipText} font={fontSmall} color={chipColor} />
-              <Group transform={lockTransform} opacity={lockOp}>
-                <RoundedRect x={-24} y={-13} width={48} height={24} r={8} color="#dff3ff" />
-                <RoundedRect x={-24} y={-13} width={48} height={24} r={8} style="stroke" strokeWidth={3} color={INK} />
-                {im.ball ? <SkImage image={im.ball} x={-21} y={-10} width={18} height={18} /> : null}
-                <Text x={0} y={5} text="x3" font={fontSmall} color="#7a8aa6" />
-              </Group>
-              <Group opacity={shardOp}>
-                <Group transform={shardTransformA}><RoundedRect x={-10} y={-8} width={20} height={16} r={4} color="#dff3ff" /><RoundedRect x={-10} y={-8} width={20} height={16} r={4} style="stroke" strokeWidth={2.5} color={INK} /></Group>
-                <Group transform={shardTransformB}><RoundedRect x={-10} y={-8} width={20} height={16} r={4} color="#dff3ff" /><RoundedRect x={-10} y={-8} width={20} height={16} r={4} style="stroke" strokeWidth={2.5} color={INK} /></Group>
-              </Group>
-            </Group>
-          ) : null}
-          {fontSmall ? <Text x={bankX} y={LANE_Y + 98} text={bankText} font={fontSmall} color={GOLD} /> : null}
-          {/* Frozen prompt: hold to play */}
+          {/* Parked shield: a white bubble glint around the shark */}
+          <Group opacity={shieldOp}>
+            <Circle cx={shieldCx} cy={LANE_Y - 50} r={shieldR} color="#ffffff" opacity={0.25} />
+            <Circle cx={shieldCx} cy={LANE_Y - 50} r={shieldR} style="stroke" strokeWidth={4} color="#ffffff" />
+            <Circle cx={shieldCx} cy={LANE_Y - 50} r={shieldR} style="stroke" strokeWidth={1.5} color={INK} opacity={0.6} />
+          </Group>
+          {/* The Veil: a flat white wash over the sky band (never dark) */}
+          <Rect x={-40} y={skyTop - 40} width={FIELD_W + 80} height={LANE_Y - 40 - skyTop} color="#ffffff" opacity={washOp} />
+          {/* Frozen prompt: thumb glyph */}
           <Group opacity={frozenOp}>
             <Circle cx={frozenX} cy={LANE_Y + 150} r={frozenRingR} style="stroke" strokeWidth={6} color={INK} opacity={0.5} />
             <Circle cx={frozenX} cy={LANE_Y + 150} r={frozenRingR} style="stroke" strokeWidth={4} color="#ffffff" />
             <Circle cx={frozenX} cy={LANE_Y + 150} r={13} color="#ffffff" />
             <Circle cx={frozenX} cy={LANE_Y + 150} r={13} style="stroke" strokeWidth={3} color={INK} />
             {fontSmall ? <Text x={holdX} y={LANE_Y + 205} text="HOLD TO PLAY" font={fontSmall} color={INK} /> : null}
+          </Group>
+          {/* Lock ring at the thumb's last touch point (fills over the remaining lock) */}
+          <Group opacity={lockOpRing}>
+            <Path path={lockRing} style="stroke" strokeWidth={6} color={INK} opacity={0.45} />
+            <Path path={lockRing} style="stroke" strokeWidth={3} color="#ffffff" opacity={0.6} />
+            <Path path={lockArc} style="stroke" strokeWidth={5} color="#ffffff" strokeCap="round" />
+          </Group>
+          {/* Rival rail tick (ghost rounds) */}
+          <Group opacity={ghostOp}>
+            <RoundedRect x={ghostTickX} y={LANE_Y + 36} width={6} height={16} r={3} color={CORAL} />
+            <RoundedRect x={ghostTickX} y={LANE_Y + 36} width={6} height={16} r={3} style="stroke" strokeWidth={1.5} color={INK} />
           </Group>
         </Group>
 
@@ -1258,8 +1770,11 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
           <Rect x={0} y={skyTop} width={FIELD_W} height={FIELD_H - skyTop} style="stroke" strokeWidth={10} color={GOLD} />
           <Rect x={5} y={skyTop + 5} width={FIELD_W - 10} height={FIELD_H - skyTop - 10} style="stroke" strokeWidth={3} color="#fff1c4" />
         </Group>
+        {/* Foreground bunting (parallax-free HUD-adjacent, leans with Crosswind) */}
+        <Path path={bunting} color="#ffffff" opacity={0.9} />
+        <Path path={bunting} style="stroke" strokeWidth={2} color={INK} opacity={0.7} />
 
-        {/* Top band: hearts + time bar only (score is in the shell header) */}
+        {/* Top band: hearts, time bar, star meter */}
         {im.heart ? (
           <>
             <Group transform={hs0} opacity={h0}><SkImage image={im.heart} x={0} y={0} width={26} height={24} /></Group>
@@ -1267,46 +1782,75 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
             <Group transform={hs2} opacity={h2}><SkImage image={im.heart} x={0} y={0} width={26} height={24} /></Group>
           </>
         ) : null}
-        <RoundedRect x={112} y={17} width={TIME_W + 4} height={18} r={9} color="#ffffff" />
-        <Group transform={timePulse} origin={vec(200, 26)}>
-          <RoundedRect x={114} y={19} width={timeFillW} height={14} r={7} color={timeColor} />
+        <RoundedRect x={TIME_X} y={15} width={TIME_W + 4} height={16} r={8} color="#ffffff" />
+        <Group transform={timePulse} origin={vec(200, 23)}>
+          <RoundedRect x={TIME_X + 2} y={17} width={timeFillW} height={12} r={6} color={timeColor} />
         </Group>
-        <Group clip={rect(114, 19, TIME_W, 14)}>
-          <Rect x={frozenShimmer} y={19} width={30} height={14} color="#ffffff" opacity={0.7} />
+        <Group clip={rect(TIME_X + 2, 17, TIME_W, 12)}>
+          <Rect x={frozenShimmer} y={17} width={30} height={12} color="#ffffff" opacity={0.7} />
         </Group>
-        <RoundedRect x={112} y={17} width={TIME_W + 4} height={18} r={9} style="stroke" strokeWidth={3} color={INK} />
-        {im.timer ? <SkImage image={im.timer} x={92} y={12} width={28} height={28} /> : null}
-        {im.rush ? <SkImage image={im.rush} x={TIME_W + 108} y={10} width={20} height={33} opacity={rushOp} /> : null}
-        <Group opacity={isQueue}>
-          <Circle cx={184} cy={46} r={5} color="#ffffff" opacity={set0} />
-          <Circle cx={200} cy={46} r={5} color="#ffffff" opacity={set1} />
-          <Circle cx={216} cy={46} r={5} color="#ffffff" opacity={set2} />
-          <Circle cx={184} cy={46} r={5} style="stroke" strokeWidth={2} color={INK} />
-          <Circle cx={200} cy={46} r={5} style="stroke" strokeWidth={2} color={INK} />
-          <Circle cx={216} cy={46} r={5} style="stroke" strokeWidth={2} color={INK} />
-        </Group>
-
-        {/* Power-up ring (v2.1) */}
-        <Group opacity={powerOp}>
-          <Circle cx={34} cy={LANE_Y + 172} r={22} color="#ffffff" />
-          <Path path={powerArc} style="stroke" strokeWidth={5} color={GOLD} />
-        </Group>
-
-        {/* Rival portrait window (ghost rounds): their shark, score, tug bar; rail tick */}
-        <Group opacity={ghostOp}>
-          <RoundedRect x={318} y={52} width={72} height={72} r={14} color="#ffffff" />
-          <RoundedRect x={318} y={52} width={72} height={72} r={14} style="stroke" strokeWidth={4} color={ghostRim} />
-          <Group clip={rect(320, 54, 68, 68)}>
-            {im.poseIdle ? <SkImage image={im.poseIdle} x={292} y={46} width={POSE_W * 0.72} height={POSE_H * 0.72} opacity={ghostCalm} /> : null}
-            {im.poseChomp ? <SkImage image={im.poseChomp} x={292} y={46} width={POSE_W * 0.72} height={POSE_H * 0.72} opacity={ghostHype} /> : null}
+        <RoundedRect x={TIME_X} y={15} width={TIME_W + 4} height={16} r={8} style="stroke" strokeWidth={3} color={INK} />
+        {im.timer ? <SkImage image={im.timer} x={TIME_X - 20} y={9} width={26} height={26} /> : null}
+        {im.rush ? <SkImage image={im.rush} x={TIME_X + TIME_W + 2} y={8} width={18} height={30} opacity={rushOp} /> : null}
+        {/* Star meter */}
+        <RoundedRect x={TIME_X} y={44} width={TIME_W + 4} height={14} r={7} color="#ffffff" />
+        <RoundedRect x={TIME_X + 2} y={46} width={meterFillW} height={10} r={5} color={meterFillColor} />
+        <RoundedRect x={TIME_X} y={44} width={TIME_W + 4} height={14} r={7} style="stroke" strokeWidth={2.5} color={INK} />
+        {notchXs.map((i) => (tgt[i] > 0 ? (
+          <Group key={i} transform={i === 0 ? n0 : i === 1 ? n1 : i === 2 ? n2 : n3}>
+            {i < 3 ? (
+              <>
+                <Circle cx={0} cy={0} r={9} color="#ffffff" />
+                <Circle cx={0} cy={0} r={9} color={GOLD} opacity={i === 0 ? l0 : i === 1 ? l1 : l2} />
+                <Circle cx={0} cy={0} r={9} style="stroke" strokeWidth={2.5} color={INK} />
+                {fontTiny ? <Text x={-3.5} y={4.5} text={`${i + 1}`} font={fontTiny} color={INK} /> : null}
+              </>
+            ) : im.crown ? (
+              <Group opacity={crownOp}>
+                <SkImage image={im.crown} x={-12} y={-13} width={24} height={22} />
+              </Group>
+            ) : null}
           </Group>
-          <RoundedRect x={318} y={128} width={72} height={8} r={4} color="#ffffff" />
-          <RoundedRect x={318} y={128} width={tugW} height={8} r={4} color="#2d9cff" />
-          <RoundedRect x={318} y={128} width={72} height={8} r={4} style="stroke" strokeWidth={2} color={INK} />
-          {fontSmall ? <Text x={ghostScoreX} y={154} text={ghostScoreText} font={fontSmall} color={INK} /> : null}
-          {fontSmall ? <Text x={ghostNameX} y={48} text={ghostName} font={fontSmall} color={INK} /> : null}
-          <RoundedRect x={ghostTickX} y={LANE_Y + 36} width={6} height={16} r={3} color={CORAL} />
-          <RoundedRect x={ghostTickX} y={LANE_Y + 36} width={6} height={16} r={3} style="stroke" strokeWidth={1.5} color={INK} />
+        ) : null))}
+        {font ? (
+          <>
+            <Text x={12} y={72} text={scoreText} font={font} color={INK} style="stroke" strokeWidth={6} />
+            <Text x={12} y={72} text={scoreText} font={font} color="#ffffff" />
+          </>
+        ) : null}
+        {fontTiny ? <Text x={TIME_X + 4} y={74} text={nextText} font={fontTiny} color={INK} /> : null}
+        <Group opacity={isQueue}>
+          <Circle cx={TIME_X + TIME_W - 28} cy={70} r={5} color="#ffffff" opacity={set0} />
+          <Circle cx={TIME_X + TIME_W - 12} cy={70} r={5} color="#ffffff" opacity={set1} />
+          <Circle cx={TIME_X + TIME_W + 4} cy={70} r={5} color="#ffffff" opacity={set2} />
+          <Circle cx={TIME_X + TIME_W - 28} cy={70} r={5} style="stroke" strokeWidth={2} color={INK} />
+          <Circle cx={TIME_X + TIME_W - 12} cy={70} r={5} style="stroke" strokeWidth={2} color={INK} />
+          <Circle cx={TIME_X + TIME_W + 4} cy={70} r={5} style="stroke" strokeWidth={2} color={INK} />
+        </Group>
+
+        {/* Line Heat strip (y 62-90): fin chips ranked by live score, yours ringed */}
+        <Group opacity={stripOp} transform={[{ translateY: 14 }]}>
+          <Path path={stripOthers} color="#dff3ff" />
+          <Path path={stripOthers} style="stroke" strokeWidth={2.5} color={INK} />
+          <Path path={stripMe} color="#ffffff" />
+          <Path path={stripMe} style="stroke" strokeWidth={4} color={BLUE} />
+          <Path path={stripFrozen} color={INK} opacity={0.6} />
+          {fontTiny ? <Text x={26} y={81} text={stripLabels} font={fontTiny} color={INK} /> : null}
+        </Group>
+
+        {/* Rival portrait window (ghost rounds): their shark, score, tug bar */}
+        <Group opacity={ghostOp}>
+          <RoundedRect x={302} y={96} width={88} height={88} r={16} color="#ffffff" />
+          <RoundedRect x={302} y={96} width={88} height={88} r={16} style="stroke" strokeWidth={4} color={ghostRim} />
+          <Group clip={rect(304, 98, 84, 84)}>
+            {im.poseIdle ? <SkImage image={im.poseIdle} x={282} y={92} width={POSE_W * 0.82} height={POSE_H * 0.82} opacity={ghostCalm} /> : null}
+            {im.poseCheer ? <SkImage image={im.poseCheer} x={282} y={92} width={POSE_W * 0.82} height={POSE_H * 0.82} opacity={ghostHype} /> : null}
+          </Group>
+          <RoundedRect x={304} y={188} width={84} height={8} r={4} color="#ffffff" />
+          <RoundedRect x={304} y={188} width={tugW} height={8} r={4} color={BLUE} />
+          <RoundedRect x={304} y={188} width={84} height={8} r={4} style="stroke" strokeWidth={2} color={INK} />
+          {fontSmall ? <Text x={ghostScoreX} y={214} text={ghostScoreText} font={fontSmall} color={INK} /> : null}
+          {fontTiny ? <Text x={ghostNameX} y={92} text={ghostName} font={fontTiny} color={INK} /> : null}
         </Group>
 
         {/* Stamps */}
@@ -1325,7 +1869,7 @@ function squash(v: Vis): number {
   'worklet';
   const t = v.t - v.squashT;
   if (t < 0 || t > 220) return 1;
-  const amt = 0.14 * v.squashAmt;
+  const amt = 0.12 * v.squashAmt;
   if (t < 60) return 1 - amt * (t / 60);
   const u = (t - 60) / 160;
   return 1 - amt + amt * (1 - Math.exp(-5 * u) * Math.cos(9 * u));
@@ -1350,4 +1894,4 @@ function rings(s: SimState, gold: boolean) {
   return p;
 }
 
-export { CARD_SET_BASE };
+export { S_HANG, S_MISS, S_PASS, SP_GLINT, SP_JUICE };

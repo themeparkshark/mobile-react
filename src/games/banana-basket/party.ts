@@ -1,5 +1,5 @@
 /**
- * Banana Basket on Line Party: "Snack Dash", a 20 s micro-round for the
+ * Banana Basket on Line Party: "Snack Dash", an 11-bar (20.5 s) micro-round (v2.1 adapter) for the
  * Party Series (design 11.2, multiplayer.md 4). Same shape as the shared
  * party sim registry entries (bonk_race, trivia_sprint): pure, integer-only,
  * replayable by the backend's Node sidecar from this exact file.
@@ -7,7 +7,7 @@
  * Everyone in the room plays the same seed in their own field (rivals never
  * enter your field). The input is the sim's own per-step log, sent as a
  * change list: tap [ms, v] means "from logged step stepOf(ms) on, the input
- * is v" where v = targetQ4 * 2 + touch. ms = floor(step * 1000 / 60) of the
+ * is v" where v = targetQ4 * 2 + touch (the wire format; the sim logs q4 * 4 + touch). ms = floor(step * 1000 / 60) of the
  * player's LOGGED steps, so a personal HOLD (thumb up) costs nothing and
  * never pauses anyone else. A dropped or backgrounded seat is finished by its
  * ghost (ghostFill): their own inputs until the drop, then a bot plays on
@@ -22,9 +22,9 @@ import { BOT_CASUAL, BOT_EXPERT, BOT_HUMAN, botInput, createBot } from './bots';
 import { mixSeed } from './fixed';
 import { MODE_PARTY, PARTY_STEPS, createSim, finalScore, step, type SimConfig, type SimState } from './sim';
 
-export const SNACK_DASH_VERSION = 1;
+export const SNACK_DASH_VERSION = 2;
 export const ROUND_MS = Math.floor((PARTY_STEPS * 1000) / 60);
-/** Input changes per round (a 60 Hz change every step would be 1200; HOLD adds none). */
+/** Input changes per round (a 60 Hz change every step would be 1232; HOLD adds none). */
 export const MAX_TAPS = 6000;
 /** Hard cap on logged steps the replay will run (a stuck thumb-up log ends). */
 export const MAX_STEPS = 6000;
@@ -168,7 +168,12 @@ export function ghostFill(board: SnackBoard, seed: number, seat: number, own: Sn
       step(s, 1, q4);
     }
   }
-  return compress(s.log);
+  return compress(s.log.map(toWire));
+}
+
+/** Sim log entry (q4 * 4 + autoRun * 2 + touch) to the wire value (q4 * 2 + touch). */
+export function toWire(v: number): number {
+  return (v >> 2) * 2 + (v & 1);
 }
 
 /** FNV-1a over the canonical result (zero-tolerance claim check). */

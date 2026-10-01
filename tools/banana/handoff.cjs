@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * Writes the WS7 server handoff for Banana Basket (never into the backend
- * repo): constants.json (tuning + baked tables + star targets) and
- * golden-vectors.json (proofs whose replayed scores BananaReplay.php must
- * reproduce exactly, including heavy freezes, heart outs, cards, queue sets
- * and Gull Send).
+ * Writes the WS7 server handoff for Banana Basket bb2r8 (never into the
+ * backend repo): constants.json (tuning + baked tables + star targets) and
+ * golden-vectors.json: the 24 proofs design rev 8 section 10 names, whose
+ * replayed scores and stats BananaReplay.php must reproduce exactly.
  *
  *   node tools/banana/handoff.cjs [outDir]
  */
@@ -27,69 +26,118 @@ for (const [k, v] of Object.entries(C)) if (typeof v === 'number' || typeof v ==
 for (const [k, v] of Object.entries(T)) constants[k] = plain(v);
 if (!out.includes('fixtures')) fs.writeFileSync(path.join(out, 'constants.json'), JSON.stringify(constants, null, 1));
 
-// Rev 5: 24 vectors. Each slot names what it must contain; seeds are searched
-// deterministically (first seed that qualifies) so the set is reproducible.
-const base = { deck: 'park', unlock: 3, cards: 0xffff, assist: false, twist: 0 };
-function run(over, kind, botSeed) {
-  const cfg = { ...base, ...over };
-  const s = sim.createSim(cfg);
-  bots.runBot(s, bots.createBot(kind, botSeed ?? cfg.seed), sim.step);
-  return { cfg, s };
-}
-function events(over, kind) {
+const base = { deck: 'park', unlock: 3, cards: 0xffff, assist: false, twist: 0, rules: C.R_RIDE };
+const RIDE = sim.MODE_RIDE;
+const QUEUE = sim.MODE_QUEUE;
+const HEAT = sim.MODE_HEAT;
+
+/** Run a bot (or a scripted driver) and gather the events the predicates need. */
+function drive(over, kind, script) {
   const cfg = { ...base, ...over };
   const s = sim.createSim(cfg);
   const b = bots.createBot(kind, cfg.seed);
-  const ev = { locks: 0, unlocks: 0, optMiss: 0, walls: 0, maxRun: 0 };
+  const ev = { locks: 0, unlocks: 0, walls: 0, zonesAt: { 1: new Set(), 6: new Set(), 12: new Set() }, zones: new Set(), luckyPops: 0, coinPops: 0, shieldPuffer: 0, shieldGull: 0, saveThenFall: 0, saved: false };
   let lastVx = 0;
-  for (let n = 0; n < 40000 && !s.done; n++) {
-    sim.step(s, 1, bots.botInput(s, b));
+  const step = (t, q) => {
+    sim.step(s, t, q);
     if (s.bOn === 1 && lastVx !== 0 && Math.sign(s.bVx) === -Math.sign(lastVx) && (s.bX < 40 * 256 || s.bX > 360 * 256)) ev.walls++;
     lastVx = s.bOn === 1 ? s.bVx : 0;
-    if (s.bN > ev.maxRun) ev.maxRun = s.bN;
     for (let e = 0; e < s.evN; e++) {
-      if (s.evK[e] === sim.EV_GATE && s.evA[e] === 1) ev.locks++;
-      if (s.evK[e] === sim.EV_GATE && s.evA[e] === 2) ev.unlocks++;
-      if (s.evK[e] === sim.EV_MISS && s.evC[e] === 0) {
-        for (let i = 0; i < 28; i++) if (s.iSt[i] === 3 && s.iMust[i] === 1 && s.iOpt[i] === 1 && (s.iX[i] >> 8) === s.evA[e]) ev.optMiss++;
+      const k = s.evK[e];
+      if (k === sim.EV_GATE && s.evA[e] === 1) ev.locks++;
+      if (k === sim.EV_GATE && s.evA[e] === 2) ev.unlocks++;
+      if (k === sim.EV_ZONE) {
+        ev.zones.add(s.evB[e]);
+        if (ev.zonesAt[s.evC[e]]) ev.zonesAt[s.evC[e]].add(s.evB[e]);
       }
+      if (k === sim.EV_PRIZE && s.evA[e] === 2) {
+        if ((s.evC[e] & 15) === C.K_LUCKY) ev.luckyPops++;
+        else ev.coinPops++;
+      }
+      if (k === sim.EV_SHIELD) {
+        if (s.evB[e] === 1) ev.shieldPuffer++;
+        else ev.shieldGull++;
+      }
+      if (k === sim.EV_PAIL && s.evA[e] !== undefined && s.evB[e] === 1) ev.saved = true;
+      if (k === sim.EV_BALL_LOST && ev.saved) ev.saveThenFall++;
     }
-  }
+  };
+  if (script) script(s, b, step);
+  else bots.runBot(s, b, (_s, t, q) => step(t, q));
   return { cfg, s, ev };
 }
+
+/** Scripted juggler: aims zone (bounce n mod 5) every bounce, ignores items. */
+function zoneSweep(s, b, step) {
+  for (let n = 0; n < 40000 && !s.done; n++) {
+    let x = s.bx >> 8;
+    if (s.bOn === 1 && s.bVy > 0 && s.bPredStep >= 0) x = (s.bPredX >> 8) - C.ZONE_MID[(s.bN + 1) % 5];
+    step(1, Math.max(62, Math.min(338, x)) * 16);
+  }
+}
+
+/** Stand under the puffers (heart-outs). */
+function underPuffers(s, b, step) {
+  for (let n = 0; n < 40000 && !s.done; n++) {
+    let target = 200;
+    for (let i = 0; i < 28; i++) if (s.iSt[i] === 1 && s.iKind[i] === C.K_PUFFER) target = s.iX[i] >> 8;
+    step(1, Math.max(62, Math.min(338, target)) * 16);
+  }
+}
+
+/** Expert, but it skims every puffer 68 fu off center for CLOSE CALL. */
+function skimmer(s, b, step) {
+  for (let n = 0; n < 40000 && !s.done; n++) {
+    let q = bots.botInput(s, b);
+    for (let i = 0; i < 28; i++) {
+      if (s.iSt[i] !== 1 || s.iKind[i] !== C.K_PUFFER) continue;
+      const r = s.iLand[i] - (s.iAge[i] >> 8);
+      if (r >= 0 && r < 20) {
+        const px = s.iX[i] >> 8;
+        const t = px + 68 <= 338 ? px + 68 : px - 68;
+        q = t * 16;
+        b.x = t;
+      }
+    }
+    step(1, q);
+  }
+}
+
 const slots = [
-  // name, config, bot, predicate(state, ev) or null
-  ['ride human d2', { difficulty: 2, mode: 0 }, bots.BOT_HUMAN, null],
-  ['ride expert d3', { difficulty: 3, mode: 0 }, bots.BOT_EXPERT, null],
-  ['ride kid d1', { difficulty: 1, mode: 0 }, bots.BOT_KID, null],
-  ['ride casual d3', { difficulty: 3, mode: 0 }, bots.BOT_CASUAL, null],
-  ['heavy freeze 1 (ride)', { difficulty: 2, mode: 0 }, bots.BOT_FREEZE_SPAM, null],
-  ['heavy freeze 2 (ride d3)', { difficulty: 3, mode: 0 }, bots.BOT_FREEZE_SPAM, null],
-  ['heavy freeze 3 (queue)', { difficulty: 2, mode: 1 }, bots.BOT_FREEZE_SPAM, null],
-  ['heavy freeze 4 (line walker)', { difficulty: 2, mode: 0 }, bots.BOT_LINE_WALKER, null],
-  ['heavy freeze 5 (queue line walker)', { difficulty: 1, mode: 1 }, bots.BOT_LINE_WALKER, null],
-  ['cards 1 (ride first run)', { difficulty: 2, mode: 0, cards: 0 }, bots.BOT_HUMAN, null],
-  ['cards 2 (queue run 1)', { difficulty: 2, mode: 1, unlock: 1, cards: 0 }, bots.BOT_HUMAN, null],
-  ['rim roll save 1', { difficulty: 2, mode: 0 }, bots.BOT_HUMAN, (s) => s.saves > 0],
-  ['rim roll save 2', { difficulty: 3, mode: 1 }, bots.BOT_CASUAL, (s) => s.saves > 0],
-  ['chain breaks on misses 1', { difficulty: 2, mode: 0 }, bots.BOT_KID, (s) => s.misses >= 3],
-  ['chain breaks on misses 2', { difficulty: 3, mode: 1 }, bots.BOT_KID, (s) => s.misses >= 3],
-  ['long juggle 1 (30+ bounces, gold)', { difficulty: 2, mode: 0 }, bots.BOT_EXPERT, (s, ev) => ev.maxRun >= 30 && s.goldBalls > 0],
-  ['long juggle 2 (wall hits)', { difficulty: 3, mode: 0 }, bots.BOT_EXPERT, (s, ev) => ev.maxRun >= 30 && ev.walls > 0],
-  ['long juggle 3 (queue)', { difficulty: 2, mode: 1 }, bots.BOT_EXPERT, (s, ev) => ev.maxRun >= 30],
-  ['long juggle 4 (d1)', { difficulty: 1, mode: 0 }, bots.BOT_EXPERT, (s, ev) => ev.maxRun >= 30 && s.goldBalls > 0],
-  ['ball gate 1 (held at x2, then unlocked)', { difficulty: 2, mode: 0 }, bots.BOT_HUMAN, (s, ev) => ev.locks > 0 && ev.unlocks > 0],
-  ['ball gate 2 (queue)', { difficulty: 2, mode: 1 }, bots.BOT_HUMAN, (s, ev) => ev.locks > 0 && ev.unlocks > 0],
-  ['multi-catch 1', { difficulty: 2, mode: 0 }, bots.BOT_EXPERT, (s) => s.multi >= 2],
-  ['multi-catch 2 (queue tip-over)', { difficulty: 2, mode: 1 }, bots.BOT_EXPERT, (s) => s.multi >= 3],
+  // name, config, bot, predicate(state, ev), script
+  ['heavy freeze 1 (ride, line walker)', { difficulty: 2, mode: RIDE }, bots.BOT_LINE_WALKER, null],
+  ['heavy freeze 2 (queue ranked, line walker)', { difficulty: 2, mode: QUEUE }, bots.BOT_LINE_WALKER, null],
+  ['heavy freeze 3 (ride d3, stare)', { difficulty: 3, mode: RIDE }, bots.BOT_STARE, null],
+  ['queued freeze + parked shield (puffer)', { difficulty: 3, mode: RIDE }, bots.BOT_SHIELD, (s, ev) => ev.shieldPuffer > 0],
+  ['queued freeze + parked shield (gull)', { difficulty: 3, mode: QUEUE, unlock: 3 }, bots.BOT_SHIELD, (s, ev) => ev.shieldGull > 0],
+  ['pulse pattern', { difficulty: 2, mode: RIDE }, bots.BOT_PULSE, null],
+  ['hearts end 1 (ride d3)', { difficulty: 3, mode: RIDE }, bots.BOT_KID, (s) => s.endReason === sim.END_HEARTS, underPuffers],
+  ['hearts end 2 (queue)', { difficulty: 3, mode: QUEUE }, bots.BOT_KID, (s) => s.endReason === sim.END_HEARTS, underPuffers],
+  ['teaching cards (queue run 1, fresh)', { difficulty: 2, mode: QUEUE, unlock: 1, cards: 0 }, bots.BOT_HUMAN, null],
+  ['ride_intro 1 (fresh cards)', { difficulty: 2, mode: RIDE, rules: C.R_INTRO, cards: 0 }, bots.BOT_HUMAN, null],
+  ['ride_intro 2 (d1 kid)', { difficulty: 1, mode: RIDE, rules: C.R_INTRO }, bots.BOT_KID, null],
+  ['long juggle 1 (30+ bounces, Gold Rush gold)', { difficulty: 2, mode: RIDE }, bots.BOT_SUPER, (s) => s.bestLife >= 30 && s.goldBalls > 0],
+  ['long juggle 2 (walls)', { difficulty: 3, mode: RIDE }, bots.BOT_SUPER, (s, ev) => s.bestLife >= 30 && ev.walls > 0],
+  ['long juggle 3 (queue)', { difficulty: 2, mode: QUEUE }, bots.BOT_SUPER, (s) => s.bestLife >= 30],
+  ['zone sweep (all 5 zones, bounce 12)', { difficulty: 1, mode: RIDE }, bots.BOT_EXPERT, (s, ev) => ev.zones.size === 5 && s.bestLife >= 12, zoneSweep],
+  ['ball gate 1 (held at x2, then unlocked)', { difficulty: 2, mode: RIDE }, bots.BOT_HUMAN, (s, ev) => ev.locks > 0 && ev.unlocks > 0],
+  ['ball gate 2 (queue)', { difficulty: 2, mode: QUEUE }, bots.BOT_HUMAN, (s, ev) => ev.locks > 0 && ev.unlocks > 0],
+  ['pail save 1', { difficulty: 2, mode: RIDE }, bots.BOT_HUMAN, (s) => s.pailSaves > 0],
+  ['pail save 2 (second fall after a save)', { difficulty: 2, mode: RIDE }, bots.BOT_HUMAN, (s, ev) => s.pailSaves > 0 && ev.saveThenFall > 0],
+  ['prize POP (hanging coin)', { difficulty: 2, mode: RIDE }, bots.BOT_EXPERT, (s, ev) => ev.coinPops > 0],
+  ['prize POP (Lucky Bunch)', { difficulty: 2, mode: RIDE }, bots.BOT_SUPER, (s, ev) => ev.luckyPops > 0],
+  ['BONK + CLOSE CALL', { difficulty: 3, mode: RIDE }, bots.BOT_EXPERT, (s) => s.bonks > 0 && s.closeCalls > 0, skimmer],
+  ['Park Twist (Crosswind, queue ranked)', { difficulty: 2, mode: QUEUE, unlock: 3, twist: C.TWIST_CROSSWIND }, bots.BOT_HUMAN, null],
+  ['Wide Basket (queue run 1)', { difficulty: 2, mode: QUEUE, unlock: 1, assist: true }, bots.BOT_HUMAN, null],
+  ['Line Heat run', { difficulty: 2, mode: HEAT, twist: C.TWIST_PRIZES, heatId: 9000123 }, bots.BOT_HUMAN, null],
 ];
 const vectors = [];
 let seedBase = 1000;
-for (const [name, over, kind, pred] of slots) {
+for (const [name, over, kind, pred, script] of slots) {
   let pick = null;
-  for (let k = 0; k < 400 && !pick; k++) {
+  for (let k = 0; k < 600 && !pick; k++) {
     const seed = seedBase + k;
-    const r = events({ seed, ...over }, kind);
+    const r = drive({ seed, ...over }, kind, script);
     if (!pred || pred(r.s, r.ev)) pick = r;
   }
   if (!pick) throw new Error(`no seed found for ${name}`);
@@ -97,51 +145,8 @@ for (const [name, over, kind, pred] of slots) {
   const p = proof.buildProof(pick.cfg, pick.s, pick.s.steps * 17);
   vectors.push({ name, proof: plain(p), expect: { score: p.score, clock: pick.s.clock, end: p.end } });
 }
-// GRAZE: a scripted skimmer that parks 68 fu beside every landing puffer.
-{
-  let found = null;
-  for (let seed = 4000; seed < 4400 && !found; seed++) {
-    const cfg = { ...base, seed, difficulty: 3, mode: 1 };
-    const s = sim.createSim(cfg);
-    const b = bots.createBot(bots.BOT_EXPERT, seed);
-    for (let n = 0; n < 40000 && !s.done; n++) {
-      let q = bots.botInput(s, b);
-      let soon = 1 << 30;
-      for (let i = 0; i < 28; i++) {
-        if (s.iSt[i] !== 1 || s.iKind[i] !== 5) continue;
-        const r = s.iLand[i] - (s.iAge[i] >> 8);
-        if (r >= 0 && r < 30 && r < soon) {
-          soon = r;
-          const px = s.iX[i] >> 8;
-          const t = px + 68 <= 338 ? px + 68 : px - 68;
-          q = t * 16;
-          b.x = t;
-        }
-      }
-      sim.step(s, 1, q);
-    }
-    if (s.grazes > 0) found = { cfg, s };
-  }
-  if (!found) throw new Error('no graze vector');
-  const p = proof.buildProof(found.cfg, found.s, found.s.steps * 17);
-  vectors.push({ name: 'graze (scripted skimmer)', proof: plain(p), expect: { score: p.score, clock: found.s.clock, end: p.end } });
-}
-// Two heart-outs: stand under the puffers (first two d3 Ride seeds that end on hearts).
-for (let seed = 3001, got = 0; got < 2 && seed < 3400; seed++) {
-  const cfg = { ...base, seed, difficulty: 3, mode: 0 };
-  const s = sim.createSim(cfg);
-  for (let n = 0; n < 40000 && !s.done; n++) {
-    let target = 200;
-    for (let i = 0; i < 28; i++) if (s.iSt[i] === 1 && s.iKind[i] === 5) target = s.iX[i] >> 8;
-    sim.step(s, 1, Math.max(62, Math.min(338, target)) * 16);
-  }
-  if (s.endReason !== sim.END_HEARTS) continue;
-  got++;
-  const p = proof.buildProof(cfg, s, s.steps * 17);
-  vectors.push({ name: `hearts out ride ${seed}`, proof: plain(p), expect: { score: p.score, clock: s.clock, end: p.end } });
-}
 fs.writeFileSync(path.join(out, 'golden-vectors.json'), JSON.stringify(vectors));
-// Line Party Snack Dash (party.ts): sidecar vectors, 8 seeds x 3 profiles + a ghost-filled drop.
+// Line Party Snack Dash (party.ts, v2.1 adapter): sidecar vectors, 8 seeds x 3 profiles + a ghost-filled drop.
 if (!out.includes('fixtures')) {
   const party = loadTs('src/games/banana-basket/party.ts');
   const pv = [];

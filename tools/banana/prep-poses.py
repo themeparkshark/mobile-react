@@ -11,8 +11,11 @@ ART = '/Users/dustinsparage/apps/tps-mg/art/banana'
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, 'src/assets/games/banana-basket/v2')
 W, H, BODY = 640, 600, 560
-poses = {'idle': ('shark_basket_hold.png', 1.0), 'hop': ('bb_hold_hop.png', 0.86), 'lean': ('bb_hold_lean.png', 1.0),
-         'chomp': ('bb_hold_chomp.png', 1.0), 'flinch': ('bb_hold_flinch.png', 1.0)}
+# Rev 8 (Rig B, 7.1): the master plus whole-sprite key holds; bb_hold_lean and the
+# original flinch are retired (lean is a runtime rotation about the tail base).
+poses = {'idle': ('shark_basket_hold.png', 1.0), 'hop': ('bb_hold_hop.png', 0.86),
+         'chomp': ('bb_hold_chomp.png', 1.0), 'flinch': ('bb_hold_flinch_v2.png', 1.0),
+         'cheer': ('bb_hold_cheer.png', 1.0)}
 ref_area = 0
 for name, (src, hk) in poses.items():
     im = Image.open(os.path.join(ART, src)).convert('RGBA')

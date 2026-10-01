@@ -1,11 +1,13 @@
 /**
- * Banana Basket v2 (design rev 4, "earn every catch").
+ * Banana Basket v2 (design rev 8, "hero first, live heats").
  *
- * Slide the shark's picnic basket to catch bananas spilling off the snack
- * cart, keep a beach ball bouncing for Ball Boost, grab Alex's gold shark-fin
- * coins to light up Golden Hour and dodge the teal pufferfish. Lift your
- * thumb and the whole park freezes mid-air; touch again and it springs back
- * to life in 200 ms (the line is always moving, so the player is the pause).
+ * Slide the shark and his picnic basket to catch the bananas spilling off
+ * Finn's snack cart, and bounce the beach ball off the rim to aim it: the rim
+ * has 5 zones and the zone the ball hits decides exactly where it flies. Only
+ * the ball snaps down the hanging gold coins and Lucky Bunches. Keep the
+ * chain going for x4 (x3 and x4 need the ball in full rules), dodge or BONK
+ * the teal pufferfish, and lift your thumb to freeze the park (the line is
+ * always moving, so the player is the pause).
  *
  * Architecture (studio engine):
  *   - sim.ts: integer, deterministic, worklet-safe. Steps at 60 Hz on the UI
@@ -13,18 +15,19 @@
  *   - render/vis.ts: render-only reactions fed by sim events on the same step.
  *   - render/Field.tsx: one Skia canvas, zero React renders during play.
  *   - Sim events cross to JS once per frame (useEventBridge) for sound,
- *     haptics (HapticBus) and FxStage particles, all on the same flush.
- *   - The result carries a replayable proof (proof.ts); the client never
- *     computes a reward.
+ *     haptics (engine bus, banana preset) and FxStage particles.
+ *   - The result carries a replayable bb2r8 proof; the client never computes
+ *     a reward.
  *
  * Public API kept for MiniGameSelector / LinePlay:
  *   <BananaBasketGame visible seed onComplete onClose />
  * Mode: explicit `mode`, else Ride Challenge context => 'ride', LinePlay
- * context => 'queue', otherwise 'ride'.
+ * context => 'queue', otherwise 'ride'. Ruleset: explicit `rules` (the server
+ * lookup), else ride_intro until this phone has seen the ball learned.
  */
 
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Dimensions, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { AppState, Dimensions, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS, runOnUI, useSharedValue } from 'react-native-reanimated';
 
@@ -45,31 +48,33 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { deckIdForRideName } from '../../services/rideTheme';
 
 import {
-  CARD_SET_BASE, G_GREAT, G_PERFECT, G_POP, K_BUNCH, K_COIN, K_FINGER, K_GIFT, K_LUCKY, K_PUFFER, K_WATCH, LANE_Y,
-  BASKET_MAX, BASKET_MIN, DRAG_GAIN_Q8, CARD_BEACH, CARD_BREEZY, CARD_SPLASH, TWIST_BEACH, TWIST_BREEZY, TWIST_SPLASH,
-  FIELD_W,
+  BASKET_MAX, BASKET_MIN, CARD_SET_BASE, DRAG_GAIN_Q8, FIELD_H, FIELD_W, G_GOLD_POP, G_PERFECT, G_POP, K_BUNCH, K_COIN,
+  K_LUCKY, K_PUFFER, LANE_Y, R_INTRO, R_RIDE, RULES_NAMES, TWIST_NAMES,
 } from './constants';
 import {
-  EV_BALL_LOST, EV_BALL_POP, EV_BALL_TOSS, EV_BANK, EV_BONK, EV_BOUNCE, EV_BREAK, EV_CARD, EV_CATCH, EV_CLOSE, EV_COIN,
-  EV_DOWNWELL, EV_FINALE, EV_GOLD_BALL, EV_GOLDEN, EV_GRAZE, EV_HIT, EV_MISS, EV_POWER, EV_PUFF, EV_RIM, EV_RUSH,
-  EV_SAVE, EV_SET, EV_SPLASH, EV_SPLAT, EV_TELL, EV_TICK, EV_TIER, EV_TIME, EV_TIPOVER, MODE_QUEUE, MODE_RIDE,
-  EV_GATE, EV_GULL, EV_MULTI,
-  createSim, finalScore, replay, starTargets, starsFor, step, tierOf, type SimConfig, type SimState,
+  EV_BALL_LOST, EV_BALL_POP, EV_BALL_TOSS, EV_BONK, EV_BOUNCE, EV_BREAK, EV_CARD, EV_CATCH, EV_CLOSE, EV_COIN,
+  EV_COIN_SET, EV_EDGE, EV_FINALE, EV_GATE, EV_GOLD_BALL, EV_GOLDEN, EV_GULL, EV_HIT, EV_MISS, EV_PAIL, EV_PARK,
+  EV_PRIZE, EV_PUFF, EV_REMIX, EV_RUSH, EV_SET, EV_SHIELD, EV_SPLAT, EV_TELL, EV_TICK, EV_TIER, EV_TIME, EV_TIPOVER,
+  EV_VICTORY, MODE_HEAT, MODE_QUEUE, MODE_RIDE, ballShare, createSim, crownFor, finalScore, replay, starTargets,
+  starsFor, step, type SimConfig, type SimState,
 } from './sim';
 import { mixSeed } from './fixed';
-import { tipLine, whyLine } from './summary';
+import { nextStarDelta, pileLine, tipLine, whyLine } from './summary';
 import { botInput, createBot, BOT_EXPERT, type Bot } from './bots';
 import { buildProof, decodeInput, type BananaProof } from './proof';
-import { compareLine, createGhost, finnRun, ghostAdvance, type Ghost } from './ghost';
-import { bananaBed, bananaCues, ladderNext, ladderNote, ladderReset, registerBananaAudio, type Ladder } from './audio';
+import { compareLine, createGhost, finnRun, ghostAdvance, ghostFinal, type Ghost } from './ghost';
+import { bananaBed, bananaCues, ladderLayers, ladderNext, ladderNote, ladderReset, registerBananaAudio, type Ladder } from './audio';
+import { catchHaptic, createHapticBus, due, request, resetBus, type BbPrim } from './hapticBus';
 import {
-  createHapticBus, firePending, request, resetBus, HB_BOUNCE, HB_CATCH, HB_COIN, HB_HIT, HB_PERFECT, HB_POP, HB_TELL,
-  HB_TIER, type BbPrim,
-} from './hapticBus';
-import { EMPTY_PROGRESS, loadProgress, saveProgress, twistForDay, unlockFor, type BananaProgress } from './progress';
-import { hashDay } from './day';
+  EMPTY_PROGRESS, MASTERY_NAMES, juggleKey, learnsBall, loadProgress, masteryAfter, rulesFor, saveProgress, twistForDay,
+  unlockFor, type BananaProgress,
+} from './progress';
+import {
+  advanceBots, botWhisper, buildStrip, countIn, fillBots, heatConfig, type FinnBot, type HeatRound, type HeatStripEntry,
+  type HeatTransport,
+} from './heat';
 import { BananaField, fieldLayout, toPx, useFieldImages } from './render/Field';
-import { createVis, visEvents, visFrame, type Vis } from './render/vis';
+import { createVis, notchPass, visEvents, visFrame, type Vis } from './render/vis';
 import { TeachCard, cardInfo, type CardInfo } from './render/TeachCard';
 
 registerBananaAudio();
@@ -79,6 +84,7 @@ const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 // Synthetic bridge events (not sim events).
 const EVX_FREEZE = 200;
 const EVX_THAW = 201;
+const EVX_NOTCH = 202;
 
 export interface BananaGhostInput {
   name: string;
@@ -96,8 +102,10 @@ export interface BananaBasketGameProps {
   onClose: () => void;
   /** Ref so the host can wrap up on a real queue event. */
   shellRef?: React.Ref<GameShellV2Handle>;
-  /** 'ride' (one 45 s run) or 'queue' (3 x 20 s sets). Inferred when omitted. */
-  mode?: 'ride' | 'queue';
+  /** 'ride' (one 44.8 s run), 'queue' (3 x 11-bar sets) or 'heat' (Line Heat). Inferred when omitted. */
+  mode?: 'ride' | 'queue' | 'heat';
+  /** Ride ruleset from the server attempt (WS7 lookup); else the local fallback. */
+  rules?: 'ride_intro' | 'ride';
   /** Ride deck (theme); derived from rideName when omitted. */
   deck?: string;
   rideName?: string;
@@ -110,10 +118,14 @@ export interface BananaBasketGameProps {
   onChallenge?: (proof: BananaProof) => void;
   /** Dev: the Expert bot plays (tester video, perf runs). */
   autoplay?: boolean;
-  /** Queue Easy Basket assist (excluded from boards, never in Ride). */
+  /** Wide Basket assist (unranked queue runs only). */
   assist?: boolean;
   /** Dev/lab override of the queue unlock gate (1-3); normally from local progress. */
   unlock?: number;
+  /** Dev/lab override of the Park Twist (queue unlock 3+, heats). */
+  twist?: number;
+  /** Line Heat (mode 'heat'): the scheduled round and its transport. */
+  heat?: { round: HeatRound; transport: HeatTransport } | null;
 }
 
 interface RunSetup {
@@ -122,14 +134,18 @@ interface RunSetup {
   ghostLabel: string;
 }
 
+function modeOf(m: 'ride' | 'queue' | 'heat'): number {
+  return m === 'queue' ? MODE_QUEUE : m === 'heat' ? MODE_HEAT : MODE_RIDE;
+}
+
 export function BananaBasketGame(props: BananaBasketGameProps) {
   const {
     visible, difficulty = 2, seed: seedProp, onComplete, onClose, shellRef, deck: deckProp, rideName, rideId,
-    ghost: ghostProp, staffGhost, onChallenge, autoplay = false, assist = false,
+    ghost: ghostProp, staffGhost, onChallenge, autoplay = false, heat,
   } = props;
   const linePlay = useContext(LinePlayMovementContext);
   const rideChallenge = useContext(RideChallengeContext);
-  const mode: 'ride' | 'queue' = props.mode ?? (rideChallenge ? 'ride' : linePlay ? 'queue' : 'ride');
+  const mode: 'ride' | 'queue' | 'heat' = props.mode ?? (rideChallenge ? 'ride' : linePlay ? 'queue' : 'ride');
   const reducedMotion = useReducedGameMotion();
   const deck = deckProp ?? deckIdForRideName(rideName);
 
@@ -148,23 +164,29 @@ export function BananaBasketGame(props: BananaBasketGameProps) {
 
   const setup = useMemo<RunSetup | null>(() => {
     if (!progress) return null;
+    if (mode === 'heat' && heat) {
+      return { cfg: heatConfig(heat.round, difficulty, deck, progress.cards), ghost: null, ghostLabel: '' };
+    }
     const queue = mode === 'queue';
     const seed = runIndex === 0 || raceSelf ? baseSeed : mixSeed(baseSeed, runIndex);
+    const unlock = queue ? (props.unlock ?? unlockFor(progress.queueRuns)) : 3;
+    const rules = mode === 'ride' ? (props.rules ? (props.rules === 'ride_intro' ? R_INTRO : R_RIDE) : rulesFor(progress)) : R_RIDE;
     const cfg: SimConfig = {
       seed,
       difficulty,
-      mode: queue ? MODE_QUEUE : MODE_RIDE,
+      mode: modeOf(mode),
+      rules,
       deck,
-      unlock: queue ? (props.unlock ?? unlockFor(progress.queueRuns)) : 3,
+      unlock,
       cards: progress.cards,
-      assist: queue && assist,
-      twist: twistForDay(new Date()),
+      assist: queue && unlock <= 2 && (props.assist ?? progress.wideBasket),
+      twist: props.twist ?? (queue && unlock >= 3 ? twistForDay(new Date(), rideId) : 0),
     };
     const g = raceSelf ?? ghostProp ?? null;
     return { cfg, ghost: g, ghostLabel: g ? g.name : staffGhost ? 'FINN' : '' };
     // progress is read once per run (cards/unlock snapshot at run start)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress !== null, runIndex, baseSeed, mode, difficulty, deck, assist, ghostProp, raceSelf, staffGhost, props.unlock]);
+  }, [progress !== null, runIndex, baseSeed, mode, difficulty, deck, ghostProp, raceSelf, staffGhost, props.unlock, props.rules, props.twist, props.assist, heat]);
 
   if (!setup) return <View style={styles.fill} />;
   return (
@@ -180,6 +202,7 @@ export function BananaBasketGame(props: BananaBasketGameProps) {
       staffGhost={!!staffGhost}
       autoplay={autoplay}
       rideId={rideId}
+      heat={heat ?? null}
       onComplete={onComplete}
       onClose={onClose}
       onChallenge={onChallenge}
@@ -198,7 +221,7 @@ export function BananaBasketGame(props: BananaBasketGameProps) {
 interface RunProps {
   visible: boolean;
   setup: RunSetup;
-  mode: 'ride' | 'queue';
+  mode: 'ride' | 'queue' | 'heat';
   reducedMotion: boolean;
   progress: BananaProgress;
   setProgress: (p: BananaProgress) => void;
@@ -206,6 +229,7 @@ interface RunProps {
   staffGhost: boolean;
   autoplay: boolean;
   rideId?: number | string;
+  heat: { round: HeatRound; transport: HeatTransport } | null;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
   onChallenge?: (proof: BananaProof) => void;
@@ -214,14 +238,12 @@ interface RunProps {
 }
 
 function BananaRun({
-  visible, setup, mode, reducedMotion, progress, setProgress, shellRef, staffGhost, autoplay, rideId, onComplete, onClose,
-  onChallenge, onRematch, onRaceSelf,
+  visible, setup, mode, reducedMotion, progress, setProgress, shellRef, staffGhost, autoplay, rideId, heat, onComplete,
+  onClose, onChallenge, onRematch, onRaceSelf,
 }: RunProps) {
   const { cfg } = setup;
-  const thresholds = useMemo(() => {
-    const t = starTargets(cfg.mode, cfg.difficulty);
-    return { one: t[0], two: t[1], three: t[2] };
-  }, [cfg.mode, cfg.difficulty]);
+  const targets = useMemo(() => starTargets(cfg.mode, cfg.difficulty, cfg.rules ?? R_RIDE), [cfg.mode, cfg.difficulty, cfg.rules]);
+  const thresholds = useMemo(() => ({ one: targets[0], two: targets[1], three: targets[2] }), [targets]);
 
   const internalShell = useRef<GameShellV2Handle>(null);
   const shell = (shellRef as React.RefObject<GameShellV2Handle>) ?? internalShell;
@@ -233,10 +255,12 @@ function BananaRun({
 
   const [score, setScore] = useState(0);
   const [result, setResult] = useState<GameResult | null>(null);
+  const [extras, setExtras] = useState<ResultsExtras | null>(null);
   const [card, setCard] = useState<CardInfo | null>(null);
   const [cardReady, setCardReady] = useState(false);
   const [bed, setBed] = useState<'calm' | 'rush' | 'fever'>('calm');
   const [ghostName, setGhostName] = useState(setup.ghostLabel);
+  const [heatCount, setHeatCount] = useState<number | null>(null);
 
   // -- UI-thread state ---------------------------------------------------------------------
   const sim = useSharedValue<SimState>(createSim(cfg));
@@ -244,6 +268,7 @@ function BananaRun({
   const tick = useSharedValue(0);
   const touch = useSharedValue(0);
   const target = useSharedValue(200);
+  const thumb = useSharedValue({ x: 200, y: LANE_Y + 120 });
   const dragFrom = useSharedValue(0);
   const dragBase = useSharedValue(200);
   const running = useSharedValue(false);
@@ -252,6 +277,7 @@ function BananaRun({
   const wasFrozen = useSharedValue(true);
   const bot = useSharedValue<Bot | null>(autoplay ? createBot(BOT_EXPERT, cfg.seed) : null);
   const ghost = useSharedValue<Ghost | null>(null);
+  const strip = useSharedValue<HeatStripEntry[] | null>(null);
 
   // Ghost (async challenge / staff ghost Finn): the real sim on the same seed.
   useEffect(() => {
@@ -274,19 +300,18 @@ function BananaRun({
   // -- JS mirrors ----------------------------------------------------------------------------
   const scoreRef = useRef(0);
   const chainRef = useRef(0);
-  const statsRef = useRef({ catches: 0, perfects: 0, maxChain: 0, bounces: 0, fevers: 0, hearts: 3 });
   const setScoreAt = useRef(0);
   const ladder = useRef<Ladder>({ i: -1 });
-  const bounceLadder = useRef(0);
-  const goldenRef = useRef(false);
   const startedAt = useRef(0);
   const frozenAt = useRef(0);
   const freezes = useRef<number[][]>([]);
   const frozenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tambTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const endedRef = useRef(false);
   const bus = useRef(createHapticBus());
   const cues = useMemo(() => bananaCues(), []);
+  const finns = useRef<FinnBot[]>([]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -299,33 +324,35 @@ function BananaRun({
   const walk = useWalkSense({ active: visible && !result });
   const camera = useCamera({ width: layout.width, height: layout.height, timeScale: worldScale, reducedMotion, walking: walk.walking });
 
-  // -- haptics through the bus ------------------------------------------------------------------
-  const buzz = useCallback((pri: number, pulses: BbPrim[] | BbPrim, gapMs = 0) => {
-    const list = Array.isArray(pulses) ? pulses : [pulses];
-    const span = gapMs * (list.length - 1);
-    const d = request(bus.current, Date.now(), pri, span);
-    const play = () => list.forEach((p, i) => (i === 0 ? firePrimitive(p) : setTimeout(() => firePrimitive(p), gapMs * i)));
-    if (d.kind === 'now') play();
+  // -- haptics through the engine bus (banana preset, design 9.1) -----------------------------------
+  const buzz = useCallback((p: BbPrim | null, after: BbPrim[] = [], gapMs = 120) => {
+    if (!p) return;
+    const d = request(bus.current, Date.now(), p);
+    if (d.kind === 'now') firePrimitive(p);
     else if (d.kind === 'later') {
-      const token = d.token;
       setTimeout(() => {
-        if (firePending(bus.current, token, Date.now(), span)) play();
-      }, Math.max(0, d.at - Date.now()));
+        const q = due(bus.current, Date.now());
+        if (q) firePrimitive(q);
+      }, Math.max(0, d.at - Date.now()) + 1);
     }
+    after.forEach((a, i) => setTimeout(() => {
+      const r = request(bus.current, Date.now(), a);
+      if (r.kind === 'now') firePrimitive(a);
+    }, gapMs * (i + 1)));
   }, []);
 
   // -- sim events on JS: sound, haptic, particles (one flush per frame) ------------------------
   const px = (x: number, y: number) => toPx(layoutRef.current, x, y);
   const burst = (name: Parameters<FxStageHandle['burst']>[0], x: number, y: number, count?: number, color?: number) => {
     const p = px(x, y);
-    // Banana's FX sheet is Alex-style colour art: confetti plays as drawn (white tint).
     const c = color ?? (name === 'confetti' || name === 'ribbons' ? 0xffffffff : undefined);
     fx.current?.burst(name, p.x, p.y, count || c ? { count, color: c } : undefined);
   };
-  const emit = (def: EmitterDef, x: number, y: number, count?: number) => {
+  const emitFx = (def: EmitterDef, x: number, y: number, count?: number) => {
     const p = px(x, y);
     fx.current?.emitDef(def, p.x, p.y, count ? { count } : undefined);
   };
+  const pan = (x: number) => Math.max(-1, Math.min(1, (x - 200) / 200)) * 0.6;
 
   const finishRun = useRef<() => void>(() => undefined);
 
@@ -335,220 +362,204 @@ function BananaRun({
       case EV_CATCH: {
         const k = b & 15;
         const grade = (b >> 4) & 15;
+        const tier = (b >> 8) & 7;
+        const onBeat = ((b >> 13) & 1) === 1;
         const pts = c & 0xffff;
-        const chain = c >> 16;
         scoreRef.current += pts;
-        chainRef.current = chain;
-        const st = statsRef.current;
-        st.catches += 1;
-        if (grade === G_PERFECT) st.perfects += 1;
-        if (chain > st.maxChain) st.maxChain = chain;
-        if (k === K_FINGER || k === K_WATCH || k === K_GIFT) break;
-        const note = ladderNote(ladder.current, goldenRef.current);
-        ladderNext(ladder.current, false);
-        const tier = (b >> 8) & 15;
-        const pan = (a - 200) / 200;
-        if (k === K_COIN) {
-          buzz(HB_COIN, 'heavy');
-          GameAudio.playLadder(cues.note, note, { pan });
-          burst('coins', a, LANE_Y - 10, 12);
-          burst('sparkles', a, LANE_Y - 20, 8);
-          camera.kick(0, 2);
-          fx.current?.ring(px(a, LANE_Y).x, px(a, LANE_Y).y, { color: '#fec90e', from: 10, to: 60, ms: 240 });
-          break;
-        }
-        GameAudio.play(k === K_BUNCH || k === K_LUCKY ? cues.bunch : cues.plop, { pan });
-        // Ladder by timbre (design 8.3): x1 glock, x2 + chime, x3 + bell, x4 + brass stab.
-        GameAudio.playLadder(cues.note, note, { pan });
-        if (tier >= 2) GameAudio.play(cues.chime, { pan, volume: 0.55 });
-        if (tier >= 3) GameAudio.playLadder(cues.bell, note, { pan, volume: 0.75 });
-        if (tier >= 4) GameAudio.play(cues.stab, { pan, volume: 0.6 });
-        // Wicker splinters on every catch.
-        emit(SPLINTERS, a, LANE_Y - 4, grade >= G_PERFECT ? 8 : 6);
+        chainRef.current = c >> 16;
+        const p = pan(a);
         if (grade >= G_POP) {
-          GameAudio.play(cues.pop, { pan });
-        } else if (grade === G_PERFECT) {
-          GameAudio.play(cues.sparkle, { pan, volume: 0.8 });
-          buzz(HB_PERFECT, 'light');
-          emit(GOLD_CHIPS, a, LANE_Y - 10, 10);
-          burst('stars', a, LANE_Y - 12, 4);
-          fx.current?.ring(px(a, LANE_Y).x, px(a, LANE_Y).y, { color: '#fec90e', from: 10, to: 56, ms: 220 });
-          if (!reduced) camera.kick((a - 200) / 200 * 3, 3);
+          // POP (ball): bubble pop + pluck; Lucky Bunch is a bigger POP.
+          GameAudio.play(cues.pop, { pan: p });
+          GameAudio.play(cues.pluck, { pan: p, volume: 0.7 });
+          if (k === K_LUCKY) {
+            GameAudio.play(cues.combo, { pan: p });
+            buzz('medium', ['light'], 90);
+            burst('coins', a, LANE_Y - 120, 20);
+            if (!reduced) camera.kick(0, 3);
+          } else {
+            buzz('medium');
+            if (!reduced) camera.kick(0, 2);
+          }
+          burst('stars', a, LANE_Y - 140, 10);
+          if (grade === G_GOLD_POP) burst('sparkles', a, LANE_Y - 140, 6);
         } else {
-          if (grade === G_GREAT) burst('sparkles', a, LANE_Y - 14, 2);
-          if (tier <= 2) buzz(HB_CATCH, 'selection');
-          fx.current?.ring(px(a, LANE_Y).x, px(a, LANE_Y).y, { color: '#ffffff', from: 10, to: 46, ms: 220 });
-          if (!reduced) camera.kick((a - 200) / 200 * 2, 2);
+          GameAudio.play(k === K_BUNCH ? cues.bunch : cues.plop, { pan: p });
+          emitFx(JUICE, a, LANE_Y - 8, 2);
+          burst('puff', a, LANE_Y - 4, 1);
+          if (k === K_BUNCH) {
+            emitFx(JUICE, a, LANE_Y - 8, 2);
+            burst('puff', a, LANE_Y, 3);
+            buzz('medium');
+          } else if (grade === G_PERFECT) {
+            GameAudio.play(cues.sparkle, { pan: p, volume: 0.8 });
+            buzz('light');
+            emitFx(GOLD_GLINT, a, LANE_Y - 12, 6);
+            if (!reduced) camera.kick(0, 2);
+          } else buzz(catchHaptic(tier, onBeat, false));
         }
-        if (k === K_BUNCH || k === K_LUCKY) {
-          buzz(HB_POP, k === K_LUCKY && grade === G_PERFECT ? ['medium', 'light'] : 'medium', 90);
-          if (k === K_LUCKY && grade === G_PERFECT) burst('coins', a, LANE_Y - 30, 20);
+        if (k === K_COIN) {
+          GameAudio.play(cues.coinReward, { pan: p, volume: 0.5 });
+          emitFx(GOLD_GLINT, a, LANE_Y - 40, 4);
         }
+        // Ladder by timbre (8.3): max 2 layers; on-beat at x3+ swaps the top layer for the bright set.
+        const note = ladderNote(ladder.current);
+        ladderNext(ladder.current, false);
+        for (const layer of ladderLayers(tier, onBeat)) {
+          const cue = layer === 'glock' ? cues.glock : layer === 'chime' ? cues.chimeL : layer === 'bell' ? cues.bellL : layer === 'stab' ? cues.stabL : cues.bright;
+          GameAudio.playLadder(cue, note, { pan: p, volume: layer === 'stab' ? 0.7 : 0.9 });
+        }
+        if (tier >= 3) GameAudio.duck(1.5, 10, 60, 50);
         break;
       }
-      case EV_COIN: {
+      case EV_EDGE:
+        GameAudio.play(cues.clack, { pan: pan(a), volume: 0.8 });
+        break;
+      case EV_COIN:
         GameAudio.playLadder(cues.meter, Math.max(0, Math.min(2, b - 1)));
-        scoreRef.current += 0;
+        buzz('medium');
         break;
-      }
-      case EV_SAVE:
-        GameAudio.play(cues.chime);
-        buzz(HB_PERFECT, 'light');
-        burst('coins', a, LANE_Y - 10, 8);
-        scoreRef.current += c;
-        break;
-      case EV_RIM:
-        GameAudio.play(cues.clack);
-        [0, 1, 2].forEach((n) => setTimeout(() => GameAudio.playLadder(cues.rimTick, n, { volume: 0.7 }), 45 * n));
+      case EV_COIN_SET:
+        GameAudio.play(cues.ding);
+        burst('coins', a, LANE_Y - 60, 14);
         break;
       case EV_MISS:
-        if (c === 1) {
-          ladderReset(ladder.current);
-        }
+        if (c === 1) ladderReset(ladder.current);
         break;
       case EV_SPLAT:
-        GameAudio.play(cues.splat, { pan: (a - 200) / 200, volume: 0.8 });
-        emit(JUICE, a, LANE_Y + 110, 5);
+        GameAudio.play(cues.splat, { pan: pan(a), volume: 0.8 });
+        emitFx(JUICE, a, LANE_Y + 110, 4);
         break;
       case EV_BREAK:
-        GameAudio.play(cues.wah, { volume: 0.6 });
+        GameAudio.play(cues.wah, { volume: 0.55 });
         break;
       case EV_TIER: {
-        ladder.current.i = 7;
+        ladderNext(ladder.current, true);
         GameAudio.play(cues.tierUp);
-        buzz(HB_TIER, 'success');
+        GameAudio.playLadder(cues.bellL, 0, { volume: 0.8 });
+        buzz('success');
         const bx = sim.value.bx / 256;
-        burst('confetti', bx, LANE_Y - 10, 12);
+        burst('confetti', bx, LANE_Y - 170, 12);
         if (!reduced) camera.punch(0.04, 90);
         break;
       }
       case EV_GATE:
         if (a === 1) GameAudio.play(cues.deflate, { volume: 0.5 });
         break;
-      case EV_MULTI:
-        GameAudio.play(cues.combo, { volume: 0.9 });
-        buzz(HB_PERFECT, 'light');
-        burst('sparkles', a, LANE_Y - 40, 6);
-        break;
       case EV_GULL:
-        if (a === 1) GameAudio.play(cues.squawk, { pan: (b - 200) / 200 });
-        else if (a === 2) GameAudio.play(cues.flap, { volume: 0.8 });
+        if (a === 1) {
+          GameAudio.play(cues.squawk, { pan: pan(c) });
+          buzz('selection', ['selection'], 60);
+        } else if (a === 2) GameAudio.play(cues.flap, { volume: 0.8 });
         else if (a === 3) {
           GameAudio.play(cues.squawk);
           GameAudio.play(cues.wah, { volume: 0.5 });
-          buzz(HB_HIT, 'warning' as BbPrim);
-          emit(FEATHERS, b, LANE_Y - 30, 10);
-          if (!reduced) camera.kick((200 - b) / 200 * 4, 2);
-        } else if (a === 5) GameAudio.play(cues.chime);
+          buzz('warning');
+          emitFx(FEATHERS, b, LANE_Y - 30, 10);
+        } else if (a === 6) GameAudio.play(cues.whoosh);
         break;
       case EV_TELL:
         if (b === K_PUFFER) {
-          GameAudio.play(cues.creak, { pan: (a - 200) / 200 });
-          buzz(HB_TELL, 'light');
-        } else if (b === 101) {
-          GameAudio.play(cues.splashTell, { pan: (a - 200) / 200 });
-          buzz(HB_TELL, 'light');
-        } else if (b === 100) {
-          buzz(HB_TELL, ['selection', 'selection'], 60);
+          GameAudio.play(cues.creak, { pan: pan(a) });
+          buzz('light');
+        } else if (b === 102) {
+          GameAudio.play(cues.whistle, { volume: 0.35 });
         }
         break;
       case EV_PUFF:
-        GameAudio.play(cues.creak, { volume: 0.35, pan: (a - 200) / 200 });
+        GameAudio.play(cues.creak, { volume: 0.3, pan: pan(a) });
         break;
       case EV_HIT: {
-        statsRef.current.hearts = b;
         GameAudio.play(cues.bonk);
-        GameAudio.play(cues.heart, { volume: 0.8 });
+        GameAudio.play(cues.impact, { volume: 0.8 });
+        GameAudio.play(cues.heart, { volume: 0.7 });
         GameAudio.duck(3, 30, 250, 200);
-        buzz(HB_HIT, 'error');
-        emit(DIZZY_STARS, a, LANE_Y - 60, 5);
-        const p = px(a, LANE_Y);
-        fx.current?.vignette({ color: '#ff6b5c', peak: 0.3, inMs: 30, holdMs: 120, outMs: 110 });
-        fx.current?.ring(p.x, p.y, { color: '#ff6b5c', from: 12, to: 90, ms: 260 });
-        if (!reduced) camera.shake(0.6, (200 - a) / 200, -0.3);
+        buzz('error');
+        emitFx(DIZZY_STARS, a, LANE_Y - 60, 5);
+        emitFx(SPLINTERS, a, LANE_Y - 4, 6);
+        const p = px(a, LANE_Y - 40);
+        fx.current?.vignette({ color: '#ff5a4e', peak: 0.2, inMs: 30, holdMs: 120, outMs: 110 });
+        if (!reduced) {
+          fx.current?.ring(p.x, p.y, { color: '#ffffff', from: 12, to: 220 * layoutRef.current.k, ms: 300 });
+          camera.shake(0.6, 0, -0.3);
+          camera.kick(0, 4);
+        }
         break;
       }
+      case EV_SHIELD:
+        GameAudio.play(cues.pop, { volume: 0.4 });
+        buzz('selection');
+        break;
       case EV_CLOSE:
         GameAudio.play(cues.close);
-        buzz(HB_POP, 'light');
-        burst('speedLines', a, LANE_Y - 40, 6);
-        break;
-      case EV_GRAZE:
-        GameAudio.play(cues.sparkle);
-        buzz(HB_POP, 'medium');
-        burst('coins', a, LANE_Y - 30, 16);
+        buzz('light');
         break;
       case EV_BOUNCE: {
         const n = b;
         const gold = c & 1;
-        bounceLadder.current = Math.min(3, n - 1);
-        GameAudio.playLadder(cues.boing, gold ? 3 : Math.min(3, (n - 1) % 4), { pan: (a - 200) / 200 });
-        if (n <= 3 || gold) buzz(HB_BOUNCE, 'selection');
-        burst('puff', a, LANE_Y - 10, 4);
-        statsRef.current.bounces += 1;
-        scoreRef.current += c >> 1;
+        GameAudio.playLadder(cues.boing, gold ? 3 : Math.min(3, (n - 1) % 4), { pan: pan(a) });
+        if (n <= 3 || gold) buzz('selection');
+        burst('puff', a, LANE_Y - 4, 3);
         break;
       }
       case EV_GOLD_BALL:
-        GameAudio.play(cues.pop);
-        buzz(HB_TIER, 'medium');
+        GameAudio.play(cues.sparkle);
         burst('stars', a, LANE_Y - 60, 12);
-        if (!reduced) camera.kick(0, -3);
         break;
       case EV_BALL_POP:
-        GameAudio.play(cues.pop, { pan: (a - 200) / 200 });
-        buzz(HB_POP, 'medium');
-        burst('stars', a, LANE_Y - 120, 12);
+        break;
+      case EV_PRIZE:
+        if (a === 1) GameAudio.play(cues.pluck, { volume: 0.4, pan: pan(c >> 4) });
         break;
       case EV_BONK:
-        GameAudio.play(cues.bonk, { volume: 0.8 });
-        GameAudio.play(cues.deflate, { volume: 0.7 });
-        buzz(HB_POP, 'medium');
-        emit(GOLD_CHIPS, a, LANE_Y - 150, 8);
-        scoreRef.current += b;
+        GameAudio.play(cues.bonk, { volume: 0.85 });
+        GameAudio.play(cues.deflate, { volume: 0.6 });
+        buzz('medium');
+        burst('stars', a, c === 2 ? LANE_Y - 60 : LANE_Y - 150, 8);
+        if (!reduced) camera.kick(0, 2);
         break;
       case EV_BALL_LOST:
         GameAudio.play(cues.deflate, { volume: 0.7 });
-        burst('puff', a, LANE_Y + 50, 6);
+        burst('confetti', a, PLAZA_FX_Y, 8);
         break;
       case EV_BALL_TOSS:
-        GameAudio.play(cues.whistle, { volume: 0.45 });
-        GameAudio.play(cues.boing, { volume: 0.6 });
+        if (b === 1) GameAudio.play(cues.boing, { volume: 0.8 });
+        else GameAudio.play(cues.roll, { volume: 0.4 });
         break;
-      case EV_DOWNWELL:
-        GameAudio.playLadder(cues.meter, Math.max(0, Math.min(2, b - 1)));
+      case EV_PAIL:
+        if (b === 1) {
+          GameAudio.play(cues.sparkle);
+          GameAudio.play(cues.whistle, { volume: 0.5 });
+          buzz('light');
+          burst('sparkles', a, PLAZA_FX_Y - 20, 8);
+        }
         break;
       case EV_GOLDEN:
-        if (a === 1) {
-          goldenRef.current = true;
-          statsRef.current.fevers += 1;
-          GameAudio.play(cues.feverStart);
+        if (a === 4) {
+          GameAudio.play(cues.riser, { volume: 0.9 });
+        } else if (a === 1) {
           GameAudio.duck(3, 30, 250, 250);
-          buzz(HB_COIN, ['heavy', 'light', 'light'], 120);
-          fx.current?.vignette({ color: '#fff1c4', peak: 0.35, inMs: 300, holdMs: 5400, outMs: 300 });
-          burst('confetti', 200, 300, 40);
+          buzz('heavy', ['light', 'light'], 120);
+          burst('confetti', 200, CHIP_FX_Y, 40);
           if (!reduced) {
             camera.punch(0.05, 120);
             camera.frame(1.02);
             camera.shake(0.3);
           }
           setBed('fever');
+          startTamb();
         } else if (a === 2) {
-          GameAudio.play(cues.sparkle, { volume: 0.6 });
+          GameAudio.play(cues.feverEnd, { volume: 0.6 });
         } else {
-          goldenRef.current = false;
-          GameAudio.play(cues.feverEnd, { volume: 0.7 });
+          stopTamb();
           camera.frame(1);
           setBed((cur) => (cur === 'fever' ? 'calm' : cur));
         }
         break;
-      case EV_BANK:
-        GameAudio.play(cues.meter, { volume: 0.8 });
-        break;
       case EV_RUSH:
         if (a === 1) GameAudio.play(cues.rushBell);
         else {
-          GameAudio.play(cues.whistle, { volume: 0.7 });
+          fx.current?.vignette({ color: '#ffffff', peak: 0.12, inMs: 200, holdMs: 9000, outMs: 300 });
           if (!reduced) {
             camera.punch(0.04, 100);
             camera.frame(1.02);
@@ -557,41 +568,45 @@ function BananaRun({
         }
         break;
       case EV_TICK:
-        GameAudio.play(cues.tick, { volume: 0.7 });
+        GameAudio.play(cues.tick5, { volume: 0.7 });
+        if (a <= 2 && !reduced) camera.frame(1.04);
         break;
       case EV_FINALE:
         GameAudio.play(cues.roll);
         if (!reduced) camera.punch(0.12, 250);
         break;
+      case EV_VICTORY:
+        GameAudio.play(cues.combo);
+        break;
       case EV_TIME:
-        buzz(HB_HIT, 'heavy');
+        buzz('heavy');
         GameAudio.play(cues.whistle);
         GameAudio.duck(3, 30, 250, 250);
+        stopTamb();
         if (!reduced) camera.shake(0.4);
         burst('confetti', 200, 250, 60);
         finishRun.current();
         break;
       case EV_TIPOVER:
         GameAudio.play(cues.rushBell);
-        buzz(HB_TIER, 'medium');
+        buzz('medium');
         if (!reduced) camera.shake(0.25);
         break;
-      case EV_SPLASH:
-        if (a === 2) {
-          GameAudio.play(cues.splash);
-          buzz(HB_HIT, ['medium', 'medium'], 80);
-          burst('splash', b, LANE_Y + 40, 16);
-        } else if (a === 3) GameAudio.play(cues.splash, { volume: 0.5 });
-        break;
-      case EV_POWER:
-        GameAudio.play(cues.power);
-        buzz(HB_TIER, 'medium');
+      case EV_REMIX:
+        GameAudio.play(cues.ding, { volume: 0.7 });
         break;
       case EV_SET:
-        buzz(HB_TIER, 'medium');
+        buzz('medium');
         GameAudio.play(cues.whistle, { volume: 0.7 });
+        stopTamb();
         setBed('calm');
         resetBus(bus.current);
+        break;
+      case EV_PARK:
+        break;
+      case EVX_NOTCH:
+        GameAudio.playLadder(cues.bellL, 0, { volume: 0.8 });
+        buzz('light');
         break;
       case EV_CARD:
         break;
@@ -607,6 +622,20 @@ function BananaRun({
   };
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+
+  // Golden Hour tambourine on 8th notes (from the sim clock pace: 14 steps).
+  const startTamb = () => {
+    stopTamb();
+    tambTimer.current = setInterval(() => {
+      const s = sim.value;
+      if (s.holdTs > 0 && s.ghQ > 0) GameAudio.play(cues.tamb, { volume: 0.45 });
+    }, 233);
+  };
+  const stopTamb = () => {
+    if (tambTimer.current) clearInterval(tambTimer.current);
+    tambTimer.current = null;
+  };
+  useEffect(() => () => stopTamb(), []);
 
   const bridge = useEventBridge((batch) => {
     forEachEvent(batch, (kind, a, b, c) => onEventRef.current(kind, a, b, c));
@@ -626,10 +655,12 @@ function BananaRun({
       void GameAudio.music.pause(150);
     }, 150);
     if (savedTimer.current) clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(() => {
-      // Solo: 10 minutes frozen ends the run as "Saved".
-      if (!endedRef.current) shell.current?.wrapUp?.('saved' as never);
-    }, 10 * 60 * 1000);
+    if (mode !== 'heat') {
+      savedTimer.current = setTimeout(() => {
+        // Solo: 10 minutes frozen ends the run as "Saved".
+        if (!endedRef.current) shell.current?.wrapUp?.('saved' as never);
+      }, 10 * 60 * 1000);
+    }
   };
   const onThaw = () => {
     if (frozenTimer.current) clearTimeout(frozenTimer.current);
@@ -638,7 +669,7 @@ function BananaRun({
     if (frozenAt.current && frozenMs > 150) {
       void GameAudio.music.resume(200);
       GameAudio.play(cues.resume, { volume: 0.5 });
-      freezes.current.push([0, frozenMs]);
+      freezes.current.push([sim.value.clock, frozenMs]);
     }
     frozenAt.current = 0;
     resetBus(bus.current);
@@ -664,7 +695,8 @@ function BananaRun({
   }, []);
 
   // -- the loop -------------------------------------------------------------------------------
-  const clock = useGameClock({
+  const tgt = targets;
+  useGameClock({
     onStep: () => {
       'worklet';
       const s = sim.value;
@@ -698,6 +730,7 @@ function BananaRun({
       visEvents(vis.value, s, reducedMotion);
       const r = ring.value;
       for (let e = 0; e < s.evN; e++) pushEvent(r, s.evK[e], s.evA[e], s.evB[e], s.evC[e], s.clock);
+      if (notchPass(vis.value, s.score + s.bonus, tgt) >= 0) pushEvent(r, EVX_NOTCH, 0, 0, 0, s.clock);
       const g = ghost.value;
       if (g !== null) ghostAdvance(g, s.clock);
       if (s.cardPending) {
@@ -717,7 +750,7 @@ function BananaRun({
   });
 
   // -- input: relative drag anywhere, touch flag drives time --------------------------------------
-  const pan = useMemo(() => Gesture.Pan()
+  const gesture = useMemo(() => Gesture.Pan()
     .minDistance(0)
     .shouldCancelWhenOutside(false)
     .onBegin((e) => {
@@ -727,11 +760,11 @@ function BananaRun({
       // A re-grip starts from the basket's current x: it never jumps.
       dragBase.value = sim.value.bx / 256;
       target.value = dragBase.value;
+      thumb.value = { x: e.x / layout.k, y: (e.y - layout.oy) / layout.k };
     })
     .onUpdate((e) => {
       'worklet';
-      const kScale = layout.k;
-      const dx = ((e.absoluteX - dragFrom.value) / kScale) * (DRAG_GAIN_Q8 / 256);
+      const dx = ((e.absoluteX - dragFrom.value) / layout.k) * (DRAG_GAIN_Q8 / 256);
       let t = dragBase.value + dx;
       if (t < BASKET_MIN) {
         dragBase.value += BASKET_MIN - t;
@@ -741,12 +774,12 @@ function BananaRun({
         t = BASKET_MAX;
       }
       target.value = t;
-      if (__DEV__ && DEBUG_DRAG) runOnJS(logDrag)(e.absoluteX, t);
+      thumb.value = { x: e.x / layout.k, y: (e.y - layout.oy) / layout.k };
     })
     .onFinalize(() => {
       'worklet';
       touch.value = 0;
-    }), [touch, dragFrom, dragBase, target, sim, layout.k]);
+    }), [touch, dragFrom, dragBase, target, sim, layout.k, layout.oy, thumb]);
 
   // Backgrounding forces the thumb up (the park freezes) and the shell runs its 3-2-1.
   useEffect(() => {
@@ -756,11 +789,43 @@ function BananaRun({
     return () => sub.remove();
   }, [touch]);
 
+  // -- Line Heat: synced count-in, Finn fill bots, the live strip at 4 Hz ---------------------------
+  useEffect(() => {
+    if (mode !== 'heat' || !heat || !visible) return undefined;
+    finns.current = fillBots(cfg, 1);
+    const rivals = new Map<string, { player: { id: string; name: string; known: boolean; team: string; bot: boolean }; score: number; frozen: boolean }>();
+    const unsub = heat.transport.onWhisper(heat.round, (w, p) => rivals.set(p.id, { player: p, score: w.score, frozen: w.frozen }));
+    const id = setInterval(() => {
+      const now = Date.now() + heat.transport.offsetMs();
+      const ci = countIn(now, heat.round.startAt);
+      setHeatCount(ci);
+      if (now >= heat.round.startAt) {
+        running.value = true;
+        advanceBots(finns.current, now - heat.round.startAt);
+      }
+      const s = sim.value;
+      const frozenMe = s.holdTs === 0;
+      heat.transport.whisper(heat.round, {
+        clockStep: s.clock, x: s.bx >> 8, score: s.score, chain: s.chain, tier: s.tier, hearts: s.hearts, ballLive: s.bN > 0, frozen: frozenMe,
+      });
+      const list = [
+        ...Array.from(rivals.values()),
+        ...finns.current.map((f) => ({ player: f.player, ...botWhisper(f) })),
+      ];
+      strip.value = buildStrip({ id: 'me', score: s.score, frozen: frozenMe, team: 'blue' }, list);
+    }, 250);
+    return () => {
+      clearInterval(id);
+      unsub();
+    };
+  }, [mode, heat, visible, cfg, running, sim, strip]);
+
   // -- finish -----------------------------------------------------------------------------------
   const deliver = useCallback((s: SimState) => {
     if (endedRef.current) return;
     endedRef.current = true;
     running.value = false;
+    stopTamb();
     const elapsed = Date.now() - (startedAt.current || Date.now());
     const final = finalScore(s);
     let verified = true;
@@ -771,28 +836,34 @@ function BananaRun({
       if (!verified) console.warn('[banana] replay mismatch', finalScore(r), final);
     }
     const proof = buildProof(cfg, s, Math.max(elapsed, s.steps * 17), freezes.current);
-    const stars = starsFor(final, [thresholds.one, thresholds.two, thresholds.three]);
-    const facts = { misses: s.misses, heartsLeft: s.hearts, ballLiveSteps: s.ballLive, clockSteps: s.clock };
-    const st = statsRef.current;
+    const stars = starsFor(final, targets);
+    const crown = crownFor(final, targets);
+    const facts = { misses: s.misses, heartsLeft: s.hearts, ballLiveSteps: s.ballLive, clockSteps: s.clock, bestLife: s.bestLife };
     const g = ghost.value;
-    const cmp = g ? compareLine(s, (() => {
-      const rs = createSim({ ...cfg, cards: 0xffff });
-      for (let i = 0; i < g.log.length && !rs.done; i++) step(rs, g.log[i] & 1, g.log[i] >> 1);
-      return rs;
-    })(), g.name) : null;
+    const cmp = g ? compareLine(s, ghostFinal({ ...cfg, cards: 0xffff }, g.log), g.name) : null;
+    const share = ballShare(s);
+    const next = nextStarDelta(final, targets);
+    const jKey = juggleKey(new Date(), rideId);
+    const prevJuggle = progress.juggle[jKey] ?? 0;
+    const rideKey = String(rideId ?? 'park');
+    const mastery = mode === 'ride' ? masteryAfter(progress.mastery[rideKey] ?? 0, stars) : progress.mastery[rideKey] ?? 0;
+    const firstWin = mode === 'ride' && stars >= 1 && !progress.firstWins[jKey];
+    const out = s.endReason === 2;
     const res: GameResult = {
       score: final,
       stars,
       maxCombo: s.maxChain,
       thresholds,
-      message: cmp ? cmp.line : stars >= 1 ? (mode === 'ride' ? 'RIDE COIN EARNED!' : stars === 3 ? 'BASKET MASTER!' : 'NICE HAUL!')
-        : `SO CLOSE! ${whyLine(facts)} ${tipLine(facts)}`.trim(),
+      message: out ? 'OUT OF HEARTS' : stars >= 1
+        ? (mode === 'ride' ? 'RIDE COIN EARNED!' : stars === 3 ? 'BASKET MASTER!' : 'NICE HAUL!')
+        : 'SO CLOSE!',
+      note: stars === 0 ? `${whyLine(facts)} ${tipLine(facts)}`.trim() : cmp ? cmp.line : next ? `+${next.delta} TO ${next.label}` : undefined,
+      rival: g ? { name: g.name, score: g.final } : null,
       stats: [
-        { label: 'CATCHES', value: `${s.catches}` },
-        { label: 'PERFECT', value: `${s.perfects}` },
+        { label: 'BALL SHARE', value: `${share}%` },
+        { label: 'BEST JUGGLE', value: `${s.bestLife}` },
         { label: 'BEST CHAIN', value: `${s.maxChain}` },
-        { label: 'BOUNCES', value: `${s.bounces}` },
-        ...(s.bonus > 0 ? [{ label: 'BONUS', value: `+${s.bonus}` }] : []),
+        { label: 'PERFECT', value: `${s.perfects}` },
       ],
       meta: {
         game: 'banana-basket',
@@ -800,6 +871,7 @@ function BananaRun({
         seed: cfg.seed,
         difficulty: cfg.difficulty,
         mode,
+        rules: RULES_NAMES[s.rules],
         rideId,
         maxCombo: s.maxChain,
         durationMs: Math.round(s.clock * (1000 / 60)),
@@ -808,29 +880,40 @@ function BananaRun({
         ghost: g ? { name: g.name, score: g.final, line: cmp?.line } : undefined,
       },
     };
-    void st;
-    // Progress: cards seen, queue runs (unlock gate), best, PB ghost.
-    const next: BananaProgress = {
+    setExtras({
+      share, juggle: s.bestLife, prevJuggle, pile: pileLine(s.catches), starBonus: mode === 'ride' && stars >= 2, crown,
+      mastery: mode === 'ride' && stars >= 2 ? MASTERY_NAMES[mastery] : '', firstWin,
+    });
+    // Progress: cards seen, queue runs (unlock gate), best, PB ghost, juggle, mastery, ball learned.
+    const nextP: BananaProgress = {
       ...progress,
       cards: progress.cards | s.cardsSeen,
       queueRuns: mode === 'queue' ? progress.queueRuns + 1 : progress.queueRuns,
       bestRide: mode === 'ride' ? Math.max(progress.bestRide, final) : progress.bestRide,
       bestQueue: mode === 'queue' ? Math.max(progress.bestQueue, final) : progress.bestQueue,
+      ballLearned: progress.ballLearned || learnsBall(s.bestLife, s.pops),
+      mastery: { ...progress.mastery, [rideKey]: mastery },
+      juggle: { ...progress.juggle, [jKey]: Math.max(prevJuggle, s.bestLife) },
+      firstWins: firstWin ? { ...progress.firstWins, [jKey]: true } : progress.firstWins,
       ghosts: { ...progress.ghosts },
     };
     const key = `${mode}:${cfg.seed}`;
-    if (!next.ghosts[key] || next.ghosts[key].score < final) next.ghosts[key] = { input: proof.input, score: final, at: Date.now() };
-    setProgress(next);
-    void saveProgress(next);
+    if (!nextP.ghosts[key] || nextP.ghosts[key].score < final) {
+      nextP.ghosts[key] = { input: proof.input, score: final, at: Date.now(), rules: proof.rules, unlock: proof.unlock, cards: proof.cards, twist: proof.twist ?? 0 };
+    }
+    setProgress(nextP);
+    void saveProgress(nextP);
     lastProof.current = proof;
     setTimeout(() => {
       if (stars >= 1 && mode === 'ride') {
         GameAudio.play('fx.coin');
         setTimeout(() => GameAudio.play('fx.reward'), 350);
+        buzz('success');
       } else if (stars === 0) GameAudio.play(cues.wah);
+      else GameAudio.play(cues.finale, { volume: 0.8 });
       setResult(res);
     }, reducedMotion ? 500 : 1100);
-  }, [cfg, thresholds, mode, rideId, progress, setProgress, running, ghost, cues.wah, reducedMotion]);
+  }, [cfg, targets, thresholds, mode, rideId, progress, setProgress, running, ghost, cues, reducedMotion, buzz]);
   const lastProof = useRef<BananaProof | null>(null);
 
   finishRun.current = () => {
@@ -843,20 +926,17 @@ function BananaRun({
   const onWrapUp = useCallback((): GameResult | null => {
     running.value = false;
     endedRef.current = true;
+    stopTamb();
     const sc = scoreRef.current;
-    const st = statsRef.current;
     return {
       score: sc,
-      stars: starsFor(sc, [thresholds.one, thresholds.two, thresholds.three]),
-      maxCombo: st.maxChain,
+      stars: starsFor(sc, targets),
+      maxCombo: chainRef.current,
       thresholds,
-      stats: [
-        { label: 'CATCHES', value: `${st.catches}` },
-        { label: 'PERFECT', value: `${st.perfects}` },
-      ],
+      stats: [],
       meta: { game: 'banana-basket', score: sc, seed: cfg.seed, mode, partial: true },
     };
-  }, [running, thresholds, cfg.seed, mode]);
+  }, [running, targets, thresholds, cfg.seed, mode]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -864,17 +944,24 @@ function BananaRun({
   };
 
   const images = useFieldImages();
+  const twistName = cfg.twist && (mode === 'heat' || (mode === 'queue' && cfg.unlock >= 3)) ? TWIST_NAMES[cfg.twist] : '';
   const objective = mode === 'ride'
-    ? 'Catch bananas. Keep the ball up. Dodge puffers. Lift your thumb to freeze time.'
-    : 'Three quick sets. Lift your thumb any time: the park freezes with you.';
+    ? 'CATCH! AIM! DODGE! Lift your thumb any time: the park freezes with you.'
+    : mode === 'heat'
+      ? `Same line, same race. ${twistName ? `Today: ${twistName}.` : ''}`
+      : `Three quick sets. Lift your thumb any time.${twistName ? ` Park Twist: ${twistName}.` : ''}`;
+  const subtitle = mode === 'queue'
+    ? (cfg.unlock >= 3 ? `Queue${twistName ? `: ${twistName}` : ''}` : cfg.unlock === 2 ? 'Queue: Gull Set run' : 'Queue run 1')
+    : mode === 'heat' ? 'Line Heat' : cfg.rules === R_INTRO ? 'Ride Challenge: first ride' : 'Ride Challenge';
 
   return (
     <GameShellV2
       ref={shell}
       visible={visible}
       title="Banana Basket"
-      subtitle={mode === 'queue' ? (cfg.unlock >= 2 ? 'Queue: Gull Set run' : 'Queue run 1') : 'Ride Challenge'}
+      subtitle={subtitle}
       score={score}
+      hideHeaderScore
       personalBest={mode === 'ride' ? progress.bestRide || undefined : progress.bestQueue || undefined}
       objective={objective}
       result={result}
@@ -884,11 +971,17 @@ function BananaRun({
       getSnapshot={() => ({ score: scoreRef.current, state: { seed: cfg.seed, mode } })}
       onWrapUp={onWrapUp}
       resumeStyle="countdown"
+      countdownStyle={mode === 'heat' ? 'none' : undefined}
+      resultExtras={extras ? <ResultsRows x={extras} /> : undefined}
       onStart={() => {
-        running.value = true;
+        if (mode !== 'heat') running.value = true;
         startedAt.current = Date.now();
       }}
       onPause={() => {
+        if (mode === 'heat') {
+          touch.value = 0;
+          return;
+        }
         running.value = false;
         touch.value = 0;
       }}
@@ -906,7 +999,7 @@ function BananaRun({
       }}
     >
       <GestureHandlerRootView style={styles.fill}>
-        <GestureDetector gesture={pan}>
+        <GestureDetector gesture={gesture}>
           <View style={styles.fill} onLayout={onLayout} collapsable={false}>
             <BananaField
               layout={layout}
@@ -919,9 +1012,17 @@ function BananaRun({
               ghost={ghost}
               ghostName={ghostName}
               reducedMotion={reducedMotion}
+              targets={targets}
+              thumb={thumb}
+              strip={mode === 'heat' ? strip : undefined}
             />
             <FxStage ref={fx} width={layout.width} height={layout.height} timeScale={worldScale} reducedMotion={reducedMotion} atlasImage={images.fxSheet} />
             {card ? <TeachCard card={card} ready={cardReady} /> : null}
+            {mode === 'heat' && heatCount !== null ? (
+              <View style={styles.countWrap} pointerEvents="none">
+                <Text style={styles.count}>{heatCount === 0 ? 'GO!' : `${heatCount}`}</Text>
+              </View>
+            ) : null}
           </View>
         </GestureDetector>
       </GestureHandlerRootView>
@@ -929,15 +1030,47 @@ function BananaRun({
   );
 }
 
-const DEBUG_DRAG = false;
-function logDrag(x: number, t: number) {
-  console.log('[banana drag]', Math.round(x), Math.round(t));
+interface ResultsExtras {
+  share: number;
+  juggle: number;
+  prevJuggle: number;
+  pile: string;
+  starBonus: boolean;
+  crown: boolean;
+  mastery: string;
+  firstWin: boolean;
 }
 
-// Banana particle defs on the Banana FX sheet (outlined art, design D-3).
+/** Results rows (7.7): BALL SHARE bar, BEST JUGGLE, PILE, ribbons. */
+function ResultsRows({ x }: { x: ResultsExtras }) {
+  return (
+    <View style={styles.rows}>
+      <View style={styles.shareRow}>
+        <Text style={styles.rowLabel}>BALL {x.share}%</Text>
+        <View style={styles.shareBar}>
+          <View style={[styles.shareFill, { width: `${Math.max(2, Math.min(100, x.share))}%` }]} />
+        </View>
+      </View>
+      <Text style={styles.rowText}>
+        JUGGLE {x.juggle}{x.juggle > x.prevJuggle && x.prevJuggle > 0 ? '  NEW BEST!' : ''}   {x.pile}
+      </Text>
+      <View style={styles.ribbons}>
+        {x.starBonus ? <Text style={[styles.ribbon, styles.ribbonGold]}>STAR BONUS</Text> : null}
+        {x.crown ? <Text style={[styles.ribbon, styles.ribbonGold]}>GOLD CROWN</Text> : null}
+        {x.firstWin ? <Text style={[styles.ribbon, styles.ribbonBlue]}>FIRST WIN</Text> : null}
+        {x.mastery ? <Text style={[styles.ribbon, styles.ribbonBlue]}>{x.mastery}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+const PLAZA_FX_Y = 600;
+const CHIP_FX_Y = LANE_Y - 168;
+
+// Banana particle defs on the Banana FX sheet (outlined art).
 const SPLINTERS: EmitterDef = { ...EMITTERS.shards, sprite: FX_SPRITE.shard, size: [6, 9], speed: [200, 380], spread: 140 };
-const GOLD_CHIPS: EmitterDef = { ...EMITTERS.shards, sprite: FX_SPRITE.dot, size: [6, 9], speed: [260, 460], spread: 160, colors: [0xffffffff] };
-const JUICE: EmitterDef = { ...EMITTERS.splash, sprite: FX_SPRITE.droplet, size: [6, 9], count: [5, 5] };
+const GOLD_GLINT: EmitterDef = { ...EMITTERS.shards, sprite: FX_SPRITE.starArt, size: [7, 11], speed: [220, 420], spread: 160, colors: [0xffffffff] };
+const JUICE: EmitterDef = { ...EMITTERS.splash, sprite: FX_SPRITE.droplet, size: [6, 9], count: [2, 2], colors: [0xfffff4c8] };
 const FEATHERS: EmitterDef = {
   ...EMITTERS.ribbons, sprite: FX_SPRITE.ribbon + 2, frames: 2, count: [10, 10], speed: [120, 300], gravity: 160,
   drag: 2.2, life: [0.8, 0.95], size: [8, 11], colors: [0xffffffff],
@@ -946,7 +1079,19 @@ const DIZZY_STARS: EmitterDef = { ...EMITTERS.stars, sprite: FX_SPRITE.starArt, 
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#bfeaff' },
+  countWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  count: { fontFamily: 'Shark', fontSize: 96, color: '#ffffff', textShadowColor: '#23263a', textShadowRadius: 6, textShadowOffset: { width: 0, height: 3 } },
+  rows: { width: '100%', paddingHorizontal: 8, marginTop: 6 },
+  shareRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  rowLabel: { fontFamily: 'Shark', fontSize: 16, color: '#23263a', width: 92 },
+  shareBar: { flex: 1, height: 12, borderRadius: 6, borderWidth: 2, borderColor: '#23263a', backgroundColor: '#ffffff', overflow: 'hidden' },
+  shareFill: { height: '100%', backgroundColor: '#2d9cff' },
+  rowText: { fontFamily: 'Shark', fontSize: 15, color: '#23263a', marginBottom: 4 },
+  ribbons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  ribbon: { fontFamily: 'Shark', fontSize: 14, color: '#23263a', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10, borderWidth: 2, borderColor: '#23263a', overflow: 'hidden' },
+  ribbonGold: { backgroundColor: '#fec90e' },
+  ribbonBlue: { backgroundColor: '#dff3ff' },
 });
 
 export default BananaBasketGame;
-export { FIELD_W };
+export { FIELD_W, FIELD_H, K_BUNCH };

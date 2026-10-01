@@ -32,8 +32,14 @@ SRC = {
     'heart': (f'{ART}/banana/heart_life.png', 128),
     'ball': (f'{ART}/boss/prop_beach_ball.png', 192),
     'coin': (f'{ALEX}/v2_2/slice87.png', 192),
-    'gift': (f'{ALEX}/v2_2/slice41.png', 192),
-    'finger': (f'{ALEX}/inventory/slice37.png', 192),
+    'pail': (f'{ART}/banana/bb_sand_pail.png', 192),
+    'puffer': (f'{ART}/banana/bb_puffer_calm_v2.png', 256),
+    'puffer_full': (f'{ART}/banana/bb_puffer_puffed_v2.png', 256),
+    'juice_a': (f'{ART}/banana/bb_juice_drop_v2_teardrop.png', 96),
+    'juice_b': (f'{ART}/banana/bb_juice_drop_v2_comma.png', 96),
+    'glint': (f'{ART}/banana/bb_gold_glint_v2_sparkle.png', 96),
+    'glint_edge': (f'{ART}/banana/bb_gold_glint_v2_edge.png', 96),
+    'finn': (f'{ALEX}/sharks/green 2023 classic eyes.png', 256),
     'timer': (f'{WS0}/timer.png', 128),
     'rush': (f'{WS0}/rush.png', 128),
     'crown': (f'{WS0}/crown.png', 128),
@@ -81,9 +87,10 @@ def main():
     for name, (path, side) in SRC.items():
         im = fit(Image.open(path), side)
         im.save(os.path.join(OUT, f'{name}.png'), optimize=True)
-    for name, src in (('puffer', 'pufferfish'), ('puffer_full', 'pufferfish_puffed')):
-        im = teal(fit(Image.open(f'{ART}/shared/{src}.png'), 256))
-        im.save(os.path.join(OUT, f'{name}.png'), optimize=True)
+    # Rev 8: the puffer v2 pair passes the pixel hue gate as generated (no hue map).
+    for old in ('gift.png', 'finger.png', 'pose_lean.png', 'shark_lean.png'):
+        if os.path.exists(os.path.join(OUT, old)):
+            os.remove(os.path.join(OUT, old))
     print('wrote', sorted(os.listdir(OUT)))
 
 

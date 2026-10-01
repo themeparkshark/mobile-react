@@ -1,43 +1,82 @@
 /**
- * Banana Basket bots (design 5.5): regression and calibration tools, plus the
- * dev autoplay. Bots only produce inputs ({touch, targetQ4}), so the sim stays
- * the single source of truth. Their noise uses their own seeded stream,
- * separate from the game's, so every bot run is reproducible.
+ * Banana Basket bots (design rev 8, 5.5): calibration and regression tools,
+ * plus the dev autoplay. Bots only produce inputs ({touch, targetQ4}), so the
+ * sim stays the single source of truth. Their noise uses their own seeded
+ * stream, separate from the game's, so every bot run is reproducible. Bots set
+ * starting values only; P2 human telemetry locks the targets (G19).
  *
  * Worklet-safe: the dev tester runs the Expert on the UI thread.
  */
 
-import { BASKET_MAX, BASKET_MIN, HALF_ZONE, K_BANANA, K_BUNCH, K_COIN, K_LUCKY, K_PUFFER, LANE_Y, S_FALL, SUB, BALL_R } from './constants';
+import {
+  BALL_R, BASKET_MAX, BASKET_MIN, FIELD_W, GULL_REACH, HALF_ZONE, K_BANANA, K_BUNCH, K_COIN, K_PUFFER, LANE_Y,
+  LOCK_STEPS, MAX_PRIZES, PRIZE_R, S_FALL, S_HANG, SUB, ZONE_MID,
+} from './constants';
 import { clampInt, mixSeed, rngBelow, rngNext, type BRng } from './fixed';
 import { MAX_ITEMS, type SimState } from './state';
+import { travelOf, zoneArc } from './patterns';
 
 export const BOT_KID = 0;
 export const BOT_HUMAN = 1;
 export const BOT_CASUAL = 2;
 export const BOT_EXPERT = 3;
 export const BOT_EXPERT_NO_BALL = 4;
-export const BOT_FREEZE_SPAM = 5;
+export const BOT_PULSE = 5;
 export const BOT_LINE_WALKER = 6;
+export const BOT_HUMAN_NO_BALL = 7;
+export const BOT_SUPER = 8;
+export const BOT_EXPERT_NO_AIM = 9;
+export const BOT_STARE = 10;
+export const BOT_SHIELD = 11;
+/** Rev 5 name kept for old callers. */
+export const BOT_FREEZE_SPAM = BOT_PULSE;
+
+export const BOT_NAMES = [
+  'Kid', 'Human', 'Casual', 'Expert', 'Expert-no-ball', 'Pulse', 'Line-walker', 'Human-no-ball', 'Super Expert',
+  'Expert-no-aim', 'Stare', 'Shield',
+];
+
+// Ball policies.
+const BALL_NONE = 0;
+const BALL_CHASE = 1;
+const BALL_FALLING = 2;
+const BALL_JUGGLE = 3;
 
 export interface Bot {
   kind: number;
   rng: BRng;
   react: number;
-  speed: number;
+  /** Finger speed: max target move per step (fu); 0 = unlimited. */
+  finger: number;
   aimSd: number;
   aimUniform: number;
   lapseEvery: number;
   lapseLeft: number;
   lapseClock: number;
   ball: number;
-  closeCalls: number;
+  /** Zone aiming: 0 none, 1 human (25% zone error), 2 expert, 3 super (2 prizes ahead), 4 random zone. */
+  aim: number;
+  forkBall: number;
+  airPenalty: number;
   x: number;
   touch: number;
+  /** Frames left frozen (no steps logged). */
   freezeLeft: number;
   nextFreeze: number;
-  walkFreezes: number[];
+  liftLeft: number;
+  shieldPhase: number;
   focus: number;
   focusOff: number;
+  zonePick: number;
+  zoneFor: number;
+  zoneJitter: number;
+  forkPick: number;
+  forkFor: number;
+  seenAfter: number;
+  lastHazard: number;
+  /** Ball reaction: the clock when the bot last saw the ball change course. */
+  ballSeenN: number;
+  ballSeenAt: number;
 }
 
 export function createBot(kind: number, seed: number): Bot {
@@ -46,48 +85,67 @@ export function createBot(kind: number, seed: number): Bot {
     kind,
     rng: { s: mixSeed(seed >>> 0, 0x626f7400 + kind) },
     react: 11,
-    speed: 256,
+    finger: 0,
     aimSd: 0,
     aimUniform: 0,
     lapseEvery: 0,
     lapseLeft: 0,
     lapseClock: 0,
-    ball: 1,
-    closeCalls: 1,
+    ball: BALL_JUGGLE,
+    aim: 2,
+    forkBall: 100,
+    airPenalty: 0,
     x: 200,
     touch: 1,
     freezeLeft: 0,
-    nextFreeze: 20,
-    walkFreezes: [],
+    nextFreeze: 0,
+    liftLeft: 0,
+    shieldPhase: 0,
     focus: -1,
     focusOff: 0,
+    zonePick: 2,
+    zoneFor: -1,
+    zoneJitter: 0,
+    forkPick: 1,
+    forkFor: -1,
+    seenAfter: 0,
+    lastHazard: 0,
+    ballSeenN: -1,
+    ballSeenAt: 0,
   };
   if (kind === BOT_KID) {
     b.react = 36;
-    b.speed = 141;
+    b.finger = 22;
     b.aimUniform = 40;
     b.lapseEvery = 300;
-    b.ball = 1;
-    b.closeCalls = 0;
-  } else if (kind === BOT_HUMAN || kind === BOT_LINE_WALKER) {
-    b.react = 11 + rngBelow(b.rng, 5);
-    b.speed = 218;
-    b.aimSd = 14;
-    b.lapseEvery = 600;
-    b.closeCalls = 0;
+    b.ball = BALL_CHASE;
+    b.airPenalty = 12;
+    b.aim = 0;
   } else if (kind === BOT_CASUAL) {
     b.react = 27;
-    b.speed = 166;
+    b.finger = 28;
     b.aimUniform = 30;
     b.lapseEvery = 600;
-    b.closeCalls = 0;
+    b.ball = BALL_FALLING;
+    b.aim = 0;
+  } else if (kind === BOT_HUMAN || kind === BOT_LINE_WALKER || kind === BOT_HUMAN_NO_BALL) {
+    b.react = 11 + rngBelow(b.rng, 5);
+    b.finger = 34;
+    b.aimSd = 14;
+    b.airPenalty = 7;
+    b.lapseEvery = 600;
+    b.ball = kind === BOT_HUMAN_NO_BALL ? BALL_NONE : BALL_JUGGLE;
+    b.aim = 1;
+    b.forkBall = 60;
+  } else if (kind === BOT_SUPER) {
+    b.react = 7;
+    b.aim = 3;
   } else if (kind === BOT_EXPERT_NO_BALL) {
-    b.ball = 0;
+    b.ball = BALL_NONE;
+  } else if (kind === BOT_EXPERT_NO_AIM) {
+    b.aim = 4;
   }
-  if (kind === BOT_LINE_WALKER) {
-    const n = 3 + rngBelow(b.rng, 4);
-    for (let i = 0; i < n; i++) b.walkFreezes.push(200 + rngBelow(b.rng, 2400));
-  }
+  if (kind === BOT_LINE_WALKER) b.nextFreeze = 300 + rngBelow(b.rng, 900);
   return b;
 }
 
@@ -104,23 +162,152 @@ function remaining(s: SimState, i: number): number {
   return s.iLand[i] - (s.iAge[i] >> 8);
 }
 
+function isMust(s: SimState, i: number): boolean {
+  'worklet';
+  return s.iKind[i] === K_BANANA && s.iMust[i] === 1;
+}
+
+/** Steps for the basket (and the bot's finger) to cover dx fu. */
+function reach(b: Bot, dx: number): number {
+  'worklet';
+  const a = dx < 0 ? -dx : dx;
+  const t = travelOf(a > 40 ? a - 40 : 0);
+  if (b.finger <= 0) return t;
+  const f = Math.ceil(Math.max(0, a - 40) / b.finger);
+  return f > t ? f : t;
+}
+
+/** Zone that sends the ball through a hanging prize (or -1). */
+function zoneForPrize(s: SimState, plan: number): number {
+  'worklet';
+  const ax: number[] = [];
+  const ay: number[] = [];
+  for (let i = 0; i < 100; i++) {
+    ax.push(0);
+    ay.push(0);
+  }
+  let best = -1;
+  let bestScore = 1 << 30;
+  const bx = s.bx >> 8;
+  const dt = s.bPredStep - s.clock;
+  for (let z = 0; z < 5; z++) {
+    const need = (s.bPredX >> 8) - ZONE_MID[z];
+    if (need < BASKET_MIN || need > BASKET_MAX) continue;
+    if (travelOf(Math.abs(need - bx)) > dt) continue;
+    const k = zoneArc(s, s.bPredX, s.bN + 1, z, ax, ay);
+    for (let h = 0; h < MAX_PRIZES; h++) {
+      if (s.hSt[h] !== S_HANG) continue;
+      const r = BALL_R + PRIZE_R - 6;
+      for (let m = 0; m < k; m++) {
+        const dx = ax[m] - s.hX[h];
+        const dy = ay[m] - s.hY[h];
+        if (dx * dx + dy * dy <= r * r) {
+          // Lucky first, then the prize that expires soonest; super also prefers a landing near the middle.
+          let sc = s.hEnd[h] - s.clock - (s.hKind[h] === 3 ? 400 : 0);
+          if (plan) sc += Math.abs(ax[k - 1] - 200);
+          if (sc < bestScore) {
+            bestScore = sc;
+            best = z;
+          }
+          break;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+/** Zone whose next landing is closest to x (keeps the ball near the action). */
+function zoneToward(s: SimState, x: number): number {
+  'worklet';
+  const ax: number[] = [];
+  const ay: number[] = [];
+  for (let i = 0; i < 100; i++) {
+    ax.push(0);
+    ay.push(0);
+  }
+  let best = 2;
+  let bestD = 1 << 30;
+  for (let z = 0; z < 5; z++) {
+    const k = zoneArc(s, s.bPredX, s.bN + 1, z, ax, ay);
+    const d = Math.abs(ax[k - 1] - x);
+    if (d < bestD) {
+      bestD = d;
+      best = z;
+    }
+  }
+  return best;
+}
+
+function chooseZone(s: SimState, b: Bot, focusX: number): number {
+  'worklet';
+  if (b.aim === 0) return 2;
+  if (b.aim === 4) return rngBelow(b.rng, 5);
+  const pz = zoneForPrize(s, b.aim === 3 ? 1 : 0);
+  let z = pz >= 0 ? pz : zoneToward(s, focusX);
+  if (b.aim === 1 && rngBelow(b.rng, 100) < 25) z = clampInt(z + (rngBelow(b.rng, 2) === 0 ? -1 : 1), 0, 4);
+  return z;
+}
+
+/** Thumb pattern for this step (freeze bots). Returns 1 to step with touch, 0 lift. */
+function thumb(s: SimState, b: Bot): number {
+  'worklet';
+  if (b.kind === BOT_PULSE) {
+    if (b.liftLeft > 0) {
+      b.liftLeft--;
+      return 0;
+    }
+    for (let i = 0; i < MAX_ITEMS; i++) {
+      if (s.iSt[i] !== S_FALL) continue;
+      const r = remaining(s, i);
+      if (r >= 0 && r <= 30 && rngBelow(b.rng, 6) === 0) {
+        b.liftLeft = 1 + rngBelow(b.rng, 20);
+        return 0;
+      }
+    }
+  } else if (b.kind === BOT_STARE) {
+    for (let i = 0; i < MAX_ITEMS; i++) {
+      if (s.iSt[i] === S_FALL && s.iKind[i] === K_PUFFER && s.iId[i] > b.lastHazard) {
+        b.lastHazard = s.iId[i];
+        b.freezeLeft = 120;
+        b.seenAfter = s.clock;
+        return 0;
+      }
+    }
+  } else if (b.kind === BOT_SHIELD) {
+    let danger = false;
+    for (let i = 0; i < MAX_ITEMS; i++) {
+      if (s.iSt[i] !== S_FALL || s.iKind[i] !== K_PUFFER) continue;
+      const r = remaining(s, i);
+      if (r >= 0 && r <= 30 && Math.abs(s.iX[i] - s.bx) <= (HALF_ZONE + 4) * SUB) danger = true;
+    }
+    if (s.gSt > 0 && Math.abs(s.gX - s.bx) <= (GULL_REACH + 4) * SUB) danger = true;
+    if (danger) {
+      if (s.parked) return 0;
+      if (s.fullRun < LOCK_STEPS && s.holdTs > 0) return 0;
+      // Out of the lock: blip the thumb so the next lift lands inside it.
+      b.shieldPhase = b.shieldPhase === 0 ? 1 : 0;
+      return b.shieldPhase === 1 ? 0 : 1;
+    }
+    b.shieldPhase = 0;
+  } else if (b.kind === BOT_LINE_WALKER) {
+    if (s.clock >= b.nextFreeze && b.freezeLeft === 0) {
+      b.freezeLeft = 60 + rngBelow(b.rng, 1740);
+      b.nextFreeze = s.clock + 300 + rngBelow(b.rng, 900);
+      b.seenAfter = s.clock;
+      return 0;
+    }
+  }
+  return 1;
+}
+
 /**
  * Next input for this bot. Returns targetQ4 (1/16 fu); b.touch holds the
  * thumb state for the step.
  */
 export function botInput(s: SimState, b: Bot): number {
   'worklet';
-  // Thumb patterns (the time-freeze bots).
-  b.touch = 1;
-  if (b.kind === BOT_FREEZE_SPAM) {
-    if (b.freezeLeft > 0) {
-      b.freezeLeft--;
-      b.touch = 0;
-    } else if (--b.nextFreeze <= 0) {
-      b.freezeLeft = 4 + rngBelow(b.rng, 7);
-      b.nextFreeze = 10 + rngBelow(b.rng, 21);
-    }
-  }
+  b.touch = thumb(s, b);
   // Lapses: the bot looks away and holds still.
   if (b.lapseEvery > 0 && s.clock - b.lapseClock >= b.lapseEvery) {
     b.lapseClock = s.clock + rngBelow(b.rng, b.lapseEvery >> 1);
@@ -132,7 +319,9 @@ export function botInput(s: SimState, b: Bot): number {
   }
   const bx = s.bx >> 8;
   const airborne = s.bOn === 1 && s.bY < (LANE_Y - 120) * SUB;
-  const react = b.react + (b.kind === BOT_HUMAN && airborne ? 7 : 0);
+  const react = b.react + (airborne ? b.airPenalty : 0);
+  // After a long freeze (veil): items need a fresh look.
+  const veilSeen = b.seenAfter;
   // Most urgent visible collectible (must-catch first).
   let best = -1;
   let bestR = 1 << 30;
@@ -141,10 +330,10 @@ export function botInput(s: SimState, b: Bot): number {
     const k = s.iKind[i];
     if (k === K_PUFFER) continue;
     if ((s.iAge[i] >> 8) < react) continue;
+    if (veilSeen > 0 && s.clock - veilSeen < react) continue;
     const r = remaining(s, i);
     if (r < -2) continue;
-    const must = (k === K_BANANA || k === K_BUNCH || k === K_LUCKY) && s.iMust[i] === 1 && s.iOpt[i] === 0;
-    const score = r - (must ? 0 : 12) + (k === K_COIN ? -6 : 0);
+    const score = r - (isMust(s, i) ? 0 : 12) + (k === K_COIN ? -6 : 0);
     if (score < bestR) {
       bestR = score;
       best = i;
@@ -152,45 +341,52 @@ export function botInput(s: SimState, b: Bot): number {
   }
   let target = bx;
   if (best >= 0) {
-    const r = remaining(s, best);
-    const lx = (s.iX[best] + s.iVx[best] * (r > 0 ? r : 0)) >> 8;
     if (b.focus !== s.iId[best]) {
       b.focus = s.iId[best];
-      const sd = b.aimSd * (b.kind === BOT_HUMAN && airborne ? 2 : 1);
-      b.focusOff = sd > 0 ? gauss(b, sd) : b.aimUniform > 0 ? (rngBelow(b.rng, b.aimUniform * 2 + 1) - b.aimUniform) : 0;
+      const sd = b.aimSd * (airborne && b.airPenalty > 0 ? 2 : 1);
+      b.focusOff = sd > 0 ? gauss(b, sd) : b.aimUniform > 0 ? rngBelow(b.rng, b.aimUniform * 2 + 1) - b.aimUniform : 0;
     }
-    target = lx + b.focusOff;
+    target = (s.iX[best] >> 8) + b.focusOff;
   }
-  // Juggle (rev 5: the ball is the key to x3/x4). Plan the order of the next
-  // ball landing and the most urgent catch: take both when the bot's own
-  // speed allows it, otherwise keep the chain (catch) unless the gate is
-  // what is holding the tier back.
-  if (b.ball && s.bOn === 1 && s.bVy > 0 && s.bPredStep >= 0) {
+  // The ball: plan the order of the next contact and the most urgent catch.
+  // The bot reacts to each new ball arc after its own reaction time.
+  if (s.bounces + s.bOn * 1000 + s.pailSaves * 100000 !== b.ballSeenN) {
+    b.ballSeenN = s.bounces + s.bOn * 1000 + s.pailSaves * 100000;
+    b.ballSeenAt = s.clock;
+  }
+  const ballSeen = s.clock - b.ballSeenAt >= react;
+  if (ballSeen && b.ball !== BALL_NONE && s.bOn === 1 && s.bVy > 0 && s.bPredStep >= 0) {
     const dt = s.bPredStep - s.clock;
     const px = s.bPredX >> 8;
-    const strike = px + (b.kind === BOT_EXPERT ? (px > 200 ? 18 : -18) : 0);
-    const per = Math.floor((24 * b.speed) / 256) + 1;
-    const slack = b.kind === BOT_EXPERT ? 3 : 10;
-    // Both the catch zone (62) and the ball band (76) are wide: the basket
-    // only needs to get within ~40 fu of each to take it cleanly.
-    const travel = (d: number) => {
-      const a = (d < 0 ? -d : d) - 40;
-      return (a > 0 ? Math.floor(a / per) : 0) + slack;
-    };
-    if (dt >= 0 && dt < 60) {
+    if (b.zoneFor !== s.bounces) {
+      b.zoneFor = s.bounces;
+      b.zonePick = chooseZone(s, b, best >= 0 ? target : 200);
+      // Contact error: uniform for kids and casuals, Gaussian for humans (x2 while airborne).
+      b.zoneJitter = b.aimUniform > 0 ? rngBelow(b.rng, b.aimUniform * 2 + 1) - b.aimUniform : b.aimSd > 0 ? gauss(b, b.aimSd) : 0;
+    }
+    const strike = clampInt(px - (b.aim === 0 ? b.zoneJitter : ZONE_MID[b.zonePick]) + (b.aimSd > 0 ? b.zoneJitter : 0), BASKET_MIN, BASKET_MAX);
+    const want = b.ball === BALL_CHASE || (b.ball === BALL_FALLING && dt < 40) || b.ball === BALL_JUGGLE;
+    if (want && dt >= 0 && dt < 60) {
       let goBall = best < 0;
       if (!goBall) {
         const r = remaining(s, best);
         const lx = target;
-        const reachBallFirst = travel(strike - bx) <= dt && travel(lx - strike) <= r - dt;
-        const reachItemFirst = r <= dt && travel(lx - bx) <= r && travel(strike - lx) <= dt - r;
-        if (reachBallFirst && !(reachItemFirst && r < dt)) goBall = true;
-        else if (reachItemFirst) goBall = false;
-        else if (!reachItemFirst && !reachBallFirst) {
-          // Can't have both: protect the key once the chain needs it.
-          const k = s.iKind[best];
-          const must = (k === K_BANANA || k === K_BUNCH || k === K_LUCKY) && s.iMust[best] === 1 && s.iOpt[best] === 0;
-          goBall = !must || (b.kind === BOT_EXPERT && s.chain < 4);
+        const slack = b.kind === BOT_EXPERT || b.kind === BOT_SUPER ? 1 : 4;
+        const ballFirst = reach(b, strike - bx) + slack <= dt && reach(b, lx - strike) + slack <= r - dt;
+        const itemFirst = r <= dt && reach(b, lx - bx) + slack <= r && reach(b, strike - lx) + slack <= dt - r;
+        if (ballFirst && !(itemFirst && r < dt)) goBall = true;
+        else if (itemFirst) goBall = false;
+        else if (b.ball === BALL_CHASE) goBall = true;
+        else {
+          // Can't have both.
+          if (s.iFlag[best] === 2) {
+            if (b.forkFor !== s.iId[best]) {
+              b.forkFor = s.iId[best];
+              b.forkPick = rngBelow(b.rng, 100) < b.forkBall ? 1 : 0;
+              if (b.kind === BOT_EXPERT || b.kind === BOT_SUPER || b.kind === BOT_EXPERT_NO_AIM) b.forkPick = s.chain >= 12 || s.bN >= 3 ? 1 : 0;
+            }
+            goBall = b.forkPick === 1;
+          } else goBall = !isMust(s, best) || ((b.kind === BOT_EXPERT || b.kind === BOT_SUPER) && s.chain < 3);
         }
       }
       if (goBall) target = strike;
@@ -203,34 +399,43 @@ export function botInput(s: SimState, b: Bot): number {
     const r = remaining(s, i);
     if (r > 40 || r < -1) continue;
     const px = s.iX[i] >> 8;
-    const clear = HALF_ZONE + (b.closeCalls ? 6 : 26);
+    const clear = HALF_ZONE + (b.kind === BOT_EXPERT || b.kind === BOT_SUPER ? 6 : 26);
     if (target > px - clear && target < px + clear) {
       target = target >= px ? px + clear + 2 : px - clear - 2;
       if (target < BASKET_MIN) target = px + clear + 2;
       if (target > BASKET_MAX) target = px - clear - 2;
     }
   }
+  // Leave a gull's shadow.
+  if (s.gSt > 0) {
+    const gx = s.gX >> 8;
+    const clear = GULL_REACH + 12;
+    if (target > gx - clear && target < gx + clear) target = gx < FIELD_W / 2 ? gx + clear + 4 : gx - clear - 4;
+  }
   target = clampInt(Math.round(target), BASKET_MIN, BASKET_MAX);
-  // The bot's own finger speed (fraction of the basket cap).
-  const maxMove = Math.floor((24 * b.speed) / 256) + 1;
   const d = target - b.x;
-  b.x += d > maxMove ? maxMove : d < -maxMove ? -maxMove : d;
+  if (b.finger > 0) b.x += d > b.finger ? b.finger : d < -b.finger ? -b.finger : d;
+  else b.x = target;
   return b.x * 16;
 }
 
 /** Run a whole round with a bot and return the final state (tests, calibration). */
-export function runBot(s: SimState, b: Bot, step: (s: SimState, touch: number, q4: number) => void, maxSteps = 40000): SimState {
+export function runBot(s: SimState, b: Bot, step: (s: SimState, touch: number, q4: number) => void, maxSteps = 60000): SimState {
   for (let n = 0; n < maxSteps && !s.done; n++) {
-    const q4 = botInput(s, b);
-    if (b.kind === BOT_LINE_WALKER && b.walkFreezes.length > 0 && s.clock >= b.walkFreezes[0]) {
-      // A long freeze: the thumb lifts, holdTs ramps to 0, then no steps are logged.
-      b.walkFreezes.shift();
-      for (let k = 0; k < 10 && s.holdTs > 0; k++) step(s, 0, q4);
+    if (s.cardPending === 0 && b.freezeLeft > 0 && s.holdTs === 0) {
+      // Frozen: time stands still and nothing is logged.
+      b.freezeLeft--;
       continue;
     }
-    if (!b.touch && s.holdTs === 0) continue;
-    step(s, b.touch, q4);
+    const q4 = botInput(s, b);
+    const touch = b.freezeLeft > 0 ? 0 : b.touch;
+    if (!touch && s.holdTs === 0 && s.steps > 0 && !s.cardPending) {
+      // A pulse lift at rest: nothing to log.
+      continue;
+    }
+    step(s, touch, q4);
   }
   return s;
 }
-export { BALL_R };
+
+export { BALL_R, K_BUNCH };
