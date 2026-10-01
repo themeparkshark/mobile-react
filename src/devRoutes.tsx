@@ -32,6 +32,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'TripGoalPreview', getComponent: () => require('./screens/ExploreScreen/TripGoalPreviewScreen').default },
       { name: 'MapAlivePreview', getComponent: () => require('./screens/ExploreScreen/MapAlivePreviewScreen').default },
       { name: 'ParkDayRecapPreview', getComponent: () => require('./screens/ParkDayRecapPreviewScreen').default },
+      { name: 'LineGroupPreview', getComponent: () => require('./screens/LinePlay/LineGroupPreviewScreen').default },
       { name: 'CrewGridPreview', getComponent: () => require('./screens/LinePlay/CrewGridPreviewScreen').default },
       { name: 'SetCollectionPreview', getComponent: () => require('./screens/SetCollectionPreviewScreen').default },
       { name: 'HomeHuntPreview', getComponent: () => require('./screens/ExploreScreen/HomeHuntPreviewScreen').default },
@@ -56,6 +57,7 @@ export function devInitialRoute(): string | null {
     [on(process.env.EXPO_PUBLIC_SHELF_ARRIVAL_PREVIEW), 'ShelfArrivalPreview'],
     [on(process.env.EXPO_PUBLIC_TRIVIA_GAME_PREVIEW), 'TriviaGamePreview'],
     [on(process.env.EXPO_PUBLIC_LINEPLAY_FLOW_PREVIEW), 'LinePlay'],
+    [on(process.env.EXPO_PUBLIC_LINE_GROUP_PREVIEW), 'LineGroupPreview'],
     [on(process.env.EXPO_PUBLIC_QUEUE_TIMES_PREVIEW), 'QueueTimesPreview'],
     [on(process.env.EXPO_PUBLIC_PARK_ARRIVAL_PREVIEW), 'ParkArrivalPreview'],
     [on(process.env.EXPO_PUBLIC_PARK_CHECKLIST_PREVIEW) ||

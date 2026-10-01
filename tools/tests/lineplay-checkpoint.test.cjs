@@ -31,6 +31,7 @@ vm.runInNewContext(code, {
     if (name === './crewRelay') return crewModule.exports;
     if (name === './navigationPanel') return require('./helpers/navigation-panel.cjs');
     if (name === './replay') return require('./helpers/lineplay-replay.cjs');
+    if (name === './checkpointCredit') return require('./helpers/lineplay-checkpoint-credit.cjs');
     throw new Error(`Unexpected dependency: ${name}`);
   },
 }, { filename: 'checkpoint.ts' });

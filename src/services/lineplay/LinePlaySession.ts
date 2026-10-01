@@ -62,7 +62,13 @@ import { recordAdaptiveEpisode, selectAdaptiveEpisode } from './episodeRotation'
 import { readCheckpoint, writeCheckpoint, removeCheckpoint, type LinePlayCheckpoint } from './checkpoint';
 import { createCrewRelay, isCrewRelayProgress, type CrewRelayProgress } from './crewRelay';
 import { crewGridHasLine } from './crewGrid';
-import { activateQueueBackgroundHeartbeat, deactivateQueueBackgroundHeartbeat } from './backgroundQueueHeartbeat';
+import { activateQueueBackgroundHeartbeat, deactivateQueueBackgroundHeartbeat,
+  takeBackgroundTrail } from './backgroundQueueHeartbeat';
+import syncLineSession from '../../api/endpoints/me/inline-timer/sync';
+import { appendTrail, buildExit, DARK_GAP_MS, mergeTrails, offlineCreditEstimate,
+  trimSynced, type CheckpointFix, type CheckpointPayload, type OfflineCredit,
+  type ServerCreditSummary } from './checkpointCredit';
+import { prepareQueuePedometer, readQueueSteps } from './queuePedometer';
 import { LINEPLAY_ROUND_QUESTIONS } from '../../games/trivia/config';
 import { createNavigationPanel, createNavigationPanelProgress, traceNavigationPanel,
   turnNavigationTile, type NavigationPanelProgress } from './navigationPanel';
@@ -104,6 +110,13 @@ export function isRecentQueueSample(sample: LocationSample | null | undefined, n
   return Boolean(sample && Number.isFinite(sample.latitude) && Number.isFinite(sample.longitude) &&
     typeof sample.timestamp === 'number' && Number.isFinite(sample.timestamp) &&
     sample.timestamp <= now + 5_000 && now - sample.timestamp <= 45_000);
+}
+
+/** A location sample as a checkpoint fix on the phone clock. */
+export function toCheckpointFix(sample: LocationSample): CheckpointFix {
+  return { latitude: sample.latitude, longitude: sample.longitude,
+    accuracyMeters: typeof sample.accuracyMeters === 'number' ? sample.accuracyMeters : null,
+    at: sample.timestamp ?? Date.now() };
 }
 
 export interface RideContext {
@@ -271,6 +284,13 @@ export interface SessionSnapshot {
   readonly leftLine: boolean;
   /** The open Current Quest bonus attempt, if any. */
   readonly questAttempt: CurrentQuestAttempt | null;
+  /**
+   * Checkpoint crediting (L1): what the phone clock carries while GPS or
+   * signal is gone, and whether anything is still waiting to sync.
+   */
+  readonly offlineCredit: OfflineCredit;
+  /** The server's credit block (null on servers with the flag off). */
+  readonly serverCredit: ServerCreditSummary | null;
 }
 
 type Listener = (snap: SessionSnapshot) => void;
@@ -612,6 +632,16 @@ export class LinePlaySession {
   private readonly exitDetector = new ExitSpeedDetector();
   private forcedHeartbeatTimers: ReturnType<typeof setTimeout>[] = [];
   private forcedThreshold: number | null = null;
+  // Checkpoint crediting (L1).
+  /** Entry checkpoint: the first fresh fix of this wait, on the phone clock. */
+  private entryFix: CheckpointFix | null = null;
+  /** Fixes taken while the server was unreachable, oldest first. */
+  private offlineTrail: CheckpointFix[] = [];
+  /** A saved wait was reopened at this time (the next-app-open exit). */
+  private reopenedAt: number | null = null;
+  private nearSinceReopen = false;
+  private serverCredit: ServerCreditSummary | null = null;
+  private trailSync: Promise<void> | null = null;
 
   private listeners = new Set<Listener>();
 
@@ -653,8 +683,11 @@ export class LinePlaySession {
     // The queue executes completeInLineTimer with idempotency. On success it
     // stashes the server rewards so a late-draining complete still updates UI
     // if a subscriber is listening.
-    this.unsubscribeRecovery = subscribeLinePlayRewardRecovery((sessionId, response) => {
-      if (!this.disposed && this.serverSessionId === sessionId) this.applyServerSnapshot(response);
+    this.unsubscribeRecovery = subscribeLinePlayRewardRecovery((sessionId, response, startRequestId) => {
+      if (this.disposed) return;
+      // An offline wait learns its server id only when the late start lands.
+      if (this.serverSessionId === sessionId ||
+          (startRequestId != null && startRequestId === this.startRequestId)) this.applyServerSnapshot(response);
     });
   }
 
@@ -752,7 +785,28 @@ export class LinePlaySession {
       moving: this.isMoving(),
       leftLine: this.clientLeftLine || Boolean(this.bonus?.motion?.left_line),
       questAttempt: this.questAttempt,
+      offlineCredit: offlineCreditEstimate({
+        startedAt: this.entryFix?.at ?? this.startedAt,
+        endedAt: this.endedAt,
+        now: Date.now(),
+        postedWaitMinutes: this.entranceWaitMinutes ?? (this.waitSource === 'estimate' ? null : this.plannedWaitMinutes),
+        serverCapSeconds: this.serverCredit?.cap_seconds,
+        verifiedEligibleSeconds: this.verifiedEligibleSeconds,
+        creditedParts: this.creditedParts,
+        partIntervalSeconds: this.partIntervalSeconds,
+        sessionPartCap: this.sessionPartCap,
+        partsRemainingToday: this.partsRemainingToday,
+        syncing: this.isSyncing(),
+      }),
+      serverCredit: this.serverCredit,
     };
+  }
+
+  /** Something of this wait has not reached the server yet. */
+  private isSyncing(): boolean {
+    if (this.state === 'idle' || this.rewardUnavailable || this.ride?.lineRewardsReady === false) return false;
+    return this.rewardsPending || this.offlineTrail.length > 0 ||
+      (!this.serverSessionId && this.entryFix !== null);
   }
 
   /** Walking with the line in the last few seconds (OS speed), else the server's view. */
@@ -923,6 +977,8 @@ export class LinePlaySession {
       currentQuestProof: this.currentQuestProof,
       bonusSeen: this.bonusSeen,
       bonusQuestProof: this.bonusQuestProof,
+      entryFix: this.entryFix,
+      offlineTrail: this.offlineTrail,
     };
     this.checkpointWrites = this.checkpointWrites.then(() => writeCheckpoint(data))
       .catch(error => console.warn('[LinePlaySession] checkpoint unavailable:', error));
@@ -1407,6 +1463,14 @@ export class LinePlaySession {
     );
 
     this.startedAt = saved?.startedAt ?? Date.now();
+    // Entry checkpoint and offline trail survive an app kill in the checkpoint.
+    this.entryFix = saved?.entryFix ?? null;
+    this.offlineTrail = saved?.offlineTrail ? [...saved.offlineTrail] : [];
+    this.serverCredit = null;
+    this.trailSync = null;
+    this.reopenedAt = saved && saved.state !== 'complete' ? Date.now() : null;
+    this.nearSinceReopen = false;
+    if (!saved) void prepareQueuePedometer().catch(() => undefined);
     this.crewRelay = this.chapter
       ? saved?.crewRelay && isCrewRelayProgress(saved.crewRelay)
         ? saved.crewRelay
@@ -1423,6 +1487,7 @@ export class LinePlaySession {
     // Location can arrive while the cached wait is loading. Use that sample
     // too, so a stationary player does not wait for another GPS update.
     const startLocation = initialLocation ?? locationDuringLoad;
+    if (!this.entryFix && startLocation && this.state === 'active') this.captureEntry(startLocation);
     if (this.serverSessionId) {
       try {
         const response = await readInLineTimer(this.serverSessionId);
@@ -1437,7 +1502,60 @@ export class LinePlaySession {
     } else if (startLocation && this.state === 'active') {
       this.lastSample = { ...startLocation, timestamp: Date.now() };
       await this.connectServer(startLocation);
+    } else if (this.state === 'complete' && saved && !saved.serverSessionId && saved.rewardsPending) {
+      // An offline wait that ended before the app closed: its late start and
+      // completion already sit in the reward queue.
+      void this.retryQueue.drain();
     }
+    if (this.serverSessionId && this.state === 'active') void this.syncTrail();
+  }
+
+  /**
+   * Entry checkpoint (L1): the first fresh fix of the wait locks where and
+   * when it began on the phone clock, so a start the server only hears about
+   * later (no signal at the entrance) is still dated from here.
+   */
+  private captureEntry(sample: LocationSample): void {
+    if (this.entryFix || !isRecentQueueSample(sample)) return;
+    this.entryFix = toCheckpointFix(sample);
+    this.persistCheckpoint();
+  }
+
+  /** Keep a fix the server could not take (no signal), for the next sync. */
+  private keepOfflineFix(sample: LocationSample): void {
+    if (!isRecentQueueSample(sample)) return;
+    const before = this.offlineTrail.length;
+    this.offlineTrail = appendTrail(this.offlineTrail, toCheckpointFix(sample));
+    if (this.offlineTrail.length !== before) this.persistCheckpoint();
+  }
+
+  /**
+   * Upload the offline trail (this screen's and the background task's).
+   * Idempotent on the server; a failure keeps every fix for later.
+   */
+  private syncTrail(): Promise<void> {
+    if (this.trailSync) return this.trailSync;
+    const sessionId = this.serverSessionId;
+    if (!sessionId || this.state === 'complete' || this.state === 'idle') return Promise.resolve();
+    const run = (async () => {
+      try {
+        const background = await takeBackgroundTrail(sessionId);
+        if (background.length) this.offlineTrail = mergeTrails(this.offlineTrail, background);
+      } catch { /* background trail unavailable */ }
+      if (!this.offlineTrail.length || this.serverSessionId !== sessionId) return;
+      const batch = [...this.offlineTrail];
+      try {
+        const result = await syncLineSession(sessionId, batch);
+        this.offlineTrail = trimSynced(this.offlineTrail, batch[batch.length - 1].at);
+        if (!this.disposed && this.serverSessionId === sessionId) this.applyServerSnapshot(result);
+      } catch (error) {
+        console.info('[LinePlaySession] offline trail sync pending',
+          (error as { response?: { status?: number } })?.response?.status ?? 'network');
+      }
+      this.persistCheckpoint();
+    })();
+    this.trailSync = run.finally(() => { this.trailSync = null; });
+    return this.trailSync;
   }
 
   private applyServerSnapshot(result: LineSessionResponse): void {
@@ -1460,6 +1578,7 @@ export class LinePlaySession {
     this.applySignal(result.signal);
     this.applyParkProject(result.park_project);
     this.applyBonus(result.bonus);
+    if (result.credit !== undefined) this.serverCredit = result.credit ?? null;
     this.startedAt = Date.parse(result.started_at) || this.startedAt;
     if (result.status === 'completed') {
       void deactivateQueueBackgroundHeartbeat(result.session_id).catch(error =>
@@ -1518,20 +1637,28 @@ export class LinePlaySession {
     if (!force && Date.now() - this.lastServerStartAttemptAt < 30_000) return;
     this.lastServerStartAttemptAt = Date.now();
 
+    // A start sent late uses the entry checkpoint it saved: its own fix and
+    // phone-clock time. A fresh start sends the current fix as today.
+    if (!this.entryFix) this.captureEntry(sample);
+    const entry = this.entryFix && Date.now() - this.entryFix.at > 30_000 ? this.entryFix : null;
     const attempt = (async () => {
       try {
         const result = await startInLineTimer(
           this.ride!.rideId,
           this.startRequestId!,
-          sample.latitude,
-          sample.longitude,
+          entry?.latitude ?? sample.latitude,
+          entry?.longitude ?? sample.longitude,
+          entry ? { clientStartedAt: entry.at, accuracyMeters: entry.accuracyMeters }
+            : { accuracyMeters: sample.accuracyMeters },
         );
         if (result.success && result.session_id) {
           this.lastSuccessfulPresenceUpdateAt = Date.now();
           this.applyServerSnapshot(result);
+          if (this.offlineTrail.length) void this.syncTrail();
         }
       } catch (error) {
         const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
+        if (!response) this.keepOfflineFix(sample);
         if (response?.status === 404 || response?.data?.code === 'LINE_REWARDS_UNAVAILABLE') {
           this.rewardUnavailable = true;
           this.rewardConnectionIssue = null;
@@ -1561,15 +1688,26 @@ export class LinePlaySession {
     if (this.heartbeatInFlight) return;
     this.heartbeatInFlight = true;
     try {
-      const result = await heartbeatInLineTimer(this.serverSessionId, sample.latitude, sample.longitude,
-        sample.accuracyMeters);
+      // After a dark gap (indoors), steps since the last nearby answer let the
+      // server tell a creeping queue from a walk around the park.
+      const now = Date.now();
+      const darkFrom = this.lastSuccessfulPresenceUpdateAt;
+      const steps = darkFrom > 0 && now - darkFrom > DARK_GAP_MS ? await readQueueSteps(darkFrom, now) : null;
+      const sessionId = this.serverSessionId;
+      if (!sessionId) return;
+      const result = await heartbeatInLineTimer(sessionId, sample.latitude, sample.longitude,
+        sample.accuracyMeters, steps);
       this.lastSuccessfulPresenceUpdateAt = Date.now();
       this.awaySamples = 0;
       this.firstAwayAt = null;
+      this.nearSinceReopen = true;
       this.applyServerSnapshot(result);
+      if (this.offlineTrail.length) void this.syncTrail();
     } catch (error) {
       const response = (error as { response?: { status?: number; data?: { code?: string; message?: string } } })?.response;
       const status = response?.status;
+      // No answer at all: no signal. Keep the fix for the next sync.
+      if (!response) this.keepOfflineFix(sample);
       // The server saying this fresh fix is not near the ride (older servers
       // send only the message). Validation 422s never count as leaving.
       if (status === 422 && (response?.data?.code === 'NOT_NEAR_RIDE' ||
@@ -1756,6 +1894,11 @@ export class LinePlaySession {
     this.backgroundTrackingAvailable = null;
     this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = 0;
+    // The rest of the wait is a new session with its own entry checkpoint.
+    this.entryFix = null;
+    this.offlineTrail = [];
+    this.serverCredit = null;
+    this.reopenedAt = null;
     this.creditedParts = null;
     this.rewards = null;
     this.rewardsPending = false;
@@ -1841,10 +1984,26 @@ export class LinePlaySession {
     if (!this.serverSessionId && this.lastSample) {
       await this.connectServer(this.lastSample, true);
     }
+    const recentSample = this.lastSample && Date.now() - (this.lastSample.timestamp ?? 0) <= 90_000
+      ? this.lastSample : null;
+    const checkpoint = await this.exitCheckpoint(recentSample);
     const sessionId = this.serverSessionId;
     if (!sessionId) {
-      // Offline session that never got a server id: nothing to complete
-      // server-side. Show local elapsed; no server rewards.
+      if (this.entryFix && this.startRequestId && this.ride && this.ride.rideId > 0 &&
+          this.ride.lineRewardsReady !== false && !this.rewardUnavailable) {
+        // The whole wait was offline (airplane mode, a dead zone at the
+        // entrance). Its entry checkpoint starts the session late and the
+        // exit completes it, from the reward queue, whenever signal returns.
+        this.rewardsPending = true;
+        this.persistCheckpoint();
+        await this.retryQueue.enqueue({ sessionId: '',
+          offlineStart: { rideId: this.ride.rideId, startRequestId: this.startRequestId, entry: this.entryFix },
+          checkpoint, currentQuestProof: null, storyMemento: this.storyMemento() },
+        `offline_${this.startRequestId}`);
+        this.emit();
+        return;
+      }
+      // No entry fix ever: nothing the server could credit. Show local elapsed.
       this.rewardsPending = false;
       this.emit();
       return;
@@ -1852,35 +2011,62 @@ export class LinePlaySession {
 
     // Attempt the complete immediately; on failure, queue for retry.
     try {
-      const recentSample = this.lastSample && Date.now() - (this.lastSample.timestamp ?? 0) <= 90_000
-        ? this.lastSample : null;
       const res = await completeInLineTimer(
         sessionId,
         recentSample?.latitude,
         recentSample?.longitude,
         this.currentQuestVerified ? undefined : this.currentQuestProof ?? undefined,
         this.storyMemento(),
+        checkpoint,
       );
       if (res?.success) {
+        this.offlineTrail = [];
         this.applyServerSnapshot(res);
       } else {
-        await this.queueComplete(sessionId);
+        await this.queueComplete(sessionId, checkpoint);
       }
     } catch (e) {
       console.warn('[LinePlaySession] completeInLineTimer failed, queueing:', e);
-      await this.queueComplete(sessionId);
+      await this.queueComplete(sessionId, checkpoint);
     }
     this.emit();
   }
 
-  private async queueComplete(sessionId: string): Promise<void> {
+  /**
+   * Exit checkpoint (L1): how the wait ended, the offline trail, and steps
+   * across the last dark gap. The server ignores it while its flag is off.
+   */
+  private async exitCheckpoint(recentSample: LocationSample | null): Promise<CheckpointPayload> {
+    const sessionId = this.serverSessionId;
+    if (sessionId) {
+      try {
+        const background = await takeBackgroundTrail(sessionId);
+        if (background.length) this.offlineTrail = mergeTrails(this.offlineTrail, background);
+      } catch { /* background trail unavailable */ }
+    }
+    const exit = buildExit({
+      endReason: this.endReason,
+      boardingAt: this.boardingAt,
+      endedAt: this.endedAt ?? Date.now(),
+      firstAwayAt: this.firstAwayAt,
+      reopenedAt: this.reopenedAt,
+      nearSinceReopen: this.nearSinceReopen,
+      recentFix: recentSample && isRecentQueueSample(recentSample, this.endedAt ?? Date.now())
+        ? toCheckpointFix(recentSample) : null,
+    });
+    const darkFrom = this.lastSuccessfulPresenceUpdateAt || this.entryFix?.at || this.startedAt || exit.at;
+    const steps = exit.at - darkFrom > DARK_GAP_MS ? await readQueueSteps(darkFrom, exit.at) : null;
+    return { exit, samples: [...this.offlineTrail], steps };
+  }
+
+  private async queueComplete(sessionId: string, checkpoint: CheckpointPayload | null = null): Promise<void> {
     this.rewardsPending = true;
     this.persistCheckpoint();
     // Idempotency key = the server session id, so a session is never completed
     // twice even across app restarts.
     await this.retryQueue.enqueue({ sessionId,
       currentQuestProof: this.currentQuestVerified ? null : this.currentQuestProof,
-      storyMemento: this.storyMemento() }, `complete_${sessionId}`);
+      storyMemento: this.storyMemento(), checkpoint }, `complete_${sessionId}`);
   }
 
   private storyMemento(): QueueStoryMemento | null {
@@ -2037,6 +2223,12 @@ export class LinePlaySession {
     this.sawSpeed = false;
     this.clientLeftLine = false;
     this.exitDetector.reset();
+    this.entryFix = null;
+    this.offlineTrail = [];
+    this.reopenedAt = null;
+    this.nearSinceReopen = false;
+    this.serverCredit = null;
+    this.trailSync = null;
     this.emit();
   }
 

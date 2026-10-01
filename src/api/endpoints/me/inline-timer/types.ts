@@ -115,6 +115,8 @@ export interface LineSessionResponse {
   current_quest_verified?: boolean;
   signal: LineSignalSummary | null;
   bonus?: LineBonusSummary | null;
+  /** Checkpoint crediting (L1). Absent or null while the server flag is off. */
+  credit?: import('../../../../services/lineplay/checkpointCredit').ServerCreditSummary | null;
   park_project: import('../park-projects').ParkProject | null;
   rewards: {
     coin_asset_id?: number;
@@ -131,5 +133,9 @@ export interface LineSessionResponse {
     encore_energy?: number;
     bonus_park_day_used?: number;
     bonus_park_day_cap?: number;
+    /** L1: the sign's wait vs the wait the guest stood. */
+    wait?: { posted_seconds: number | null; typical_seconds: number | null;
+      actual_seconds: number; exit_method: string | null };
+    bridged_seconds?: number;
   } | null;
 }
