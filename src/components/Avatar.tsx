@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { Text, View } from 'react-native';
 import config from '../config';
 import { AuthContext } from '../context/AuthProvider';
@@ -40,6 +40,10 @@ export default function Avatar({
   // Build layered avatar URL — use skin + eyes + items for live outfit
   // The circle container clips it so background is fine
   const hasSkin = inventory?.skin_item?.no_eye_url;
+  // A photo URL that 404s or is not an image left a black or white blob in
+  // the friends list (QA P2-7): fall back to the TPS shark instead.
+  const [failedPhoto, setFailedPhoto] = useState<string | null>(null);
+  const photo = player.avatar_url && player.avatar_url !== failedPhoto ? player.avatar_url : null;
 
   return (
     <View
@@ -176,8 +180,9 @@ export default function Avatar({
           ) : (
             <Image
               // No outfit or photo yet: Dustin's TPS shark instead of an empty ring.
-              source={player.avatar_url ? player.avatar_url : DEFAULT_PORTRAIT}
+              source={photo ?? DEFAULT_PORTRAIT}
               placeholder={DEFAULT_PORTRAIT}
+              onError={() => { if (photo) setFailedPhoto(photo); }}
               contentFit="contain"
               style={{ width: s * 1.2, height: s * 1.2, position: 'absolute', left: '-10%' }}
             />

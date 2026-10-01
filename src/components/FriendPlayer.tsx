@@ -42,6 +42,10 @@ export default function FriendPlayer({
     });
     return (
       <TouchableOpacity
+        // Swipe actions sit offscreen (VoiceOver found them at x of about
+        // -9663); the row's own buttons already offer the same actions.
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         onPress={() => {
           playSound(tapSound);
           if (isFriend) {
@@ -103,6 +107,8 @@ export default function FriendPlayer({
     });
     return (
       <TouchableOpacity
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
         onPress={async () => {
           playSound(tapSound);
           await complimentPlayer(player);
@@ -226,6 +232,7 @@ export default function FriendPlayer({
           }}
         >
           <Button
+            accessibilityLabel={`Compliment ${player.screen_name}`}
             onPress={async () => {
               playSound(tapSound);
               await complimentPlayer(player);
@@ -241,6 +248,7 @@ export default function FriendPlayer({
             />
           </Button>
           <Button
+            accessibilityLabel={`${isFriend ? 'Remove' : isPending ? 'Accept' : 'Add'} ${player.screen_name}${isFriend ? ' from friends' : ' as a friend'}`}
             onPress={() => {
               playSound(tapSound);
               if (isPending && !isFriend) {
