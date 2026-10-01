@@ -52,7 +52,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BOSS_ART, THEMED_SHARK_FRAMES, THEMES, type WhackTheme } from './assets';
 import { buildBurst, walkOk, type Timeline, type WalkBoost } from './timeline';
 import {
-  E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_END, E_SPLAT, E_SPLAT_CLEAR, E_WIN, NO_CARRY, createSim, type BurstCarry, type BurstResult,
+  E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_DECOY, E_END, E_HIT, E_SPLAT, E_SPLAT_CLEAR, E_WIN, NO_CARRY, createSim, type BurstCarry, type BurstResult,
 } from './sim';
 import { buildProof, type WhackProofV4 } from './proof';
 import {
@@ -63,11 +63,13 @@ import { A_CANDY, A_FADE, A_INK, A_SCAN, BOSS_NAMES } from './timeline';
 import { computeLayout, type BoardLayout } from './render/layout';
 import { boxesFor, poseScaleFor } from './render/boxes';
 import { THEME_FX } from './render/renderState';
+import { ShareCardButton, TILE_DECOY, TILE_QUICK } from './ui/ShareCard';
 import { WhackBoard, WhackHud, useBoardImages } from './render/WhackBoard';
 import { useWhackRuntime } from './useWhackRuntime';
 import { Banner, Breather, DuelCard } from './ui/Overlays';
 import { duelTimeline } from './net/duel';
-import { ghostFromRun, ghostHitsBetween, paceAt, pbGhostKey } from './net/ghost';
+import { ghostFromRun, paceAt, pbGhostKey } from './net/ghost';
+import { mapGhostHole } from './formations';
 import { createLocalNetAdapter } from './net/localAdapter';
 import { ghostDeltaLine, lineDaySeed, lineDayXform, parkLocalDate, type LineDayEntry } from './net/lineDay';
 import { applyMastery, applyRunToBook, cardTitle, nextRunOfDay, type CardBook, type FinnCard, type MasteryBook } from './meta/collection';
@@ -218,7 +220,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const [breather, setBreather] = useState<null | {
     burstScore: number; runScore: number; stats: { label: string; value: string }[]; next: string; readyAt: number; goal: string | null;
     duelLine: string | null; incoming: number; feverReady: boolean; bossNext: boolean; boost: boolean;
+    split?: { text: string; ahead: boolean } | null;
   }>(null);
+  /** Ghost split (6.11): this Run's banked total minus the PB ghosts' totals over the same Bursts. */
+  const splitRef = useRef({ mine: 0, best: 0, known: true });
+  const tilesRef = useRef<number[]>([]);
   const [readyOn, setReadyOn] = useState(false);
   const [reveal, setReveal] = useState<DuelReveal | null>(null);
   const [lifetime, setLifetime] = useState<number | null>(props.unlockLevel ?? null);
@@ -364,6 +370,9 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           winRef.current = { at: now, ms: Math.max(ms, Math.round(ms * 0.55) + secs * 200) + 300 };
         });
       }
+      // Share card tiles (6.11): one per hit in order, plus a "!" tile for a decoy hit.
+      if (kind === E_HIT) tilesRef.current.push(Math.min(TILE_QUICK, b % 10));
+      else if (kind === E_DECOY) tilesRef.current.push(TILE_DECOY);
       if (juice.handle(kind, a, b, c, now)) return;
       switch (kind) {
         case E_ATTACK: {
@@ -455,22 +464,37 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         setShellScore(bankedRef.current.reduce((s, x) => s + x.score, 0) + m.score);
         const g = ghostRef.current;
         if (g) pace.value = m.score - paceAt(g, m.t);
-        // Line of the Day: named ghost pucks flash on the wells they hit (mapped through mine o theirs^-1).
+        // Ghost fingers (12.1, GHOST PLAY): on shared seeds the PB ghost's tinted finger taps the wells
+        // it hit, and Line of the Day rivals tap in their colours (mapped through mine o theirs^-1).
+        // Hits due in the next poll window are scheduled at their game time.
         const rivals = props.lineDay?.rivals ?? [];
-        if (G && rivals.length && m.t > ghostT.current) {
-          rivals.slice(0, 3).forEach((r, i) => {
-            const gb = r.ghosts?.[t.input.burstIndex];
-            if (!gb) return;
-            for (const h of ghostHitsBetween(gb, ghostT.current, m.t, (t.input.xform ?? 0) & 7)) {
-              fx.current?.flyUp(r.name.split(' ')[0].toUpperCase(), G.cx[h] + (i - 1) * 14, G.my[h] - G.spriteH[h] * 0.2, { size: 'sm', color: GHOST_COLORS[i] });
+        const horizon = m.t + 260;
+        if (G && !m.frozen && horizon > ghostT.current) {
+          const from = Math.max(ghostT.current, m.t - 10);
+          const fire = (gb: WhackGhost, color: number, name: string | null) => {
+            for (const [ht, hh] of gb.hits) {
+              if (ht <= from || ht > horizon) continue;
+              const h = mapGhostHole(hh, gb.xform, (t.input.xform ?? 0) & 7);
+              setTimeout(() => {
+                runtimeRef.current.ghostTap(h, color);
+                if (name) fx.current?.flyUp(name, G.cx[h], G.my[h] - G.spriteH[h] * 0.2, { size: 'sm', color: GHOST_COLORS[color - 1] });
+              }, Math.max(0, ht - m.t));
             }
-          });
+          };
+          if (rivals.length) {
+            rivals.slice(0, 3).forEach((r, i) => {
+              const gb = r.ghosts?.[t.input.burstIndex];
+              if (gb) fire(gb, i + 1, r.name.split(' ')[0].toUpperCase());
+            });
+          } else if (g && (format === 'daily' || lineRun)) {
+            fire(g, 0, null);
+          }
+          ghostT.current = horizon;
         }
-        ghostT.current = m.t;
       });
     }, 250);
     return () => clearInterval(iv);
-  }, [visible, phase, cues, pace, props.lineDay, busyRef]);
+  }, [visible, phase, cues, pace, props.lineDay, busyRef, format, lineRun]);
 
   // ---------------------------------------------------------------- flow
   const flash = useCallback((text: string, sub: string | null = null, color = '#ffffff', ms = 1100) => {
@@ -481,6 +505,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const startBurst = useCallback((bi: number, runIdx: number, withSlam: boolean, feverFired = false) => {
     if (feverFired) carryRef.current = { ...carryRef.current, feverReady: false, meter: 0 };
     const t = buildTimeline(bi, runIdx, feverFired);
+    if (bi === 0) tilesRef.current = [];
     tlRef.current = t;
     setTl(t);
     setBurstIdx(bi);
@@ -668,6 +693,11 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       const key = pbGhostKey(format, t.input.burstIndex, shared ? t.input.seed : undefined);
       const prev = await AsyncStorage.getItem(key);
       const prevScore = prev ? (JSON.parse(prev) as WhackGhost).score : -1;
+      const sp = splitRef.current;
+      if (t.input.burstIndex === 0) { sp.mine = 0; sp.best = 0; sp.known = true; }
+      sp.mine += res.score;
+      if (prevScore >= 0) sp.best += prevScore;
+      else sp.known = false;
       if (res.score > prevScore && !boostedRunRef.current) {
         const triples: number[][] = [];
         for (let i = 0; i + 2 < taps.length; i += 3) triples.push([taps[i], taps[i + 1], taps[i + 2]]);
@@ -762,6 +792,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
         feverReady,
         bossNext: nextTl.boss,
         boost: pendingBoost.current === 'golden',
+        split: !ride && format !== 'duel' && splitRef.current.known && splitRef.current.best > 0 ? (() => {
+          const d = splitRef.current.mine - splitRef.current.best;
+          return { text: d >= 0 ? `+${d.toLocaleString()} AHEAD OF YOUR BEST` : `${d.toLocaleString()} BEHIND YOUR BEST`, ahead: d >= 0 };
+        })() : null,
       });
       setReadyOn(false);
       setPhase('breather');
@@ -918,6 +952,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       onResume={handleResume}
       onRematch={!ride && format !== 'duel' ? handleRematch : undefined}
       onComplete={onComplete}
+      resultExtras={result ? <ShareCardButton tiles={tilesRef.current} rideName={taskName ?? null} score={result.score} stars={result.stars ?? 0} /> : undefined}
       onClose={onClose}
       onQuit={onQuit}
     >
@@ -961,6 +996,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
               onBank={onBankExit}
               canBank={format !== 'duel'}
               duelLine={breather.duelLine}
+              split={breather.split}
             />
           ) : null}
           {__DEV__ && process.env.EXPO_PUBLIC_WHACK_PERF === '1' ? <PerfOverlay probe={perf} /> : null}

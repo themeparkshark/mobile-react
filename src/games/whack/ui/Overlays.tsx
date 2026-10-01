@@ -96,6 +96,8 @@ export interface BreatherProps {
   onBank: () => void;
   canBank: boolean;
   duelLine?: string | null;
+  /** Split vs your best (Mario Kart ghost splits): "+340 AHEAD OF YOUR BEST" / "-120 BEHIND YOUR BEST". */
+  split?: { text: string; ahead: boolean } | null;
 }
 
 export function Breather(p: BreatherProps) {
@@ -127,6 +129,11 @@ export function Breather(p: BreatherProps) {
           ))}
         </View>
         {p.duelLine ? <Text style={styles.duelLine}>{p.duelLine}</Text> : null}
+        {p.split ? (
+          <View style={[styles.splitChip, { backgroundColor: p.split.ahead ? '#dff6e6' : '#ffe4de' }]}>
+            <Text style={[styles.splitText, { color: p.split.ahead ? '#11823b' : '#c2412f' }]}>{p.split.text}</Text>
+          </View>
+        ) : null}
         {p.goal ? <Text style={styles.goal}>{p.goal}</Text> : null}
         {p.showWalk !== false ? (
           <View style={styles.walkRow}>
@@ -234,6 +241,8 @@ const styles = StyleSheet.create({
   chipValue: { fontFamily: 'Shark', fontSize: 18, color: NAVY },
   chipLabel: { fontFamily: 'Knockout', fontSize: 11, color: BLUE, letterSpacing: 1 },
   duelLine: { fontFamily: 'Shark', fontSize: 18, color: CORAL, marginTop: 8 },
+  splitChip: { marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 2, borderColor: NAVY },
+  splitText: { fontFamily: 'Shark', fontSize: 16 },
   goal: { fontFamily: 'Knockout', fontSize: 15, color: NAVY, marginTop: 8 },
   walkRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, alignSelf: 'stretch' },
   walkTitle: { fontFamily: 'Shark', fontSize: 17, color: NAVY },

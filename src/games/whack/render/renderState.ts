@@ -62,6 +62,7 @@ export const PULSE_COLORS = ['#ffffff', '#ffcf3b', '#ff6b5c', '#ffffff', '#fffff
 export type BoxTable = number[][];
 
 export const HAT_SLOTS = 2;
+export const GHOST_SLOTS = 4;
 
 export interface RenderState {
   frame: number[];
@@ -160,6 +161,11 @@ export interface RenderState {
   release: number;
   releaseX: number;
   releaseY: number;
+  /** Ghost fingers (PB / Line of the Day rivals): opacity, position and colour index per slot. */
+  ghostOp: number[];
+  ghostX: number[];
+  ghostY: number[];
+  ghostC: number[];
 }
 
 /**
@@ -199,6 +205,7 @@ export function createRenderState(): RenderState {
     fingerX: 0, fingerY: 0, fingerRot: 0, fingerScale: 1, fingerOp: 0, medShake: 0, medSlam: 1, veil: 0, fever: 0, occupied: 0, hatBounces: 0, tick: 0,
     studs: arr(0), studPulse: arr(0), clipTop: arr(0), foam: arr(0), foamW: arr(0), foamY: arr(0), foamStep: 0,
     glX: arr(0), glY: arr(0), glW: arr(0), outline: arr(0), smear: 0, release: -1, releaseX: 0, releaseY: 0,
+    ghostOp: arr(0, GHOST_SLOTS), ghostX: arr(0, GHOST_SLOTS), ghostY: arr(0, GHOST_SLOTS), ghostC: arr(0, GHOST_SLOTS),
   };
 }
 
@@ -258,6 +265,10 @@ export interface HoleAnim {
   releaseAt: number;
   releaseX: number;
   releaseY: number;
+  ghostAt: number[];
+  ghostHole: number[];
+  ghostC: number[];
+  ghostNext: number;
 }
 
 export function createHoleAnim(): HoleAnim {
@@ -272,6 +283,7 @@ export function createHoleAnim(): HoleAnim {
     lastTier: 0, medShakeAt: -99999, medSlamAt: -99999,
     fingerAt: -99999, fingerX: 0, fingerY: 0, fingerSpin: 0, fxNow: 0, veil: 0, fever: 0,
     hatAt: arr(-1), hatCrit: arr(0), releaseAt: -99999, releaseX: 0, releaseY: 0,
+    ghostAt: arr(-99999, GHOST_SLOTS), ghostHole: arr(0, GHOST_SLOTS), ghostC: arr(0, GHOST_SLOTS), ghostNext: 0,
   };
 }
 
@@ -814,6 +826,19 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
     rs.releaseY = an.releaseY;
   } else {
     rs.release = -1;
+  }
+  // Ghost fingers: a translucent tinted foam finger pressed on the well, held 160 ms (on twos), then fading.
+  for (let k = 0; k < GHOST_SLOTS; k++) {
+    const ga = now - an.ghostAt[k];
+    if (ga >= 0 && ga < 280) {
+      const h = an.ghostHole[k];
+      rs.ghostOp[k] = ga < 160 ? 0.55 : 0.55 * (1 - (ga - 160) / 120);
+      rs.ghostX[k] = L.cx[h] + (k % 2 === 0 ? -6 : 6);
+      rs.ghostY[k] = L.my[h] - L.spriteH[h] * 0.75 - L.cellW * 0.05 * Math.floor(ga / 83);
+      rs.ghostC[k] = an.ghostC[k];
+    } else {
+      rs.ghostOp[k] = 0;
+    }
   }
   rs.tick += 1;
 }

@@ -114,6 +114,8 @@ export interface WhackRuntime {
   setRunning: (on: boolean, easeIn?: boolean) => void;
   /** Bank now (line call / BANK & EXIT). */
   bank: () => void;
+  /** A ghost (PB or rival) hit this well: flash its tinted finger (colour 0 PB, 1-3 rivals). */
+  ghostTap: (hole: number, color: number) => void;
   /** Snapshot of the live sim for the JS side (score, taps, time). */
   mirror: () => Promise<SimMirror>;
   /** Final result + tap log (after E_END). */
@@ -393,6 +395,17 @@ export function useWhackRuntime(opts: {
         rt.value.running = v;
         if (ease) rt.value.easeT = 0;
       })(on, easeIn);
+    },
+    ghostTap: (hole: number, color: number) => {
+      runOnUI((h: number, c: number) => {
+        'worklet';
+        const a = an.value;
+        const k = a.ghostNext % a.ghostAt.length;
+        a.ghostNext += 1;
+        a.ghostAt[k] = a.fxNow;
+        a.ghostHole[k] = h;
+        a.ghostC[k] = c;
+      })(hole, color);
     },
     bank: () => {
       runOnUI(() => {

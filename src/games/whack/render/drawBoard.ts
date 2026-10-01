@@ -55,6 +55,8 @@ export interface WellKit {
   bolts: SkPath[];
   /** v5 waterline: the submerged tint (-12% value, -20% saturation, +6% teal). */
   tint: SkPaint;
+  /** Ghost finger tints (PB blue, then rival gold, coral, green; never purple). */
+  ghostTint: SkPaint[];
   paint: SkPaint;
   white: SkPaint;
   gold: SkPaint;
@@ -170,8 +172,14 @@ export function buildWellKit(L: BoardLayout, hatAspect: number): WellKit {
     lr * v, lg * v, (lb + sat) * v, 0, 0.036,
     0, 0, 0, 1, 0,
   ]));
+  const ghostTint = ['#7fd6ff', '#ffcf3b', '#ff6b5c', '#5fd38a'].map((c) => {
+    const g = Skia.Paint();
+    g.setAntiAlias(true);
+    g.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color(c), BlendMode.Modulate));
+    return g;
+  });
   return {
-    interior, mouth, mouthPath, occClip, lipClip, rimRect, highlight, studs, studList, bolts, tint, paint, white, gold, navySil, stroke, fill,
+    interior, mouth, mouthPath, occClip, lipClip, rimRect, highlight, studs, studList, bolts, tint, ghostTint, paint, white, gold, navySil, stroke, fill,
     hatW: L.cellW * 0.62 * (hatAspect > 0 ? 1 : 1),
   };
 }
@@ -517,6 +525,21 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
     st.setColor(C_WHITE);
     st.setStrokeWidth(2.5);
     canvas.drawCircle(rs.releaseX, rs.releaseY, r, st);
+  }
+  // Ghost fingers (GHOST PLAY): tinted, translucent, never mistaken for your own.
+  if (art.finger) {
+    const gw = L.cellW * 0.42;
+    const gh = gw / 0.871;
+    for (let k = 0; k < rs.ghostOp.length; k++) {
+      if (rs.ghostOp[k] <= 0) continue;
+      const tp = kit.ghostTint[rs.ghostC[k] % kit.ghostTint.length];
+      tp.setAlphaf(rs.ghostOp[k]);
+      canvas.save();
+      canvas.translate(rs.ghostX[k], rs.ghostY[k]);
+      canvas.rotate(4, 0, 0);
+      img(canvas, art.finger, -gw * 0.5, -gh * 0.2, gw, gh, tp);
+      canvas.restore();
+    }
   }
   // Foam finger above the touch.
   if (rs.fingerOp > 0 && art.finger) {
