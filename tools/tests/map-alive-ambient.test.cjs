@@ -22,7 +22,8 @@ test('tiers: Reduce Motion is always calm; strain steps full -> lite -> calm', (
   assert.equal(budget.aliveTier({ reducedMotion: false, strain: 2 }), 'calm');
   assert.equal(budget.aliveTier({ reducedMotion: true, strain: 0 }), 'calm');
   assert.equal(budget.ALIVE_CAPS.calm.hz, 0, 'calm freezes the ambient clock');
-  assert.equal(budget.ALIVE_CAPS.lite.hz, 30, 'lite halves the ambient clock');
+  assert.equal(budget.ALIVE_CAPS.lite.hz, 30, 'lite runs the ambient clock at 30 Hz');
+  assert.equal(budget.ALIVE_CAPS.full.hz, 30, 'battery pass: slow ambient loops never need 60 updates a second');
 });
 
 test('particle budget: every tier stays under the hard sprite ceiling and lite is lighter than full', () => {

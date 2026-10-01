@@ -2,7 +2,11 @@
  * How much ambient life the game map may run. Pure rules, unit tested.
  *
  * The map runs all day in a park, so every moving thing on it is budgeted:
- *  - `full`: the whole living map (60 Hz ambient clock).
+ *  - `full`: the whole living map. Its ambient clock ticks at 30 Hz: every
+ *    idle loop is slow (bobs, glows, drifting clouds), so 30 updates a second
+ *    looks the same while halving the UI-thread work for up to 120 sprites,
+ *    all day, in the heat. The shark, camera and every tap response still run
+ *    at the display rate; they never read this clock.
  *  - `lite`: fewer sprites on a 30 Hz clock, chosen automatically when the
  *    phone starts dropping frames (a hot phone, Low Power Mode throttling).
  *  - `calm`: nothing moves. Reduce Motion always lands here; so does a phone
@@ -41,7 +45,7 @@ export interface AliveCaps {
 }
 
 export const ALIVE_CAPS: Readonly<Record<AliveTier, AliveCaps>> = {
-  full: { hz: 60, clouds: 3, birds: 3, fireflies: 6, waterGlints: 6, pulsingRides: 10, idleCoins: 4,
+  full: { hz: 30, clouds: 3, birds: 3, fireflies: 6, waterGlints: 6, pulsingRides: 10, idleCoins: 4,
     limitedShimmer: 4, sleepyRides: 3, trail: 8, skyShowBursts: 4, sparksPerBurst: 14, ghosts: 5 },
   lite: { hz: 30, clouds: 2, birds: 2, fireflies: 3, waterGlints: 3, pulsingRides: 4, idleCoins: 3,
     limitedShimmer: 2, sleepyRides: 2, trail: 5, skyShowBursts: 3, sparksPerBurst: 10, ghosts: 3 },
