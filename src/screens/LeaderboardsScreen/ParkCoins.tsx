@@ -17,11 +17,13 @@ import { StandingsInvite, StandingsListCard, StandingsNudge, StandingsRow } from
 import {
   defaultStandingsPark, pickDefaultLeaderboard, podiumSlots, STANDINGS_EMPTY_COPY, standingsStatus, type StandingsStatus,
 } from './standingsModel';
+import { standingsGeneration } from './standingsCache';
 
 type Board = { readonly leaderboards: LeaderboardType[]; readonly leaderboardId?: number; readonly players: PlayerType[] };
 
 // Survives tab switches, so returning to this tab shows the last board at once.
-const cache: { parks: ParkType[]; parkId?: number; boards: Map<string, Board> } = { parks: [], boards: new Map() };
+const cache: { parks: ParkType[]; parkId?: number; boards: Map<string, Board>; generation: number } =
+  { parks: [], boards: new Map(), generation: standingsGeneration() };
 
 const coinScore = (player: PlayerType) => Number(player.park_coins) || 0;
 
@@ -56,6 +58,10 @@ export default function ParkCoins() {
   // Board for the park and period. Every path ends in ready, empty or error.
   useEffect(() => {
     if (!parkId) return;
+    if (cache.generation !== standingsGeneration()) {
+      cache.boards.clear();
+      cache.generation = standingsGeneration();
+    }
     const key = `${parkId}:${chosenBoardId ?? 'default'}`;
     const cached = cache.boards.get(key);
     if (cached) {

@@ -29,6 +29,7 @@ import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
 import ChallengeStatusCard from './rewards/ChallengeStatusCard';
+import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
 import { challengeRibbon, outOfTicketsCopy, type TicketSources } from './rewards/challengeCopy';
 import { prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
 import getCollectionMilestones, { type CollectionMilestones } from '../api/endpoints/me/ride-coins/milestones';
@@ -281,6 +282,7 @@ export default function RedeemRedeemableModal({
         }
       }
       onTaskCompleted?.(attempt.task_id, attempt.task_type === 'secret_task');
+      markStandingsStale();
       if (currencies[0]?.icon_url) {
         triggerFly({
           imageUrl: currencies[0].icon_url,

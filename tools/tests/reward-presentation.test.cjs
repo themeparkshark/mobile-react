@@ -10,6 +10,7 @@ function recoveredWin() {
   const attempt = { id: 10, task_id: 104, task_type: 'task', status: 'won', ticket_cost: 1,
     rewards: { coin_asset_id: 300, coin_times_collected: 1, coins_earned: 10, xp_earned: 25, energy_earned: 40, ride_parts_earned: 4 } };
   let view;
+  const standingsMarks = { count: 0 };
   view = runtime('src/components/RedeemRedeemableModal.tsx', {
     '../context/AuthProvider': { AuthContext: { value: { player: { id: 5, tickets: 7 }, refreshPlayer: async () => ({ energy: 160 }) } } },
     '../context/LocationProvider': { LocationContext: { value: { location: { latitude: 34, longitude: -118 } } } },
@@ -27,9 +28,10 @@ function recoveredWin() {
     '../RootNavigation': { navigate: (...args) => navigation.push(args) },
     '../services/collection/earnedShelf': require('./helpers/earned-shelf.cjs'),
     '../constants/coinTiers': coinTiers,
+    '../screens/LeaderboardsScreen/standingsCache': { markStandingsStale: () => { standingsMarks.count++; } },
   }, { open: true, park: { id: 1 }, redeemable: { type: 'task', model: { id: 104, name: 'Forbidden Journey' } },
     close() { view.props.open = false; }, onPress() {} });
-  return { view, navigation, prefetches, milestoneReads, game: () => view.find(node => node.type === 'react-native-modal'),
+  return { view, navigation, prefetches, milestoneReads, standingsMarks, game: () => view.find(node => node.type === 'react-native-modal'),
     rewards: () => view.find(node => node.type === './PostWinRewardsModal') };
 }
 test('confirmed rewards wait until the native challenge presentation has dismissed', async () => {
@@ -40,6 +42,7 @@ test('confirmed rewards wait until the native challenge presentation has dismiss
   assert.equal(flow.rewards().props.visible, true);
   assert.equal(flow.rewards().props.coinTimesCollected, 1);
   assert.equal(flow.rewards().props.rideName, 'Forbidden Journey');
+  assert.equal(flow.standingsMarks.count, 1, 'a confirmed win refreshes cached standings');
 });
 test('a first coin prefetches its park shelf and reads its collection milestones once', async () => {
   const flow = recoveredWin(); await flow.view.settle(); await flow.view.settle();

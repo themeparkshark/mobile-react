@@ -11,13 +11,15 @@ import { StandingsInvite, StandingsListCard, StandingsNudge, StandingsRow } from
 import {
   experienceScore, podiumSlots, STANDINGS_EMPTY_COPY, standingsStatus, vipNeutralStandingsEnabled, type StandingsStatus,
 } from './standingsModel';
+import { standingsGeneration } from './standingsCache';
 
 const PAGE_SIZE_HINT = 15;
 // Read by name so Expo inlines the public env value at build time.
 const VIP_NEUTRAL = vipNeutralStandingsEnabled({ EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS: process.env.EXPO_PUBLIC_VIP_NEUTRAL_STANDINGS });
 
 // Survives tab switches, so returning to this tab shows the last board at once.
-const cache: { players: PlayerType[]; page: number; more: boolean } = { players: [], page: 1, more: true };
+const cache: { players: PlayerType[]; page: number; more: boolean; generation: number } =
+  { players: [], page: 1, more: true, generation: standingsGeneration() };
 
 const xpScore = (player: PlayerType) => experienceScore(player as PlayerType & { base_total_experience?: number }, VIP_NEUTRAL);
 
@@ -30,7 +32,8 @@ export default function Experience() {
   const request = useRef(0);
 
   useEffect(() => {
-    if (cache.players.length) return;
+    if (cache.players.length && cache.generation === standingsGeneration()) return;
+    cache.generation = standingsGeneration();
     const id = ++request.current;
     setStatus('loading');
     all(1).then(list => {

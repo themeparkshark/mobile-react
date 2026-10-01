@@ -91,5 +91,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
     async settle() { await new Promise(resolve => setImmediate(resolve)); render(); },
     preference(value) { preferenceListener?.(value); render(); },
     unmount() { slots.forEach(slot => slot?.cleanup?.()); },
+    /** Unmount and mount again in the same module realm (module-level caches survive). */
+    remount() { slots.forEach(slot => slot?.cleanup?.()); slots.length = 0; render(); },
   };
 };
