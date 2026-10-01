@@ -42,6 +42,8 @@ export interface CueDef {
   maxVoices?: number;
   /** Merge repeats inside this window (default 0). */
   cooldownMs?: number;
+  /** Voice group shared with other cues (caps set with GameAudio.setGroupCaps). */
+  group?: string;
   /** 0 ambient, 1 normal, 2 impact, 3 critical (default 1). */
   priority?: number;
   /** Random pitch variance in semitones (+/-). Runtime rate change. */

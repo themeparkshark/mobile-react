@@ -95,6 +95,13 @@ export * from './core/beatMap';
 export * from './core/calibration';
 export * from './core/timeline';
 export * from './core/atlasLayout';
+export * from './core/fxGovernor';
+export * from './core/perfTier';
+export * from './core/trail';
+export * from './core/color';
+export * from './core/hitTest';
+export * from './core/flip';
+export * from './core/nearMiss';
 
 // Loop + time
 export { useGameClock } from './useGameClock';
@@ -119,6 +126,8 @@ export { CountUpText } from './fx/CountUpText';
 export { useEventBridge } from './fx/useEventBridge';
 export type { EventBridge } from './fx/useEventBridge';
 export { buildSpriteAtlas, useSpriteAtlas } from './fx/SpriteAtlas';
+export { RibbonTrail, BrushStroke, useRibbonTrail, INK } from './fx/RibbonTrail';
+export type { RibbonTrailHandle } from './fx/RibbonTrail';
 export type { SpriteAtlas, SpriteAtlasOptions } from './fx/SpriteAtlas';
 export { useWalkSense } from './motion/useWalkSense';
 export type { WalkSense, WalkSenseOptions } from './motion/useWalkSense';
@@ -130,8 +139,9 @@ export type { FeelDef, FeelAt, FeelDeps, FeelBurst, FeelFire } from './feel';
 export {
   playHaptic, firePrimitive, setTellHapticsEnabled, areTellHapticsEnabled,
   setHapticAudioOffsetMs, setHapticGapMs, scheduleHaptics,
+  configureHaptics, hapticBusStats, playPattern, setNativeHapticPlayer, hasNativeHaptics,
 } from './Haptics';
-export type { PatternOptions } from './Haptics';
+export type { PatternOptions, NativeHapticPlayer } from './Haptics';
 
 // Audio
 export { GameAudio, MusicDirector } from './audio/GameAudio';
@@ -155,4 +165,19 @@ export { ResultsCard, defaultMessage as resultsMessage } from './results/Results
 export type { ResultsCardProps, ResultStat } from './results/ResultsCard';
 export { usePerfProbe, PerfOverlay } from './perf/PerfOverlay';
 export type { PerfProbe } from './perf/PerfOverlay';
+export { usePerfTier } from './perf/usePerfTier';
+export type { PerfTierHandle } from './perf/usePerfTier';
 export type { ShellSnapshotData } from './GameShellV2';
+
+// Engine pass 4: haptic bus + Core Haptics patterns, stamps, finisher cam, thermal ladder
+export * from './core/hapticBus';
+export * from './core/hapticPattern';
+export * from './core/stamps';
+export * from './core/finisher';
+export * from './core/thermal';
+export { StampLayer } from './fx/StampLayer';
+export type { StampLayerHandle, StampLayerProps, StampOptions } from './fx/StampLayer';
+export { useFinisher } from './fx/useFinisher';
+export type { FinisherDeps, FinisherAt } from './fx/useFinisher';
+export { useThermal } from './perf/useThermal';
+export type { ThermalHandle } from './perf/useThermal';

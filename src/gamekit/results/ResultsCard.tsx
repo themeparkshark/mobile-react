@@ -17,7 +17,7 @@
  * place, no slams or wobbles.
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -33,7 +33,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import GameIcon from '../../ui/GameIcon';
-import { compareBest, formatScore, nextStarGoal, type StarThresholds } from '../core/scoring';
+import { compareBest, formatScore, nextStarGoal, tallySchedule, tallyTickCount, type StarThresholds } from '../core/scoring';
+import { nearMissLine } from '../core/nearMiss';
 import { CountUpText } from '../fx/CountUpText';
 import { playHaptic } from '../Haptics';
 import { GameAudio } from '../audio/GameAudio';
@@ -58,10 +59,26 @@ export interface ResultsCardProps {
   reducedMotion?: boolean;
   /** Called when the reveal (stars + count-up) has finished. */
   onRevealed?: () => void;
+  /** Ghost / rival to compare against: drives the near-miss line. */
+  rival?: { name: string; score: number } | null;
+  /**
+   * Bucket tallies that fill before the score (Whack: HITS, COMBO, BONUS),
+   * each with accelerating ticks climbing 0 -> +12 semitones.
+   */
+  buckets?: ResultStat[];
+  /** Numeric bucket values (same order as buckets) for the tally count-up. */
+  bucketValues?: number[];
+  /**
+   * Gap between star slams (ms). Pass the stinger's beat or half-beat
+   * (Whack: stars on stinger beats; Rhythm: one per half beat).
+   */
+  starStepMs?: number;
 }
 
 const STAR_BASE_DELAY = 260;
 const STAR_STEP = 220;
+const BUCKET_MS = 520;
+const BUCKET_GAP = 140;
 
 export function defaultMessage(stars: number, near: boolean): string {
   if (stars >= 3) return 'INCREDIBLE!';
@@ -71,12 +88,18 @@ export function defaultMessage(stars: number, near: boolean): string {
 }
 
 export function ResultsCard({
-  score, stars, message, thresholds, personalBest, maxCombo, stats = [], note, reducedMotion = false, onRevealed,
+  score, stars, message, thresholds, personalBest, maxCombo, stats = [], note, reducedMotion = false, onRevealed, rival,
+  buckets, bucketValues, starStepMs = STAR_STEP,
 }: ResultsCardProps) {
   const goal = useMemo(() => (thresholds ? nextStarGoal(score, thresholds) : null), [score, thresholds]);
   const best = useMemo(() => compareBest(score, personalBest), [score, personalBest]);
   const title = message ?? defaultMessage(stars, !!goal?.near);
-  const countDelay = reducedMotion ? 0 : STAR_BASE_DELAY + STAR_STEP * 3;
+  // The one line that sells "one more run" (beat a ghost, so close to a star).
+  const near = useMemo(() => nearMissLine({ score, thresholds, best: personalBest, rival }), [score, thresholds, personalBest, rival]);
+  const showNear = near.text && near.kind !== 'newBest' && near.kind !== 'nextStar';
+  const nBuckets = buckets?.length ?? 0;
+  const bucketStart = STAR_BASE_DELAY + starStepMs * 3;
+  const countDelay = reducedMotion ? 0 : bucketStart + nBuckets * (BUCKET_MS + BUCKET_GAP);
 
   const ribbon = useSharedValue(reducedMotion ? 1 : 0);
   const bestScale = useSharedValue(reducedMotion ? 1 : 0);
@@ -129,10 +152,20 @@ export function ResultsCard({
             earned={n <= stars}
             close={!!goal && goal.near && n === stars + 1}
             reducedMotion={reducedMotion}
+            stepMs={starStepMs}
             onLanded={n === Math.max(1, stars) ? onRevealed : undefined}
           />
         ))}
       </View>
+
+      {nBuckets ? (
+        <View style={styles.buckets}>
+          {buckets!.map((b, i) => (
+            <BucketTally key={b.label} label={b.label} text={b.value} value={bucketValues?.[i]}
+              delayMs={reducedMotion ? 0 : bucketStart + i * (BUCKET_MS + BUCKET_GAP)} reducedMotion={reducedMotion} />
+          ))}
+        </View>
+      ) : null}
 
       <Text style={styles.label}>SCORE</Text>
       <CountUpText value={score} delayMs={countDelay} reducedMotion={reducedMotion} tickEvery={Math.max(1, Math.round(score / 14))}
@@ -148,6 +181,14 @@ export function ResultsCard({
           <Text style={styles.bestQuiet}>{`BEST ${formatScore(personalBest)}`}</Text>
         ) : null}
       </Animated.View>
+
+      {showNear ? (
+        <Animated.View style={[styles.nearLine, near.kind === 'beatRival' && styles.nearWin, bestStyle]}>
+          <Text style={[styles.nearText, near.kind === 'beatRival' && styles.nearWinText]} numberOfLines={1} adjustsFontSizeToFit>
+            {near.text.toUpperCase()}
+          </Text>
+        </Animated.View>
+      ) : null}
 
       {goal ? (
         <View style={styles.goal} accessible accessibilityLabel={goal.nextStar
@@ -186,11 +227,53 @@ function Chip({ label, value }: ResultStat) {
   );
 }
 
-function StarSlot({ index, earned, close, reducedMotion, onLanded }: {
+/** One bucket: counts up from 0 with accelerating, rising coin ticks, then pops. */
+function BucketTally({ label, text, value, delayMs, reducedMotion }: {
+  label: string;
+  text: string;
+  value?: number;
+  delayMs: number;
+  reducedMotion: boolean;
+}) {
+  const pop = useSharedValue(reducedMotion ? 1 : 0);
+  const [shown, setShown] = useState(reducedMotion || value === undefined ? value ?? 0 : 0);
+  useEffect(() => {
+    if (reducedMotion) {
+      setShown(value ?? 0);
+      return undefined;
+    }
+    pop.value = withDelay(delayMs, withSequence(
+      withTiming(1.15, { duration: 90, easing: Easing.out(Easing.back(1.6)) }),
+      withSpring(1, { damping: 10, stiffness: 300 }),
+    ));
+    const n = value !== undefined ? tallyTickCount(value) : 0;
+    const plan = tallySchedule(n, BUCKET_MS);
+    const timers = plan.at.map((t, k) => setTimeout(() => {
+      GameAudio.play('fx.coin', { volume: 0.3, pitch: plan.pitch[k] * 0.5 });
+      if (k === n - 1) playHaptic('tick');
+    }, delayMs + t));
+    timers.push(setTimeout(() => setShown(value ?? 0), delayMs));
+    return () => { timers.forEach(clearTimeout); cancelAnimation(pop); };
+  }, [delayMs, value, reducedMotion, pop]);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }], opacity: pop.value > 0.02 ? 1 : 0 }));
+  return (
+    <Animated.View style={style}>
+      <View style={styles.bucket}>
+        {value !== undefined ? (
+          <CountUpText value={shown} durationMs={BUCKET_MS} reducedMotion={reducedMotion} punch={1.05} style={styles.bucketValue} />
+        ) : <Text style={styles.bucketValue}>{text}</Text>}
+        <Text style={styles.bucketLabel}>{label}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+function StarSlot({ index, earned, close, reducedMotion, stepMs, onLanded }: {
   index: number;
   earned: boolean;
   close: boolean;
   reducedMotion: boolean;
+  stepMs: number;
   onLanded?: () => void;
 }) {
   const scale = useSharedValue(reducedMotion ? 1 : earned ? 0 : 1);
@@ -202,7 +285,7 @@ function StarSlot({ index, earned, close, reducedMotion, onLanded }: {
       scale.value = 1;
       return undefined;
     }
-    const delay = STAR_BASE_DELAY + (index - 1) * STAR_STEP;
+    const delay = STAR_BASE_DELAY + (index - 1) * stepMs;
     if (earned) {
       scale.value = withDelay(delay, withSequence(
         withTiming(2.2, { duration: 0 }),
@@ -227,7 +310,7 @@ function StarSlot({ index, earned, close, reducedMotion, onLanded }: {
       ), 3, false));
     }
     return undefined;
-  }, [earned, close, index, reducedMotion, onLanded, scale, tilt]);
+  }, [earned, close, index, reducedMotion, stepMs, onLanded, scale, tilt]);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }, { rotate: `${tilt.value}deg` }] }));
   return (
     <Animated.View style={[styles.star, index === 2 && styles.starMiddle, style]}>
@@ -272,10 +355,21 @@ const styles = StyleSheet.create({
   goalToGo: { fontFamily: 'Knockout', fontSize: 16, color: '#ffe07a' },
   goalTrack: { height: 16, borderRadius: 8, backgroundColor: '#bfe5ff', borderWidth: 3, borderColor: '#05346e', overflow: 'hidden' },
   goalFill: { height: '100%', backgroundColor: '#ffcf3b' },
+  buckets: { flexDirection: 'row', justifyContent: 'center', marginBottom: 4 },
+  bucket: { backgroundColor: '#3d9be6', borderRadius: 14, borderWidth: 3, borderColor: '#05346e', paddingHorizontal: 10,
+    paddingVertical: 3, marginHorizontal: 4, alignItems: 'center', minWidth: 78 },
+  bucketValue: { fontFamily: 'Shark', fontSize: 22, height: 30, color: '#ffffff', minWidth: 60, textAlign: 'center',
+    textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
+  bucketLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#ffe07a', letterSpacing: 1 },
   stats: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 12 },
   chip: { backgroundColor: '#fff8e4', borderRadius: 14, borderWidth: 3, borderColor: '#05346e', paddingHorizontal: 12,
     paddingVertical: 4, margin: 4, alignItems: 'center', minWidth: 86 },
   chipValue: { fontFamily: 'Shark', fontSize: 20, color: '#05346e' },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c', letterSpacing: 1 },
+  nearLine: { borderRadius: 999, borderWidth: 3, borderColor: '#05346e', backgroundColor: '#e4f7ff', paddingHorizontal: 14,
+    paddingVertical: 3, marginBottom: 4, maxWidth: '100%' },
+  nearWin: { backgroundColor: '#ffcf3b' },
+  nearText: { fontFamily: 'Knockout', fontSize: 16, color: '#05346e', letterSpacing: 1 },
+  nearWinText: { color: '#05346e' },
   note: { fontFamily: 'Knockout', fontSize: 15, color: '#ffffff', marginTop: 10, textAlign: 'center' },
 });

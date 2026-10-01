@@ -14,9 +14,18 @@ and stays backward compatible: every existing import from `src/gamekit` still wo
 - **QUEUE REALITY.** The line never stops moving, so movement never pauses a
   game (see "Interruptions").
 
-Demo: **MiniGameTester, then "Studio Engine Demo: Bonk Lab"** (`demo/EngineDemo.tsx`).
-Set `EXPO_PUBLIC_RIDE_GAME_PREVIEW=1 EXPO_PUBLIC_ENGINE_DEMO=1` to boot straight
-into it with the scripted autoplay tour.
+Demos (dev MiniGameTester):
+- **"Studio Engine Demo: Bonk Lab"** (`demo/EngineDemo.tsx`): the full game loop.
+  `EXPO_PUBLIC_RIDE_GAME_PREVIEW=1 EXPO_PUBLIC_ENGINE_DEMO=1` boots into its tour.
+- **"Studio Engine Lab: FX Lab"** (`demo/FxLab.tsx`): ribbon trails, afterimages,
+  brush strokes, the FX governor, card flips, nearest-target taps, perf tiers,
+  the colour guard and the rival near-miss results card.
+  `EXPO_PUBLIC_ENGINE_DEMO=fxlab` boots into its tour
+  (`/Users/dustinsparage/apps/tps-mg/engine-metro.sh`, port 8093).
+- **"Studio Engine Lab: Feel Lab"** (`demo/FeelLab.tsx`): bubble-letter stamps,
+  the finisher cam (Final Bonk, Ride win, Match point), the haptic priority bus
+  per game, Banana's screen-event cap, the thermal ladder and the results card
+  with bucket tallies. `DEMO=feellab` boots into its tour.
 
 ## Map
 
@@ -42,6 +51,20 @@ into it with the scripted autoplay tour.
 | Calibration | `core/calibration.ts`, `session/calibrationStore.ts` | per-route audio latency and input offset (Rhythm, Boss, Trivia) |
 | Timelines | `core/timeline.ts` | closed-form fx springs, cue timelines on the fx clock, fixed logical views |
 | Sprite atlas | `core/atlasLayout.ts`, `fx/SpriteAtlas.ts` | per-theme atlas built at mount from Alex's frames (2048 px cap) |
+| FX governor | `core/fxGovernor.ts`, `feel.ts` | flash gate (35%, 500 ms, under 3 Hz), hit-stop budget, one stop per stroke, punch vs shake, priority |
+| Perf tiers | `core/perfTier.ts`, `perf/usePerfTier.ts` | auto full / lite / min from the first 60 frames, step-down only, `TIER_SCALES` |
+| Trails and ink | `core/trail.ts`, `fx/RibbonTrail.tsx` | ribbon trails, ink brush strokes (tapering over a 2 px INK edge), afterimages |
+| Colour guard | `core/color.ts` | `brightTeamColor`, contrast ratio, readable pick, palette lerps |
+| Walk-safe input | `core/hitTest.ts` | nearest target with forgiveness, bump rejection, tap/swipe/drag |
+| Card flip | `core/flip.ts` | flip pose (face at 90 deg, edge, shade, specular, squash), network hold, deal-in |
+| Near miss | `core/nearMiss.ts`, `results/ResultsCard.tsx` | the "one more run" line: beat a ghost, so close to a star |
+| Haptic bus | `core/hapticBus.ts`, `Haptics.ts` | one priority bus for every game's density rule (gap, rate, max delay, tell budget, input exemption), per-game presets |
+| Core Haptics | `core/hapticPattern.ts`, `assets/haptics/*.ahap` | intensity/sharpness patterns, AHAP export, expo fallback merged under 100 ms, native player hook |
+| Stamps | `core/stamps.ts`, `fx/StampLayer.tsx` | bubble-letter stamps in 3 Skia passes, slam/squash/hold/drift poses, FIFO priority queue |
+| Finisher cam | `core/finisher.ts`, `fx/useFinisher.ts` | Final Bonk / match point / extreme finish / Final Pop / Finale BIG cue plans |
+| Thermal ladder | `core/thermal.ts`, `perf/useThermal.ts` | nominal/fair/serious/critical over the whole session, native signal hook, 120 Hz to 60-step |
+| Screen cap | `core/fxGovernor.ts` `govScreenEvent` | at most N screen-space moments per window (Banana 2 per 250 ms) |
+| Voice groups, Rez snap | `core/audioMix.ts`, `GameAudio.setGroupCaps`, `playQuantized` | shared caps per group, audio-only 16th snapping |
 
 ## A game in 60 lines
 
@@ -252,6 +275,10 @@ GameAudio.music.setTrimDb(-3);                      // line moving: dip, never s
   steals that cue's oldest voice. Impacts steal the oldest tells. `cooldownMs`
   merges rapid repeats, variants never repeat back to back, and `pitchJitter`
   adds random pitch variance.
+- **Decode safety**: audio-api decodes are serialized (one in flight). 0.6.5
+  builds buffer host objects on detached threads into an unsynchronized debug
+  registry, and parallel decodes aborted the app. The native fix for the next
+  binary is `node tools/audio/patch-audio-api.mjs` before `pod install`.
 - **Latency**: react-native-audio-api 0.6 decodes WAV and MP3 but not AAC, so the
   `HybridBackend` sends compressed files to expo-av.
   `setHapticAudioOffsetMs(GameAudio.latencyMs)` aligns patterns that pass
@@ -408,6 +435,115 @@ const atlas = useSpriteAtlas([finnIdle, finnPeek, finnBonk, holeLip], { cell: 25
 One offscreen draw at mount, capped at 2048 px (16 MB). `layoutAtlas` is pure
 and tested.
 
+## FX governor
+
+Stacked moments must read as one big beat, not a strobe.
+
+```ts
+const governor = useMemo(() => createFxGovernor({ calm: reducedMotion || walking }), [reducedMotion, walking]);
+const feel = useFeel({
+  golden: { hitStop: 110, flash: { peak: 0.6 }, punch: 0.05, prio: 5, ... },
+  pearl:  { hitStop: 50,  flash: { peak: 0.3 }, punch: 0.03, prio: 1, ... },
+  ko:     { hitStop: 160, flash: { peak: 0.5 }, force: true, ... },
+}, { fx, camera, clock, governor });
+govBeginStroke(governor, strokeIndex);   // Current Quest: one global hit-stop per player move
+```
+
+- Full-frame flashes: at most one per 500 ms and one per 2 s window, peak capped
+  at 35% (15% calm). A denied flash becomes a localized bloom, so the moment
+  still lands.
+- Global hit-stops: at most 90 ms of freeze per second (Sharky), trimmed to
+  what is left, and at most one per stroke.
+- Camera: no punch within 150 ms of a shake; shakes in the same beat keep the
+  larger trauma.
+- Priority: inside a 120 ms beat, a lower `prio` never takes a flash, stop or
+  punch that a higher one owns (golden > unlock > Riptide > pearl bank > tide).
+- `force` (KO, round end) skips the gaps and budgets but keeps the caps.
+
+Direct use: `govFlash(g, now, peak, prio)`, `govHitStop`, `govShake`, `govPunch`.
+
+## Perf tiers
+
+```ts
+const tier = usePerfTier({ active: playing });
+const s = TIER_SCALES[tier.tierJs];                    // { particles, shaders, shaderRes, ambient, blur, trails }
+<FxStage capacity={Math.round(200 * s.particles)} ... />
+{s.shaders ? <Caustics /> : <BakedCaustics />}
+fxEmitUI(fx.state.value, { ...EMITTERS.stars, count: tierCount(tier.tier.value, 12) }, x, y);   // worklet
+proof.meta.perf_tier = TIER_NAMES[tier.tierJs];
+```
+
+The probe skips 20 warm-up frames, then the p95 of the next 60 vsync intervals
+picks the tier (lite above 19 ms, min above 28 ms; at 60 Hz a healthy frame is
+16.7 ms). During play it only steps down, after a full 120-frame window over the
+threshold x1.15 and a 240-frame cooldown, and never back up mid-run. App-switch
+hitches over 250 ms are ignored. `tier.force(1)` pins a tier for the tester;
+`force(-1)` returns to auto and re-measures.
+
+## Ribbon trails, brush strokes, afterimages
+
+```tsx
+const trail = useRibbonTrail({ cap: 24, lifeMs: 600 });
+// UI thread, each frame: trailPush(trail.state.value, x, y, fxMs); trail.version.value += 1;
+<RibbonTrail trail={trail} now={fxMsSv} color="#ffcf3b" head={24} tail={6} />      // inside your Canvas
+
+const xs = [], ys = [];
+quadPolyline(x0, y0, cx, cy, x1, y1, 24, xs, ys);        // or ringPolyline(...)
+<BrushStroke xs={xs} ys={ys} progress={drawOnSv} color="#ffffff" head={3} tail={9} taperIn={0.1} />
+
+const ghosts = useSharedValue(createAfterimages(4, 30, 170));   // Sharky Dash: 4 every 30 ms
+afterimagePush(ghosts.value, fxMs, x, y, rot, frame);            // worklet
+afterimageAlpha(ghosts.value, i, fxMs, 0.45);                    // per ghost sprite
+```
+
+Every strip is drawn twice: the INK outline pass (navy, widened 2 px per side)
+and the fill. That is the Current Quest ink rule, and it keeps procedural FX in
+Alex's outlined style. Feed the fx clock so a hit-stop freezes the fade.
+
+## Walk-safe taps
+
+```ts
+const i = nearestTarget(cxs, cys, radii, liveMask, n, x, y, { forgiveness: walkForgiveness(walk.state.current) });
+if (i === AMBIGUOUS) return;        // a bump dead between two targets flips nothing
+if (i >= 0) flip(i);
+swipeKind(dx, dy, durMs);           // STROKE_TAP tolerates a 22 px walking wobble
+```
+
+Distances are normalized by each target's radius, so a big target never steals a
+tap from a small one under the finger. Use the art's true radius; forgiveness
+grows it.
+
+## Card flip
+
+```ts
+const card = useAnimatedStyle(() => {
+  const p = flipPose(fxMs.value - startSv.value, undefined, !faceUpSv.value);  // FLIP_DEFAULT: 220 ms
+  return { transform: [{ perspective: 800 }, { rotateY: `${p.angle}deg` }, { scale: p.squash }] };
+});
+// p.faceUp swaps the art at exactly 90 deg; p.edge, p.shade, p.specularX/p.specular, p.shadowStretch drive the layers.
+holdPose(elapsedMs);     // server-revealed modes: 60 deg, wobble only after 180 ms
+dealPose(elapsedMs, i);  // 38 ms stagger, out-back 0.6 -> 1, rotateZ -12 -> 0
+```
+
+Worklet note: never give a worklet a default parameter that points at a module
+object (`timing = FLIP_DEFAULT`). The Reanimated plugin does not capture it and
+the worklet throws "Property doesn't exist" on the UI thread.
+
+## Colour guard
+
+`brightTeamColor(hex)` keeps bright colours and remaps dark, navy or purple ones to
+sky, coral or gold by hue (Line Party crews, player colours). `contrastRatio`,
+`pickReadable(candidates, skies, 3)` (Parade Beat notes at 3:1 in every sky
+state), `mixHex` and `lighten` for palette lerps. `BRIGHT` holds the world
+palette, and `BRIGHT.ink` is for outlines only.
+
+## Near miss on the results card
+
+`GameResult.rival = { name, score }` (a ghost, a crew mate, the Daily median)
+adds one line to the card, chosen by `nearMissLine`: "You beat Maya by 60", "Only
+40 behind Sam", "Just 50 from star 2", "120 off your best". It always uses
+positive framing and never says "you lost".
+
 ## Art rule
 
 The engine draws **no characters, icons or props**. Characters and props come
@@ -415,6 +551,131 @@ from Alex's art already in the app, or from the GPT Image 2.5 pipeline with the
 quality gate. Procedural drawing is limited to FX primitives (dots, rings,
 droplets, streaks, confetti) and environment shapes (water, lips), always in the
 navy-outline cartoon style.
+
+## Haptic bus (engine pass 4)
+
+Every haptic (`playHaptic`, `playPattern`, `feel` entries) goes through one
+priority bus. Pick the game's rule on mount:
+
+```ts
+useEffect(() => { configureHaptics('whack'); return () => configureHaptics('default'); }, []);
+playPattern('whackCrit', { priority: WHACK_PRIO.quick });          // one pattern = one bus event
+playPattern('goldenTell', { priority: WHACK_PRIO.goldenTell, tell: true });
+playHaptic('tap', { input: true });                                  // Line Party P1-input skips the cap
+hapticBusStats();                                                    // fired / queued / dropped / preempted
+```
+
+| Preset | Rule |
+|---|---|
+| `default` | 60 ms gap, an out-ranking haptic fires inside the gap (the pass 1-3 grammar, unchanged) |
+| `whack` | 1 per 90 ms; a blocked one waits at most 30 ms (a higher one replaces it, lower ones drop); 1 tell per 300 ms |
+| `banana` | 84 ms gap, 12 per second, a lower one within 50 ms of a higher one drops, queue up to 30 ms |
+| `trivia` | 6 per second |
+| `sharky` | 4 gameplay haptics per second, telegraphs exempt |
+| `currentQuest` / `memory` / `boss` | 50 / 60 / 60 ms gap (boss queues up to 20 ms) |
+| `rhythm` / `rhythmDense` | 60 ms, or 90 ms in bars with 6+ notes (switch at runtime) |
+| `lineParty` | 120 ms cap, own direct hits exempt |
+
+A queued haptic that would land more than its max delay late is dropped: a
+late buzz reads as a bug.
+
+## Core Haptics patterns
+
+`AHAP_LIBRARY` holds the designs' patterns as intensity/sharpness events
+(Whack v4 hits, tells, Champ crouch, Final Bonk; Rhythm Phase 6 with DRUM always
+duller than RIM; Boss BossFeel; Banana's puffer hit and Golden Hour).
+
+```ts
+playPattern('bossKo');                                   // native AHAP player if registered, else expo fallback
+playPattern([{ t: 0, kind: 'transient', i: 0.9, s: 0.8 }, { t: 40, kind: 'transient', i: 0.9, s: 0.9 }]);
+setNativeHapticPlayer({ play: (ahap, delayMs) => CoreHaptics.play(JSON.stringify(ahap), delayMs) }); // WS9's module
+```
+
+- `node tools/haptics/export-ahap.cjs` writes `assets/haptics/<name>.ahap`
+  (Apple AHAP 1.0) for the native module; `--check` exits 1 when stale.
+- The expo fallback plays one preset per event (sharpness picks the family:
+  dull is soft/medium/heavy, crisp is light/rigid) and merges pulses closer than
+  100 ms into the strongest, because expo-haptics only plays the first of them.
+- Rising continuous ramps (Champ crouch 0.2 to 0.6) set the event at its peak and
+  start the `HapticIntensityControl` curve below 1.
+
+## Stamps
+
+```tsx
+const stamps = useRef<StampLayerHandle>(null);
+<StampLayer ref={stamps} width={W} height={H} timeScale={clock.fxScale} queue={{ maxLive: 1 }} />
+stamps.current?.push('CLOSE!', { x, y, style: 'sharky', color: '#ffcf3b' });
+stamps.current?.push('SNATCHED', { style: 'party', priority: 5 });     // jumps the queue
+// or from a feel entry: combo: { ..., stamp: { style: 'slab', color: '#ffcf3b' } }, then feel('combo', { stamp: 'x4 COMBO +600' })
+```
+
+Styles: `sharky` (1.4 to 1.0 in 140 ms outBack 1.7, squash frame, 380 ms hold,
+12 pt drift), `trivia` (2.2 to 1.0, exits up 40 pt), `party` (1.8 to 1.0),
+`slab` (Whack combo slab at -12 deg), `ribbon` (Rhythm 0.4 to 1.15), `fever`.
+Three Skia passes: a navy drop shadow, a 7 pt `#23384f` outline, then the fill.
+The queue is FIFO by priority with `maxLive`, `spacingMs` (Line Party 600) and
+`maxWaitMs` (stale stamps are dropped). Stamps run on the fx clock, so a hit-stop
+freezes them mid-slam. Reduced motion: a plain fade.
+
+## Finisher cam
+
+```ts
+const finisher = useFinisher({ clock, camera, fx, stamps, wave, sunburst, width: W, height: H, stinger: 'sting_whack_win' });
+const ms = finisher.run('bossDefeat', { x, y, text: 'KNOCKOUT!' });   // then show results after `ms`
+finisher.cancel();                                                     // pause / wrap-up
+```
+
+| Preset | Plan |
+|---|---|
+| `bossDefeat` | 160 ms freeze, 0.25x for 700 ms, push 1.10 toward the impact, impact frame, 3 rings 150 ms apart, 60 confetti, boss shake, stinger, music -8 dB |
+| `rideWin` | same without the shake, 24 confetti |
+| `matchPoint` | Trivia: 0.4x for 900 ms, push 1.6, sunburst, confetti cannon, stinger |
+| `extremeFinish` | Banana: 0.25x, 1.3 close-up, 60 confetti |
+| `gateFinale` | Sharky Ride Gate: 0.4x for 300 ms, push 1.15 |
+| `finalPop` | Boss: 220 ms freeze, 1.18x, 200 ms slow-mo |
+| `finaleBig` | Rhythm: 80 ms hold, 1.06 zoom, light shake, 3 bursts of 48 |
+
+`finisherPlan(preset, reducedMotion)` is pure. Reduced motion keeps the stamp,
+rings, stinger and a few confetti, and drops freeze, slow-mo, push, shake and the
+impact frame.
+
+## Thermal ladder
+
+```ts
+const thermal = useThermal({ active: playing });
+const t = THERMAL_SCALES[thermal.levelJs];      // particleCap, parallax, ambient, afterimages, caustics, mesh, confetti, step60
+<FxStage capacity={Math.min(capacity, t.particleCap)} ... />
+// worklet: if (thermal.step60.value && (frame & 1)) return;     // commit shared values every other vsync
+onRunEnd: thermal.runEnd();                     // recovers one step between runs, never mid-run
+proof.meta.hz = thermal.hz(); proof.meta.thermal = THERMAL_NAMES[thermal.levelJs];
+```
+
+Without a native signal, the ladder steps down one level when the median frame
+time stays 25% over the Run 1 baseline for 10 s. `thermal.setNative(level)` takes
+`ProcessInfo.thermalState` once WS9's module exists, and then it wins. At 120 Hz,
+a p5 under 100 fps for 5 s turns on 60-step mode. `thermal.force(level)` pins a
+level for the tester.
+
+## Screen-event cap, voice groups, Rez snap
+
+```ts
+const governor = createFxGovernor({ screenEventsPerWindow: 2, screenWindowMs: 250 });   // Banana 7.0
+GameAudio.setGroupCaps({ tick: 3, babble: 1, crowd: 1 });   // Trivia voice manager
+GameAudio.setCueGroup('tv_crowd_gasp', 'crowd');
+GameAudio.playQuantized('wh_bonk', { step: streak, subdivision: 0.25, maxSnapMs: 50 });  // audio only, never scoring
+```
+
+A feel moment over the screen cap keeps its particles, sound and haptic, and
+loses its flash (it becomes a local bloom), camera move, vignette and stamp.
+Offer moments in priority order inside a frame; `force` always passes and still
+counts.
+
+## Results: bucket tallies, stars on the beat
+
+`GameResult.buckets` (`[{ label: 'HITS', value: '38' }, ...]`) with
+`bucketValues` adds tallies that pop in before the score and count up from 0
+with accelerating coin ticks climbing 0 to +12 semitones (`tallySchedule`).
+`starStepMs` puts the star slams on the stinger's beat (Whack: 464 ms at 129.2 BPM).
 
 ## Tests
 
@@ -425,5 +686,11 @@ navy-outline cartoon style.
 - `tools/tests/gamekit-engine-timing.test.cjs` covers the event ring, walk
   sense, beat maps, calibration, fx springs, cue timelines, fixed views, atlas
   layout and haptic scheduling.
+- `tools/tests/gamekit-engine-fx.test.cjs` covers the FX governor, perf tiers,
+  trails, brush strips, afterimages, the colour guard, hit testing, the flip pose
+  and near-miss lines (the governor through `fireFeel` is in the systems test).
+- `tools/tests/gamekit-engine-pass4.test.cjs` covers the haptic bus presets,
+  AHAP export and fallback, stamps, finisher plans, the thermal ladder, the
+  screen-event cap through `fireFeel`, voice groups, Rez snapping and tallies.
 - `tools/tests/game-shell-presentation.test.cjs` covers the QUEUE REALITY shell
   flows.

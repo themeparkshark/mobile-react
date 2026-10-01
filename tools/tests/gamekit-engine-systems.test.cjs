@@ -231,6 +231,35 @@ test('feel grammar: one call fires sound, haptic, time, camera and FX; rivals an
   assert.deepEqual(log, [['ladder', 'bonk', 5]], 'rival-caused: no haptic; calm (walking/reduced motion): no camera');
 });
 
+test('feel grammar + governor: a denied flash becomes a local bloom, stacked stops are budgeted, punch waits for shake', () => {
+  const log = [];
+  const feelMod = loadTs('src/gamekit/feel.ts', {
+    react: { useCallback: (fn) => fn, useRef: (v) => ({ current: v }) },
+    './audio/GameAudio': { GameAudio: { play: () => undefined, playLadder: () => undefined, duck: () => undefined } },
+    './Haptics': { playHaptic: () => undefined, HP: { own: 2, telegraph: 3 } },
+  });
+  const govMod = loadTs('src/gamekit/core/fxGovernor.ts');
+  let now = 1000;
+  const deps = {
+    governor: govMod.createFxGovernor(),
+    now: () => now,
+    fx: { current: { burst: () => undefined, ring: () => undefined, flash: (o) => log.push(['flash', o.peak]), bloom: () => log.push(['bloom']),
+      vignette: () => undefined, flyUp: () => undefined } },
+    camera: { shake: (t) => log.push(['shake', t]), punch: () => log.push(['punch']), kick: () => undefined },
+    clock: { hitStop: (ms) => log.push(['hitStop', ms]), localStop: () => undefined, slowMo: () => undefined },
+  };
+  const golden = { flash: { peak: 0.6 }, hitStop: 70, shake: 0.3, prio: 5 };
+  feelMod.fireFeel(golden, { x: 10, y: 10 }, deps);
+  now += 40;
+  feelMod.fireFeel({ flash: { peak: 0.3 }, hitStop: 70, punch: 0.04, prio: 1 }, { x: 10, y: 10 }, deps);
+  assert.deepEqual(log, [['hitStop', 70], ['shake', 0.3], ['flash', 0.35], ['bloom']],
+    'golden takes the stop and a capped flash; the pearl in the same beat gets a bloom, no stop, no punch');
+  log.length = 0;
+  now += 600;
+  feelMod.fireFeel({ flash: { peak: 0.3 }, hitStop: 70, punch: 0.04, prio: 1 }, { x: 10, y: 10 }, deps);
+  assert.deepEqual(log, [['hitStop', 20], ['punch'], ['bloom']], 'budget-trimmed stop, punch allowed, flash still inside the 2 s window');
+});
+
 test('studio audio sync: infers ladders and lanes, converts one-shots to WAV, splits approved from dev', { skip: spawnSync('ffmpeg', ['-version']).status !== 0 }, () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-audio-'));
   const src = path.join(tmp, 'audio');
