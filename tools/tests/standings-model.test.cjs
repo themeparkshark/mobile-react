@@ -88,6 +88,7 @@ test('Standings screens never wait on a bare spinner and use the brand icons', (
     assert.match(source, /SharkLoader/, `${file} has a loading and error state`);
     assert.match(source, /state="error"/, `${file} has a retry path`);
   }
-  const screen = fs.readFileSync(path.join(root, 'src/screens/LeaderboardScreen.tsx'), 'utf8');
-  assert.match(screen, /icon: 'ride'/, 'Rides tab has its icon');
+  // The tab list moved into standingsTabs() so the Home Hunt flag can add a fourth tab.
+  const tabs = fs.readFileSync(path.join(root, 'src/screens/LeaderboardsScreen/homeHuntModel.ts'), 'utf8');
+  assert.match(tabs, /icon: 'ride'/, 'Rides tab has its icon');
 });

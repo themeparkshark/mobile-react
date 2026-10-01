@@ -1,7 +1,7 @@
 /**
  * Standings tab 4: Home Hunt (spec 5.3). Header card, Near Me | Friends
  * control, podium, rows, a sticky You row, the info sheet, the age question
- * and the Hunter Name settings. Near Me never shows or opens a username.
+ * and the Hunter Name settings. Near Me shows Hunter Names only and never opens a profile.
  */
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
