@@ -363,6 +363,14 @@ export default function MemoryGame({
   const [ghostUi, setGhostUi] = useState({ ghostPairs: 0, delta: null as string | null, ahead: false, passed: 0, label: 'PB' });
   const [tryScreen, setTryScreen] = useState<{ pairs: number; total: number; left: number } | null>(null);
   const [unlock, setUnlock] = useState<string | null>(null);
+  const [tip, setTip] = useState<{ text: string; kind: 'scout' | 'slip' } | null>(null);
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showTip = useCallback((text: string, kind: 'scout' | 'slip') => {
+    if (tipTimer.current) clearTimeout(tipTimer.current);
+    setTip({ text, kind });
+    tipTimer.current = setTimeout(() => setTip(null), 2200);
+  }, []);
+  useEffect(() => () => { if (tipTimer.current) clearTimeout(tipTimer.current); }, []);
   const [peeks, setPeeks] = useState({ n: 0, armed: false, show: false });
   const [runIndex, setRunIndex] = useState(0);
   const [racers, setRacers] = useState<Racer[]>([]);
@@ -1319,7 +1327,7 @@ export default function MemoryGame({
           Haptic.tickSelection();
           chainPlate.current?.bounce();
           stage.current?.pose('hmm', 600);
-          if (e.scouts === 1 && r.runIndex === 0 && r.tryIndex === 0) stage.current?.say('NEW CARDS ARE FREE', '#ffffff', 'right');
+          if (e.scouts === 1 && r.runIndex === 0 && r.tryIndex === 0) showTip('New cards are free. Keep your chain.', 'scout');
           break;
         }
         case 'gullMiss': {
@@ -1349,7 +1357,7 @@ export default function MemoryGame({
           chainPlate.current?.shatter();
           if (!reducedMotion) fx.current?.burst('shards', g.W - 60, g.hudY + 24, { count: 8 });
           stage.current?.pose('facepalm', 800);
-          if (e.slips === 1 && r.runIndex === 0 && r.tryIndex === 0) stage.current?.say('YOU SAW THAT ONE!', MM.coral, 'right');
+          if (e.slips === 1 && r.runIndex === 0 && r.tryIndex === 0) showTip('You saw that one! Chain reset.', 'slip');
           warmth.value = withTiming(0, { duration: 300 });
           break;
         }
@@ -1934,6 +1942,11 @@ export default function MemoryGame({
             <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.warmFlash, warmFlashStyle]} />
             <FxStage ref={fx} width={g.W} height={g.H} reducedMotion={reducedMotion} style={StyleSheet.absoluteFill} />
 
+            {tip ? (
+              <View pointerEvents="none" style={[styles.tip, tip.kind === 'slip' && styles.tipSlip, { top: g.panel.y - 34 }]} accessibilityLiveRegion="polite">
+                <Text style={styles.tipText}>{tip.text}</Text>
+              </View>
+            ) : null}
             {unlock ? (
               <View pointerEvents="none" style={[styles.unlock, { top: g.grid.y + g.grid.h / 2 - 40 }]}>
                 <Text style={styles.unlockKicker}>NEW</Text>
@@ -2085,6 +2098,9 @@ const styles = StyleSheet.create({
   peekText: { fontFamily: 'Shark', fontSize: 18, color: MM.navyText },
   peekCount: { position: 'absolute', right: -8, top: -8, width: 24, height: 24, borderRadius: 12, backgroundColor: MM.gold, borderWidth: 2, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   peekCountText: { fontFamily: 'Shark', fontSize: 14, color: MM.navyText },
+  tip: { position: 'absolute', alignSelf: 'center', backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: MM.scout, paddingHorizontal: 14, paddingVertical: 6 },
+  tipSlip: { borderColor: MM.coral },
+  tipText: { fontFamily: 'Knockout', fontSize: 16, color: MM.navyText },
   unlock: { position: 'absolute', left: 40, right: 40, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 3, borderColor: MM.gold, paddingVertical: 10 },
   unlockKicker: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, letterSpacing: 1 },
   unlockText: { fontFamily: 'Shark', fontSize: 28, color: MM.navyText },
