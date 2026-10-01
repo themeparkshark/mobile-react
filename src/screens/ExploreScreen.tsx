@@ -57,6 +57,7 @@ import useRideControlMap from '../hooks/useRideControlMap';
 import useBossMapMoment from '../hooks/useBossMapMoment';
 import BossMapDeparture from '../components/boss/BossMapDeparture';
 import { Circle } from '../components/map/Circle';
+import { crowdHaze } from '../components/map/alive/parkPulse';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
 import type { RushPick } from '../components/RushCallout';
 import LiveEventsPill from '../components/LiveEventsPill';
@@ -372,6 +373,11 @@ function ExploreScreen() {
   }, [park?.id]);
   const liveByTask = useMemo(() => new globalThis.Map<number, LiveRide>(
     (livePark?.rides ?? []).map(r => [r.task_id, r])), [livePark]);
+  // Park pulse: a warm haze over the busiest rides on today's map.
+  const parkHaze = useMemo(() => crowdHaze((redeemables?.tasks ?? []).flatMap(task => {
+    const live = liveByTask.get(task.id);
+    return live ? [{ ...live, latitude: Number(task.latitude), longitude: Number(task.longitude) }] : [];
+  })), [redeemables?.tasks, liveByTask]);
 
   // Easter-egg scenes only play for the closest themed rides, so the map
   // wakes up around you as you walk and stays light on the phone.
@@ -1046,6 +1052,7 @@ function ExploreScreen() {
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
           onZoomChange={onMapZoom}
           ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}
+          crowdHaze={parkHaze}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
           controlsTop={slotTop + (queueRide ? 104 : 76)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {

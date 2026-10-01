@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { Camera, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -34,7 +34,7 @@ export const MapQueryContext = createContext<{
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -46,6 +46,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly guideTarget?: { latitude: number; longitude: number; requestId: number } | null;
   /** A full-screen flow covers the map: hold every ambient loop still (battery). */
   readonly ambientPaused?: boolean;
+  /** Park pulse: busy rides as weighted points; a soft warm haze gathers over them. */
+  readonly crowdHaze?: GeoJSON.FeatureCollection | null;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -406,6 +408,21 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             symbolSortKey: ['get', 'k'],
           }} />
         </ShapeSource>
+        {/* Crowd haze: static GL heatmap (no per-frame cost), warm where the lines are long. */}
+        {crowdHaze && crowdHaze.features.length > 0 && (
+          <ShapeSource id="tps-crowd-haze" shape={crowdHaze}>
+            <HeatmapLayer id="tps-crowd-haze" style={{
+              heatmapWeight: ['get', 'w'],
+              heatmapIntensity: ['interpolate', ['linear'], ['zoom'], 15, 0.6, 19, 1.1],
+              heatmapRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 15, 22, 17, 55, 19, 150],
+              heatmapColor: ['interpolate', ['linear'], ['heatmap-density'],
+                0, 'rgba(255,214,120,0)', 0.25, 'rgba(255,214,120,0.18)', 0.55, 'rgba(255,176,82,0.34)',
+                0.8, 'rgba(255,132,72,0.42)', 1, 'rgba(255,104,78,0.48)'],
+              heatmapOpacity: 0.7,
+              heatmapOpacityTransition: { duration: 1200, delay: 0 },
+            }} />
+          </ShapeSource>
+        )}
         {guideTarget && location && pathShown && (
           <ShapeSource id="tps-guide" shape={guideLine(location, guideTarget)}>
             <LineLayer id="tps-guide-casing" style={{ lineColor: BRAND.navy, lineWidth: 7, lineCap: 'round', lineOpacity: 0.85 }} />

@@ -5,6 +5,8 @@ import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, wi
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { hash01, withinBudget } from '../../components/map/alive/ambientBudget';
+import { waitGlow, type WaitGlow as WaitGlowLook } from '../../components/map/alive/parkPulse';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 import { Marker } from '../../components/map/Marker';
 import RideTeamFlag from '../../components/map/RideTeamFlag';
 import Countdown, { zeroPad } from 'react-countdown';
@@ -109,6 +111,56 @@ function FloatingCoin({ seed, moving }: { readonly seed: number; readonly moving
     <Animated.Image source={RIDE_COIN} style={[styles.floatingCoin, coin]} />
     <Animated.Image source={SPARKLE} tintColor="#ffffff" resizeMode="contain" style={[styles.coinGlint, glint]} />
   </>;
+}
+
+/** A soft radial pool of light (static SVG; motion comes from the wrapping view). */
+function GlowPool({ id, color, width, height }: { id: string; color: string; width: number; height: number }) {
+  return (
+    <Svg width={width} height={height}>
+      <Defs>
+        <RadialGradient id={id} cx="50%" cy="50%" rx="50%" ry="50%">
+          <Stop offset="0" stopColor={color} stopOpacity={0.95} />
+          <Stop offset="0.55" stopColor={color} stopOpacity={0.4} />
+          <Stop offset="1" stopColor={color} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx={width / 2} cy={height / 2} rx={width / 2} ry={height / 2} fill={`url(#${id})`} />
+    </Svg>
+  );
+}
+
+/**
+ * Park pulse: the island breathes a glow from the live wait. Walk-ons glow cool
+ * mint, a normal line gold, a slammed ride warm coral and quicker. Islands past
+ * the animation budget (or calm) hold the same glow still.
+ */
+function WaitGlow({ id, glow, moving }: { readonly id: number; readonly glow: WaitGlowLook; readonly moving: boolean }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(id + 0.25);
+  const style = useAnimatedStyle(() => {
+    const k = moving ? (Math.sin((clock.value / glow.period + phase) * Math.PI * 2) + 1) / 2 : 0.7;
+    return { opacity: glow.strength * (0.6 + 0.4 * k), transform: [{ scaleX: 0.92 + 0.1 * k }, { scaleY: 0.92 + 0.1 * k }] };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[styles.waitGlow, style]}>
+      <GlowPool id={`wait-${id}`} color={glow.color} width={104} height={40} />
+    </Animated.View>
+  );
+}
+
+/** A sleeping island: little "z" float up and fade, one after another. */
+function SleepyZ({ i, moving, seed }: { readonly i: number; readonly moving: boolean; readonly seed: number }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(seed + 7);
+  const style = useAnimatedStyle(() => {
+    if (!moving) return { opacity: i === 2 ? 0 : 0.9, transform: [{ translateX: i * 8 }, { translateY: -i * 9 }, { rotate: '-12deg' }] };
+    const p = (clock.value / 3.3 + phase + i / 3) % 1;
+    return {
+      opacity: p < 0.15 ? p / 0.15 : p > 0.7 ? (1 - p) / 0.3 : 1,
+      transform: [{ translateX: p * 18 + Math.sin(p * Math.PI * 2) * 3 }, { translateY: -p * 30 }, { rotate: '-12deg' }, { scale: 0.7 + p * 0.6 }],
+    };
+  });
+  return <Animated.Text style={[styles.sleepyZ, style]}>z</Animated.Text>;
 }
 
 const LIMITED_COLORS = ['#c9a6ff', '#8fe8ff', '#fff1a3', '#ffb3de', '#c9a6ff', '#8fe8ff', '#fff1a3', '#ffb3de', '#c9a6ff'] as const;
@@ -239,6 +291,7 @@ function TaskMarker({
   }, [kinds]);
   const latitude = Number(task.latitude);
   const longitude = Number(task.longitude);
+  const glow = useMemo(() => resting ? null : waitGlow(live), [live, resting]);
   const waterSpot = useWaterSpot(waterKind, latitude, longitude);
 
   // Selection: anticipation dip, spring lift to 1.15, settle. Haptic on the lift.
@@ -339,6 +392,7 @@ function TaskMarker({
           </View>
         )}
 
+        {glow && <WaitGlow id={task.id} glow={glow} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
         {limited && <LimitedShimmer seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.limitedShimmer)} />}
         {/* Ground ring: flat, bright, no glow. */}
         <View style={[styles.groundRing, { borderColor: ringColor, backgroundColor: `${ringColor}33` }]} />
@@ -359,6 +413,9 @@ function TaskMarker({
             <Image source={LANDMARKS[look.landmark]} style={styles.landmarkImage} contentFit="contain" />
           </View>
           {owned && !isSelected && <View style={styles.levelPip}><Text style={styles.levelText}>{task.coin_level ?? 1}</Text></View>}
+          {resting && <View pointerEvents="none" style={styles.sleepy}>
+            {[0, 1, 2].map(i => <SleepyZ key={i} i={i} seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.sleepyRides)} />)}
+          </View>}
           {down && <View style={styles.downChip}><GameIcon name="wrench" size={12} /><Text style={styles.downText}>DOWN</Text></View>}
           {!down && restingUntil !== null && !isSelected && <View style={styles.restingSlot}><View style={styles.downChip}><Text style={styles.downText} numberOfLines={1}>{restingLabel(restingUntil).toUpperCase()}</Text></View></View>}
           {clusterCount > 0 && <View style={styles.clusterBadge}><Text style={styles.clusterText}>+{clusterCount}</Text></View>}
@@ -433,5 +490,9 @@ const styles = StyleSheet.create({
   limitedHalo: { position: 'absolute', bottom: 7, width: 68, height: 26, borderRadius: 34, overflow: 'hidden', opacity: 0.7 },
   // Two full colour cycles (9 stops), so sliding one band left loops seamlessly.
   limitedFlow: { position: 'absolute', left: 0, top: 0, bottom: 0, width: LIMITED_BAND * 2 },
+  waitGlow: { position: 'absolute', bottom: 0, width: 104, height: 40 },
+  sleepy: { position: 'absolute', top: 14, right: 4, width: 30, height: 40, zIndex: 6 },
+  sleepyZ: { position: 'absolute', left: 0, bottom: 0, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy,
+    textShadowColor: BRAND.white, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 3 },
   limitedTwinkle: { position: 'absolute', width: 13, height: 13, zIndex: 9 },
 });
