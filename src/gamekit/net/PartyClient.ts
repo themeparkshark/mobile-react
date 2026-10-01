@@ -134,7 +134,7 @@ export const HOLD_BUDGET_MS = 6000;
 /** The quick 3-2-1 before a held board resumes (part of the hold). */
 export const RESUME_COUNT_MS = 900;
 /** Games this build can render. */
-export const DEFAULT_GAMES = ['bonk_race'];
+export const DEFAULT_GAMES = ['bonk_race', 'parade_sprint'];
 
 const PENDING_KEY = 'party:pending-submit';
 
@@ -273,6 +273,23 @@ export class PartyClient {
     const last = r.taps.length ? r.taps[r.taps.length - 1][0] : 0;
     r.taps.push([Math.max(t, last), choice]);
     return t;
+  }
+
+  /**
+   * Record an input at an explicit board time (ms since GO), for games that
+   * judge on the UI thread (Parade Beat judges at touch-down, then hands the
+   * same ms here so the server replays exactly what the phone judged). Times
+   * are clamped to stay non-decreasing. Returns the stored ms, or null.
+   */
+  recordTapAt(boardMs: number, choice: number): number | null {
+    const r = this.local;
+    if (!r || r.ended || r.heldAt !== null || this.state.phase !== 'playing') return null;
+    const t = Math.round(boardMs);
+    if (t < 0 || t > r.durationMs) return null;
+    const last = r.taps.length ? r.taps[r.taps.length - 1][0] : 0;
+    const at = Math.max(t, last);
+    r.taps.push([at, choice]);
+    return at;
   }
 
   /** Board time in ms since GO (negative during the count-in, frozen during a HOLD). */

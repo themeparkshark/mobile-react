@@ -11,8 +11,9 @@
  */
 import * as bonk from '../games/party/bonkRace';
 import * as sprint from '../games/trivia-duel/party/triviaSprint';
+import * as parade from '../games/rhythm/multiplayer/paradeSprint';
 
-export type PartySimKey = 'bonk_race' | 'trivia_sprint';
+export type PartySimKey = 'bonk_race' | 'trivia_sprint' | 'parade_sprint';
 export type SimTap = [number, number];
 export type SimProfile = 'rookie' | 'regular' | 'ace';
 
@@ -69,6 +70,22 @@ export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
     resultHash: sprint.resultHash,
     settle: (results) => ({ bonus: results.map(() => 0), detail: null }),
     explain: () => null,
+  },
+  // Parade Beat's Same-Minute Race (design rhythm.md 11.2): each phone plays the
+  // song from GO, the judge replays the log. Not integer-only: sidecar driver only.
+  parade_sprint: {
+    key: 'parade_sprint',
+    version: parade.PARADE_SPRINT_VERSION,
+    roundMs: parade.ROUND_MS,
+    maxTaps: parade.MAX_TAPS,
+    build: parade.buildBoard,
+    validTaps: parade.validTaps,
+    resolve: parade.resolve,
+    botTaps: parade.botTaps,
+    ghostFill: parade.ghostFill,
+    resultHash: parade.resultHash,
+    settle: (results) => ({ bonus: results.map(() => 0), detail: null }),
+    explain: (board, taps) => parade.explain(board, taps),
   },
 };
 

@@ -29,6 +29,8 @@ import { useLineHeadsUp } from '../motion/QueueMotion';
 import GameIcon from '../../ui/GameIcon';
 import type { EmoteId } from '../net/partyTypes';
 import BonkBoard from './BonkBoard';
+import ParadeBoard from '../../games/rhythm/multiplayer/ParadeBoard';
+import { PARADE_SPRINT_KEY, botTaps as paradeBotTaps, buildBoard as buildParadeBoard, resolve as resolveParade, type SprintBoard } from '../../games/rhythm/multiplayer/paradeSprint';
 import PartyLobby from './PartyLobby';
 import PartyResults from './PartyResults';
 import RaceStrip, { type RacerLine } from './RaceStrip';
@@ -84,7 +86,9 @@ function LineParty({ client, rideId, onExit, autoplay }: LinePartyProps) {
       body = <WrapUp reason={state.leftReason} onClose={onExit} />;
       break;
     default:
-      body = <Race client={client} autoplay={autoplay} onEmote={onEmote} />;
+      body = (state.room?.round?.game ?? client.round?.game) === PARADE_SPRINT_KEY
+        ? <ParadeRace client={client} autoplay={autoplay} onEmote={onEmote} />
+        : <Race client={client} autoplay={autoplay} onEmote={onEmote} />;
   }
 
   return (
@@ -247,6 +251,126 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round for you. Only your best 4 rounds count, so this one is free." /> : null}
         {phase === 'spectating' ? <Banner title="NEXT ROUND IS YOURS" sub="This race started before you joined. Cheer them on." /> : null}
         {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Checking every board on the server..." big /> : null}
+      </View>
+      <View style={styles.stickers}>
+        <MiniStickers onEmote={onEmote} />
+      </View>
+    </View>
+  );
+}
+
+// ------------------------------------------------------- the Parade Beat race
+
+/**
+ * Parade Beat's Same-Minute Race (sim parade_sprint): every phone plays the
+ * song from GO and judges on its own; the strip shows live Duel Points
+ * (rivals from their 250 ms whispers, house drummers from their resolved
+ * bars as the song passes each bar line).
+ */
+function ParadeRace({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: BotProfile | null; onEmote: (id: EmoteId) => void }) {
+  const state = usePartyState(client);
+  const round = state.room?.round ?? null;
+  const local = client.round;
+  const [boardT, setBoardT] = useState(-3000);
+  const [myScore, setMyScore] = useState(0);
+  const board = useMemo<SprintBoard | null>(() => {
+    if (local?.game === PARADE_SPRINT_KEY && local.board) return local.board as SprintBoard;
+    return round ? buildParadeBoard(round.seed) : null;
+  }, [local?.roundId, round?.seed]);
+  // House drummers: their Duel Points bar by bar, revealed as the song passes each bar line.
+  const botBars = useMemo(() => {
+    const m = new Map<number, { barEnd: number[]; pts: number[] }>();
+    if (!board || !round) return m;
+    const ch = board.chart;
+    round.seats.forEach((s) => {
+      if (s.kind !== 'bot' || !s.profile) return;
+      const r = resolveParade(board, paradeBotTaps(board, round.seed, s.seat, s.profile));
+      m.set(s.seat, { barEnd: r.barPts.map((_, i) => ch.barStart[ch.firstBar + i + 1]), pts: r.barPts });
+    });
+    return m;
+  }, [round?.id, board]);
+  useEffect(() => {
+    const h = setInterval(() => { const t = client.boardTime(); if (t !== null) setBoardT(t); }, 125);
+    return () => clearInterval(h);
+  }, [client]);
+  const onProgress = useCallback((score: number, combo: number) => { setMyScore(score); client.reportProgress(score, combo); }, [client]);
+  const recordAt = useCallback((ms: number, code: number) => client.recordTapAt(ms, code), [client]);
+  const boardClock = useCallback(() => client.boardTime(), [client]);
+
+  const lines: RacerLine[] = useMemo(() => {
+    if (!round) return [];
+    const emoteBy = new Map(state.emotes.map((e) => [e.user_id, { id: e.emote, key: e.key }]));
+    const raw = round.seats.map((seat) => {
+      const me = seat.kind === 'human' && seat.user_id === state.userId;
+      let score = 0;
+      let ghost = false;
+      let away = false;
+      if (me) {
+        score = myScore;
+        ghost = state.ghostedRoundId === round.id;
+      } else if (seat.kind === 'bot') {
+        const b = botBars.get(seat.seat);
+        if (b) for (let i = 0; i < b.pts.length; i++) if (b.barEnd[i] <= boardT) score += b.pts[i];
+      } else {
+        const rival = seat.user_id !== undefined ? state.rivals[seat.user_id] : undefined;
+        const member = state.room?.members.find((m) => m.id === seat.user_id);
+        score = rival?.score ?? member?.live_score ?? 0;
+        ghost = !!rival?.ghost;
+        away = member?.state === 'away';
+      }
+      const key = seat.kind === 'bot' ? `b:${seat.name}` : `u:${seat.user_id}`;
+      const seriesPoints = state.room?.series?.standings.find((r) => r.key === key)?.points;
+      const name = seat.kind === 'bot' ? seat.name : displayName(state, seat.user_id, seat.name);
+      return { seat, name, seriesPoints, score, me, ghost, away, emote: seat.user_id !== undefined ? emoteBy.get(seat.user_id) ?? null : null };
+    });
+    const all = raw.map((r) => r.score);
+    return raw.map((r) => ({ ...r, placement: placementOf(r.score, all) }));
+  }, [boardT, botBars, myScore, round, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
+
+  const phase = state.phase;
+  const playing = (phase === 'countdown' || phase === 'playing') && local && local.roundId === round?.id && !local.ended;
+  const secondsLeft = local ? Math.max(0, Math.ceil((local.durationMs - boardT) / 1000)) : 0;
+  const canHold = phase === 'playing' && !!local && !local.ended && boardT >= 0 && !state.hold;
+  const demo = autoplay === 'rookie' || autoplay === 'regular' || autoplay === 'ace' ? autoplay : null;
+
+  return (
+    <View style={styles.race}>
+      <SeriesPill round={round} />
+      <RaceStrip lines={lines} />
+      <View style={styles.hud}>
+        <Text style={styles.myScore}>{myScore.toLocaleString('en-US')}</Text>
+        <View style={styles.hudRight}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Hold my board"
+            hitSlop={10}
+            disabled={!canHold}
+            onPress={() => { if (client.hold('manual')) haptic('tapLight'); }}
+            style={[styles.holdBtn, !canHold && { opacity: 0.35 }]}
+          >
+            <GameIcon name="pause" size={26} />
+          </Pressable>
+          <Timer seconds={secondsLeft} urgent={secondsLeft <= 3 && boardT > 0} />
+        </View>
+      </View>
+      <View style={styles.boardWrap}>
+        {playing && local && board ? (
+          <ParadeBoard
+            key={local.roundId}
+            board={board}
+            seed={local.seed}
+            boardClock={boardClock}
+            held={!!state.hold}
+            recordAt={recordAt}
+            onProgress={onProgress}
+            autoplay={demo}
+          />
+        ) : null}
+        {state.hold && phase === 'playing' ? <HoldOverlay client={client} /> : null}
+        {phase === 'countdown' && local ? <CountIn boardT={boardT} late={local.lateStart} /> : null}
+        {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It drums the rest of this round for you. Only your best 4 rounds count." /> : null}
+        {phase === 'spectating' ? <Banner title="NEXT ROUND IS YOURS" sub="This parade started before you joined. Cheer them on." /> : null}
+        {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Checking every drummer on the server..." big /> : null}
       </View>
       <View style={styles.stickers}>
         <MiniStickers onEmote={onEmote} />

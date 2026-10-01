@@ -752,3 +752,58 @@ test('drumline: house crew and ghosts race the same chart; a ghost replays its o
   const again = dl.crewForRound(ch, { seed: 555, autoFever: false }, null, null);
   assert.deepEqual(again.map((r) => r.id), dl.crewForRound(ch, { seed: 555, autoFever: false }, null, null).map((r) => r.id));
 });
+
+test('parade_sprint (Line Party): deterministic replay, tap codes, ghost fill, marchers are not punished, Fever bars weigh 1.5x', () => {
+  const ps = loadTs('src/games/rhythm/multiplayer/paradeSprint.ts');
+  // Tap codes round-trip.
+  for (const [ty, z, p] of [[0, 0, 0], [1, 2, 9999], [3, 0, 77], [4, 1, 0]]) {
+    assert.deepEqual(plain(ps.decodeTap(ps.encodeTap(ty, z, p))), { type: ty, zone: z, pointer: p });
+  }
+  // Boards: one of the two ride stages by seed, the canonical sprint chart.
+  const b0 = ps.buildBoard(0);
+  const b1 = ps.buildBoard(1);
+  assert.equal(b0.stage, 'opening_day_a');
+  assert.equal(b1.stage, 'waiting_room_a');
+  assert.deepEqual(Array.from(b0.chart.t), Array.from(chartOf('opening_day_a', 'ride', 1, 0).t));
+  assert.ok(ps.ROUND_MS >= b0.roundMs && ps.ROUND_MS >= b1.roundMs);
+  // The generated sim stages match the stage JSON (re-run tools/rhythm/export_sim_stages.mjs if this fails).
+  const gen = loadTs('src/games/rhythm/stages/simStages.generated.ts').SIM_STAGES;
+  for (const id of ['opening_day_a', 'waiting_room_a']) assert.deepEqual(plain(gen[id].formats.ride), stages[id].formats.ride, `${id} sim stage is current`);
+  // Replay is deterministic, and a bot log is valid.
+  const bot = ps.botTaps(b1, 1, 2, 'regular');
+  assert.ok(ps.validTaps(bot));
+  const r1 = ps.resolve(b1, bot);
+  const r2 = ps.resolve(b1, JSON.parse(JSON.stringify(bot)));
+  assert.equal(ps.resultHash(r1), ps.resultHash(r2));
+  assert.ok(r1.score > 600 && r1.score <= 12 * 150, `duel points ${r1.score}`);
+  assert.equal(r1.barPts.length, 12);
+  // Validation: out of order, unknown type, too late.
+  assert.equal(ps.validTaps([[10, 0], [5, 0]]), false);
+  assert.equal(ps.validTaps([[10, 200000]]), false);
+  assert.equal(ps.validTaps([[ps.ROUND_MS + 1, 0]]), false);
+  // An empty seat scores 0; a ghost fill keeps my taps before the drop and the house drummer after.
+  assert.equal(ps.resolve(b1, []).score, 0);
+  const until = Math.round(b1.chart.barStart[b1.chart.firstBar + 6]);
+  const ace = ps.botTaps(b1, 1, 0, 'ace');
+  const filled = ps.ghostFill(b1, 1, 0, ace, until, 'regular');
+  assert.ok(ps.validTaps(filled));
+  assert.deepEqual(filled.filter(([t]) => t < until), ace.filter(([t]) => t < until));
+  const prefix = ps.resolve(b1, ace, until);
+  assert.ok(prefix.score <= ps.resolve(b1, ace).score);
+  // Marchers: playing only the March layer perfectly earns full Duel Points on those bars.
+  const ch = b1.chart;
+  const marchTaps = [[0, ps.encodeTap(ps.T_MARCH, 1, 0)]];
+  let pid = 1;
+  for (let i = 0; i < ch.t.length; i++) {
+    if (!(ch.layers[i] & 2)) continue;
+    const t = Math.round(ch.t[i]);
+    marchTaps.push([t, ps.encodeTap(0, 0, pid)], [t + 60, ps.encodeTap(1, 0, pid)]);
+    pid++;
+  }
+  marchTaps.sort((a, b) => a[0] - b[0]);
+  const march = ps.resolve(b1, marchTaps);
+  const standing = ps.resolve(b1, ps.botTaps(b1, 3, 0, 'ace'));
+  assert.ok(march.score >= standing.score * 0.9, `a perfect marcher (${march.score}) is not punished vs an ace (${standing.score})`);
+  // Fever weighs 1.5x: a perfect run with Fever scores above 12 x 100.
+  assert.ok(march.score > 1200, `Fever bars count 1.5x (${march.score})`);
+});

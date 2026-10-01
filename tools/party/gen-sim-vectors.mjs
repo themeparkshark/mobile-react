@@ -48,6 +48,23 @@ function humanTaps(sim, board, seed) {
         for (let k = 0; k < 3; k++) taps.push([Math.min(sim.roundMs, t + k * 85), next() % holes]);
       }
     }
+  } else if (sim.key === 'parade_sprint') {
+    // A drummer in a moving line: most notes near the beat, some late or early,
+    // bumps, a Fever swipe and a MARCH toggle now and then.
+    const ch = board.chart;
+    let pid = 1;
+    for (let i = 0; i < ch.t.length; i++) {
+      const roll = next() % 100;
+      if (roll < 82) {
+        const err = (next() % 181) - 90;
+        const t = Math.max(0, Math.min(board.roundMs, Math.round(ch.t[i] + err)));
+        const p = pid++ % 5000;
+        taps.push([t, p], [Math.min(board.roundMs, t + 60 + (ch.kind[i] === 2 ? Math.round(ch.end[i] - ch.t[i]) : 0)), 100000 + p]);
+      }
+      if (roll > 94) taps.push([Math.max(0, Math.min(board.roundMs, Math.round(ch.t[i] + 300 + (next() % 200)))), (next() % 3) * 10000 + (pid++ % 5000)]);
+      if (roll === 50) taps.push([Math.max(0, Math.round(ch.t[i] - 400)), 300000 + 7000 + i]);
+      if (roll === 51) taps.push([Math.max(0, Math.round(ch.t[i])), 400000 + (next() % 2) * 10000]);
+    }
   } else {
     for (const q of board) {
       const roll = next() % 100;
@@ -64,7 +81,9 @@ function main() {
   const { hash, sims } = loadBundle();
   fs.mkdirSync(outDir, { recursive: true });
   const profiles = ['rookie', 'regular', 'ace'];
+  const only = process.env.ONLY ? process.env.ONLY.split(',') : null;
   for (const sim of Object.values(sims)) {
+    if (only && !only.includes(sim.key)) continue;
     const seeds = [0, 1, 7, 42, 4294967295, 2147483648, 3735928559];
     const gen = lcg(0x1234abcd ^ sim.version);
     while (seeds.length < PER_GAME) seeds.push(gen());
