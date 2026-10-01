@@ -17,6 +17,7 @@ import { MemoryGame } from '../games/memory';
 import { TriviaDuel } from '../games/trivia-duel';
 import { SharkySwim } from '../games/sharky';
 import { BananaBasketGame } from '../games/banana-basket';
+import BananaLab from '../games/banana-basket/BananaLab';
 import { TaskAttemptGame, TaskGameProof } from '../api/endpoints/me/task-attempts';
 import { getLinePlayChapter } from '../services/lineplay/chapters';
 
@@ -66,6 +67,7 @@ export default function MiniGameSelector({
   onComplete,
 }: Props) {
   const [selectedGame, setSelectedGame] = useState<MiniGameType | null>(null);
+  const [bananaLabClosed, setBananaLabClosed] = useState(false);
   const gameMountedAt = useRef(0);
   const exitPromptOpen = useRef(false);
 
@@ -158,6 +160,12 @@ export default function MiniGameSelector({
     ? getLinePlayChapter(parkId, undefined, taskName) : null,
   [parkId, taskName]);
 
+  // Dev lab (EXPO_PUBLIC_BANANA_LAB): opens Banana Basket's mode picker straight
+  // from the tester. __DEV__-only, never in release builds.
+  if (__DEV__ && process.env.EXPO_PUBLIC_BANANA_LAB && !bananaLabClosed) {
+    return <BananaLab command={process.env.EXPO_PUBLIC_BANANA_LAB} onClose={() => setBananaLabClosed(true)} />;
+  }
+
   if (!visible || !selectedGame) return null;
 
   // A Ticket was already spent when the server created this attempt.
@@ -235,7 +243,7 @@ export default function MiniGameSelector({
         );
       case 'banana':
         return (
-          <BananaBasketGame visible={visible} seed={seed} onClose={onClose}
+          <BananaBasketGame visible={visible} seed={seed} onClose={onClose} rideName={taskName}
             onComplete={(mult, meta) => handleComplete(mult, meta)} />
         );
     }
