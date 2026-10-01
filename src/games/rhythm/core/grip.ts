@@ -17,6 +17,8 @@ import { Z_CENTRE, Z_DEAD_L, Z_DEAD_R, Z_RIM_L, Z_RIM_R } from './types';
 
 export const GRIP_ONE = 0;
 export const GRIP_TWO = 1;
+/** A chart with no RIM notes (First Parade, Opening Day d1, the ride sprint): the whole drum is blue. */
+export const GRIP_ALL = 2;
 export const DEAD_BAND = 16;
 
 export interface GripPrefs {
@@ -30,8 +32,9 @@ export interface GripPrefs {
 
 export const DEFAULT_GRIP: GripPrefs = { grip: -1, hand: 1, swap: 0 };
 
-export function gripFor(prefs: GripPrefs, difficulty: number, format: 'queue' | 'ride'): number {
+export function gripFor(prefs: GripPrefs, difficulty: number, format: 'queue' | 'ride', hasRim = true): number {
   'worklet';
+  if (!hasRim) return GRIP_ALL;
   if (format === 'ride') return GRIP_ONE;
   if (prefs.grip === GRIP_ONE || prefs.grip === GRIP_TWO) return prefs.grip;
   return difficulty >= 2 ? GRIP_TWO : GRIP_ONE;
@@ -44,6 +47,7 @@ export function gripFor(prefs: GripPrefs, difficulty: number, format: 'queue' | 
 export function gripSpans(grip: number, hand: number, swap: number): number[] {
   'worklet';
   // [x0, x1, kind, x0, x1, kind, ...]
+  if (grip === GRIP_ALL) return [0, 1, 0];
   if (grip === GRIP_TWO) return swap ? [0, 0.5, 1, 0.5, 1, 0] : [0, 0.5, 0, 0.5, 1, 1];
   return hand < 0 ? [0, 0.4, 1, 0.4, 0.8, 0, 0.8, 1, 1] : [0, 0.2, 1, 0.2, 0.6, 0, 0.6, 1, 1];
 }
@@ -52,6 +56,7 @@ export function gripSpans(grip: number, hand: number, swap: number): number[] {
 export function zoneOf(x: number, width: number, grip: number, hand: number, swap: number): number {
   'worklet';
   const half = DEAD_BAND / 2;
+  if (grip === GRIP_ALL) return Z_CENTRE;
   if (grip === GRIP_TWO) {
     const mid = width / 2;
     if (Math.abs(x - mid) <= half) return x < mid ? Z_DEAD_L : Z_DEAD_R;

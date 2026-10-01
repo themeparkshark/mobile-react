@@ -156,6 +156,8 @@ export interface ParadeView {
   /** Lane-edge spark kick: 2 per rail on PERFECT, 1 on GREAT. */
   railSparkAt: number;
   railSparkN: number;
+  /** Fever drop moment (bloom pulse, crowd jump). */
+  dropAt: number;
   /** Launch Swipe streak. */
   launchAt: number;
   launchX: number;
@@ -195,7 +197,7 @@ export function createView(n: number, cx: number, yLine: number, width: number, 
     reduced: 0, pocket: 0,
     overAt: -1e9, overX: 0, overY: 0, rippleAt: -1e9, rippleAmp: 0,
     zoneFlashAt: -1e9, zoneFlashX: 0, zoneFlashKind: 0,
-    railSparkAt: -1e9, railSparkN: 0, launchAt: -1e9, launchX: 0, limping: 0, judgSide: 0,
+    railSparkAt: -1e9, railSparkN: 0, dropAt: -1e9, launchAt: -1e9, launchX: 0, limping: 0, judgSide: 0,
     countBeats,
     cx, yLine, width,
   };
@@ -256,8 +258,15 @@ export function stepView(v: ParadeView, fx: FxState | null, dt: number): void {
   }
 }
 
+/** Moments that own the ribbon for a while (a milestone never covers the Fever drop). */
+function ribbonRank(id: number): number {
+  'worklet';
+  return id === RB_FEVER || id === RB_FULL_COMBO || id === RB_STALL ? 2 : id === 0 ? 0 : 1;
+}
+
 function ribbon(v: ParadeView, id: number): void {
   'worklet';
+  if (v.ribbon && v.wt - v.ribbonAt < 1100 && ribbonRank(v.ribbon) > ribbonRank(id)) return;
   v.ribbon = id;
   v.ribbonAt = v.wt;
 }
@@ -410,6 +419,7 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       // The drop (design 6.5): light, sound and touch; the camera never moves.
       v.feverTarget = 1;
       v.armed = 0;
+      v.dropAt = v.wt;
       ribbon(v, RB_FEVER);
       scheduleFireworks(v, 3, false);
       v.flashAt = v.wt;

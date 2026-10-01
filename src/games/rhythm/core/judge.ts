@@ -413,6 +413,15 @@ export function nextOpenSection(s: JudgeState): number {
   return -1;
 }
 
+function fizzleFever(s: JudgeState, t: number): void {
+  'worklet';
+  if (feverActiveAt(s, t) && s.feverKillAt <= 0) {
+    const i = s.cursor < s.n ? s.cursor : s.n - 1;
+    const beat = i >= 0 ? s.beatLen[i] : 450;
+    s.feverKillAt = t + beat;
+  }
+}
+
 function addGroove(s: JudgeState, t: number, dv: number): void {
   'worklet';
   const bar = barAt(s, t);
@@ -471,15 +480,6 @@ function breakCombo(s: JudgeState): number {
   const prev = s.combo;
   s.combo = 0;
   return prev;
-}
-
-function fizzleFever(s: JudgeState, t: number): void {
-  'worklet';
-  if (feverActiveAt(s, t) && s.feverKillAt <= 0) {
-    const i = s.cursor < s.n ? s.cursor : s.n - 1;
-    const beat = i >= 0 ? s.beatLen[i] : 450;
-    s.feverKillAt = t + beat;
-  }
 }
 
 function logInput(s: JudgeState, note: number, delta: number, kind: number, zone: number): void {
@@ -589,28 +589,6 @@ function deploy(s: JudgeState, t: number): boolean {
 function canLaunch(s: JudgeState, t: number): boolean {
   'worklet';
   return s.armed === 1 && !s.limping && s.pendingDeploy < 0 && !feverActiveAt(s, t) && !s.stalled && !s.finished;
-}
-
-/**
- * Fever launch (the Launch Swipe or a tap on the armed meter). Queues the
- * Fever for the next drop line. A launch is never a stray: the pointer's
- * pending stray is cancelled. Returns true when the Fever was queued.
- */
-export function judgeLaunch(s: JudgeState, t0: number, pid: number): boolean {
-  'worklet';
-  const t = Math.round(t0);
-  if (t > s.now) judgeTick(s, t);
-  for (let k = s.pendT.length - 1; k >= 0; k--) {
-    if (s.pendPid[k] === pid) {
-      s.pendT.splice(k, 1);
-      s.pendPid.splice(k, 1);
-      s.pendZone.splice(k, 1);
-    }
-  }
-  logTouch(s, t, 3, 0, 0, pid); // logged even when not armed: it cancels the pending stray
-  if (!canLaunch(s, t)) return false;
-  s.launches++;
-  return deploy(s, t);
 }
 
 function resolveStray(s: JudgeState, k: number): void {
@@ -945,6 +923,28 @@ export function judgeDown(s: JudgeState, t0: number, zone: number, pid: number, 
     s.pRollTicks[slot] = 0;
   }
   return cand;
+}
+
+/**
+ * Fever launch (the Launch Swipe or a tap on the armed meter). Queues the
+ * Fever for the next drop line. A launch is never a stray: the pointer's
+ * pending stray is cancelled. Returns true when the Fever was queued.
+ */
+export function judgeLaunch(s: JudgeState, t0: number, pid: number): boolean {
+  'worklet';
+  const t = Math.round(t0);
+  if (t > s.now) judgeTick(s, t);
+  for (let k = s.pendT.length - 1; k >= 0; k--) {
+    if (s.pendPid[k] === pid) {
+      s.pendT.splice(k, 1);
+      s.pendPid.splice(k, 1);
+      s.pendZone.splice(k, 1);
+    }
+  }
+  logTouch(s, t, 3, 0, 0, pid); // logged even when not armed: it cancels the pending stray
+  if (!canLaunch(s, t)) return false;
+  s.launches++;
+  return deploy(s, t);
 }
 
 export function judgeMove(s: JudgeState, t0: number, pid: number, y: number): void {

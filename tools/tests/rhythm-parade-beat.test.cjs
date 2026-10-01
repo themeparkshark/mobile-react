@@ -256,6 +256,10 @@ test('grips: One Thumb (right) x 40/160/300 = RIM/DRUM/RIM; Two Thumbs x 100 DRU
   assert.equal(G.detectHand(new Array(20).fill(120), 390, 1), -1);
   assert.equal(G.detectHand(new Array(20).fill(195), 390, -1), -1);
   assert.equal(G.detectHand(new Array(5).fill(300), 390, -1), -1);
+  // A chart with no RIM notes plays on an all-blue drum: every touch is a DRUM touch.
+  assert.equal(G.gripFor(G.DEFAULT_GRIP, 1, 'queue', false), G.GRIP_ALL);
+  for (const x of [5, 100, 195, 300, 385]) assert.equal(G.zoneOf(x, 390, G.GRIP_ALL, 1, 0), T.Z_CENTRE);
+  assert.deepEqual(plain(G.gripSpans(G.GRIP_ALL, 1, 0)), [0, 1, 0]);
 });
 
 test('judge: combo lives in the beat domain (a 4-bar rest keeps it); multiplier steps', () => {

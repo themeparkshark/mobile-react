@@ -77,7 +77,7 @@ import {
   judgeMove,
   judgeTick,
   judgeUp,
-  lockTime,
+  barAt,
   nextOpenSection,
   noteActive,
   voidAround,
@@ -118,6 +118,8 @@ const SECTION_LABEL_RIDE = ['Warm-up', 'Chorus', 'Finale'];
 const FAKE_WALK = __DEV__ && process.env.EXPO_PUBLIC_RHYTHM_WALK === '1';
 const DEV_STAGE = (__DEV__ ? process.env.EXPO_PUBLIC_RHYTHM_STAGE : undefined) as StageId | undefined;
 const DEV_DIFF = __DEV__ ? Number(process.env.EXPO_PUBLIC_RHYTHM_DIFF || 0) : 0;
+// Dev only: start from empty progress (First Parade, callouts) without touching saved data.
+const DEV_FRESH = __DEV__ && process.env.EXPO_PUBLIC_RHYTHM_FRESH === '1';
 
 export interface RhythmTapGameProps {
   visible: boolean;
@@ -246,7 +248,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   useEffect(() => {
     if (!visible) return;
     let alive = true;
-    void loadProgress().then((p) => {
+    void (DEV_FRESH ? Promise.resolve(emptyProgress()) : loadProgress()).then((p) => {
       if (!alive) return;
       progressRef.current = p;
       setProgress(p);
@@ -299,6 +301,8 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const pausedAt = useRef<number | null>(null);
   const hapticCancel = useRef<(() => void) | null>(null);
   const finished = useRef(false);
+  // PB as it stood when the round began (the results card compares against it).
+  const pbBefore = useRef<number | undefined>(undefined);
   const perfRunJs = useRef(0);
   const glockStep = useRef(0);
   const rivals = useRef<Rival[]>([]);
@@ -321,7 +325,8 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   }, [walk.walking, marchOn]);
 
   // Grip for this round (ride: always One Thumb).
-  const grip = plan ? gripFor(gripPrefs, plan.difficulty, plan.format) : GRIP_ONE;
+  const hasRim = plan ? plan.chart.kind.includes(K_RIM) : true;
+  const grip = plan ? gripFor(gripPrefs, plan.difficulty, plan.format, hasRim) : GRIP_ONE;
   useEffect(() => {
     gripSv.value = [grip, gripPrefs.hand, gripPrefs.swap];
   }, [grip, gripPrefs.hand, gripPrefs.swap, gripSv]);
@@ -351,6 +356,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     if (!visible || !plan) return;
     let alive = true;
     finished.current = false;
+    pbBefore.current = progressRef.current.pb[pbKey(plan.stage, plan.difficulty, plan.format === 'ride' ? 'ride' : 'stage')];
     pauseSpans.current = [];
     pausedAt.current = null;
     setMarchLive(false);
@@ -680,19 +686,36 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
           const k = s.kind[i];
           if (ap.skip[i] || k === K_FREEZE || k === K_POPPER || !noteActive(s, i)) continue;
           const t = s.t[i] + ap.err[i];
-          const z = k === K_RIM ? (i % 2 ? 1 : 2) : 0;
+          // Tap the middle of the right colour for the live grip.
+          const g = gripSv.value;
+          const rimX = g[0] === GRIP_TWO ? (g[2] ? 0.25 : 0.75) : g[1] < 0 ? (i % 2 ? 0.2 : 0.9) : (i % 2 ? 0.1 : 0.8);
+          const drumX = g[0] === GRIP_TWO ? (g[2] ? 0.75 : 0.25) : g[1] < 0 ? 0.6 : 0.4;
+          const x = (k === K_RIM ? rimX : drumX) * SCREEN_W;
+          const z = zoneOf(x, SCREEN_W, g[0], g[1], g[2]);
           v.touchZone = z;
-          v.touchX = z === 1 ? SCREEN_W * 0.15 : z === 2 ? SCREEN_W * 0.85 : SCREEN_W * 0.5;
-          v.touchY = geom.touchTop + 80;
-          const hadArmed = s.armed;
+          v.touchX = x;
+          v.touchY = geom.touchTop + 140;
           judgeDown(s, t, z, 1000 + i, 700);
-          if (k === K_BIG || hadArmed) judgeDown(s, t + 14, 0, 50000 + i, 700);
+          if (k === K_BIG) judgeDown(s, t + 14, 0, 50000 + i, 700);
           if (k === K_CYMBAL) judgeMove(s, t + 50, 1000 + i, 650);
           ap.relT.push(k === K_ROLL ? s.end[i] + 5 : t + 70);
           ap.relP.push(1000 + i);
-          if (k === K_BIG || hadArmed) {
+          if (k === K_BIG) {
             ap.relT.push(t + 80);
             ap.relP.push(50000 + i);
+          }
+        }
+        // The scripted drummer saves Fever for the Chorus (or the next drop) and swipes in the rest beat.
+        if (s.armed && !s.autoFever && s.pendingDeploy < 0) {
+          const chorus = s.firstBar + 12;
+          const target = s.dropBars.indexOf(chorus) >= 0 && barAt(s, vnow) < chorus ? chorus : -1;
+          const drop = target > 0 ? target : barAt(s, vnow) + 1;
+          if (s.dropBars.indexOf(drop) >= 0) {
+            const at = s.barStart[drop] - (s.barStart[drop] - s.barStart[drop - 1]) / 8 - 160;
+            if (vnow >= at) {
+              v.touchX = SCREEN_W * 0.5;
+              judgeLaunch(s, vnow, 77000 + drop);
+            }
           }
         }
         for (let q = ap.relT.length - 1; q >= 0; q--) {
@@ -1006,7 +1029,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       score={score}
       multiplier={mult}
       fever={feverOn}
-      personalBest={plan ? progressRef.current.pb[pbKey(plan.stage, plan.difficulty, plan.format === 'ride' ? 'ride' : 'stage')] : undefined}
+      personalBest={plan ? pbBefore.current : undefined}
       objective="Tap the drum on the beat"
       goal={rideTarget ? { current: goalHits, target: rideTarget, label: 'BEATS' } : undefined}
       result={result}
@@ -1067,7 +1090,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
             >
               <Text style={[styles.chipTxt, pocket && styles.chipTxtOn]}>{pocket ? 'FEEL' : 'SOUND'}</Text>
             </Pressable>
-            {plan && plan.format === 'queue' && !plan.ftue ? (
+            {plan && plan.format === 'queue' && !plan.ftue && hasRim ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Change grip"
@@ -1182,8 +1205,8 @@ const styles = StyleSheet.create({
   touchZone: { position: 'absolute', left: 0, right: 0 },
   loading: { position: 'absolute', top: '40%', alignSelf: 'center', backgroundColor: '#fff8e4', borderRadius: 16, borderWidth: 3, borderColor: '#0b3a6b', paddingHorizontal: 16, paddingVertical: 8 },
   loadingTxt: { fontFamily: 'Shark', fontSize: 18, color: '#0b3a6b' },
-  chipRow: { position: 'absolute', left: 64, top: 46, flexDirection: 'row' },
-  chip: { backgroundColor: '#fff8e4', borderRadius: 12, borderWidth: 2, borderColor: '#0b3a6b', paddingHorizontal: 8, paddingVertical: 4, marginRight: 6 },
+  chipRow: { position: 'absolute', left: 12, top: 146, alignItems: 'flex-start' },
+  chip: { backgroundColor: '#fff8e4', borderRadius: 12, borderWidth: 2, borderColor: '#0b3a6b', paddingHorizontal: 8, paddingVertical: 4, marginBottom: 6 },
   chipOn: { backgroundColor: '#1f7fe0' },
   chipTxt: { fontFamily: 'Shark', fontSize: 12, color: '#0b3a6b' },
   chipTxtOn: { color: '#ffffff' },
@@ -1195,11 +1218,11 @@ const styles = StyleSheet.create({
   marchTxtLive: { color: '#0b3a6b' },
   marchHint: { fontFamily: 'Knockout', fontSize: 11, color: '#1f6fc0' },
   meterTap: { position: 'absolute', right: 6, top: 34, width: 64, height: 64, borderRadius: 32 },
-  rivalStrip: { position: 'absolute', top: 64, left: 8, right: 8, flexDirection: 'row', justifyContent: 'center' },
+  rivalStrip: { position: 'absolute', top: 46, left: 64, right: 64, flexDirection: 'row', justifyContent: 'center' },
   rivalChip: { backgroundColor: 'rgba(255,248,228,0.92)', borderWidth: 2, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, marginHorizontal: 3, alignItems: 'center', minWidth: 64 },
   rivalName: { fontFamily: 'Knockout', fontSize: 10, color: '#0b3a6b' },
   rivalScore: { fontFamily: 'Shark', fontSize: 11, color: '#0b3a6b' },
-  delta: { position: 'absolute', top: 128, alignSelf: 'center', backgroundColor: '#ffffff', borderWidth: 3, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 2, alignItems: 'center' },
+  delta: { position: 'absolute', top: 94, right: 12, backgroundColor: '#ffffff', borderWidth: 3, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 2, alignItems: 'center' },
   deltaTxt: { fontFamily: 'Shark', fontSize: 16 },
   deltaLbl: { fontFamily: 'Knockout', fontSize: 11, color: '#0b3a6b' },
 });

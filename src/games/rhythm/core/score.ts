@@ -52,11 +52,12 @@ function sd(a: readonly number[]): number {
 
 /**
  * osu!'s unstable rate (UR = 10 x sd) in kid words, scaled for a phone
- * speaker: sd 12 ms -> 91 "Rock steady", 22 ms -> 69 "Steady", 45 ms -> 19.
+ * touch screen and the rev 6 windows: sd 15 ms -> 93 "Rock steady",
+ * 30 ms -> 70 "Steady", 45 ms -> 48 "Wobbly".
  */
 export function steadinessOf(errs: readonly number[]): number {
   const ur = sd(errs) * 10;
-  return Math.max(0, Math.min(100, Math.round(100 - (ur - 80) * 0.22)));
+  return Math.max(0, Math.min(100, Math.round(100 - (ur - 100) * 0.15)));
 }
 
 export function steadinessLabel(v: number): string {

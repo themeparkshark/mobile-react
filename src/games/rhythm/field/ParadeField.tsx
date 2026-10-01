@@ -27,6 +27,7 @@ import {
   Line,
   LinearGradient,
   Oval,
+  RadialGradient,
   Path,
   Rect,
   RoundedRect,
@@ -318,7 +319,7 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
   });
   const feverMatrix = useDerivedValue(() => {
     tick.value;
-    const f = view.value.fever * 0.65;
+    const f = view.value.fever * 0.9;
     const dim = 1 - 0.06 * Math.min(1, inhale.value * 3);
     // Golden hour: lift red and green, cool the blue a little. Never purple.
     return [
@@ -327,6 +328,35 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       0, 0, (1 - 0.28 * f) * dim, 0, 0,
       0, 0, 0, 1, 0,
     ];
+  });
+  // Fever god rays (world layer, behind the crowd): 7 warm rays turning 6 deg/s.
+  const raysPath = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const p = Skia.Path.Make();
+    if (v.fever < 0.02) return p;
+    const ox = cx;
+    const oy = yLine * 0.18;
+    const rot = (v.wt / 1000) * (6 * Math.PI / 180);
+    const R = H * 1.2;
+    for (let k = 0; k < 7; k++) {
+      const a = rot + (k / 7) * Math.PI * 2;
+      const w = 0.13;
+      p.moveTo(ox, oy);
+      p.lineTo(ox + Math.cos(a - w) * R, oy + Math.sin(a - w) * R);
+      p.lineTo(ox + Math.cos(a + w) * R, oy + Math.sin(a + w) * R);
+      p.close();
+    }
+    return p;
+  });
+  const raysOpacity = useDerivedValue(() => 0.22 * view.value.fever);
+  // Bloom pulse behind the lane on the drop: white-gold glow, 0.5 -> 0 over 300 ms (then a soft hold in Fever).
+  const bloomOpacity = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const t = v.wt - v.dropAt;
+    const pulse = t >= 0 && t < 300 ? 0.55 * (1 - t / 300) : 0;
+    return Math.max(pulse, 0.18 * v.fever);
   });
   const bgRect = useMemo(() => {
     if (!bg) return { x: 0, y: 0, w: W, h: H };
@@ -408,6 +438,9 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     // One shark sits down on a MISS; the whole crowd crouches in the inhale.
     if (i === (Math.floor(v.crowdSitAt / 97) % 6) && v.wt - v.crowdSitAt < 600) y += 10;
     y += 9 * inhale.value;
+    // The whole crowd jumps on the drop (staggered 30-60 ms per shark).
+    const tj = v.wt - v.dropAt - (30 + ((i * 53) % 31));
+    if (!reducedMotion && tj >= 0 && tj < 420) y -= 22 * Math.sin((tj / 420) * Math.PI);
     const sway = combo >= 10 ? Math.sin((d.beatIdx + d.beatPhase) * Math.PI) * 0.05 : 0;
     const flip = slot[0] === 0 ? 1 : -1;
     const sc = size / Math.max(r.width, r.height);
@@ -830,12 +863,29 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
   const hitRingR = useDerivedValue(() => {
     tick.value;
     const v = view.value;
-    const t = v.wt - v.ringAt;
+    const t0 = v.wt - v.ringAt;
+    // Receptor impact (design 6.3): the cel ring holds at r 40 for 2 frames on PERFECT, 1 on GREAT.
+    const hold = v.ringGrade <= J_PERFECT ? 33 : v.ringGrade === J_GREAT ? 17 : 0;
+    const t = t0 - hold;
     const to = v.ringGrade <= J_PERFECT ? 120 : v.ringGrade === J_GREAT ? 95 : 75;
     const dur = v.ringGrade <= J_PERFECT ? 260 : 220;
-    if (t < 0 || t > dur) return 0;
+    if (t0 < 0 || t > dur) return 0;
+    if (t < 0) return 40;
     const u = 1 - Math.pow(1 - t / dur, 3);
     return 40 + (to - 40) * u + Math.sin(v.wt * 0.7) * 1.5;
+  });
+  const echoRingR = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const t = v.wt - v.ringAt - 60 - 33;
+    if (v.ringGrade > J_PERFECT || t < 0 || t > 240) return 0;
+    return 40 + 70 * (1 - Math.pow(1 - t / 240, 3));
+  });
+  const echoRingOpacity = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const t = v.wt - v.ringAt - 93;
+    return v.ringGrade > J_PERFECT || t < 0 || t > 240 ? 0 : 0.8 * (1 - t / 240);
   });
   const hitRingOpacity = useDerivedValue(() => {
     tick.value;
@@ -1007,8 +1057,7 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     const sp = spanList[i];
     if (!sp) return 0;
     const t = tele.value;
-    const base = view.value.march > 0.5 ? 0.24 : 0.18;
-    return base + 0.27 * (sp.kind === 0 ? t[0] : t[1]);
+    return 0.42 * (sp.kind === 0 ? t[0] : t[1]);
   }));
   const spanFlash = [0, 1, 2].map((i) => useDerivedValue(() => {
     tick.value;
@@ -1072,7 +1121,27 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     return [{ translateX: cx }, { translateY: oy }, { rotate: rot }, { translateX: -W * 0.75 }, { translateY: -W * 0.75 }];
   });
   const starburstOpacity = useDerivedValue(() => 0.22 * view.value.fever);
-  const glyphSize = 58 * (W / 390);
+  const glyphSize = 96 * (W / 390);
+  // Zone glyphs bop on the beat and pop when their zone is telegraphed.
+  const glyphXf = [0, 1, 2].map((i) => useDerivedValue(() => {
+    tick.value;
+    const sp = spanList[i];
+    if (!sp) return [{ scale: 1 }];
+    const d = draw.value;
+    const t = tele.value;
+    const k = 1 + 0.05 * Math.max(0, bop(d.beatPhase)) + 0.16 * (sp.kind === 0 ? t[0] : t[1]);
+    const gx = (sp.x0 + sp.x1) / 2;
+    const gy = headY + headH * 0.5;
+    return [{ translateX: gx }, { translateY: gy }, { scale: k }, { translateX: -gx }, { translateY: -gy }];
+  }));
+  const headArcs = useMemo(() => {
+    // Faint concentric arcs: the curve of a real drum head.
+    const p = Skia.Path.Make();
+    const ccx = W / 2;
+    const ccy = headY + headH * 1.15;
+    for (const rr of [W * 0.42, W * 0.62, W * 0.84]) p.addOval({ x: ccx - rr * 1.25, y: ccy - rr, width: rr * 2.5, height: rr * 2 });
+    return p;
+  }, [W, headY, headH]);
   // Launch Swipe streak: a gold ribbon shooting up from the thumb.
   const launchPath = useDerivedValue(() => {
     tick.value;
@@ -1135,6 +1204,12 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
           <ColorMatrix matrix={feverMatrix} />
           {bg ? <Image image={bg} x={bgRect.x} y={bgRect.y} width={bgRect.w} height={bgRect.h} fit="fill" /> : <Rect x={0} y={0} width={W} height={H} color="#4fc3ff" />}
         </Group>
+        <Path path={raysPath} color="#fff3b0" opacity={raysOpacity} />
+        <Group opacity={bloomOpacity}>
+          <Circle cx={cx} cy={yLine * 0.62} r={W * 0.62}>
+            <RadialGradient c={vec(cx, yLine * 0.62)} r={W * 0.62} colors={['rgba(255,252,230,1)', 'rgba(255,214,110,0.6)', 'rgba(255,214,110,0)']} />
+          </Circle>
+        </Group>
         <Group transform={buntingTransform} origin={vec(W / 2, 0)}>
           <Path path={bunting.cord} color={NAVY} style="stroke" strokeWidth={2.5} />
           {bunting.paths.map((p, i) => <Path key={i} path={p} color={bunting.fills[i]} />)}
@@ -1184,7 +1259,7 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       {railPaths.map((p, i) => (
         <Path key={i} path={p} color={rails[i]} style="stroke" strokeWidth={4} strokeCap="round" opacity={railFlashOpacity[i]} />
       ))}
-      <Path path={tailPath} color="#ff8a6b" />
+      <Path path={tailPath} color={BLUE} />
       <Path path={tailPath} color="#ffffff" style="stroke" strokeWidth={6}>
         <DashPathEffect intervals={[10, 10]} phase={tailStripePhase} />
       </Path>
@@ -1203,8 +1278,9 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       </Path>
       <Path path={popPips} color={GOLD} />
       {/* hit ring + line flash (screen-ish white bar with gold edge) */}
-      <Circle cx={cx} cy={yLine} r={hitRingR} color={NAVY} style="stroke" strokeWidth={9} opacity={hitRingOpacity} />
-      <Circle cx={cx} cy={yLine} r={hitRingR} color={hitRingColor} style="stroke" strokeWidth={5.5} opacity={hitRingOpacity} />
+      <Circle cx={cx} cy={yLine} r={hitRingR} color={NAVY} style="stroke" strokeWidth={7.5} opacity={hitRingOpacity} />
+      <Circle cx={cx} cy={yLine} r={hitRingR} color={hitRingColor} style="stroke" strokeWidth={4.5} opacity={hitRingOpacity} />
+      <Circle cx={cx} cy={yLine} r={echoRingR} color="#ffffff" style="stroke" strokeWidth={3} opacity={echoRingOpacity} />
       <Circle cx={cx} cy={yLine} r={ringR} color="#ffffff" opacity={coreFlash} />
       <Group opacity={lineFlashOpacity}>
         <Rect x={lineFlashX} y={yLine - 5} width={lineFlashW} height={10} color="#ffffff" />
@@ -1244,10 +1320,19 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
           </Rect>
           {spanList.map((sp, i) => (
             <Group key={`z${i}`}>
+              <Rect x={sp.x0} y={headY} width={sp.x1 - sp.x0} height={headH + 4}>
+                <LinearGradient
+                  start={vec(0, headY)}
+                  end={vec(0, headY + headH)}
+                  colors={sp.kind === 0 ? ['rgba(31,127,224,0.16)', 'rgba(31,127,224,0.34)'] : ['rgba(255,107,74,0.16)', 'rgba(255,107,74,0.34)']}
+                />
+              </Rect>
               <Rect x={sp.x0} y={headY} width={sp.x1 - sp.x0} height={headH + 4} color={sp.kind === 0 ? BLUE : CORAL} opacity={spanOpacity[i]} />
               <Rect x={sp.x0} y={headY} width={sp.x1 - sp.x0} height={headH + 4} color="#ffffff" opacity={spanFlash[i]} />
             </Group>
           ))}
+          <Path path={headArcs} color={NAVY} style="stroke" strokeWidth={2} opacity={0.07} />
+          <Oval x={W * 0.08} y={headY + 10} width={W * 0.5} height={headH * 0.28} color="#ffffff" opacity={0.35} />
           {spanList.slice(1).map((sp, i) => (
             <Line key={`b${i}`} p1={vec(sp.x0, headY + 6)} p2={vec(sp.x0, headY + headH - 4)} color={NAVY} strokeWidth={2} opacity={0.7}>
               <DashPathEffect intervals={[8, 7]} />
@@ -1264,7 +1349,10 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
             if (!img) return null;
             const gh = glyphSize * (img.height() / img.width());
             return (
-              <Image key={`g${i}`} image={img} x={(sp.x0 + sp.x1) / 2 - glyphSize / 2} y={headY + headH * 0.5 - gh / 2} width={glyphSize} height={gh} fit="contain" opacity={0.5} />
+              <Group key={`g${i}`} transform={glyphXf[i]}>
+                <Oval x={(sp.x0 + sp.x1) / 2 - glyphSize * 0.42} y={headY + headH * 0.5 + gh * 0.36} width={glyphSize * 0.84} height={12} color={NAVY} opacity={0.12} />
+                <Image image={img} x={(sp.x0 + sp.x1) / 2 - glyphSize / 2} y={headY + headH * 0.5 - gh / 2} width={glyphSize} height={gh} fit="contain" opacity={0.92} />
+              </Group>
             );
           })}
           <Circle cx={rippleX} cy={rippleY} r={rippleR} color={NAVY} style="stroke" strokeWidth={3} opacity={rippleOpacity} />
