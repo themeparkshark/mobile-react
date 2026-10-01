@@ -1542,7 +1542,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
           st.slip = true;
           if (a !== undefined) later(1050, () => commitRef.current(A_UNDO));
           gap = 1800;
-        } else if (autoMode === '2' && run.index === 1 && !st.stalled && v.strokes >= 1
+        } else if (autoMode === '2' && run.index === (trial ? 1 : 0) && !st.stalled && v.strokes >= 1 && st.slip
           && strokesLeft(run) - distanceFrom(b, v, false) >= 0) {
           // Wander, but never more than one stroke past saving: the stall lands as a near miss.
           const left0 = strokesLeft(run);
@@ -1560,7 +1560,7 @@ export default function CurrentQuestGame({ visible, seed, themeId, context: cont
           hold = 260;
           gap = 560;
         } else if (autoMode === '2' && !st.tipped && tipAllowed(run) && v.strokes === 0
-          && ((trial && run.index === 2) || (!trial && run.index === 1 && st.recovered))) {
+          && ((trial && run.index === 2) || (!trial && run.index === 1))) {
           st.tipped = true;
           later(50, () => commitRef.current(A_TIP));
           autoNext.current = Date.now() + 2600;
