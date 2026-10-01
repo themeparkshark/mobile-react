@@ -52,7 +52,9 @@ function humanTaps(sim, board, seed) {
   } else if (sim.key === 'bonk_race') {
     for (const s of board) {
       const roll = next() % 100;
-      if (s.kind === 'lure' ? roll < 20 : roll < 70) taps.push([Math.min(sim.roundMs, s.at + 150 + (next() % 1000)), s.hole]);
+      // Shared Goldens are telegraphed: people snatch them right after the beat.
+      const react = s.sg > 0 ? 90 + (next() % 400) : 150 + (next() % 1000);
+      if (s.kind === 'lure' ? roll < 20 : roll < 70) taps.push([Math.min(sim.roundMs, s.at + react), s.hole]);
       if (roll > 92) {
         const t = Math.min(sim.roundMs, s.at + (next() % 400));
         for (let k = 0; k < 3; k++) taps.push([Math.min(sim.roundMs, t + k * 85), next() % holes]);
@@ -95,10 +97,21 @@ function main() {
         empty: [],
       };
       const out = { seed, seat, profile, until_ms: until, logs: {} };
+      const results = [];
       for (const [name, taps] of Object.entries(logs)) {
         const r = sim.resolve(board, taps);
+        results.push(r);
         out.logs[name] = { taps, score: r.score, hash: sim.resultHash(r) };
       }
+      // The four logs as one room: SNATCH settle, then each seat's key moment.
+      const settle = sim.settle(results);
+      out.settle = JSON.parse(JSON.stringify(settle));
+      Object.keys(logs).forEach((name, j) => {
+        out.logs[name].explain = JSON.parse(JSON.stringify(sim.explain(board, logs[name], settle, j)));
+      });
+      // Prefix resolve (Bonk Royale splits) on the human log.
+      const pr = sim.resolve(board, human, until);
+      out.prefix = { until_ms: until, score: pr.score, hash: sim.resultHash(pr) };
       return out;
     });
     const file = path.join(outDir, `${sim.key}.json`);

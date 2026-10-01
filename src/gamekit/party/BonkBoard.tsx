@@ -5,8 +5,16 @@
  * the tap log goes to the server, which replays it with the same sim.
  *
  * Walk-safe: big cells in the bottom of the screen (one thumb), every target
- * stays up 1.0-1.35 s, a stray bump is a free whiff, and nothing pauses when
+ * stays up 2.25-3 beats, a stray bump is a free whiff, and nothing pauses when
  * the line moves. Audio and haptics mark every hit so a glance is enough.
+ *
+ * v2 (design rev 6, 7.1): the board lives on the beat of the room loop. Rims
+ * bump on every beat (harder on the bar downbeat). On bars 2/4/6/8/10 a
+ * Shared Golden rises on the same hole on every phone: its rim glows and
+ * pulses for one beat first, and it rises inside a ring of pips in every
+ * seated player's color. Bonk it first after the beat to SNATCH it. The
+ * LAST 2 BARS get a banner and a gold vignette. All of this is render-only:
+ * nothing here writes board-ms.
  *
  * Art: Alex's Whack-a-Shark pieces (hole plate, park Finn peek/pop/dazed,
  * golden shark, anglerfish lure) over the underwater playfield. The hole's
@@ -17,6 +25,7 @@ import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
   Canvas,
+  Circle,
   Group,
   Image as SkiaImage,
   LinearGradient,
@@ -27,11 +36,14 @@ import {
   type SkImage,
 } from '@shopify/react-native-skia';
 import Animated, {
+  cancelAnimation,
   Easing,
   runOnJS,
+  type SharedValue,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
+  withRepeat,
   withSequence,
   withSpring,
   withTiming,
@@ -41,7 +53,7 @@ import { useFlash, useShake } from '../Juice';
 import { haptic } from '../Haptics';
 import { playSfx } from '../SFX';
 import { BRAND, FONT } from '../../ui/tokens';
-import { botTaps, multTenths, resolve, type BotProfile, type Spawn, type Tap } from '../../games/party/bonkRace';
+import { botTaps, LAST_BARS_FROM, lureDrop, multTenths, resolve, type BotProfile, type Spawn, type Tap } from '../../games/party/bonkRace';
 import { BOARD } from './partyArt';
 
 export interface BonkBoardProps {
@@ -59,11 +71,17 @@ export interface BonkBoardProps {
   onTick?: (boardMs: number, score: number) => void;
   /** The client's board clock (ms since GO, frozen during a personal HOLD). */
   boardClock?: () => number | null;
+  /** Bright seat colors for the Shared Golden pip ring (one per seated player). */
+  pipColors?: string[];
+  /** I bonked Shared Golden `sg` (1-5) with this replay-exact reaction. */
+  onShared?: (sg: number, reactionMs: number) => void;
+  /** Bumps when this phone stamps SNATCHED for me (one beat after the window). */
+  snatchedKey?: number;
 }
 
-type OccPhase = 'peek' | 'up' | 'bonked' | 'none';
-interface Occ { id: number; kind: Spawn['kind']; phase: OccPhase }
-const EMPTY: Occ = { id: -1, kind: 'finn', phase: 'none' };
+type OccPhase = 'tell' | 'peek' | 'up' | 'bonked' | 'none';
+interface Occ { id: number; kind: Spawn['kind']; phase: OccPhase; sg: number }
+const EMPTY: Occ = { id: -1, kind: 'finn', phase: 'none', sg: 0 };
 const PEEK_MS = 140;
 const BONKED_HOLD_MS = 280;
 
@@ -88,7 +106,7 @@ function grid(w: number, h: number): Cell[] {
 
 interface FlyUp { key: number; x: number; y: number; text: string; color: string; big: boolean }
 
-function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress, autoplay, onTick, boardClock }: BonkBoardProps) {
+function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress, autoplay, onTick, boardClock, pipColors, onShared, snatchedKey }: BonkBoardProps) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const cells = useMemo(() => (size.w ? grid(size.w, size.h) : []), [size]);
   const [occ, setOcc] = useState<Occ[]>(() => Array(9).fill(EMPTY));
@@ -100,9 +118,12 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
   const lastResult = useRef(resolve(spawns, []));
   const particles = useRef<ParticleHandle>(null);
   const shake = useShake();
-  const flash = useFlash();
   const coralFlash = useFlash();
   const flyKey = useRef(0);
+  // Beat decor: one shared pulse for every rim (render clock only).
+  const pulse = useSharedValue(1);
+  const lastBeat = useRef(-1);
+  const [lastBars, setLastBars] = useState(false);
   const byHole = useMemo(() => {
     const m: Spawn[][] = Array.from({ length: 9 }, () => []);
     spawns.forEach((s) => m[s.hole].push(s));
@@ -110,6 +131,7 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
   }, [spawns]);
   const auto = useMemo(() => (autoplay ? botTaps(spawns, seed, 17 + Math.floor(Math.random() * 40), autoplay) : []), [autoplay, spawns, seed]);
   const autoIndex = useRef(0);
+  const lastBarsRef = useRef(false);
 
   const addFlyUp = useCallback((cell: Cell, text: string, color: string, big = false) => {
     const key = ++flyKey.current;
@@ -130,6 +152,7 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
       const id = r.hitIds[r.hitIds.length - 1];
       hitAt.current.set(id, perfNow());
       streak.current += 1;
+      const shared = r.sgHits > before.sgHits;
       const golden = r.goldens > before.goldens;
       const quick = r.quick > before.quick;
       const gained = r.score - before.score;
@@ -138,8 +161,16 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
         setTier(nextTier);
         if (nextTier > tier) { haptic('comboHeavy'); playSfx('combo', 0.8); }
       }
-      if (golden) {
-        flash.flash(0.45, 220);
+      if (shared) {
+        // Flat +100 now; the +200 SNATCH is settled room-wide one beat after the window.
+        const n = r.sgReactions.findIndex((v, i) => v >= 0 && before.sgReactions[i] < 0);
+        if (n >= 0) onShared?.(n + 1, r.sgReactions[n]);
+        particles.current?.burst({ x: cell.cx, y: cell.cy - cell.size * 0.2, preset: 'coins', count: 16, colors: ['#ffcf3b', '#ffe07a', '#ffffff'] });
+        haptic('success');
+        playSfx('coin');
+        addFlyUp(cell, `+${gained}`, BRAND.gold, true);
+      } else if (golden) {
+        // Local burst only: no full-screen flash in Bonk Race (design 13.2).
         particles.current?.burst({ x: cell.cx, y: cell.cy - cell.size * 0.2, preset: 'coins', count: 22, colors: ['#ffcf3b', '#ffe07a', '#ffffff'] });
         haptic('success');
         playSfx('coin');
@@ -153,13 +184,15 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
     } else if (r.lureHits > before.lureHits) {
       const id = r.hitIds[r.hitIds.length - 1];
       hitAt.current.set(id, perfNow());
-      streak.current = 0;
-      setTier(10);
-      shake.shake(7, 110);
-      coralFlash.flash(0.35, 200);
-      haptic('failBuzz');
+      // A lure drops ONE tier (x3 -> x2.5), never all the way.
+      streak.current = lureDrop(streak.current);
+      setTier(multTenths(streak.current));
+      shake.shake(3, 90);
+      coralFlash.flash(0.22, 160);
+      haptic('comboHeavy');
+      setTimeout(() => haptic('hitMedium'), 60);
       playSfx('fail', 0.9);
-      addFlyUp(cell, `-150`, '#ff8a5c', true);
+      addFlyUp(cell, `${r.score - before.score === 0 ? '-150' : r.score - before.score}`, '#ff8a5c', true);
     } else if (r.butterfingers > before.butterfingers) {
       streak.current = 0;
       setTier(10);
@@ -169,7 +202,7 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
       playSfx('tap', 0.25);
     }
     onProgress?.(r.score, streak.current);
-  }, [addFlyUp, cells, coralFlash, flash, onProgress, onTap, perfNow, shake, spawns, tier]);
+  }, [addFlyUp, cells, coralFlash, onProgress, onShared, onTap, perfNow, shake, spawns, tier]);
   const bonkRef = useRef(bonk);
   bonkRef.current = bonk;
 
@@ -186,14 +219,15 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
       for (let h = 0; h < 9; h++) {
         let o: Occ = EMPTY;
         for (const s of byHole[h]) {
-          if (t < s.at - PEEK_MS) break;
+          if (t < Math.min(s.tell, s.at - PEEK_MS)) break;
           const hitTime = hitAt.current.get(s.id);
           if (hitTime !== undefined) {
-            if (now - hitTime < BONKED_HOLD_MS) { o = { id: s.id, kind: s.kind, phase: 'bonked' }; }
+            if (now - hitTime < BONKED_HOLD_MS) { o = { id: s.id, kind: s.kind, phase: 'bonked', sg: s.sg }; }
             continue;
           }
-          if (t < s.at) { o = { id: s.id, kind: s.kind, phase: 'peek' }; break; }
-          if (t < s.at + s.up) { o = { id: s.id, kind: s.kind, phase: 'up' }; break; }
+          if (t < s.at - PEEK_MS) { o = { id: s.id, kind: s.kind, phase: 'tell', sg: s.sg }; break; }
+          if (t < s.at) { o = { id: s.id, kind: s.kind, phase: 'peek', sg: s.sg }; break; }
+          if (t < s.at + s.up) { o = { id: s.id, kind: s.kind, phase: 'up', sg: s.sg }; break; }
         }
         next.push(o);
       }
@@ -207,6 +241,19 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
           autoIndex.current += 1;
         }
       }
+      // Rims bump on every beat of the room loop, harder on the bar downbeat.
+      if (t >= 0 && t < durationMs) {
+        const b = Math.floor((t * 1000) / 441180);
+        if (b !== lastBeat.current) {
+          lastBeat.current = b;
+          const peak = b % 4 === 0 ? 1.03 : 1.015;
+          pulse.value = withSequence(withTiming(peak, { duration: 60, easing: Easing.out(Easing.quad) }), withTiming(1, { duration: 160, easing: Easing.inOut(Easing.quad) }));
+        }
+        if (t >= LAST_BARS_FROM !== lastBarsRef.current) {
+          lastBarsRef.current = t >= LAST_BARS_FROM;
+          setLastBars(lastBarsRef.current);
+        }
+      }
       const second = Math.floor(t / 250);
       if (second !== lastSecond) {
         lastSecond = second;
@@ -218,7 +265,7 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [auto, boardClock, byHole, durationMs, goAt, onTick, perfNow]);
+  }, [auto, boardClock, byHole, durationMs, goAt, onTick, perfNow, pulse]);
 
   const onTouch = useCallback((x: number, y: number) => {
     // Generous hitboxes: the whole cell plus slop, and the rising sprite above it.
@@ -248,14 +295,15 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
     <View style={styles.fill}>
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.fill, shake.style]} onLayout={onLayout}>
-          {size.w > 0 ? <Holes cells={cells} occ={occ} /> : null}
+          {size.w > 0 ? <Holes cells={cells} occ={occ} pulse={pulse} pipColors={pipColors ?? []} /> : null}
           <ParticleField ref={particles} width={size.w} height={size.h} style={StyleSheet.absoluteFill} pointerEvents="none" />
           {flyUps.map(({ key, ...f }) => <FlyUpText key={key} {...f} />)}
-          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.goldWash, flash.style]} />
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.coralWash, coralFlash.style]} />
         </Animated.View>
       </GestureDetector>
+      {lastBars ? <LastBars /> : null}
       {tier > 10 ? <TierBadge tier={tier} /> : null}
+      {snatchedKey ? <SnatchStamp key={snatchedKey} /> : null}
     </View>
   );
 }
@@ -264,7 +312,7 @@ export default memo(BonkBoard);
 
 // ---------------------------------------------------------------- holes
 
-function Holes({ cells, occ }: { cells: Cell[]; occ: Occ[] }) {
+function Holes({ cells, occ, pulse, pipColors }: { cells: Cell[]; occ: Occ[]; pulse: SharedValue<number>; pipColors: string[] }) {
   const hole = useImage(BOARD.hole);
   const lure = useImage(BOARD.lure);
   const golden = useImage(BOARD.golden);
@@ -276,7 +324,7 @@ function Holes({ cells, occ }: { cells: Cell[]; occ: Occ[] }) {
   return (
     <Canvas style={[StyleSheet.absoluteFill, { width: w, height: h }]} pointerEvents="none">
       {cells.map((cell, i) => (
-        <Hole key={i} cell={cell} occ={occ[i]} images={{ hole, lure, golden, peek, pop, dazed }} />
+        <Hole key={i} cell={cell} occ={occ[i]} pulse={pulse} pipColors={pipColors} images={{ hole, lure, golden, peek, pop, dazed }} />
       ))}
     </Canvas>
   );
@@ -284,13 +332,31 @@ function Holes({ cells, occ }: { cells: Cell[]; occ: Occ[] }) {
 
 interface HoleImages { hole: SkImage | null; lure: SkImage | null; golden: SkImage | null; peek: SkImage | null; pop: SkImage | null; dazed: SkImage | null }
 
-const Hole = memo(function Hole({ cell, occ, images }: { cell: Cell; occ: Occ; images: HoleImages }) {
+const Hole = memo(function Hole({ cell, occ, images, pulse, pipColors }: { cell: Cell; occ: Occ; images: HoleImages; pulse: SharedValue<number>; pipColors: string[] }) {
   const rise = useSharedValue(0);
   const sx = useSharedValue(1);
   const sy = useSharedValue(1);
+  // Shared Golden telegraph: the rim glows gold and pulses at 4 Hz for the beat before it rises.
+  const glow = useSharedValue(0);
+  const spin = useSharedValue(0);
+  const shared = occ.sg > 0 && (occ.phase === 'tell' || occ.phase === 'peek' || occ.phase === 'up');
 
   useEffect(() => {
-    if (occ.phase === 'peek') {
+    if (shared) {
+      glow.value = withRepeat(withSequence(withTiming(1, { duration: 125 }), withTiming(0.45, { duration: 125 })), -1, false);
+      spin.value = 0;
+      spin.value = withRepeat(withTiming(Math.PI * 2, { duration: 1800, easing: Easing.linear }), -1, false);
+    } else {
+      cancelAnimation(glow);
+      cancelAnimation(spin);
+      glow.value = withTiming(0, { duration: 120 });
+    }
+  }, [glow, shared, spin]);
+
+  useEffect(() => {
+    if (occ.phase === 'tell') {
+      rise.value = 0;
+    } else if (occ.phase === 'peek') {
       rise.value = withTiming(0.28, { duration: 120, easing: Easing.out(Easing.quad) });
       sx.value = 1; sy.value = 1;
     } else if (occ.phase === 'up') {
@@ -323,6 +389,17 @@ const Hole = memo(function Hole({ cell, occ, images }: { cell: Cell; occ: Occ; i
     return { S, imgX: mx - 514 * u, imgY: my - 478 * u, mx, my, rx, ry, clip };
   }, [cell]);
 
+  // Every rim bumps on the beat (render only).
+  const plateX = useDerivedValue(() => g.mx - (g.S * pulse.value) / 2 + (g.imgX - (g.mx - g.S / 2)) * pulse.value);
+  const plateY = useDerivedValue(() => g.my - (g.S * pulse.value) / 2 + (g.imgY - (g.my - g.S / 2)) * pulse.value);
+  const plateS = useDerivedValue(() => g.S * pulse.value);
+  const glowOpacity = useDerivedValue(() => glow.value);
+  const pips = useMemo(() => {
+    const colors = pipColors.length ? pipColors : [BRAND.gold];
+    const n = Math.max(6, colors.length * 3);
+    return Array.from({ length: n }, (_, i) => ({ i, n, color: colors[i % colors.length] }));
+  }, [pipColors]);
+
   const sprite = cell.size * 1.12;
   const travel = cell.size * 0.5;
   const x = useDerivedValue(() => g.mx - (sprite * sx.value) / 2);
@@ -332,23 +409,81 @@ const Hole = memo(function Hole({ cell, occ, images }: { cell: Cell; occ: Occ; i
 
   return (
     <Group>
-      {images.hole ? <SkiaImage image={images.hole} x={g.imgX} y={g.imgY} width={g.S} height={g.S} fit="fill" />
+      {shared ? (
+        <Group opacity={glowOpacity}>
+          <Oval x={g.mx - g.rx * 1.42} y={g.my - g.ry * 1.75} width={g.rx * 2.84} height={g.ry * 3.5} color="rgba(255,207,59,0.55)" />
+          <Oval x={g.mx - g.rx * 1.42} y={g.my - g.ry * 1.75} width={g.rx * 2.84} height={g.ry * 3.5} color={BRAND.gold} style="stroke" strokeWidth={5} />
+        </Group>
+      ) : null}
+      {images.hole ? <SkiaImage image={images.hole} x={plateX} y={plateY} width={plateS} height={plateS} fit="fill" />
         : <Oval x={g.mx - g.rx * 1.35} y={g.my - g.ry * 1.6} width={g.rx * 2.7} height={g.ry * 3.2} color={BRAND.navy} />}
       {/* Teal water in the mouth (no black voids) with a white back-lip rim light. */}
       <Oval x={g.mx - g.rx * 0.99} y={g.my - g.ry * 0.98} width={g.rx * 1.98} height={g.ry * 1.96}>
         <LinearGradient start={vec(0, g.my - g.ry)} end={vec(0, g.my + g.ry)} colors={['#1c8fa6', '#46c3d1']} />
       </Oval>
       <Oval x={g.mx - g.rx * 0.8} y={g.my - g.ry * 0.9} width={g.rx * 1.6} height={g.ry * 0.5} color="rgba(255,255,255,0.28)" />
-      {occ.phase !== 'none' && img ? (
+      {occ.phase !== 'none' && occ.phase !== 'tell' && img ? (
         <Group clip={g.clip}>
           <SkiaImage image={img} x={x} y={y} width={ww} height={hh} fit="contain" />
         </Group>
       ) : null}
+      {shared && occ.phase !== 'tell' ? pips.map((p) => <Pip key={p.i} index={p.i} count={p.n} color={p.color} spin={spin} cx={g.mx} cy={g.my - g.ry * 0.4} rx={g.rx * 1.25} ry={g.ry * 1.9} />) : null}
     </Group>
   );
 });
 
+/** One pip of the Shared Golden ring, in a seated player's color: it reads "everyone's". */
+function Pip({ index, count, color, spin, cx, cy, rx, ry }: { index: number; count: number; color: string; spin: SharedValue<number>; cx: number; cy: number; rx: number; ry: number }) {
+  const px = useDerivedValue(() => cx + rx * Math.cos(spin.value + (index * Math.PI * 2) / count));
+  const py = useDerivedValue(() => cy + ry * Math.sin(spin.value + (index * Math.PI * 2) / count));
+  return (
+    <Group>
+      <Circle cx={px} cy={py} r={7} color={BRAND.navy} />
+      <Circle cx={px} cy={py} r={4.5} color={color} />
+    </Group>
+  );
+}
+
 // ---------------------------------------------------------------- juice
+
+/** LAST 2 BARS: a banner for one beat and a gold vignette that breathes on the beat. */
+function LastBars() {
+  const banner = useSharedValue(0);
+  const vignette = useSharedValue(0);
+  useEffect(() => {
+    banner.value = withSequence(withTiming(1, { duration: 240, easing: Easing.out(Easing.back(1.8)) }), withTiming(1, { duration: 441 }), withTiming(0, { duration: 200 }));
+    vignette.value = withTiming(1, { duration: 400 });
+  }, [banner, vignette]);
+  const bStyle = useAnimatedStyle(() => ({ opacity: banner.value, transform: [{ scale: 0.7 + 0.3 * banner.value }] }));
+  const vStyle = useAnimatedStyle(() => ({ opacity: vignette.value }));
+  return (
+    <>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.vignette, vStyle]} />
+      <Animated.View pointerEvents="none" style={[styles.lastBars, bStyle]}>
+        <Text style={styles.lastBarsText}>LAST 2 BARS</Text>
+      </Animated.View>
+    </>
+  );
+}
+
+/** My SNATCH: the stamp slams onto the board edge (1.8 -> 1.0 in 120 ms). */
+function SnatchStamp() {
+  const s = useSharedValue(1.8);
+  const o = useSharedValue(1);
+  useEffect(() => {
+    s.value = withTiming(1, { duration: 120, easing: Easing.out(Easing.back(2)) });
+    o.value = withSequence(withTiming(1, { duration: 1100 }), withTiming(0, { duration: 220 }));
+  }, [o, s]);
+  const style = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ scale: s.value }, { rotate: '-6deg' }] }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.snatchWrap, style]}>
+      <View style={styles.snatch}>
+        <Text style={styles.snatchText}>SNATCHED</Text>
+        <Text style={styles.snatchSub}>+200</Text>
+      </View>
+    </Animated.View>
+  );
+}
 
 const FlyUpText = memo(function FlyUpText({ x, y, text, color, big }: Omit<FlyUp, 'key'>) {
   const s = useSharedValue(0.6);
@@ -383,7 +518,13 @@ function TierBadge({ tier }: { tier: number }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  goldWash: { backgroundColor: 'rgba(255,207,59,0.55)' },
+  vignette: { borderWidth: 18, borderColor: 'rgba(255,207,59,0.22)', borderRadius: 24 },
+  lastBars: { position: 'absolute', top: 6, alignSelf: 'center', backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 4 },
+  lastBarsText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.white, letterSpacing: 1, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
+  snatchWrap: { position: 'absolute', left: 12, top: 8 },
+  snatch: { backgroundColor: BRAND.white, borderColor: BRAND.gold, borderWidth: 4, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 2, alignItems: 'center' },
+  snatchText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, letterSpacing: 1, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
+  snatchSub: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy },
   coralWash: { backgroundColor: 'rgba(255,107,92,0.45)' },
   flyWrap: { position: 'absolute', width: 180, alignItems: 'center' },
   fly: {

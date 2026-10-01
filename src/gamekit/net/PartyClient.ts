@@ -28,10 +28,11 @@
 import { partySim, type PartySim, type SimTap } from '../../games-registry/partySims';
 import type { Spawn } from '../../games/party/bonkRace';
 import { ClockSync } from './ClockSync';
-import type { EmoteEvent, EmoteId, EntryResponse, PartyApiError, ProgressWhisper, RoomSnapshot, RoundSummary, SeriesSummary } from './partyTypes';
+import type { EmoteEvent, EmoteId, EntryResponse, PartyApiError, ProgressWhisper, RoomSnapshot, RoundSummary, SeriesSummary, SnatchWhisper } from './partyTypes';
 import {
   applyEmote,
   applyProgress,
+  applySnatch,
   applyRound,
   applySnapshot,
   initialPartyState,
@@ -353,6 +354,34 @@ export class PartyClient {
     this.log('resume', { heldMs: r.heldMs });
   }
 
+  /** Shared Golden reactions of my current board (-1 = not hit), carried on every progress whisper. */
+  private mySg: number[] = [-1, -1, -1, -1, -1];
+  private mySgRound = -1;
+
+  /**
+   * I bonked a Shared Golden: tell the room now, not on the next 4 Hz tick, so
+   * every phone can stamp SNATCHED one beat after the window (design 7.1.3).
+   * Display only; the server settles the replayed logs.
+   */
+  reportSnatch(sg: number, reactionMs: number): void {
+    const r = this.local;
+    if (!r || sg < 1 || sg > 5) return;
+    if (this.mySgRound !== r.roundNo) {
+      this.mySg = [-1, -1, -1, -1, -1];
+      this.mySgRound = r.roundNo;
+    }
+    if (this.mySg[sg - 1] >= 0) return;
+    this.mySg[sg - 1] = Math.max(0, Math.round(reactionMs));
+    const channel = this.roomChannel;
+    if (!channel || this.state.connection !== 'live') return;
+    const w: SnatchWhisper = { u: this.opts.userId, r: r.roundNo, sg, ms: this.mySg[sg - 1] };
+    try {
+      channel.trigger('client-snatch', w);
+    } catch {
+      // Best effort: the next progress whisper carries it too.
+    }
+  }
+
   /** Whisper my live score to the room at 4 Hz (display only). */
   reportProgress(score: number, streak: number): void {
     const r = this.local;
@@ -362,6 +391,7 @@ export class PartyClient {
     if (at - this.lastWhisperAt < WHISPER_MS) return;
     this.lastWhisperAt = at;
     const w: ProgressWhisper = { u: this.opts.userId, s: score, k: streak, t: Math.round(this.boardTime() ?? 0), r: r.roundNo };
+    if (this.mySgRound === r.roundNo && this.mySg.some((v) => v >= 0)) w.g = [...this.mySg];
     try {
       channel.trigger('client-progress', w);
     } catch {
@@ -692,6 +722,7 @@ export class PartyClient {
     });
     channel.bind('emote', (e: EmoteEvent) => this.set(applyEmote(this.state, e, this.now())));
     channel.bind('client-progress', (w: ProgressWhisper) => this.set(applyProgress(this.state, w, this.now())));
+    channel.bind('client-snatch', (w: SnatchWhisper) => this.set(applySnatch(this.state, w, this.now())));
     channel.bind('pusher:subscription_error', (e: unknown) => this.log('room channel refused', e));
   }
 

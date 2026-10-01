@@ -38,6 +38,7 @@ const CURVE_STEP_MS = 250;
 import PartyLobby from './PartyLobby';
 import PartyResults from './PartyResults';
 import RaceStrip, { type RacerLine } from './RaceStrip';
+import { provisionalBonus, provisionalSnatch, stampAt, type SeatReactions } from './sharedGolden';
 import { BOARD, STICKERS, STICKER_LABEL } from './partyArt';
 
 export interface LinePartyProps {
@@ -143,6 +144,43 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   const onTick = useCallback((t: number, score: number) => { setBoardT(t); setMyScore(score); }, []);
   const onProgress = useCallback((score: number, streak: number) => { setMyScore(score); client.reportProgress(score, streak); }, [client]);
 
+  // Shared Golden SNATCH (design 7.1.3): my reaction goes out at once; one beat
+  // after each window this phone stamps the fastest seat it knows about.
+  const [mySg, setMySg] = useState<number[]>([-1, -1, -1, -1, -1]);
+  const [snatchedKey, setSnatchedKey] = useState(0);
+  const [stampTags, setStampTags] = useState<Record<string, number>>({});
+  const stamped = useRef(new Set<number>());
+  useEffect(() => { setMySg([-1, -1, -1, -1, -1]); stamped.current = new Set(); setStampTags({}); }, [round?.id]);
+  const onShared = useCallback((sg: number, reactionMs: number) => {
+    client.reportSnatch(sg, reactionMs);
+    setMySg((prev) => prev.map((v, i) => (i === sg - 1 && v < 0 ? reactionMs : v)));
+  }, [client]);
+  const botSg = useMemo(() => {
+    const m = new Map<number, number[]>();
+    botLogs.forEach((log, seat) => m.set(seat, resolve(spawns, log).sgReactions));
+    return m;
+  }, [botLogs, spawns]);
+  const reactions: SeatReactions[] = useMemo(() => (round?.seats ?? []).map((seat) => {
+    if (seat.kind === 'bot') return { key: `b:${seat.name}`, sg: botSg.get(seat.seat) ?? null };
+    if (seat.user_id === state.userId) return { key: 'me', sg: mySg };
+    return { key: `u:${seat.user_id}`, sg: seat.user_id !== undefined ? state.rivals[seat.user_id]?.sg ?? null : null };
+  }), [botSg, mySg, round?.seats, state.rivals, state.userId]);
+  useEffect(() => {
+    for (let n = 1; n <= 5; n++) {
+      if (boardT < stampAt(n) || stamped.current.has(n)) continue;
+      stamped.current.add(n);
+      const winners = provisionalSnatch(n, reactions);
+      if (winners.includes('me')) {
+        setSnatchedKey(n);
+        haptic('success');
+        playSfx('star', 0.9);
+      }
+      if (winners.length) setStampTags((prev) => ({ ...prev, ...Object.fromEntries(winners.map((k) => [k, n])) }));
+    }
+  }, [boardT, reactions]);
+  const bonusNow = useMemo(() => provisionalBonus(boardT, reactions), [boardT, reactions]);
+  const pipColors = useMemo(() => (round?.seats ?? []).map((_, i) => SEAT_COLORS[i % SEAT_COLORS.length]), [round?.seats]);
+
   const lines: RacerLine[] = useMemo(() => {
     if (!round) return [];
     const emoteBy = new Map(state.emotes.map((e) => [e.user_id, { id: e.emote, key: e.key }]));
@@ -166,13 +204,16 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         away = member?.state === 'away';
       }
       const key = seat.kind === 'bot' ? `b:${seat.name}` : `u:${seat.user_id}`;
+      const stampKey = me ? 'me' : key;
+      score += bonusNow[stampKey] ?? 0;
+      const snatched = stampTags[stampKey];
       const seriesPoints = state.room?.series?.standings.find((r) => r.key === key)?.points;
       const name = seat.kind === 'bot' ? seat.name : displayName(state, seat.user_id, seat.name);
-      return { seat, name, seriesPoints, score, me, ghost, away, emote: seat.user_id !== undefined ? emoteBy.get(seat.user_id) ?? null : null };
+      return { seat, name, seriesPoints, score, me, ghost, away, snatched, emote: seat.user_id !== undefined ? emoteBy.get(seat.user_id) ?? null : null };
     });
     const all = raw.map((r) => r.score);
     return raw.map((r) => ({ ...r, placement: placementOf(r.score, all) }));
-  }, [boardT, botLogs, botCurves, myScore, round, spawns, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
+  }, [boardT, bonusNow, botLogs, botCurves, myScore, round, spawns, stampTags, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
 
   const phase = state.phase;
   const playing = (phase === 'countdown' || phase === 'playing') && local && local.roundId === round?.id && !local.ended;
@@ -186,7 +227,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
       <SeriesPill round={round} />
       <RaceStrip lines={lines} />
       <View style={styles.hud}>
-        <Text style={styles.myScore}>{myScore.toLocaleString('en-US')}</Text>
+        <Text style={styles.myScore}>{(myScore + (bonusNow.me ?? 0)).toLocaleString('en-US')}</Text>
         <View style={styles.hudRight}>
           <Pressable
             accessibilityRole="button"
@@ -229,6 +270,9 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
             onTick={onTick}
             autoplay={autoplay}
             boardClock={boardClock}
+            pipColors={pipColors}
+            onShared={onShared}
+            snatchedKey={snatchedKey}
           />
         ) : null}
         {state.hold && phase === 'playing' ? <HoldOverlay client={client} /> : null}
@@ -243,6 +287,9 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
     </View>
   );
 }
+
+/** Bright seat colors for the Shared Golden pip ring (no violet, no dark surfaces). */
+const SEAT_COLORS = ['#ffcf3b', '#7cc6f5', '#ff8a5c', '#1fc8b8', '#ffffff', '#ffe07a', '#9be15d', '#ff9fc4'];
 
 /** ROUND 2 OF 5, or the gold FINAL ROUND x2 on round five. */
 function SeriesPill({ round }: { round: { series_round: number | null; final: boolean } | null }) {
@@ -295,7 +342,7 @@ function HeadsUp({ enabled }: { enabled: boolean }) {
   const show = useLineHeadsUp(enabled);
   if (!show) return null;
   return (
-    <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(300)} style={styles.headsUp} pointerEvents="none">
+    <Animated.View entering={FadeIn.duration(180)} style={styles.headsUp} pointerEvents="none">
       <GameIcon name="queue" size={18} />
       <Text style={styles.headsUpText}>Line's moving. Heads up!</Text>
     </Animated.View>
@@ -338,7 +385,9 @@ function CountIn({ boardT, late }: { boardT: number; late: boolean }) {
 
 function Banner({ title, sub, big }: { title: string; sub: string; big?: boolean }) {
   return (
-    <Animated.View entering={ZoomIn.springify().damping(12)} exiting={FadeOut} style={styles.bannerWrap} pointerEvents="none">
+    // No exiting animation: under load a Reanimated exit can strand the banner
+    // behind the next round's board (seen in the v2 two-sim lab). It just unmounts.
+    <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.bannerWrap} pointerEvents="none">
       <Text style={[styles.bannerTitle, big && { fontSize: 52 }]}>{title}</Text>
       <Text style={styles.bannerSub}>{sub}</Text>
     </Animated.View>
