@@ -23,7 +23,7 @@ import { createSim, simAdvanceTo, simTap, P_TELL, P_UP } from '../sim';
 import { buildBurst, type Timeline } from '../timeline';
 import { MAX_TAPS as BURST_MAX_TAPS } from '../waves';
 
-export const WHACK_RUSH_VERSION = 1;
+export const WHACK_RUSH_VERSION = 2;
 export const ROUND_MS = 20000;
 export const HOLES = 9;
 export const MAX_TAPS = BURST_MAX_TAPS;

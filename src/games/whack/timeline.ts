@@ -1,24 +1,29 @@
 /**
- * timeline.ts: the deterministic Burst timeline (design 5.1).
+ * timeline.ts: the deterministic Burst timeline (design v4 6.1).
  *
- *   buildBurst({ seed, burstIndex, format, difficulty, theme, unlockLevel, xform, walkBoost, incoming })
+ *   buildBurst({ seed, burstIndex, format, difficulty, theme, unlockLevel, xform, walkBoost, runOfDay, feverFired, incoming })
  *
- * Pure and seed-only: nothing a player does changes a timeline. The client,
- * the ghost renderer and the server replay (PHP port, vectors in __vectors__/)
- * build the identical event list from the same inputs. Tells land on the 8th
- * note grid of the Burst music (EIGHTH_MS), so tells feel musical.
+ * Pure and seed-only: nothing a player does during a Burst changes its
+ * timeline. The client, the ghost renderer and the server replay (PHP port,
+ * vectors in __vectors__/) build the identical event list from the same inputs.
+ *
+ * v4 beat alignment: `emergeAt` (the pop) sits on the Burst's 8th-note grid
+ * (16th in the Golden Rush's last 3s) and `tellAt = emergeAt - tellMs(kind)`,
+ * so the tell phrase is a pickup and the pop lands on the beat. That is what
+ * makes the board playable by ear on a phone speaker.
  */
 
 import { createRng, mixSeed, rngFloat, rngInt, type Rng } from '../../gamekit/core/rng';
 import { BASIC_FORMATIONS, FORMATIONS, RIDE_FORMATIONS, xformHole } from './formations';
 import {
   BOSS_CADENCE, BOSS_HP, EIGHTH_MS, FIRST_CALLOUT, FIRST_TELL_MS, GAP_SCALE, HELMET_EXT_MS, K_ANGLER, K_BRUISER,
-  K_FINN, K_GOLDEN, K_HELMET, K_PUFFER, K_SPRINTER, K_TENTACLE, K_TWIN, RIDE_ANGLER_FROM, RIDE_BRUISER_EVERY,
-  RIDE_BRUISER_FROM, SHAPES, TELL_MS, UNLOCK, quantize, upTimeFor,
+  K_FINN, K_GOLDEN, K_HELMET, K_TENTACLE, K_TWIN, NORMALIZED_LIFETIME, RIDE_ANGLER_FROM, RIDE_BRUISER_EVERY,
+  RIDE_BRUISER_FROM, SHAPES, SIXTEENTH_MS, TELL_MS, UNLOCK, feverBanked, isBossRun, quantize, quantize16, upTimeFor,
   type BurstShape, type BurstShapeId, type Difficulty, type WhackFormat,
 } from './waves';
 
 export type WhackThemeId = 'park' | 'pirates' | 'mansion' | 'space' | 'jungle' | 'backlot';
+/** v4 Walk Boost is a Golden Start only (6.12). 'meter' is accepted from old callers and ignored. */
 export type WalkBoost = 'golden' | 'meter' | null;
 
 export interface SpawnEvent {
@@ -73,6 +78,10 @@ export interface BurstInput {
   unlockLevel: number;
   xform?: number;
   walkBoost?: WalkBoost;
+  /** Run of the park day (0-based): drives the Boss Run cadence (every 3rd Run). */
+  runOfDay?: number;
+  /** The player pressed GO FEVER in the breather before this Burst (banked fever, 6.5). */
+  feverFired?: boolean;
   /** Duel sabotage queued by the rival's previous Burst (10.2 A). */
   incoming?: { matchSeed: number; senderEventIds: number[] } | null;
 }
@@ -89,7 +98,14 @@ export interface Timeline {
   difficulty: Difficulty;
   ride: boolean;
   butterfingers: boolean;
+  /** Fever exists in this Burst (meter fills). */
   fever: boolean;
+  /** A full meter banks ("FEVER READY") instead of firing; fired from the breather (formats with breathers). */
+  feverBank: boolean;
+  /** This Burst starts in fever (GO FEVER). */
+  feverStart: boolean;
+  /** Finale kind when this is the Run's last Burst. */
+  finale: 'rush' | 'boss' | null;
   boss: boolean;
   /**
    * Auto Look-Up on (every solo format). Off for live party rounds: the room's
@@ -105,11 +121,10 @@ export interface Timeline {
 
 /** Lifetime number used for roster gating. Shared seeds (daily/weekly) give everyone the same roster. */
 export function lifetimeFor(input: BurstInput): number {
-  if (input.format === 'daily' || input.format === 'weekly') return 19;
-  if (input.format === 'duel') return Math.max(1, input.unlockLevel);
-  if (input.format === 'raid') return 19;
-  // Live party rounds: everyone gets the same roster (formations, helmets, twins, sprinters; no puffer).
-  if (input.format === 'party') return 9;
+  const f = input.format;
+  // Shared seeds (Line of the Day, daily, raid, live party) normalize the roster so everyone plays the same board.
+  if (f === 'daily' || f === 'weekly' || f === 'lineDay' || f === 'raid' || f === 'party') return NORMALIZED_LIFETIME;
+  if (f === 'duel') return Math.max(1, input.unlockLevel);
   return Math.max(0, input.unlockLevel) + input.burstIndex + 1;
 }
 
@@ -119,12 +134,13 @@ export function shapeFor(input: BurstInput, lifetime: number): BurstShapeId {
     case 'ride': return 'ride';
     case 'raid': return 'raid';
     case 'party': return 'party';
-    case 'duel': return (['b2', 'b3', 'b4'] as const)[Math.min(2, i)];
-    case 'daily': return (['b2', 'b3', 'b5'] as const)[Math.min(2, i)];
+    case 'duel': return (['b2', 'b4', 'b3'] as const)[Math.min(2, i)];
+    case 'daily': return (['b2', 'b3', 'rush'] as const)[Math.min(2, i)];
     default: {
-      const s = (['b1', 'b2', 'b3', 'b4'] as const)[i];
+      const s = (['b1', 'b2', 'b3'] as const)[i];
       if (s) return s;
-      return lifetime >= UNLOCK.boss ? 'b5' : 'rush';
+      // Finale (exactly one per Run): Boss Run every 3rd Run of the day, else Golden Rush.
+      return isBossRun(input.format, input.runOfDay ?? 0, lifetime) ? 'b5' : 'rush';
     }
   }
 }
@@ -157,11 +173,11 @@ function upCount(b: Builder, at: number): number {
   return n;
 }
 
-function makeEvent(b: Builder, tellAt: number, hole: number, kind: number, opts: { first?: boolean; formation?: number; lead?: boolean; link?: number } = {}): SpawnEvent {
+/** An event whose pop (`emergeAt`) is on the beat; the tell is the pickup before it. */
+function makeEvent(b: Builder, emergeAt: number, hole: number, kind: number, opts: { first?: boolean; formation?: number; lead?: boolean; link?: number } = {}): SpawnEvent {
   const tell = opts.first ? FIRST_TELL_MS : TELL_MS[kind];
-  const emergeAt = tellAt + tell;
   return {
-    id: 0, tellAt, emergeAt, duckAt: emergeAt + upTimeFor(kind, b.d), hole, kind,
+    id: 0, tellAt: emergeAt - tell, emergeAt, duckAt: emergeAt + upTimeFor(kind, b.d), hole, kind,
     formation: opts.formation ?? 0, formationLead: !!opts.lead, linkId: opts.link ?? 0, first: !!opts.first,
   };
 }
@@ -170,8 +186,9 @@ function place(b: Builder, at: number, kind: number, preferred: number[] | null,
   for (let shift = 0; shift < 8; shift++) {
     const t = quantize(at + shift * EIGHTH_MS);
     const probe = makeEvent(b, t, 0, kind, opts);
+    if (probe.tellAt < 0) continue;
     const pool = preferred ?? [0, 1, 2, 3, 4, 5, 6, 7, 8];
-    const free = pool.filter((h) => holeFree(b, h, t, upWindow(probe)));
+    const free = pool.filter((h) => holeFree(b, h, probe.tellAt, upWindow(probe)));
     if (free.length === 0) continue;
     const hole = preferred ? free[0] : free[rngInt(b.rng, 0, free.length - 1)];
     const e = { ...probe, hole };
@@ -190,8 +207,8 @@ function placeFormation(b: Builder, at: number, fid: number, lifetime: number, p
     const t = quantize(base + eighths * EIGHTH_MS);
     let kind = kindOverride >= 0 ? kindOverride : K_FINN;
     if (kind === K_FINN && lifetime >= UNLOCK.helmet && f.steps.length <= 3 && k === f.steps.length - 1 && rngFloat(b.rng) < 0.3) kind = K_HELMET;
-    const e = makeEvent(b, t, hole, kind, { formation: fid + 1, lead: k === 0, link: kind === K_TWIN ? 100 + fid * 10 + Math.floor(eighths / 2) : 0 });
-    if (!holeFree(b, hole, t, upWindow(e))) continue;
+    const e = makeEvent(b, t, hole, kind, { formation: fid + 1, lead: k === 0 });
+    if (e.tellAt < 0 || !holeFree(b, hole, e.tellAt, upWindow(e))) continue;
     b.events.push(e);
     last = Math.max(last, t);
   }
@@ -201,12 +218,15 @@ function placeFormation(b: Builder, at: number, fid: number, lifetime: number, p
 function formationPool(input: BurstInput, lifetime: number): number[] {
   if (input.format === 'ride') return RIDE_FORMATIONS;
   if (lifetime < UNLOCK.allFormations) return BASIC_FORMATIONS;
-  return FORMATIONS.filter((f) => (!f.twins || lifetime >= UNLOCK.twins) && (!f.trap || lifetime >= UNLOCK.angler)).map((f) => f.id);
+  return FORMATIONS.map((f) => f.id);
 }
 
-/** Walk Charge boosts apply to queue formats only (never ride, duel or raid). */
+/**
+ * Walk Boost (6.12) only in random-seed solo Queue Runs: never in Line of the
+ * Day, daily, ghost races, duels, raids, live rounds or the ride coin round.
+ */
 export function walkOk(format: WhackFormat): boolean {
-  return format === 'queue' || format === 'daily' || format === 'weekly';
+  return format === 'queue';
 }
 
 const TWIN_PAIRS = [[3, 5], [0, 2], [6, 8], [1, 7], [0, 8], [2, 6]];
@@ -217,6 +237,7 @@ export function buildBurst(input: BurstInput): Timeline {
   const shapeId = shapeFor(input, lifetime);
   const base: BurstShape = SHAPES[shapeId];
   const lengthMs = input.format === 'duel' ? 15000 : base.lengthMs;
+  const finale: Timeline['finale'] = shapeId === 'rush' ? 'rush' : shapeId === 'b5' ? 'boss' : null;
   const burstSeed = mixSeed(input.seed >>> 0, (input.burstIndex + 1) >>> 0);
   const rng = createRng(burstSeed);
   const b: Builder = { rng, d, events: [], quiet: [], lengthMs };
@@ -236,8 +257,6 @@ export function buildBurst(input: BurstInput): Timeline {
     place(b, 2000, K_TWIN, [5], { first: true, link: 1 });
     b.quiet.push([1300, 3800]);
   }
-  if (first === UNLOCK.sprinter) { place(b, 3000, K_SPRINTER, [4], { first: true }); b.quiet.push([1500, 4200]); }
-  if (first === UNLOCK.puffer) { place(b, 2000, K_PUFFER, [4], { first: true }); b.quiet.push([1300, 3800]); }
 
   // 2. Formations.
   const slots = [...base.formations];
@@ -261,31 +280,18 @@ export function buildBurst(input: BurstInput): Timeline {
   if (first === UNLOCK.fever && !base.goldens.some(([a]) => a < 5000)) place(b, 2600, K_GOLDEN, null);
   if (input.walkBoost === 'golden' && walkOk(input.format)) place(b, 2000 + rngFloat(rng) * 1500, K_GOLDEN, null);
 
-  // 4. Tricksters (B4): seeded from the unlocked set.
-  if (base.tricksters.length) {
-    const pool: number[] = [];
-    if (has('sprinter')) pool.push(K_SPRINTER);
-    if (has('twins')) pool.push(K_TWIN);
-    if (has('puffer') && input.format === 'queue') pool.push(K_PUFFER);
-    let prev = -1;
+  // 4. Twin pairs (DOUBLE BONK) in the trickster slots, once twins unlock (v4: the only trickster left).
+  if (base.tricksters.length && has('twins')) {
     for (const s of base.tricksters) {
-      if (!pool.length) break;
-      let k = pool[rngInt(rng, 0, pool.length - 1)];
-      if (k === prev && pool.length > 1) k = pool[(pool.indexOf(k) + 1) % pool.length];
-      prev = k;
-      if (k === K_TWIN) {
-        const t = quantize(s);
-        const order = TWIN_PAIRS.map((p, i) => [p, (i * 7 + rngInt(rng, 0, 5)) % 6] as const).sort((x, y) => x[1] - y[1]);
-        for (const [pair] of order) {
-          const a = makeEvent(b, t, pair[0], K_TWIN);
-          if (holeFree(b, pair[0], t, upWindow(a)) && holeFree(b, pair[1], t, upWindow(a))) {
-            const link = 10 + Math.round(s / 100);
-            b.events.push({ ...a, linkId: link }, { ...makeEvent(b, t, pair[1], K_TWIN), linkId: link });
-            break;
-          }
+      const t = quantize(s);
+      const order = TWIN_PAIRS.map((p, i) => [p, (i * 7 + rngInt(rng, 0, 5)) % 6] as const).sort((x, y) => x[1] - y[1]);
+      for (const [pair] of order) {
+        const a = makeEvent(b, t, pair[0], K_TWIN);
+        if (holeFree(b, pair[0], a.tellAt, upWindow(a)) && holeFree(b, pair[1], a.tellAt, upWindow(a))) {
+          const link = 10 + Math.round(s / 100);
+          b.events.push({ ...a, linkId: link }, { ...makeEvent(b, t, pair[1], K_TWIN), linkId: link });
+          break;
         }
-      } else {
-        place(b, s, k, null);
       }
       b.quiet.push([s - 500, s + 900]);
     }
@@ -296,29 +302,34 @@ export function buildBurst(input: BurstInput): Timeline {
     for (let t = RIDE_BRUISER_FROM; t < lengthMs - 1400; t += RIDE_BRUISER_EVERY) place(b, t, K_BRUISER, null);
   }
 
-  // 6. Free spawns: gap eases from gapFrom to gapTo, capped at maxUp live targets.
+  // 6. Free spawns: `t` is the pop time on the grid. The gap eases from gapFrom to gapTo,
+  // capped at maxUp live targets; the Golden Rush's last 3s run on 16ths.
   let t = base.startMs;
   let lastHole = -1;
   const stopAt = lengthMs - 900;
+  const sixteenths = base.sixteenthsFrom ?? Infinity;
   while (t < stopAt) {
     const q = b.quiet.find(([a, z]) => t >= a && t < z);
     if (q) { t = q[1]; continue; }
     const p = t / lengthMs;
+    const dense = t >= sixteenths;
     let gap = (base.gapFrom + (base.gapTo - base.gapFrom) * p) * scale;
     let maxUp = Math.round(base.maxUpFrom + (base.maxUpTo - base.maxUpFrom) * p);
     if (base.boss && d === 3) maxUp += 1;
+    if (dense) gap = Math.max(SIXTEENTH_MS * 3, gap * 0.7);
     if (ride && t >= RIDE_BRUISER_FROM) { gap = 1000 * scale; maxUp = 2; }
-    const tq = quantize(t);
+    const step = dense ? SIXTEENTH_MS : EIGHTH_MS;
+    const tq = dense ? quantize16(t) : quantize(t);
     const r = rngFloat(rng);
     let kind = K_FINN;
     if (base.boss && r < base.tentacle) kind = K_TENTACLE;
     else if (anglersOn && (!ride || t >= RIDE_ANGLER_FROM) && r < base.tentacle + base.angler) kind = K_ANGLER;
     else if (has('helmet') && r < base.tentacle + base.angler + base.helmet) kind = K_HELMET;
     const probe = makeEvent(b, tq, 0, kind);
-    if (upCount(b, probe.emergeAt) >= maxUp) { t += EIGHTH_MS; continue; }
+    if (probe.tellAt < 0 || upCount(b, probe.emergeAt) >= maxUp) { t += step; continue; }
     const free: number[] = [];
-    for (let h = 0; h < 9; h++) if (h !== lastHole && holeFree(b, h, tq, upWindow(probe))) free.push(h);
-    if (!free.length) { t += EIGHTH_MS; continue; }
+    for (let h = 0; h < 9; h++) if (h !== lastHole && holeFree(b, h, probe.tellAt, upWindow(probe))) free.push(h);
+    if (!free.length) { t += step; continue; }
     const hole = free[rngInt(rng, 0, free.length - 1)];
     b.events.push({ ...probe, hole });
     lastHole = hole;
@@ -328,7 +339,7 @@ export function buildBurst(input: BurstInput): Timeline {
   // 7. Order, ids, symmetry.
   const x = (input.xform ?? 0) & 7;
   const events = b.events
-    .filter((e) => e.tellAt < lengthMs - 600)
+    .filter((e) => e.emergeAt < lengthMs - 400)
     .sort((a, z) => a.tellAt - z.tellAt || a.hole - z.hole)
     .map((e, i) => ({ ...e, id: i, hole: xformHole(e.hole, x) }));
 
@@ -371,11 +382,14 @@ export function buildBurst(input: BurstInput): Timeline {
     ride,
     butterfingers: ride || lifetime >= UNLOCK.butterfingers,
     fever: !ride && lifetime >= UNLOCK.fever,
+    feverBank: !ride && lifetime >= UNLOCK.fever && feverBanked(input.format),
+    feverStart: !ride && lifetime >= UNLOCK.fever && feverBanked(input.format) && !!input.feverFired,
+    finale,
     boss: base.boss,
     lookUp: input.format !== 'party',
     bossKind,
     bossHp: base.boss ? (input.format === 'raid' ? BOSS_HP[d] + 8 : BOSS_HP[d]) : 0,
-    meterStart: input.walkBoost === 'meter' && walkOk(input.format) ? 50 : 0,
+    meterStart: 0,
     events,
     attacks,
   };
@@ -392,7 +406,7 @@ export function buildRun(base: Omit<BurstInput, 'burstIndex'>, count: number): T
 export function timelineFingerprint(tl: Timeline): string {
   const ev = tl.events.map((e) => `${e.id}:${e.tellAt}:${e.emergeAt}:${e.duckAt}:${e.hole}:${e.kind}:${e.formation}:${e.linkId}:${e.first ? 1 : 0}`).join(',');
   const at = tl.attacks.map((a) => `${a.type}:${a.tellAt}:${a.landAt}:${a.hole}:${a.hole2}:${a.row}`).join(',');
-  return `${tl.shape}|${tl.lengthMs}|${tl.bossHp}|${tl.meterStart}|${ev}|${at}`;
+  return `${tl.shape}|${tl.lengthMs}|${tl.bossHp}|${tl.feverStart ? 1 : 0}|${ev}|${at}`;
 }
 
 export { K_BRUISER, K_TENTACLE };

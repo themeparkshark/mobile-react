@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Golden vectors for the Whack PHP replay port (design 11.2).
+ * Golden vectors (v4) for the Whack PHP replay port (design 13.3).
  *   node tools/whack/gen-vectors.cjs            (writes src/games/whack/__vectors__/vectors.json)
  * Timelines: seeds x formats x difficulties x Burst indexes, plus symmetry
  * transforms and walk boosts. Runs: autoplayed tap logs (every profile,
@@ -18,29 +18,49 @@ const A = loadTs('src/games/whack/autoplayer.ts');
 const P = loadTs('src/games/whack/proof.ts');
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
+const THEMES = ['park', 'pirates', 'mansion', 'space', 'jungle', 'backlot'];
 const timelines = [];
-const formats = [['ride', [0]], ['queue', [0, 1, 2, 3, 4]], ['weekly', [0, 2, 4]], ['duel', [0, 1, 2]], ['raid', [0]], ['daily', [0, 1, 2]]];
+// v4: 4-Burst Runs (finale = Golden Rush or Boss Run by runOfDay), Line of the Day xforms, GO FEVER Bursts, Golden Start.
+const formats = [['ride', [0]], ['queue', [0, 1, 2, 3]], ['lineDay', [0, 1, 2, 3]], ['duel', [0, 1, 2]], ['raid', [0]], ['daily', [0, 1, 2]], ['party', [0]]];
 for (let seed = 1; seed <= 40; seed++) {
   for (const [format, bursts] of formats) {
     for (const d of [1, 2, 3]) {
       for (const b of bursts) {
-        const input = { seed: seed * 2654435761 >>> 0, burstIndex: b, format, difficulty: d, theme: ['park', 'pirates', 'mansion', 'space', 'jungle', 'backlot'][seed % 6], unlockLevel: (seed * 7) % 25, xform: format === 'weekly' ? seed % 8 : 0, walkBoost: format === 'queue' && seed % 3 === 0 ? (seed % 2 ? 'golden' : 'meter') : null };
+        const input = {
+          seed: seed * 2654435761 >>> 0, burstIndex: b, format, difficulty: d, theme: THEMES[seed % 6], unlockLevel: (seed * 7) % 25,
+          xform: format === 'lineDay' ? seed % 8 : 0, walkBoost: format === 'queue' && seed % 3 === 0 ? 'golden' : null,
+          runOfDay: seed % 4, feverFired: b > 0 && seed % 5 === 0,
+        };
         timelines.push({ input, sha256: sha(T.timelineFingerprint(T.buildBurst(input))) });
       }
     }
   }
 }
 const runs = [];
-const profiles = ['novice', 'median', 'expert', 'glance', 'walking', 'masher'];
-for (let k = 0; k < 60; k++) {
-  const format = ['ride', 'queue', 'weekly', 'raid'][k % 4];
-  const input = { seed: (k + 11) * 40503 >>> 0, burstIndex: format === 'queue' ? k % 5 : 0, format, difficulty: 1 + (k % 3), theme: 'pirates', unlockLevel: 12, xform: format === 'weekly' ? k % 8 : 0, walkBoost: null };
+const profiles = ['novice', 'median', 'expert', 'onbeat', 'glance', 'walking', 'masher', 'bot', 'jitterbot'];
+for (let k = 0; k < 72; k++) {
+  const format = ['ride', 'queue', 'lineDay', 'raid'][k % 4];
+  const burst = format === 'queue' || format === 'lineDay' ? k % 4 : 0;
+  const fire = (format === 'queue' || format === 'lineDay') && burst > 0 && k % 3 === 0;
+  const input = {
+    seed: (k + 11) * 40503 >>> 0, burstIndex: burst, format, difficulty: 1 + (k % 3), theme: 'pirates', unlockLevel: 12,
+    xform: format === 'lineDay' ? k % 8 : 0, walkBoost: null, runOfDay: k % 3, feverFired: fire,
+  };
   const tl = T.buildBurst(input);
-  const r = A.autoplayBurst(tl, profiles[k % profiles.length], k);
-  const proof = P.buildProof(tl, S.NO_CARRY, r.sim.taps, r.result, { wallMs: r.stats.wallMs });
-  runs.push({ proof, expect: { score: r.result.score, win: r.result.win, hits: r.result.legacyHits, maxStreak: r.result.maxStreak, freezes: r.result.freezes, bossDamage: r.result.bossDamage, elapsedMs: r.result.elapsedMs } });
+  // Carry a streak into later Bursts so tier drops and x4 show up in the vectors.
+  const carry = burst > 0 ? { meter: fire ? 0 : 40, feverLeft: 0, streak: [0, 14, 33, 47][burst], feverReady: false } : S.NO_CARRY;
+  const r = A.autoplayBurst(tl, profiles[k % profiles.length], k, carry);
+  const proof = P.buildProof(tl, carry, r.sim.taps, r.result, { wallMs: r.stats.wallMs, pos: r.sim.pos });
+  runs.push({
+    proof,
+    expect: {
+      score: r.result.score, win: r.result.win, hits: r.result.legacyHits, maxStreak: r.result.maxStreak, freezes: r.result.freezes,
+      bossDamage: r.result.bossDamage, elapsedMs: r.result.elapsedMs, anticipated: r.result.anticipated, tierDrops: r.result.tierDrops,
+      feverReady: r.result.feverReady, flagged: P.verifyProof(proof).flagged ?? null,
+    },
+  });
 }
-const out = { v: 2, generated: 'tools/whack/gen-vectors.cjs', fingerprint: 'timelineFingerprint() in src/games/whack/timeline.ts', timelines, runs };
+const out = { v: 4, generated: 'tools/whack/gen-vectors.cjs', fingerprint: 'timelineFingerprint() in src/games/whack/timeline.ts', timelines, runs };
 const file = path.resolve(__dirname, '../../src/games/whack/__vectors__/vectors.json');
 fs.writeFileSync(file, JSON.stringify(out));
 console.log(`wrote ${timelines.length} timelines, ${runs.length} runs -> ${path.relative(process.cwd(), file)} (${fs.statSync(file).size} bytes)`);

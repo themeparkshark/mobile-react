@@ -70,13 +70,13 @@ function emptySim(): WhackSim {
   };
   return {
     n: 0, evTell: [], evEmerge: [], evDuck: [], evHole: [], evKind: [], evLink: [], aN: 0, aType: [], aTell: [], aLand: [],
-    aHole: [], aHole2: [], aRow: [], aState: [], len: 30000, ride: false, butterOn: false, feverOn: false, boss: false, lookUpOn: true, seed: 0,
+    aHole: [], aHole2: [], aRow: [], aState: [], len: 30000, ride: false, butterOn: false, feverOn: false, feverBank: false, feverReady: false, boss: false, lookUpOn: true, seed: 0,
     t: 0, next: 0, ended: false, frozen: false, hEv: z(-1), hPh: z(0), hAt: z(0), hExt: z(0), hHelm: z(0), hLock: z(0),
     hHitT: z(-99999), hGrade: z(0), hSplat: z(0), hSplatType: z(0), hFade: z(0), hPuffed: z(0), score: 0, streak: 0,
     maxStreak: 0, tier: 0, meter: 0, fever: false, feverLeft: 0, coin: 0, win: false, winAt: -1, hits: 0, legacyHits: 0,
     quick: 0, good: 0, late: 0, crits: 0, goldens: 0, decoyHits: 0, whiffs: 0, butters: 0, escapes: 0, engagedEscapes: 0,
-    freezes: 0, doubles: 0, lastTap: 0, w0: -99999, w1: -99999, quickRun: 0, blocked: 0, bossHp: 0, bossMax: 0,
-    bossDownAt: -1, lap: false, bruiserHp: 0, scanRow: -1, scanUntil: 0, taps: [], tapCount: 0, emit: true, ev: [],
+    freezes: 0, doubles: 0, anticipated: 0, tierDrops: 0, lastTap: 0, w0: -99999, w1: -99999, quickRun: 0, blocked: 0, bossHp: 0, bossMax: 0,
+    bossDownAt: -1, lap: false, bruiserHp: 0, scanRow: -1, scanUntil: 0, taps: [], pos: [], tapCount: 0, emit: true, ev: [],
   };
 }
 

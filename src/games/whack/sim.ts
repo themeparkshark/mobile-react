@@ -1,10 +1,10 @@
 /**
- * sim.ts: the Bonk Rush resolver (design 4, 5). One pure state machine runs
+ * sim.ts: the Bonk Rush resolver (design v4 5-6). One pure state machine runs
  * on the UI thread during play and in node / the server replay afterwards.
  *
  *   const s = createSim(timeline, carry);
  *   simAdvance(s, ms);      // whole game-time ms, 1 ms ticks, event exact
- *   simTap(s, hole);        // resolves at s.t, logs [t, hole, flags]
+ *   simTap(s, hole, dx, dy, sub);  // resolves at s.t, logs [t, hole, flags] (+ [dx, dy, sub] in s.pos)
  *   simSwipe(s, hole);      // clears a landed splat
  *   simResult(s);
  *
@@ -24,7 +24,7 @@ import { A_CANDY, A_FADE, A_INK, A_SCAN } from './timeline';
 import {
   ANGLER_LOCK_MS, BRUISER_HP, BUTTER_WINDOW_MS, COIN_ANGLER, COIN_BRUISER, COIN_BUTTER, COIN_BY_GRADE, COIN_ESCAPE,
   COIN_GOLDEN, EARLY_GRACE_MS, ENGAGED_MS, FEVER_MS, GOOD_FRAC, G_CRIT, G_GOOD, G_LATE, G_QUICK, HELMET_EXT_MS,
-  K_ANGLER, K_BRUISER, K_FINN, K_GOLDEN, K_HELMET, K_PUFFER, K_SPRINTER, K_TENTACLE, K_TWIN, LOOKUP_FRAC,
+  K_ANGLER, K_BRUISER, K_FINN, K_GOLDEN, K_HELMET, K_PUFFER, K_SPRINTER, K_TENTACLE, K_TWIN, LOOKUP_FRAC, TIER_DROP_FROM,
   LOOKUP_IDLE_MS, MAX_TAPS, METER_ANGLER, METER_BUTTER, METER_BY_GRADE, METER_CRIT, METER_DOUBLE, METER_GOLDEN,
   METER_SPRINTER, MULT_CAP, PTS_ANGLER, PTS_BOSS_DEFEAT, PTS_BRUISER_HIT, PTS_BRUISER_KO, PTS_COIN_BUBBLE, PTS_CRIT,
   PTS_DOUBLE, PTS_FINN, PTS_GOLDEN, PTS_HELMET_POP, PTS_LAP_PER_SEC, PTS_PUFFER_POKE, PTS_SPRINTER, PTS_TENTACLE,
@@ -43,9 +43,10 @@ export const SPLAT_NONE = 0;
 export const SPLAT_TELL = 1;
 export const SPLAT_DOWN = 2;
 
-// Tap flags
+// Tap flags (proof v4 13.1): bit 0 resume, bit 1 anticipated (pre-emerge QUICK), bit 2 swipe.
 export const TAP_RESUME = 1;
-export const TAP_SWIPE = 2;
+export const TAP_ANTICIPATED = 2;
+export const TAP_SWIPE = 4;
 
 // Sim events (to the runtime through the event ring): [kind, a, b, c, t]
 export const E_TELL = 1; //          hole, kind, eventId
@@ -73,6 +74,8 @@ export const E_END = 22;
 export const E_BRUISER = 23; //      hole, hpLeft, points
 export const E_COIN_BUBBLE = 24; //  hole, points
 export const E_PUFF = 25; //         hole (inflate started)
+export const E_TIER_DROP = 26; //    newTier, streak (engaged escape at x2+)
+export const E_FEVER_READY = 27; //  banked fever is ready (meter full)
 
 export interface BurstCarry {
   /** Bonk Meter % carried from the previous Burst of the Run. */
@@ -80,9 +83,11 @@ export interface BurstCarry {
   /** Fever game-time ms still owed from the previous Burst. */
   feverLeft: number;
   streak: number;
+  /** A banked fever waiting for GO FEVER (6.5). */
+  feverReady?: boolean;
 }
 
-export const NO_CARRY: BurstCarry = { meter: 0, feverLeft: 0, streak: 0 };
+export const NO_CARRY: BurstCarry = { meter: 0, feverLeft: 0, streak: 0, feverReady: false };
 
 export interface WhackSim {
   // Timeline (struct of arrays; worklet friendly)
@@ -105,6 +110,9 @@ export interface WhackSim {
   ride: boolean;
   butterOn: boolean;
   feverOn: boolean;
+  /** Full meter banks instead of firing (formats with breathers). */
+  feverBank: boolean;
+  feverReady: boolean;
   boss: boolean;
   /** Auto Look-Up enabled (false in live party rounds). */
   lookUpOn: boolean;
@@ -153,6 +161,8 @@ export interface WhackSim {
   engagedEscapes: number;
   freezes: number;
   doubles: number;
+  anticipated: number;
+  tierDrops: number;
   // Input history
   lastTap: number;
   w0: number;
@@ -169,6 +179,8 @@ export interface WhackSim {
   scanUntil: number;
   // Logs
   taps: number[];
+  /** Per logged tap: dx, dy (1/32 cell, int8) and sub-frame ms (0-16); never read by the resolver. */
+  pos: number[];
   tapCount: number;
   emit: boolean;
   ev: number[];
@@ -184,7 +196,10 @@ function fill(n: number, v: number): number[] {
 export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = true): WhackSim {
   const e = tl.events;
   const a = tl.attacks;
-  return {
+  const feverBank = !!tl.feverBank;
+  const start = !!tl.feverStart;
+  const ready = feverBank && !start && !!carry.feverReady;
+  const sim: WhackSim = {
     n: e.length,
     evTell: e.map((x) => x.tellAt),
     evEmerge: e.map((x) => x.emergeAt),
@@ -204,6 +219,8 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     ride: tl.ride,
     butterOn: tl.butterfingers,
     feverOn: tl.fever,
+    feverBank,
+    feverReady: ready,
     boss: tl.boss,
     lookUpOn: tl.lookUp !== false,
     seed: tl.burstSeed,
@@ -227,9 +244,9 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     streak: Math.max(0, carry.streak | 0),
     maxStreak: Math.max(0, carry.streak | 0),
     tier: tierFor(Math.max(0, carry.streak | 0)),
-    meter: tl.fever ? Math.max(tl.meterStart, Math.min(100, carry.meter)) : 0,
-    fever: tl.fever && carry.feverLeft > 0,
-    feverLeft: tl.fever ? Math.max(0, carry.feverLeft | 0) : 0,
+    meter: !tl.fever || start ? 0 : ready ? 100 : Math.max(tl.meterStart, Math.min(feverBank ? 99 : 100, carry.meter)),
+    fever: tl.fever && (start || carry.feverLeft > 0),
+    feverLeft: !tl.fever ? 0 : start ? FEVER_MS : Math.max(0, carry.feverLeft | 0),
     coin: 0,
     win: false,
     winAt: -1,
@@ -247,6 +264,8 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     engagedEscapes: 0,
     freezes: 0,
     doubles: 0,
+    anticipated: 0,
+    tierDrops: 0,
     lastTap: 0,
     w0: -99999,
     w1: -99999,
@@ -260,10 +279,14 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     scanRow: -1,
     scanUntil: 0,
     taps: [],
+    pos: [],
     tapCount: 0,
     emit,
     ev: [],
   };
+  // GO FEVER: the Burst opens in fever (the runtime slams FEVER! on the first frame).
+  if (start && tl.fever) push(sim, E_FEVER, 1, 0, 0);
+  return sim;
 }
 
 function push(s: WhackSim, kind: number, a: number, b: number, c: number): void {
@@ -317,12 +340,41 @@ function streakHit(s: WhackSim): void {
   }
 }
 
+/**
+ * Engaged escape (v4 6.5): at tier x2 or higher drop exactly one tier (streak
+ * set to that tier's threshold); below x2 reset the streak.
+ */
+function escapeEngaged(s: WhackSim): void {
+  'worklet';
+  if (s.tier >= TIER_DROP_FROM) {
+    const nt = s.tier - 1;
+    s.tier = nt;
+    s.streak = TIER_AT[nt];
+    s.quickRun = 0;
+    s.tierDrops += 1;
+    push(s, E_TIER_DROP, nt, s.streak, 0);
+    return;
+  }
+  streakBreak(s);
+}
+
 function addMeter(s: WhackSim, pct: number): void {
   'worklet';
   if (!s.feverOn) return;
   if (s.fever && pct > 0) return; // the meter can't refill during fever
+  if (s.feverReady) return; // one banked fever at a time: the full meter waits for GO FEVER
   s.meter += pct;
   if (s.meter < 0) s.meter = 0;
+  if (s.feverBank) {
+    if (s.meter >= 100 && !s.fever) {
+      s.meter = 100;
+      s.feverReady = true;
+      push(s, E_FEVER_READY, 0, 0, 0);
+    } else if (s.meter > 100) {
+      s.meter = 100;
+    }
+    return;
+  }
   if (s.meter >= 100 && !s.fever) {
     s.meter = 0;
     s.fever = true;
@@ -439,11 +491,12 @@ function tick(s: WhackSim): void {
         s.hAt[h] = t;
         s.escapes += 1;
         let engaged = 0;
-        const counts = k === K_FINN || k === K_HELMET || k === K_TWIN || k === K_TENTACLE || k === K_BRUISER;
+        // v4: golden escapes count too (the golden is a gift you can drop); decoys never do.
+        const counts = k === K_FINN || k === K_HELMET || k === K_TWIN || k === K_TENTACLE || k === K_BRUISER || k === K_GOLDEN;
         if (counts && s.hSplat[h] !== SPLAT_DOWN && t - s.lastTap <= ENGAGED_MS) {
           engaged = 1;
           s.engagedEscapes += 1;
-          streakBreak(s);
+          escapeEngaged(s);
           addCoin(s, COIN_ESCAPE);
         }
         push(s, E_ESCAPE, h, k, engaged);
@@ -704,25 +757,41 @@ function bonk(s: WhackSim, h: number): void {
   }
 }
 
-/** A touch-down on `hole` at the current game time. */
-export function simTap(s: WhackSim, h: number): void {
+function clampI8(v: number): number {
+  'worklet';
+  const r = Math.round(v);
+  return r < -128 ? -128 : r > 127 ? 127 : r;
+}
+
+/**
+ * A touch-down on `hole` at the current game time. `dx, dy` is the touch minus
+ * the hole centre in 1/32 cell (anti-cheat position features), `sub` the touch
+ * timestamp's offset inside its frame (0-16 ms). Neither changes the outcome.
+ */
+export function simTap(s: WhackSim, h: number, dx = 0, dy = 0, sub = 0): void {
   'worklet';
   if (s.ended || s.tapCount >= MAX_TAPS || h < 0 || h > 8) return;
   let flags = 0;
   if (s.frozen) {
     s.frozen = false;
-    flags |= 1;
+    flags |= TAP_RESUME;
     push(s, E_RESUME, h, 0, 0);
   }
+  const ph = s.hPh[h];
+  const hidden = s.hSplat[h] === SPLAT_DOWN || s.t < s.hLock[h];
+  // Pre-emerge window: -80 ms to the pop grades QUICK with the anticipated flag.
+  const early = !hidden && ph === P_TELL && s.t >= s.evEmerge[s.hEv[h]] - EARLY_GRACE_MS;
+  if (early) flags |= TAP_ANTICIPATED;
   s.taps.push(s.t, h, flags);
+  s.pos.push(clampI8(dx), clampI8(dy), sub < 0 ? 0 : sub > 16 ? 16 : Math.round(sub));
   s.tapCount += 1;
   s.lastTap = s.t;
-  if (s.hSplat[h] === SPLAT_DOWN) return; // hidden under a splat: swipe it
-  if (s.t < s.hLock[h]) return;
-  const ph = s.hPh[h];
+  if (hidden) return; // under a splat (swipe it) or an angler lock
   if (ph === P_TELL) {
-    if (s.t >= s.evEmerge[s.hEv[h]] - EARLY_GRACE_MS) bonk(s, h);
-    else whiff(s, h);
+    if (early) {
+      s.anticipated += 1;
+      bonk(s, h);
+    } else whiff(s, h);
     return;
   }
   if (ph === P_UP) {
@@ -744,6 +813,7 @@ export function simSwipe(s: WhackSim, h: number): void {
     push(s, E_RESUME, h, 0, 0);
   }
   s.taps.push(s.t, h, flags);
+  s.pos.push(0, 0, 0);
   s.tapCount += 1;
   s.lastTap = s.t;
   if (s.hSplat[h] === SPLAT_DOWN) {
@@ -759,6 +829,7 @@ export function simUnfreeze(s: WhackSim): void {
   // Logged as a resume tap on hole -1 so the replay unfreezes at the same time.
   s.frozen = false;
   s.taps.push(s.t, -1, TAP_RESUME);
+  s.pos.push(0, 0, 0);
   s.tapCount += 1;
   s.lastTap = s.t;
   push(s, E_RESUME, -1, 0, 0);
@@ -793,6 +864,10 @@ export interface BurstResult {
   engagedEscapes: number;
   doubles: number;
   blocked: number;
+  anticipated: number;
+  tierDrops: number;
+  /** A banked fever is waiting (the breather offers GO FEVER). */
+  feverReady: boolean;
   coin: number;
   winAt: number;
   bossHp: number;
@@ -833,13 +908,16 @@ export function simResult(s: WhackSim): BurstResult {
     engagedEscapes: s.engagedEscapes,
     doubles: s.doubles,
     blocked: s.blocked,
+    anticipated: s.anticipated,
+    tierDrops: s.tierDrops,
+    feverReady: s.feverReady,
     coin: Math.round(s.coin),
     winAt: s.winAt,
     bossHp: s.bossHp,
     bossDamage: s.bossMax - s.bossHp,
     bossDown: s.bossMax > 0 && s.bossHp === 0,
     elapsedMs: s.t,
-    carry: { meter: s.meter, feverLeft: s.feverLeft, streak: s.streak },
+    carry: { meter: s.meter, feverLeft: s.feverLeft, streak: s.streak, feverReady: s.feverReady },
   };
 }
 
@@ -860,7 +938,7 @@ export function replayBurst(tl: Timeline, carry: BurstCarry, taps: number[][], e
     }
     if (s.t !== gt) break; // cannot reach this stamp: forged or corrupt log
     if (flags & TAP_SWIPE) simSwipe(s, hole);
-    else simTap(s, hole);
+    else simTap(s, hole, tap[3] ?? 0, tap[4] ?? 0, tap[5] ?? 0);
   }
   const end = endAt ?? tl.lengthMs;
   if (!s.ended) simAdvanceTo(s, end);
