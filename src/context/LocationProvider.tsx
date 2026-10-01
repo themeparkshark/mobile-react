@@ -294,7 +294,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const playerId = player?.id;
     const lookup = (async () => {
       try {
-        const newPark = await currentPark(coordinates.latitude, coordinates.longitude);
+        const newPark = await currentPark(coordinates.latitude, coordinates.longitude,
+          latestLocationSampleRef.current?.accuracyMeters);
         if (currentPlayerIdRef.current !== playerId) return;
         const at = Date.now();
         parkLookupRef.current = { ...coordinates, at, outcome: newPark ? 'park' : 'outside' };

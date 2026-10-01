@@ -4,7 +4,8 @@ import client from '../../client';
 
 export default async function currentPark(
   latitude: number,
-  longitude: number
+  longitude: number,
+  accuracyMeters?: number | null
 ): Promise<ParkType | null> {
   // Guard against invalid coordinates (prevents 422 errors)
   if (
@@ -19,9 +20,13 @@ export default async function currentPark(
   }
 
   try {
+    // Accuracy lets the server ignore a drifted fix instead of dropping the park.
+    const accuracy = typeof accuracyMeters === 'number' && Number.isFinite(accuracyMeters) && accuracyMeters > 0
+      ? accuracyMeters : undefined;
     const response = await client.post('/me/current-park', {
       latitude,
       longitude,
+      ...(accuracy !== undefined ? { accuracy } : {}),
     });
     let data = response.data;
     if (typeof data === 'string') {
