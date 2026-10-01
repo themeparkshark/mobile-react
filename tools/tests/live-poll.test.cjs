@@ -130,9 +130,10 @@ test('map markers and pills stop timers and loops while the map is off screen', 
   const gym = read('src/components/GymBattle/GymMarker.tsx');
   assert.match(gym, /if \(!running\) \{\s*cancelAnimation\(pulseScale\)/);
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
-  assert.match(marker, /const base = alive\.running \? scenes : \[\];/);
-  assert.match(marker, /\{waterHome && waterSpot && \(\s*<Marker[^>]*>\s*\{waterKind \? <WaterAmbience/, 'pausing never adds or removes a map child');
-  assert.match(marker, /showTimer && alive\.active &&/);
+  // Pausing never mounts or unmounts views inside a map marker (MapLibre crash).
+  assert.doesNotMatch(marker, /alive\.(running|active) \?|&& alive\.(running|active) &&|alive\.(running|active) && /);
+  assert.match(marker, /<MarkerTimer expiresAt=\{expiresAt!\} ticking=\{alive\.active\}/);
+  assert.match(read('src/components/map/RideAmbience.tsx'), /const \{ running \} = useMapAlive\(\);\s*useEffect\(\(\) => \{\s*if \(!running\) \{ cancelAnimation\(p\); return; \}/);
   const pill = read('src/components/LiveEventsPill.tsx');
   assert.match(pill, /const ticking = focused && appActive && \(rushes\.length > 0 \|\| raid\?\.status === 'active'\)/);
 });

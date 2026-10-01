@@ -9,7 +9,6 @@ import { waitGlow, type WaitGlow as WaitGlowLook } from '../../components/map/al
 import { arrivalBurstAllowed } from '../../components/map/alive/presence';
 import { Marker } from '../../components/map/Marker';
 import RideTeamFlag from '../../components/map/RideTeamFlag';
-import Countdown, { zeroPad } from 'react-countdown';
 import { TaskType } from '../../models/task-type';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { gameTimestamp } from './mapOpportunityTiming';
@@ -255,6 +254,26 @@ function LimitedShimmer({ seed, moving }: { readonly seed: number; readonly movi
   </>;
 }
 
+/**
+ * The island's "m:ss" timer. Ticks once a second while the map is on screen
+ * and holds still otherwise. It always renders the same single Text, so
+ * pausing never changes the views inside a map marker.
+ */
+function MarkerTimer({ expiresAt, ticking, urgent }: { readonly expiresAt: number; readonly ticking: boolean; readonly urgent: boolean }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!ticking) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [ticking]);
+  const total = Math.round(Math.max(0, expiresAt - now) / 1000) * 1000;
+  const seconds = Math.floor(total / 1000) % 60;
+  return <Text style={[styles.timerText, urgent && styles.timerTextUrgent]}>
+    {Math.floor(total / 60000)}:{String(seconds).padStart(2, '0')}
+  </Text>;
+}
+
 /** "Play here": a soft ring swells out from the island's base while the ride is playable. */
 function PlayPulse({ color, reducedMotion }: { readonly color: string; readonly reducedMotion: boolean }) {
   const p = useSharedValue(0);
@@ -333,18 +352,15 @@ function TaskMarker({
   const limited = task.limited?.active ? limitedLabel(task.limited) : null;
   const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, limited: !!limited, selected: isSelected });
   const showTimer = expiresAt !== null && expiresAt > Date.now() && !rush && (isSelected || near || timerUrgent);
-  // Scenes are ambience: they unmount (and their loops stop) whenever the
-  // living map pauses (another screen on top, background, calm tier).
-  const scenes = useMemo(() => ambient && !reducedMotion ? ambienceNow(look.ambience) : [], [ambient, look, reducedMotion]);
+  // Scenes stay mounted while the living map pauses; their loops stop inside
+  // (RideAmbience reads the map's running state). Mounting or unmounting views
+  // inside 37 markers at once on every return to the map crashed MapLibre's
+  // subview insert (-[MLRNMapView insertReactSubview:atIndex:]) in testing.
   const kinds = useMemo(() => {
-    const base = alive.running ? scenes : [];
+    const base = ambient && !reducedMotion ? ambienceNow(look.ambience) : [];
     // A Rush always sparkles, near or far: it's worth walking to.
-    return rush && !reducedMotion && alive.active ? [...base, 'rush' as const] : base;
-  }, [scenes, rush, reducedMotion, alive.running, alive.active]);
-  // The water scene's own map marker stays mounted while paused (only its
-  // contents stop): adding and removing a map child on every focus change
-  // crashed MapLibre's subview insert (-[MLRNMapView insertReactSubview:atIndex:]).
-  const waterHome = scenes.find(k => WATER_AMBIENCE.includes(k));
+    return rush && !reducedMotion ? [...base, 'rush' as const] : base;
+  }, [ambient, look, rush, reducedMotion]);
   const waterKind = kinds.find(k => WATER_AMBIENCE.includes(k));
   const [behindKinds, frontKinds] = useMemo(() => {
     const pin = kinds.filter(k => !WATER_AMBIENCE.includes(k));
@@ -353,7 +369,7 @@ function TaskMarker({
   const latitude = Number(task.latitude);
   const longitude = Number(task.longitude);
   const glow = useMemo(() => resting ? null : waitGlow(live), [live, resting]);
-  const waterSpot = useWaterSpot(waterHome, latitude, longitude);
+  const waterSpot = useWaterSpot(waterKind, latitude, longitude);
 
   // Selection: anticipation dip, spring lift to 1.15, settle. Haptic on the lift.
   const lift = useSharedValue(isSelected ? 1 : 0);
@@ -399,9 +415,9 @@ function TaskMarker({
     : down ? 'Temporarily down' : closed ? 'Closed right now' : null);
 
   return (<>
-    {waterHome && waterSpot && (
+    {waterKind && waterSpot && (
       <Marker coordinate={waterSpot} anchor={{ x: 0.5, y: 0.63 }}>
-        {waterKind ? <WaterAmbience kind={waterKind} /> : null}
+        <WaterAmbience kind={waterKind} />
       </Marker>
     )}
     <Marker
@@ -426,16 +442,9 @@ function TaskMarker({
             <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text></View>
         </View>}
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
-        {!isSelected && showTimer && alive.active && (
+        {!isSelected && showTimer && (
           <View style={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent, badge !== 'new' && badge !== 'level' && styles.timerLow]}>
-            <Countdown
-              date={expiresAt!}
-              renderer={({ total, seconds }) => (
-                <Text style={[styles.timerText, timerUrgent && styles.timerTextUrgent]}>
-                  {Math.floor(total / 60000)}:{zeroPad(seconds)}
-                </Text>
-              )}
-            />
+            <MarkerTimer expiresAt={expiresAt!} ticking={alive.active} urgent={timerUrgent} />
           </View>
         )}
 

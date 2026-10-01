@@ -17,6 +17,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import type { AmbienceId } from '../../services/rideLandmark';
+import { useMapAlive } from './alive/MapAliveContext';
 
 export const AMBIENCE_BOX = 240;
 const C = AMBIENCE_BOX / 2;
@@ -49,13 +50,22 @@ function rng(seed: number) {
   return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
 }
 
+/**
+ * One scene loop. It stops (holding its frame) whenever the living map pauses:
+ * another screen on top, the app in the background, or the calm tier. The
+ * views stay mounted, so pausing never changes what is inside a map marker.
+ */
 function useLoop(duration: number, delay = 0): SharedValue<number> {
   const p = useSharedValue(0);
+  const { running } = useMapAlive();
   useEffect(() => {
+    if (!running) { cancelAnimation(p); return; }
+    // withRepeat loops from where it starts, so always start a fresh cycle.
+    p.value = 0;
     p.value = withDelay(delay, withRepeat(withTiming(1, { duration, easing: Easing.linear }), -1, false));
     return () => cancelAnimation(p);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [running]);
   return p;
 }
 
