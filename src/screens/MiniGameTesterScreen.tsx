@@ -85,7 +85,7 @@ export default function MiniGameTesterScreen() {
     const back = () => { setCqPick(cqLab === 'hub' ? null : cqPick); setCqRound((r) => r + 1); };
     return (
       <LinePlayMovementContext.Provider value={(process.env.EXPO_PUBLIC_CQ_WALK === '1' ? cqMovement : null) as any}>
-        <View style={{ flex: 1, backgroundColor: '#3fc1ef' }}>
+        <View style={{ flex: 1, backgroundColor: '#3fc1ef', alignSelf: 'center', width: Number(process.env.EXPO_PUBLIC_CQ_W ?? 0) || '100%' }}>
           {cqLab === 'hub' && !cqPick ? <CurrentQuestHub key={cqRound} refreshKey={cqRound} liveHumans={Number(process.env.EXPO_PUBLIC_CQ_HUMANS ?? 1)} onPlay={setCqPick} /> : null}
           {cqPick ? (
             <CurrentQuestGame key={`${cqRound}:${cqPick.context}:${cqPick.chartNodeId ?? ''}`} visible context={cqPick.context} chartNodeId={cqPick.chartNodeId}

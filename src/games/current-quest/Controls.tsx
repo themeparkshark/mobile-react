@@ -196,7 +196,7 @@ export const BottomBar = React.memo(function BottomBar(p: BarProps) {
           </Animated.View>
         </>
       ) : null}
-      <Conch size={size} label={p.undos ? `Undo ${p.undos}` : 'Undo'} disabled={p.disabled || !p.canUndo}
+      <Conch size={size} label="Undo" disabled={p.disabled || !p.canUndo}
         onPressIn={undoIn} onPressOut={undoOut} accessibilityLabel="Undo last stroke. Hold to rewind several.">
         <View style={styles.flip}><GameIcon name="retry" size={size * 0.48} /></View>
       </Conch>
@@ -321,7 +321,7 @@ export function DeadSheet({ info, trial, rings, canUndo, onUndo, onRestart, onRi
 }
 
 const styles = StyleSheet.create({
-  bar: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'flex-start', paddingTop: 6, paddingHorizontal: 14, paddingBottom: 22, zIndex: 5 },
+  bar: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'flex-start', paddingTop: 4, paddingHorizontal: 14, paddingBottom: 14, zIndex: 5 },
   barBig: { paddingTop: 2 },
   conchWrap: { alignItems: 'center', minWidth: 66 },
   conch: {

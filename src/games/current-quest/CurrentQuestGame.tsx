@@ -63,7 +63,6 @@ import {
 } from './motion';
 import { ArrowPad, BottomBar, DeadSheet, type DeadSheetInfo } from './Controls';
 import { HUD_ROW_H, QuestHud, RUN_BAR_H, type HudState } from './QuestHud';
-import { GhostRail } from './GhostRail';
 import { RAIL_H, ShowdownRail, type RailRacer } from './ShowdownRail';
 import { CqResultsCard, ResultsVeil, type CqResultsSummary, type PodiumRow, type RouteCompare } from './ResultsCard';
 import { StakeCard } from './StakeCard';
@@ -123,7 +122,7 @@ const THIN_IDLE_MS = 6000;
 /** 4 bars of the 89 BPM lagoon bed: how long a Riptide surge glows. */
 const SURGE_MS = 10780;
 /** Fixed bottom-bar height (64 pt targets while walking, labels, safe area pad), reserved so walking never re-lays the board. */
-const BAR_H = 104;
+const BAR_H = 96;
 const ARROWS_H = 68;
 
 const deadQuietCopy = (trial: boolean) => (trial ? 'Undo rewinds the board. A ring gives 2 strokes.' : 'Undo or restart. Nothing is lost.');
@@ -287,11 +286,14 @@ export default function CurrentQuestGame({
   }, []);
   const layoutFor = useCallback((rows: number): BoardLayout | null => {
     if (!field) return null;
-    const rail = showdown ? RAIL_H : ghost ? 42 : 0;
-    const reserved = HUD_ROW_H + RUN_BAR_H + 4 + rail + BAR_H + (arrows ? ARROWS_H : 0);
+    // 0.A.1: a run shows four things; only the Showdown keeps its racer rail (the ghost speaks through split chips).
+    const rail = showdown ? RAIL_H : 0;
+    const reserved = HUD_ROW_H + RUN_BAR_H + rail + BAR_H + (arrows ? ARROWS_H : 0);
     return boardLayout(field.w, field.h - reserved, rows, true);
   }, [field, arrows, showdown, ghost]);
   const layout = useMemo(() => layoutFor(rowsNow), [layoutFor, rowsNow]);
+  // eslint-disable-next-line no-console
+  if (__DEV__ && layout && process.env.EXPO_PUBLIC_CQ_LAYOUTLOG === '1') console.log('[cq-layout]', JSON.stringify({ field, rows: rowsNow, cell: layout.cell, cw: layout.cw, ch: layout.ch }));
   const layoutRef = useRef<BoardLayout | null>(layout);
   layoutRef.current = layout;
 
@@ -405,7 +407,6 @@ export default function CurrentQuestGame({
   const [stake, setStake] = useState(context === 'ride');
   const stakeFor = useRef('');
   const [runReady, setRunReady] = useState(false);
-  const [elapsedNow, setElapsedNow] = useState(0);
   const busyUntil = useRef(0);
   const buffered = useRef<number | null>(null);
   const playing = useRef(false);
@@ -1973,7 +1974,6 @@ export default function CurrentQuestGame({
     lastStrokeAt.current = Date.now();
     svRef.current.idleSince.value = svRef.current.fxT.value;
     GameAudio.music.setState('open', 200);
-    setElapsedNow(0);
     // R10 one-more metric: PLAY AGAIN within 10 s of the last results.
     if (runEndAt.current && Date.now() - runEndAt.current < 10000) {
       void saveProgress((p) => ({ ...p, replays: p.replays.map((x, i) => (i === p.replays.length - 1 ? { ...x, again: true } : x)) }));
@@ -2126,13 +2126,6 @@ export default function CurrentQuestGame({
     return () => clearTimeout(t);
   }, [smallChip]);
 
-  // Ghost rail clock (async challenge).
-  useEffect(() => {
-    if (!ghost || !visible) return undefined;
-    const id = setInterval(() => { if (playing.current) setElapsedNow(Date.now() - startedAt.current); }, 500);
-    return () => clearInterval(id);
-  }, [ghost, visible]);
-
   // Results: the board slides 40 px down under the white veil (P8).
   const boardDrop = useSharedValue(0);
   useEffect(() => { boardDrop.value = result ? withSpring(40, { damping: 16, stiffness: 140 }) : withTiming(0, { duration: 200 }); }, [result, boardDrop]);
@@ -2182,7 +2175,6 @@ export default function CurrentQuestGame({
         <View style={styles.root} onLayout={onFieldLayout}>
           {hud ? <QuestHud h={hud} onTideHold={onTideHold} width={hudW} tierLabels={trial ? ['6', '8'] : undefined} /> : <View style={{ height: HUD_ROW_H + RUN_BAR_H }} />}
           {showdown && racers.length ? <ShowdownRail racers={racers} remainingMs={sdRemaining} total={voyagesN} onAim={onAimSeat} /> : null}
-          {!showdown && ghost ? <GhostRail ghost={ghost} elapsedMs={elapsedNow} voyage={voyageIdx} cleared={run?.results.length ?? 0} total={voyagesN} /> : null}
           <Animated.View style={[styles.boardArea, boardDropSt]}>
             {layout && board && stableImages.idle ? (
               <GestureDetector gesture={gesture}>
@@ -2301,7 +2293,7 @@ export default function CurrentQuestGame({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  boardArea: { alignItems: 'center', justifyContent: 'center', paddingBottom: 4, flex: 1 },
+  boardArea: { alignItems: 'center', justifyContent: 'center', flex: 1 },
   fx: { position: 'absolute', left: 0, top: 0 },
   arrowArea: { alignItems: 'stretch', paddingBottom: 4 },
   // Walking is a state, not a pause (17): a quiet chip by the medallion, input stays live.

@@ -61,7 +61,8 @@ export function boardLayout(availableWidth: number, maxHeight = Infinity, rows =
   // v7.1 J2: 14 pt side gutters (margin 2 + rim 12), so a 5x7 board spans about 92% of a 375 pt screen.
   const margin = tight ? 2 : availableWidth < 360 ? 6 : 10;
   const rim = tight ? 12 : availableWidth < 360 ? 8 : 10;
-  const topPad = 0.34;
+  // Room above row 0 for upright overhang (coral 0.28 cell, the standing shark 0.36 cell, minus the 14 pt rim).
+  const topPad = tight ? 0.2 : 0.34;
   const face = 12;
   const chrome = (cell: number) => cell * topPad + rim * 2 + face + margin * 2;
   let cell = Math.min((availableWidth - 2 * (margin + rim) - (tight ? 0 : 4)) / 5, 76);
