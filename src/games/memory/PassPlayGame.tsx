@@ -27,7 +27,9 @@ import { deckById, type Deck } from './decks';
 import { faceFor } from './faces';
 import { boardSeed, buildLayout } from './logic';
 import { FLIP_MS, MM, ladderStep } from './theme';
-import { createPassPlay, ppDismiss, ppFlip, ranking, type PPEvent, type PPState } from './modes/passPlay';
+import { createPassPlay, forcedSet, ppDismiss, ppFlip, ranking, type PPEvent, type PPState } from './modes/passPlay';
+
+const forcedSetFor = (s: PPState) => forcedSet(s, s.a, s.aKnown);
 
 const CARD_BACK = require('../../assets/games/memory/card-back.png');
 const PLAYER_SHARKS = [SHARKS.classic, SHARKS.green, SHARKS.pink, SHARKS.orange];
@@ -306,6 +308,36 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
     startRing();
   }, [startRing]);
 
+  // Dev capture bot (EXPO_PUBLIC_MEMORY_AUTOPLAY set): plays every seat from
+  // the table's own knowledge and taps through the handoff curtain.
+  const autoplay = typeof __DEV__ !== 'undefined' && __DEV__ && !!process.env.EXPO_PUBLIC_MEMORY_AUTOPLAY;
+  useEffect(() => {
+    if (!autoplay || !visible || result) return;
+    const id = setInterval(() => {
+      const gg = gRef.current;
+      const s = stateRef.current;
+      if (!gg) return;
+      if (curtain != null) { if (Math.random() < 0.5) continueTurn(); return; }
+      if (!playing.current || s.phase === 3) return;
+      if (s.phase === 2) { if (Math.random() < 0.6) apply(ppDismiss(s), []); return; }
+      const open: number[] = [];
+      for (let i = 0; i < 16; i++) if (!s.matched[i] && i !== s.a) open.push(i);
+      const known = (i: number) => s.seen[s.current][i] && Math.random() < 0.8;
+      let pick = -1;
+      if (s.phase === 1) {
+        pick = open.find((i) => s.faces[i] === s.faces[s.a] && known(i)) ?? -1;
+        const allowed = forcedSetFor(s);
+        if (pick < 0) pick = (allowed.length ? allowed : open.filter((i) => !s.tableSeen[i]))[0] ?? open[0];
+      } else {
+        pick = open.find((i) => known(i) && open.some((j) => j !== i && s.faces[j] === s.faces[i] && known(j))) ?? open.find((i) => !s.tableSeen[i]) ?? open[0];
+      }
+      if (pick == null || pick < 0) return;
+      const p = slotXY(gg, pick);
+      tapAt(p.x + gg.cw / 2, p.y + gg.ch / 2);
+    }, 650);
+    return () => clearInterval(id);
+  }, [autoplay, visible, result, curtain, apply, continueTurn, tapAt]);
+
   const onRematch = useCallback(() => setRound((r) => r + 1), []);
   const blocked = view.allowed.length ? new Set(Array.from({ length: 16 }, (_, i) => i).filter((i) => view.allowed.indexOf(i) < 0 && i !== stateRef.current.a && !stateRef.current.matched[i])) : null;
 
@@ -315,6 +347,8 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
       title="Pass & Play"
       subtitle={`${deck.label} · ${players} players`}
       score={view.pairs[view.current] ?? 0}
+      // Local table game: no personal best (the winner's pairs never read as a record).
+      personalBest={result?.score}
       objective={`${players} sharks, one phone. Match and go again.`}
       result={result}
       gameId="memory"
@@ -348,6 +382,7 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
               const done = view.matched.indexOf(s) >= 0;
               return <View key={`w${round}-${s}`} style={[styles.well, done && styles.wellGold, { left: p.x, top: p.y, width: g.cw, height: g.ch }]} />;
             })}
+            <View style={StyleSheet.absoluteFill} pointerEvents="none" collapsable={false}>
             <View style={[StyleSheet.absoluteFill, styles.tilt]} pointerEvents="none">
               {layout.faces.map((f, s) => {
                 const p = slotXY(g, s);
@@ -356,6 +391,7 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
                     back={CARD_BACK} face={faceFor(deck, f)} reducedMotion={reducedMotion} />
                 );
               })}
+            </View>
             </View>
             {blocked ? Array.from(blocked).map((s) => {
               const p = slotXY(g, s);
@@ -445,8 +481,8 @@ const styles = StyleSheet.create({
   abs: { position: 'absolute' },
   strip: { position: 'absolute', left: 0, right: 0, top: 4 },
   token: { position: 'absolute', top: 0, width: 80, alignItems: 'center' },
-  tokenDisc: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  tokenShark: { width: 40, height: 40 },
+  tokenDisc: { width: 54, height: 54, borderRadius: 27, borderWidth: 3, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  tokenShark: { width: 58, height: 58, marginTop: 10 },
   tokenPlate: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffffff', borderRadius: 10, borderWidth: 2, borderColor: MM.ink, paddingHorizontal: 6, marginTop: -6 },
   tokenName: { fontFamily: 'Knockout', fontSize: 12, color: MM.ink },
   tokenPairs: { fontFamily: 'Shark', fontSize: 16, color: MM.navyText },
