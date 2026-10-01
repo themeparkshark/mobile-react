@@ -26,6 +26,13 @@ import { isInPickupRange } from './homeFindCopy';
 import HomeIntro, { useHomeIntroSeen } from './HomeIntro';
 import getPrepItemSets from '../../api/endpoints/me/prep-item-sets';
 import * as RootNavigation from '../../RootNavigation';
+import { reportHomeSpot, type HuntReportReason } from '../../api/endpoints/me/homeHunt';
+import { HOME_HUNT_COPY } from '../../constants/homeHuntCopy';
+import { gameAlert } from '../../ui';
+import { showToast } from '../../utils/toast';
+import { homeHuntEnabled, loadHomeHuntWeek } from '../LeaderboardsScreen/homeHuntWeekCache';
+import { REPORT_REASONS, SAFETY_LINE, huntRankLine, shouldShowSafetyLine } from './homeHuntMap';
+import { getHomeHuntRankLine, setHomeHuntRankLine, subscribeHomeHuntRankLine } from './homeHuntRankStore';
 
 // ── Layout: one grid for every home card ─────────────────────────────
 // Top row: the live bar (only for a live boss, or the team race when the
@@ -62,6 +69,9 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 dayjs.extend(isBetween);
+
+// The first rare or better find on the map says the safety line once per app session.
+let safetyLineShown = false;
 
 
 
@@ -110,11 +120,35 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
   const cacheReadOnce = useRef(false);
   const firstScreenFocus = useRef(true);
   const screenFocused = useRef(false);
+  const [rankLine, setRankLine] = useState<string | null>(getHomeHuntRankLine());
   const [liveBar, setLiveBar] = useState<'raid' | 'teams' | null>(null);
   const [setProgress, setSetProgress] = useState<Record<string, { collected: number; total: number }>>({});
   const [introSeen, markIntroSeen] = useHomeIntroSeen(player?.id);
   const introOpen = introSeen === false && introAllowed && homeLocationConfirmed;
   useEffect(() => { onIntroOpenChange?.(introOpen); }, [introOpen, onIntroOpenChange]);
+
+  // Home Hunt rank line: only when the server flag is on and sends a line.
+  useEffect(() => subscribeHomeHuntRankLine(setRankLine), []);
+  useEffect(() => {
+    if (!player?.id) return;
+    let live = true;
+    void loadHomeHuntWeek(player.id).then(week => {
+      if (live && homeHuntEnabled(week)) setHomeHuntRankLine(huntRankLine(week));
+    });
+    return () => { live = false; };
+  }, [player?.id]);
+
+  const reportSpot = useCallback((pivotId: number) => {
+    const submit = (reason: HuntReportReason) => {
+      reportHomeSpot(pivotId, reason)
+        .then(() => showToast(HOME_HUNT_COPY.reportThanks, 'success'))
+        .catch(() => showToast(HOME_HUNT_COPY.reportFailed, 'error'));
+    };
+    gameAlert(HOME_HUNT_COPY.reportTitle, 'What is wrong with this spot?', [
+      ...REPORT_REASONS.map(option => ({ text: option.label, onPress: () => submit(option.reason) })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, []);
 
   /** Check whether enough distance/time has elapsed to allow a fetch */
   const shouldThrottle = (
@@ -314,6 +348,15 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     return { item, distance, inRange: !loadError && isInPickupRange(distance) };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [prepItems, lat, lng, loadError]);
+  useEffect(() => {
+    if (safetyLineShown || !homeLocationConfirmed) return;
+    const top = activePrepItems.reduce((best, item) => Math.max(best, item.rarity ?? 0), 0);
+    if (shouldShowSafetyLine(top, safetyLineShown)) {
+      safetyLineShown = true;
+      showToast(SAFETY_LINE, 'info', 6000);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prepItems, homeLocationConfirmed]);
   const findInRange = homeLocationConfirmed && placed.some(entry => entry.inRange);
   const pickupRange = useMemo(() => (homeLocationConfirmed
     ? { meters: HOME_PREP_PICKUP_RADIUS_METERS, findInside: findInRange } : null), [homeLocationConfirmed, findInRange]);
@@ -334,12 +377,14 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
   } else if (isLoading) {
     bottom = <HomeMapStatusCard mode="loading" inline />;
   } else if (activePrepItems.length === 0) {
-    bottom = <HomeMapStatusCard mode={loadError ? 'error' : 'empty'} inline
+    bottom = <HomeMapStatusCard mode={loadError ? 'error' : 'empty'} inline rankLine={rankLine}
+      onOpenStandings={() => RootNavigation.navigate('Leaderboard', { tab: 'home_hunt' })}
       onOpenCollections={() => RootNavigation.navigate('SetCollection',
         focusedSet?.slug ? { slug: focusedSet.slug } : undefined)}
       onRetry={() => void loadPrepItems(true)} />;
   } else if (loadError) {
-    bottom = <HomeMapStatusCard mode="saved" inline onRetry={() => void loadPrepItems(true)} />;
+    bottom = <HomeMapStatusCard mode="saved" inline rankLine={rankLine}
+      onOpenStandings={() => RootNavigation.navigate('Leaderboard', { tab: 'home_hunt' })} onRetry={() => void loadPrepItems(true)} />;
   } else if (huntTarget) {
     bottom = <HomeHuntCard target={huntTarget} setProgress={huntProgress}
       findsUntilTicket={playerStats?.ticket_guarantee_in}
@@ -367,6 +412,7 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
               longitude: prepItem.longitude!,
             }}
             anchor={PREP_MARKER_ANCHOR}
+            onLongPress={prepItem.pivot_id ? () => reportSpot(prepItem.pivot_id as number) : undefined}
             accessibilityLabel={inRange ? `${prepItem.name}. In range. Tap to grab.` : `${prepItem.name}, ${distance == null ? 'distance unknown' : `${Math.round(distance)} meters away`}`}
             onPress={() => {
               if (!loadError && prepItem.pivot_id) {

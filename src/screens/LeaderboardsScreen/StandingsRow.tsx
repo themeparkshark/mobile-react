@@ -19,7 +19,7 @@ export function rowEnterDelay(index: number, base = 650): number {
   return base + Math.min(index, 10) * 55;
 }
 
-export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, index, highlight, enterDelayBase }: {
+export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, index, highlight, enterDelayBase, interactive = true }: {
   readonly player: PlayerType;
   readonly rank: number;
   readonly score: number;
@@ -31,6 +31,8 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
   readonly highlight?: boolean;
   /** When the cascade starts; lists under a podium wait for it to land. */
   readonly enterDelayBase?: number;
+  /** False on Near Me boards, where Hunter Names never open a profile. */
+  readonly interactive?: boolean;
 }) {
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
@@ -38,8 +40,9 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
   return (
     <Animated.View entering={reduced ? undefined : FadeInRight.delay(rowEnterDelay(index, enterDelayBase)).springify().damping(15).stiffness(170)}>
       <Pressable
-        accessibilityRole="button"
+        accessibilityRole={interactive ? 'button' : 'text'}
         accessibilityLabel={`Rank ${rank}, ${player.screen_name}, ${score}`}
+        disabled={!interactive}
         onPress={() => { playSound(tapSound); RootNavigation.navigate('Player', { player: player.id }); }}
         style={({ pressed }) => ({
           flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, marginHorizontal: 12, marginVertical: 4,
@@ -54,7 +57,7 @@ export function StandingsRow({ player, rank, score, scoreIcon, detail, isMe, ind
             width: 34, height: 34, borderRadius: 17, marginRight: 8, alignItems: 'center', justifyContent: 'center',
             backgroundColor: BRAND.blueBright, borderBottomWidth: 3, borderBottomColor: BRAND.blueLip,
           }}>
-            <Text style={{ fontFamily: 'Shark', fontSize: rank > 99 ? 12 : 16, color: BRAND.white }}>{rank}</Text>
+            <Text style={{ fontFamily: 'Shark', fontSize: rank > 99 ? 12 : 16, color: BRAND.white }}>{rank > 0 ? rank : '-'}</Text>
           </View>
         )}
         <View style={{ width: 50, height: 50, borderRadius: 25, overflow: 'hidden', backgroundColor: BRAND.sky }}>
