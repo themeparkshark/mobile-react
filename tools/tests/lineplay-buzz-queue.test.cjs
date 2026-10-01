@@ -93,6 +93,7 @@ test('an abandoned queue session stops background heartbeats after 20 minutes aw
         posts++;
         throw { response: { status: 422, data: { code: 'NOT_NEAR_RIDE' } } };
       } } };
+      if (name === './checkpointCredit') return require('./helpers/lineplay-checkpoint-credit.cjs');
       throw new Error(`Unexpected dependency: ${name}`);
     },
   }, { filename: file });

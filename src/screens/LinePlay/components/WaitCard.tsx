@@ -4,7 +4,7 @@
  * Park-themed art slot (image_url) with a graceful gradient fallback.
  */
 
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, shadows } from '../../../design-system';
@@ -68,6 +68,11 @@ export interface WaitCardProps {
   readonly bonus?: LineBonusSummary | null;
   /** A game is mounted: the ring's idle loops (bob, glint, pulse) rest. */
   readonly gameOpen?: boolean;
+  /**
+   * The wait screen body (L2 WaitCoinHero): the ride's coin center stage with
+   * the wait stats. Compact mode only; the Part gem and count move into it.
+   */
+  readonly hero?: ReactNode;
 }
 
 const GOLD = '#fec90e';
@@ -149,6 +154,7 @@ export default function WaitCard({
   onPlayBonus,
   bonus = null,
   gameOpen = false,
+  hero = null,
 }: WaitCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -267,11 +273,13 @@ export default function WaitCard({
           </Pressable>}
         </View>
 
+        {compact && hero}
         {compact ? <View style={styles.compactMeter}>
-          {noPartsHere ? <GameIcon name="queue" size={34} />
+          {hero ? null : noPartsHere ? <GameIcon name="queue" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={`${earned} Ride Part${earned === 1 ? '' : 's'} earned. ${headline} ${subline}`}>
-            <Text style={styles.compactHeadline}>{headline}{rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}</Text>
+            <Text style={styles.compactHeadline} numberOfLines={1}>{headline}{hero && rewardTrackingAvailable && !atCap && !countdown.needsCheck && !countdown.checking && !paused
+              ? ` ${subline}` : !hero && rewardTrackingAvailable ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}</Text>
             {noPartsHere && <Text style={styles.compactNote} numberOfLines={1}>No Parts at this ride</Text>}
             {bonusOn && <View style={styles.bonusRow}>
               {bonusDone ? <Text style={styles.bonusDone} numberOfLines={1}>Bonus Parts done at this ride today</Text>

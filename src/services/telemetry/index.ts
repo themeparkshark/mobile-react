@@ -13,6 +13,7 @@ import {
   type TelemetryEvent,
 } from './sentryEnvelope';
 import { sentryReleaseAndDist } from './releaseName';
+import { readStack } from '../../utils/hermesSafeError';
 
 /**
  * Crash and error reporting plus core-loop breadcrumbs.
@@ -122,7 +123,8 @@ function toError(error: unknown): { name: string; message: string; stack?: strin
     return {
       name: typeof candidate.name === 'string' ? candidate.name : 'Error',
       message: candidate.message,
-      stack: typeof candidate.stack === 'string' ? candidate.stack : undefined,
+      // readStack: an axios error's .stack getter throws on Hermes.
+      stack: readStack(candidate),
     };
   }
   return { name: 'Error', message: typeof error === 'string' ? error : 'Non-error thrown' };

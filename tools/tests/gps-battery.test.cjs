@@ -129,6 +129,7 @@ function heartbeatHarness() {
       if (name === 'expo-secure-store') return { getItemAsync: async () => 'token' };
       if (name === 'expo-task-manager') return { defineTask: (_, callback) => { task = callback; } };
       if (name === '../../api/client') return { default: { post: async () => { calls.posts++; return { data: { status: 'active' } }; } } };
+      if (name === './checkpointCredit') return loadTs('src/services/lineplay/checkpointCredit.ts');
       throw new Error(`Unexpected dependency: ${name}`);
     },
   }, { filename: file });

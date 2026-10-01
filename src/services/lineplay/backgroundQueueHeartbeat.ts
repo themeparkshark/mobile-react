@@ -9,12 +9,15 @@ import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
 import * as TaskManager from 'expo-task-manager';
 import client from '../../api/client';
+import { appendTrail, isCheckpointFix, type CheckpointFix } from './checkpointCredit';
 
 const TASK = 'lineplay-queue-heartbeat';
 const STORAGE_KEY = 'lineplay_active_background_session_v1';
 const MAX_SESSION_AGE_MS = 3 * 60 * 60 * 1000;
 const MAX_SAMPLE_AGE_MS = 90_000;
 const MIN_SEND_GAP_MS = 20_000;
+/** Fixes the background task took while the server was unreachable (L1). */
+const TRAIL_PREFIX = 'lineplay_background_trail_v1_';
 /**
  * A guest who walked away from the line without ending LinePlay is far from
  * the ride on every sample. Stop the background task after this long instead of
@@ -126,6 +129,36 @@ export function deactivateQueueBackgroundHeartbeat(sessionId: string): Promise<v
   });
 }
 
+/**
+ * Hand the foreground the fixes this task kept while offline, and forget
+ * them. The foreground merges them into its own trail and syncs.
+ */
+export function takeBackgroundTrail(sessionId: string): Promise<CheckpointFix[]> {
+  return serialize(async () => {
+    const key = `${TRAIL_PREFIX}${sessionId}`;
+    try {
+      const raw = await AsyncStorage.getItem(key);
+      await AsyncStorage.removeItem(key);
+      const parsed = raw ? JSON.parse(raw) as unknown : [];
+      return Array.isArray(parsed) ? parsed.filter(isCheckpointFix) : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+async function keepOfflineFix(sessionId: string, fix: CheckpointFix): Promise<void> {
+  const key = `${TRAIL_PREFIX}${sessionId}`;
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) as unknown : [];
+    const trail = Array.isArray(parsed) ? parsed.filter(isCheckpointFix) : [];
+    await AsyncStorage.setItem(key, JSON.stringify(appendTrail(trail, fix)));
+  } catch {
+    // Storage trouble never stops the heartbeat.
+  }
+}
+
 export function clearQueueBackgroundHeartbeat(): Promise<void> {
   return serialize(async () => {
     lastAttemptAt = 0;
@@ -179,9 +212,12 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
     lastAttemptAt = now;
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(active));
     try {
+      const accuracy = sample.coords.accuracy;
       const response = await client.post(`/me/line-sessions/${active.sessionId}/heartbeat`, {
         latitude: sample.coords.latitude,
         longitude: sample.coords.longitude,
+        ...(typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy >= 0
+          ? { accuracy_meters: Math.min(10_000, accuracy) } : {}),
       }, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 });
       if (response.data?.status === 'completed') {
         await AsyncStorage.removeItem(STORAGE_KEY);
@@ -210,8 +246,15 @@ TaskManager.defineTask(TASK, async ({ data, error }) => {
         active.awaySince = awaySince;
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(active));
       }
-      // A rejected/far sample or network outage earns no time. Retry only
-      // when the OS supplies another recent location.
+      if (!response) {
+        // No signal (an indoor queue, airplane mode): keep the fix for the
+        // foreground to sync, so the server can still place the guest.
+        await keepOfflineFix(active.sessionId, { latitude: sample.coords.latitude,
+          longitude: sample.coords.longitude, accuracyMeters: sample.coords.accuracy ?? null,
+          at: sample.timestamp });
+      }
+      // A rejected/far sample earns no time. Retry only when the OS supplies
+      // another recent location.
     }
   });
 });
