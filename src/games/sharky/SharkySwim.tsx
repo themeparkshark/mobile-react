@@ -120,6 +120,13 @@ export function SharkySwim({
   const perfTier = usePerfTier({ active: visible && !result });
   const qualityRef = useRef(0);
   qualityRef.current = perfTier.tierJs;
+  // Dev captures: EXPO_PUBLIC_SHARKY_QUALITY=0|1|2 pins the tier (simulator Debug
+  // frame times are not device frame times).
+  const pinQuality = __DEV__ ? process.env.EXPO_PUBLIC_SHARKY_QUALITY : undefined;
+  useEffect(() => {
+    if (pinQuality !== undefined && pinQuality !== '') perfTier.force(Number(pinQuality));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pinQuality]);
 
   // --- live Sprint Race (Line Party semantics; lab transport in dev) ----------------
   const liveUrl = raceUrl ?? (__DEV__ ? process.env.EXPO_PUBLIC_SHARKY_RACE_URL : undefined) ?? null;

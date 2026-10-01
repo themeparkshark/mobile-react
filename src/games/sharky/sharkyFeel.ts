@@ -296,7 +296,8 @@ export function createSharkyFeel(deps: FeelDeps) {
           fx?.burst('impact', s.x, s.y, { count: 1, size: 1.5 });
           fx?.burst('confetti', s.x, s.y, { count: 30 });
           fx?.flyUp('FRENZY!', deps.layout().w / 2, s.y - 90, { size: 'xl', color: GOLD, ms: 1200 });
-          fx?.vignette({ color: GOLD, peak: 0.35, inMs: 120, holdMs: 5600, outMs: 300 });
+          // Bright gold edge band only (a deeper gold muddied into olive over the blue water).
+          fx?.vignette({ color: '#ffe066', peak: 0.28, inMs: 120, holdMs: 5600, outMs: 300 });
           if (!deps.calm) camera.punch(0.06);
           hooks.onFrenzy(true);
           break;
