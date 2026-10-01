@@ -94,8 +94,10 @@ function SnatchTag() {
   }, [o, s]);
   const style = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ scale: s.value }, { rotate: '-8deg' }] }));
   return (
-    <Animated.View pointerEvents="none" style={[styles.snatch, style]}>
-      <Text style={styles.snatchText}>SNATCHED</Text>
+    <Animated.View pointerEvents="none" style={[styles.snatchWrap, style]}>
+      <View style={styles.snatch}>
+        <Text style={styles.snatchText}>SNATCHED</Text>
+      </View>
     </Animated.View>
   );
 }
@@ -153,6 +155,7 @@ const styles = StyleSheet.create({
   tag: { fontFamily: FONT.body, fontSize: 10, color: BRAND.navy, backgroundColor: BRAND.sky, paddingHorizontal: 6, borderRadius: 6, overflow: 'hidden', marginTop: 2 },
   tagBot: { fontFamily: FONT.body, fontSize: 10, color: BRAND.navy, backgroundColor: BRAND.cream, paddingHorizontal: 6, borderRadius: 6, overflow: 'hidden', marginTop: 2 },
   tagSpacer: { height: 14 },
-  snatch: { position: 'absolute', top: 18, alignSelf: 'center', backgroundColor: BRAND.white, borderColor: BRAND.gold, borderWidth: 3, borderRadius: 10, paddingHorizontal: 6 },
+  snatchWrap: { position: 'absolute', top: 18, alignSelf: 'center' },
+  snatch: { backgroundColor: BRAND.white, borderColor: BRAND.gold, borderWidth: 3, borderRadius: 10, paddingHorizontal: 6 },
   snatchText: { fontFamily: FONT.display, fontSize: 13, color: BRAND.gold, letterSpacing: 0.6, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0.1 },
 });

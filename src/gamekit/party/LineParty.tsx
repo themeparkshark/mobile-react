@@ -309,7 +309,7 @@ function HeadsUp({ enabled }: { enabled: boolean }) {
   const show = useLineHeadsUp(enabled);
   if (!show) return null;
   return (
-    <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(300)} style={styles.headsUp} pointerEvents="none">
+    <Animated.View entering={FadeIn.duration(180)} style={styles.headsUp} pointerEvents="none">
       <GameIcon name="queue" size={18} />
       <Text style={styles.headsUpText}>Line's moving. Heads up!</Text>
     </Animated.View>
@@ -352,7 +352,9 @@ function CountIn({ boardT, late }: { boardT: number; late: boolean }) {
 
 function Banner({ title, sub, big }: { title: string; sub: string; big?: boolean }) {
   return (
-    <Animated.View entering={ZoomIn.springify().damping(12)} exiting={FadeOut} style={styles.bannerWrap} pointerEvents="none">
+    // No exiting animation: under load a Reanimated exit can strand the banner
+    // behind the next round's board (seen in the v2 two-sim lab). It just unmounts.
+    <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.bannerWrap} pointerEvents="none">
       <Text style={[styles.bannerTitle, big && { fontSize: 52 }]}>{title}</Text>
       <Text style={styles.bannerSub}>{sub}</Text>
     </Animated.View>

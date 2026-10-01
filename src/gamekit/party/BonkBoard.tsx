@@ -476,9 +476,11 @@ function SnatchStamp() {
   }, [o, s]);
   const style = useAnimatedStyle(() => ({ opacity: o.value, transform: [{ scale: s.value }, { rotate: '-6deg' }] }));
   return (
-    <Animated.View pointerEvents="none" style={[styles.snatch, style]}>
-      <Text style={styles.snatchText}>SNATCHED</Text>
-      <Text style={styles.snatchSub}>+200</Text>
+    <Animated.View pointerEvents="none" style={[styles.snatchWrap, style]}>
+      <View style={styles.snatch}>
+        <Text style={styles.snatchText}>SNATCHED</Text>
+        <Text style={styles.snatchSub}>+200</Text>
+      </View>
     </Animated.View>
   );
 }
@@ -519,7 +521,8 @@ const styles = StyleSheet.create({
   vignette: { borderWidth: 18, borderColor: 'rgba(255,207,59,0.22)', borderRadius: 24 },
   lastBars: { position: 'absolute', top: 6, alignSelf: 'center', backgroundColor: BRAND.gold, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 4 },
   lastBarsText: { fontFamily: FONT.display, fontSize: 24, color: BRAND.white, letterSpacing: 1, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
-  snatch: { position: 'absolute', left: 12, top: 8, backgroundColor: BRAND.white, borderColor: BRAND.gold, borderWidth: 4, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 2, alignItems: 'center' },
+  snatchWrap: { position: 'absolute', left: 12, top: 8 },
+  snatch: { backgroundColor: BRAND.white, borderColor: BRAND.gold, borderWidth: 4, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 2, alignItems: 'center' },
   snatchText: { fontFamily: FONT.display, fontSize: 26, color: BRAND.gold, letterSpacing: 1, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
   snatchSub: { fontFamily: FONT.display, fontSize: 16, color: BRAND.navy },
   coralWash: { backgroundColor: 'rgba(255,107,92,0.45)' },
