@@ -10,7 +10,7 @@ import {
   BUZZ, DAILY_LADDER, POINTS, QUEUE_ROUNDS, RIDE_QUESTIONS, RIDE_ROUND, READ_LOCK, SUDDEN_DEATH, TEMPLATES,
   type DuelMode, type FinRank, type RoundSpec, type SpeedTier,
 } from './config';
-import { buildDeck, factKeysOf, materializeQuestion, type DuelQuestion, type PoolQuestion } from './content';
+import { buildDeck, factKeysOf, materializeQuestion, usablePool, type DuelQuestion, type PoolQuestion } from './content';
 import { finAnswer, finClosestGuess, finStake, type FinAnswer } from './finAI';
 import {
   applyFinal, applyStreak, buzzOrder, buzzPoints, closestPoints, createStreak, creditedSpeed, deadHeatPoints, graceMs, quickPoints,
@@ -93,13 +93,28 @@ function altFinalQuestion(pool: readonly PoolQuestion[], spec: RoundSpec, deck: 
   const final = deck[deck.length - 1];
   const used = new Set(deck.map((q) => q.id));
   const facts = new Set(deck.flatMap((q) => factKeysOf(q)));
-  // Authored items first; a generated history item when the authored hard pool is one category.
-  const tries: RoundSpec[] = [spec, spec, spec, { ...spec, formats: ['opened'] }, { ...spec, formats: ['opened'] }, { ...spec, formats: ['pair'] }];
-  for (let k = 0; k < tries.length; k++) {
-    const [q] = buildDeck(pool, [tries[k]], { seed: mixSeed(seed, 0xca7 + k), parkId: opts.parkId, seen: [...(opts.seen ?? []), ...used, ...[...facts].map((f) => `fact:${f}`)] });
-    if (!q || used.has(q.id) || q.category === final.category) continue;
-    if (factKeysOf(q).some((f) => facts.has(f))) continue;
-    return q;
+  const seenAge = new Map((opts.seen ?? []).map((id, i) => [id, i] as const));
+  const ok = (q: DuelQuestion | null): q is DuelQuestion => !!q && !used.has(q.id) && q.category !== final.category && !factKeysOf(q).some((f) => facts.has(f));
+  // 1) Authored, hardest first, unseen before least-recently seen.
+  const r = createRng(mixSeed(seed, 0xca7));
+  for (const d of ['hard', 'medium'] as const) {
+    const cands = usablePool(pool)
+      .filter((q) => q.difficulty === d)
+      .map((q) => materializeQuestion(q.id, pool, seed))
+      .filter(ok)
+      .sort((a, b) => (seenAge.get(a.id) ?? -1) - (seenAge.get(b.id) ?? -1));
+    if (cands.length) {
+      const fresh = cands.filter((q) => !seenAge.has(q.id));
+      const from = fresh.length ? fresh : cands.slice(0, 3);
+      return from[Math.floor(rngFloat(r) * from.length)];
+    }
+  }
+  // 2) A generated history item from facts the match hasn't used.
+  const rest = [...(opts.seen ?? []), ...used, ...[...facts].map((f) => `fact:${f}`)];
+  for (let k = 0; k < 4; k++) {
+    const fmt = k < 2 ? 'opened' : 'pair';
+    const [q] = buildDeck(pool, [{ ...spec, formats: [fmt] }], { seed: mixSeed(seed, 0xca8 + k), parkId: opts.parkId, seen: rest });
+    if (ok(q)) return q;
   }
   return null;
 }
@@ -301,7 +316,8 @@ export function resolveRound(mode: DuelMode, r: PlannedRound, me: SideInput, opp
   if (opp) fold(tally.opp, opp, oppRes, buzz ? buzz.first !== 'me' || buzz.open || buzz.steal || buzz.deadHeat : true);
   tally.round += 1;
   const after = tally.me.score - tally.opp.score;
-  const decisive = !!opp && (Math.sign(before) !== Math.sign(after)) && after !== 0;
+  // Decisive = the answer that flips the lead, or breaks a tie in the Final (never the first points of a match).
+  const decisive = !!opp && ((before < 0 && after > 0) || (before > 0 && after < 0) || (r.spec.type === 'final' && before === 0 && after !== 0));
   return { me: meRes, opp: oppRes, buzz, decisive };
 }
 

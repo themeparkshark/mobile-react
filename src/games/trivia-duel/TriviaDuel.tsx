@@ -18,7 +18,7 @@
  * question's speed bonus, and graded modes credit at most 6s per question.
  */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Dimensions, Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Animated, {
   Easing, runOnJS, runOnUI, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -49,7 +49,7 @@ import {
 } from './engine/match';
 import { nearMiss } from './engine/nearMiss';
 import { duelStars, flameTier, peekMode, peekSample, rideStars, rideWon, tickerValue, wagerStakes } from './engine/scoring';
-import { FIN_POSE_ORDER, C, type FinPose, type SharkLook } from './art';
+import { ART, FIN_POSE_ORDER, C, type FinPose, type SharkLook } from './art';
 import { BEDS, CUE, bed, beatMs, msToGrid, registerDuelAudio, resetFreeBeat, sfx, sfxLadder } from './audio';
 import { loadPool } from './pool';
 import {
@@ -590,7 +590,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     let p: MatchPlan | null = null;
     if (ghost) p = planFromIds(ghost.mode === 'ride' ? 'queue' : ghost.mode, ghost.seed, ghost.qids, poolRef.current, rank, !!mem.relaxed);
     if (!p) p = planMatch(mode === 'ghost' ? 'queue' : mode, seed, poolRef.current, { parkId, seen: mem.seen, rank, relaxed: !!mem.relaxed });
-    if (__DEV__) console.log('[trivia-duel] plan', { seed, seen: mem.seen.length, pool: poolRef.current.length, ids: p.rounds.map((r) => r.question.id) });
+    if (__DEV__) console.log('[trivia-duel] plan', { seed, seen: mem.seen.length, pool: poolRef.current.length, ids: p.rounds.map((r) => r.question.id), alt: p.finalAlt?.question.id ?? null, cats: p.rounds.map((r) => r.question.category) });
     const carry = mode === 'queue' || mode === 'practice' ? activeCarry(mem, Date.now()) : { streak: 0, shield: false };
     carryRef.current = carry;
     tally.current = createTally(carry.streak, carry.shield);
@@ -1173,7 +1173,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (res.buzz?.deadHeat) {
       const won = !!res.me.deadHeatWon;
       const lost = !!res.opp.deadHeatWon;
-      later(240, () => stamp(won ? 'DEAD HEAT WON!' : lost ? `${oppName.toUpperCase()} TAKES IT` : 'NOBODY!', won ? C.gold : C.coral, 30, W / 2, ZONE_TOP - 24));
+      later(240, () => stamp(won ? 'DEAD HEAT WON!' : lost ? `${oppName.toUpperCase()} TAKES IT` : 'NOBODY!', won ? C.gold : C.coral, 30, W / 2, RAIL_H + STAGE_H * 0.62));
     }
 
     // Your outcome.
@@ -1442,7 +1442,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
     });
     if (ev === EV_UNLOCK) {
       const ms = 900 + skill * 2200;
-      if (r.spec.type === 'buzz') later(ms * 0.7, onBuzzUI);
+      if (r.spec.type === 'buzz') {
+        // Demo capture alternates a clean buzz with a DEAD HEAT (ring 90ms after Fin).
+        const fb = oppIn.current.buzzMs ?? -1;
+        later(fb >= 0 && playsRef.current % 2 === 1 ? fb + 90 : ms * 0.7, onBuzzUI);
+      }
       else if (q.format === 'closest' && q.slider) {
         const guess = q.slider.truth + (skill < 0.7 ? 0 : 3);
         later(ms * 0.6, () => setSliderVal(guess));
@@ -1803,16 +1807,25 @@ function RelaxedToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) 
   );
 }
 
+/** DEAD HEAT (11.6): Alex's twin polaroid drops in, holds, then pops away (never lingers on screen). */
 function Polaroid({ k }: { k: number }) {
-  const y = useSharedValue(-300);
+  const y = useSharedValue(-260);
+  const sc = useSharedValue(1);
+  const op = useSharedValue(0);
   useEffect(() => {
-    y.value = -300;
-    y.value = withSequence(withTiming(0, { duration: 240, easing: Easing.out(Easing.back(1.4)) }), withDelay(400, withTiming(-300, { duration: 200 })));
-  }, [k, y]);
-  const st = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }, { rotate: '-6deg' }] }));
+    y.value = -260;
+    sc.value = 1;
+    op.value = 1;
+    y.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.back(1.4)) });
+    sc.value = withDelay(640, withTiming(0.6, { duration: 180 }));
+    op.value = withDelay(640, withTiming(0, { duration: 180 }));
+  }, [k, y, sc, op]);
+  const st = useAnimatedStyle(() => ({ opacity: op.value, transform: [{ translateY: y.value }, { rotate: '-6deg' }, { scale: sc.value }] }));
   return (
     <Animated.View pointerEvents="none" style={[styles.polaroid, st]}>
-      <OutlinedText text="DEAD HEAT!" size={30} color="#ffffff" width={2} />
+      <Image source={ART.polaroid} style={{ width: 200, height: 152 }} resizeMode="contain" />
+      <OutlinedText text="DEAD HEAT!" size={34} color={C.gold} width={3} />
+      <OutlinedText text="PICK BLIND" size={20} color="#ffffff" width={2} />
     </Animated.View>
   );
 }
@@ -1886,7 +1899,7 @@ const styles = StyleSheet.create({
   finalCat: { fontFamily: 'Shark', fontSize: 30, color: C.navy },
   finalHard: { fontFamily: 'Knockout', fontSize: 18, color: C.coral, marginTop: 2 },
   loading: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  polaroid: { position: 'absolute', top: '30%', alignSelf: 'center', backgroundColor: '#ffffff', borderWidth: 3, borderColor: C.ink, borderRadius: 8, padding: 14, transform: [{ rotate: '-6deg' }] },
+  polaroid: { position: 'absolute', top: '18%', alignSelf: 'center', alignItems: 'center' },
 });
 
 export default TriviaDuel;
