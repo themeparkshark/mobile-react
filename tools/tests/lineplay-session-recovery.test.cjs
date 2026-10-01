@@ -81,8 +81,14 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
         return backgroundPermission.granted;
       },
       deactivateQueueBackgroundHeartbeat: async id => { calls.backgroundStopped.push(id); },
+      takeBackgroundTrail: async () => [],
     },
     '../../games/trivia/config': { LINEPLAY_ROUND_QUESTIONS: 5 },
+    '../../api/endpoints/me/inline-timer/sync': asDefault(async (...args) => {
+      calls.sync = (calls.sync ?? 0) + 1; return server;
+    }),
+    './checkpointCredit': require('./helpers/lineplay-checkpoint-credit.cjs'),
+    './queuePedometer': { prepareQueuePedometer: async () => {}, readQueueSteps: async () => null },
   };
   const moduleRef = { exports: {} };
   vm.runInNewContext(code, {

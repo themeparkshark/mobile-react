@@ -5,6 +5,7 @@ import type { CurrentQuestProof } from '../../api/endpoints/me/inline-timer/curr
 import { isCrewRelayProgress, type CrewRelayProgress } from './crewRelay';
 import { isNavigationPanelProgress, type NavigationPanelProgress } from './navigationPanel';
 import { isQueueDifficulty, type QueueDifficulty } from './replay';
+import { isCheckpointFix, TRAIL_MAX_FIXES, type CheckpointFix } from './checkpointCredit';
 
 const PREFIX = 'lineplay_checkpoint_v1_';
 const MAX_AGE_MS = 3 * 60 * 60 * 1000;
@@ -45,6 +46,10 @@ export interface LinePlayCheckpoint {
   bonusSeen?: string[];
   /** A bonus-round proof (with its attempt id) waiting for the network. */
   bonusQuestProof?: CurrentQuestProof | null;
+  /** L1 entry checkpoint: the first fresh fix of the wait, on the phone clock. */
+  entryFix?: CheckpointFix | null;
+  /** L1 fixes taken while the server was unreachable, waiting to sync. */
+  offlineTrail?: CheckpointFix[];
 }
 
 function isBonusProof(value: unknown): boolean {
@@ -124,6 +129,9 @@ export function parseCheckpoint(raw: string | null, playerId: number, rideId: nu
       (value.bonusSeen !== undefined && (!Array.isArray(value.bonusSeen) || value.bonusSeen.length > 40 ||
         !value.bonusSeen.every(key => typeof key === 'string' && key.length <= 120))) ||
       (value.bonusQuestProof !== undefined && value.bonusQuestProof !== null && !isBonusProof(value.bonusQuestProof)) ||
+      (value.entryFix !== undefined && value.entryFix !== null && !isCheckpointFix(value.entryFix)) ||
+      (value.offlineTrail !== undefined && (!Array.isArray(value.offlineTrail) ||
+        value.offlineTrail.length > TRAIL_MAX_FIXES || !value.offlineTrail.every(isCheckpointFix))) ||
       !['active', 'complete'].includes(value.state) ||
       (value.serverSessionId !== null && typeof value.serverSessionId !== 'string') ||
       !Number.isFinite(value.verifiedEligibleSeconds) || value.verifiedEligibleSeconds < 0 ||
