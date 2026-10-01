@@ -95,7 +95,13 @@ async function checkProfile(name, { easJson, fetchImpl = fetch, log = console.lo
     log(`${name}: development profile, API comes from Metro at runtime; nothing to verify`);
     return;
   }
-  const problem = storeUrlProblem(apiUrl);
+  // Internal-only exception: the "internal-tunnel" profile (marked with
+  // TPS_INTERNAL_TUNNEL_BUILD=1) may target a trycloudflare quick tunnel to the
+  // tester backend. Every other store profile still rejects tunnels.
+  const internalTunnel = name === 'internal-tunnel' && profile.env?.TPS_INTERNAL_TUNNEL_BUILD === '1';
+  const problem = internalTunnel && /(^|\.)trycloudflare\.com$/i.test(new URL(apiUrl).hostname) && apiUrl.startsWith('https://')
+    ? null
+    : storeUrlProblem(apiUrl);
   if (problem) throw new Error(`${name}: ${problem}`);
   const publicUrl = profile.env?.EXPO_PUBLIC_API_URL;
   if (publicUrl && publicUrl !== apiUrl) throw new Error(`${name}: EXPO_PUBLIC_API_URL disagrees with API_URL`);

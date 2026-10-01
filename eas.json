@@ -55,6 +55,22 @@
         "image": "macos-tahoe-26.5-xcode-26.6"
       },
       "channel": "testflight"
+    },
+    "internal-tunnel": {
+      "extends": "production",
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "API_URL": "https://jackets-gap-families-country.trycloudflare.com/api",
+        "EXPO_PUBLIC_API_URL": "https://jackets-gap-families-country.trycloudflare.com/api",
+        "TPS_INTERNAL_TUNNEL_BUILD": "1",
+        "SOURCEMAP_FILE": "ios/main.jsbundle.map"
+      },
+      "ios": {
+        "resourceClass": "m-medium",
+        "image": "macos-tahoe-26.5-xcode-26.6"
+      },
+      "channel": "internal-tunnel"
     }
   },
   "submit": {

@@ -98,3 +98,16 @@ test('checkProfile fails a tunnel before any network call and skips dev profiles
   await target.checkProfile('dev', { easJson, fetchImpl, log() {} });
   await assert.rejects(target.checkProfile('devBaked', { easJson, fetchImpl, log() {} }), /must not bake API_URL/);
 });
+
+test('only the marked internal-tunnel profile may target a trycloudflare tunnel', async () => {
+  const { checkProfile } = require('../check-api-target.cjs');
+  const T = 'https://example-words.trycloudflare.com/api';
+  const ok = async (url) => ({ ok: true, status: url.endsWith('/crumbs') ? 200 : 401, headers: { get: () => 'application/json' }, json: async () => ({ data: { labels: {}, errors: {} } }) });
+  const base = { production: { distribution: 'store', env: { API_URL: 'https://tps-api.on-forge.com/api' } } };
+  const marked = { build: { ...base, 'internal-tunnel': { extends: 'production', env: { API_URL: T, EXPO_PUBLIC_API_URL: T, TPS_INTERNAL_TUNNEL_BUILD: '1' } } } };
+  await checkProfile('internal-tunnel', { easJson: marked, fetchImpl: ok, log: () => {} });
+  const unmarked = { build: { ...base, 'internal-tunnel': { extends: 'production', env: { API_URL: T } } } };
+  await assert.rejects(checkProfile('internal-tunnel', { easJson: unmarked, fetchImpl: ok, log: () => {} }), /ephemeral tunnel/);
+  const otherName = { build: { ...base, testflight: { extends: 'production', env: { API_URL: T, TPS_INTERNAL_TUNNEL_BUILD: '1' } } } };
+  await assert.rejects(checkProfile('testflight', { easJson: otherName, fetchImpl: ok, log: () => {} }), /ephemeral tunnel/);
+});
