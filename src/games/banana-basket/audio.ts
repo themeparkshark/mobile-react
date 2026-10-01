@@ -91,6 +91,11 @@ export function bananaCues() {
     feverEnd: pick('sh_fever_end', 'fx.whoosh'),
     finale: pick('bb_finale_tail', 'fx.reveal'),
     stamp: pick('sh_stamp', 'ui.confirm'),
+    stab: pick('bb_stab', 'fx.reveal'),
+    combo: pick('bb_combo', 'ui.confirm'),
+    squawk: pick('sh_seagull', 'ui.select'),
+    flap: pick('bb_flap', 'fx.whoosh'),
+    slam: pick('bb_slam', 'sh_star_slam', 'fx.hit'),
     coinReward: 'fx.coin',
     reward: 'fx.reward',
   };

@@ -33,6 +33,7 @@ import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import { useGameClock } from '../../gamekit/useGameClock';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
+import { EMITTERS, FX_SPRITE, type EmitterDef } from '../../gamekit/core/particles';
 import { useCamera } from '../../gamekit/fx/useCamera';
 import { useEventBridge } from '../../gamekit/fx/useEventBridge';
 import { forEachEvent, pushEvent } from '../../gamekit/core/eventRing';
@@ -52,6 +53,7 @@ import {
   EV_BALL_LOST, EV_BALL_POP, EV_BALL_TOSS, EV_BANK, EV_BONK, EV_BOUNCE, EV_BREAK, EV_CARD, EV_CATCH, EV_CLOSE, EV_COIN,
   EV_DOWNWELL, EV_FINALE, EV_GOLD_BALL, EV_GOLDEN, EV_GRAZE, EV_HIT, EV_MISS, EV_POWER, EV_PUFF, EV_RIM, EV_RUSH,
   EV_SAVE, EV_SET, EV_SPLASH, EV_SPLAT, EV_TELL, EV_TICK, EV_TIER, EV_TIME, EV_TIPOVER, MODE_QUEUE, MODE_RIDE,
+  EV_GATE, EV_GULL, EV_MULTI,
   createSim, finalScore, replay, starTargets, starsFor, step, tierOf, type SimConfig, type SimState,
 } from './sim';
 import { mixSeed } from './fixed';
@@ -313,7 +315,13 @@ function BananaRun({
   const px = (x: number, y: number) => toPx(layoutRef.current, x, y);
   const burst = (name: Parameters<FxStageHandle['burst']>[0], x: number, y: number, count?: number, color?: number) => {
     const p = px(x, y);
-    fx.current?.burst(name, p.x, p.y, count || color ? { count, color } : undefined);
+    // Banana's FX sheet is Alex-style colour art: confetti plays as drawn (white tint).
+    const c = color ?? (name === 'confetti' || name === 'ribbons' ? 0xffffffff : undefined);
+    fx.current?.burst(name, p.x, p.y, count || c ? { count, color: c } : undefined);
+  };
+  const emit = (def: EmitterDef, x: number, y: number, count?: number) => {
+    const p = px(x, y);
+    fx.current?.emitDef(def, p.x, p.y, count ? { count } : undefined);
   };
 
   const finishRun = useRef<() => void>(() => undefined);
@@ -335,9 +343,11 @@ function BananaRun({
         if (k === K_FINGER || k === K_WATCH || k === K_GIFT) break;
         const note = ladderNote(ladder.current, goldenRef.current);
         ladderNext(ladder.current, false);
+        const tier = (b >> 8) & 15;
         const pan = (a - 200) / 200;
         if (k === K_COIN) {
           buzz(HB_COIN, 'heavy');
+          GameAudio.playLadder(cues.note, note, { pan });
           burst('coins', a, LANE_Y - 10, 12);
           burst('sparkles', a, LANE_Y - 20, 8);
           camera.kick(0, 2);
@@ -345,22 +355,25 @@ function BananaRun({
           break;
         }
         GameAudio.play(k === K_BUNCH || k === K_LUCKY ? cues.bunch : cues.plop, { pan });
+        // Ladder by timbre (design 8.3): x1 glock, x2 + chime, x3 + bell, x4 + brass stab.
+        GameAudio.playLadder(cues.note, note, { pan });
+        if (tier >= 2) GameAudio.play(cues.chime, { pan, volume: 0.55 });
+        if (tier >= 3) GameAudio.playLadder(cues.bell, note, { pan, volume: 0.75 });
+        if (tier >= 4) GameAudio.play(cues.stab, { pan, volume: 0.6 });
+        // Wicker splinters on every catch.
+        emit(SPLINTERS, a, LANE_Y - 4, grade >= G_PERFECT ? 8 : 6);
         if (grade >= G_POP) {
           GameAudio.play(cues.pop, { pan });
-          GameAudio.playLadder(cues.bell, note, { pan });
         } else if (grade === G_PERFECT) {
-          GameAudio.playLadder(cues.bell, Math.min(15, note + 7), { pan });
-          GameAudio.play(cues.sparkle, { pan, volume: 0.7 });
+          GameAudio.play(cues.sparkle, { pan, volume: 0.8 });
           buzz(HB_PERFECT, 'light');
-          burst('sparks', a, LANE_Y - 8, 14);
+          emit(GOLD_CHIPS, a, LANE_Y - 10, 10);
           burst('stars', a, LANE_Y - 12, 4);
-          fx.current?.ring(px(a, LANE_Y).x, px(a, LANE_Y).y, { color: '#fec90e', from: 10, to: 52, ms: 220 });
+          fx.current?.ring(px(a, LANE_Y).x, px(a, LANE_Y).y, { color: '#fec90e', from: 10, to: 56, ms: 220 });
           if (!reduced) camera.kick((a - 200) / 200 * 3, 3);
         } else {
-          GameAudio.playLadder(cues.note, note, { pan });
-          if (grade === G_GREAT) GameAudio.play(cues.chime, { pan, volume: 0.8 });
-          if (tierOf(chain) <= 2) buzz(HB_CATCH, 'selection');
-          burst('puff', a, LANE_Y - 6, 6);
+          if (grade === G_GREAT) burst('sparkles', a, LANE_Y - 14, 2);
+          if (tier <= 2) buzz(HB_CATCH, 'selection');
           fx.current?.ring(px(a, LANE_Y).x, px(a, LANE_Y).y, { color: '#ffffff', from: 10, to: 46, ms: 220 });
           if (!reduced) camera.kick((a - 200) / 200 * 2, 2);
         }
@@ -392,16 +405,38 @@ function BananaRun({
         break;
       case EV_SPLAT:
         GameAudio.play(cues.splat, { pan: (a - 200) / 200, volume: 0.8 });
-        burst('splash', a, LANE_Y + 110, 6, 0xffffd23f);
+        emit(JUICE, a, LANE_Y + 110, 5);
         break;
       case EV_BREAK:
         GameAudio.play(cues.wah, { volume: 0.6 });
         break;
-      case EV_TIER:
+      case EV_TIER: {
         ladder.current.i = 7;
         GameAudio.play(cues.tierUp);
         buzz(HB_TIER, 'success');
-        burst('confetti', 200, 62, 12);
+        const bx = sim.value.bx / 256;
+        burst('confetti', bx, LANE_Y - 10, 12);
+        if (!reduced) camera.punch(0.04, 90);
+        break;
+      }
+      case EV_GATE:
+        if (a === 1) GameAudio.play(cues.deflate, { volume: 0.5 });
+        break;
+      case EV_MULTI:
+        GameAudio.play(cues.combo, { volume: 0.9 });
+        buzz(HB_PERFECT, 'light');
+        burst('sparkles', a, LANE_Y - 40, 6);
+        break;
+      case EV_GULL:
+        if (a === 1) GameAudio.play(cues.squawk, { pan: (b - 200) / 200 });
+        else if (a === 2) GameAudio.play(cues.flap, { volume: 0.8 });
+        else if (a === 3) {
+          GameAudio.play(cues.squawk);
+          GameAudio.play(cues.wah, { volume: 0.5 });
+          buzz(HB_HIT, 'warning' as BbPrim);
+          emit(FEATHERS, b, LANE_Y - 30, 10);
+          if (!reduced) camera.kick((200 - b) / 200 * 4, 2);
+        } else if (a === 5) GameAudio.play(cues.chime);
         break;
       case EV_TELL:
         if (b === K_PUFFER) {
@@ -423,8 +458,7 @@ function BananaRun({
         GameAudio.play(cues.heart, { volume: 0.8 });
         GameAudio.duck(3, 30, 250, 200);
         buzz(HB_HIT, 'error');
-        burst('impact', a, LANE_Y - 20);
-        burst('stars', a, LANE_Y - 30, 6);
+        emit(DIZZY_STARS, a, LANE_Y - 60, 5);
         const p = px(a, LANE_Y);
         fx.current?.vignette({ color: '#ff6b5c', peak: 0.3, inMs: 30, holdMs: 120, outMs: 110 });
         fx.current?.ring(p.x, p.y, { color: '#ff6b5c', from: 12, to: 90, ms: 260 });
@@ -467,14 +501,15 @@ function BananaRun({
         GameAudio.play(cues.bonk, { volume: 0.8 });
         GameAudio.play(cues.deflate, { volume: 0.7 });
         buzz(HB_POP, 'medium');
-        burst('impact', a, LANE_Y - 140);
+        emit(GOLD_CHIPS, a, LANE_Y - 150, 8);
         scoreRef.current += b;
         break;
       case EV_BALL_LOST:
         GameAudio.play(cues.deflate, { volume: 0.7 });
-        burst('confetti', a, LANE_Y + 40, 10);
+        burst('puff', a, LANE_Y + 50, 6);
         break;
       case EV_BALL_TOSS:
+        GameAudio.play(cues.whistle, { volume: 0.45 });
         GameAudio.play(cues.boing, { volume: 0.6 });
         break;
       case EV_DOWNWELL:
@@ -886,7 +921,7 @@ function BananaRun({
               ghostName={ghostName}
               reducedMotion={reducedMotion}
             />
-            <FxStage ref={fx} width={layout.width} height={layout.height} timeScale={worldScale} reducedMotion={reducedMotion} />
+            <FxStage ref={fx} width={layout.width} height={layout.height} timeScale={worldScale} reducedMotion={reducedMotion} atlasImage={images.fxSheet} />
             {card ? <TeachCard card={card} ready={cardReady} /> : null}
           </View>
         </GestureDetector>
@@ -894,6 +929,16 @@ function BananaRun({
     </GameShellV2>
   );
 }
+
+// Banana particle defs on the Banana FX sheet (outlined art, design D-3).
+const SPLINTERS: EmitterDef = { ...EMITTERS.shards, sprite: FX_SPRITE.shard, size: [6, 9], speed: [200, 380], spread: 140 };
+const GOLD_CHIPS: EmitterDef = { ...EMITTERS.shards, sprite: FX_SPRITE.dot, size: [6, 9], speed: [260, 460], spread: 160, colors: [0xffffffff] };
+const JUICE: EmitterDef = { ...EMITTERS.splash, sprite: FX_SPRITE.droplet, size: [6, 9], count: [5, 5] };
+const FEATHERS: EmitterDef = {
+  ...EMITTERS.ribbons, sprite: FX_SPRITE.ribbon + 2, frames: 2, count: [10, 10], speed: [120, 300], gravity: 160,
+  drag: 2.2, life: [0.8, 0.95], size: [8, 11], colors: [0xffffffff],
+};
+const DIZZY_STARS: EmitterDef = { ...EMITTERS.stars, sprite: FX_SPRITE.starArt, count: [5, 5] };
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: '#bfeaff' },

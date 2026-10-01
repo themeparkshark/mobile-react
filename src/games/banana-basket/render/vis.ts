@@ -6,12 +6,12 @@
  */
 
 import {
-  G_GREAT, G_PERFECT, G_POP, K_BUNCH, K_COIN, K_LUCKY, LANE_Y,
+  G_GREAT, G_PERFECT, G_POP, HALF_ZONE, K_BANANA, K_BUNCH, K_COIN, K_LUCKY, K_PUFFER, LANE_Y, PERFECT_D, S_FALL, SUB,
 } from '../constants';
 import {
   EV_BALL_LOST, EV_BALL_POP, EV_BONK, EV_BOUNCE, EV_BREAK, EV_CATCH, EV_CLOSE, EV_FINALE, EV_GOLD_BALL, EV_GOLDEN,
   EV_GRAZE, EV_HIT, EV_MISS, EV_POWER, EV_RIM, EV_RUSH, EV_SAVE, EV_SPLAT, EV_SPLASH, EV_TIER, EV_TIME, EV_TIPOVER,
-  EV_BANK, EV_SET, type SimState,
+  EV_BANK, EV_SET, EV_MULTI, EV_GATE, EV_BALL_TOSS, EV_GULL, EV_SPAWN, MAX_ITEMS, type SimState,
 } from '../state';
 
 export const POSE_IDLE = 0;
@@ -19,6 +19,11 @@ export const POSE_CHEER = 1;
 export const POSE_BONKED = 2;
 export const POSE_DIZZY = 3;
 export const POSE_FIST = 4;
+export const POSE_HOP = 5;
+export const POSE_LEAN = 6;
+export const POSE_CHOMP = 7;
+export const POSE_STRAIN = 8;
+export const POSE_SLUMP = 9;
 
 // Stamp texts (index into STAMP_TEXT).
 export const ST_NONE = 0;
@@ -45,13 +50,20 @@ export const ST_GOLD_BALL = 20;
 export const ST_POP = 21;
 export const ST_FINGER = 22;
 export const ST_WATCH = 23;
+export const ST_DOUBLE = 24;
+export const ST_TRIPLE = 25;
+export const ST_QUAD = 26;
+export const ST_UNLOCK = 27;
+export const ST_BOUNCE = 28;
+export const ST_STOLEN = 29;
+export const ST_BLOCKED = 30;
 
 export const STAMP_TEXT = [
   '', 'PERFECT', 'GREAT', 'GOOD', 'SAVE!', 'CLOSE CALL', 'GRAZE +100', 'GOLDEN HOUR!', 'FINAL RUSH! FASTER!', 'TIME!',
   'BONK!', 'BOOST x2!', 'CHAIN x2', 'CHAIN x3', 'CHAIN x4', 'CART TIP-OVER!', 'GOLDEN BANK +250', 'CHAIN FREEZE',
   'OUT OF HEARTS', 'DODGE!', 'GOLD BALL!', 'BALL POP!', 'FOAM FINGER!', '+3 SECONDS',
+  'DOUBLE!', 'TRIPLE CATCH!', 'QUAD CATCH!', 'x3 UNLOCKED!', 'BOUNCE!', 'GULL STEAL!', 'BLOCKED!',
 ];
-
 export const MAX_SPLATS = 12;
 
 export interface Vis {
@@ -96,6 +108,41 @@ export interface Vis {
   tierFlashT: number;
   resumeT: number;
   tipT: number;
+  /** Pose actually drawn this frame (forced pose or the velocity blend). */
+  show: number;
+  /** +1 / -1: mirror for lean (moving right mirrors the left-leaning art). */
+  face: number;
+  hopPhase: number;
+  hopLand: number;
+  /** Catch plop flipbook (4 frames) and the ink POW flipbook (3 frames). */
+  plopT: number;
+  plopX: number;
+  plopGold: number;
+  powT: number;
+  powX: number;
+  powY: number;
+  /** Rim notch glow 0..1 (next must-catch projected inside the PERFECT window). */
+  notch: number;
+  /** Ball gate plate: locked since / unlocked at. */
+  lockT: number;
+  unlockT: number;
+  locked: number;
+  ringT: number;
+  cartT: number;
+  cartX: number;
+  cartPos: number;
+  gullT: number;
+  gullPhase: number;
+  gullX: number;
+  stealT: number;
+  multiT: number;
+  serveDone: number;
+}
+
+/** Stamps that are world events (centre screen); the rest land on the basket. */
+export function stampIsBig(id: number): boolean {
+  'worklet';
+  return id === ST_TIME || id === ST_OUT || id === ST_GOLDEN || id === ST_RUSH || id === ST_TIPOVER;
 }
 
 function stamp(v: Vis, id: number, suffix: number): void {
@@ -152,6 +199,30 @@ export function createVis(): Vis {
     tierFlashT: -1e6,
     resumeT: -1e6,
     tipT: -1e6,
+    show: POSE_IDLE,
+    face: 1,
+    hopPhase: 0,
+    hopLand: -1e6,
+    plopT: -1e6,
+    plopX: 200,
+    plopGold: 0,
+    powT: -1e6,
+    powX: 200,
+    powY: LANE_Y,
+    notch: 0,
+    lockT: -1e6,
+    unlockT: -1e6,
+    locked: 0,
+    ringT: -1e6,
+    cartT: -1e6,
+    cartX: 200,
+    cartPos: 200,
+    gullT: -1e6,
+    gullPhase: 0,
+    gullX: 200,
+    stealT: -1e6,
+    multiT: -1e6,
+    serveDone: 0,
   };
 }
 
@@ -179,9 +250,17 @@ export function visEvents(v: Vis, s: SimState, reducedMotion: boolean): void {
       v.chipGain = c & 0xffff;
       v.chipTier = tier;
       v.catchX = a;
+      v.plopT = v.t;
+      v.plopX = a;
+      v.plopGold = grade >= G_PERFECT || kind === K_COIN ? 1 : 0;
+      if (kind === K_BUNCH || kind === K_LUCKY) setPose(v, POSE_STRAIN, 150);
       if (grade === G_PERFECT) {
         setPose(v, POSE_CHEER, 180);
         v.flashT = v.t;
+        v.silhouetteT = v.t;
+        v.powT = v.t;
+        v.powX = a;
+        v.powY = LANE_Y - 18;
         if (s.perfStreak >= 3) stamp(v, ST_PERFECT, s.perfStreak);
       }
       if (v.earlyStamps < 3 && kind !== K_COIN && grade < G_POP) {
@@ -200,6 +279,9 @@ export function visEvents(v: Vis, s: SimState, reducedMotion: boolean): void {
       v.splatT[i] = v.t;
       v.splatHead = (i + 1) % MAX_SPLATS;
     } else if (k === EV_HIT) {
+      v.powT = v.t;
+      v.powX = a;
+      v.powY = LANE_Y - 30;
       setPose(v, POSE_BONKED, 120);
       v.poseUntil = v.t + 120;
       v.silhouetteT = v.t;
@@ -212,10 +294,8 @@ export function visEvents(v: Vis, s: SimState, reducedMotion: boolean): void {
     } else if (k === EV_BOUNCE) {
       v.ballSquashT = v.t;
       v.lastBounceT = v.t;
-      if (b === 1) {
-        v.boostT = v.t;
-        stamp(v, ST_BOOST, 0);
-      }
+      v.ringT = v.t;
+      if (b === 1 && !v.serveDone && s.bounces <= 1) stamp(v, ST_BOUNCE, 0);
     } else if (k === EV_GOLD_BALL) {
       stamp(v, ST_GOLD_BALL, 0);
       v.flashT = v.t;
@@ -224,12 +304,48 @@ export function visEvents(v: Vis, s: SimState, reducedMotion: boolean): void {
     } else if (k === EV_BONK) {
       stamp(v, ST_BONK, 0);
       v.flashT = v.t;
+      v.powT = v.t;
+      v.powX = a;
+      v.powY = LANE_Y - 150;
     } else if (k === EV_BALL_LOST) {
       v.boostT = -1e6;
     } else if (k === EV_TIER) {
       v.badgeT = v.t;
       v.tierFlashT = v.t;
-      stamp(v, a === 2 ? ST_TIER2 : a === 3 ? ST_TIER3 : ST_TIER4, 0);
+      if (c === 1) {
+        v.unlockT = v.t;
+        v.locked = 0;
+        stamp(v, ST_UNLOCK, 0);
+      } else stamp(v, a === 2 ? ST_TIER2 : a === 3 ? ST_TIER3 : ST_TIER4, 0);
+    } else if (k === EV_GATE) {
+      if (a === 1) {
+        v.lockT = v.t;
+        v.locked = 1;
+      } else v.locked = 0;
+    } else if (k === EV_MULTI) {
+      v.multiT = v.t;
+      stamp(v, b === 2 ? ST_DOUBLE : b === 3 ? ST_TRIPLE : ST_QUAD, 0);
+    } else if (k === EV_SPAWN) {
+      if (b !== K_PUFFER) v.cartX = a;
+    } else if (k === EV_BALL_TOSS) {
+      v.cartT = v.t;
+      v.cartX = a;
+    } else if (k === EV_GULL) {
+      if (a === 1) {
+        v.gullT = v.t;
+        v.gullPhase = 1;
+        v.gullX = b;
+      } else if (a === 2) {
+        v.gullPhase = 2;
+        v.gullT = v.t;
+      } else {
+        v.gullPhase = a === 3 ? 3 : 0;
+        v.gullT = v.t;
+        if (a === 3) {
+          v.stealT = v.t;
+          stamp(v, ST_STOLEN, 0);
+        } else if (a === 5) stamp(v, ST_BLOCKED, 0);
+      }
     } else if (k === EV_BREAK) {
       v.badgeShakeT = v.t;
     } else if (k === EV_GOLDEN) {
@@ -249,7 +365,7 @@ export function visEvents(v: Vis, s: SimState, reducedMotion: boolean): void {
     } else if (k === EV_TIME) {
       v.timeT = v.t;
       stamp(v, a === 2 ? ST_OUT : ST_TIME, 0);
-      setPose(v, a === 2 ? POSE_DIZZY : POSE_FIST, 100000);
+      setPose(v, a === 2 ? POSE_SLUMP : POSE_FIST, 100000);
     } else if (k === EV_TIPOVER) {
       v.tipT = v.t;
       stamp(v, ST_TIPOVER, 0);
@@ -288,6 +404,63 @@ export function visFrame(v: Vis, s: SimState, frameMs: number, running: boolean)
     if (v.pose === POSE_BONKED) setPose(v, POSE_DIZZY, 700);
     else v.pose = POSE_IDLE;
   }
+  if (s.bounces > 1 || s.clock > 180) v.serveDone = 1;
+  // Shark: forced poses win; else the velocity blend (design 7.1).
+  const vx = (s.bv / SUB) * 60;
+  const ax = vx < 0 ? -vx : vx;
+  if (vx > 30) v.face = -1;
+  else if (vx < -30) v.face = 1;
+  let show = v.pose;
+  if (show === POSE_IDLE && !s.done) {
+    if (ax > 900) show = POSE_LEAN;
+    else if (ax > 60) {
+      // Tail-hop shuffle: idle, hop, idle, hop at 4-12 fps by speed.
+      const fps = 4 + (8 * (ax - 60)) / 840;
+      const before = Math.floor(v.hopPhase);
+      v.hopPhase += (dt / 1000) * fps;
+      const now = Math.floor(v.hopPhase);
+      if (now !== before && now % 2 === 0) v.hopLand = v.t;
+      show = now % 2 === 1 ? POSE_HOP : POSE_IDLE;
+    }
+    // Anticipation: an item within 120 fu above the rim inside the zone: chomp.
+    const bx = s.bx;
+    for (let i = 0; i < MAX_ITEMS; i++) {
+      if (s.iSt[i] !== S_FALL || s.iKind[i] === K_PUFFER) continue;
+      const above = LANE_Y * SUB - s.iY[i];
+      const dx = s.iX[i] - bx;
+      if (above > 0 && above < 120 * SUB && dx < HALF_ZONE * SUB && dx > -HALF_ZONE * SUB) {
+        show = POSE_CHOMP;
+        break;
+      }
+    }
+  }
+  v.show = show;
+  // The snack cart rattles along the track toward the next drop.
+  // It heads for the next pending drop (not a hazard) so it arrives first.
+  let nextAt = 1 << 30;
+  for (let r = 0; r < s.pN; r++) {
+    if (s.pKind[r] === K_PUFFER || s.pSpawn[r] >= nextAt) continue;
+    nextAt = s.pSpawn[r];
+    v.cartX = s.pX[r] / SUB;
+  }
+  const kc = 1 - Math.exp(-dt / 160);
+  v.cartPos += (v.cartX - v.cartPos) * kc;
+  // Rim notch glow: the next must-catch landing's projected x inside +-12 fu.
+  let soonest = 1 << 30;
+  let glow = 0;
+  for (let i = 0; i < MAX_ITEMS; i++) {
+    if (s.iSt[i] !== S_FALL || s.iMust[i] !== 1) continue;
+    const kd = s.iKind[i];
+    if (kd !== K_BANANA && kd !== K_BUNCH && kd !== K_LUCKY) continue;
+    const left = s.iLand[i] - (s.iAge[i] >> 8);
+    if (left < 0 || left >= soonest) continue;
+    soonest = left;
+    const lx = s.iX[i] + s.iVx[i] * left;
+    const d = lx - s.bx;
+    glow = d <= PERFECT_D * SUB && d >= -PERFECT_D * SUB ? 1 : 0;
+  }
+  const kg = 1 - Math.exp(-frameMs / 50);
+  v.notch += (glow - v.notch) * kg;
   // Rolling total (in step with the ladder note).
   const total = s.score + s.bonus;
   if (v.scoreShown < total) {
