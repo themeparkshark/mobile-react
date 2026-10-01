@@ -1,16 +1,21 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * Sharky Sprint Race lab server (DEV ONLY; never deployed).
+ * Sharky Rally lab server (DEV ONLY; never deployed). Design v7.1 section 11.
  *
- * Mirrors the Line Party server semantics for the 'sharky_race' game so two
- * simulators can race for real before WS1/WS7 wire the Laravel side:
+ * Mirrors the Line Party server semantics for the 'sharky_rally' game so two
+ * simulators can rally for real before WS1/WS7 wire the Laravel side:
  *   - one room per ride queue, 4 seats, empty seats are house-crew bots whose
  *     input logs are planned from (seed, seat, profile) by the SAME verifier
  *     bundle the server will run (so every phone replays them identically);
  *   - server seed per round, start_at = now + 3.5s, clock sync by ping;
- *   - 10 Hz display whispers relayed to the room (never trusted);
- *   - results only from server replays of each submitted swim proof;
+ *   - 10 Hz display whispers {step, d, y, score, crowd} relayed (never trusted);
+ *   - Bubble Gift: a sender's Overdrive start puffs a gift to the rival
+ *     directly behind it in live score (last place gifts the one ahead); the
+ *     server stamps {eventId} and the receiver logs ext bubble_gift(eventId);
+ *     a proof carrying a gift the server never issued is dq:gift;
+ *   - results only from server replays of each submitted swim proof, ranked
+ *     by verified score (within 1%, more Close Skims wins);
  *     a player who drops or never submits is ghost-filled by a bot plan;
  *   - nobody ever pauses the room; results autostart the next lobby.
  *
@@ -84,14 +89,14 @@ function startRound(r) {
   humans.forEach((m, i) => seats.push({ seat: i, kind: 'human', userId: m.id, name: m.name }));
   let crew = 0;
   while (seats.length < 4) {
-    const c = api.RACE_HOUSE_CREW[crew++ % api.RACE_HOUSE_CREW.length];
+    const c = api.RALLY_HOUSE_CREW[crew++ % api.RALLY_HOUSE_CREW.length];
     const seat = seats.length;
-    const plan = api.raceBot(seed, seat, c.profile);
-    seats.push({ seat, kind: 'bot', name: c.name, profile: c.profile, inputs: plan.inputs, finishStep: plan.finishStep, score: plan.score, finished: plan.finished });
+    const plan = api.rallyBot(seed, seat, c.profile);
+    seats.push({ seat, kind: 'bot', name: c.name, profile: c.profile, inputs: plan.inputs, finishStep: plan.finishStep, score: plan.score, closeSkims: plan.closeSkims, finished: plan.finished });
   }
   const roundId = `r${r.rideId}-${r.roundNo}`;
   const startAtMs = now() + START_LEAD_MS;
-  r.round = { roundId, seed, startAtMs, seats, entries: new Map(), finalized: false };
+  r.round = { roundId, seed, startAtMs, seats, entries: new Map(), finalized: false, live: new Map(), gifts: new Map(), giftSeq: 0, lastGiftTo: new Map() };
   r.phase = 'countdown';
   for (const m of r.members.values()) {
     const mySeat = seats.find((s) => s.userId === m.id);
@@ -118,23 +123,23 @@ function finalize(r) {
   clearTimers(r);
   const results = rd.seats.map((s) => {
     if (s.kind === 'bot') {
-      return { seat: s.seat, kind: 'bot', name: s.name, finished: s.finished, finishStep: s.finishStep, score: s.score, distance: 7500, verified: true, reason: 'ok', filledBy: null };
+      return { seat: s.seat, kind: 'bot', name: s.name, finished: s.finished, finishStep: s.finishStep, score: s.score, closeSkims: s.closeSkims, verified: true, reason: 'ok', filledBy: null };
     }
     const e = rd.entries.get(s.seat);
     if (e && e.verdict.ok) {
       return { seat: s.seat, kind: 'human', name: s.name, userId: s.userId, finished: e.proof.reached_gate, finishStep: e.proof.finish_step,
-        score: e.verdict.score, distance: e.proof.distance, verified: true, reason: 'ok', filledBy: null, flagged: e.verdict.plausibility.flagged };
+        score: e.verdict.score, closeSkims: e.proof.close_skims, verified: true, reason: 'ok', filledBy: null, flagged: e.verdict.plausibility.flagged };
     }
-    // Dropped / never submitted / failed replay: the ghost finishes the race.
-    const g = api.raceBot(rd.seed, s.seat, 'rookie');
+    // Dropped / never submitted / failed replay: the ghost finishes the rally.
+    const g = api.rallyBot(rd.seed, s.seat, 'rookie');
     return { seat: s.seat, kind: 'human', name: s.name, userId: s.userId, finished: g.finished, finishStep: g.finishStep, score: g.score,
-      distance: 7500, verified: true, reason: e ? e.verdict.reason : 'ghost_fill', filledBy: 'ghost' };
+      closeSkims: g.closeSkims, verified: true, reason: e ? e.verdict.reason : 'ghost_fill', filledBy: 'ghost' };
   });
-  results.sort((a, b) => api.raceRankKey(b.finished, b.finishStep, b.score, b.distance) - api.raceRankKey(a.finished, a.finishStep, a.score, a.distance));
+  results.sort(api.rallyCompare);
   results.forEach((x, i) => { x.placement = i + 1; x.points = [4, 2, 1, 0][i]; });
   r.phase = 'results';
   broadcast(r, { t: 'results', roundId: rd.roundId, results, nextLobbyAtMs: now() + RESULTS_MS });
-  log('results', rd.roundId, results.map((x) => `${x.placement}.${x.name}(${x.finishStep}${x.filledBy ? ' ghost' : ''}${x.reason !== 'ok' ? ' ' + x.reason : ''})`).join(' '));
+  log('results', rd.roundId, results.map((x) => `${x.placement}.${x.name}(${x.score}${x.filledBy ? ' ghost' : ''}${x.reason !== 'ok' ? ' ' + x.reason : ''})`).join(' '));
   r.timers.push(setTimeout(() => scheduleLobby(r), RESULTS_MS));
 }
 
@@ -170,7 +175,34 @@ wss.on('connection', (ws) => {
     }
     if (msg.t === 'w' && r.round) {
       const seat = r.round.seats.find((s) => s.userId === me.id);
-      if (seat) broadcast(r, { t: 'w', seat: seat.seat, step: msg.step | 0, d: msg.d | 0, y: msg.y | 0, f: msg.f | 0 }, ws);
+      if (seat) {
+        r.round.live.set(seat.seat, { score: msg.score | 0, step: msg.step | 0 });
+        broadcast(r, { t: 'w', seat: seat.seat, step: msg.step | 0, d: msg.d | 0, y: msg.y | 0, f: msg.f | 0, score: msg.score | 0, crowd: msg.crowd | 0 }, ws);
+      }
+      return;
+    }
+    if (msg.t === 'gift' && r.round && !r.round.finalized) {
+      // Bubble Gift: to the rival directly behind the sender in live score
+      // (last place gifts the one just ahead). Humans only; one per 5s each.
+      const rd = r.round;
+      const seat = rd.seats.find((s) => s.userId === me.id);
+      if (!seat) return;
+      const scoreOf = (s) => (s.kind === 'human' ? (rd.live.get(s.seat)?.score ?? 0) : 0);
+      const others = rd.seats.filter((s) => s.seat !== seat.seat);
+      const mine = scoreOf(seat);
+      const behind = others.filter((s) => scoreOf(s) <= mine).sort((a, b) => scoreOf(b) - scoreOf(a));
+      const ahead = others.filter((s) => scoreOf(s) > mine).sort((a, b) => scoreOf(a) - scoreOf(b));
+      const target = behind[0] || ahead[0];
+      if (!target || target.kind !== 'human') return; // ghosts never receive gifts
+      const t = now();
+      if (t - (rd.lastGiftTo.get(target.seat) || 0) < 5000) return;
+      rd.lastGiftTo.set(target.seat, t);
+      const eventId = ++rd.giftSeq;
+      rd.gifts.set(eventId, { from: seat.seat, to: target.seat });
+      const tm = [...r.members.values()].find((m) => m.id === target.userId);
+      if (tm) send(tm.ws, { t: 'gift', eventId, from: seat.seat, fromName: seat.name, serverMs: t });
+      send(ws, { t: 'gift_sent', eventId, to: target.seat, toName: target.name });
+      log('gift', seat.name, '->', target.name, eventId);
       return;
     }
     if (msg.t === 'bg') {
@@ -184,7 +216,13 @@ wss.on('connection', (ws) => {
       const seat = r.round.seats.find((s) => s.userId === me.id);
       if (!seat || r.round.entries.has(seat.seat)) return;
       const proof = msg.proof || {};
-      const verdict = proof.seed === r.round.seed && proof.mode === 'race' ? api.verifySwimProof(proof) : { ok: false, reason: 'foreign_round', score: 0, plausibility: { flagged: false } };
+      let verdict = proof.seed === r.round.seed && proof.mode === 'rally' ? api.verifySwimProof(proof) : { ok: false, reason: 'foreign_round', score: 0, plausibility: { flagged: false } };
+      // Every logged gift must be one the server issued to this seat.
+      if (verdict.ok) {
+        const gifts = api.core.decodeInputs(String(proof.inputs || '')).filter((x) => x.kind === api.core.IN_EXT && x.sub === api.core.EXT_BUBBLE_GIFT);
+        const bad = gifts.some((x) => { const g = r.round.gifts.get(x.arg); return !g || g.to !== seat.seat; });
+        if (bad) verdict = { ok: false, reason: 'dq:gift', score: 0, plausibility: { flagged: true } };
+      }
       r.round.entries.set(seat.seat, { proof, verdict });
       send(ws, { t: 'entry', roundId: r.round.roundId, verdict: verdict.reason, score: verdict.score });
       log('submit', me.name, verdict.reason, 'score', verdict.score, 'finish', proof.finish_step);
@@ -201,4 +239,4 @@ wss.on('connection', (ws) => {
     log('leave', me.name);
   });
 });
-log(`sharky lab race server on ws://localhost:${PORT}`);
+log(`sharky lab rally server on ws://localhost:${PORT}`);

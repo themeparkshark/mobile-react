@@ -1,6 +1,6 @@
 /**
  * Swim proof: build (client) and verify (server Node verifier, tests).
- * The payload is the single source of truth in design section 11.2.
+ * The payload is the single source of truth in design v7.1 section 12.2.
  * tools/sharky/build-verifier.cjs bundles this file plus core.ts into
  * verifiers/swim/verify.cjs for WS7 (stdin JSON -> stdout JSON).
  */
@@ -31,7 +31,9 @@ export interface SwimProof {
   hearts_left: number;
   tokens: number;
   reached_gate: boolean;
-  frenzy_banked: number;
+  frenzy_count: number;
+  close_skims: number;
+  graze_steps: number;
   state_hash: number;
   elapsed_ms: number;
   finish_step: number;
@@ -59,7 +61,9 @@ export function buildSwimProof(cfg: SimConfig, entries: InputEntry[], s: SimStat
     hearts_left: s.hearts,
     tokens: s.tokens,
     reached_gate: s.endReason === END_GATE || s.endReason === END_FINISH,
-    frenzy_banked: s.banked,
+    frenzy_count: s.frenzyCount,
+    close_skims: s.stCloseSkims,
+    graze_steps: s.stHaloSteps,
     state_hash: finalHash(s),
     elapsed_ms: Math.round(elapsedMs),
     finish_step: s.finishStep,
@@ -75,7 +79,7 @@ export interface SwimVerdict {
   sim_version: string;
 }
 
-/** Max input events in any 2s (120-step) window: 30/s (design 11.3). */
+/** Max input events in any 2s (120-step) window: 30/s (design 12.3). */
 export const INPUT_RATE_MAX_PER_2S = 60;
 
 export function inputRateOk(entries: InputEntry[]): boolean {
@@ -86,13 +90,13 @@ export function inputRateOk(entries: InputEntry[]): boolean {
   return true;
 }
 
-const MODES: Record<string, number> = { queue: 0, ride: 1, race: 2, ghost: 3, practice: 4 };
+const MODES: Record<string, number> = { queue: 0, ride: 1, rally: 2, ghost: 3, practice: 4 };
 
 /** Replay a proof and compare every claimed field. Never trusts the client. */
 export function verifySwimProof(p: SwimProof): SwimVerdict {
   const fail = (reason: string, score = 0): SwimVerdict => ({
     ok: false, reason, score, win: false, sim_version: SIM_VERSION,
-    plausibility: { reactN: 0, reactMeanSteps: 0, reactFast: 0, holdEntropyBits: 0, perfectTightRatio: 0, flagged: false, reasons: [] },
+    plausibility: { reactN: 0, reactMeanSteps: 0, reactFast: 0, holdEntropyBits: 0, perfectTightRatio: 0, closeShare: 0, maxConsecClose: 0, flagged: false, reasons: [] },
   });
   if (!p || p.game !== 'swim') return fail('bad_game');
   if (p.sim_version !== SIM_VERSION) return fail('unknown_sim_version');
@@ -106,9 +110,9 @@ export function verifySwimProof(p: SwimProof): SwimVerdict {
   } catch {
     return fail('bad_inputs');
   }
-  // Design v5 (11.3): at most 30 input events per second over any 2s window.
-  // Expert feathering at 7-8 taps/s is 14-16 events/s plus Dashes; the replay
-  // proves physical plausibility and 11.4 catches bots.
+  // Design 12.3: at most 30 input events per second over any 2s window.
+  // Expert feathering at 7-8 taps/s is 14-16 events/s; the replay proves
+  // physical plausibility and 12.4 catches bots.
   if (!inputRateOk(entries)) return fail('input_rate');
   if (entries.length && entries[entries.length - 1].step > p.steps_total) return fail('input_after_end');
   const cfg: SimConfig = { seed: p.seed | 0, mode, difficulty: p.difficulty | 0, tier: p.unlock_tier | 0, runs: p.runs | 0 };
@@ -119,7 +123,9 @@ export function verifySwimProof(p: SwimProof): SwimVerdict {
     ['distance', (s.dist >> 8) === p.distance],
     ['hearts', s.hearts === p.hearts_left],
     ['tokens', s.tokens === p.tokens],
-    ['frenzy_banked', s.banked === p.frenzy_banked],
+    ['frenzy_count', s.frenzyCount === p.frenzy_count],
+    ['close_skims', s.stCloseSkims === p.close_skims],
+    ['graze_steps', s.stHaloSteps === p.graze_steps],
     ['state_hash', finalHash(s) === p.state_hash],
     ['reached_gate', (s.endReason === END_GATE || s.endReason === END_FINISH) === p.reached_gate],
   ];

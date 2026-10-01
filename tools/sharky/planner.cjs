@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Planner bots for the chunk gates (design 14.7).
+ * Planner bots for the chunk gates (design v7.1 4.4, 14.11).
  *
  *   dfsClear(s, opts): depth-first search over hold/release decisions every
  *   `every` steps, backtracking on any hit. With every=1 it is the
@@ -36,7 +36,7 @@ function dfsClear(start, opts = {}) {
     if ((s.dist >> 8) >= untilX || s.phase !== core.PH_PLAY) return true;
     if (++nodes > maxNodes) return false;
     // Heuristic ordering: try the choice that moves toward the bot target first.
-    const ty = core.botTargetY(s, (s.speed >> 8) + 120);
+    const ty = core.botTargetY(s, (s.speed >> 8) + 120, opts.hug ? 1 : 0);
     const first = (s.y >> 8) > ty ? 1 : 0;
     for (const hold of [first, 1 - first]) {
       const c = core.cloneSim(s);
@@ -66,7 +66,7 @@ function chunkSim(chunkId, speedU, opts = {}) {
 module.exports = { core, dfsClear, chunkSim, advance };
 
 if (require.main === module) {
-  const speed = Number(process.argv[2] || 560);
+  const speed = Number(process.argv[2] || 520);
   for (const c of core.CHUNKS) {
     const res = [];
     for (const every of [1, 4, 7]) {

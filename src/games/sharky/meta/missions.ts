@@ -6,6 +6,7 @@
 
 export interface RunStats {
   skims: number;
+  closeSkims: number;
   perfects: number;
   frenzies: number;
   tokens: number;
@@ -13,7 +14,7 @@ export interface RunStats {
   score: number;
   gates: number;
   coins: number;
-  dashes: number;
+  overdrives: number;
   hits: number;
 }
 
@@ -28,15 +29,16 @@ export interface MissionDef {
 }
 
 export const MISSION_POOL: MissionDef[] = [
-  { id: 'skim10', text: 'Skim 10 times', target: 10, kind: 'sum', unlock: 2, read: (s) => s.skims },
+  { id: 'skim10', text: 'Skim past 10 hazards', target: 10, kind: 'sum', unlock: 0, read: (s) => s.skims },
+  { id: 'close5', text: 'Land 5 Close Skims in one run', target: 5, kind: 'best', unlock: 1, read: (s) => s.closeSkims },
   { id: 'perfect3', text: 'Perfect 3 rings in one run', target: 3, kind: 'best', unlock: 0, read: (s) => s.perfects },
   { id: 'frenzy1', text: 'Reach a FRENZY', target: 1, kind: 'best', unlock: 0, read: (s) => s.frenzies },
   { id: 'tokens3', text: 'Grab all 3 Ride Tokens', target: 3, kind: 'best', unlock: 1, read: (s) => s.tokens },
   { id: 'chomp5', text: 'Chomp 5 prize boxes or puffers', target: 5, kind: 'sum', unlock: 1, read: (s) => s.chomps },
-  { id: 'score3000', text: 'Score 3,000 in one run', target: 3000, kind: 'best', unlock: 0, read: (s) => s.score },
+  { id: 'score5000', text: 'Score 5,000 in one run', target: 5000, kind: 'best', unlock: 0, read: (s) => s.score },
   { id: 'gates3', text: 'Reach 3 Tide Gates in one run', target: 3, kind: 'best', unlock: 0, read: (s) => s.gates },
   { id: 'coins60', text: 'Collect 60 coins in one run', target: 60, kind: 'best', unlock: 0, read: (s) => s.coins },
-  { id: 'dash6', text: 'Boost Dash 6 times', target: 6, kind: 'sum', unlock: 2, read: (s) => s.dashes },
+  { id: 'overdrive3', text: 'Fire Overdrive 3 times', target: 3, kind: 'sum', unlock: 2, read: (s) => s.overdrives },
   { id: 'clean', text: 'Finish a run without a hit', target: 1, kind: 'best', unlock: 0, read: (s) => (s.hits === 0 && s.score > 0 ? 1 : 0) },
 ];
 

@@ -1,5 +1,5 @@
 /**
- * Sharky Swim "Tide Run": the deterministic integer sim.
+ * Sharky Swim "Tide Run": the deterministic integer sim (design v7.1, tide-run-5).
  *
  * ONE file, self-contained (no imports), every function a worklet. The same
  * code runs on the UI thread (Reanimated), in `node --test`, in the ghost /
@@ -11,17 +11,25 @@
  *   - no Math.sin / sqrt / random: a Bhaskara integer sine and mulberry32;
  *   - input is a log of (step, kind, arg); nothing reads wall time.
  *
- * Coordinates: world units (u). The fixed view is 960 x 1000u on every device
+ * Coordinates: world units (u). The fixed view is 720 x 1000u on every device
  * (design 3.2). The shark's world x is `dist`; entities carry absolute world x.
+ *
+ * v7.1 in one paragraph: one input (hold to rise), graze halos that pay per
+ * step and credit a Skim or Close Skim at pass end, one chain that feeds a
+ * Frenzy (x8, banks immediately), a Boost meter that arms an automatic
+ * Overdrive on the next Close Skim or Perfect ring, Neutral Settle and soft
+ * edges for glance-aways, a hit that costs a heart and a recoverable Coin
+ * Scatter and nothing else, a flat tide clock (+4s per gate), a Gate Bonus
+ * that cashes the chain, and a pocket that collapses when you hold through it.
  */
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-export const SIM_VERSION_TAG = 'tide-run-4';
+export const SIM_VERSION_TAG = 'tide-run-5';
 export const STEP_HZ = 60;
-export const VIEW_W = 960;
+export const VIEW_W = 720;
 export const VIEW_H = 1000;
 export const SURFACE_Y = 40;
 export const FLOOR_Y = 960;
@@ -29,10 +37,10 @@ export const Q = 256;
 
 export const MODE_QUEUE = 0;
 export const MODE_RIDE = 1;
-export const MODE_RACE = 2;
+export const MODE_RALLY = 2;
 export const MODE_GHOST = 3;
 export const MODE_PRACTICE = 4;
-export const MODE_NAMES = ['queue', 'ride', 'race', 'ghost', 'practice'];
+export const MODE_NAMES = ['queue', 'ride', 'rally', 'ghost', 'practice'];
 
 export const PH_PLAY = 0;
 export const PH_POCKET = 1;
@@ -43,15 +51,16 @@ export const END_NONE = 0;
 export const END_TIME = 1;
 export const END_WIPEOUT = 2;
 export const END_GATE = 3; // ride: reached the Ride Gate (win)
-export const END_FINISH = 4; // race: crossed the finish
+export const END_FINISH = 4; // rally: crossed the finish
 export const END_ABORT = 5;
 
 // Input kinds (log format: varint(stepDelta << 2 | kind)).
 export const IN_PRESS = 0;
 export const IN_RELEASE = 1;
-export const IN_DASH = 2;
+/** Reserved (was the v6 Dash and the Rally Boost button, both cut in v7.1). Ignored. */
+export const IN_RESERVED = 2;
 export const IN_EXT = 3;
-// Ext subkinds (design 11.2).
+// Ext subkinds (design 12.2).
 export const EXT_PAUSE_RESUME = 1;
 export const EXT_CREW_FRENZY = 2;
 export const EXT_RESCUE_SPAWN = 3;
@@ -60,6 +69,7 @@ export const EXT_LINE_BOOST = 5;
 export const EXT_DRAFT_ON = 6;
 export const EXT_DRAFT_OFF = 7;
 export const EXT_RIDE_RESCUE = 8;
+export const EXT_BUBBLE_GIFT = 10;
 
 // Entity types.
 export const E_NONE = 0;
@@ -74,16 +84,23 @@ export const E_TORPEDO = 8;
 export const E_SCATTER = 9;
 export const E_GATE = 10;
 export const E_SHIELD = 11;
+export const E_GIFT = 12;
 
 // Entity flags.
-export const F_SKIMC = 1; // skim candidate (visible water gap seen)
-export const F_CLOSE = 2; // sprites overlapped: no skim this pass
+export const F_PASS = 1; // a graze pass is open (shark inside the halo)
+export const F_SMASH = 2; // smashed in Overdrive
 export const F_DONE = 4; // collected / resolved / passed
 export const F_HIT = 8; // hit the shark
-export const F_TELE = 16; // telegraph fired
+export const F_SKIMMED = 16; // Skim credit already decided for this hazard
 export const F_BADGE = 32; // edge badge fired
 export const F_GHOST = 64; // phased (float) while overlapping
-export const F_TOKEN_SLOT = 128;
+export const F_GATE_RING = 128; // the Gate Rush ring in an arch
+
+// Coin flags (ep2): bit0 Close-line, bit1 bottom cap side, bits2-3 pylon class,
+// bit4 circle hug, bit5 Bubble Gift coin, bit6 Gate Rush coin.
+export const CF_CLOSE = 1;
+export const CF_GIFT = 32;
+export const CF_RUSH = 64;
 
 // Gate kinds.
 export const G_TIDE = 0;
@@ -94,27 +111,27 @@ export const G_FINISH = 3;
 // Events (sim -> presentation). Stride EV_STRIDE: kind, a, b, c, d.
 export const EV_STRIDE = 5;
 export const EV_CAP = 48;
-export const EV_COIN = 1;
-export const EV_LINE = 2;
-export const EV_RING = 3;
-export const EV_SKIM = 4;
-export const EV_CHOMP = 5;
+export const EV_COIN = 1; // x, y, ladder, flags (1 regrab, 2 star, 4 close-line, 8 rush, 16 gift)
+export const EV_LINE = 2; // x, y, count, 0
+export const EV_RING = 3; // x, y, perfect, gap
+export const EV_SKIM = 4; // x, y, close, entity
+export const EV_CHOMP = 5; // x, y, kind, pts (kind E_PYLON/E_JELLY/E_TORPEDO = Overdrive smash)
 export const EV_TOKEN = 6;
 export const EV_TOKEN_SET = 7;
-export const EV_BOOST_SEG = 8;
-export const EV_DASH = 9;
-export const EV_FIZZ = 10;
-export const EV_HIT = 11;
+export const EV_BOOST_SEG = 8; // segments 1..3
+export const EV_OD_ARMED = 9;
+export const EV_OD_START = 10; // x, y, trigger (1 close skim, 2 perfect)
+export const EV_HIT = 11; // x, y, hearts, type
 export const EV_SHIELD_POP = 12;
-export const EV_CHAIN_TIER = 13;
-export const EV_CHAIN_BREAK = 14;
+export const EV_CHAIN_TIER = 13; // tier, chain
+export const EV_CHAIN_BREAK = 14; // tier, chain, reason (0 timeout, 3 wipeout, 4 surface, 5 floor)
 export const EV_FRENZY_START = 15;
 export const EV_FRENZY_END = 16;
-export const EV_BOUNCE = 17;
-export const EV_GATE = 18;
+export const EV_BOUNCE = 17; // which (0 surface, 1 floor), x
+export const EV_GATE = 18; // bonusSteps, kind, step, gates
 export const EV_POCKET_END = 19;
-export const EV_PIP = 20;
-export const EV_BADGE = 21;
+export const EV_PIP = 20; // n (3 = last), short
+export const EV_BADGE = 21; // entity, type
 export const EV_TORPEDO_TRACK = 22;
 export const EV_TORPEDO_LOCK = 23;
 export const EV_PUFFER_WIGGLE = 24;
@@ -127,25 +144,35 @@ export const EV_REVIVE = 30;
 export const EV_END = 31;
 export const EV_CLOCK_TICK = 32;
 export const EV_SPRINT = 33;
-export const EV_SCATTER = 34;
+export const EV_SCATTER = 34; // n, x, y, deducted
 export const EV_SHIELD_GET = 35;
 export const EV_LINE_BOOST = 36;
-export const EV_SPEED_BOOST = 37;
-export const EV_REGAIN = 38;
-export const EV_SCORE = 39;
+export const EV_OD_END = 37;
+export const EV_REGRAB = 38; // x, y, count, refund
+export const EV_SCORE = 39; // score
 export const EV_DRAFT = 40;
 export const EV_GATE_NEAR = 41;
+export const EV_GRAZE = 42; // close, entity, hazard edge y, 0
+export const EV_TOUCH = 43; // which (0 surface, 1 floor), x
+export const EV_GATE_BONUS = 44; // pts, mult, frenzy, gateKind
+export const EV_RUSH = 45; // gateX, gateKind
+export const EV_GIFT_IN = 46; // eventId, x, y
+export const EV_GIFT_POP = 47; // x, y, eventId
+export const EV_SETTLE = 48; // y
+export const EV_PASS = 49; // hazardType, speed (u/s): a hazard's centre passes the shark (Doppler)
 
-// Shark geometry (u).
-export const SHARK_RX = 46;
-export const SHARK_RY = 26;
-export const SIL_RX = 60;
-export const SIL_RY = 36;
-export const SHARK_MIN_Y = SURFACE_Y + 30;
-export const SHARK_MAX_Y = FLOOR_Y - 30;
+// Shark geometry (u). v7.1: art and hitbox x1.2 (design 3.1).
+export const SHARK_RX = 55;
+export const SHARK_RY = 31;
+export const SIL_RX = 72;
+export const SIL_RY = 43;
+export const SHARK_MIN_Y = SURFACE_Y + 34;
+export const SHARK_MAX_Y = FLOOR_Y - 34;
+/** The nose sits this far ahead of the shark centre (anchor + 90u). */
+export const NOSE_OFF = 90;
 
 // Hazard geometry (u).
-export const PYLON_W = 100;
+export const PYLON_W = 120;
 export const HIT_INSET = 10;
 export const JELLY_R = 48;
 export const JELLY_BOB = 60;
@@ -162,22 +189,35 @@ export const COIN_R = 22;
 export const BOX_R = 40;
 export const TOKEN_R = 34;
 export const RING_R = 70;
-export const RING_PERFECT = 16;
+export const RING_PERFECT = 18;
 export const SHIELD_R = 40;
+/** Tide / Ride Gate arch art half-width at 60% (design 4.3), for the exclusion zone. */
+export const ARCH_HALF = 332;
+export const GATE_PAD_BEFORE = 300;
+export const GATE_PAD_AFTER = 200;
+export const ART_PAD = 40;
+
+// Graze (design 3.3): bands in u from the silhouette to the art edge.
+export const GRAZE_CLOSE = 14;
+export const GRAZE_HALO = 28;
+export const GRAZE_MIN_STEPS = 6;
+export const GRAZE_PTS_CAP = 80;
+export const GRAZE_BOOST_CAP = 50;
 
 // Systems.
 export const HEARTS = 3;
 export const IFRAMES = 60;
-export const STUMBLE_HOLD = 15;
-export const STUMBLE_RAMP = 33;
-export const DASH_STEPS = 14;
-export const DASH_BUFFER = 6;
-export const CONTACT_GRACE = 5;
 export const BOOST_MAX = 300;
-export const BOOST_COST = 100;
+export const BOOST_SEG = 100;
+export const OD_STEPS = 150;
+export const OD_IFRAMES = 36;
 export const CHAIN_WINDOW = 120;
 export const FRENZY_STEPS = 360;
 export const SCATTER_STEPS = 90;
+export const SETTLE_IDLE = 36;
+export const SETTLE_IDLE_EDGE = 9;
+export const SETTLE_VMAX = 300;
+export const SOFT_VY = 300;
 export const FLOAT_ARM = 108;
 export const FLOAT_IN = 24;
 export const FLOAT_FREEZE = 360;
@@ -187,11 +227,15 @@ export const WIPE_ANIM = 54;
 export const REVIVE_WINDOW = 180;
 export const CLOCK_BASE = 1800; // 30s
 export const CLOCK_CAP = 3600; // 60s total
+export const GATE_CLOCK = 240; // +4s per Tide Gate, flat
 export const POCKET_QUEUE = 150;
 export const POCKET_RIDE = 120;
+export const POCKET_SHORT = 48;
 export const LINE_BOOST_STEPS = 60;
 export const LINE_BOOST_MAX = 240;
-export const DRAFT_MAX = 90;
+export const DRAFT_MAX = 120;
+export const GIFT_COOL = 300;
+export const RALLY_LEN_HALF = 2000;
 
 // ---------------------------------------------------------------------------
 // Integer helpers
@@ -226,7 +270,6 @@ export function isin(p: number): number {
     t -= 512;
     sign = -1;
   }
-  // x in degrees*? Use Bhaskara on t in [0,512) mapped to [0,180) degrees.
   // sin(x) ~ 16x(180-x) / (40500 - 4x(180-x)); x = t*180/512.
   const x = t * 180; // scaled by 512
   const a = x * (92160 - x); // (x)(180*512 - x), scaled by 512^2
@@ -275,9 +318,7 @@ export function fnv(h: number, v: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Chunks (authored). Entities: [type, x, y, p1, p2]. Coins: p1 = local line.
-// Pylon: y = gap centre, p1 = gap class (0 std, 1 wide, 2 tight).
-// Jelly: p1 = bob phase (0..1023). Token: slot on the risky line.
+// Chunks (authored in tools/sharky/chunks-src.cjs). Entities: [type, x, y, p1, p2].
 // ---------------------------------------------------------------------------
 
 export interface Chunk {
@@ -288,158 +329,93 @@ export interface Chunk {
   zone: number;
   tier: number;
   breather: number;
+  /** The lane (y) the chunk exits on: the Gate Rush coin line starts here. */
+  exitY: number;
   e: number[];
 }
 
-// Coin line helper data is authored inline as flat numbers for speed.
+// CHUNKS-BEGIN (generated by tools/sharky/chunks-src.cjs; edit the source, then run it)
 export const CHUNKS: Chunk[] = [
-  {
-    // 0: Lagoon warm-up: coin arcs that teach hold and release. No hazards.
-    id: 0, name: 'lagoon_warmup', len: 1100, diff: 1, zone: 0, tier: 0, breather: 1,
+  { id: 0, name: 'lagoon_warmup', len: 1035, diff: 1, zone: 0, tier: 0, breather: 1, exitY: 500,
     e: [
-      1, 160, 500, 0, 0, 1, 220, 470, 0, 0, 1, 280, 430, 0, 0, 1, 340, 390, 0, 0, 1, 400, 360, 0, 0, 1, 460, 350, 0, 0,
-      1, 520, 360, 0, 0, 1, 580, 390, 0, 0,
-      1, 680, 470, 1, 0, 1, 740, 530, 1, 0, 1, 800, 590, 1, 0, 1, 860, 640, 1, 0, 1, 920, 660, 1, 0, 1, 980, 650, 1, 0,
-      2, 1060, 600, 0, 0,
-    ],
-  },
-  {
-    // 1: Pylon trio.
-    id: 1, name: 'pylon_trio', len: 1000, diff: 2, zone: 1, tier: 0, breather: 0,
+      1, 69, 520, 0, 0, 1, 139, 411, 0, 0, 1, 209, 357, 0, 0, 1, 279, 357, 0, 0,
+      1, 349, 411, 0, 0, 1, 419, 520, 0, 0, 1, 541, 470, 1, 0, 1, 611, 590, 1, 0,
+      1, 681, 630, 1, 0, 1, 751, 590, 1, 0, 1, 821, 470, 1, 0, 2, 943, 470, 0, 0,
+    ] },
+  { id: 1, name: 'pylon_pair', len: 1104, diff: 2, zone: 1, tier: 0, breather: 0, exitY: 640,
     e: [
-      5, 120, 470, 0, 0, 1, 150, 470, 0, 0, 1, 210, 470, 0, 0,
-      1, 330, 520, 1, 0, 1, 390, 560, 1, 0,
-      5, 470, 600, 0, 0, 1, 500, 600, 1, 0, 1, 560, 600, 1, 0,
-      3, 640, 260, 0, 0,
-      5, 800, 420, 0, 0, 1, 830, 420, 2, 0, 1, 890, 420, 2, 0,
-    ],
-  },
-  {
-    // 2: Jelly drift, weave between bobbing lanterns.
-    id: 2, name: 'jelly_drift', len: 900, diff: 2, zone: 1, tier: 0, breather: 0,
+      5, 92, 300, 0, 0, 1, 81, 161, 0, 1, 1, 151, 161, 0, 1, 1, 221, 161, 0, 1,
+      5, 667, 690, 0, 0,
+    ] },
+  { id: 2, name: 'jelly_drift', len: 1104, diff: 2, zone: 1, tier: 0, breather: 0, exitY: 300,
     e: [
-      6, 160, 300, 0, 0, 6, 420, 680, 512, 0, 6, 680, 330, 256, 0,
-      1, 150, 560, 0, 0, 1, 210, 560, 0, 0, 1, 270, 540, 0, 0,
-      2, 420, 380, 0, 0,
-      1, 560, 600, 1, 0, 1, 620, 620, 1, 0, 1, 680, 640, 1, 0,
-      3, 820, 780, 0, 0,
-    ],
-  },
-  {
-    // 3: Ring lane (breather): 3 rings then a coin line.
-    id: 3, name: 'ring_lane', len: 800, diff: 1, zone: 1, tier: 0, breather: 1,
+      6, 184, 300, 0, 0, 6, 529, 520, 512, 0, 2, 529, 270, 0, 0, 6, 897, 760, 256, 0,
+    ] },
+  { id: 3, name: 'ring_lane', len: 874, diff: 1, zone: 1, tier: 0, breather: 1, exitY: 330,
     e: [
-      2, 120, 520, 0, 0, 2, 300, 460, 0, 0, 2, 480, 400, 0, 0,
-      1, 580, 400, 0, 0, 1, 640, 420, 0, 0, 1, 700, 450, 0, 0, 1, 760, 490, 0, 0,
-    ],
-  },
-  {
-    // 4: Pylon slalom: alternating high and low gaps.
-    id: 4, name: 'pylon_slalom', len: 1300, diff: 4, zone: 2, tier: 0, breather: 0,
+      2, 92, 420, 0, 0, 2, 334, 360, 0, 0, 2, 575, 300, 0, 0, 1, 644, 300, 0, 0,
+      1, 714, 330, 0, 0, 1, 784, 360, 0, 0,
+    ] },
+  { id: 4, name: 'pylon_slalom', len: 1150, diff: 4, zone: 2, tier: 0, breather: 0, exitY: 320,
     e: [
-      5, 100, 330, 0, 0, 1, 130, 330, 0, 0,
-      5, 520, 680, 0, 0, 1, 550, 680, 1, 0, 1, 380, 520, 1, 0, 1, 440, 610, 1, 0,
-      5, 940, 360, 0, 0, 1, 970, 360, 2, 0, 1, 800, 530, 2, 0, 1, 860, 440, 2, 0,
-      3, 700, 850, 0, 0,
-      2, 1200, 480, 0, 0,
-    ],
-  },
-  {
-    // 5: Jelly curtain: a column of lanterns with one gap, coins through it.
-    id: 5, name: 'jelly_curtain', len: 1000, diff: 5, zone: 2, tier: 0, breather: 0,
+      5, 69, 300, 0, 0, 5, 575, 690, 0, 0, 1, 564, 551, 0, 1, 1, 634, 551, 0, 1,
+      1, 704, 551, 0, 1, 3, 736, 870, 0, 0, 5, 1012, 320, 1, 0,
+    ] },
+  { id: 5, name: 'jelly_curtain', len: 1081, diff: 5, zone: 2, tier: 0, breather: 0, exitY: 700,
     e: [
-      6, 300, 170, 0, 0, 6, 300, 330, 0, 0, 6, 300, 770, 0, 0, 6, 300, 900, 0, 0,
-      1, 200, 540, 0, 0, 1, 260, 540, 0, 0, 1, 320, 540, 0, 0, 1, 380, 540, 0, 0,
-      6, 720, 420, 512, 0, 6, 720, 880, 512, 0,
-      1, 640, 660, 1, 0, 1, 700, 660, 1, 0, 1, 760, 660, 1, 0,
-      3, 880, 200, 0, 0,
-    ],
-  },
-  {
-    // 6: Box bounty: prize boxes on the lines between pylons.
-    id: 6, name: 'box_bounty', len: 1000, diff: 3, zone: 1, tier: 1, breather: 0,
+      6, 299, 480, 0, 0, 6, 299, 620, 0, 0, 6, 299, 760, 0, 0, 6, 299, 900, 0, 0,
+      2, 299, 250, 0, 0, 6, 805, 160, 512, 0, 6, 805, 520, 512, 0,
+    ] },
+  { id: 6, name: 'box_bounty', len: 1150, diff: 3, zone: 1, tier: 1, breather: 0, exitY: 680,
     e: [
-      4, 160, 420, 0, 0, 4, 280, 560, 0, 0,
-      5, 440, 500, 1, 0, 1, 470, 500, 0, 0, 1, 530, 500, 0, 0,
-      4, 640, 330, 0, 0, 3, 700, 170, 0, 0,
-      5, 840, 380, 0, 0, 1, 870, 380, 1, 0, 1, 930, 400, 1, 0,
-    ],
-  },
-  {
-    // 7: Puffer patrol: pass them early or Dash through.
-    id: 7, name: 'puffer_patrol', len: 1000, diff: 4, zone: 2, tier: 2, breather: 0,
+      4, 115, 380, 0, 0, 5, 437, 290, 1, 0, 1, 425, 121, 0, 5, 1, 495, 121, 0, 5,
+      1, 565, 121, 0, 5, 3, 782, 200, 0, 0, 5, 966, 700, 0, 0,
+    ] },
+  { id: 7, name: 'puffer_patrol', len: 1150, diff: 4, zone: 2, tier: 1, breather: 0, exitY: 300,
     e: [
-      7, 200, 500, 0, 0,
-      1, 140, 300, 0, 0, 1, 200, 300, 0, 0, 1, 260, 300, 0, 0,
-      7, 480, 320, 0, 0, 7, 520, 720, 0, 0,
-      1, 500, 520, 1, 0, 1, 560, 520, 1, 0,
-      3, 520, 880, 0, 0,
-      7, 800, 540, 0, 0, 2, 820, 290, 0, 0,
-    ],
-  },
-  {
-    // 8: Puffer in the pylon exit.
-    id: 8, name: 'puffer_pylon', len: 1100, diff: 6, zone: 2, tier: 2, breather: 0,
+      7, 207, 500, 0, 0, 1, 126, 421, 0, 17, 1, 196, 421, 0, 17, 1, 266, 421, 0, 17,
+      7, 598, 320, 0, 0, 7, 633, 720, 0, 0, 3, 621, 880, 0, 0, 4, 966, 300, 0, 0,
+    ] },
+  { id: 8, name: 'puffer_pylon', len: 1150, diff: 6, zone: 2, tier: 1, breather: 0, exitY: 380,
     e: [
-      5, 140, 420, 0, 0, 1, 170, 420, 0, 0,
-      7, 420, 460, 0, 0, 1, 380, 640, 1, 0, 1, 440, 660, 1, 0, 1, 500, 640, 1, 0,
-      5, 700, 640, 0, 0, 1, 730, 640, 2, 0,
-      7, 960, 380, 0, 0, 3, 960, 820, 0, 0,
-    ],
-  },
-  {
-    // 9: Torpedo alley: a runaway bumper boat plus a pylon.
-    id: 9, name: 'torpedo_alley', len: 1200, diff: 5, zone: 2, tier: 3, breather: 0,
+      5, 46, 300, 0, 0, 1, 35, 161, 0, 1, 1, 105, 161, 0, 1, 1, 175, 161, 0, 1,
+      7, 437, 460, 0, 0, 5, 736, 690, 0, 0, 7, 1058, 380, 0, 0,
+    ] },
+  { id: 9, name: 'torpedo_alley', len: 1150, diff: 5, zone: 2, tier: 3, breather: 0, exitY: 700,
     e: [
-      8, 300, 500, 0, 0,
-      1, 200, 360, 0, 0, 1, 260, 360, 0, 0, 1, 320, 360, 0, 0, 1, 380, 360, 0, 0,
-      5, 820, 540, 1, 0, 1, 850, 540, 1, 0,
-      3, 1000, 240, 0, 0,
-      2, 1100, 560, 0, 0,
-    ],
-  },
-  {
-    // 10: Storm mix.
-    id: 10, name: 'storm_mix', len: 1300, diff: 8, zone: 3, tier: 3, breather: 0,
+      8, 437, 500, 0, 0, 5, 805, 690, 1, 0, 1, 793, 859, 0, 7, 1, 863, 859, 0, 7,
+      1, 933, 859, 0, 7, 3, 1035, 240, 0, 0,
+    ] },
+  { id: 10, name: 'storm_mix', len: 1150, diff: 8, zone: 3, tier: 3, breather: 0, exitY: 860,
     e: [
-      5, 120, 400, 0, 0, 1, 150, 400, 0, 0,
-      6, 420, 700, 0, 0, 6, 460, 250, 512, 0,
-      8, 700, 500, 0, 0,
-      5, 1000, 620, 0, 0, 1, 1030, 620, 1, 0, 1, 900, 560, 1, 0,
-      3, 1180, 860, 0, 0,
-    ],
-  },
-  {
-    // 11: Gauntlet: tight pylons, puffers, lanterns.
-    id: 11, name: 'gauntlet', len: 1400, diff: 9, zone: 3, tier: 2, breather: 0,
+      5, 46, 300, 0, 0, 1, 35, 439, 0, 3, 1, 105, 439, 0, 3, 1, 175, 439, 0, 3,
+      6, 414, 700, 0, 0, 6, 448, 250, 512, 0, 8, 690, 500, 0, 0, 5, 943, 690, 0, 0,
+    ] },
+  { id: 11, name: 'gauntlet', len: 1150, diff: 9, zone: 3, tier: 1, breather: 0, exitY: 520,
     e: [
-      5, 120, 360, 2, 0, 1, 150, 360, 0, 0,
-      7, 420, 560, 0, 0, 6, 420, 860, 256, 0,
-      5, 720, 640, 2, 0, 1, 750, 640, 1, 0, 1, 620, 520, 1, 0,
-      6, 1000, 330, 0, 0, 7, 1040, 700, 0, 0,
-      1, 1000, 520, 2, 0, 1, 1060, 520, 2, 0, 1, 1120, 520, 2, 0,
-      3, 1250, 180, 0, 0,
-    ],
-  },
-  {
-    // 12: Shield breather (ride sprint 2 only): rings and a Bubble Shield.
-    id: 12, name: 'shield_breather', len: 800, diff: 1, zone: 1, tier: 0, breather: 1,
+      5, 46, 300, 2, 0, 1, 35, 419, 0, 11, 1, 105, 419, 0, 11, 1, 175, 419, 0, 11,
+      7, 414, 560, 0, 0, 6, 414, 860, 256, 0, 5, 690, 690, 2, 0, 6, 1012, 330, 0, 0,
+    ] },
+  { id: 12, name: 'shield_breather', len: 874, diff: 1, zone: 1, tier: 0, breather: 1, exitY: 520,
     e: [
-      2, 120, 480, 0, 0, 11, 360, 500, 0, 0, 2, 560, 520, 0, 0,
-      1, 640, 520, 0, 0, 1, 700, 520, 0, 0, 1, 760, 520, 0, 0,
-    ],
-  },
+      2, 92, 420, 0, 0, 11, 345, 500, 0, 0, 2, 575, 360, 0, 0, 1, 644, 380, 0, 0,
+      1, 714, 450, 0, 0, 1, 784, 520, 0, 0,
+    ] },
+  { id: 13, name: 'reef_fork', len: 1150, diff: 4, zone: 2, tier: 0, breather: 0, exitY: 300,
+    e: [
+      5, 138, 700, 0, 0, 1, 126, 561, 0, 1, 1, 196, 561, 0, 1, 1, 266, 561, 0, 1,
+      2, 207, 561, 0, 0, 6, 759, 520, 0, 0, 5, 759, 280, 1, 0,
+    ] },
 ];
-
 export const CHUNK_WARMUP = 0;
 export const CHUNK_BREATHER = 3;
 export const CHUNK_SHIELD = 12;
+// CHUNKS-END
 
-/** Minimum unlock tier for each entity type (design 5.7). */
+/** Minimum unlock tier for each entity type (design 5.9). */
 export function entityTier(t: number): number {
   'worklet';
-  if (t === E_BOX || t === E_TOKEN) return 1;
-  if (t === E_PUFFER) return 2;
+  if (t === E_BOX || t === E_TOKEN || t === E_PUFFER) return 1;
   if (t === E_TORPEDO) return 3;
   return 0;
 }
@@ -451,7 +427,7 @@ export function entityTier(t: number): number {
 export interface SimConfig {
   seed: number;
   mode: number;
-  /** 1..3 (queue); ride and race use their own speed tables. */
+  /** 1..3 (queue); ride and rally use their own speed tables. */
   difficulty: number;
   /** Unlock tier = verified runs, capped at 12. */
   tier: number;
@@ -463,25 +439,26 @@ export interface SimConfig {
 
 export interface SprintDescriptor {
   sprintIdx: number;
+  /** Chunk ids; -1 marks the Rally split gate. */
   chunks: number[];
   remix: number;
   sig?: string;
 }
 
-/** Speed table (u/s): [base, cap]. */
+/** Speed table (u/s): [base, cap] (design 3.2). */
 export function speedTable(mode: number, diff: number): number[] {
   'worklet';
-  if (mode === MODE_RIDE) return [320, 480];
-  if (mode === MODE_RACE) return [360, 520];
-  if (diff <= 1) return [300, 460];
-  if (diff >= 3) return [380, 560];
-  return [340, 520];
+  if (mode === MODE_RIDE) return [320, 450];
+  if (mode === MODE_RALLY) return [400, 460];
+  if (diff <= 1) return [300, 440];
+  if (diff >= 3) return [370, 520];
+  return [340, 480];
 }
 
-/** Effective hazard tier for a mode (design 5.7 fairness). */
+/** Effective hazard tier for a mode (design 5.9 fairness). */
 export function effectiveTier(mode: number, tier: number): number {
   'worklet';
-  if (mode === MODE_RACE) return 3;
+  if (mode === MODE_RALLY) return 3;
   if (mode === MODE_RIDE) return clampi(tier, 2, 4);
   return clampi(tier, 0, 12);
 }
@@ -492,15 +469,33 @@ export function pylonGap(diff: number, cls: number): number {
   return cls === 1 ? base + 60 : cls === 2 ? base - 40 : base;
 }
 
-/** Target course length per sprint (u). 0 = time-based (queue). */
+/** The authoring gap (D2) a Close-line coin was placed against. */
+function authorGap(cls: number): number {
+  'worklet';
+  return cls === 1 ? 440 : cls === 2 ? 340 : 380;
+}
+
+/** Hazard-free Gate Rush length before a gate (u): 2.5s at +12%. */
+export function rushLen(speedU: number): number {
+  'worklet';
+  return idiv(speedU * 28, 10);
+}
+
+/** Is this a timed (tide clock) mode? */
+export function timedMode(mode: number): boolean {
+  'worklet';
+  return mode === MODE_QUEUE || mode === MODE_GHOST || mode === MODE_PRACTICE;
+}
+
+/** Chunk content length per sprint (u), before the Gate Rush. */
 export function sprintTargetLen(mode: number, sprintIdx: number, speedU: number): number {
   'worklet';
-  if (mode === MODE_RIDE) return 5000;
-  if (mode === MODE_RACE) return 7500;
-  // Queue: about 11s at the current speed.
-  const t = idiv(speedU * 105, 10);
-  void sprintIdx;
-  return clampi(t, 3300, 6400);
+  if (mode === MODE_RIDE) return 3800;
+  if (mode === MODE_RALLY) return RALLY_LEN_HALF;
+  // Queue sprints 1-3: about 8.5s of chunks plus a 2.5s rush = 11s.
+  // Sprint 4 (Final Stretch) has no gate: enough course for any clock.
+  if (sprintIdx >= 3) return clampi(speedU * 40, 12000, 22000);
+  return clampi(idiv(speedU * 85, 10), 2500, 4800);
 }
 
 function diffBand(mode: number, sprintIdx: number): number[] {
@@ -510,11 +505,41 @@ function diffBand(mode: number, sprintIdx: number): number[] {
     if (sprintIdx === 1) return [3, 6];
     return [5, 7];
   }
-  if (mode === MODE_RACE) return [3, 8];
+  if (mode === MODE_RALLY) return [3, 8];
   if (sprintIdx === 0) return [2, 4];
   if (sprintIdx === 1) return [4, 7];
   if (sprintIdx === 2) return [6, 9];
   return [7, 10];
+}
+
+/** Does a sprint end in a gate? (Queue sprint 4 is the gateless Final Stretch.) */
+export function sprintHasGate(mode: number, sprintIdx: number): boolean {
+  'worklet';
+  if (timedMode(mode)) return sprintIdx < 3;
+  return true;
+}
+
+function pickChunk(r: { s: number }, band: number[], t: number, last: number): number {
+  'worklet';
+  for (let widen = 0; widen < 10; widen++) {
+    const lo = band[0] - widen;
+    const hi = band[1] + widen;
+    let count = 0;
+    for (let i = 1; i < CHUNKS.length; i++) {
+      const c = CHUNKS[i];
+      if (c.breather || c.tier > t || c.id === last || c.diff < lo || c.diff > hi) continue;
+      count++;
+    }
+    if (count === 0) continue;
+    let k = rngRange(r, 0, count - 1);
+    for (let i = 1; i < CHUNKS.length; i++) {
+      const c = CHUNKS[i];
+      if (c.breather || c.tier > t || c.id === last || c.diff < lo || c.diff > hi) continue;
+      if (k === 0) return c.id;
+      k--;
+    }
+  }
+  return CHUNK_BREATHER;
 }
 
 /**
@@ -532,54 +557,42 @@ export function generateSprint(seed: number, sprintIdx: number, mode: number, ti
   let len = 0;
   let last = -1;
   let sinceBreather = 0;
-  if (sprintIdx === 0 && mode !== MODE_RACE) {
+  if (sprintIdx === 0 && mode !== MODE_RALLY) {
     chunks.push(CHUNK_WARMUP);
     len += CHUNKS[CHUNK_WARMUP].len;
   }
-  let guard = 0;
-  while (len < target - 500 && guard < 20) {
-    guard++;
-    if (mode === MODE_RIDE && sprintIdx === 1 && chunks.length === 1) {
-      chunks.push(CHUNK_SHIELD);
-      len += CHUNKS[CHUNK_SHIELD].len;
+  const halves = mode === MODE_RALLY ? 2 : 1;
+  for (let h = 0; h < halves; h++) {
+    if (h === 1) {
+      chunks.push(-1);
+      len = 0;
       sinceBreather = 0;
-      continue;
     }
-    if (sinceBreather >= 3) {
-      chunks.push(CHUNK_BREATHER);
-      len += CHUNKS[CHUNK_BREATHER].len;
-      sinceBreather = 0;
-      last = CHUNK_BREATHER;
-      continue;
-    }
-    // Candidates within the band, widening by 1 until something fits.
-    let pickId = -1;
-    for (let widen = 0; widen < 10 && pickId < 0; widen++) {
-      const lo = band[0] - widen;
-      const hi = band[1] + widen;
-      let count = 0;
-      for (let i = 1; i < CHUNKS.length; i++) {
-        const c = CHUNKS[i];
-        if (c.breather || c.tier > t || c.id === last || c.diff < lo || c.diff > hi) continue;
-        count++;
+    let guard = 0;
+    while (len < target - 300 && guard < 46) {
+      guard++;
+      if (mode === MODE_RIDE && sprintIdx === 1 && chunks.length === 1) {
+        chunks.push(CHUNK_SHIELD);
+        len += CHUNKS[CHUNK_SHIELD].len;
+        sinceBreather = 0;
+        last = CHUNK_SHIELD;
+        continue;
       }
-      if (count === 0) continue;
-      let k = rngRange(r, 0, count - 1);
-      for (let i = 1; i < CHUNKS.length; i++) {
-        const c = CHUNKS[i];
-        if (c.breather || c.tier > t || c.id === last || c.diff < lo || c.diff > hi) continue;
-        if (k === 0) {
-          pickId = c.id;
-          break;
-        }
-        k--;
+      if (sinceBreather >= 3) {
+        chunks.push(CHUNK_BREATHER);
+        len += CHUNKS[CHUNK_BREATHER].len;
+        sinceBreather = 0;
+        last = CHUNK_BREATHER;
+        continue;
       }
+      const pickId = pickChunk(r, band, t, last);
+      // Stop rather than overshoot: the flat clock assumes 11s sprints.
+      if (len >= target - 700 && len + CHUNKS[pickId].len > target + 250) break;
+      chunks.push(pickId);
+      len += CHUNKS[pickId].len;
+      last = pickId;
+      sinceBreather++;
     }
-    if (pickId < 0) pickId = CHUNK_BREATHER;
-    chunks.push(pickId);
-    len += CHUNKS[pickId].len;
-    last = pickId;
-    sinceBreather++;
   }
   return { sprintIdx, chunks, remix: 0 };
 }
@@ -590,6 +603,7 @@ export function generateSprint(seed: number, sprintIdx: number, mode: number, ti
 
 export const ENT_CAP = 160;
 export const LINE_CAP = 32;
+export const CQ_CAP = 48;
 
 export interface SimState {
   // config
@@ -619,16 +633,19 @@ export interface SimState {
   py: number;
   holding: number;
   lastPress: number;
+  /** Step of the last press or release (Settle and Float idle counts). */
+  lastTouch: number;
+  settle: number;
+  touchCool: number;
   dist: number;
   pdist: number;
   speed: number;
   speedEff: number;
   gates: number;
-  stumble: number;
   iframes: number;
-  dash: number;
-  dashBuf: number;
   boost: number;
+  odArmed: number;
+  od: number;
   hearts: number;
   shield: number;
   reviveShield: number;
@@ -640,8 +657,7 @@ export interface SimState {
   floatSteps: number;
   popGrace: number;
   pocketY: number;
-  boostSpeed: number; // race boosts: remaining steps
-  boostSpeedPct: number;
+  rushK: number;
   draft: number;
   draftSteps: number;
   draftAcc: number;
@@ -654,8 +670,8 @@ export interface SimState {
   chainCoins: number;
   frenzy: number;
   frenzyCount: number;
-  pot: number;
-  banked: number;
+  /** Chain count that starts the next Frenzy. */
+  frenzyNext: number;
   tokens: number;
   tokenMask: number;
   skimStack: number;
@@ -663,12 +679,23 @@ export interface SimState {
   ladder: number;
   ladderTimer: number;
   maxChain: number;
+  maxTier: number;
+  regrabN: number;
+  lastGateBonus: number;
+  crowd: number;
+  crowdAway: number;
+  crowdOut: number;
+  giftCool: number;
+  /** Presentation: the strongest graze band this step (0 none, 1 halo, 2 Close) and its hazard. */
+  grazeBand: number;
+  grazeEnt: number;
   // course
   sprint: number;
   sprintStart: number;
   gateX: number;
   gateKind: number;
-  courseEnd: number; // ride/race total length (u), 0 = endless
+  rushX: number;
+  courseEnd: number; // ride/rally total length (u), 0 = endless
   cq: number[];
   cqX: number[];
   cqN: number;
@@ -692,6 +719,13 @@ export interface SimState {
   evy: number[];
   ef: number[];
   eline: number[];
+  /** Graze pass counters: halo steps, Close steps, base points paid, Boost paid. */
+  eg: number[];
+  ec: number[];
+  egp: number[];
+  egb: number[];
+  /** Steps the silhouette overlapped the art (clipping) this pass. */
+  eo: number[];
   eHint: number;
   // rng for in-run randomness (scatter fans)
   rs: number;
@@ -704,15 +738,22 @@ export interface SimState {
   hash: number;
   // stats (plausibility + results)
   stSkims: number;
+  stCloseSkims: number;
+  stHaloSteps: number;
+  stCloseSteps: number;
+  stPasses: number;
   stPerfects: number;
   stRings: number;
   stChomps: number;
+  stSmashes: number;
   stHits: number;
   stCoins: number;
-  stDashes: number;
-  stFizz: number;
+  stCoinsTotal: number;
+  stOverdrives: number;
   stFrenzies: number;
   stBounces: number;
+  stTouches: number;
+  stRegrabs: number;
   stTele: number;
   stReactN: number;
   stReactSum: number;
@@ -723,7 +764,11 @@ export interface SimState {
   holdHist: number[];
   stPerfectTight: number;
   stRingOpp: number;
+  inputsSinceSkim: number;
+  consecClose: number;
+  maxConsecClose: number;
   splitSteps: number[];
+  splitScores: number[];
   finishStep: number;
   endReason: number;
 }
@@ -773,10 +818,10 @@ export function speedFrac(s: SimState): number {
   return clampi(idiv((s.speed - s.speedBase) * 256, den), 0, 256);
 }
 
-/** Shark anchor x in the view (u): 250 at base speed, 140 at max. */
+/** Shark anchor x in the view (u): 158 (22%) at base speed, 108 (15%) at max. */
 export function anchorX(s: SimState): number {
   'worklet';
-  return 250 - ((110 * speedFrac(s)) >> 8);
+  return 158 - ((50 * speedFrac(s)) >> 8);
 }
 
 /** Course visible ahead of the shark centre (u). */
@@ -814,46 +859,109 @@ export function spawn(s: SimState, t: number, x: number, y: number, p1: number, 
   s.evy[i] = 0;
   s.ef[i] = 0;
   s.eline[i] = line;
+  s.eg[i] = 0;
+  s.ec[i] = 0;
+  s.egp[i] = 0;
+  s.egb[i] = 0;
+  s.eo[i] = 0;
   return i;
+}
+
+/** A fresh coin-line slot (global ring of LINE_CAP). */
+function newLine(s: SimState): number {
+  'worklet';
+  const g = s.lineSeq % LINE_CAP;
+  s.lineSeq++;
+  s.lineTotal[g] = 0;
+  s.lineGot[g] = 0;
+  s.lineId[g] = s.lineSeq;
+  return g;
+}
+
+/**
+ * Gate Rush (design 5.7): a hazard-free run-up with a 9-coin line at 55u
+ * spacing from the exit lane into a Gate Ring centred in the arch.
+ */
+function spawnRush(s: SimState, gateX: number, exitY: number): void {
+  'worklet';
+  const ringX = gateX - 30;
+  const g = newLine(s);
+  const y0 = clampi(exitY, 200, 800);
+  for (let k = 0; k < 9; k++) {
+    const x = ringX - 80 - (8 - k) * 55;
+    // Smoothstep from the exit lane to the arch centre (y 500).
+    const tq = idiv(k * 256, 8);
+    const ease = idiv(tq * tq * (768 - 2 * tq), 65536);
+    const y = y0 + idiv((500 - y0) * ease, 256);
+    s.lineTotal[g]++;
+    spawn(s, E_COIN, x, y, 0, CF_RUSH, g);
+  }
+  const ri = spawn(s, E_RING, ringX, 500, 1, 0, 0);
+  if (ri >= 0) s.ef[ri] |= F_GATE_RING;
 }
 
 /**
  * Start sprint `idx`: materialize its descriptor into the chunk queue. `desc`
  * may be a server-streamed descriptor; null regenerates locally.
  */
-export function startSprint(s: SimState, idx: number, desc: SprintDescriptor | null, extraLead = 0): void {
+export function startSprint(s: SimState, idx: number, desc: SprintDescriptor | null, extraLead: number): void {
   'worklet';
   const d = desc || generateSprint(s.seed, idx, s.mode, s.tier, s.speed >> 8);
   s.sprint = idx;
   const du = distU(s);
-  // Lead-in: no hazard hitbox within ~1.5s of the pocket exit.
-  // Every hazard must get its full edge badge (600ms before the view), so the
-  // lead covers the view ahead plus 600ms (races have no warm-up chunk).
-  const lead = extraLead + (idx === 0 ? (s.mode === MODE_RACE ? aheadU(s) + 320 : 260) : idiv((s.speed >> 8) * 3, 2));
+  const sp = s.speed >> 8;
+  // Lead-in: no hazard hitbox within ~1.5s of the pocket exit. At GO every
+  // hazard must still get its full edge badge (600ms before the view).
+  const lead = extraLead + (idx === 0 ? (s.mode === MODE_RALLY ? aheadU(s) + 320 : 260) : idiv(sp * 3, 2));
   let x = du + lead;
   s.sprintStart = x;
   s.cqN = 0;
   s.cqNext = 0;
   s.tokenPlaced = idx >= 3 || s.etier < 1 ? 1 : 0;
-  for (let i = 0; i < d.chunks.length && i < s.cq.length; i++) {
-    s.cq[i] = d.chunks[i];
-    s.cqX[i] = x;
-    x += CHUNKS[d.chunks[i]].len;
+  const rl = rushLen(sp);
+  let lastChunk = -1;
+  for (let i = 0; i < d.chunks.length && s.cqN < CQ_CAP; i++) {
+    const c = d.chunks[i];
+    if (c < 0) {
+      // Rally split: rush, split gate (no pocket), then a 1.5s lead-in.
+      const gx = x + rl;
+      spawnRush(s, gx, lastChunk >= 0 ? CHUNKS[lastChunk].exitY : 500);
+      spawn(s, E_GATE, gx, 500, G_SPLIT, 0, 0);
+      x = gx + (idiv(sp * 3, 2) > 640 ? idiv(sp * 3, 2) : 640);
+      continue;
+    }
+    s.cq[s.cqN] = c;
+    s.cqX[s.cqN] = x;
+    x += CHUNKS[c].len;
     s.cqN++;
+    lastChunk = c;
   }
-  // Gate at the end of the sprint.
   let kind = G_TIDE;
   if (s.mode === MODE_RIDE && idx >= 2) kind = G_RIDE;
-  if (s.mode === MODE_RACE) kind = G_FINISH;
+  if (s.mode === MODE_RALLY) kind = G_FINISH;
   s.gateKind = kind;
-  s.gateX = x + 160;
-  if (s.mode === MODE_RACE) {
-    // One race course: mid split gate at half the course (no pocket).
-    s.gateX = s.sprintStart + 7500;
-    spawn(s, E_GATE, s.sprintStart + 3750, 500, G_SPLIT, 0, 0);
+  if (sprintHasGate(s.mode, idx)) {
+    s.rushX = x;
+    s.gateX = x + rl;
+    spawnRush(s, s.gateX, lastChunk >= 0 ? CHUNKS[lastChunk].exitY : 500);
+    spawn(s, E_GATE, s.gateX, 500, kind, 0, 0);
+  } else {
+    s.rushX = 0;
+    s.gateX = 0;
   }
-  spawn(s, E_GATE, s.gateX, 500, kind, 0, 0);
   emit(s, EV_SPRINT, idx, s.gateX, kind, 0);
+}
+
+/**
+ * Pylon gap difficulty for this run: Rally is D2 for everyone; the Ride
+ * Challenge uses the D1 gaps (design 6.2: its pool targets a 72-86% novice
+ * win rate on its own speed curve), queue runs use the rated difficulty.
+ */
+function courseDiff(s: SimState): number {
+  'worklet';
+  if (s.mode === MODE_RALLY) return 2;
+  if (s.mode === MODE_RIDE) return 1;
+  return s.diff;
 }
 
 function spawnChunk(s: SimState, qi: number): void {
@@ -867,7 +975,7 @@ function spawnChunk(s: SimState, qi: number): void {
     const t = e[k];
     if (entityTier(t) > s.etier) continue;
     const x = x0 + e[k + 1];
-    const y = e[k + 2];
+    let y = e[k + 2];
     if (t === E_TOKEN) {
       if (s.tokenPlaced) continue;
       s.tokenPlaced = 1;
@@ -876,29 +984,29 @@ function spawnChunk(s: SimState, qi: number): void {
     }
     if (t === E_COIN) {
       const lp = e[k + 3] & 7;
-      if (localToGlobal[lp] < 0) {
-        const g = s.lineSeq % LINE_CAP;
-        s.lineSeq++;
-        localToGlobal[lp] = g;
-        s.lineTotal[g] = 0;
-        s.lineGot[g] = 0;
-        s.lineId[g] = s.lineSeq;
-      }
+      const fl = e[k + 4];
+      if (localToGlobal[lp] < 0) localToGlobal[lp] = newLine(s);
       const g = localToGlobal[lp];
+      // Close-line coins follow the real pylon gap (D1 wider, D3 tighter).
+      if ((fl & CF_CLOSE) && !(fl & 16)) {
+        const cls = (fl >> 2) & 3;
+        const delta = (authorGap(cls) - pylonGap(courseDiff(s), cls)) >> 1;
+        y += fl & 2 ? -delta : delta;
+      }
       s.lineTotal[g]++;
-      spawn(s, E_COIN, x, y, 0, 0, g);
+      spawn(s, E_COIN, x, y, 0, fl & 31, g);
       continue;
     }
     if (t === E_PYLON) {
-      spawn(s, E_PYLON, x, y, pylonGap(s.mode === MODE_RACE ? 2 : s.diff, e[k + 3]), 0, 0);
+      spawn(s, E_PYLON, x, y, pylonGap(courseDiff(s), e[k + 3]), 0, 0);
       continue;
     }
     spawn(s, t, x, y, e[k + 3], e[k + 4], 0);
   }
-  // A sprint whose chunks carry no token slot gets one on the gate approach.
-  if (qi === s.cqN - 1 && !s.tokenPlaced && s.sprint < 3 && s.etier >= 1) {
+  // A sprint whose chunks carry no token slot gets one on the rush approach.
+  if (qi === s.cqN - 1 && !s.tokenPlaced && s.sprint < 3 && s.etier >= 1 && s.gateX > 0) {
     s.tokenPlaced = 1;
-    spawn(s, E_TOKEN, s.gateX - 300, 230, s.sprint, 0, 0);
+    spawn(s, E_TOKEN, s.rushX + 120, 260, s.sprint, 0, 0);
   }
 }
 
@@ -918,7 +1026,7 @@ export function createSim(cfg: SimConfig): SimState {
     runs: cfg.runs | 0,
     speedBase: st[0] * Q,
     speedCap: st[1] * Q,
-    frenzyAt: (cfg.runs | 0) < 3 && cfg.mode !== MODE_RACE ? 10 : 12,
+    frenzyAt: (cfg.runs | 0) < 3 && cfg.mode !== MODE_RALLY ? 10 : 12,
     step: 0,
     worldT: 0,
     activeSteps: 0,
@@ -934,16 +1042,18 @@ export function createSim(cfg: SimConfig): SimState {
     py: 500 * Q,
     holding: 0,
     lastPress: 0,
+    lastTouch: 0,
+    settle: 0,
+    touchCool: 0,
     dist: 0,
     pdist: 0,
     speed: st[0] * Q,
     speedEff: st[0] * Q,
     gates: 0,
-    stumble: 0,
     iframes: 0,
-    dash: 0,
-    dashBuf: 0,
     boost: 0,
+    odArmed: 0,
+    od: 0,
     hearts: HEARTS,
     shield: 0,
     reviveShield: 0,
@@ -955,8 +1065,7 @@ export function createSim(cfg: SimConfig): SimState {
     floatSteps: 0,
     popGrace: 0,
     pocketY: 500 * Q,
-    boostSpeed: 0,
-    boostSpeedPct: 0,
+    rushK: 0,
     draft: 0,
     draftSteps: 0,
     draftAcc: 0,
@@ -968,8 +1077,7 @@ export function createSim(cfg: SimConfig): SimState {
     chainCoins: 0,
     frenzy: 0,
     frenzyCount: 0,
-    pot: 0,
-    banked: 0,
+    frenzyNext: (cfg.runs | 0) < 3 && cfg.mode !== MODE_RALLY ? 10 : 12,
     tokens: 0,
     tokenMask: 0,
     skimStack: 0,
@@ -977,13 +1085,23 @@ export function createSim(cfg: SimConfig): SimState {
     ladder: 0,
     ladderTimer: 0,
     maxChain: 0,
+    maxTier: 0,
+    regrabN: 0,
+    lastGateBonus: 0,
+    crowd: 0,
+    crowdAway: 0,
+    crowdOut: 0,
+    giftCool: 0,
+    grazeBand: 0,
+    grazeEnt: -1,
     sprint: -1,
     sprintStart: 0,
     gateX: 0,
     gateKind: G_TIDE,
-    courseEnd: cfg.mode === MODE_RIDE ? 15000 : cfg.mode === MODE_RACE ? 7500 : 0,
-    cq: zeros(24),
-    cqX: zeros(24),
+    rushX: 0,
+    courseEnd: cfg.mode === MODE_RIDE ? 15000 : 0,
+    cq: zeros(CQ_CAP),
+    cqX: zeros(CQ_CAP),
     cqN: 0,
     cqNext: 0,
     tokenPlaced: 0,
@@ -1004,6 +1122,11 @@ export function createSim(cfg: SimConfig): SimState {
     evy: zeros(ENT_CAP),
     ef: zeros(ENT_CAP),
     eline: zeros(ENT_CAP),
+    eg: zeros(ENT_CAP),
+    ec: zeros(ENT_CAP),
+    egp: zeros(ENT_CAP),
+    egb: zeros(ENT_CAP),
+    eo: zeros(ENT_CAP),
     eHint: 0,
     rs: hash2(cfg.seed | 0, 0x5eed) | 0,
     ev: zeros(EV_CAP * EV_STRIDE),
@@ -1011,15 +1134,22 @@ export function createSim(cfg: SimConfig): SimState {
     evStale: 0,
     hash: 2166136261,
     stSkims: 0,
+    stCloseSkims: 0,
+    stHaloSteps: 0,
+    stCloseSteps: 0,
+    stPasses: 0,
     stPerfects: 0,
     stRings: 0,
     stChomps: 0,
+    stSmashes: 0,
     stHits: 0,
     stCoins: 0,
-    stDashes: 0,
-    stFizz: 0,
+    stCoinsTotal: 0,
+    stOverdrives: 0,
     stFrenzies: 0,
     stBounces: 0,
+    stTouches: 0,
+    stRegrabs: 0,
     stTele: 0,
     stReactN: 0,
     stReactSum: 0,
@@ -1030,11 +1160,15 @@ export function createSim(cfg: SimConfig): SimState {
     holdHist: zeros(32),
     stPerfectTight: 0,
     stRingOpp: 0,
+    inputsSinceSkim: 0,
+    consecClose: 0,
+    maxConsecClose: 0,
     splitSteps: zeros(8),
+    splitScores: zeros(8),
     finishStep: 0,
     endReason: END_NONE,
   };
-  startSprint(s, 0, null);
+  startSprint(s, 0, null, 0);
   return s;
 }
 
@@ -1072,7 +1206,7 @@ export function pufferR(s: SimState, i: number): number {
   return PUFF_R0 + idiv((PUFF_R1 - PUFF_R0) * k, PUFF_INFLATE_STEPS);
 }
 
-/** Hazard vs an ellipse at (cx, cy) with radii grown by `grow`. art=1 uses art edges, else hitboxes. */
+/** Hazard vs an ellipse at (cx, cy). art=true uses art edges, else hitboxes. */
 function hazardTouches(s: SimState, i: number, cx: number, cy: number, rx: number, ry: number, art: boolean): boolean {
   'worklet';
   const t = s.et[i];
@@ -1101,12 +1235,12 @@ function hazardTouches(s: SimState, i: number, cx: number, cy: number, rx: numbe
   return false;
 }
 
-function isHazard(t: number): boolean {
+export function isHazard(t: number): boolean {
   'worklet';
   return t === E_PYLON || t === E_JELLY || t === E_PUFFER || t === E_TORPEDO;
 }
 
-/** Left and right art extents of a hazard (u), for skims, badges and float. */
+/** Left and right art extents of a hazard (u), for passes, badges and float. */
 export function hazardSpan(s: SimState, i: number): number[] {
   'worklet';
   const t = s.et[i];
@@ -1118,21 +1252,25 @@ export function hazardSpan(s: SimState, i: number): number[] {
 }
 
 // ---------------------------------------------------------------------------
-// Scoring, chain, frenzy
+// Scoring, chain, Frenzy, Boost and Overdrive
 // ---------------------------------------------------------------------------
 
+/** Chain tier 0..3 (x1 0-2, x2 3-5, x3 6-8, x4 9+). */
 export function chainTier(s: SimState): number {
   'worklet';
-  const c = s.frenzy > 0 ? s.chain % 12 : s.chain;
-  const t = idiv(c, 3);
+  const t = idiv(s.chain, 3);
   return t > 3 ? 3 : t;
 }
 
+/**
+ * Score multiplier: tier + 1, plus half again in Frenzy (x6 ceiling). Design
+ * 5.8 tuning lever 5: the starting x2 (x8) let Frenzy carry 48-67% of the bot
+ * points against the <= 30% / 40% lock rule; x1.5 is the documented fallback.
+ */
 export function multiplier(s: SimState): number {
   'worklet';
   const m = chainTier(s) + 1;
-  const f = s.frenzy > 0 ? m * 2 : m;
-  return f > 8 ? 8 : f;
+  return s.frenzy > 0 ? m + (m >> 1) : m;
 }
 
 function scoringOn(s: SimState): boolean {
@@ -1140,84 +1278,130 @@ function scoringOn(s: SimState): boolean {
   return s.float === 0 && s.popGrace === 0 && s.reviveShield === 0 && s.phase === PH_PLAY;
 }
 
+/** Multiplied points (the caller multiplies): straight to the score, no pot. */
 function addScore(s: SimState, pts: number): void {
   'worklet';
-  if (s.frenzy > 0) s.pot += pts;
-  else s.score += pts;
+  s.score += pts;
+}
+
+/** Flat points (distance, Gate Bonus, Full Clear, regrab refunds). */
+function addFlat(s: SimState, pts: number): void {
+  'worklet';
+  s.score += pts;
 }
 
 function addBoost(s: SimState, amt: number): void {
   'worklet';
-  if (s.etier < 2) return;
-  const before = idiv(s.boost, BOOST_COST);
+  if (s.etier < 2 || s.od > 0 || s.odArmed) return;
+  const before = idiv(s.boost, BOOST_SEG);
   s.boost = clampi(s.boost + amt, 0, BOOST_MAX);
-  const after = idiv(s.boost, BOOST_COST);
+  const after = idiv(s.boost, BOOST_SEG);
   if (after > before) emit(s, EV_BOOST_SEG, after, 0, 0, 0);
-}
-
-function bankPot(s: SimState, reason: number): void {
-  'worklet';
-  if (s.pot > 0) {
-    s.score += s.pot;
-    s.banked += s.pot;
-    emit(s, EV_FRENZY_END, s.pot, reason, 0, 0);
-    s.pot = 0;
-  } else if (reason >= 0) {
-    emit(s, EV_FRENZY_END, 0, reason, 0, 0);
+  if (s.boost >= BOOST_MAX && !s.odArmed) {
+    s.odArmed = 1;
+    emit(s, EV_OD_ARMED, s.dist >> 8, s.y >> 8, 0, 0);
   }
 }
 
-/** A chain event (line, ring, skim, chomp, token, regained scatter). */
-function chainEvent(s: SimState): void {
+/** Overdrive fires on the next Close Skim or Perfect ring once armed (design 5.5). */
+function odTrigger(s: SimState, why: number): void {
+  'worklet';
+  if (!s.odArmed || s.od > 0) return;
+  s.odArmed = 0;
+  s.od = OD_STEPS;
+  s.stOverdrives++;
+  emit(s, EV_OD_START, s.dist >> 8, s.y >> 8, why, 0);
+}
+
+/** One chain count (line, ring, skim, chomp, token, a 3+ regrab). */
+function chainCount(s: SimState): void {
   'worklet';
   const before = chainTier(s);
   const wasFrenzy = s.frenzy > 0;
   s.chain++;
   s.chainTimer = CHAIN_WINDOW;
+  if (s.mode === MODE_RALLY) s.crowd++;
   if (s.chain > s.maxChain) s.maxChain = s.chain;
-  // Frenzy at frenzyAt, then every +12.
-  const at = s.frenzyAt;
-  if (s.chain === at || (s.chain > at && (s.chain - at) % 12 === 0)) {
-    if (!wasFrenzy) {
-      s.frenzy = FRENZY_STEPS;
-      s.frenzyCount++;
-      s.stFrenzies++;
-      s.boost = s.etier >= 2 ? BOOST_MAX : s.boost;
-      emit(s, EV_FRENZY_START, s.chain, 0, 0, 0);
-    } else {
-      s.frenzy = FRENZY_STEPS;
-    }
+  // Frenzy at frenzyAt; the next one needs +12 counts after a Frenzy ends
+  // (counts scored inside a Frenzy never extend it or bank toward the next).
+  if (!wasFrenzy && s.chain >= s.frenzyNext) {
+    s.frenzy = FRENZY_STEPS;
+    s.frenzyCount++;
+    s.stFrenzies++;
+    emit(s, EV_FRENZY_START, s.chain, 0, 0, 0);
     return;
   }
   const after = chainTier(s);
-  if (after > before && s.frenzy === 0) emit(s, EV_CHAIN_TIER, after, s.chain, 0, 0);
+  if (after > s.maxTier) s.maxTier = after;
+  if (after > before) emit(s, EV_CHAIN_TIER, after, s.chain, 0, 0);
+}
+
+function chainEvent(s: SimState, counts: number): void {
+  'worklet';
+  for (let k = 0; k < counts; k++) chainCount(s);
 }
 
 function breakChain(s: SimState, reason: number): void {
   'worklet';
   if (s.chain > 0) emit(s, EV_CHAIN_BREAK, chainTier(s), s.chain, reason, 0);
-  if (s.frenzy > 0) {
-    s.frenzy = 0;
-    bankPot(s, 1);
-  }
   s.chain = 0;
   s.chainCoins = 0;
   s.chainTimer = 0;
+  if (s.frenzy === 0) s.frenzyNext = s.frenzyAt;
+}
+
+// ---------------------------------------------------------------------------
+// Bubble Gift placement (Rally, design 11.3)
+// ---------------------------------------------------------------------------
+
+/** Is world x clear of hazards (300u), gates (300u) and the lead-in? */
+function giftSlotOk(s: SimState, x: number): boolean {
+  'worklet';
+  if (x < s.sprintStart) return false;
+  for (let i = 0; i < ENT_CAP; i++) {
+    const t = s.et[i];
+    if (t === E_GATE) {
+      if (absi(s.ex[i] - x) < 300) return false;
+      continue;
+    }
+    if (!isHazard(t)) continue;
+    const sp = hazardSpan(s, i);
+    if (x + 300 + 280 > sp[0] && x - 300 < sp[1]) return false;
+  }
+  if (s.gateX > 0 && absi(s.gateX - x) < 300 + 280) return false;
+  return true;
+}
+
+function placeGift(s: SimState, eventId: number): void {
+  'worklet';
+  const du = s.dist >> 8;
+  const start = du + idiv((s.speed >> 8) * 3, 2);
+  for (let k = 0; k < 40; k++) {
+    const x = start + k * 50;
+    if (!giftSlotOk(s, x)) continue;
+    const y = clampi(s.y >> 8, 200, 800);
+    const j = spawn(s, E_GIFT, x, y, eventId, 0, 0);
+    if (j >= 0) {
+      s.giftCool = GIFT_COOL;
+      emit(s, EV_GIFT_IN, eventId, x, y, 0);
+    }
+    return;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Input
 // ---------------------------------------------------------------------------
 
-function startDash(s: SimState): void {
+function noteReaction(s: SimState): void {
   'worklet';
-  s.boost -= BOOST_COST;
-  s.dash = DASH_STEPS;
-  s.dashBuf = 0;
-  s.stDashes++;
-  if (s.vy > 200 * Q) s.vy = 200 * Q;
-  if (s.vy < -200 * Q) s.vy = -200 * Q;
-  emit(s, EV_DASH, s.boost, 0, 0, 0);
+  if (s.lastTele < 0) return;
+  const r = s.step - s.lastTele;
+  if (s.stReactN < 64) s.reactS[s.stReactN] = r;
+  s.stReactN++;
+  s.stReactSum += r;
+  if (r < 4) s.stReactFast++;
+  s.lastTele = -1;
 }
 
 /**
@@ -1231,22 +1415,18 @@ export function applyInput(s: SimState, kind: number, sub: number, arg: number):
     if (s.holding) return;
     s.holding = 1;
     s.lastPress = s.step;
+    s.lastTouch = s.step;
     s.holdStart = s.step;
-    if (s.lastTele >= 0) {
-      const r = s.step - s.lastTele;
-      if (s.stReactN < 64) s.reactS[s.stReactN] = r;
-      s.stReactN++;
-      s.stReactSum += r;
-      if (r < 4) s.stReactFast++;
-      s.lastTele = -1;
-    }
+    s.inputsSinceSkim++;
+    s.settle = 0;
+    noteReaction(s);
     if (s.float > 0) {
       s.float = 0;
       s.floatSteps = 0;
       s.popGrace = POP_GRACE;
       emit(s, EV_FLOAT_POP, s.dist >> 8, s.y >> 8, 0, 0);
     }
-    if (s.phase === PH_PLAY && s.vy > 0 && s.dash === 0) {
+    if (s.phase === PH_PLAY && s.vy > 0) {
       s.vy -= 180 * Q + idiv(s.vy * 35, 100);
     }
     return;
@@ -1254,31 +1434,19 @@ export function applyInput(s: SimState, kind: number, sub: number, arg: number):
   if (kind === IN_RELEASE) {
     if (!s.holding) return;
     s.holding = 0;
+    s.lastTouch = s.step;
+    s.inputsSinceSkim++;
     const d = s.step - s.holdStart;
     const b = clampi(d >> 1, 0, 31);
     s.holdHist[b]++;
-    if (s.lastTele >= 0) {
-      const r = s.step - s.lastTele;
-      if (s.stReactN < 64) s.reactS[s.stReactN] = r;
-      s.stReactN++;
-      s.stReactSum += r;
-      if (r < 4) s.stReactFast++;
-      s.lastTele = -1;
-    }
-    if (s.phase === PH_PLAY && s.vy < 0 && s.dash === 0) s.vy += 120 * Q;
-    return;
-  }
-  if (kind === IN_DASH) {
-    if (s.etier < 2 || s.phase !== PH_PLAY || s.float > 0) return;
-    if (s.dash > 0) return;
-    if (s.boost >= BOOST_COST) startDash(s);
-    else s.dashBuf = DASH_BUFFER;
+    noteReaction(s);
+    if (s.phase === PH_PLAY && s.vy < 0) s.vy += 120 * Q;
     return;
   }
   if (kind === IN_EXT) {
     if (sub === EXT_REVIVE || sub === EXT_RIDE_RESCUE) {
       if (s.phase !== PH_WIPE) return;
-      if (sub === EXT_REVIVE && (s.reviveUsed || (s.mode !== MODE_QUEUE && s.mode !== MODE_GHOST && s.mode !== MODE_PRACTICE))) return;
+      if (sub === EXT_REVIVE && (s.reviveUsed || !timedMode(s.mode))) return;
       if (sub === EXT_RIDE_RESCUE && (s.rescueUsed || s.mode !== MODE_RIDE || !s.rescueAvail)) return;
       if (sub === EXT_REVIVE) s.reviveUsed = 1;
       else s.rescueUsed = 1;
@@ -1289,12 +1457,12 @@ export function applyInput(s: SimState, kind: number, sub: number, arg: number):
       s.iframes = REVIVE_SHIELD;
       s.y = 500 * Q;
       s.vy = 0;
-      s.stumble = 0;
+      s.lastTouch = s.step;
       emit(s, EV_REVIVE, sub, arg, 0, 0);
       return;
     }
     if (sub === EXT_LINE_BOOST) {
-      if (s.mode !== MODE_QUEUE || s.lineBoostSteps >= LINE_BOOST_MAX) return;
+      if (!timedMode(s.mode) || s.lineBoostSteps >= LINE_BOOST_MAX) return;
       const room = CLOCK_CAP - (CLOCK_BASE + s.bonusSteps);
       const add = clampi(LINE_BOOST_STEPS, 0, room);
       if (add <= 0) return;
@@ -1305,7 +1473,7 @@ export function applyInput(s: SimState, kind: number, sub: number, arg: number):
       return;
     }
     if (sub === EXT_DRAFT_ON) {
-      if (s.mode !== MODE_RACE && s.mode !== MODE_GHOST) return;
+      if (s.mode !== MODE_RALLY && s.mode !== MODE_GHOST) return;
       if (!s.draft) {
         s.draft = 1;
         s.draftSteps = 0;
@@ -1318,12 +1486,17 @@ export function applyInput(s: SimState, kind: number, sub: number, arg: number):
       s.draft = 0;
       return;
     }
+    if (sub === EXT_BUBBLE_GIFT) {
+      if (s.mode !== MODE_RALLY || s.phase !== PH_PLAY || s.giftCool > 0) return;
+      placeGift(s, arg);
+      return;
+    }
     // EXT_PAUSE_RESUME: recorded for plausibility (exact-state resume, QUEUE REALITY).
   }
 }
 
 // ---------------------------------------------------------------------------
-// Hits
+// Hits, chomps and Overdrive smashes
 // ---------------------------------------------------------------------------
 
 function sharkHit(s: SimState, i: number): void {
@@ -1341,43 +1514,41 @@ function sharkHit(s: SimState, i: number): void {
     emit(s, EV_SHIELD_POP, x, y, 0, 0);
     return;
   }
+  // v7.1: a hit costs exactly a heart and a recoverable Coin Scatter.
   s.hearts--;
   s.stHits++;
   s.iframes = IFRAMES;
-  s.stumble = STUMBLE_HOLD + STUMBLE_RAMP;
-  // Coin Scatter: 40% of the chain's coins (max 12) fan forward.
   const n = clampi(idiv(s.chainCoins * 4, 10), 0, 12);
+  const v = 10 * multiplier(s);
+  const deducted = clampi(n * v, 0, s.score);
+  s.score -= deducted;
+  s.chainCoins -= n;
+  s.regrabN = 0;
   const r = { s: s.rs };
+  let left = deducted;
   for (let k = 0; k < n; k++) {
-    const j = spawn(s, E_SCATTER, x + 20, y, 0, 0, 0);
+    const j = spawn(s, E_SCATTER, x + 10, y, 0, 0, 0);
     if (j < 0) break;
-    s.evx[j] = (rngRange(r, 60, 260)) * Q; // forward (world-relative)
-    s.evy[j] = (rngRange(r, 0, 520) - 360) * Q;
+    // Each coin refunds exactly its share of what was deducted.
+    const share = k === n - 1 ? left : idiv(deducted, n);
+    left -= share;
+    s.ep2[j] = share;
+    // Out of the shark: forward and up or down, then drifting back to be chased.
+    s.evx[j] = rngRange(r, 220, 460) * Q;
+    s.evy[j] = (rngRange(r, 0, 760) - 520) * Q;
   }
   s.rs = r.s;
-  if (s.score > 0 && n > 0) {
-    const lose = clampi(n * 10, 0, s.score);
-    s.score -= lose;
+  if (n > 0) emit(s, EV_SCATTER, n, x, y, deducted);
+  if (s.mode === MODE_RALLY && s.crowd > 0) {
+    s.crowdOut = idiv(s.crowd * 3, 10);
+    s.crowdAway = SCATTER_STEPS;
   }
-  if (n > 0) emit(s, EV_SCATTER, n, x, y, 0);
-  // Frenzy: lose 50% of the pot, bank the rest, end Frenzy.
-  if (s.frenzy > 0) {
-    s.pot = s.pot - (s.pot >> 1);
-    s.frenzy = 0;
-    bankPot(s, 2);
-  }
-  // Chain drops one tier.
-  const t = chainTier(s);
-  const before = s.chain;
-  s.chain = t > 0 ? (t - 1) * 3 : 0;
-  if (before > 0) emit(s, EV_CHAIN_BREAK, t, before, 2, s.chain);
-  s.chainCoins = 0;
-  s.chainTimer = s.chain > 0 ? CHAIN_WINDOW : 0;
   emit(s, EV_HIT, x, y, s.hearts, s.et[i]);
   if (s.hearts <= 0) {
     s.phase = PH_WIPE;
     s.phaseSteps = 0;
     s.holding = 0;
+    s.od = 0;
     breakChain(s, 3);
     emit(s, EV_WIPEOUT, x, y, 0, 0);
   }
@@ -1394,7 +1565,7 @@ function chomp(s: SimState, i: number, pts: number, kind: number): void {
   if (scoringOn(s)) {
     addScore(s, pts * multiplier(s));
     addBoost(s, 25);
-    chainEvent(s);
+    chainEvent(s, 1);
   }
   emit(s, EV_CHOMP, x, y, kind, pts);
   if (s.et[i] === E_BOX) {
@@ -1403,27 +1574,44 @@ function chomp(s: SimState, i: number, pts: number, kind: number): void {
     for (let k = 0; k < 5; k++) {
       const j = spawn(s, E_SCATTER, x, y, 1, 0, 0);
       if (j < 0) break;
-      s.evx[j] = rngRange(r, 80, 300) * Q;
+      s.evx[j] = rngRange(r, 160, 360) * Q;
       s.evy[j] = (rngRange(r, 0, 500) - 330) * Q;
     }
     s.rs = r.s;
   }
 }
 
+/** Overdrive contact: the hazard is smashed (Chomp 60, 1 chain count). */
+function smash(s: SimState, i: number): void {
+  'worklet';
+  const t = s.et[i];
+  if (s.ef[i] & F_SMASH) return;
+  s.ef[i] |= F_SMASH;
+  s.stSmashes++;
+  if (t === E_PYLON) {
+    // Pylons stay standing: a bolt pops and the lattice shudders.
+    s.etm[i] = 0;
+    s.stChomps++;
+    if (scoringOn(s)) {
+      addScore(s, 60 * multiplier(s));
+      chainEvent(s, 1);
+    }
+    emit(s, EV_CHOMP, s.dist >> 8, s.y >> 8, E_PYLON, 60);
+    return;
+  }
+  chomp(s, i, 60, t);
+  if (t === E_TORPEDO) s.est[i] = 4;
+}
+
 // ---------------------------------------------------------------------------
-// Step
+// Step helpers
 // ---------------------------------------------------------------------------
 
 function speedMulQ8(s: SimState): number {
   'worklet';
   let m = 256;
-  if (s.stumble > 0) {
-    if (s.stumble > STUMBLE_RAMP) m = 154; // x0.6
-    else m = 154 + idiv((256 - 154) * (STUMBLE_RAMP - s.stumble), STUMBLE_RAMP);
-  }
-  if (s.dash > 0) m = (m * 461) >> 8; // x1.8
-  if (s.boostSpeed > 0) m = (m * (256 + s.boostSpeedPct)) >> 8;
-  if (s.draft) m = (m * 287) >> 8; // +12%
+  if (s.od > 0 && s.mode !== MODE_RALLY) m = 320; // x1.25
+  if (s.rushK > 0) m = (m * (256 + idiv(s.rushK, 9))) >> 8; // Gate Rush +12.5%
   if (s.float > 0) {
     if (s.mode === MODE_RIDE) m = 0;
     else m = (m * 90) >> 8; // 35%
@@ -1435,7 +1623,14 @@ function bounce(s: SimState, which: number): void {
   'worklet';
   s.stBounces++;
   emit(s, EV_BOUNCE, which, s.dist >> 8, 0, 0);
-  if (s.chain > 0 || s.frenzy > 0) breakChain(s, which === 0 ? 4 : 5);
+  if (s.chain > 0) breakChain(s, which === 0 ? 4 : 5);
+}
+
+function softTouch(s: SimState, which: number): void {
+  'worklet';
+  s.stTouches++;
+  if (s.touchCool === 0) emit(s, EV_TOUCH, which, s.dist >> 8, 0, 0);
+  s.touchCool = 15;
 }
 
 function sharkPhysics(s: SimState): void {
@@ -1449,8 +1644,19 @@ function sharkPhysics(s: SimState): void {
     s.vy = 0;
     return;
   }
-  if (s.dash > 0) {
-    // vy clamped to +-200 and held for the whole dash.
+  const yU = s.y >> 8;
+  const idle = s.step - s.lastTouch;
+  const nearEdge = yU < SURFACE_Y + 200 || yU > FLOOR_Y - 200;
+  const settling = !s.holding && (idle >= SETTLE_IDLE || (nearEdge && idle >= SETTLE_IDLE_EDGE));
+  if (settling && !s.settle) {
+    s.settle = 1;
+    emit(s, EV_SETTLE, yU, 0, 0, 0);
+  }
+  if (settling) {
+    // Neutral Settle: a critically damped spring to y 500 (omega 6/s).
+    const accel = -36 * (s.y - 500 * Q) - 12 * s.vy;
+    s.vy += idiv(accel, STEP_HZ);
+    s.vy = clampi(s.vy, -SETTLE_VMAX * Q, SETTLE_VMAX * Q);
     s.y += idiv(s.vy, STEP_HZ);
   } else {
     let accel: number;
@@ -1462,14 +1668,25 @@ function sharkPhysics(s: SimState): void {
     s.vy = clampi(s.vy, -720 * Q, 820 * Q);
     s.y += idiv(s.vy, STEP_HZ);
   }
+  // Soft edges (design 3.4d): a touch at |vy| <= 300 never breaks the chain.
   if (s.y < SHARK_MIN_Y * Q) {
     s.y = SHARK_MIN_Y * Q;
-    if (s.vy < 0) s.vy = 120 * Q;
-    bounce(s, 0);
+    if (s.vy < -SOFT_VY * Q) {
+      s.vy = 120 * Q;
+      bounce(s, 0);
+    } else {
+      s.vy = 60 * Q;
+      softTouch(s, 0);
+    }
   } else if (s.y > SHARK_MAX_Y * Q) {
     s.y = SHARK_MAX_Y * Q;
-    if (s.vy > 0) s.vy = -420 * Q;
-    bounce(s, 1);
+    if (s.vy > SOFT_VY * Q) {
+      s.vy = -420 * Q;
+      bounce(s, 1);
+    } else {
+      s.vy = -60 * Q;
+      softTouch(s, 1);
+    }
   }
 }
 
@@ -1488,7 +1705,7 @@ function hazardAhead(s: SimState, lookU: number): boolean {
   return false;
 }
 
-/** Doom predictor (design 7.4): unavoidable hit within 6 steps under hold AND release. */
+/** Doom predictor (design 3.4g): an unavoidable hit within 6 steps under hold AND release. */
 function doomCheck(s: SimState): boolean {
   'worklet';
   const sf = speedFrac(s);
@@ -1519,7 +1736,7 @@ function doomCheck(s: SimState): boolean {
   return true;
 }
 
-function updateEntities(s: SimState, du: number, pdu: number): void {
+function updateEntities(s: SimState, du: number): void {
   'worklet';
   const ahead = aheadU(s);
   const spd = s.speedEff >> 8;
@@ -1528,7 +1745,7 @@ function updateEntities(s: SimState, du: number, pdu: number): void {
   // the view edge forward while the badge is up, which could shave a step.
   const sb = s.speed >> 8;
   const bv = spd > sb ? spd : sb;
-  const badgeLead = idiv(bv * 6, 10) + idiv(bv, 30);
+  const badgeLead = idiv(bv * 6, 10) + idiv(bv * 2, 60) + 12;
   for (let i = 0; i < ENT_CAP; i++) {
     const t = s.et[i];
     if (t === E_NONE) continue;
@@ -1540,6 +1757,10 @@ function updateEntities(s: SimState, du: number, pdu: number): void {
       s.et[i] = E_NONE;
       continue;
     }
+    if (isHazard(t) && !(s.ef[i] & F_HIT)) {
+      const pdu = s.pdist >> 8;
+      if (s.ex[i] > pdu && s.ex[i] <= du) emit(s, EV_PASS, t, s.speedEff >> 8, 0, 0);
+    }
     if (isHazard(t) && !(s.ef[i] & F_BADGE) && t !== E_TORPEDO) {
       const sp = hazardSpan(s, i);
       if (sp[0] <= du + ahead + badgeLead) {
@@ -1548,6 +1769,19 @@ function updateEntities(s: SimState, du: number, pdu: number): void {
         s.lastTele = s.step;
         s.stTele++;
       }
+    }
+    if (t === E_GIFT) {
+      // The gift bubble pops into a 5-coin line in its lane 260u ahead.
+      if (s.ex[i] - du <= 260) {
+        const g = newLine(s);
+        for (let k = 0; k < 5; k++) {
+          s.lineTotal[g]++;
+          spawn(s, E_COIN, s.ex[i] + k * 70, s.ey[i], 0, CF_GIFT, g);
+        }
+        emit(s, EV_GIFT_POP, s.ex[i], s.ey[i], s.ep1[i], 0);
+        s.et[i] = E_NONE;
+      }
+      continue;
     }
     if (t === E_PUFFER) {
       const dx = s.ex[i] - du;
@@ -1604,104 +1838,202 @@ function updateEntities(s: SimState, du: number, pdu: number): void {
       continue;
     }
     if (t === E_SCATTER) {
-      // Bouncing coins (hit scatter or box spill): world-relative motion.
-      // Fans ahead, then drifts back toward the shark (catchable, not free).
-      s.ex[i] += idiv(s.evx[i], STEP_HZ * Q) + idiv(s.speedEff >> 1, STEP_HZ * Q);
-      s.evy[i] += idiv(700 * Q, STEP_HZ);
+      // Coin Scatter (Sonic): gravity arcs with real bounces (restitution 0.6).
+      // Relative to the shark they burst ahead, slow, then drift back at
+      // 120 u/s, so a player steering to their lane wins them back.
+      s.ex[i] += idiv(s.evx[i] + s.speedEff - 120 * Q, STEP_HZ * Q);
+      s.evy[i] += idiv(1400 * Q, STEP_HZ);
       s.ey[i] += idiv(s.evy[i], STEP_HZ * Q);
-      s.evx[i] -= idiv(s.evx[i], 40);
-      if (s.ey[i] > FLOOR_Y - 20) {
-        s.ey[i] = FLOOR_Y - 20;
+      s.evx[i] -= idiv(s.evx[i], 30);
+      if (s.ey[i] > FLOOR_Y - 24) {
+        s.ey[i] = FLOOR_Y - 24;
         s.evy[i] = -idiv(s.evy[i] * 6, 10);
       }
-      if (s.ey[i] < SURFACE_Y + 20) {
-        s.ey[i] = SURFACE_Y + 20;
-        s.evy[i] = -s.evy[i];
+      if (s.ey[i] < SURFACE_Y + 24) {
+        s.ey[i] = SURFACE_Y + 24;
+        s.evy[i] = -idiv(s.evy[i] * 6, 10);
       }
       if (s.etm[i] >= SCATTER_STEPS) s.et[i] = E_NONE;
       continue;
     }
   }
-  void pdu;
 }
 
-function skim(s: SimState, i: number): void {
+/** Pass end (design 3.3): decide the Skim credit from the whole window. */
+function passEnd(s: SimState, i: number): void {
   'worklet';
+  s.ef[i] &= ~F_PASS;
+  if (s.ef[i] & (F_HIT | F_SKIMMED | F_GHOST)) return;
+  // A pass that mostly clipped the art earns nothing (no reward for clipping).
+  if (s.eo[i] >= s.eg[i]) return;
+  const close = s.ec[i] >= GRAZE_MIN_STEPS;
+  const skimmed = close || s.eg[i] >= GRAZE_MIN_STEPS;
+  if (!skimmed) return;
+  s.ef[i] |= F_SKIMMED;
   s.stSkims++;
+  s.stPasses++;
+  if (close) {
+    s.stCloseSkims++;
+    s.consecClose = s.inputsSinceSkim < 2 ? s.consecClose + 1 : 0;
+    if (s.consecClose > s.maxConsecClose) s.maxConsecClose = s.consecClose;
+  }
+  s.inputsSinceSkim = 0;
   s.skimStack = s.skimTimer > 0 ? clampi(s.skimStack + 1, 1, 4) : 1;
   s.skimTimer = 60;
+  emit(s, EV_SKIM, s.dist >> 8, s.y >> 8, close ? 1 : 0, i);
   if (!scoringOn(s)) return;
-  const pts = (s.dash > 0 ? 50 : 25) * multiplier(s);
-  addScore(s, pts);
-  addBoost(s, 34);
-  chainEvent(s);
-  const y = s.et[i] === E_JELLY ? jellyY(s, i) : s.ey[i];
-  emit(s, EV_SKIM, s.dist >> 8, s.y >> 8, s.skimStack, y);
+  chainEvent(s, close ? 2 : 1);
+  if (close) odTrigger(s, 1);
+}
+
+/** Per-step graze accumulation inside a hazard's halo. */
+function grazeStep(s: SimState, i: number, du: number, sy: number): void {
+  'worklet';
+  if (s.ef[i] & (F_HIT | F_SKIMMED)) return;
+  let band = 0;
+  if (hazardTouches(s, i, du, sy, SIL_RX + 1, SIL_RY + 1, true)) band = 3;
+  else if (hazardTouches(s, i, du, sy, SIL_RX + GRAZE_CLOSE, SIL_RY + GRAZE_CLOSE, true)) band = 2;
+  else if (hazardTouches(s, i, du, sy, SIL_RX + GRAZE_HALO, SIL_RY + GRAZE_HALO, true)) band = 1;
+  if (band === 0) {
+    if (s.ef[i] & F_PASS) passEnd(s, i);
+    return;
+  }
+  s.ef[i] |= F_PASS;
+  if (band === 3) {
+    // Overlapping art without a hit pays nothing.
+    s.eo[i]++;
+    return;
+  }
+  s.eg[i]++;
+  s.stHaloSteps++;
+  if (band === 2 || s.grazeBand === 0) {
+    s.grazeBand = band === 2 ? 2 : 1;
+    s.grazeEnt = i;
+  }
+  if (band === 2) {
+    s.ec[i]++;
+    s.stCloseSteps++;
+  }
+  emit(s, EV_GRAZE, band === 2 ? 1 : 0, i, sy, 0);
+  if (!scoringOn(s)) return;
+  const base = band === 2 ? 5 : 2;
+  const pay = clampi(GRAZE_PTS_CAP - s.egp[i], 0, base);
+  if (pay > 0) {
+    s.egp[i] += pay;
+    addScore(s, pay * multiplier(s) * (s.od > 0 ? 2 : 1));
+  }
+  const b = clampi(GRAZE_BOOST_CAP - s.egb[i], 0, band === 2 ? 4 : 2);
+  if (b > 0) {
+    s.egb[i] += b;
+    addBoost(s, b);
+  }
 }
 
 function end(s: SimState, reason: number): void {
   'worklet';
   if (s.phase === PH_DONE) return;
-  if (s.frenzy > 0) {
-    s.frenzy = 0;
-    bankPot(s, 0);
-  }
   s.phase = PH_DONE;
   s.endReason = reason;
   emit(s, EV_END, reason, s.score, s.hearts, s.tokens);
 }
 
+/** Gate Bonus (design 5.7): 100 x the multiplier at the gate line, flat. */
+function gateBonus(s: SimState, kind: number): void {
+  'worklet';
+  const m = multiplier(s);
+  const pts = 100 * m;
+  addFlat(s, pts);
+  s.lastGateBonus = pts;
+  emit(s, EV_GATE_BONUS, pts, m, s.frenzy > 0 ? 1 : 0, kind);
+}
+
 function gate(s: SimState, i: number): void {
   'worklet';
   const kind = s.ep1[i];
+  const k = clampi(s.gates, 0, 7);
   if (kind === G_SPLIT) {
-    const k = clampi(s.gates, 0, 7);
+    gateBonus(s, kind);
     s.splitSteps[k] = s.step;
+    s.splitScores[k] = s.score;
     s.gates++;
-    emit(s, EV_GATE, 0, kind, s.step, 0);
+    emit(s, EV_GATE, 0, kind, s.step, s.gates);
     return;
   }
-  const frenzyNow = s.frenzy > 0;
-  const multNow = multiplier(s);
-  if (s.frenzy > 0) {
-    s.frenzy = 0;
-    bankPot(s, 0);
-  }
-  if (kind === G_FINISH) {
+  if (kind === G_FINISH || kind === G_RIDE) {
+    gateBonus(s, kind);
+    s.splitSteps[k] = s.step;
+    s.splitScores[k] = s.score;
     s.finishStep = s.step;
-    end(s, END_FINISH);
-    emit(s, EV_GATE, 0, kind, s.step, 0);
+    emit(s, EV_GATE, 0, kind, s.step, s.gates + 1);
+    end(s, kind === G_FINISH ? END_FINISH : END_GATE);
     return;
   }
-  if (kind === G_RIDE) {
-    s.finishStep = s.step;
-    end(s, END_GATE);
-    emit(s, EV_GATE, 0, kind, s.step, 0);
-    return;
-  }
-  // Tide Gate: clock bonus 4s + (multiplier - 1)s, 8s during Frenzy; 60s cap.
+  // Tide Gate: a flat +4s (cap 60s), the Gate Bonus, then a Tide Pocket.
+  gateBonus(s, kind);
   let bonus = 0;
-  if (s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE) {
-    const want = frenzyNow ? 480 : (4 + (multNow - 1)) * 60;
+  if (timedMode(s.mode)) {
     const room = CLOCK_CAP - (CLOCK_BASE + s.bonusSteps);
-    bonus = clampi(want, 0, room);
+    bonus = clampi(GATE_CLOCK, 0, room);
     s.bonusSteps += bonus;
     s.clockSteps += bonus;
   }
-  const k = clampi(s.gates, 0, 7);
   s.splitSteps[k] = s.step;
+  s.splitScores[k] = s.score;
   s.gates++;
+  // v7.1 engaged-player rule: holding on the gate-line step collapses the pocket.
+  const full = s.mode === MODE_RIDE ? POCKET_RIDE : POCKET_QUEUE;
+  s.pocketLen = s.holding ? POCKET_SHORT : full;
   emit(s, EV_GATE, bonus, kind, s.step, s.gates);
   s.phase = PH_POCKET;
   s.phaseSteps = 0;
   s.pocketY = s.y;
+  s.float = 0;
+  s.settle = 0;
   // The next sprint streams in now, placed after the pocket's cruise (the
   // speed is constant in a pocket, so this is exact) and its lead-in.
   startSprint(s, s.sprint + 1, null, idiv(idiv(s.speed, STEP_HZ) * s.pocketLen, Q));
-  s.float = 0;
-  s.dash = 0;
-  s.dashBuf = 0;
-  s.holding = s.holding;
+}
+
+function collectCoin(s: SimState, i: number): void {
+  'worklet';
+  const t = s.et[i];
+  const cy = s.ey[i];
+  const cx = s.ex[i];
+  const fl = s.ep2[i];
+  s.ef[i] |= F_DONE;
+  s.et[i] = E_NONE;
+  s.stCoins++;
+  s.stCoinsTotal++;
+  s.ladder = s.ladderTimer > 0 ? clampi(s.ladder + 1, 0, 12) : 0;
+  s.ladderTimer = 24;
+  if (s.chain > 0) s.chainTimer = CHAIN_WINDOW;
+  if (t === E_SCATTER && s.ep1[i] === 0) {
+    // Coin Scatter regrab: refund exactly what this coin took, window extends.
+    addFlat(s, fl);
+    s.regrabN++;
+    s.stRegrabs++;
+    emit(s, EV_COIN, cx, cy, s.ladder, 1);
+    if (s.regrabN === 3) {
+      chainEvent(s, 1);
+      s.crowdAway = 0;
+      emit(s, EV_REGRAB, cx, cy, s.regrabN, fl);
+    }
+    return;
+  }
+  s.chainCoins++;
+  const m = multiplier(s);
+  const gift = t === E_COIN && (fl & CF_GIFT) !== 0;
+  addScore(s, 10 * (gift && m > 4 ? 4 : m));
+  emit(s, EV_COIN, cx, cy, s.ladder, (s.frenzy > 0 ? 2 : 0) | (fl & CF_CLOSE ? 4 : 0) | (fl & CF_RUSH ? 8 : 0) | (gift ? 16 : 0));
+  if (t === E_COIN) {
+    const g = s.eline[i];
+    s.lineGot[g]++;
+    if (s.lineGot[g] === s.lineTotal[g] && s.lineTotal[g] >= 3) {
+      addScore(s, 30 * (gift && m > 4 ? 4 : m));
+      chainEvent(s, 1);
+      emit(s, EV_LINE, cx, cy, s.lineTotal[g], gift ? 1 : 0);
+    }
+  }
 }
 
 function collide(s: SimState, du: number, pdu: number): void {
@@ -1709,42 +2041,22 @@ function collide(s: SimState, du: number, pdu: number): void {
   const sy = s.y >> 8;
   const on = scoringOn(s);
   const safe = s.float > 0 || s.popGrace > 0 || s.reviveShield > 0;
+  const magnet = s.frenzy > 0 ? 220 : s.od > 0 ? 200 : 0;
   for (let i = 0; i < ENT_CAP; i++) {
     const t = s.et[i];
     if (t === E_NONE || (s.ef[i] & F_DONE)) continue;
     const dx = s.ex[i] - du;
-    if (dx > 320 || dx < -320) continue;
+    if (dx > 340 || dx < -340) continue;
     if (t === E_COIN || t === E_SCATTER) {
       if (!on) continue;
-      if (t === E_SCATTER && s.etm[i] < 8) continue;
+      if (t === E_SCATTER && s.etm[i] < 12) continue;
       const cy = s.ey[i];
       let got = ellipseCircle(du, sy, SHARK_RX + 14, SHARK_RY + 14, s.ex[i], cy, COIN_R);
-      if (!got && s.frenzy > 0) {
+      if (!got && magnet > 0) {
         const ddy = cy - sy;
-        got = dx * dx + ddy * ddy <= 220 * 220;
+        got = dx * dx + ddy * ddy <= magnet * magnet;
       }
-      if (!got) continue;
-      s.ef[i] |= F_DONE;
-      s.et[i] = E_NONE;
-      s.stCoins++;
-      s.chainCoins++;
-      addScore(s, 10 * multiplier(s));
-      s.ladder = s.ladderTimer > 0 ? clampi(s.ladder + 1, 0, 12) : 0;
-      s.ladderTimer = 18;
-      if (s.chain > 0 || s.frenzy > 0) s.chainTimer = CHAIN_WINDOW;
-      emit(s, EV_COIN, s.ex[i], cy, s.ladder, t === E_SCATTER ? 1 : 0);
-      if (t === E_SCATTER && s.ep1[i] === 0) {
-        chainEvent(s);
-        emit(s, EV_REGAIN, s.ex[i], cy, 0, 0);
-      }
-      if (t === E_COIN) {
-        const g = s.eline[i];
-        s.lineGot[g]++;
-        if (s.lineGot[g] === s.lineTotal[g] && s.lineTotal[g] >= 3) {
-          chainEvent(s);
-          emit(s, EV_LINE, s.ex[i], cy, s.lineTotal[g], 0);
-        }
-      }
+      if (got) collectCoin(s, i);
       continue;
     }
     if (t === E_RING) {
@@ -1757,15 +2069,11 @@ function collide(s: SimState, du: number, pdu: number): void {
       s.stRings++;
       if (perfect) s.stPerfects++;
       if (d <= 4) s.stPerfectTight++;
-      addScore(s, (perfect ? 100 : 50) * multiplier(s));
+      addScore(s, (perfect ? 120 : 50) * multiplier(s));
       addBoost(s, perfect ? 50 : 15);
-      chainEvent(s);
-      if (perfect && (s.mode === MODE_RACE || s.mode === MODE_GHOST)) {
-        s.boostSpeed = 36;
-        s.boostSpeedPct = 26; // +10%
-        emit(s, EV_SPEED_BOOST, 10, 36, 0, 0);
-      }
+      chainEvent(s, perfect ? 2 : 1);
       emit(s, EV_RING, s.ex[i], s.ey[i], perfect ? 1 : 0, d);
+      if (perfect) odTrigger(s, 2);
       continue;
     }
     if (t === E_TOKEN) {
@@ -1777,12 +2085,12 @@ function collide(s: SimState, du: number, pdu: number): void {
         s.tokenMask |= 1 << slot;
         s.tokens++;
       }
-      addScore(s, 150 * multiplier(s));
+      addScore(s, 200 * multiplier(s));
       addBoost(s, 50);
-      chainEvent(s);
+      chainEvent(s, 1);
       emit(s, EV_TOKEN, s.ex[i], s.ey[i], slot, s.tokens);
       if (s.tokens === 3) {
-        s.score += 500;
+        addFlat(s, 500);
         emit(s, EV_TOKEN_SET, 500, 0, 0, 0);
       }
       continue;
@@ -1812,38 +2120,35 @@ function collide(s: SimState, du: number, pdu: number): void {
     if (t === E_TORPEDO && (s.est[i] === 0 || s.est[i] >= 4)) continue;
     const touching = hazardTouches(s, i, du, sy, SHARK_RX, SHARK_RY, false);
     if (safe) {
-      if (touching) s.ef[i] |= F_GHOST | F_CLOSE;
+      if (touching) s.ef[i] |= F_GHOST;
+      if (s.ef[i] & F_PASS) passEnd(s, i);
       continue;
     }
-    if (t === E_PUFFER) {
+    if (touching && s.od > 0) {
+      smash(s, i);
+      if (s.et[i] !== E_PYLON) continue;
+    } else if (t === E_PUFFER) {
       const inflated = s.est[i] >= 2 && s.etm[i] >= 4;
       if (touching) {
-        if (!inflated || s.dash > 0) {
-          chomp(s, i, 60, E_PUFFER);
-          continue;
-        }
-        // Contact grace (5 steps): a Dash inside it turns the hit into a Chomp.
-        if (s.ep2[i] === 0) s.ep2[i] = s.step;
-        if (s.step - s.ep2[i] >= CONTACT_GRACE) sharkHit(s, i);
+        if (!inflated) chomp(s, i, 60, E_PUFFER);
+        else sharkHit(s, i);
+        if (s.phase !== PH_PLAY) return;
         continue;
       }
-      s.ep2[i] = 0;
     } else if (touching) {
       sharkHit(s, i);
       if (s.phase !== PH_PLAY) return;
       continue;
     }
-    // Honest skims: visible water 2..22u between silhouette and art edge.
-    if (!(s.ef[i] & F_CLOSE)) {
-      if (hazardTouches(s, i, du, sy, SIL_RX + 2, SIL_RY + 2, true)) s.ef[i] |= F_CLOSE;
-      else if (hazardTouches(s, i, du, sy, SIL_RX + 22, SIL_RY + 22, true)) s.ef[i] |= F_SKIMC;
-    }
-    const sp = hazardSpan(s, i);
-    if (sp[1] < du - SIL_RX && !(s.ef[i] & F_DONE)) {
-      s.ef[i] |= F_DONE;
-      if ((s.ef[i] & F_SKIMC) && !(s.ef[i] & (F_CLOSE | F_HIT | F_GHOST))) skim(s, i);
-    }
+    grazeStep(s, i, du, sy);
   }
+}
+
+export function scatterCount(s: SimState): number {
+  'worklet';
+  let n = 0;
+  for (let i = 0; i < ENT_CAP; i++) if (s.et[i] === E_SCATTER && s.ep1[i] === 0) n++;
+  return n;
 }
 
 export function stateHash(s: SimState): number {
@@ -1856,6 +2161,8 @@ export function stateHash(s: SimState): number {
   h = fnv(h, s.score);
   h = fnv(h, s.hearts);
   h = fnv(h, s.boost);
+  h = fnv(h, s.chain);
+  h = fnv(h, scatterCount(s));
   return h >>> 0;
 }
 
@@ -1881,9 +2188,10 @@ function stepInner(s: SimState): void {
   }
 
   s.worldT++;
+  if (s.touchCool > 0) s.touchCool--;
   if (s.phase === PH_WIPE) {
     s.phaseSteps++;
-    const canRevive = (s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE) && !s.reviveUsed;
+    const canRevive = timedMode(s.mode) && !s.reviveUsed;
     const canRescue = s.mode === MODE_RIDE && !s.rescueUsed && s.rescueAvail > 0;
     const limit = WIPE_ANIM + (canRevive || canRescue ? REVIVE_WINDOW : 0);
     if (s.phaseSteps >= limit) end(s, END_WIPEOUT);
@@ -1896,23 +2204,27 @@ function stepInner(s: SimState): void {
     const target = 500 * Q + 40 * isin(s.phaseSteps * 12);
     s.y += (target - s.y) >> 3;
     s.vy = 0;
+    if (s.rushK > 0) s.rushK = s.rushK > 24 ? s.rushK - 24 : 0;
     s.dist += idiv(s.speed, STEP_HZ);
     const du = s.dist >> 8;
     while (s.cqNext < s.cqN && s.cqX[s.cqNext] <= du + 1500) {
       spawnChunk(s, s.cqNext);
       s.cqNext++;
     }
-    updateEntities(s, du, pdu);
+    updateEntities(s, du);
     const left = s.pocketLen - s.phaseSteps;
-    if (left === 72 || left === 36 || left === 0) emit(s, EV_PIP, left === 72 ? 1 : left === 36 ? 2 : 3, 0, 0, 0);
+    if (s.pocketLen === POCKET_SHORT) {
+      if (left === 18) emit(s, EV_PIP, 3, 1, 0, 0);
+    } else if (left === 72 || left === 36 || left === 0) {
+      emit(s, EV_PIP, left === 72 ? 1 : left === 36 ? 2 : 3, 0, 0, 0);
+    }
     if (s.phaseSteps >= s.pocketLen) {
       s.phase = PH_PLAY;
       s.phaseSteps = 0;
       s.vy = 0;
-      // The pocket is "look up" time: the Bubble Float idle count restarts at
-      // its exit, so a player gets the full 1.8s to put a thumb back down
-      // instead of being floated on the first lead-in step.
-      if (!s.holding) s.lastPress = s.step;
+      // The pocket is "look up" time: Settle and Float idle counts restart at
+      // its exit, so a player gets the full window to put a thumb back down.
+      if (!s.holding) s.lastTouch = s.step;
       emit(s, EV_POCKET_END, s.sprint, 0, 0, 0);
     }
     return;
@@ -1922,7 +2234,7 @@ function stepInner(s: SimState): void {
   s.activeSteps++;
   if (s.float === 0) s.speedSteps++;
   s.phaseSteps++;
-  if (s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE) {
+  if (timedMode(s.mode)) {
     s.clockSteps--;
     if (s.clockSteps <= 300 && s.clockSteps > 0 && s.clockSteps % 60 === 0) emit(s, EV_CLOCK_TICK, idiv(s.clockSteps, 60), 0, 0, 0);
     if (s.clockSteps <= 0) {
@@ -1933,10 +2245,10 @@ function stepInner(s: SimState): void {
   }
 
   // Speed ramp: +4.2 u/s per active second, +25 per gate, capped.
-  const sp = s.speedBase + idiv(s.speedSteps * 42 * Q, 600) + s.gates * 25 * Q;
+  const sp = s.speedBase + idiv(s.speedSteps * 42 * Q, 600) + (s.mode === MODE_RALLY ? 0 : s.gates * 25 * Q);
   s.speed = sp > s.speedCap ? s.speedCap : sp;
 
-  // Bubble Float: arms after 1.8s without a touch-down, when nothing is near.
+  // Bubble Float: arms after 1.8s without a touch, when nothing is near (1.0s).
   if (s.float === 1) {
     s.floatSteps++;
     if (s.floatSteps >= FLOAT_FREEZE) {
@@ -1944,9 +2256,9 @@ function stepInner(s: SimState): void {
       emit(s, EV_FREEZE, 0, 0, 0, 0);
       return;
     }
-  } else if (!s.holding && s.activeSteps > 180 && s.step - s.lastPress >= FLOAT_ARM && s.dash === 0
+  } else if (!s.holding && s.activeSteps > 180 && s.step - s.lastTouch >= FLOAT_ARM && s.od === 0
     && s.popGrace === 0 && s.reviveShield === 0) {
-    if (!hazardAhead(s, (s.speed >> 8) + 100)) {
+    if (!hazardAhead(s, (s.speed >> 8) + SIL_RX)) {
       s.float = 1;
       s.floatSteps = 0;
       emit(s, EV_FLOAT_IN, s.dist >> 8, s.y >> 8, 0, 0);
@@ -1955,23 +2267,19 @@ function stepInner(s: SimState): void {
 
   // Timers.
   if (s.iframes > 0) s.iframes--;
-  if (s.stumble > 0) s.stumble--;
   if (s.popGrace > 0) s.popGrace--;
   if (s.reviveShield > 0) s.reviveShield--;
-  if (s.boostSpeed > 0) s.boostSpeed--;
   if (s.skimTimer > 0) s.skimTimer--;
   if (s.ladderTimer > 0) s.ladderTimer--;
   if (s.doomCool > 0) s.doomCool--;
-  if (s.dash > 0) {
-    s.dash--;
-  } else if (s.dashBuf > 0) {
-    if (s.boost >= BOOST_COST) startDash(s);
-    else {
-      s.dashBuf--;
-      if (s.dashBuf === 0) {
-        s.stFizz++;
-        emit(s, EV_FIZZ, s.boost, 0, 0, 0);
-      }
+  if (s.giftCool > 0) s.giftCool--;
+  if (s.crowdAway > 0) s.crowdAway--;
+  if (s.od > 0) {
+    s.od--;
+    if (s.od === 0) {
+      s.boost = 0;
+      s.iframes = OD_IFRAMES;
+      emit(s, EV_OD_END, s.dist >> 8, s.y >> 8, 0, 0);
     }
   }
   if (s.draft) {
@@ -1986,17 +2294,36 @@ function stepInner(s: SimState): void {
       emit(s, EV_DRAFT, 0, 0, 0, 0);
     }
   }
-  if (s.float === 0 && s.phase === PH_PLAY) {
+  if (s.float === 0) {
     if (s.frenzy > 0) {
       s.frenzy--;
       if (s.frenzy === 0) {
-        bankPot(s, 0);
+        emit(s, EV_FRENZY_END, s.chain, 0, 0, 0);
         s.chainTimer = CHAIN_WINDOW;
+        s.frenzyNext = s.chain + 12;
       }
-    } else if (s.chainTimer > 0) {
+    } else if (s.chainTimer > 0 && s.iframes === 0) {
+      // The window freezes in i-frames (a hit can't time the chain out).
       s.chainTimer--;
       if (s.chainTimer === 0) breakChain(s, 0);
     }
+  }
+
+  // Gate Rush: +12% over 300ms inside the rush zone, out over 200ms after.
+  const duNow = s.dist >> 8;
+  const inRush = s.gateX > 0 && duNow >= s.gateX - rushLen(s.speed >> 8) && duNow < s.gateX;
+  let splitRush = false;
+  if (!inRush && s.mode === MODE_RALLY) {
+    for (let i = 0; i < ENT_CAP; i++) {
+      if (s.et[i] !== E_GATE || s.ep1[i] !== G_SPLIT || (s.ef[i] & F_DONE)) continue;
+      if (duNow >= s.ex[i] - rushLen(s.speed >> 8) && duNow < s.ex[i]) splitRush = true;
+    }
+  }
+  if (inRush || splitRush) {
+    if (s.rushK === 0) emit(s, EV_RUSH, inRush ? s.gateX : duNow, s.gateKind, 0, 0);
+    s.rushK = s.rushK + 16 > 288 ? 288 : s.rushK + 16;
+  } else if (s.rushK > 0) {
+    s.rushK = s.rushK > 24 ? s.rushK - 24 : 0;
   }
 
   s.speedEff = (s.speed * speedMulQ8(s)) >> 8;
@@ -2010,35 +2337,37 @@ function stepInner(s: SimState): void {
     s.cqNext++;
   }
 
-  updateEntities(s, du, pdu);
+  updateEntities(s, du);
+  s.grazeBand = 0;
+  s.grazeEnt = -1;
   collide(s, du, pdu);
   if (s.phase !== PH_PLAY) return;
 
-  // Distance points: 1 per 10u (not in Float).
-  if (s.float === 0 && s.reviveShield === 0) {
+  // Distance points: 1 per 50u, flat (not in Float, a revive shield or Rally).
+  if (s.float === 0 && s.reviveShield === 0 && s.mode !== MODE_RALLY) {
     s.distAcc += du - pdu;
-    while (s.distAcc >= 10) {
-      s.distAcc -= 10;
-      addScore(s, 1);
+    while (s.distAcc >= 50) {
+      s.distAcc -= 50;
+      addFlat(s, 1);
     }
   }
 
-  // Ride win beat: the Ride Gate is about to enter view.
-  if (s.gateKind === G_RIDE && !s.gateNear && s.gateX - du <= aheadU(s)) {
+  // Ride / Rally finish beat: the Ride Gate is about to enter view.
+  if ((s.gateKind === G_RIDE || s.gateKind === G_FINISH) && !s.gateNear && s.gateX > 0 && s.gateX - du <= aheadU(s) + 180) {
     s.gateNear = 1;
     emit(s, EV_GATE_NEAR, s.gateX, 0, 0, 0);
   }
 
   // Doom slow-mo (presentation) when the next hit is unavoidable and fatal.
   if (s.hearts === 1 && !s.shield && s.iframes === 0 && s.float === 0 && s.popGrace === 0 && s.doomCool === 0
-    && s.dash === 0 && s.reviveShield === 0 && (s.reviveUsed || s.mode === MODE_RIDE || s.mode === MODE_RACE)) {
+    && s.od === 0 && s.reviveShield === 0 && (s.reviveUsed || s.mode === MODE_RIDE || s.mode === MODE_RALLY)) {
     if (doomCheck(s)) {
       s.doomCool = 60;
       emit(s, EV_DOOM, du, s.y >> 8, 0, 0);
     }
   }
 
-  if (s.phaseSteps % 6 === 0) emit(s, EV_SCORE, s.score, s.pot, 0, 0);
+  if (s.phaseSteps % 6 === 0) emit(s, EV_SCORE, s.score, 0, 0, 0);
   if (s.step % 600 === 0) s.hash = stateHash(s);
 }
 
@@ -2126,11 +2455,11 @@ export function decodeInputs(str: string): InputEntry[] {
   let step = 0;
   const readVar = (): number => {
     let x = 0;
-    let shift = 0;
+    let mul = 1;
     while (p < bytes.length) {
       const b = bytes[p++];
-      x += (b & 0x7f) * Math.pow(2, shift);
-      shift += 7;
+      x += (b & 0x7f) * mul;
+      mul *= 128;
       if (!(b & 0x80)) break;
     }
     return x;
@@ -2138,7 +2467,7 @@ export function decodeInputs(str: string): InputEntry[] {
   while (p < bytes.length) {
     const v = readVar();
     const kind = v & 3;
-    step += Math.floor(v / 4);
+    step += idiv(v, 4);
     let sub = 0;
     let arg = 0;
     if (kind === IN_EXT) {
@@ -2180,7 +2509,7 @@ export function finalHash(s: SimState): number {
 }
 
 // ---------------------------------------------------------------------------
-// Plausibility (design 11.4): flags for review, never a rejection by itself.
+// Plausibility (design 12.4): flags for review, never a rejection by itself.
 // ---------------------------------------------------------------------------
 
 export interface Plausibility {
@@ -2189,6 +2518,8 @@ export interface Plausibility {
   reactFast: number;
   holdEntropyBits: number;
   perfectTightRatio: number;
+  closeShare: number;
+  maxConsecClose: number;
   flagged: boolean;
   reasons: string[];
 }
@@ -2215,50 +2546,35 @@ export function plausibility(s: SimState): Plausibility {
   if (total >= 10 && ent < 2.0) reasons.push('timing_entropy');
   const ratio = s.stRingOpp >= 15 ? s.stPerfectTight / s.stRingOpp : 0;
   if (ratio > 0.35) reasons.push('frame_perfect');
+  const closeShare = s.stHaloSteps > 0 ? s.stCloseSteps / s.stHaloSteps : 0;
+  if (s.stPasses >= 15 && closeShare > 0.7) reasons.push('close_band');
+  if (s.maxConsecClose >= 8) reasons.push('close_streak');
   return {
     reactN: s.stReactN,
     reactMeanSteps: mean,
     reactFast: s.stReactFast,
     holdEntropyBits: ent,
     perfectTightRatio: ratio,
+    closeShare,
+    maxConsecClose: s.maxConsecClose,
     flagged: reasons.length > 0,
     reasons,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Bot policy: house-crew racers, tests and chunk gates. Integer only.
+// Bot targeting and the fast lookahead planner (bots, tests, chunk gates).
 // ---------------------------------------------------------------------------
 
-export interface BotBrain {
-  /** Steps between input changes (human ~7). */
-  cadence: number;
-  /** Perception delay in steps (the world it plans on is this old). */
-  delay: number;
-  /** Target-y noise (u). */
-  noise: number;
-  /** Uses Dash when boost is ready and a Puffer or skim line is near. */
-  dasher: boolean;
-  /** Dashes the moment the meter allows (spam policy for the race test). */
-  spam: boolean;
-  r: { s: number };
-  next: number;
-  wantHold: number;
-  targetY: number;
-}
-
-export function createBrain(seed: number, cadence: number, delay: number, noise: number, dasher: boolean, spam: boolean): BotBrain {
-  'worklet';
-  return { cadence, delay, noise, dasher, spam, r: { s: seed | 0 }, next: 0, wantHold: 0, targetY: 500 };
-}
-
-/** Best y to aim for given the hazards ahead (u). Deterministic heuristic. */
-export function botTargetY(s: SimState, lookU: number): number {
+/**
+ * Best y to aim for given the hazards ahead (u). Deterministic heuristic.
+ * hug = 0 the lazy centre line, 1 the Close line (skill line, design 4.4).
+ */
+export function botTargetY(s: SimState, lookU: number, hug: number): number {
   'worklet';
   const du = s.dist >> 8;
   let best = -1;
   let bestX = 1e9;
-  // Nearest unresolved hazard or pickup line ahead.
   for (let i = 0; i < ENT_CAP; i++) {
     const t = s.et[i];
     if (!isHazard(t) || (s.ef[i] & (F_HIT | F_DONE))) continue;
@@ -2269,13 +2585,14 @@ export function botTargetY(s: SimState, lookU: number): number {
       best = i;
     }
   }
+  const sy = s.y >> 8;
   if (best < 0) {
     // Follow coins / rings.
     let cy = 500;
     let cx = 1e9;
     for (let i = 0; i < ENT_CAP; i++) {
       const t = s.et[i];
-      if (t !== E_COIN && t !== E_RING && t !== E_TOKEN) continue;
+      if (t !== E_COIN && t !== E_RING && t !== E_TOKEN && t !== E_BOX) continue;
       if (s.ef[i] & F_DONE) continue;
       if (s.ex[i] < du || s.ex[i] > du + lookU) continue;
       if (s.ex[i] < cx) {
@@ -2286,13 +2603,19 @@ export function botTargetY(s: SimState, lookU: number): number {
     return cy;
   }
   const t = s.et[best];
-  if (t === E_PYLON) return s.ey[best];
+  if (t === E_PYLON) {
+    if (!hug) return s.ey[best];
+    const half = s.ep1[best] >> 1;
+    const top = s.ey[best] - half + SIL_RY + 8;
+    const bot = s.ey[best] + half - SIL_RY - 8;
+    return absi(sy - top) <= absi(sy - bot) ? top : bot;
+  }
   // Circles and torpedoes: pick the side with more room, considering neighbours.
   const hy = t === E_JELLY ? jellyY(s, best) : s.ey[best];
   const r = t === E_JELLY ? JELLY_R : t === E_PUFFER ? PUFF_R1 : TORP_H >> 1;
-  const above = hy - r - SHARK_RY - 40;
-  const below = hy + r + SHARK_RY + 40;
-  // Check the other hazards in the same x band.
+  const pad = hug ? 18 : 40;
+  const above = hy - r - SHARK_RY - pad;
+  const below = hy + r + SHARK_RY + pad;
   let upOk = above > SHARK_MIN_Y + 10;
   let downOk = below < SHARK_MAX_Y - 10;
   for (let i = 0; i < ENT_CAP; i++) {
@@ -2300,69 +2623,17 @@ export function botTargetY(s: SimState, lookU: number): number {
     const t2 = s.et[i];
     if (!isHazard(t2) || (s.ef[i] & (F_HIT | F_DONE))) continue;
     if (absi(s.ex[i] - s.ex[best]) > 220) continue;
-    const y2 = t2 === E_JELLY ? jellyY(s, i) : t2 === E_PYLON ? -1 : s.ey[i];
     if (t2 === E_PYLON) continue;
+    const y2 = t2 === E_JELLY ? jellyY(s, i) : s.ey[i];
     const r2 = t2 === E_JELLY ? JELLY_R : t2 === E_PUFFER ? PUFF_R1 : TORP_H >> 1;
     if (absi(y2 - above) < r2 + SHARK_RY + 20) upOk = false;
     if (absi(y2 - below) < r2 + SHARK_RY + 20) downOk = false;
   }
-  const sy = s.y >> 8;
   if (upOk && downOk) return absi(sy - above) < absi(sy - below) ? above : below;
   if (upOk) return above;
   if (downOk) return below;
   return absi(sy - above) < absi(sy - below) ? above : below;
 }
-
-/**
- * One bot decision for the current step. Returns inputs to apply as a small
- * list of kinds (press/release/dash). Uses its own RNG so bots replay.
- */
-export function botDecide(s: SimState, b: BotBrain, out: number[]): number {
-  'worklet';
-  let n = 0;
-  if (s.phase !== PH_PLAY) {
-    if (s.phase === PH_POCKET && s.holding) {
-      out[n++] = IN_RELEASE;
-    }
-    return n;
-  }
-  if (s.step < b.next) return 0;
-  b.next = s.step + b.cadence;
-  const sf = speedFrac(s);
-  const look = (s.speed >> 8) + 60 + ((sf * 80) >> 8);
-  let ty = botTargetY(s, look);
-  if (b.noise > 0) ty += rngRange(b.r, -b.noise, b.noise);
-  b.targetY = ty;
-  // Predict where we'll be after `delay + cadence` steps with a simple lead.
-  const lead = b.delay + b.cadence;
-  const py = (s.y >> 8) + idiv(idiv(s.vy, Q) * lead, STEP_HZ);
-  const want = py > ty ? 1 : 0;
-  if (want && !s.holding) out[n++] = IN_PRESS;
-  if (!want && s.holding) out[n++] = IN_RELEASE;
-  if (b.dasher && s.etier >= 2 && s.dash === 0 && s.boost >= BOOST_COST) {
-    if (b.spam) out[n++] = IN_DASH;
-    else {
-      // Dash through an inflated puffer we're about to hit, or on a clear straight.
-      const du = s.dist >> 8;
-      for (let i = 0; i < ENT_CAP; i++) {
-        if (s.et[i] !== E_PUFFER || s.est[i] < 1 || s.est[i] >= 4) continue;
-        const dx = s.ex[i] - du;
-        if (dx > 40 && dx < 200 && absi(s.ey[i] - (s.y >> 8)) < 90) {
-          out[n++] = IN_DASH;
-          break;
-        }
-      }
-      if (n === 0 || out[n - 1] !== IN_DASH) {
-        if (s.boost >= BOOST_MAX && !hazardAhead(s, 500)) out[n++] = IN_DASH;
-      }
-    }
-  }
-  return n;
-}
-
-// ---------------------------------------------------------------------------
-// Test and tooling helpers (also worklet-safe)
-// ---------------------------------------------------------------------------
 
 /** Deep copy of a sim state (planner bots, doom tests, ghost forks). */
 export function cloneSim(s: SimState): SimState {
@@ -2393,17 +2664,11 @@ export function setCourse(s: SimState, chunkIds: number[], lead: number): void {
     x += CHUNKS[chunkIds[i]].len;
     s.cqN++;
   }
-  s.gateX = x + 160;
+  s.rushX = x;
+  s.gateX = x + rushLen(s.speed >> 8);
   s.gateKind = G_TIDE;
   spawn(s, E_GATE, s.gateX, 500, G_TIDE, 0, 0);
 }
-
-// ---------------------------------------------------------------------------
-// Fast lookahead planner (bots): shark-only physics against predicted hazard
-// positions. No state cloning, so a house-crew racer plans a whole run in a
-// few ms. Conservative: puffers count as inflated, tracking torpedoes as
-// locked on their current lane.
-// ---------------------------------------------------------------------------
 
 function touchesAhead(s: SimState, cx: number, cy: number, tAdd: number, k: number): boolean {
   'worklet';
@@ -2425,7 +2690,7 @@ function touchesAhead(s: SimState, cx: number, cy: number, tAdd: number, k: numb
       if (ellipseRect(cx, cy, SHARK_RX + 4, SHARK_RY + 4, x - hw + HIT_INSET, s.ey[i] - hh + HIT_INSET, x + hw - HIT_INSET, s.ey[i] + hh - HIT_INSET)) return true;
       continue;
     }
-    if (x - cx > 220 || x - cx < -220) continue;
+    if (x - cx > 240 || x - cx < -240) continue;
     if (t === E_PYLON) {
       const half = s.ep1[i] >> 1;
       const top = s.ey[i] - half;
@@ -2447,33 +2712,33 @@ function touchesAhead(s: SimState, cx: number, cy: number, tAdd: number, k: numb
 /**
  * Choose hold (1) or release (0) for the next `every` steps so that some
  * continuation of `horizon` decisions stays hit-free. -1 = none found in
- * budget. Deterministic.
+ * budget. Deterministic. Models thrust, sink, the kicks and Neutral Settle
+ * (a long release springs back to y 500), like the real step.
  */
 export function planHold(s: SimState, every: number, horizon: number, budget: number, prefer: number): number {
   'worklet';
   const sf = speedFrac(s);
-  // Q8 advance per step; a running Dash holds vy and moves x1.8 until it ends.
-  const advNow = idiv(s.speedEff, STEP_HZ);
-  const advAfter = s.dash > 0 ? idiv(advNow * 256, 461) : advNow;
-  const dashLeft = s.dash;
+  const adv = idiv(s.speedEff, STEP_HZ);
   const thrust = idiv(-(2600 + ((650 * sf) >> 8)) * Q, STEP_HZ);
   const sink = idiv((1900 + ((285 * sf) >> 8)) * Q, STEP_HZ);
   const minY = SHARK_MIN_Y * Q;
   const maxY = SHARK_MAX_Y * Q;
-  // Explicit DFS stack: [y, vy, holding, k(steps so far), choiceIdx, firstChoice, rootChoice]
+  // Overdrive and i-frames make contact harmless only until they run out.
+  const invuln = s.od > 0 ? s.od + OD_IFRAMES : s.iframes;
   const sy: number[] = [];
   const svy: number[] = [];
   const sh: number[] = [];
   const sk: number[] = [];
   const sc: number[] = [];
+  const si: number[] = [];
   let nodes = 0;
-  sy.push(s.y); svy.push(s.vy); sh.push(s.holding); sk.push(0); sc.push(0);
+  sy.push(s.y); svy.push(s.vy); sh.push(s.holding); sk.push(0); sc.push(0); si.push(s.step - s.lastTouch);
   const rootFirst = prefer;
   let rootChoice = -1;
   while (sy.length > 0) {
     const top = sy.length - 1;
     if (sc[top] >= 2) {
-      sy.pop(); svy.pop(); sh.pop(); sk.pop(); sc.pop();
+      sy.pop(); svy.pop(); sh.pop(); sk.pop(); sc.pop(); si.pop();
       continue;
     }
     const choice = sc[top] === 0 ? prefer : 1 - prefer;
@@ -2483,37 +2748,41 @@ export function planHold(s: SimState, every: number, horizon: number, budget: nu
     let y = sy[top];
     let vy = svy[top];
     let holding = sh[top];
+    let idle = si[top];
     const k0 = sk[top];
-    // Input edge kicks.
-    const dashing = k0 < dashLeft;
     if (choice === 1 && !holding) {
-      if (vy > 0 && !dashing) vy -= 180 * Q + idiv(vy * 35, 100);
+      if (vy > 0) vy -= 180 * Q + idiv(vy * 35, 100);
       holding = 1;
+      idle = 0;
     } else if (choice === 0 && holding) {
-      if (vy < 0 && !dashing) vy += 120 * Q;
+      if (vy < 0) vy += 120 * Q;
       holding = 0;
+      idle = 0;
     }
     let hit = false;
     for (let j = 1; j <= every; j++) {
-      const kk = k0 + j;
-      if (kk <= dashLeft) {
-        y += idiv(vy, STEP_HZ);
+      idle++; // the sim measures idle after its step counter advances
+      const yU = y >> 8;
+      const nearEdge = yU < SURFACE_Y + 200 || yU > FLOOR_Y - 200;
+      if (!holding && (idle >= SETTLE_IDLE || (nearEdge && idle >= SETTLE_IDLE_EDGE))) {
+        vy += idiv(-36 * (y - 500 * Q) - 12 * vy, STEP_HZ);
+        vy = clampi(vy, -SETTLE_VMAX * Q, SETTLE_VMAX * Q);
       } else {
         const accel = holding ? thrust : sink;
         if ((accel < 0 && vy > 0) || (accel > 0 && vy < 0)) vy -= idiv(vy * 3, 64);
         vy = clampi(vy + accel, -720 * Q, 820 * Q);
-        y += idiv(vy, STEP_HZ);
       }
+      y += idiv(vy, STEP_HZ);
       if (y < minY) {
         y = minY;
-        if (vy < 0) vy = 120 * Q;
+        if (vy < 0) vy = vy < -SOFT_VY * Q ? 120 * Q : 60 * Q;
       } else if (y > maxY) {
         y = maxY;
-        if (vy > 0) vy = -420 * Q;
+        if (vy > 0) vy = vy > SOFT_VY * Q ? -420 * Q : -60 * Q;
       }
       const k = k0 + j;
-      const cx = (s.dist + (k <= dashLeft ? advNow * k : advNow * dashLeft + advAfter * (k - dashLeft))) >> 8;
-      if (touchesAhead(s, cx, y >> 8, k, k)) {
+      const cx = (s.dist + adv * k) >> 8;
+      if (k > invuln && touchesAhead(s, cx, y >> 8, k, k)) {
         hit = true;
         break;
       }
@@ -2521,7 +2790,7 @@ export function planHold(s: SimState, every: number, horizon: number, budget: nu
     if (hit) continue;
     const depth = idiv(k0 + every, every);
     if (depth >= horizon) return top === 0 ? choice : rootChoice;
-    sy.push(y); svy.push(vy); sh.push(holding); sk.push(k0 + every); sc.push(0);
+    sy.push(y); svy.push(vy); sh.push(holding); sk.push(k0 + every); sc.push(0); si.push(idle);
   }
   return -1;
 }

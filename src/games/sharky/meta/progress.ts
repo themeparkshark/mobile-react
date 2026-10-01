@@ -23,6 +23,8 @@ export interface GhostRecord {
   inputs: string;
   name: string;
   at: number;
+  /** Score at each gate (Trackmania splits compare score, design 7.10). */
+  splits?: number[];
 }
 
 export interface MissionState {
@@ -74,7 +76,7 @@ export async function saveProgress(p: SharkyProgress): Promise<void> {
   }
 }
 
-/** Unlock tier from runs (design 5.7). */
+/** Unlock tier from runs (design 5.9). */
 export function unlockTier(runs: number): number {
   return Math.max(0, Math.min(12, runs));
 }
@@ -86,12 +88,13 @@ export function ratedDifficulty(p: SharkyProgress): 1 | 2 | 3 {
   return Math.max(1, Math.min(3, 1 + Math.floor(best / 2))) as 1 | 2 | 3;
 }
 
-/** The "NEW!" card shown after a run that crossed an unlock (design 5.7). */
+/** The "NEW!" card shown after a run that crossed an unlock (design 5.9). */
 export function unlockCard(runsBefore: number, runsAfter: number): string | null {
   const cards: Record<number, string> = {
-    1: 'NEW: Prize Boxes and Ride Tokens',
-    2: 'NEW: Puffers and Boost Dash',
-    3: 'NEW: Bumper Boats, Sprint Races and missions',
+    1: 'NEW: Prize Boxes',
+    2: 'NEW: Overdrive',
+    3: 'NEW: Rally your crew',
+    4: 'NEW: Power-ups',
   };
   for (let r = runsBefore + 1; r <= runsAfter; r++) if (cards[r]) return cards[r];
   return null;

@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Bundle the swim verifier for the server (design 11.3): the SAME sim/core.ts
+ * Bundle the swim verifier for the server (design v7.1 12.3): the SAME sim/core.ts
  * the phone runs, plus sim/verify.ts, into one dependency-free CommonJS file.
  *
  *   node tools/sharky/build-verifier.cjs [out]   (default build/verifiers/swim/verify.cjs)
@@ -19,7 +19,7 @@ const MODULES = {
   './version.generated': 'src/games/sharky/sim/version.generated.ts',
   './verify': 'src/games/sharky/sim/verify.ts',
   './bots': 'src/games/sharky/sim/bots.ts',
-  './race': 'src/games/sharky/sim/race.ts',
+  './rally': 'src/games/sharky/sim/rally.ts',
 };
 
 function build(out) {
@@ -31,7 +31,7 @@ function build(out) {
     }).outputText;
     src += `__mods[${JSON.stringify(id)}] = function (module, exports, require) {\n${code}\n};\n`;
   }
-  src += `const api = Object.assign({}, __req('./verify'), __req('./race'), { core: __req('./core'), bots: __req('./bots') });
+  src += `const api = Object.assign({}, __req('./verify'), __req('./rally'), { core: __req('./core'), bots: __req('./bots') });
 module.exports = api;
 if (require.main === module) {
   let buf = '';
@@ -41,8 +41,8 @@ if (require.main === module) {
     let out;
     try {
       const req = JSON.parse(buf);
-      // {cmd:'race_bot', seed, seat, profile} plans a house-crew racer; anything else is a swim proof.
-      out = req && req.cmd === 'race_bot' ? { ok: true, ...api.raceBot(req.seed, req.seat, req.profile) } : api.verifySwimProof(req);
+      // {cmd:'rally_bot', seed, seat, profile} plans a ghost seat (house crew); anything else is a swim proof.
+      out = req && (req.cmd === 'rally_bot' || req.cmd === 'race_bot') ? { ok: true, ...api.rallyBot(req.seed, req.seat, req.profile) } : api.verifySwimProof(req);
     } catch (e) { out = { ok: false, reason: 'bad_json' }; }
     process.stdout.write(JSON.stringify(out));
     process.exit(out.ok ? 0 : 2);
