@@ -650,6 +650,7 @@ const Shark = React.memo(function Shark({ sim, tick, alpha, swim, dash, dizzy, b
   const o3 = op(3);
   const o4 = op(4);
   const floatScale = useDerivedValue(() => {
+    tick.value;
     const s = sim.value;
     if (s.float === 0) return 0;
     const k = Math.min(1, s.floatSteps / 24);
@@ -670,7 +671,7 @@ const Shark = React.memo(function Shark({ sim, tick, alpha, swim, dash, dizzy, b
   const shieldT = useDerivedValue(() => [{ translateX: pose.value.x }, { translateY: pose.value.y }]);
   const DH = (SHARK_W * 458) / 768;
   // Dash afterimages: 3 ghosts trailing 30u apart, fading 0.45 -> 0.
-  const ghostOp = useDerivedValue(() => (sim.value.dash > 0 ? 1 : 0));
+  const ghostOp = useDerivedValue(() => (tick.value, sim.value.dash > 0 ? 1 : 0));
   const ghostT = [1, 2, 3].map((k) => useDerivedValue(() => {
     const p = pose.value;
     return [{ translateX: p.x - k * 34 }, { translateY: p.y }, { rotate: p.tilt }, { scaleX: 1.12 }, { scaleY: 0.92 }];

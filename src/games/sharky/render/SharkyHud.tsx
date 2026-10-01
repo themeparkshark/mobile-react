@@ -80,27 +80,30 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
     const done = s.phase === PH_POCKET ? s.sprint : s.sprint + within;
     return Math.max(0, Math.min(1, done / 3));
   });
-  const barFill = useDerivedValue(() => Skia.RRectXY(Skia.XYWHRect(barX + 3, barY + 3, Math.max(0, (barW - 6) * frac.value), barH - 6), 7, 7));
+  const barFill = useDerivedValue(() => (tick.value, Skia.RRectXY(Skia.XYWHRect(barX + 3, barY + 3, Math.max(0, (barW - 6) * frac.value), barH - 6), 7, 7)));
   const low = useDerivedValue(() => {
+    tick.value;
     const s = sim.value;
     const timed = s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE;
     return timed && s.clockSteps < 480 && s.phase !== PH_POCKET;
   });
-  const barColor = useDerivedValue(() => (low.value ? CORAL : '#5fd0ff'));
+  const barColor = useDerivedValue(() => (tick.value, (low.value ? CORAL : '#5fd0ff')));
   const barPulse = useDerivedValue(() => {
+    tick.value;
     if (!low.value) return [{ scaleY: 1 }];
     const k = 1 + 0.2 * Math.max(0, Math.sin((tick.value / 60) * Math.PI * 4));
     return [{ scaleY: k }];
   });
   const clockText = useDerivedValue(() => {
+    tick.value;
     const s = sim.value;
     if (s.mode === MODE_QUEUE || s.mode === MODE_GHOST || s.mode === MODE_PRACTICE) return `${Math.ceil(s.clockSteps / 60)}s`;
     return `${Math.round(frac.value * 100)}%`;
   });
 
   // --- hearts ---------------------------------------------------------------
-  const heartOps = [0, 1, 2].map((i) => useDerivedValue(() => (sim.value.hearts > i ? 1 : 0.22)));
-  const shieldOp = useDerivedValue(() => (sim.value.shield ? 1 : 0));
+  const heartOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.hearts > i ? 1 : 0.22))));
+  const shieldOp = useDerivedValue(() => (tick.value, (sim.value.shield ? 1 : 0)));
 
   // --- chain pill -------------------------------------------------------------
   const chainText = useDerivedValue(() => {
@@ -112,6 +115,7 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
     return s.chain >= 9 ? `x${multiplier(s)}  FRENZY IN ${Math.max(1, toNext)}` : `CHAIN x${multiplier(s)}`;
   });
   const pillColor = useDerivedValue(() => {
+    tick.value;
     const s = sim.value;
     if (s.frenzy > 0) return Math.floor(tick.value / 8) % 2 ? GOLD : '#fff1b8';
     return TIER_COLORS[chainTier(s)];
@@ -119,24 +123,27 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
   const pillW = 190;
   const pillX = W / 2 - pillW / 2;
   const drain = useDerivedValue(() => {
+    tick.value;
     const s = sim.value;
     const k = s.frenzy > 0 ? s.frenzy / FRENZY_STEPS : s.chain > 0 ? s.chainTimer / CHAIN_WINDOW : 0;
     return Skia.RRectXY(Skia.XYWHRect(pillX + 12, rowY + 30, Math.max(0, (pillW - 24) * k), 5), 2, 2);
   });
   const pillScale = useDerivedValue(() => {
+    tick.value;
     const s = sim.value;
     // Spring pop on tier ups (reads the chain window freshly refilled).
     const fresh = s.chainTimer > CHAIN_WINDOW - 8 && s.chain > 0 ? (s.chainTimer - (CHAIN_WINDOW - 8)) / 8 : 0;
     return [{ scale: 1 + 0.18 * fresh }];
   });
   const chainTextX = useDerivedValue(() => {
+    tick.value;
     const w = fontS ? fontS.measureText(chainText.value).width : 0;
     return W / 2 - w / 2;
   });
 
   // --- tokens -------------------------------------------------------------------
-  const tokOps = [0, 1, 2].map((i) => useDerivedValue(() => (sim.value.tokenMask & (1 << i) ? 1 : 0.25)));
-  const showTokens = useDerivedValue(() => (sim.value.etier >= 1 ? 1 : 0));
+  const tokOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.tokenMask & (1 << i) ? 1 : 0.25))));
+  const showTokens = useDerivedValue(() => (tick.value, (sim.value.etier >= 1 ? 1 : 0)));
 
   // --- position tag (race / ghost) ----------------------------------------------
   const place = useDerivedValue(() => {
@@ -160,17 +167,20 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
   const segW = Math.min(76, (W - 120) / 3);
   const boostX = W / 2 - (segW * 3 + 16) / 2;
   const segFill = [0, 1, 2].map((i) => useDerivedValue(() => {
+    tick.value;
     const b = sim.value.boost;
     const f = Math.max(0, Math.min(1, (b - i * 100) / 100));
     return Skia.RRectXY(Skia.XYWHRect(boostX + i * (segW + 8) + 3, sandY + 3, (segW - 6) * f, 18), 7, 7);
   }));
-  const segColor = [0, 1, 2].map((i) => useDerivedValue(() => (sim.value.boost >= (i + 1) * 100 ? '#ffffff' : '#7fd8ff')));
+  const segColor = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.boost >= (i + 1) * 100 ? '#ffffff' : '#7fd8ff'))));
   const boostLabel = useDerivedValue(() => {
+    tick.value;
     const s = sim.value;
     if (s.dash > 0) return 'DASH!';
     return s.boost >= 100 ? 'SLIDE RIGHT TO DASH' : 'BOOST';
   });
   const boostLabelX = useDerivedValue(() => {
+    tick.value;
     const w = fontS ? fontS.measureText(boostLabel.value).width : 0;
     return W / 2 - w / 2;
   });
