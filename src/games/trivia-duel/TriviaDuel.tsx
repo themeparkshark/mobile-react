@@ -237,7 +237,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const oppIn = useRef<SideInput>({ ...NO_INPUT });
   const meIn = useRef<SideInput>({ ...NO_INPUT });
   const resolved = useRef({ me: false, opp: false, revealing: false });
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /**
+   * Flow timers are HOLD-aware: a HOLD (pause button, app backgrounded) parks
+   * every pending beat with its remaining time, so nothing resolves, reveals
+   * or advances while the phone is in a pocket.
+   */
+  const timers = useRef<{ fn: () => void; left: number; at: number; h: ReturnType<typeof setTimeout> | null }[]>([]);
+  const timersHeld = useRef(false);
   const poolRef = useRef<PoolQuestion[]>([]);
   const playsRef = useRef(0);
   const startedAt = useRef(0);
@@ -256,15 +262,34 @@ export function TriviaDuel(props: TriviaDuelProps) {
   // Only the ride challenge is graded today (local queue duels have no server window yet): a pocketed phone never burns a queue question.
   const graded = mode === 'ride';
 
-  const later = useCallback((ms: number, fn: () => void) => {
-    const t = setTimeout(fn, ms);
-    timers.current.push(t);
-    return t;
+  const armTimer = useCallback((t: { fn: () => void; left: number; at: number; h: ReturnType<typeof setTimeout> | null }) => {
+    t.at = Date.now();
+    t.h = setTimeout(() => {
+      timers.current = timers.current.filter((x) => x !== t);
+      t.fn();
+    }, Math.max(0, t.left));
   }, []);
+  const later = useCallback((ms: number, fn: () => void) => {
+    const t = { fn, left: ms, at: Date.now(), h: null as ReturnType<typeof setTimeout> | null };
+    timers.current.push(t);
+    if (!timersHeld.current) armTimer(t);
+  }, [armTimer]);
   const clearTimers = useCallback(() => {
-    timers.current.forEach(clearTimeout);
+    timers.current.forEach((t) => { if (t.h) clearTimeout(t.h); });
     timers.current = [];
   }, []);
+  const holdTimers = useCallback((on: boolean) => {
+    if (on === timersHeld.current) return;
+    timersHeld.current = on;
+    const now = Date.now();
+    timers.current.forEach((t) => {
+      if (on) {
+        if (t.h) clearTimeout(t.h);
+        t.h = null;
+        t.left = Math.max(0, t.left - (now - t.at));
+      } else armTimer(t);
+    });
+  }, [armTimer]);
   useEffect(() => clearTimers, [clearTimers]);
 
   // -- Stage actors -------------------------------------------------------------------
@@ -1562,13 +1587,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
     clock.pause();
     holdStart.current = Date.now();
     setHeld(true);
+    holdTimers(true);
     runOnUI(() => {
       'worklet';
       const q = qc.value;
       // HOLD after unlock forfeits this question's speed bonus (15.2).
       if (q.phase === PH_LIVE || q.phase === PH_SUB) q.forfeit = 1;
     })();
-  }, [clock, qc]);
+  }, [clock, qc, holdTimers]);
 
   const onResume = useCallback(() => {
     const heldMs = Date.now() - holdStart.current;
@@ -1585,8 +1611,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
       if (q.phase === PH_SUB && h > cr) q.sub += h - cr;
     })(heldMs, credit, READ_LOCK.holdRestartMs);
     setHeld(false);
+    holdTimers(false);
     clock.resume();
-  }, [clock, qc, graded]);
+  }, [clock, qc, graded, holdTimers]);
 
   const onWrapUp = useCallback((): GameResult => {
     // "Your ride's up!": remaining rounds are forfeited, results saved.
