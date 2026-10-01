@@ -18,3 +18,10 @@ test('a pinch that leaves the shark centered resumes following; a real pan does 
   assert.match(didChange, /0\.00007/);
   assert.doesNotMatch(didChange, /> 0\.0005/);
 });
+
+test('both shark copies stay mounted and swap by opacity, so dragging never reloads the outfit', () => {
+  assert.match(source, /opacity: focusedOnPlayer \? 0 : 1/);
+  assert.match(source, /opacity: focusedOnPlayer \? 1 : 0/);
+  assert.doesNotMatch(source, /location && !focusedOnPlayer && \(/);
+  assert.doesNotMatch(source, /location && focusedOnPlayer && \(/);
+});

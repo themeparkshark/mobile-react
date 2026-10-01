@@ -346,6 +346,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
               <Image
                 source={{ uri: player.inventory.skin_item.no_eye_url }}
                 style={{ width: 60, height: 60, position: 'absolute' }}
+                cachePolicy="memory-disk" transition={0}
                 contentFit="contain"
               />
               {/* Animated eyes layer */}
@@ -356,7 +357,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
               />
               {/* Equipped items layered on top, in the shared outfit order */}
               {outfitLayerUrls(player.inventory).map((uri) => (
-                <Image key={uri} source={{ uri }} style={{ width: 60, height: 60, position: 'absolute' }} contentFit="contain" />
+                <Image key={uri} source={{ uri }} style={{ width: 60, height: 60, position: 'absolute' }} cachePolicy="memory-disk" transition={0} contentFit="contain" />
               ))}
             </View>
           ) : (
@@ -512,9 +513,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
         {/* Panned away: the shark stays pinned to its spot on the map. Markers draw in
             order, so it comes after the ride islands and is never hidden under one. */}
-        {location && !focusedOnPlayer && (
+        {/* Both shark copies stay mounted and swap by opacity: remounting on every
+            drag reloaded the outfit images and made the shark flash. */}
+        {location && (
           <Marker coordinate={location} anchor={{ x: 0.5, y: 0.65 }}>
-            {playerShark}
+            <View style={{ opacity: focusedOnPlayer ? 0 : 1 }}>{playerShark}</View>
           </Marker>
         )}
       </MapView>
@@ -535,8 +538,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
         </Animated.View>
       )}
-      {location && focusedOnPlayer && (
-        <View pointerEvents="none" style={styles.centerOverlay}>
+      {location && (
+        <View pointerEvents="none" style={[styles.centerOverlay, { opacity: focusedOnPlayer ? 1 : 0 }]}>
           <View style={styles.centerShark}>{playerShark}</View>
         </View>
       )}
