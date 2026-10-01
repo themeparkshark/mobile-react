@@ -2,8 +2,9 @@
  * SFX.ts — expo-av pooled sound manager for GameKit.
  *
  * Design goals:
- *   - Preload every sound in the manifest once, reuse the loaded Sound objects
- *     (a small pool per name for overlapping plays), never create-per-play.
+ *   - Load each sound once, the first time it plays, and reuse the loaded
+ *     Sound objects (a pool per name that grows to 3 for overlapping plays),
+ *     never create-per-play.
  *   - Silent no-op when a requested sound is absent from the manifest, so games
  *     work before audio assets land.
  *   - Master volume + enable flag (wire to SoundEffectProvider / player setting).
@@ -30,6 +31,8 @@ class SfxManager {
   private pools = new Map<SfxName, Voice[]>();
   private loaded = false;
   private loading: Promise<void> | null = null;
+  private pending = new Map<SfxName, Promise<Voice[] | null>>();
+  private audioModeSet = false;
   private enabled = true;
   private masterVolume = 1;
   private duck: DuckHook | null = null;
@@ -55,8 +58,8 @@ class SfxManager {
   }
 
   /**
-   * Preload the whole manifest into pools. Idempotent and safe to call from
-   * multiple mounts — concurrent calls share one in-flight promise.
+   * Warm one voice for every sound in the manifest. Optional: play() loads a
+   * sound the first time it is used. Idempotent and safe to call repeatedly.
    */
   async preload(): Promise<void> {
     if (this.loaded) return;
@@ -70,39 +73,73 @@ class SfxManager {
   }
 
   private async doPreload(): Promise<void> {
+    const names = Object.keys(SFX_MANIFEST) as SfxName[];
+    await Promise.all(names.map(name => this.ensurePool(name)));
+    this.loaded = true;
+  }
+
+  private async ensureAudioMode(): Promise<void> {
+    if (this.audioModeSet) return;
+    this.audioModeSet = true;
     try {
       await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
     } catch {
       // Non-fatal — playback may still work with default mode.
     }
-    const names = Object.keys(SFX_MANIFEST) as SfxName[];
-    await Promise.all(
-      names.map(async (name) => {
-        const asset = SFX_MANIFEST[name] as SfxAsset | undefined;
-        if (asset === undefined) return;
-        const voices: Voice[] = [];
-        for (let i = 0; i < POOL_PER_SOUND; i++) {
-          try {
-            const { sound } = await Audio.Sound.createAsync(asset, {
-              shouldPlay: false,
-              volume: this.masterVolume,
-            });
-            voices.push({ sound, busy: false });
-          } catch {
-            // Skip this voice; the pool can still work with fewer voices.
-          }
-        }
-        if (voices.length > 0) this.pools.set(name, voices);
-      }),
-    );
-    this.loaded = true;
   }
 
-  /** Drop an excess cue rather than interrupting a playing voice. */
-  private acquire(name: SfxName): Voice | null {
-    const pool = this.pools.get(name);
+  private async createVoice(name: SfxName): Promise<Voice | null> {
+    const asset = SFX_MANIFEST[name] as SfxAsset | undefined;
+    if (asset === undefined) return null;
+    try {
+      const { sound } = await Audio.Sound.createAsync(asset, {
+        shouldPlay: false,
+        volume: this.masterVolume,
+      });
+      return { sound, busy: false };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * One loaded voice per sound the first time it is needed. The old manager
+   * loaded all 16 sounds x 3 voices (48 native players) before the first cue
+   * could play; most games use a handful of sounds and rarely overlap.
+   */
+  private ensurePool(name: SfxName): Promise<Voice[] | null> {
+    const ready = this.pools.get(name);
+    if (ready) return Promise.resolve(ready);
+    const pending = this.pending.get(name);
+    if (pending) return pending;
+    const load = (async () => {
+      await this.ensureAudioMode();
+      const voice = await this.createVoice(name);
+      if (!voice) return null;
+      const pool = [voice];
+      this.pools.set(name, pool);
+      return pool;
+    })();
+    this.pending.set(name, load);
+    void load.finally(() => this.pending.delete(name));
+    return load;
+  }
+
+  /** A free voice, adding one (up to POOL_PER_SOUND) when every voice is busy. */
+  private async acquire(name: SfxName): Promise<Voice | null> {
+    const pool = await this.ensurePool(name);
     if (!pool || pool.length === 0) return null;
-    return pool.find((v) => !v.busy) ?? null;
+    const free = pool.find((v) => !v.busy);
+    if (free) return free;
+    if (pool.length >= POOL_PER_SOUND) return null; // Drop an excess cue rather than interrupting a voice.
+    const extra = await this.createVoice(name);
+    if (!extra) return null;
+    if (pool.length >= POOL_PER_SOUND) {
+      void extra.sound.unloadAsync().catch(() => undefined);
+      return pool.find((v) => !v.busy) ?? null;
+    }
+    pool.push(extra);
+    return extra;
   }
 
   private beginDuck(): void {
@@ -122,11 +159,9 @@ class SfxManager {
    */
   async play(name: SfxName, volumeScale = 1): Promise<void> {
     if (!this.enabled) return;
-    // Lazy preload so callers don't have to remember to preload first.
-    if (!this.loaded) await this.preload();
-
-    const voice = this.acquire(name);
-    if (!voice) return; // Not in manifest → silent no-op.
+    // Loads this sound on first use; absent from the manifest → silent no-op.
+    const voice = await this.acquire(name);
+    if (!voice) return;
 
     const volume = Math.max(0, Math.min(1, this.masterVolume * volumeScale));
     voice.busy = true;
