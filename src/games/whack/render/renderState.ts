@@ -432,8 +432,10 @@ export function computeRender(rs: RenderState, an: HoleAnim, s: WhackSim, L: Boa
       const bigH = k === K_BRUISER ? H * 1.12 : harmful ? H * 0.7 : H;
       rs.pulseKind[i] = k;
       // The rim never lies: harmful wells keep their teeth and "!" tab on every frame of the target's life.
-      rs.rim[i] = harmful ? RIM_HARMFUL : k === K_GOLDEN ? RIM_GOLDEN : k === K_BRUISER ? RIM_HEAVY : RIM_SAFE;
-      if (harmful) rs.tab[i] = 1 + 0.15 * (0.5 + 0.5 * Math.sin(gt * 0.02513)) * wob;
+      // (Its life ends when it ducks: an escaped target leaves a plain well.)
+      const alive = ph === P_TELL || ph === P_UP || (ph === P_BONKED && a < 430) || (ph === P_ESCAPE && a < 140);
+      rs.rim[i] = !alive ? RIM_NONE : harmful ? RIM_HARMFUL : k === K_GOLDEN ? RIM_GOLDEN : k === K_BRUISER ? RIM_HEAVY : RIM_SAFE;
+      if (harmful) rs.tab[i] = 1 + 0.15 * (0.5 + 0.5 * Math.sin(now * 0.02513)) * wob;
       if (ph === P_TELL || ph === P_UP) occupied += 1;
       if (ph === P_TELL) {
         const p = clamp01((gt - s.evTell[ev]) / tell);

@@ -335,7 +335,7 @@ export function useWhackJuice(opts: WhackJuiceOpts): WhackJuice {
         tier.current = 0;
         return true;
       case E_FEVER_READY:
-        if (G) feel('feverReady', { x: G.w / 2, y: 76, text: 'FEVER READY!' });
+        if (G) feel('feverReady', { x: G.w / 2, y: G.hudH + 40, text: 'FEVER READY!' });
         onReadyRef.current?.();
         return true;
       case E_FEVER:

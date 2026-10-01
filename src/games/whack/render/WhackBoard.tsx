@@ -16,8 +16,9 @@ import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import {
   Canvas, Circle, ColorMatrix, Group, Image, LinearGradient, Path, Picture, Rect, RoundedRect, Skia, Text, createPicture, rect,
-  useFont, useImage, vec, type SkFont, type SkImage,
+  useFont, vec, type SkFont, type SkImage,
 } from '@shopify/react-native-skia';
+import { useCachedImage } from './imageCache';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { ART, RIMS, THEMED_SHARK_FRAMES, type WhackTheme } from '../assets';
 import { DECKS, HATS, KEY_POSES, PROPS, RIM_WARNING } from '../art.generated';
@@ -43,6 +44,22 @@ const LIFT = (() => {
   const s = 0.7;
   const k = 0.65;
   const o = 0.35;
+  const r = [0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s];
+  const g = [0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s];
+  const b = [0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s];
+  return [
+    r[0] * k, r[1] * k, r[2] * k, 0, o,
+    g[0] * k, g[1] * k, g[2] * k, 0, o,
+    b[0] * k, b[1] * k, b[2] * k, 0, o,
+    0, 0, 0, 1, 0,
+  ];
+})();
+
+/** Deck value band (7.1): -15% saturation and a 12% value cap so no floor area competes with the wells. */
+const DECK_BAND = (() => {
+  const s = 0.85;
+  const k = 0.86;
+  const o = 0.03;
   const r = [0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s];
   const g = [0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s];
   const b = [0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s];
@@ -80,17 +97,17 @@ export function useBoardImages(theme: WhackTheme, bossSrc: number | null): Board
   const poses = KEY_POSES[theme];
   const props = THEME_PROPS[theme];
   const set: BoardImages = {
-    peek: useImage(frames[0]), pop: useImage(frames[1]), dazed: useImage(frames[2]),
-    golden: useImage(ART.golden), angler: useImage(ART.angler), bruiser: useImage(ART.bruiser),
-    bruiserDazed: useImage(ART.bruiserDazed), puffer: useImage(ART.puffer), puffed: useImage(ART.pufferPuffed),
-    helmet: useImage(ART.helmet), glasses: useImage(ART.sunglasses), star: useImage(ART.dizzyStar),
-    rim: useImage(RIMS[theme]), finger: useImage(ART.foamFinger), boss: useImage(bossSrc ?? ART.kraken), bg: useImage(ART.playfield),
-    anglerPeek: useImage(ART.anglerPeek), anglerAngry: useImage(ART.anglerAngry), goldenDazed: useImage(ART.goldenDazed),
-    splatInk: useImage(ART.splatInk), splatCandy: useImage(ART.splatCandy),
-    glance: useImage(poses.glance), contact: useImage(poses.contact), spiral: useImage(poses.bonked_spiral), tongue: useImage(poses.bonked_tongue),
-    hatoff: useImage(poses.bonked_hatoff), duck: useImage(poses.duck), hat: useImage(HATS[theme]), deck: useImage(DECKS[theme]),
-    teeth: useImage(RIM_WARNING.teeth), tab: useImage(RIM_WARNING.tab), caustics: useImage(CAUSTICS), shadow: useImage(SHADOW),
-    starburst: useImage(ART.impactL), propA: useImage(props[0] ?? ART.impactS), propB: useImage(props[1] ?? ART.impactS), propC: useImage(props[2] ?? ART.impactS),
+    peek: useCachedImage(frames[0]), pop: useCachedImage(frames[1]), dazed: useCachedImage(frames[2]),
+    golden: useCachedImage(ART.golden), angler: useCachedImage(ART.angler), bruiser: useCachedImage(ART.bruiser),
+    bruiserDazed: useCachedImage(ART.bruiserDazed), puffer: useCachedImage(ART.puffer), puffed: useCachedImage(ART.pufferPuffed),
+    helmet: useCachedImage(ART.helmet), glasses: useCachedImage(ART.sunglasses), star: useCachedImage(ART.dizzyStar),
+    rim: useCachedImage(RIMS[theme]), finger: useCachedImage(ART.foamFinger), boss: useCachedImage(bossSrc ?? ART.kraken), bg: useCachedImage(ART.playfield),
+    anglerPeek: useCachedImage(ART.anglerPeek), anglerAngry: useCachedImage(ART.anglerAngry), goldenDazed: useCachedImage(ART.goldenDazed),
+    splatInk: useCachedImage(ART.splatInk), splatCandy: useCachedImage(ART.splatCandy),
+    glance: useCachedImage(poses.glance), contact: useCachedImage(poses.contact), spiral: useCachedImage(poses.bonked_spiral), tongue: useCachedImage(poses.bonked_tongue),
+    hatoff: useCachedImage(poses.bonked_hatoff), duck: useCachedImage(poses.duck), hat: useCachedImage(HATS[theme]), deck: useCachedImage(DECKS[theme]),
+    teeth: useCachedImage(RIM_WARNING.teeth), tab: useCachedImage(RIM_WARNING.tab), caustics: useCachedImage(CAUSTICS), shadow: useCachedImage(SHADOW),
+    starburst: useCachedImage(ART.impactL), propA: useCachedImage(props[0] ?? ART.impactS), propB: useCachedImage(props[1] ?? ART.impactS), propC: useCachedImage(props[2] ?? ART.impactS),
   };
   // One stable object per loaded set, so the memoized board never re-renders on a parent render.
   const values = Object.values(set);
@@ -203,7 +220,11 @@ const Stage = React.memo(function Stage({ L, images, theme, sky }: { L: BoardLay
       {props[0] ? prop(images.propA, 0.14, 1, 'a') : null}
       {props[1] ? prop(images.propB, 0.86, theme === 'backlot' ? 1 : 0.95, 'b') : null}
       {props[2] ? prop(images.propC, theme === 'backlot' ? 0.68 : 0.5, theme === 'backlot' ? 0.55 : 0.8, 'c') : null}
-      {images.deck ? <Image image={images.deck} x={0} y={L.deckTop - 8} width={L.w} height={deckH} fit="cover" /> : (
+      {images.deck ? (
+        <Image image={images.deck} x={0} y={L.deckTop - 8} width={L.w} height={deckH} fit="cover">
+          <ColorMatrix matrix={DECK_BAND} />
+        </Image>
+      ) : (
         <Rect x={0} y={L.deckTop} width={L.w} height={deckH} color="#9fd2ea" />
       )}
       {/* Horizon fade: the deck melts into the haze over 24pt. */}

@@ -199,9 +199,14 @@ export function drawWells(canvas: SkCanvas, rs: RenderState, L: BoardLayout, art
     const H = L.spriteH[i];
     canvas.save();
     canvas.translate(rs.kx[i], rs.ky[i]);
+    const rr = kit.rimRect[i];
+    // 0. The well sits on the deck: a soft navy base shadow separates the rim from any floor.
+    if (art.shadow) {
+      p.setAlphaf(0.34);
+      imgC(canvas, art.shadow, cx, rr.y + rr.height * 0.86, rr.width * 1.18, rr.height * 0.5, p);
+    }
     // 1. Rim art.
     p.setAlphaf(1);
-    const rr = kit.rimRect[i];
     img(canvas, art.rim, rr.x, rr.y, rr.width, rr.height, p);
     // 2. Painted interior and the water disc (baked caustics, per-well phase).
     canvas.drawOval(kit.mouth[i], kit.interior[i]);

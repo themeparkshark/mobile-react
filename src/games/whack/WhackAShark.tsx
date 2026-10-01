@@ -47,7 +47,7 @@ import { useWhackCues, useWhackJuice, pickCue as pick } from './useWhackJuice';
 import { useWalkSense } from '../../gamekit/motion/useWalkSense';
 import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { BOSS_ART, THEMED_SHARK_FRAMES, type WhackTheme } from './assets';
+import { BOSS_ART, THEMED_SHARK_FRAMES, THEMES, type WhackTheme } from './assets';
 import { buildBurst, walkOk, type Timeline, type WalkBoost } from './timeline';
 import {
   E_ATTACK, E_BLOCKED, E_BOSS_DMG, E_BOSS_DOWN, E_END, E_SPLAT, E_SPLAT_CLEAR, E_WIN, NO_CARRY, createSim, type BurstCarry, type BurstResult,
@@ -156,11 +156,15 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const autoplay = !!props.autoplay || devAuto;
   const difficulty: Difficulty = props.difficulty ?? 2;
   const rideKey = props.rideId != null ? String(props.rideId) : (taskName ?? null);
+  const [runIndex, setRunIndex] = useState(0);
+  // Dev bench: EXPO_PUBLIC_WHACK_THEME=cycle walks the 6 themes, one per PLAY AGAIN (screenshot matrix).
+  const cycle = __DEV__ && (props.theme as string) === 'cycle';
   const theme: WhackTheme = useMemo(() => {
-    if (props.theme) return props.theme;
+    if (cycle) return THEMES[runIndex % THEMES.length];
+    if (props.theme && props.theme in THEMED_SHARK_FRAMES) return props.theme;
     const deck = deckIdForRideName(taskName);
     return (deck in THEMED_SHARK_FRAMES ? deck : 'park') as WhackTheme;
-  }, [props.theme, taskName]);
+  }, [props.theme, taskName, cycle, runIndex]);
   const reducedMotion = useReducedGameMotion();
   const shellRef = useRef<GameShellV2Handle>(null);
   const fx = useRef<FxStageHandle>(null);
@@ -199,7 +203,6 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   // ---------------------------------------------------------------- run state
   const [phase, setPhase] = useState<Phase>('play');
   const [burstIdx, setBurstIdx] = useState(0);
-  const [runIndex, setRunIndex] = useState(0);
   const [tl, setTl] = useState<Timeline | null>(null);
   const [fever, setFever] = useState(false);
   const [shellScore, setShellScore] = useState(0);
@@ -335,7 +338,6 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     }
   }, [cues.coinTick]);
 
-  const bumpShellScore = useRef(0);
   onEventsRef.current = (batch) => {
     const G = Lref.current;
     const now = Date.now();
@@ -413,11 +415,6 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           break;
       }
     });
-    // Throttled header score (the board itself never re-renders).
-    if (now - bumpShellScore.current > 250) {
-      bumpShellScore.current = now;
-      setShellScore(bankedRef.current.reduce((s, x) => s + x.score, 0) + Math.max(0, liveScoreRef.current));
-    }
   };
   const splatHint = useRef(false);
 
@@ -443,6 +440,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
           // Countdown ticks never buzz while targets are up (11.2).
           if (busyRef.current.size === 0) playPattern('lookUpResume', { priority: WHACK_PRIO.flow });
         }
+        // Header score from the sim itself (exact; the board never re-renders for it).
+        setShellScore(bankedRef.current.reduce((s, x) => s + x.score, 0) + m.score);
         const g = ghostRef.current;
         if (g) pace.value = m.score - paceAt(g, m.t);
         // Line of the Day: named ghost pucks flash on the wells they hit (mapped through mine o theirs^-1).
@@ -519,6 +518,10 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const finishRun = useCallback((reason?: string) => {
     if (finishing.current) return;
     finishing.current = true;
+    // The Run is over the moment this is called: no breather timer or autoplay may start another Burst.
+    setPhase('done');
+    setBreather(null);
+    runtime.setRunning(false);
     thermal.runEnd();
     const banked = bankedRef.current;
     const total = banked.reduce((s, b) => s + b.score, 0);
@@ -628,7 +631,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
       });
       setPhase('done');
     });
-  }, [best, cues, difficulty, format, perf, perfTier.tierJs, ride, theme, totalBursts, duel?.rival.name, thermal, lifetime, props.lineDay, lineRun, rideKey, today]);
+  }, [best, cues, difficulty, format, perf, perfTier.tierJs, ride, theme, totalBursts, duel?.rival.name, thermal, lifetime, props.lineDay, lineRun, rideKey, today, runtime]);
 
   const bankBurst = useCallback(async (): Promise<BurstBanked | null> => {
     const t = tlRef.current;
@@ -642,6 +645,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     const banked: BurstBanked = { index: t.input.burstIndex, score: res.score, result: res, proof };
     bankedRef.current = [...bankedRef.current, banked];
     carryRef.current = res.carry;
+    liveScoreRef.current = 0;
+    setShellScore(bankedRef.current.reduce((s, x) => s + x.score, 0));
     onBurstBanked?.(banked);
     if (!ride && format !== 'duel') {
       const lt = (lifetime ?? 0) + 1;
@@ -756,7 +761,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   }, [bankBurst, cues, flash, ride, finishRun, net, totalBursts, metersNow, format, buildTimeline, runIndex, difficulty, autoplay]);
 
   const onReady = useCallback((goFever: boolean) => {
-    if (phase !== 'breather') return;
+    if (phase !== 'breather' || finishing.current) return;
     setBreather(null);
     setReveal(null);
     startBurst(burstIdx + 1, runIndex, true, goFever && !!carryRef.current.feverReady);

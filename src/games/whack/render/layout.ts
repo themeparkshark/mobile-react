@@ -60,7 +60,7 @@ export function computeLayout(w: number, h: number, theme: WhackTheme, opts: { t
   // The live party board has its own room HUD: no plate, a short stage.
   const hudH = opts.compact ? 8 : HUD_H + 6;
   const rest = h - hudH;
-  const stageFrac = opts.topFrac ?? (opts.compact ? 0.08 : 0.3);
+  const stageFrac = opts.topFrac ?? (opts.compact ? 0.08 : 0.25);
   const deckTop = Math.round(hudH + rest * stageFrac);
   const deckBottom = h - (opts.bottomInset ?? 14);
   const deckH = deckBottom - deckTop;
@@ -79,7 +79,8 @@ export function computeLayout(w: number, h: number, theme: WhackTheme, opts: { t
     let my = deckTop + deckH * ROWS[r];
     const maxMy = deckBottom - rh * (1 - mcy) - 2;
     if (my > maxMy) my = maxMy;
-    const sprite = rw * 1.28;
+    // Character size follows the cell, not the rim art (flat ring rims like space would shrink Finn).
+    const sprite = Math.min(cellW * 1.2 * s, rw * 1.5);
     for (let c = 0; c < 3; c++) {
       // Back rows pull in a touch (perspective) so the board reads as a floor.
       const x = w / 2 + (COLS[c] - 0.5) * w * (0.9 + 0.1 * s);
