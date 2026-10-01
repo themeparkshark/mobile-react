@@ -698,7 +698,7 @@ export function BossBrawl(props: BossBrawlProps) {
         fxRef.current?.burst('sparks', x, L.targetY - 20, { count: perfect ? 10 : 6, color: perfect ? 0xff7bd94a : 0xffffffff });
         fxRef.current?.ring(x, L.targetY, { color: perfect ? '#7BD94A' : '#FFFFFF', to: perfect ? 70 : 50, ms: 200 });
         fxRef.current?.burst('stars', bx, faceY, { count: perfect ? 10 : 4 });
-        fxRef.current?.flyUp(perfect ? 'PERFECT' : 'GOOD', bx, headY, { size: perfect ? 'xl' : 'lg', color: perfect ? '#FFCF3B' : '#FFFFFF' });
+        fxRef.current?.flyUp(perfect ? 'PERFECT' : 'GOOD', bx, headY, { size: perfect ? 'xl' : 'lg', color: perfect ? '#FFCF3B' : '#FFFFFF', key: 'callout', rise: 26 });
         if (perfect && !reduced) camera.punch(0.06);
         if (hint === COUNTER_HINT[boss]) setHint(null);
         break;
@@ -804,7 +804,7 @@ export function BossBrawl(props: BossBrawlProps) {
           popTrauma.current = popTrauma.current >= 1 ? 0.6 : 0.35;
         }
         fxRef.current?.flyUp(perfect ? 'PERFECT POP' : pop ? 'POP' : 'HIT', bx + (n % 2 ? -1 : 1) * 30, headY + 6,
-          { size: perfect ? 'xl' : pop ? 'lg' : 'md', color: pop ? '#FFCF3B' : '#FFFFFF', key: 'pop' });
+          { size: perfect ? 'xl' : pop ? 'lg' : 'md', color: pop ? '#FFCF3B' : '#FFFFFF', key: 'callout', rise: 26 });
         break;
       }
       case E_CLANK:
@@ -812,7 +812,7 @@ export function BossBrawl(props: BossBrawlProps) {
         fxRef.current?.burst('sparks', lane2x(boutRef.current?.lastLane ?? 1), L.targetY - 4, { count: 3, color: 0xffffffff });
         anim.hurtAt.value = fxNow();
         anim.hurtK.value = 0.15;
-        if (e.a >= 2) fxRef.current?.flyUp('CLANK', bx, headY + 10, { size: 'sm', color: '#FFFFFF', key: 'clank' });
+        if (e.a >= 2) fxRef.current?.flyUp('CLANK', bx, headY + 10, { size: 'sm', color: '#FFFFFF', key: 'callout', rise: 16 });
         break;
       case E_GUARD_WARN:
         setGuardWarn(true);
@@ -838,7 +838,7 @@ export function BossBrawl(props: BossBrawlProps) {
           playPattern('bossEasySlam', { priority: HP.own });
           fxRef.current?.burst('stars', bx, faceY, { count: 20 });
           fxRef.current?.ring(bx, faceY, { color: '#FFCF3B', to: 110, ms: 300 });
-          fxRef.current?.flyUp('EASY SLAM!', bx, headY, { size: 'xl', color: '#FFCF3B' });
+          fxRef.current?.flyUp('EASY SLAM!', bx, headY, { size: 'xl', color: '#FFCF3B', key: 'callout', rise: 26 });
           if (!reduced) {
             camera.punch(0.08);
             camera.shake(0.3, 0, -1);
@@ -937,7 +937,7 @@ export function BossBrawl(props: BossBrawlProps) {
         break;
       case E_SKILL_STAR:
         GameAudio.play(GameAudio.hasCue('bo_skill_star') ? 'bo_skill_star' : 'fx.reveal');
-        fxRef.current?.flyUp('SKILL STAR!', bx, headY - 30, { size: 'xl', color: '#FFCF3B' });
+        fxRef.current?.flyUp('SKILL STAR!', bx, headY - 20, { size: 'xl', color: '#FFCF3B', key: 'skill', rise: 20 });
         fxRef.current?.burst('sparkles', bx, headY, { count: 16 });
         break;
       case E_TIER:

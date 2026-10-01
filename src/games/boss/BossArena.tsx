@@ -1441,7 +1441,7 @@ export function partLaunch(L: ArenaLayout, n: number, dir: number): { x: number;
   if (n === 1) {
     return {
       x: L.bossX - S / 2 + (HAT.x + HAT.w / 2) * S, y: L.bossY - H / 2 + (HAT.y + HAT.h / 2) * H,
-      vx: 64, vy: -840, floor: L.lipY + 34,
+      vx: 120, vy: -840, floor: L.lipY + 34,
     };
   }
   return { x: L.bossX + S * 0.1 * dir, y: L.bossY - S * 0.2, vx: 220 * (dir === 0 ? 1 : dir), vy: -700, floor: L.lipY + 30 };
