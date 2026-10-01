@@ -77,7 +77,7 @@ import {
   bedFor, bedSetFor, CQ_PRELOAD, registerCqAudio, sfxAim, sfxAmbience, sfxBeached, sfxBump, sfxButton, sfxCarry, sfxChest, sfxFinalClear,
   sfxGolden, sfxHandoff, sfxLeftover, sfxOpponentClear, sfxPearl, sfxRingLost, sfxRingOn, sfxRiptide, sfxShells, sfxShieldPop, sfxSoClose,
   sfxSplashIncoming, sfxStall, sfxSwim, sfxTally, sfxTide, sfxTideShort, sfxTip, sfxTransition, sfxTread, sfxUndo, sfxUnlock, sfxWhirlpool,
-  sfxWin, sfxWrongTurn, sfxParSink, useCqMusic,
+  sfxWin, sfxWrongTurn, sfxParSink, startSnareRoll, useCqMusic,
 } from './audio';
 import { carryPlan, cqSchedule, CQH } from './cqHaptics';
 import {
@@ -1687,7 +1687,12 @@ export default function CurrentQuestGame({
   const applyNowRef = useRef(applyNow);
   applyNowRef.current = applyNow;
 
+  // Snare escalation (0.A.13): held while an armed preview banks the golden pearl on a Fever-eligible final voyage.
+  const snareStop = useRef<(() => void) | null>(null);
+  const stopSnare = useCallback(() => { snareStop.current?.(); snareStop.current = null; }, []);
+  useEffect(() => stopSnare, [stopSnare]);
   const commit = useCallback((action: number) => {
+    stopSnare();
     if (!playing.current || finishing.current || result || stake) return;
     if (Date.now() < busyUntil.current) {
       // Exactly one buffered commit; the rest of the current animation plays at 2x.
@@ -1696,19 +1701,29 @@ export default function CurrentQuestGame({
       return;
     }
     applyNowRef.current(action);
-  }, [result, fastForward, stake]);
+  }, [result, fastForward, stake, stopSnare]);
 
   // ---- input ---------------------------------------------------------------------------------------------
+  const feverPreview = (dir: number): boolean => {
+    const run = runRef.current;
+    if (!run || dir < 0 || reducedMotion) return false;
+    const last = run.index === run.boards.length - 1 && run.boards.length > 1;
+    const priorAll = shellsRef.current.slice(0, run.boards.length - 1).every((x) => x.every(Boolean));
+    if (!last || !priorAll || run.voyage.golden || parState(currentBoard(run), run.voyage).lost) return false;
+    const pv = previewFor(run, dir);
+    return pv.valid && pv.golden;
+  };
   const onAim = useCallback((dir: number) => {
     setInspect(null);
     const s = svRef.current;
     s.tourT0.value = -1e9;
-    if (dir < 0) { setChip(null); return; }
+    if (dir < 0) { setChip(null); stopSnare(); return; }
     sfxAim(dir);
     CQH.tick();
     setChip(chipFor(dir));
-  }, [chipFor]);
-  const onCancelAim = useCallback(() => setChip(null), []);
+    if (feverPreview(dir)) { if (!snareStop.current) snareStop.current = startSnareRoll(); } else stopSnare();
+  }, [chipFor, stopSnare]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onCancelAim = useCallback(() => { setChip(null); stopSnare(); }, [stopSnare]);
   const onInspect = useCallback((x: number, y: number) => {
     const run = runRef.current;
     const l = layoutRef.current;

@@ -49,6 +49,8 @@ function registerV71(): void {
     cq_aim_1: { src: require('../../assets/games/current-quest/sfx/cq_aim_1.m4a'), durationMs: 154, bus: 'ui', maxVoices: 2, priority: 1, approved: false, fallback: 'cq_aim' },
     cq_aim_2: { src: require('../../assets/games/current-quest/sfx/cq_aim_2.m4a'), durationMs: 154, bus: 'ui', maxVoices: 2, priority: 1, approved: false, fallback: 'cq_aim' },
     cq_aim_3: { src: require('../../assets/games/current-quest/sfx/cq_aim_3.m4a'), durationMs: 154, bus: 'ui', maxVoices: 2, priority: 1, approved: false, fallback: 'cq_aim' },
+    // Snare escalation (0.A.13, Peggle): the existing shaker one-shot, rolled faster and louder while armed.
+    cq_snare_roll: { src: require('../../assets/games/audio/current-quest/cq_perc_shaker.wav'), durationMs: 176, bus: 'sfx', maxVoices: 3, priority: 1, approved: false },
   };
   GameAudio.registerCues(cues);
   const bed = (src: number): BedDef => ({ src, bpm: 136, beatsPerBar: 4, offsetMs: 0, loopEndMs: BED2_LOOP_MS, approved: false });
@@ -72,6 +74,25 @@ export function registerCqAudio(): void {
   registerV71();
 }
 
+/**
+ * Snare escalation (0.A.13): on a Fever-eligible final voyage, arming a preview that banks the golden pearl
+ * starts a roll that swells (interval 150 to 60 ms, volume 0.2 to 0.75 over 1.4 s) and holds while armed.
+ * Returns a stop function. Dev-registered and unapproved until Dustin hears it (G6).
+ */
+export function startSnareRoll(): () => void {
+  let stop = false;
+  const t0 = Date.now();
+  let id: ReturnType<typeof setTimeout> | null = null;
+  const hit = () => {
+    if (stop) return;
+    const k = Math.min(1, (Date.now() - t0) / 1400);
+    play('cq_snare_roll', { volume: 0.2 + 0.55 * k });
+    id = setTimeout(hit, 150 - 90 * k);
+  };
+  hit();
+  return () => { stop = true; if (id) clearTimeout(id); };
+}
+
 /** Every cue is loaded into the voice pool at game open; nothing loads mid-play (11.5). */
 export const CQ_PRELOAD = [
   'cq_swim', 'cq_aim', 'cq_pearl', 'cq_golden_pearl', 'cq_current_grab', 'cq_spit_out', 'sk_bump', 'cq_upstream',
@@ -80,7 +101,7 @@ export const CQ_PRELOAD = [
   'cq_ink', 'cq_surf_sting', 'cq_surge_4bar', 'cq_amb_lagoon', 'cq_win',
   ...Array.from({ length: 10 }, (_, k) => `cq_carry_${k + 1}`),
   ...Array.from({ length: 10 }, (_, k) => `cq_carry_${k + 1}_rip`),
-  'cq_shells_1', 'cq_shells_2', 'cq_shells_3', 'ui.complete', 'fx.purchase', 'fx.whoosh', 'ui.press',
+  'cq_shells_1', 'cq_shells_2', 'cq_shells_3', 'ui.complete', 'fx.purchase', 'fx.whoosh', 'ui.press', 'cq_snare_roll',
 ];
 
 
