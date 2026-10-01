@@ -19,8 +19,9 @@
 import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import {
-  BlendColor, Canvas, Circle, DashPathEffect, Group, Image as SkImage, ImageShader, LinearGradient, Oval, Path, Rect,
-  Skia, Vertices, vec, type SkImage as SkImageType,
+  BlendColor, Canvas, Circle, DashPathEffect, Group, Image as SkImage, ImageShader, LinearGradient, Oval, PaintStyle, Path,
+  Picture, Rect, Skia, StrokeCap, StrokeJoin, Vertices, createPicture, vec, type SkCanvas, type SkImage as SkImageType,
+  type SkPaint,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { rootSide, viewLane, type ArenaLayout, type BossView } from './view';
@@ -212,12 +213,11 @@ export const BossArena = React.memo(function BossArena(p: Props) {
       <BossRig {...p} />
       <WaterLip {...p} />
       {p.bossKind === 0 ? <Limbs {...p} /> : null}
-      <Row {...p} />
-      <PinnedSuckers {...p} />
-      <FinalAnchor {...p} />
+      <RowPicture {...p} />
       <Fore {...p} />
       <Splash {...p} />
       <PlayerFloat {...p} />
+      <FinPicture {...p} />
       <PopBead {...p} />
       <Parts {...p} />
       <SpeedLines {...p} />
@@ -852,21 +852,23 @@ function Limb({ img, frames, slot, idx, L }: Props & { frames: SharedValue<LimbF
   const texW = img.strip ? img.strip.width() : 768;
   const texH = img.strip ? img.strip.height() : 246;
   const W0 = Math.max(18, L.bossSize * 0.105);
+  const off = useMemo(() => {
+    const pos: Pt[] = [];
+    const tex: Pt[] = [];
+    for (let i = 0; i < JOINTS * 2; i++) {
+      pos.push({ x: -100, y: -100 });
+      tex.push({ x: 0, y: 0 });
+    }
+    return { pos, tex, out: pos, otex: tex, on: 0, fake: 0, sheen: 0, dash: Skia.Path.Make() };
+  }, []);
   const geo = useDerivedValue(() => {
     const f = frames.value[slot];
+    // Off limbs return one stable object, so Skia skips them without re-uploading geometry.
+    if (!f.on) return off;
     const pos: Pt[] = [];
     const tex: Pt[] = [];
     const out: Pt[] = [];
     const otex: Pt[] = [];
-    if (!f.on) {
-      for (let i = 0; i < JOINTS * 2; i++) {
-        pos.push({ x: -100, y: -100 });
-        tex.push({ x: 0, y: 0 });
-        out.push({ x: -100, y: -100 });
-        otex.push({ x: 0, y: 0 });
-      }
-      return { pos, tex, out, otex, on: 0, fake: 0, sheen: 0, dash: Skia.Path.Make() };
-    }
     stripVerts(f.chain, W0 * f.w, 0, 0, f.flip, texW, texH, STRIP_TIP_U, pos, tex);
     stripVerts(f.chain, W0 * f.w, 1.5, 1.5, f.flip, texW, texH, STRIP_TIP_U, out, otex);
     // Fake: hollow white dashed outline along both edges.
@@ -916,278 +918,293 @@ function Limb({ img, frames, slot, idx, L }: Props & { frames: SharedValue<LimbF
 }
 
 // ---------------------------------------------------------------------------
-// The row: three buoys, the shadow (timer), the lime ring with a chevron notch (answer), the bubble.
+// The row, drawn as ONE recorded picture per frame (one UI-thread mapper instead of ~120): three buoys,
+// the shadow (timer), the lime ring with a chevron notch (answer), the bubble; the pinned limb's suckers
+// (gold = hit here) with look-ahead and ticked rings; the Final Pop anchor with its Anchor Stars.
 
-function Row(p: Props) {
-  return (
-    <Group>
-      {[0, 1, 2].map((i) => <Buoy key={i} i={i} {...p} />)}
-    </Group>
-  );
+interface Paints {
+  fill: SkPaint;
+  stroke: SkPaint;
+  img: SkPaint;
 }
 
-function Buoy({ i, L, view, t, fx, beat, anim, img, bossKind, pres }: Props & { i: number }) {
-  const x = L.laneX[i];
-  const y = L.targetY;
+function usePaints(): Paints {
+  return useMemo(() => {
+    const fill = Skia.Paint();
+    fill.setAntiAlias(true);
+    const stroke = Skia.Paint();
+    stroke.setAntiAlias(true);
+    stroke.setStyle(PaintStyle.Stroke);
+    stroke.setStrokeCap(StrokeCap.Round);
+    stroke.setStrokeJoin(StrokeJoin.Round);
+    const img = Skia.Paint();
+    img.setAntiAlias(true);
+    return { fill, stroke, img };
+  }, []);
+}
+
+function fillC(pt: Paints, color: string, a = 1): SkPaint {
+  'worklet';
+  pt.fill.setColor(Skia.Color(color));
+  pt.fill.setAlphaf(a);
+  return pt.fill;
+}
+
+function strokeC(pt: Paints, color: string, w: number, a = 1): SkPaint {
+  'worklet';
+  pt.stroke.setColor(Skia.Color(color));
+  pt.stroke.setAlphaf(a);
+  pt.stroke.setStrokeWidth(w);
+  pt.stroke.setPathEffect(null);
+  return pt.stroke;
+}
+
+function drawImg(canvas: SkCanvas, pt: Paints, im: SkImageType | null, x: number, y: number, w: number, h: number, a = 1): void {
+  'worklet';
+  if (!im) return;
+  pt.img.setAlphaf(a);
+  canvas.drawImageRect(im, Skia.XYWHRect(0, 0, im.width(), im.height()), Skia.XYWHRect(x, y, w, h), pt.img);
+}
+
+function RowPicture({ L, view, t, fx, beat, anim, img, bossKind, pres }: Props) {
+  const pt = usePaints();
   const src = bossKind === 0 ? img.buoy : bossKind === 2 ? img.lantern : img.plate;
-  const h = bossKind === 1 ? 30 : 74;
-  const w = aspectOf(src, 317 / 384) * h;
-  const tapAt = i === 0 ? anim.buoyAt0 : i === 1 ? anim.buoyAt1 : anim.buoyAt2;
-  const tr = useDerivedValue(() => {
-    const b = beat.value;
-    const ph = b % 4;
-    // Bob 3 pt on beats 2 and 4.
-    const bump = (ph >= 1 && ph < 1.4 ? 1 - (ph - 1) / 0.4 : 0) + (ph >= 3 && ph < 3.4 ? 1 - (ph - 3) / 0.4 : 0);
-    const k = since(fx.value, tapAt.value, 220);
-    const s = 1 - 0.16 * Math.sin(k * Math.PI);
-    return [{ translateX: x }, { translateY: y - 3 * bump }, { scaleX: 2 - s }, { scaleY: s }];
-  });
-  // 0 idle, 1 telegraphed, 3 greyed, 5 dimmed (bout 1 centre)
-  const tele = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    const lane = viewLane(v, now);
-    if (!v.aOn || lane !== i) return { on: 0, p: 0, perfect: 0, I: 0 };
-    const I = v.steps[v.step * 3 + 1];
-    const T = v.step === 0 ? Math.max(v.aT, I - v.aW) : I - v.aW;
-    if (now < T || now > I + 90) return { on: 0, p: 0, perfect: 0, I };
-    return { on: 1, p: c01((now - T) / Math.max(1, I - T)), perfect: now >= I - 160 && now <= I + 40 ? 1 : 0, I };
-  });
-  const op = useDerivedValue(() => {
-    const v = view.value;
-    // Pinned: the limb lies across the buoys, the suckers are the targets now.
-    if (v.oOn && t.value >= pres.value.pinStart + 100) return 0.35;
-    if (t.value < v.greyUntil[i]) return 0.4;
-    if (bossKind === 0 && v.bout === 0 && i === 1 && v.on && !v.oOn) return 0.55;
-    return 1;
-  });
-  const shS = useDerivedValue(() => (tele.value.on ? 0.3 + 0.7 * inQuad(tele.value.p) : 0));
-  const shOp = useDerivedValue(() => (tele.value.on ? 0.42 : 0));
-  // Lime ring: tightens from 1.9x to 1x into the PERFECT window, pulses inside it.
-  const ringR = useDerivedValue(() => {
-    const tv = tele.value;
-    if (!tv.on) return 0;
-    const R0 = 42;
-    const pp = c01(tv.p / Math.max(0.01, 1 - 160 / Math.max(1, view.value.aW)));
-    return R0 * (1 + 0.9 * (1 - pp)) * (tv.perfect ? 1 + 0.05 * Math.sin(fx.value / 40) : 1);
-  });
-  const ringOp = useDerivedValue(() => (tele.value.on ? 1 : 0));
-  const notch = useDerivedValue(() => {
-    const pth = Skia.Path.Make();
-    const r = ringR.value;
-    if (r <= 0) return pth;
-    pth.moveTo(x - 10, y - r - 10);
-    pth.lineTo(x + 10, y - r - 10);
-    pth.lineTo(x, y - r + 4);
-    pth.close();
-    return pth;
-  });
-  // TEAM STRIKE: attack #2's ring wears small white crew pennants.
-  const pennants = useDerivedValue(() => {
-    const pth = Skia.Path.Make();
-    const r = ringR.value;
-    if (r <= 0 || !pres.value.team || view.value.aNo !== 1) return pth;
-    for (const a of [-2.3, -0.84]) {
-      const px = x + Math.cos(a) * (r + 4);
-      const py = y + Math.sin(a) * (r + 4);
-      pth.moveTo(px, py);
-      pth.lineTo(px, py - 18);
-      pth.lineTo(px + 13, py - 13);
-      pth.lineTo(px, py - 8);
-    }
-    return pth;
-  });
-  // Training wheels: orange dashed arc from the limb tip to the buoy (first rounds, bout 1).
-  const arc = useDerivedValue(() => {
-    const pth = Skia.Path.Make();
-    const tv = tele.value;
-    if (!tv.on || !pres.value.wheels || view.value.bout !== 0) return pth;
-    const top = y - L.H * 0.2 - 10;
-    pth.moveTo(x + 8, top + 40);
-    pth.quadTo(x + 40, (top + y) / 2, x, y - 46);
-    return pth;
-  });
-  const dashPh = useDerivedValue(() => -(fx.value * 0.12) % 18);
-  // Foam bubble: rides in on a wave, wobbles, blocks the buoy until tapped.
-  const bub = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    if (v.bubLane !== i || v.bubPopped || now < v.bubT0 || now >= v.bubT1) return { op: 0, x, s: 1 };
-    const e = (now - v.bubT0) / 300;
-    const from = i === 0 ? -60 : L.W + 60;
-    return { op: 1, x: e < 1 ? from + (x - from) * outQuad(e) : x + Math.sin(now / 120) * 2, s: 1 + 0.06 * onBeat(beat.value) };
-  });
-  const bubTr = useDerivedValue(() => [{ translateX: bub.value.x }, { translateY: y - 6 }, { scale: bub.value.s }]);
-  const bubOp = useDerivedValue(() => bub.value.op);
-  return (
-    <Group>
-      <Oval x={x - 44} y={y + 22} width={88} height={20} color={NAVY} opacity={0.12} />
-      <Oval x={useDerivedValue(() => x - 46 * shS.value)} y={useDerivedValue(() => y + 30 - 15 * shS.value)}
-        width={useDerivedValue(() => 92 * shS.value)} height={useDerivedValue(() => 30 * shS.value)} color={NAVY} opacity={shOp} />
-      <Group opacity={op} transform={tr}>
-        {src ? <SkImage image={src} x={-w / 2} y={-h / 2} width={w} height={h} /> : null}
-      </Group>
-      <Path path={arc} style="stroke" strokeWidth={9} strokeCap="round" color={NAVY} opacity={0.5} />
-      <Path path={arc} style="stroke" strokeWidth={5} strokeCap="round" color={ORANGE}>
-        <DashPathEffect intervals={[10, 8]} phase={dashPh} />
-      </Path>
-      <Group opacity={ringOp}>
-        <Circle cx={x} cy={y} r={ringR} style="stroke" strokeWidth={11} color={NAVY} />
-        <Circle cx={x} cy={y} r={ringR} style="stroke" strokeWidth={6} color={LIME} />
-        <Circle cx={x} cy={y} r={useDerivedValue(() => Math.max(0, ringR.value - 4))} style="stroke" strokeWidth={2} color={WHITE} />
-        <Path path={notch} color={LIME} />
-        <Path path={notch} style="stroke" strokeWidth={3} strokeJoin="round" color={NAVY} />
-        <Path path={pennants} color={WHITE} />
-        <Path path={pennants} style="stroke" strokeWidth={2.5} strokeJoin="round" color={NAVY} />
-      </Group>
-      {img.fxBubble ? (
-        <Group opacity={bubOp} transform={bubTr}>
-          <SkImage image={img.fxBubble} x={-36} y={-36} width={72} height={72} />
-        </Group>
-      ) : null}
-    </Group>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Pin and Pop: suckers over the lanes on the pinned limb; gold = hit here.
-
-function PinnedSuckers(p: Props) {
-  return (
-    <Group>
-      {[0, 1, 2].map((i) => <Sucker key={i} i={i} {...p} />)}
-    </Group>
-  );
-}
-
-function Sucker({ i, L, view, t, fx, beat, anim, pres }: Props & { i: number }) {
-  const x = L.laneX[i];
-  const y = L.targetY - 4;
-  const R = 15;
-  const st = useDerivedValue(() => {
-    const v = view.value;
-    const now = t.value;
-    const pr = pres.value;
-    const off = { on: 0, lit: 0, look: 0, ring: 0, appr: 0, used: 0 };
-    if (!v.oOn || now < pr.pinStart + 100 || now > v.oEnd - 120) return off;
-    const out = { on: 1, lit: 0, look: 0, ring: 0, appr: 0, used: 0 };
-    const look = v.look * v.q;
-    for (let j = 0; j < v.rings.length; j++) {
-      const r = v.rings[j];
-      const isLane = v.lanes[j] === i;
-      const breakAll = v.oKind === 1;
-      if (!isLane && !breakAll) continue;
-      if (v.used[j] !== 0) {
-        if (isLane && now < r + 200) out.used = 1;
-        continue;
-      }
-      if (now > r + v.popMs) continue;
-      if (now >= r - look) {
-        if (isLane) {
-          out.look = 1;
-          out.appr = Math.max(out.appr, 1 + c01((r - now) / look));
-          if (now >= r - 2 * v.q) {
-            out.lit = 1;
-            out.ring = 1 + 1.2 * c01((r - now) / (2 * v.q));
-          }
-        }
-        if (breakAll) out.lit = 1;
-        break;
-      }
-      if (breakAll) out.lit = Math.max(out.lit, 0.6);
-    }
-    return out;
-  });
-  const onOp = useDerivedValue(() => st.value.on);
-  const pulse = useDerivedValue(() => 0.85 + 0.15 * onBeat(beat.value));
-  const litOp = useDerivedValue(() => st.value.lit * pulse.value);
-  const lookOp = useDerivedValue(() => st.value.look);
-  const apprR = useDerivedValue(() => (st.value.appr > 0 ? R * 1.25 * st.value.appr : 0));
-  const ringR = useDerivedValue(() => (st.value.ring > 0 ? R * 1.35 * st.value.ring : 0));
-  const ringOp = useDerivedValue(() => (st.value.ring > 0 ? 1 : 0));
-  const ticks = useDerivedValue(() => {
-    const pth = Skia.Path.Make();
-    const r = ringR.value;
-    if (r <= 0) return pth;
-    for (let k = 0; k < 12; k++) {
-      const a = (k / 12) * Math.PI * 2 + fx.value / 900;
-      pth.moveTo(x + Math.cos(a) * (r + 3), y + Math.sin(a) * (r + 3));
-      pth.lineTo(x + Math.cos(a) * (r + 9), y + Math.sin(a) * (r + 9));
-    }
-    return pth;
-  });
-  const splat = useDerivedValue(() => {
-    const k = anim.beadLane.value === i ? since(fx.value, anim.beadAt.value, 200) : 0;
-    return k;
-  });
-  const sq = useDerivedValue(() => [{ translateX: x }, { translateY: y }, { scaleX: 1 + 0.35 * splat.value }, { scaleY: 1 - 0.35 * splat.value }]);
-  return (
-    <Group opacity={onOp}>
-      <Circle cx={x} cy={y} r={R * 2.1} color={GOLD} opacity={useDerivedValue(() => litOp.value * 0.45)} />
-      <Group transform={sq}>
-        <Circle cx={0} cy={0} r={R + 2.5} color={INK} />
-        <Circle cx={0} cy={0} r={R} color={LILAC} />
-        <Circle cx={0} cy={0} r={R * 0.55} style="stroke" strokeWidth={3} color={LILAC_IN} />
-        <Circle cx={0} cy={0} r={R} color={GOLD} opacity={useDerivedValue(() => litOp.value * 0.75)} />
-      </Group>
-      <Group opacity={lookOp}>
-        <Circle cx={x} cy={y} r={R + 4} style="stroke" strokeWidth={4} color={GOLD} />
-        <Circle cx={x} cy={y} r={apprR} style="stroke" strokeWidth={5} color={NAVY} opacity={0.5} />
-        <Circle cx={x} cy={y} r={apprR} style="stroke" strokeWidth={2.5} color={WHITE} />
-      </Group>
-      <Group opacity={ringOp}>
-        <Circle cx={x} cy={y} r={ringR} style="stroke" strokeWidth={8} color={NAVY} />
-        <Circle cx={x} cy={y} r={ringR} style="stroke" strokeWidth={5} color={GOLD} />
-        <Path path={ticks} style="stroke" strokeWidth={6} strokeCap="round" color={NAVY} />
-        <Path path={ticks} style="stroke" strokeWidth={3} strokeCap="round" color={GOLD} />
-      </Group>
-      <Circle cx={x} cy={y} r={useDerivedValue(() => R + 30 * (1 - splat.value))} style="stroke" strokeWidth={4} color={LILAC}
-        opacity={splat} />
-    </Group>
-  );
-}
-
-/** Final Pop: the gold anchor rises over the lit sucker with its Anchor Star sockets, then drops on the tap. */
-function FinalAnchor({ L, view, t, fx, anim, img }: Props) {
+  const bh = bossKind === 1 ? 30 : 74;
+  const bw = aspectOf(src, 317 / 384) * bh;
   const AW = 70;
   const AH = AW * 1.12;
-  const st = useDerivedValue(() => {
+  const picture = useDerivedValue(() => createPicture((canvas) => {
     const v = view.value;
     const now = t.value;
     const f = fx.value;
+    const b = beat.value;
+    const pr = pres.value;
+    const ph = b % 4;
+    const bump = (ph >= 1 && ph < 1.4 ? 1 - (ph - 1) / 0.4 : 0) + (ph >= 3 && ph < 3.4 ? 1 - (ph - 3) / 0.4 : 0);
+    const pinned = v.oOn && now >= pr.pinStart + 100;
+    const lane = viewLane(v, now);
+    let I = 0;
+    let T = 0;
+    let teleOn = false;
+    if (v.aOn && lane >= 0) {
+      I = v.steps[v.step * 3 + 1];
+      T = v.step === 0 ? Math.max(v.aT, I - v.aW) : I - v.aW;
+      teleOn = now >= T && now <= I + 90;
+    }
+    const taps = [anim.buoyAt0.value, anim.buoyAt1.value, anim.buoyAt2.value];
+    for (let i = 0; i < 3; i++) {
+      const x = L.laneX[i];
+      const y = L.targetY;
+      canvas.drawOval(Skia.XYWHRect(x - 44, y + 22, 88, 20), fillC(pt, NAVY, 0.12));
+      const tele = teleOn && lane === i;
+      if (tele) {
+        // Channel 2, the timer: the limb's shadow grows on the buoy (easeInQuad), full at impact.
+        const sh = 0.3 + 0.7 * inQuad((now - T) / Math.max(1, I - T));
+        canvas.drawOval(Skia.XYWHRect(x - 46 * sh, y + 30 - 15 * sh, 92 * sh, 30 * sh), fillC(pt, NAVY, 0.42));
+      }
+      let op = 1;
+      if (pinned) op = 0.35;
+      else if (now < v.greyUntil[i]) op = 0.4;
+      else if (bossKind === 0 && v.bout === 0 && i === 1 && v.on && !v.oOn) op = 0.55;
+      const k = since(f, taps[i], 220);
+      const s = 1 - 0.16 * Math.sin(k * Math.PI);
+      canvas.save();
+      canvas.translate(x, y - 3 * bump);
+      canvas.scale(2 - s, s);
+      drawImg(canvas, pt, src, -bw / 2, -bh / 2, bw, bh, op);
+      canvas.restore();
+      if (tele) {
+        // Training wheels: orange dashed arc from the limb tip to the buoy (first rounds, bout 1).
+        if (pr.wheels && v.bout === 0) {
+          const arc = Skia.Path.Make();
+          const top = y - L.H * 0.2 - 10;
+          arc.moveTo(x + 8, top + 40);
+          arc.quadTo(x + 40, (top + y) / 2, x, y - 46);
+          canvas.drawPath(arc, strokeC(pt, NAVY, 9, 0.5));
+          const st = strokeC(pt, ORANGE, 5);
+          st.setPathEffect(Skia.PathEffect.MakeDash([10, 8], -(f * 0.12) % 18));
+          canvas.drawPath(arc, st);
+          st.setPathEffect(null);
+        }
+        // Channel 3, the answer: lime ring with a downward chevron notch, tightening into PERFECT.
+        const perfect = now >= I - 160 && now <= I + 40;
+        const pp = c01(((now - T) / Math.max(1, I - T)) / Math.max(0.01, 1 - 160 / Math.max(1, v.aW)));
+        const r = 42 * (1 + 0.9 * (1 - pp)) * (perfect ? 1 + 0.05 * Math.sin(f / 40) : 1);
+        canvas.drawCircle(x, y, r, strokeC(pt, NAVY, 11));
+        canvas.drawCircle(x, y, r, strokeC(pt, LIME, 6));
+        canvas.drawCircle(x, y, Math.max(0, r - 4), strokeC(pt, WHITE, 2));
+        const notch = Skia.Path.Make();
+        notch.moveTo(x - 10, y - r - 10);
+        notch.lineTo(x + 10, y - r - 10);
+        notch.lineTo(x, y - r + 4);
+        notch.close();
+        canvas.drawPath(notch, fillC(pt, LIME));
+        canvas.drawPath(notch, strokeC(pt, NAVY, 3));
+        if (pr.team && v.aNo === 1) {
+          // TEAM STRIKE: attack #2's ring wears small white crew pennants.
+          const pen = Skia.Path.Make();
+          for (const a of [-2.3, -0.84]) {
+            const px = x + Math.cos(a) * (r + 4);
+            const py = y + Math.sin(a) * (r + 4);
+            pen.moveTo(px, py);
+            pen.lineTo(px, py - 18);
+            pen.lineTo(px + 13, py - 13);
+            pen.lineTo(px, py - 8);
+          }
+          canvas.drawPath(pen, fillC(pt, WHITE));
+          canvas.drawPath(pen, strokeC(pt, NAVY, 2.5));
+        }
+      }
+      // Foam bubble: rides in on a wave, wobbles on the beat, blocks the buoy until tapped.
+      if (v.bubLane === i && !v.bubPopped && now >= v.bubT0 && now < v.bubT1 && img.fxBubble) {
+        const e = (now - v.bubT0) / 300;
+        const from = i === 0 ? -60 : L.W + 60;
+        const bx = e < 1 ? from + (x - from) * outQuad(e) : x + Math.sin(now / 120) * 2;
+        const bs = 72 * (1 + 0.06 * onBeat(b));
+        drawImg(canvas, pt, img.fxBubble, bx - bs / 2, y - 6 - bs / 2, bs, bs);
+      }
+    }
+    // Pin and Pop suckers: only the current slot is lit; the next shows its look-ahead outline.
+    if (v.oOn && now >= pr.pinStart + 100 && now <= v.oEnd - 120) {
+      const R = 15;
+      const look = v.look * v.q;
+      let cur = -1;
+      for (let j = 0; j < v.rings.length; j++) {
+        if (v.used[j] === 0 && now <= v.rings[j] + v.popMs) {
+          cur = j;
+          break;
+        }
+      }
+      const pulse = 0.85 + 0.15 * onBeat(b);
+      for (let i = 0; i < 3; i++) {
+        const x = L.laneX[i];
+        const y = L.targetY - 4;
+        let lit = 0;
+        let ring = 0;
+        let appr = 0;
+        let lk = 0;
+        if (cur >= 0) {
+          const r = v.rings[cur];
+          if (v.lanes[cur] === i && now >= r - look) {
+            lk = 1;
+            lit = 1;
+            appr = 1 + c01((r - now) / look);
+            if (now >= r - 2 * v.q) ring = 1 + 1.2 * c01((r - now) / (2 * v.q));
+          } else if (v.oKind === 1 && now >= r - look) lit = 0.55;
+          const nx = cur + 1;
+          if (nx < v.rings.length && v.lanes[nx] === i && v.lanes[cur] !== i && now >= v.rings[nx] - look) {
+            lk = 1;
+            appr = Math.max(appr, 1 + c01((v.rings[nx] - now) / look));
+          }
+        }
+        const splat = anim.beadLane.value === i ? since(f, anim.beadAt.value, 200) : 0;
+        if (lit > 0) canvas.drawCircle(x, y, R * 2.1, fillC(pt, GOLD, lit * pulse * 0.45));
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.scale(1 + 0.35 * splat, 1 - 0.35 * splat);
+        canvas.drawCircle(0, 0, R + 2.5, fillC(pt, INK));
+        canvas.drawCircle(0, 0, R, fillC(pt, LILAC));
+        canvas.drawCircle(0, 0, R * 0.55, strokeC(pt, LILAC_IN, 3));
+        if (lit > 0) canvas.drawCircle(0, 0, R, fillC(pt, GOLD, lit * pulse * 0.75));
+        canvas.restore();
+        if (lk) {
+          canvas.drawCircle(x, y, R + 4, strokeC(pt, GOLD, 4));
+          canvas.drawCircle(x, y, R * 1.25 * appr, strokeC(pt, NAVY, 5, 0.5));
+          canvas.drawCircle(x, y, R * 1.25 * appr, strokeC(pt, WHITE, 2.5));
+        }
+        if (ring > 0) {
+          const rr = R * 1.35 * ring;
+          canvas.drawCircle(x, y, rr, strokeC(pt, NAVY, 8));
+          canvas.drawCircle(x, y, rr, strokeC(pt, GOLD, 5));
+          const ticks = Skia.Path.Make();
+          for (let k = 0; k < 12; k++) {
+            const a = (k / 12) * Math.PI * 2 + f / 900;
+            ticks.moveTo(x + Math.cos(a) * (rr + 3), y + Math.sin(a) * (rr + 3));
+            ticks.lineTo(x + Math.cos(a) * (rr + 9), y + Math.sin(a) * (rr + 9));
+          }
+          canvas.drawPath(ticks, strokeC(pt, NAVY, 6));
+          canvas.drawPath(ticks, strokeC(pt, GOLD, 3));
+        }
+        if (splat > 0) canvas.drawCircle(x, y, R + 30 * (1 - splat), strokeC(pt, LILAC, 4, splat));
+      }
+    }
+    // Final Pop: the gold anchor rises over the lit sucker with its Anchor Star sockets, then drops on the tap.
+    let aOp = 0;
+    let ax = 0;
+    let ay = 0;
+    let as = 1;
     const fa = anim.finalAt.value;
     if (fa >= 0 && f >= fa && f < fa + 600) {
-      // Drop onto the sucker (220 ms in-quad) then hold for the freeze.
-      const k = inQuad((f - fa) / 220);
-      const lane = anim.beadLane.value >= 0 ? anim.beadLane.value : 1;
-      return { op: 1, x: L.laneX[lane], y: L.targetY - 140 + 110 * k, s: 1 + 0.2 * k, stars: v.stars };
+      const kk = inQuad((f - fa) / 220);
+      const ln = anim.beadLane.value >= 0 ? anim.beadLane.value : 1;
+      aOp = 1;
+      ax = L.laneX[ln];
+      ay = L.targetY - 140 + 110 * kk;
+      as = 1 + 0.2 * kk;
+    } else if (v.oOn && v.finalIdx >= 0 && v.used[v.finalIdx] === 0) {
+      const r = v.rings[v.finalIdx];
+      const start = r - 8 * v.q;
+      if (now >= start) {
+        const kk = outBack((now - start) / (4 * v.q), 1.3);
+        aOp = 1;
+        ax = L.laneX[v.lanes[v.finalIdx]];
+        ay = L.targetY - 30 - 110 * kk;
+        as = 0.7 + 0.3 * kk;
+      }
     }
-    if (!v.oOn || v.finalIdx < 0 || v.used[v.finalIdx] !== 0) return { op: 0, x: 0, y: 0, s: 1, stars: 0 };
-    const r = v.rings[v.finalIdx];
-    const lane = v.lanes[v.finalIdx];
-    const start = r - 8 * v.q;
-    if (now < start) return { op: 0, x: 0, y: 0, s: 1, stars: 0 };
-    const k = outBack((now - start) / (4 * v.q), 1.3);
-    return { op: 1, x: L.laneX[lane], y: L.targetY - 30 - 110 * k, s: 0.7 + 0.3 * k, stars: v.stars };
-  });
-  const tr = useDerivedValue(() => [{ translateX: st.value.x }, { translateY: st.value.y }, { scale: st.value.s }]);
-  const op = useDerivedValue(() => st.value.op);
-  const starOp = (k: number) => useDerivedValue(() => (st.value.stars > k ? 1 : 0.25)); // eslint-disable-line react-hooks/rules-of-hooks
-  const s0 = starOp(0);
-  const s1 = starOp(1);
-  const s2 = starOp(2);
-  return (
-    <Group opacity={op} transform={tr}>
-      {img.anchor ? <SkImage image={img.anchor} x={-AW / 2} y={-AH / 2} width={AW} height={AH} /> : null}
-      {img.star ? (
-        <Group>
-          <Group opacity={s0}><SkImage image={img.star} x={-37} y={AH / 2 - 2} width={22} height={22} /></Group>
-          <Group opacity={s1}><SkImage image={img.star} x={-11} y={AH / 2 + 4} width={22} height={22} /></Group>
-          <Group opacity={s2}><SkImage image={img.star} x={15} y={AH / 2 - 2} width={22} height={22} /></Group>
-        </Group>
-      ) : null}
-    </Group>
-  );
+    if (aOp > 0) {
+      canvas.save();
+      canvas.translate(ax, ay);
+      canvas.scale(as, as);
+      drawImg(canvas, pt, img.anchor, -AW / 2, -AH / 2, AW, AH);
+      for (let k = 0; k < 3; k++) drawImg(canvas, pt, img.star, -37 + k * 26, AH / 2 - 2 + (k === 1 ? 6 : 0), 22, 22, v.stars > k ? 1 : 0.25);
+      canvas.restore();
+    }
+  }));
+  return <Picture picture={picture} />;
+}
+
+/** Grit fins badge above your shark (the last fin pulses coral on every beat) and the Knockdown stars. */
+function FinPicture({ L, view, fx, beat, anim, img }: Props) {
+  const pt = usePaints();
+  const SH = L.floatR * 1.95;
+  const y = L.floatY - SH * 0.95 - 22;
+  const FH = 26;
+  const FW = FH * (145 / 194);
+  const picture = useDerivedValue(() => createPicture((canvas) => {
+    const v = view.value;
+    const f = fx.value;
+    if (v.on && !v.downOn) {
+      const n = v.gritMax;
+      const w = n * 26 + 14;
+      const badge = Skia.RRectXY(Skia.XYWHRect(L.floatX - w / 2, y - 17, w, 34), 17, 17);
+      canvas.drawRRect(badge, fillC(pt, WHITE, 0.92));
+      canvas.drawRRect(badge, strokeC(pt, NAVY, 3));
+      for (let k = 0; k < n; k++) {
+        const x = L.floatX + (k - (n - 1) / 2) * 26;
+        const has = k < v.grit;
+        const last = v.grit === 1 && k === 0;
+        const pulse = last ? onBeat(beat.value, 0.45) : 0;
+        const pop = has ? 0 : since(f, anim.flinchAt.value, 320);
+        const op = has ? 1 : 0.18 + pop * 0.8;
+        const s = has ? 1 + 0.2 * pulse : 0.85 + pop * 0.5;
+        const yy = y - pop * 22;
+        if (last) canvas.drawCircle(x, yy + 1, 13, fillC(pt, CORAL, 0.4 + 0.5 * pulse));
+        canvas.save();
+        canvas.translate(x, yy);
+        canvas.scale(s, s);
+        drawImg(canvas, pt, img.fin, -FW / 2, -FH / 2, FW, FH, op);
+        canvas.restore();
+      }
+    }
+    if (v.downOn && img.star) {
+      for (let k = 0; k < 3; k++) {
+        const a = f / 280 + (k * Math.PI * 2) / 3;
+        drawImg(canvas, pt, img.star, L.floatX - L.floatR * 0.2 + Math.cos(a) * 34 - 11, L.floatY - L.floatR * 0.6 + Math.sin(a) * 10 - 11, 22, 22);
+      }
+    }
+  }));
+  return <Picture picture={picture} />;
 }
 
 /** Sand bar foreground at the bottom edge (the hat floats here after Break 1). */
@@ -1318,8 +1335,6 @@ function PlayerFloat({ L, view, t, fx, beat, anim, img, reduced }: Props) {
   };
   // Easy Slam charge glow under the shark while the float is held.
   const glow = useDerivedValue(() => (anim.padHeld.value > 0 && view.value.slamArmed ? 0.45 + 0.25 * Math.sin(fx.value / 60) : 0));
-  // Knockdown stars orbit (Alex's star) and the 8 get-up pips are on the HUD.
-  const downOp = useDerivedValue(() => (view.value.downOn ? 1 : 0));
   return (
     <Group>
       <Group transform={floatTr}>
@@ -1332,74 +1347,6 @@ function PlayerFloat({ L, view, t, fx, beat, anim, img, reduced }: Props) {
         {sharkImg(img.sharkBonk, p2)}
         {sharkImg(img.sharkDizzy, p3)}
         {sharkImg(img.sharkCheer, p4)}
-      </Group>
-      <GritFins L={L} view={view} fx={fx} beat={beat} anim={anim} img={img} SH={SH} />
-      <Group opacity={downOp}>
-        {img.star ? [0, 1, 2].map((k) => <DownStar key={k} k={k} L={L} fx={fx} star={img.star!} />) : null}
-      </Group>
-    </Group>
-  );
-}
-
-function DownStar({ k, L, fx, star }: { k: number; L: ArenaLayout; fx: SharedValue<number>; star: SkImageType }) {
-  const tr = useDerivedValue(() => {
-    const a = fx.value / 280 + (k * Math.PI * 2) / 3;
-    return [{ translateX: L.floatX - L.floatR * 0.2 + Math.cos(a) * 34 }, { translateY: L.floatY - L.floatR * 0.6 + Math.sin(a) * 10 }];
-  });
-  return <Group transform={tr}><SkImage image={star} x={-11} y={-11} width={22} height={22} /></Group>;
-}
-
-/** Grit: 3 fins (4 with Extra Fin) on a badge above your shark; the last one pulses coral on every beat. */
-function GritFins({ L, view, fx, beat, anim, img, SH }: {
-  L: ArenaLayout; view: SharedValue<BossView>; fx: SharedValue<number>; beat: SharedValue<number>; anim: ArenaAnim;
-  img: ArenaImages; SH: number;
-}) {
-  const y = L.floatY - SH * 0.95 - 22;
-  const badge = useDerivedValue(() => {
-    const v = view.value;
-    const n = v.on ? v.gritMax : 3;
-    const w = n * 26 + 14;
-    const p = Skia.Path.Make();
-    p.addRRect(Skia.RRectXY(Skia.XYWHRect(L.floatX - w / 2, y - 17, w, 34), 17, 17));
-    return p;
-  });
-  const badgeOp = useDerivedValue(() => (view.value.on && !view.value.downOn ? 1 : 0));
-  if (!img.fin) return null;
-  return (
-    <Group opacity={badgeOp}>
-      <Path path={badge} color="rgba(255,255,255,0.92)" />
-      <Path path={badge} style="stroke" strokeWidth={3} color={NAVY} />
-      {[0, 1, 2, 3].map((k) => <Fin key={k} k={k} L={L} y={y} view={view} fx={fx} beat={beat} anim={anim} fin={img.fin!} />)}
-    </Group>
-  );
-}
-
-function Fin({ k, L, y, view, fx, beat, anim, fin }: {
-  k: number; L: ArenaLayout; y: number; view: SharedValue<BossView>; fx: SharedValue<number>; beat: SharedValue<number>; anim: ArenaAnim;
-  fin: SkImageType;
-}) {
-  const FH = 26;
-  const FW = FH * (145 / 194);
-  const st = useDerivedValue(() => {
-    const v = view.value;
-    const n = v.on ? v.gritMax : 3;
-    if (k >= n || !v.on) return { op: 0, x: 0, y: 0, s: 1, coral: 0 };
-    const x = L.floatX + (k - (n - 1) / 2) * 26;
-    const has = k < v.grit;
-    // A lost fin pops up and off; the slot stays as a faint outline.
-    const last = v.grit === 1 && k === 0;
-    const pulse = last ? onBeat(beat.value, 0.45) : 0;
-    const pop = has ? 0 : since(fx.value, anim.flinchAt.value, 320);
-    return { op: has ? 1 : 0.18 + pop * 0.8, x, y: y - pop * 22, s: has ? 1 + 0.2 * pulse : 0.85 + pop * 0.5, coral: last ? 0.4 + 0.5 * pulse : 0 };
-  });
-  const tr = useDerivedValue(() => [{ translateX: st.value.x }, { translateY: st.value.y }, { scale: st.value.s }]);
-  const op = useDerivedValue(() => st.value.op);
-  const coral = useDerivedValue(() => st.value.coral);
-  return (
-    <Group transform={tr}>
-      <Circle cx={0} cy={1} r={13} color={CORAL} opacity={coral} />
-      <Group opacity={op}>
-        <SkImage image={fin} x={-FW / 2} y={-FH / 2} width={FW} height={FH} />
       </Group>
     </Group>
   );

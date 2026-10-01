@@ -12,7 +12,7 @@
 
 export const SEG = 24;
 export const JOINTS = SEG + 1;
-const SAMPLES = 48;
+const SAMPLES = 32;
 
 function smooth01(x: number): number {
   'worklet';

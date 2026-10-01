@@ -35,6 +35,9 @@ import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useGameClock } from '../../gamekit/useGameClock';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { useCamera } from '../../gamekit/fx/useCamera';
+import { PerfOverlay, usePerfProbe } from '../../gamekit/perf/PerfOverlay';
+import { usePerfTier } from '../../gamekit/perf/usePerfTier';
+import { TIER_SCALES } from '../../gamekit/core/perfTier';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { configureHaptics, playHaptic, playPattern, HP } from '../../gamekit/Haptics';
 import { useWalkSense } from '../../gamekit/motion/useWalkSense';
@@ -227,6 +230,9 @@ export function BossBrawl(props: BossBrawlProps) {
   const whispers = useRef<(StrikeWhisper & { used: boolean })[]>([]);
   const myStrike = useRef<{ at: number; bout: number; done: boolean } | null>(null);
   const boutWall = useRef(0);
+  // Tell Drill (first fight vs the Kraken): an unscored practice bout, wind-ups at 0.5x that wait at the impact frame.
+  const drill = useRef({ on: false, frozen: false, opens: 0, need: false, want: -1, slot: -1 });
+  const [drillOn, setDrillOn] = useState(false);
   /** The attack (index and step) the sim was on before the input/advance that produced the current events. */
   const atkCtx = useRef({ no: -1, step: 0 });
   const noteAttack = (b: Bout) => {
@@ -274,6 +280,17 @@ export function BossBrawl(props: BossBrawlProps) {
   const walking = walk.walking || !!movement?.moving;
   const camera = useCamera({ width: L.W, height: L.H, timeScale: clock.fxScale, reducedMotion: reduced, walking });
   const fxNow = () => fxNowOf(fxT);
+  const perfOn = __DEV__ && process.env.EXPO_PUBLIC_BOSS_PERF === '1';
+  const perf = usePerfProbe(perfOn);
+  // Perf tier (full / lite / min from the first frames, step-down only): particle counts scale with it.
+  const tier = usePerfTier({ active: visible && !result });
+  const pScale = TIER_SCALES[tier.tierJs].particles * (walking ? 0.8 : 1);
+  const flyUp = (text: string, x: number, y: number, o?: Parameters<FxStageHandle['flyUp']>[3]) => {
+    fxRef.current?.flyUp(text, x, y, o);
+  };
+  const burst = (name: Parameters<FxStageHandle['burst']>[0], x: number, y: number, o?: Parameters<FxStageHandle['burst']>[3]) => {
+    fxRef.current?.burst(name, x, y, o && o.count ? { ...o, count: Math.max(2, Math.round(o.count * pScale)) } : o);
+  };
 
   const loaded = useArenaImages({
     sky: ART.sky, mid: ART.mid, fore: ART.fore, cloud: ART.cloud, body: ART.body, hat: ART.hat, boss: BOSS_ART[boss],
@@ -346,6 +363,9 @@ export function BossBrawl(props: BossBrawlProps) {
       r.novice = h.rounds < 3;
       r.cleared = h.cleared;
       r.fights = h.rounds;
+      void AsyncStorage.getItem(`boss_v7_drill:${boss}`).then((d) => {
+        drill.current.need = boss === 'kraken' && (d !== '1' || (__DEV__ && process.env.EXPO_PUBLIC_BOSS_DRILL === '1')) && !autoplay;
+      }).catch(() => undefined);
       r.variant = pickVariant(r.seed, props.rank ?? 0, h.lastVariant, h.cleared);
     }).catch(() => { r.variant = pickVariant(r.seed, props.rank ?? 0, -1, false); });
     const g = props.ghost ?? (__DEV__ && process.env.EXPO_PUBLIC_BOSS_GHOST === '1' ? 'auto' : null);
@@ -387,11 +407,14 @@ export function BossBrawl(props: BossBrawlProps) {
   }, []);
 
   // ---- bout lifecycle -----------------------------------------------------
-  const startBout = useCallback((n: number, boon: number) => {
+  const startBout = useCallback((n: number, boon: number, practice = false) => {
     const r = round.current;
-    const b = createBout({
-      boss, seed: r.seed, bout: n, carry: r.carry, walk: walking, offset: r.offset, variant: r.variant, novice: r.novice,
-    });
+    const b = createBout(practice
+      ? { boss, seed: 0x0d2111, bout: 0, walk: walking, offset: r.offset, variant: 0, novice: true }
+      : { boss, seed: r.seed, bout: n, carry: r.carry, walk: walking, offset: r.offset, variant: r.variant, novice: r.novice });
+    drill.current = { ...drill.current, on: practice, frozen: false, opens: 0, want: -1, slot: -1 };
+    setDrillOn(practice);
+    if (practice) clock.slowMo(0.5, 600000, 150, true);
     if (n > 0) input(b, { t: 0, k: IN_BOON, a: boon });
     boutRef.current = b;
     boutWall.current = Date.now();
@@ -409,6 +432,7 @@ export function BossBrawl(props: BossBrawlProps) {
     setBoutNo(n);
     setGrit({ n: b.grit, max: b.gritMax });
     setStars(b.carry.stars);
+    setComboPct(b.carry.chain >= 10 ? 200 : b.carry.chain >= 6 ? 150 : b.carry.chain >= 3 ? 120 : 100);
     setDown({ on: false, taps: 0 });
     // Bout clock origin = this frame's sim time (t = 0 is a downbeat: the bed restarts on it).
     const clk = clock.clock;
@@ -420,9 +444,10 @@ export function BossBrawl(props: BossBrawlProps) {
     })();
     playBed(n === 2 ? (GameAudio.bed('boss_kraken_fury_loop_r3') && boss === 'kraken' ? 'boss_kraken_fury_loop_r3' : beds.fury) : beds.main, n === 0 ? 0 : 60);
     setStageBoth('bout');
-    showRibbon(BOUT_RIBBON[n], n === 0 ? FIGHT_NAME[boss] : undefined, 1300);
-    if (n === 0 && r.novice) setHint(COUNTER_HINT[boss]);
-  }, [boss, walking, clock.clock, boutBase, boutT, running, view, pres, qSv, beds, playBed, showRibbon]);
+    showRibbon(practice ? 'PRACTICE' : BOUT_RIBBON[n], practice ? 'WATCH THE SHADOW' : n === 0 ? FIGHT_NAME[boss] : undefined, 1300);
+    if (practice) setHint('Watch the tentacle. Its shadow shows the buoy');
+    else if (n === 0 && r.novice) setHint(COUNTER_HINT[boss]);
+  }, [clock, boss, walking, clock.clock, boutBase, boutT, running, view, pres, qSv, beds, playBed, showRibbon]);
 
   const beginRound = useCallback(() => {
     // Entrance = count-in: 4 beats on the music. Lip bulges (1), ripples (2), the hat breaks the surface (3), BURST (4).
@@ -449,12 +474,12 @@ export function BossBrawl(props: BossBrawlProps) {
       bossSfx.entrance(boss);
       playHaptic('tierUp', { priority: HP.own });
       if (!reduced) camera.shake(0.5, 0, 1);
-      fxRef.current?.burst('splash', L.bossX, L.lipY, { count: 24 });
-      fxRef.current?.burst('splash', L.bossX - L.bossSize * 0.3, L.lipY, { count: 10 });
-      fxRef.current?.burst('splash', L.bossX + L.bossSize * 0.3, L.lipY, { count: 10 });
+      burst('splash', L.bossX, L.lipY, { count: 24 });
+      burst('splash', L.bossX - L.bossSize * 0.3, L.lipY, { count: 10 });
+      burst('splash', L.bossX + L.bossSize * 0.3, L.lipY, { count: 10 });
     });
     later(4 * BEAT_MS, () => {
-      if (stageRef.current === 'intro') startBout(0, -1);
+      if (stageRef.current === 'intro') startBout(0, -1, drill.current.need);
     });
   }, [anim.entranceAt, beatOrigin, playBed, beds.main, showRibbon, bossName, boss, reduced, camera, L, startBout]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -490,7 +515,7 @@ export function BossBrawl(props: BossBrawlProps) {
         ...(s.slams > 0 ? [{ label: 'EASY SLAMS', value: `${s.slams}` }] : []),
         ...(s.getups > 0 ? [{ label: 'GOT BACK UP', value: `${s.getups}` }] : []),
         ...(s.perfect + s.good > 0 ? [{ label: 'TIMING', value: timingReadout(s.medianErr) }] : []),
-        ...(s.fakes > 0 || (r.variant > 0 && s.punishes > 0) ? [{ label: 'TIP', value: 'Winks are fakes. Shadows are real.' }] : []),
+        ...(s.fakes > 0 ? [{ label: 'TIP', value: 'Winks are fakes. Shadows are real.' }] : []),
         ...(s.nextStar ? [{ label: 'NEXT STAR', value: s.nextStar }] : []),
       ],
       meta: {
@@ -550,8 +575,8 @@ export function BossBrawl(props: BossBrawlProps) {
         anim.partAt.value = f + 400;
       }
       later(600, () => showCard('KNOCKOUT!', 1500));
-      later(900, () => fxRef.current?.burst('splash', L.bossX, L.lipY, { count: 48 }));
-      later(1200, () => fxRef.current?.burst('confetti', L.W / 2, L.bossY, { count: 48 }));
+      later(900, () => burst('splash', L.bossX, L.lipY, { count: 48 }));
+      later(1200, () => burst('confetti', L.W / 2, L.bossY, { count: 48 }));
       later(2800, () => {
         setStageBoth('done');
         setResult(res);
@@ -577,7 +602,7 @@ export function BossBrawl(props: BossBrawlProps) {
       setCatchOn(null);
       bossSfx.retreat();
       playHaptic('goodHit', { priority: HP.own });
-      fxRef.current?.burst('splash', L.bossX, L.lipY, { count: 16 });
+      burst('splash', L.bossX, L.lipY, { count: 16 });
     });
     later(2600, () => {
       setTaunt(null);
@@ -595,14 +620,29 @@ export function BossBrawl(props: BossBrawlProps) {
     GameAudio.play(GameAudio.hasCue('bo_catch') ? 'bo_catch' : 'fx.coin');
     playHaptic('goodHit', { priority: HP.own });
     const clean = lane === catchOn.lane;
-    fxRef.current?.burst('sparkles', L.laneX[lane], L.targetY - 40, { count: clean ? 14 : 6 });
-    fxRef.current?.flyUp(clean ? 'CLEAN CATCH!' : 'CAUGHT!', L.laneX[lane], L.targetY - 80, { size: 'md', color: '#FFCF3B' });
+    burst('sparkles', L.laneX[lane], L.targetY - 40, { count: clean ? 14 : 6 });
+    flyUp(clean ? 'CLEAN CATCH!' : 'CAUGHT!', L.laneX[lane], L.targetY - 80, { size: 'md', color: '#FFCF3B' });
     setCatchOn(null);
   }, [catchOn, catchArmed, anim, L]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const endBoutNow = useCallback((b: Bout) => {
     const r = round.current;
     running.value = false;
+    if (drill.current.on) {
+      // Practice is never scored: the real bout 1 starts after a READY beat.
+      drill.current = { on: false, frozen: false, opens: 0, need: false, want: -1, slot: -1 };
+      setDrillOn(false);
+      clock.slowMo(1, 0, 0, false);
+      boutRef.current = null;
+      view.value = { ...buildView(b), aOn: false, oOn: false, downOn: false };
+      pres.value = emptyPres();
+      setHint(null);
+      setStageBoth('intro');
+      void AsyncStorage.setItem(`boss_v7_drill:${boss}`, '1').catch(() => undefined);
+      showCard('READY?', 900);
+      later(1000, () => startBout(0, -1));
+      return;
+    }
     r.bouts.push(b);
     r.carry = carryOut(b);
     boutRef.current = null;
@@ -634,7 +674,15 @@ export function BossBrawl(props: BossBrawlProps) {
       later(240, () => GameAudio.play('ui.confirm', { volume: 0.5, pitch: 7 }));
     });
     if (b.endReason === END_GOT_UP) showCard('BACK UP!', 900);
-  }, [running, view, pres, beatOrigin, anim.padHeld, padTouch, downOn, finishRound, playBed, beds.rest, showCard]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [running, view, pres, beatOrigin, anim.padHeld, padTouch, downOn, finishRound, playBed, beds.rest, showCard, clock, boss, startBout]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const skipDrill = useCallback(() => {
+    const b = boutRef.current;
+    if (!b || !drill.current.on) return;
+    if (drill.current.frozen) clock.resume();
+    drill.current.frozen = false;
+    input(b, { t: boutT.value, k: IN_END });
+  }, [boutT, clock]);
 
   const fight = useCallback((boon?: number) => {
     if (stageRef.current !== 'inter') return;
@@ -677,7 +725,7 @@ export function BossBrawl(props: BossBrawlProps) {
       anim.rimAt.value = fxNow();
       GameAudio.play(GameAudio.hasCue('bo_team_strike') ? 'bo_team_strike' : 'fx.hit');
       playPattern([{ t: 0, kind: 'transient', i: 0.8, s: 0.6 }, { t: 100, kind: 'transient', i: 0.8, s: 0.6 }], { priority: HP.critical });
-      fxRef.current?.burst('stars', L.bossX, faceY, { count: 30 });
+      burst('stars', L.bossX, faceY, { count: 30 });
       fxRef.current?.ring(L.bossX, faceY, { color: '#FFCF3B', to: 130, ms: 320 });
       if (!reduced) camera.punch(0.08);
       showRibbon(`TEAM STRIKE x${mult}`, undefined, 1100);
@@ -689,6 +737,7 @@ export function BossBrawl(props: BossBrawlProps) {
     const bx = L.bossX;
     switch (e.code) {
       case E_TELL: {
+        if (drill.current.on) clock.slowMo(0.5, 600000, 150, true);
         bossSfx.tellLane(boss, e.a);
         playHaptic(e.a === 0 ? 'lane1' : e.a === 1 ? 'lane2' : 'lane3', { priority: HP.telegraph, tell: true });
         if (!walking && !reduced) camera.lean((lane2x(e.a) - bx) * 0.04, 0);
@@ -709,18 +758,18 @@ export function BossBrawl(props: BossBrawlProps) {
       case E_BUBBLE_POP:
         bossSfx.pop();
         buoyTap(e.a);
-        fxRef.current?.burst('bubbles', lane2x(e.a), L.targetY - 10, { count: 12 });
-        fxRef.current?.flyUp('POP!', lane2x(e.a), L.targetY - 56, { size: 'md', color: '#FFFFFF' });
+        burst('bubbles', lane2x(e.a), L.targetY - 10, { count: 12 });
+        flyUp('POP!', lane2x(e.a), L.targetY - 56, { size: 'md', color: '#FFFFFF' });
         break;
       case E_GREY:
         bossSfx.grey();
-        fxRef.current?.flyUp('WINK = FAKE', lane2x(e.a), L.targetY - 64, { size: 'md', color: '#FFFFFF' });
+        flyUp('WINK = FAKE', lane2x(e.a), L.targetY - 64, { size: 'md', color: '#FFFFFF' });
         break;
       case E_FAKE_TAP:
         bossSfx.punish(boss);
         playHaptic('dizzy', { priority: HP.reaction });
         anim.tauntAt.value = fxNow();
-        fxRef.current?.flyUp('FAKE!', lane2x(e.a), L.targetY - 64, { size: 'lg', color: '#FF6B5C' });
+        flyUp('FAKE!', lane2x(e.a), L.targetY - 64, { size: 'lg', color: '#FF6B5C' });
         break;
       case E_EARLY:
         bossSfx.early();
@@ -728,7 +777,7 @@ export function BossBrawl(props: BossBrawlProps) {
       case E_LOCK:
         bossSfx.lock(e.b);
         buoyTap(e.a);
-        fxRef.current?.burst('sparks', lane2x(e.a), L.targetY, { count: 8 });
+        burst('sparks', lane2x(e.a), L.targetY, { count: 8 });
         break;
       case E_PERFECT:
       case E_GOOD: {
@@ -743,10 +792,10 @@ export function BossBrawl(props: BossBrawlProps) {
         bossHurt(perfect ? 1.2 : 0.7, perfect);
         if (perfect) anim.rimAt.value = fxNow();
         const x = lane2x(e.a);
-        fxRef.current?.burst('sparks', x, L.targetY - 20, { count: perfect ? 10 : 6, color: perfect ? 0xff7bd94a : 0xffffffff });
+        burst('sparks', x, L.targetY - 20, { count: perfect ? 10 : 6, color: perfect ? 0xff7bd94a : 0xffffffff });
         fxRef.current?.ring(x, L.targetY, { color: perfect ? '#7BD94A' : '#FFFFFF', to: perfect ? 70 : 50, ms: 200 });
-        fxRef.current?.burst('stars', bx, faceY, { count: perfect ? 10 : 4 });
-        fxRef.current?.flyUp(perfect ? 'PERFECT' : 'GOOD', bx, headY, { size: perfect ? 'xl' : 'lg', color: perfect ? '#FFCF3B' : '#FFFFFF', key: 'callout', rise: 26 });
+        burst('stars', bx, faceY, { count: perfect ? 10 : 4 });
+        flyUp(perfect ? 'PERFECT' : 'GOOD', bx, headY, { size: perfect ? 'xl' : 'lg', color: perfect ? '#FFCF3B' : '#FFFFFF', key: 'callout', rise: 26 });
         if (perfect && !reduced) camera.punch(0.06);
         if (hint === COUNTER_HINT[boss]) setHint(null);
         if (perfect && crewRef.current && b && atkCtx.current.no === TEAM_STRIKE_ATTACK && !myStrike.current) {
@@ -776,11 +825,11 @@ export function BossBrawl(props: BossBrawlProps) {
           anim.splashLane.value = 3;
           anim.splashAt.value = fxNow() + 90;
           if (!reduced) camera.shake(0.3, 0, 1);
-          fxRef.current?.flyUp(PUNISH_WORD[boss], L.floatX, L.floatY - L.floatR * 2.6, { size: 'lg', color: '#FF6B5C' });
-          later(90, () => fxRef.current?.burst('splash', L.floatX, L.floatY - 20, { count: 12 }));
+          flyUp(PUNISH_WORD[boss], L.floatX, L.floatY - L.floatR * 2.6, { size: 'lg', color: '#FF6B5C' });
+          later(90, () => burst('splash', L.floatX, L.floatY - 20, { count: 12 }));
         } else {
           GameAudio.play('fx.whoosh', { volume: 0.5 });
-          fxRef.current?.flyUp(e.b === 2 ? 'THAT ONE WAS A FAKE' : 'WATCH THE SHADOW', lane2x(e.a), L.targetY - 70, { size: 'sm', color: '#FFFFFF' });
+          flyUp(e.b === 2 ? 'THAT ONE WAS A FAKE' : 'WATCH THE SHADOW', lane2x(e.a), L.targetY - 70, { size: 'sm', color: '#FFFFFF' });
         }
         break;
       }
@@ -790,7 +839,7 @@ export function BossBrawl(props: BossBrawlProps) {
         GameAudio.play(GameAudio.hasCue('bo_grit_loss') ? 'bo_grit_loss' : 'fx.nopeShort');
         const k = e.a; // the fin that just popped
         const fx = L.floatX + (k - (e.b - 1) / 2) * 26;
-        fxRef.current?.burst('puff', fx, L.floatY - L.floatR * 2.2, { count: 6 });
+        burst('puff', fx, L.floatY - L.floatR * 2.2, { count: 6 });
         if (e.a === 1) setHint('Last fin! Watch the shadow');
         break;
       }
@@ -820,6 +869,11 @@ export function BossBrawl(props: BossBrawlProps) {
         break;
       case E_OPEN: {
         popsInOpening.current = 0;
+        if (drill.current.on) {
+          clock.slowMo(1, 0, 0, false);
+          drill.current.opens += 1;
+          setHint(drill.current.opens === 1 ? 'Now tap each glowing sucker as its ring closes' : 'Too busy? Hold the float: EASY SLAM');
+        }
         popTrauma.current = 1;
         const side = pres.value.sRes === 1 ? pres.value.sSide : -1;
         const o = b?.opening;
@@ -831,7 +885,7 @@ export function BossBrawl(props: BossBrawlProps) {
             camera.punch(-0.03, 120);
             camera.shake(0.2, 0, 1);
           }
-          for (let i = 0; i < 3; i++) later(30 * i, () => fxRef.current?.burst('splash', L.laneX[i], L.targetY + 6, { count: 6 }));
+          for (let i = 0; i < 3; i++) later(30 * i, () => burst('splash', L.laneX[i], L.targetY + 6, { count: 6 }));
         }
         if (e.a === 0 && round.current.novice && b && b.cfg.bout === 0 && b.attacksDone <= 1) setHint('Tap each glowing sucker on the beat. Or hold the float');
         break;
@@ -854,25 +908,25 @@ export function BossBrawl(props: BossBrawlProps) {
         if (pop) bossSfx.popLadder(Math.min(LADDER_MAX, n - 1 + tierLift), perfect);
         else bossSfx.hit(n);
         playPattern(pop ? 'bossPop' : 'bossCounterPress', { priority: HP.own });
-        fxRef.current?.burst('sparks', lane2x(e.b), L.targetY - 6, { count: pop ? 6 : 4 });
+        burst('sparks', lane2x(e.b), L.targetY - 6, { count: pop ? 6 : 4 });
         if (pop) {
           later(80, () => {
-            fxRef.current?.burst('stars', bx, faceY, { count: perfect ? 16 : 10 });
+            burst('stars', bx, faceY, { count: perfect ? 16 : 10 });
             fxRef.current?.ring(bx, faceY, { color: '#FFCF3B', to: 90, ms: 240 });
           });
           if (!reduced) camera.shake(0.12 * popTrauma.current + (perfect ? 0.05 : 0), 0, -1);
           popTrauma.current = popTrauma.current >= 1 ? 0.6 : 0.35;
         }
-        fxRef.current?.flyUp(perfect ? 'PERFECT POP' : pop ? 'POP' : 'HIT', bx + (n % 2 ? -1 : 1) * 30, headY + 6,
+        flyUp(perfect ? 'PERFECT POP' : pop ? 'POP' : 'HIT', bx + (n % 2 ? -1 : 1) * 30, headY + 6,
           { size: perfect ? 'xl' : pop ? 'lg' : 'md', color: pop ? '#FFCF3B' : '#FFFFFF', key: 'callout', rise: 26 });
         break;
       }
       case E_CLANK:
         bossSfx.clank();
-        fxRef.current?.burst('sparks', lane2x(boutRef.current?.lastLane ?? 1), L.targetY - 4, { count: 3, color: 0xffffffff });
+        burst('sparks', lane2x(boutRef.current?.lastLane ?? 1), L.targetY - 4, { count: 3, color: 0xffffffff });
         anim.hurtAt.value = fxNow();
         anim.hurtK.value = 0.15;
-        if (e.a >= 2) fxRef.current?.flyUp('CLANK', bx, headY + 10, { size: 'sm', color: '#FFFFFF', key: 'callout', rise: 16 });
+        if (e.a >= 2) flyUp('CLANK', bx, headY + 10, { size: 'sm', color: '#FFFFFF', key: 'callout', rise: 16 });
         break;
       case E_GUARD_WARN:
         setGuardWarn(true);
@@ -886,8 +940,8 @@ export function BossBrawl(props: BossBrawlProps) {
         playHaptic('dizzy', { priority: HP.critical });
         setGuardWarn(false);
         if (!reduced) camera.shake(0.35);
-        fxRef.current?.flyUp('DIZZY', L.floatX, L.floatY - L.floatR * 2.6, { size: 'lg', color: '#FF6B5C' });
-        fxRef.current?.burst('stars', L.floatX, L.floatY - L.floatR * 1.8, { count: 8 });
+        flyUp('DIZZY', L.floatX, L.floatY - L.floatR * 2.6, { size: 'lg', color: '#FF6B5C' });
+        burst('stars', L.floatX, L.floatY - L.floatR * 1.8, { count: 8 });
         break;
       case E_SLAM: {
         const f = fxNow();
@@ -896,9 +950,9 @@ export function BossBrawl(props: BossBrawlProps) {
           bossHurt(1.6, true);
           bossSfx.heavy();
           playPattern('bossEasySlam', { priority: HP.own });
-          fxRef.current?.burst('stars', bx, faceY, { count: 20 });
+          burst('stars', bx, faceY, { count: 20 });
           fxRef.current?.ring(bx, faceY, { color: '#FFCF3B', to: 110, ms: 300 });
-          fxRef.current?.flyUp('EASY SLAM!', bx, headY, { size: 'xl', color: '#FFCF3B', key: 'callout', rise: 26 });
+          flyUp('EASY SLAM!', bx, headY, { size: 'xl', color: '#FFCF3B', key: 'callout', rise: 26 });
           if (!reduced) {
             camera.punch(0.08);
             camera.shake(0.3, 0, -1);
@@ -910,6 +964,7 @@ export function BossBrawl(props: BossBrawlProps) {
         GameAudio.play('ui.tap', { volume: 0.4 });
         break;
       case E_CLOSE:
+        if (drill.current.on && drill.current.opens >= 2 && b) input(b, { t: e.t, k: IN_END });
         bossSfx.close();
         if (boss === 'kraken' && GameAudio.hasCue('bo_guard_kraken')) GameAudio.play('bo_guard_kraken', { volume: 0.55 });
         playHaptic('goodHit', { priority: HP.own });
@@ -928,8 +983,8 @@ export function BossBrawl(props: BossBrawlProps) {
           clock.slowMo(0.3, 200, 120);
         }
         bossHurt(1.8, true);
-        fxRef.current?.burst('stars', bx, faceY, { count: 24 + 8 * nB });
-        fxRef.current?.burst('confetti', bx, faceY, { count: 16 + 8 * nB });
+        burst('stars', bx, faceY, { count: 24 + 8 * nB });
+        burst('confetti', bx, faceY, { count: 16 + 8 * nB });
         showCard(nB > 1 ? `BREAK x${nB}` : 'BREAK!', 1000);
         // The part is the hero: it leaves the rig, bounces, settles; its material flies to the HUD.
         if (boss === 'kraken') {
@@ -944,7 +999,7 @@ export function BossBrawl(props: BossBrawlProps) {
             setMats((m) => [...m, nB - 1]);
             GameAudio.play('fx.coin', { pitch: 4 });
             playHaptic('tap', { priority: HP.reaction });
-            fxRef.current?.flyUp(MATERIALS[Math.min(2, nB - 1)].name, L.W / 2, L.lipY + 40, { size: 'md', color: '#FFCF3B' });
+            flyUp(MATERIALS[Math.min(2, nB - 1)].name, L.W / 2, L.lipY + 40, { size: 'md', color: '#FFCF3B' });
           });
           pres.value = { ...pres.value, breaks: nB };
           if (nB === 1) setTaunt('My HAT!');
@@ -971,8 +1026,8 @@ export function BossBrawl(props: BossBrawlProps) {
             bossSfx.finisherImpact(boss);
             playPattern('bossFinalPop', { priority: HP.critical });
             bossHurt(2.2, true);
-            fxRef.current?.burst('stars', bx, faceY, { count: e.a >= 2 ? 60 : 20 });
-            fxRef.current?.burst('splash', bx, L.lipY, { count: 30 });
+            burst('stars', bx, faceY, { count: e.a >= 2 ? 60 : 20 });
+            burst('splash', bx, L.lipY, { count: 30 });
             if (e.a >= 2) {
               clock.hitStop(220, { force: true });
               if (!reduced) {
@@ -984,7 +1039,7 @@ export function BossBrawl(props: BossBrawlProps) {
           });
           anim.cheerAt.value = f + 300;
         } else {
-          fxRef.current?.flyUp('SHRUGGED IT OFF', bx, headY, { size: 'md', color: '#FFFFFF' });
+          flyUp('SHRUGGED IT OFF', bx, headY, { size: 'md', color: '#FFFFFF' });
         }
         break;
       }
@@ -997,13 +1052,13 @@ export function BossBrawl(props: BossBrawlProps) {
         break;
       case E_SKILL_STAR:
         GameAudio.play(GameAudio.hasCue('bo_skill_star') ? 'bo_skill_star' : 'fx.reveal');
-        fxRef.current?.flyUp('SKILL STAR!', bx, headY - 20, { size: 'xl', color: '#FFCF3B', key: 'skill', rise: 20 });
-        fxRef.current?.burst('sparkles', bx, headY, { count: 16 });
+        flyUp('SKILL STAR!', bx, headY - 20, { size: 'xl', color: '#FFCF3B', key: 'skill', rise: 20 });
+        burst('sparkles', bx, headY, { count: 16 });
         break;
       case E_TIER:
         setComboPct(e.a);
         bossSfx.tier();
-        if (e.a >= 200) fxRef.current?.flyUp('FURY!', L.W - 70, 40, { size: 'lg', color: '#FFCF3B' });
+        if (e.a >= 200) flyUp('FURY!', L.W - 70, 40, { size: 'lg', color: '#FFCF3B' });
         break;
       case E_GAUGE_HOT:
         bossSfx.gaugeHot();
@@ -1035,7 +1090,7 @@ export function BossBrawl(props: BossBrawlProps) {
               if (w.used) return;
               w.used = true;
               crewLayer.current?.strike([w.who]);
-              later(150, () => fxRef.current?.flyUp('+ALLY', L.bossX + 40, faceY - 20, { size: 'md', color: '#FFCF3B' }));
+              later(150, () => flyUp('+ALLY', L.bossX + 40, faceY - 20, { size: 'md', color: '#FFCF3B' }));
             };
             const ms = myStrike.current;
             if (ms && ms.done) echo();
@@ -1078,6 +1133,35 @@ export function BossBrawl(props: BossBrawlProps) {
         view.value = buildView(b);
         setDamage(round.current.bouts.reduce((s, x) => s + scoreBout(x), 0) + scoreBout(b));
       }
+      // Practice: the wind-up waits at the impact frame until the right buoy is tapped.
+      const da = b.attack;
+      const dd = drill.current;
+      if (dd.on && !dd.frozen) {
+        const o = b.opening;
+        if (da && now >= da.steps[b.step].I - 40) {
+          dd.frozen = true;
+          dd.want = da.steps[b.step].lane;
+          clock.pause();
+          setHint('Tap the buoy under the shadow!');
+        } else if (o && dd.opens === 1) {
+          // First opening: each glowing sucker waits at its ring close.
+          const j = o.used.findIndex((u, k) => u === 0 && now >= o.rings[k] - 30);
+          if (j >= 0 && j !== dd.slot) {
+            dd.frozen = true;
+            dd.slot = j;
+            dd.want = o.lanes[j];
+            clock.pause();
+            setHint('Tap the glowing sucker!');
+          }
+        } else if (o && dd.opens === 2 && dd.slot !== -2 && now >= o.start + 60) {
+          // Second opening: wait for the float to be held (Easy Slam).
+          dd.frozen = true;
+          dd.slot = -2;
+          dd.want = -2;
+          clock.pause();
+          setHint('Hold the float with your thumb: EASY SLAM');
+        }
+      }
       // The slam lands on an unanswered buoy at the impact frame (sound and splash on time).
       const a = b.attack;
       if (a) {
@@ -1113,6 +1197,18 @@ export function BossBrawl(props: BossBrawlProps) {
   const onInput = useCallback((k: number, a: number, t: number) => {
     const b = boutRef.current;
     if (!b || stageRef.current !== 'bout' || b.phase === P_DONE) return;
+    if (drill.current.on && drill.current.frozen) {
+      // Practice: only the right buoy releases the freeze; anything else is a gentle nudge.
+      const want = drill.current.want;
+      const ok = want === -2 ? k === IN_PAD_DOWN : k === IN_TARGET && a === want;
+      if (!ok) {
+        if (k === IN_TARGET) { buoyTap(a); bossSfx.early(); }
+        return;
+      }
+      drill.current.frozen = false;
+      clock.resume();
+      setHint(null);
+    }
     const before = b.events.length;
     if (k === IN_TARGET) b.lastLane = a;
     noteAttack(b);
@@ -1415,6 +1511,13 @@ export function BossBrawl(props: BossBrawlProps) {
           </View>
         )}
 
+        {drillOn && (
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip practice" onPress={skipDrill}
+            style={[styles.skip, { top: 84 }]}>
+            <Text style={styles.skipText}>SKIP PRACTICE</Text>
+          </Pressable>
+        )}
+
         {down.on && (
           <View style={[styles.getup, { top: L.targetY - 20 }]} pointerEvents="none">
             {Array.from({ length: 8 }, (_, i) => <View key={i} style={[styles.getupPip, i < down.taps && styles.getupOn]} />)}
@@ -1484,7 +1587,8 @@ export function BossBrawl(props: BossBrawlProps) {
         )}
 
         {mates.length > 0 && (inBout || stage === 'inter' || stage === 'intro') && <CrewLayer ref={crewLayer} L={L} mates={mates} />}
-        <FxStage ref={fxRef} width={L.W} height={L.H} timeScale={clock.fxScale} reducedMotion={reduced} />
+        <FxStage ref={fxRef} width={L.W} height={L.H} timeScale={clock.fxScale} reducedMotion={reduced} capacity={160} />
+        {perfOn ? <PerfOverlay probe={perf} style={{ top: 120, left: 8 }} /> : null}
       </GestureHandlerRootView>
     </GameShellV2>
   );
@@ -1570,6 +1674,9 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   fightText: { fontFamily: 'Shark', fontSize: 32, color: '#FFFFFF', textShadowColor: '#7A1010', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   a11y: { position: 'absolute' },
+  skip: { position: 'absolute', right: 12, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 12, borderWidth: 2, borderColor: '#1B2A4A',
+    paddingHorizontal: 10, paddingVertical: 4 },
+  skipText: { fontFamily: 'Shark', fontSize: 14, color: '#1B2A4A' },
 });
 
 export default BossBrawl;
