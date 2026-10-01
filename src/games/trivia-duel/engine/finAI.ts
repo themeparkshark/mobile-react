@@ -5,14 +5,16 @@
  * lock-time quantiles t10/t30/t50/t70), or tier priors before 30 answers, and
  * plays at his rank's offset. Seeded per (match seed, round), so a match, a
  * ghost replay and the server's grade all see the same Fin. No bluffs, no
- * feints: low ranks buzz wrong more and hand you steals.
+ * feints, no tells (7.3): his gaze and fidgets never read his pick or time.
+ * Bell rounds: he buzzes on a rank share (50-80%) at 0.9 x his sampled lock
+ * time, correctness rolled at his accuracy.
  */
 import { createRng, mixSeed, rngFloat, rngGaussian, rngInt, rngWeighted, type Rng } from '../../../gamekit/core/rng';
 import {
-  FIN_BUZZ_FACTOR, FIN_DEMOTE_AFTER_LOSSES, FIN_LOCK_SIGMA, FIN_PRIORS, FIN_RANKS, FIN_RANK_ORDER, FIN_WRONG_SLOWDOWN,
+  BUZZ, FIN_BUZZ_FACTOR, FIN_BUZZ_SHARE, FIN_DEMOTE_AFTER_LOSSES, FIN_LOCK_SIGMA, FIN_PRIORS, FIN_RANKS, FIN_RANK_ORDER, FIN_WRONG_SLOWDOWN,
   WAGER, type Difficulty, type FinRank,
 } from './config';
-import { clamp, wagerStakes } from './scoring';
+import { clamp, suggestWager, wagerStakes } from './scoring';
 
 export interface QuestionStats {
   p: number;
@@ -46,8 +48,10 @@ export interface FinAnswer {
   correct: boolean;
   /** ms from unlock when he locks. */
   lockMs: number;
-  /** ms from unlock when he buzzes (buzz rounds). */
+  /** ms from unlock when he buzzes (bell rounds), or -1 when he holds back. */
   buzzMs: number;
+  /** ms from his own tile flip to his answer after a buzz (bell rounds). */
+  answerMs: number;
 }
 
 export interface FinQuestion {
@@ -85,7 +89,12 @@ export function finAnswer(seed: number, round: number, rank: FinRank, q: FinQues
   const lo = q.graceMs + 200;
   const hi = Math.max(lo, q.windowMs - 600);
   const lockMs = Math.round(clamp(t, lo, hi));
-  return { choice, correct: choice === q.correctIndex, lockMs, buzzMs: Math.round(Math.max(lo, lockMs * FIN_BUZZ_FACTOR)) };
+  // Bell: a separate seeded stream so adding the bell never shifts his Quick Draw picks.
+  const br = createRng(mixSeed(seed >>> 0, (0xb311 + round * 131) >>> 0));
+  const buzzes = rngFloat(br) < FIN_BUZZ_SHARE[rank];
+  const bt = Math.round(clamp(lockMs * FIN_BUZZ_FACTOR, BUZZ.graceMs + 200, BUZZ.buzzWindowMs - 300));
+  const answerMs = Math.round(clamp(500 + rngFloat(br) * 1600, 450, BUZZ.answerMs - 400));
+  return { choice, correct: choice === q.correctIndex, lockMs, buzzMs: buzzes ? bt : -1, answerMs };
 }
 
 /** Closest Number: truth + Normal(0, tol x (1.1 - accuracy)). */
@@ -96,22 +105,22 @@ export function finClosestGuess(seed: number, round: number, rank: FinRank, trut
 }
 
 /**
- * Fin's wager (5.5): leading by 200+ = 25%, within 200 = 50%, trailing = ALL IN.
- * Deckhand and First Mate add one chip of noise either way.
+ * Fin's wager (5.5): he takes suggestWager() for his own state. Deckhand and
+ * First Mate pick one chip off 25% of the time.
  */
-export function finWagerIndex(seed: number, rank: FinRank, finScore: number, playerScore: number): number {
+export function finWagerIndex(seed: number, rank: FinRank, finScore: number, playerScore: number, finMult = 1): number {
   const r = finRng(seed, 999);
-  const lead = finScore - playerScore;
-  let idx = lead >= 200 ? 1 : lead > -200 ? 2 : 3;
-  if (rank === 'deckhand' || rank === 'firstmate') {
-    const n = rngInt(r, -1, 1);
-    idx = clamp(idx + n, 0, WAGER.percents.length - 1);
+  let idx = suggestWager(finScore, playerScore, finMult).index;
+  if ((rank === 'deckhand' || rank === 'firstmate') && rngFloat(r) < 0.25) {
+    const step = rngInt(r, 0, 1) === 0 ? -1 : 1;
+    idx = clamp(idx + step, 0, WAGER.percents.length - 1);
+    if (idx === suggestWager(finScore, playerScore, finMult).index) idx = clamp(idx - 2 * step, 0, WAGER.percents.length - 1);
   }
   return idx;
 }
 
-export function finStake(seed: number, rank: FinRank, finScore: number, playerScore: number): number {
-  return wagerStakes(finScore)[finWagerIndex(seed, rank, finScore, playerScore)];
+export function finStake(seed: number, rank: FinRank, finScore: number, playerScore: number, finMult = 1): number {
+  return wagerStakes(finScore)[finWagerIndex(seed, rank, finScore, playerScore, finMult)];
 }
 
 // -- Rank ladder (7.2): promote after N wins at a rank, demote after 3 straight losses.
@@ -148,32 +157,38 @@ export function applyMatchToRank(s: FinRankState, playerWon: boolean): { promote
   return { promoted: false, demoted: false };
 }
 
-// -- Barks (7.3): max 32 characters, always positive, no emoji. -----------------
+// -- Barks (7.2): 60 lines, max 32 characters, positive, event-keyed, no emoji.
+// 20 carry a {name} token (the player's name, trimmed to fit).
 
 export const BARKS = {
-  intro: ['Ahoy! Ready to race?', 'Fastest fin wins!', 'Buzzers ready, matey!', 'Let us see those fins!'],
-  youFast: ['Whoa, fast fins!', 'Quick as a wave!', 'Now THAT was speedy!'],
-  youCorrect: ['Nice one!', 'Sharp shark!', 'You know your stuff!', 'Right on the nose!'],
-  finWrong: ['Oops, my bad!', 'Barnacles! Missed it.', 'Well, that was not it!'],
-  finCorrect: ['Got it!', 'Easy for the captain!', 'Knew that one!'],
-  finalLead: ['Big wager time!', 'Let us make it count!'],
-  finalTrail: ['All or nothing, eh?', 'Still anyone\'s game!'],
-  finWins: ['Good game! Again?', 'Close one! Rematch?'],
-  finLoses: ['You got me! Great game!', 'Captain overboard! GG!'],
-  buzz: ['Hands on the bell!', 'Who rings first?'],
-  steal: ['Steal it!', 'Your chance to steal!'],
-  deadHeat: ['Dead heat! Pick blind!', 'Same instant! Choose!', 'Photo finish, matey!'],
-  comeback: ['What a comeback!', 'Look who caught up!'],
-  streak3: ['You are on fire!', 'Three in a row, wow!'],
+  intro: ['Ahoy, {name}! Ready?', 'Fastest fin wins!', 'Buzzers ready, matey!', 'Show me those fins, {name}!'],
+  youFast: ['Whoa, fast fins!', 'Quick as a wave, {name}!', 'Now THAT was speedy!', 'Lightning fins, {name}!'],
+  youCorrect: ['Nice one, {name}!', 'Sharp shark!', 'You know your stuff!', 'Right on the nose!', 'Spot on, {name}!'],
+  finWrong: ['Oops, my bad!', 'Barnacles! Missed it.', 'Well, that was not it!', 'Your round, {name}!'],
+  finCorrect: ['Got it!', 'Easy for the captain!', 'Knew that one!', 'Captain scores!'],
+  finalLead: ['Big wager time!', 'Let us make it count!', 'Bet smart, {name}!'],
+  finalTrail: ['All or nothing, eh?', 'Still anyone\'s game!', 'Your move, {name}!'],
+  finWins: ['Good game! Again?', 'Close one! Rematch?', 'Great duel, {name}!'],
+  finLoses: ['You got me! Great game!', 'Captain overboard! GG!', 'Well played, {name}!'],
+  buzz: ['Hands on the bell!', 'Who rings first?', 'Bell is live, {name}!'],
+  steal: ['Steal it!', 'Your chance to steal!', 'Snag it, {name}!'],
+  stoleBell: ['Stolen! Nice grab!', 'Sneaky fins, {name}!'],
+  comeback: ['What a comeback!', 'Look who caught up!', 'Back in it, {name}!'],
+  streak3: ['You are on fire!', 'Three in a row, wow!', 'Hot streak, {name}!'],
   shieldSave: ['Saved by the shield!', 'Lucky shield, matey!'],
-  bullseye: ['Bullseye! Spot on!', 'Right on the number!'],
-  categoryPick: ['Your pick, matey!', 'Choose wisely!'],
-  categoryFin: ['I will pick this one!', 'Captain picks!'],
+  bullseye: ['Bullseye! Spot on!', 'Right on the number!', 'Dead on, {name}!'],
+  categoryPick: ['Your pick, matey!', 'Choose wisely, {name}!'],
+  categoryFin: ['I will pick this one!', 'My pick, {name}!'],
   allIn: ['ALL IN? Bold shark!', 'Going big, I like it!'],
-  rematch: ['Back for more? Yes!', 'Round two, matey!'],
+  rematch: ['Back for more? Yes!', 'Round two, {name}!'],
 } as const;
 
-export function pickBark(kind: keyof typeof BARKS, n: number): string {
+export function pickBark(kind: keyof typeof BARKS, n: number, name = 'matey'): string {
   const list = BARKS[kind];
-  return list[Math.abs(n) % list.length];
+  const line: string = list[Math.abs(n) % list.length];
+  if (line.indexOf('{name}') < 0) return line;
+  const room = 32 - (line.length - '{name}'.length);
+  const nm = name.length > room ? name.slice(0, Math.max(3, room)) : name;
+  const out = line.replace('{name}', nm);
+  return out.length <= 32 ? out : line.replace(', {name}', '').replace('{name}', 'matey');
 }

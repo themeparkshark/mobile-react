@@ -7,14 +7,14 @@
  */
 import { createRng, mixSeed, rngFloat } from '../../../gamekit/core/rng';
 import {
-  BUZZ, DAILY_LADDER, POINTS, QUEUE_ROUNDS, RIDE_QUESTIONS, RIDE_ROUND, READ_LOCK, SUDDEN_DEATH, TEMPLATES,
-  type DuelMode, type FinRank, type RoundSpec, type SpeedTier,
+  BUZZ, DAILY_LADDER, POINTS, QUEUE_ROUNDS, RIDE_QUESTIONS, RIDE_ROUND, READ_LOCK, SUDDEN_DEATH, TEMPLATES, UNLOCK_TEMPLATES, UNLOCKS,
+  type DuelMode, type FinRank, type QueueRoundKey, type RoundSpec, type SpeedTier,
 } from './config';
 import { buildDeck, factKeysOf, materializeQuestion, usablePool, type DuelQuestion, type PoolQuestion } from './content';
 import { finAnswer, finClosestGuess, finStake, type FinAnswer } from './finAI';
 import {
-  applyFinal, applyStreak, buzzOrder, buzzPoints, closestPoints, createStreak, creditedSpeed, deadHeatPoints, graceMs, quickPoints,
-  readLockMs, relaxedTiming, ridePoints, speedTier, stealPoints, type SpeedMods, type StreakEvent, type StreakState,
+  applyFinal, applyStreak, buzzFirst, buzzPoints, closestPoints, createStreak, creditedSpeed, graceMs, quickPoints,
+  readLockMs, relaxedTiming, ridePoints, speedTier, stealPoints, streakMult, type SpeedMods, type StreakEvent, type StreakState,
 } from './scoring';
 
 export interface PlannedRound {
@@ -29,17 +29,31 @@ export interface PlannedRound {
   jitterMs: number;
 }
 
+/** 2.3 systems unlocked for this match. */
+export interface MatchFeatures {
+  chomp: boolean;
+  bell: boolean;
+  shield: boolean;
+  final: boolean;
+}
+
 export interface MatchPlan {
   mode: DuelMode;
   seed: number;
   template: number;
+  /** Round keys of the queue template actually played (ghost replays rebuild from these). */
+  keys?: QueueRoundKey[];
+  /** Lifetime queue match number this plan was built for (1-based; unlocks). */
+  matchNo?: number;
+  features: MatchFeatures;
   rank: FinRank;
   /** C9 Relaxed mode: calmer read-lock, windows, grace and horizon. */
   relaxed?: boolean;
   rounds: PlannedRound[];
   /**
-   * C11: the second Final card (a different category). Whoever trails after
+   * 5.5: the second Final card (a different category). Whoever trails after
    * round 4 picks between rounds[final] and this; the played one is recorded.
+   * Async modes (ghost, friend, Daily) never get one: the server's rotation sets the Final.
    */
   finalAlt?: PlannedRound;
 }
@@ -62,7 +76,28 @@ export function planRound(spec: RoundSpec, q: DuelQuestion, index: number, seed:
   return { index, spec, question: q, ...timing, jitterMs: unlockJitter(seed, index) };
 }
 
-export function roundSpecsFor(mode: DuelMode, seed: number): { specs: RoundSpec[]; template: number } {
+/** 2.3: what a player's Nth lifetime queue match unlocks (the ride challenge always has Chomp). */
+export function featuresFor(mode: DuelMode, matchNo: number): MatchFeatures {
+  if (mode === 'ride') return { chomp: true, bell: false, shield: false, final: false };
+  if (mode === 'daily') return { chomp: true, bell: false, shield: true, final: false };
+  const n = Math.max(1, Math.floor(matchNo));
+  return {
+    chomp: n >= UNLOCKS.chompFromMatch,
+    bell: n >= UNLOCKS.bellFromMatch,
+    shield: n >= UNLOCKS.shieldFromMatch,
+    final: n >= UNLOCKS.finalFromMatch,
+  };
+}
+
+/** Round keys for a queue match: QQQQ on match 1, QQBQ on match 2, then QQBQF / QBQQF by seed. */
+export function templateKeys(seed: number, matchNo: number): { keys: QueueRoundKey[]; template: number } {
+  if (matchNo <= 1) return { keys: UNLOCK_TEMPLATES[1].slice(), template: -1 };
+  if (matchNo === 2) return { keys: UNLOCK_TEMPLATES[2].slice(), template: -2 };
+  const template = (seed >>> 0) % TEMPLATES.length;
+  return { keys: TEMPLATES[template].slice(), template };
+}
+
+export function roundSpecsFor(mode: DuelMode, seed: number, matchNo = 3, keys?: readonly QueueRoundKey[]): { specs: RoundSpec[]; template: number; keys?: QueueRoundKey[] } {
   if (mode === 'ride') return { specs: Array.from({ length: RIDE_QUESTIONS }, () => RIDE_ROUND), template: -1 };
   if (mode === 'daily') {
     return {
@@ -70,22 +105,35 @@ export function roundSpecsFor(mode: DuelMode, seed: number): { specs: RoundSpec[
       template: -1,
     };
   }
-  const template = (seed >>> 0) % TEMPLATES.length;
-  return { specs: TEMPLATES[template].map((k) => QUEUE_ROUNDS[k]), template };
+  if (keys && keys.length) return { specs: keys.map((k) => QUEUE_ROUNDS[k]), template: -3, keys: keys.slice() };
+  const t = templateKeys(seed, matchNo);
+  return { specs: t.keys.map((k) => QUEUE_ROUNDS[k]), template: t.template, keys: t.keys };
 }
 
-export function planMatch(mode: DuelMode, seed: number, pool: readonly PoolQuestion[], opts: { parkId?: number; seen?: readonly string[]; rank?: FinRank; relaxed?: boolean } = {}): MatchPlan {
-  const { specs, template } = roundSpecsFor(mode, seed);
+export interface PlanOptions {
+  parkId?: number;
+  seen?: readonly string[];
+  rank?: FinRank;
+  relaxed?: boolean;
+  /** Lifetime queue match number (1-based) for unlocks; default 3 (everything on). */
+  matchNo?: number;
+  /** Async modes (ghost/friend/daily) never get a category pick. */
+  async?: boolean;
+}
+
+export function planMatch(mode: DuelMode, seed: number, pool: readonly PoolQuestion[], opts: PlanOptions = {}): MatchPlan {
+  const matchNo = opts.matchNo ?? 3;
+  const { specs, template, keys } = roundSpecsFor(mode, seed, matchNo);
   const deck = buildDeck(pool, specs, { seed, parkId: opts.parkId, seen: opts.seen, ride: mode === 'ride' });
   const family = mode === 'ride' ? 'ride' : 'queue';
   const rounds = specs.map((spec, i) => planRound(spec, deck[i], i, seed, family, !!opts.relaxed));
   const fi = specs.findIndex((sp) => sp.type === 'final');
   let finalAlt: PlannedRound | undefined;
-  if (fi >= 0 && (mode === 'queue' || mode === 'practice')) {
+  if (fi >= 0 && !opts.async && (mode === 'queue' || mode === 'practice')) {
     const alt = altFinalQuestion(pool, specs[fi], deck, seed, opts);
     if (alt) finalAlt = planRound(specs[fi], alt, fi, seed, family, !!opts.relaxed);
   }
-  return { mode, seed: seed >>> 0, template, rank: opts.rank ?? 'deckhand', relaxed: !!opts.relaxed, rounds, finalAlt };
+  return { mode, seed: seed >>> 0, template, keys, matchNo, features: featuresFor(mode, matchNo), rank: opts.rank ?? 'deckhand', relaxed: !!opts.relaxed, rounds, finalAlt };
 }
 
 /** A second Final question in a different category that shares no fact with the deck. */
@@ -148,8 +196,8 @@ export function finCategoryPick(cats: readonly string[], stats: Readonly<Record<
 }
 
 /** Rebuild the exact plan of a recorded run (ghost duel, server replay). */
-export function planFromIds(mode: DuelMode, seed: number, qids: readonly string[], pool: readonly PoolQuestion[], rank: FinRank = 'deckhand', relaxed = false): MatchPlan | null {
-  const { specs, template } = roundSpecsFor(mode, seed);
+export function planFromIds(mode: DuelMode, seed: number, qids: readonly string[], pool: readonly PoolQuestion[], rank: FinRank = 'deckhand', relaxed = false, keys?: readonly QueueRoundKey[]): MatchPlan | null {
+  const { specs, template } = roundSpecsFor(mode, seed, 3, keys);
   if (qids.length < specs.length) return null;
   const family = mode === 'ride' ? 'ride' : 'queue';
   const rounds: PlannedRound[] = [];
@@ -158,7 +206,10 @@ export function planFromIds(mode: DuelMode, seed: number, qids: readonly string[
     if (!q) return null;
     rounds.push(planRound(specs[i], q, i, seed, family, relaxed));
   }
-  return { mode, seed: seed >>> 0, template, rank, relaxed, rounds };
+  const features = featuresFor(mode, 3);
+  features.bell = specs.some((sp) => sp.type === 'buzz');
+  features.final = specs.some((sp) => sp.type === 'final');
+  return { mode, seed: seed >>> 0, template, keys: keys?.slice(), matchNo: 3, features, rank, relaxed, rounds };
 }
 
 export function suddenDeathRound(plan: MatchPlan, pool: readonly PoolQuestion[], seen: readonly string[]): PlannedRound {
@@ -177,13 +228,15 @@ export interface SideInput {
   lockMs: number;
   /** Closest Number guess. */
   guess?: number;
-  /** Buzz rounds: ms from unlock when the bell was hit, or -1. */
+  /** Bell rounds: ms from unlock when the bell was hit, or -1. */
   buzzMs?: number;
-  /** Steal answer (buzz rounds, when the other side buzzed wrong). */
+  /**
+   * Bell rounds, the side that did not win the bell: its pick after its tiles
+   * flipped (1.0s after the other buzz), and ms from that flip. It counts only
+   * when the buzzer misses.
+   */
   stealChoice?: number;
   stealMs?: number;
-  /** DEAD HEAT: ms from the blind-pick unlock to this side's pick. */
-  answerMs?: number;
   /** Final: chosen stake (absolute points). */
   stake?: number;
   chomp?: boolean;
@@ -205,16 +258,16 @@ export interface SideResult {
   bullseye?: boolean;
   buzzedFirst?: boolean;
   stole?: boolean;
-  /** Won (or lost) a DEAD HEAT blind pick. */
-  deadHeatWon?: boolean;
+  /** Bell: this side buzzed and missed (the streak holds). */
+  buzzMiss?: boolean;
   streak: StreakEvent | null;
 }
 
 export interface RoundResult {
   me: SideResult;
   opp: SideResult;
-  /** Buzz rounds. */
-  buzz?: { first: 'me' | 'opp' | 'none'; deadHeat: boolean; firstCorrect: boolean; steal: boolean; open: boolean };
+  /** Bell rounds. */
+  buzz?: { first: 'me' | 'opp' | 'none'; firstCorrect: boolean; steal: boolean; open: boolean };
   /** The answer that flipped or clinched the lead (server marks `decisive`). */
   decisive: boolean;
 }
@@ -235,8 +288,8 @@ export interface MatchTally {
   round: number;
 }
 
-export function createTally(carryStreak = 0, carryShield = false): MatchTally {
-  const side = (s: number, sh: boolean): SideTally => ({ score: 0, correct: 0, answered: 0, fastestMs: -1, bestTier: 'none', streak: createStreak(s, sh), log: [] });
+export function createTally(carryStreak = 0, carryShield = false, shieldOn = true): MatchTally {
+  const side = (s: number, sh: boolean): SideTally => ({ score: 0, correct: 0, answered: 0, fastestMs: -1, bestTier: 'none', streak: createStreak(s, sh, shieldOn), log: [] });
   return { me: side(carryStreak, carryShield), opp: side(0, false), round: 0 };
 }
 
@@ -312,8 +365,8 @@ export function resolveRound(mode: DuelMode, r: PlannedRound, me: SideInput, opp
     }
   }
 
-  fold(tally.me, me, meRes, buzz ? buzz.first !== 'opp' || buzz.open || buzz.steal || buzz.deadHeat : true);
-  if (opp) fold(tally.opp, opp, oppRes, buzz ? buzz.first !== 'me' || buzz.open || buzz.steal || buzz.deadHeat : true);
+  fold(tally.me, me, meRes, participation('me', buzz, meRes));
+  if (opp) fold(tally.opp, opp, oppRes, participation('opp', buzz, oppRes));
   tally.round += 1;
   const after = tally.me.score - tally.opp.score;
   // Decisive = the answer that flips the lead, or breaks a tie in the Final (never the first points of a match).
@@ -321,15 +374,30 @@ export function resolveRound(mode: DuelMode, r: PlannedRound, me: SideInput, opp
   return { me: meRes, opp: oppRes, buzz, decisive };
 }
 
-function fold(side: SideTally, input: SideInput, res: SideResult, participated: boolean): void {
+type Participation = 'scored' | 'hold' | 'none';
+
+/**
+ * How a bell round touches a side's streak (5.3): the buzzer and an open-phase
+ * pick are scored; a wrong buzz holds it; a steal counts only when it lands
+ * (a failed steal, or a steal pick that never mattered, never touches it).
+ */
+function participation(side: 'me' | 'opp', buzz: RoundResult['buzz'], res: SideResult): Participation {
+  if (!buzz) return 'scored';
+  if (buzz.open) return 'scored';
+  if (buzz.first === side) return res.correct ? 'scored' : 'hold';
+  if (buzz.steal && res.stole) return 'scored';
+  return 'none';
+}
+
+function fold(side: SideTally, input: SideInput, res: SideResult, part: Participation): void {
   side.score = Math.max(0, side.score + res.points);
   side.log.push(input);
-  if (!participated) return;
+  if (part === 'none') return;
   side.answered += 1;
   if (res.correct) side.correct += 1;
   if (res.correct && res.lockMs >= 0 && (side.fastestMs < 0 || res.lockMs < side.fastestMs)) side.fastestMs = res.lockMs;
   if (TIER_RANK[res.tier] > TIER_RANK[side.bestTier]) side.bestTier = res.tier;
-  res.streak = applyStreak(side.streak, res.streakCorrect);
+  res.streak = applyStreak(side.streak, res.streakCorrect, part === 'hold');
 }
 
 function resolveBuzzSides(r: PlannedRound, me: SideInput, opp: SideInput, tally: MatchTally) {
@@ -340,50 +408,17 @@ function resolveBuzzSides(r: PlannedRound, me: SideInput, opp: SideInput, tally:
   const ob = opp.buzzMs ?? -1;
   const mods = (i: SideInput): SpeedMods => ({ chomp: i.chomp, holdForfeit: i.holdForfeit });
   if (mb < 0 && ob < 0) {
-    // Open phase: tiles open to everyone, flat 50 for a correct pick.
+    // Open phase: nobody rang by 6s; tiles open to everyone for 4s, flat 50 (counts for the streak).
     for (const [inp, res] of [[me, meRes], [opp, oppRes]] as const) {
       res.lockMs = inp.lockMs;
       res.correct = inp.lockMs >= 0 && inp.choice === q.correctIndex;
       res.streakCorrect = res.correct;
       res.points = res.correct ? POINTS.openPhaseFlat : 0;
     }
-    return { me: meRes, opp: oppRes, buzz: { first: 'none' as const, deadHeat: false, firstCorrect: false, steal: false, open: true } };
+    return { me: meRes, opp: oppRes, buzz: { first: 'none' as const, firstCorrect: false, steal: false, open: true } };
   }
-  let first: 'me' | 'opp';
-  let deadHeat = false;
-  if (mb >= 0 && ob >= 0) {
-    const o = buzzOrder(mb, ob);
-    first = o.first === 'a' ? 'me' : 'opp';
-    deadHeat = o.deadHeat;
-  } else first = mb >= 0 ? 'me' : 'opp';
-
-  if (deadHeat) {
-    // DEAD HEAT (5.3): both picked blind; correct beats wrong, then the faster pick.
-    const side = (i: SideInput, b: number, t: SideTally) => ({
-      correct: i.choice >= 0 && i.choice === q.correctIndex,
-      answerMs: i.choice >= 0 ? i.answerMs ?? BUZZ.deadHeatDefaultAnswerMs : Number.MAX_SAFE_INTEGER,
-      buzzMs: b,
-      streakAfter: t.streak.streak + 1,
-      shield: t.streak.shield,
-      mods: mods(i),
-    });
-    const a = side(me, mb, tally.me);
-    const b = side(opp, ob, tally.opp);
-    const out = deadHeatPoints(a, b, r.graceMs);
-    for (const [res, x, pts, won] of [[meRes, a, out.a, out.winner === 'a'], [oppRes, b, out.b, out.winner === 'b']] as const) {
-      res.correct = x.correct;
-      res.streakCorrect = x.correct;
-      res.points = pts;
-      res.lockMs = x.buzzMs;
-      res.buzzedFirst = won;
-      res.deadHeatWon = won;
-      res.speed = won ? creditedSpeed(x.buzzMs, r.graceMs, BUZZ.horizonMs, x.mods) : 0;
-      res.tier = won ? speedTier(res.speed) : 'none';
-    }
-    const firstCorrect = first === 'me' ? a.correct : b.correct;
-    return { me: meRes, opp: oppRes, buzz: { first, deadHeat: true, firstCorrect, steal: false, open: false } };
-  }
-
+  // The lower scored time wins the bell (no DEAD HEAT outside live rooms).
+  const first: 'me' | 'opp' = mb >= 0 && ob >= 0 ? (buzzFirst(mb, ob) === 'a' ? 'me' : 'opp') : mb >= 0 ? 'me' : 'opp';
   const buzzer = first === 'me' ? me : opp;
   const other = first === 'me' ? opp : me;
   const bRes = first === 'me' ? meRes : oppRes;
@@ -392,11 +427,12 @@ function resolveBuzzSides(r: PlannedRound, me: SideInput, opp: SideInput, tally:
   const bt = first === 'me' ? mb : ob;
   bRes.buzzedFirst = true;
   bRes.lockMs = bt;
-  const firstCorrect = buzzer.choice === q.correctIndex;
+  const firstCorrect = buzzer.choice >= 0 && buzzer.choice === q.correctIndex;
   bRes.correct = firstCorrect;
   bRes.streakCorrect = firstCorrect;
-  bRes.points = buzzPoints(firstCorrect, bt, r.graceMs, bTally.streak.streak + 1, bTally.streak.shield, mods(buzzer));
-  bRes.speed = firstCorrect ? creditedSpeed(bt, r.graceMs, BUZZ.horizonMs, mods(buzzer)) : 0;
+  bRes.buzzMiss = !firstCorrect;
+  bRes.points = buzzPoints(firstCorrect, bt, bTally.streak.streak + 1, bTally.streak.shield, mods(buzzer));
+  bRes.speed = firstCorrect ? creditedSpeed(bt, BUZZ.graceMs, BUZZ.horizonMs, mods(buzzer)) : 0;
   bRes.tier = firstCorrect ? speedTier(bRes.speed) : 'none';
   let steal = false;
   if (!firstCorrect && other.stealChoice != null && other.stealChoice >= 0 && (other.stealMs ?? -1) >= 0) {
@@ -409,13 +445,18 @@ function resolveBuzzSides(r: PlannedRound, me: SideInput, opp: SideInput, tally:
     oRes.speed = oRes.correct ? oRes.points - POINTS.stealBase : 0;
     oRes.tier = oRes.correct ? speedTier(oRes.speed) : 'none';
   }
-  return { me: meRes, opp: oppRes, buzz: { first, deadHeat: false, firstCorrect, steal, open: false } };
+  return { me: meRes, opp: oppRes, buzz: { first, firstCorrect, steal, open: false } };
 }
 
 // -- Fin as the opponent ---------------------------------------------------------
 
-/** Fin's full input for a round, sampled from his calibrated model. */
-export function finInput(plan: MatchPlan, r: PlannedRound, tally: MatchTally, meBuzzWrongChoice = -1): { input: SideInput; answer: FinAnswer } {
+/**
+ * Fin's full input for a round, sampled from his calibrated model. Bell
+ * rounds carry everything a replay needs: his buzz (or -1), his pick, and his
+ * steal pick timed from his own tile flip (used only if you buzz and miss).
+ * He never sees your pick: the steal pick is his own answer.
+ */
+export function finInput(plan: MatchPlan, r: PlannedRound, tally: MatchTally): { input: SideInput; answer: FinAnswer } {
   const q = r.question;
   const ans = finAnswer(plan.seed, r.index, plan.rank, {
     correctIndex: Math.max(0, q.correctIndex),
@@ -430,31 +471,36 @@ export function finInput(plan: MatchPlan, r: PlannedRound, tally: MatchTally, me
     input.choice = -1;
   }
   if (r.spec.type === 'buzz') {
-    input.buzzMs = ans.buzzMs <= BUZZ.buzzWindowMs ? ans.buzzMs : -1;
-    // His blind pick in a DEAD HEAT: the tiles were already face-up, so he picks
-    // at a fraction of his calibrated lock time (same accuracy roll, no bluffs).
-    const ar = createRng(mixSeed(plan.seed, 0xdea7 + r.index));
-    input.answerMs = Math.round(Math.min(BUZZ.answerMs - 300, Math.max(450, ans.lockMs * (0.32 + 0.16 * rngFloat(ar)))));
-    if (meBuzzWrongChoice >= 0) {
-      // You buzzed wrong first: he steals with his pick, never the crumbled tile.
-      const rr = createRng(mixSeed(plan.seed, 0x57ea1 + r.index));
-      let pick = ans.choice;
-      if (pick === meBuzzWrongChoice) {
-        const others = q.choices.map((_, i) => i).filter((i) => i !== meBuzzWrongChoice && i !== q.correctIndex);
-        pick = rngFloat(rr) < q.stats.p || !others.length ? q.correctIndex : others[Math.floor(rngFloat(rr) * others.length)];
-      }
-      input.stealChoice = pick;
-      input.stealMs = Math.round(Math.min(BUZZ.answerMs - 400, 700 + rngFloat(rr) * 1600));
-    }
+    input.buzzMs = ans.buzzMs >= 0 && ans.buzzMs < BUZZ.buzzWindowMs ? ans.buzzMs : -1;
+    // His steal pick lands on his own flip clock (tiles flip 1.0s after your buzz).
+    const rr = createRng(mixSeed(plan.seed, 0x57ea1 + r.index));
+    input.stealChoice = ans.choice;
+    input.stealMs = Math.round(Math.min(BUZZ.answerMs - 300, 650 + rngFloat(rr) * 1500));
+    // If he never buzzes, his open-phase pick (from the open flip) is his lock.
+    if (input.buzzMs < 0) input.lockMs = Math.round(Math.min(BUZZ.openPhaseMs - 400, 700 + rngFloat(rr) * 1800));
+    else input.lockMs = input.buzzMs;
   }
-  if (r.spec.type === 'final') input.stake = finStake(plan.seed, plan.rank, tally.opp.score, tally.me.score);
+  if (r.spec.type === 'final') {
+    const m = streakMult(tally.opp.streak.streak + 1);
+    input.stake = finStake(plan.seed, plan.rank, tally.opp.score, tally.me.score, m);
+  }
   return { input, answer: ans };
+}
+
+/** ms from his buzz to his answer appearing (bell rounds; display timing only). */
+export function finBellAnswerMs(plan: MatchPlan, r: PlannedRound): number {
+  const q = r.question;
+  return finAnswer(plan.seed, r.index, plan.rank, {
+    correctIndex: Math.max(0, q.correctIndex), choiceCount: Math.max(1, q.choices.length), windowMs: r.windowMs, graceMs: r.graceMs, stats: q.stats,
+  }).answerMs;
 }
 
 // -- Ghost records (10.5): under 1KB, replayed on the identical seed. -------------
 
 export interface GhostRecord {
-  v: 1;
+  v: 1 | 2;
+  /** v2: round keys of the recorded template (matches 1-2 play shorter templates). */
+  keys?: QueueRoundKey[];
   seed: number;
   mode: DuelMode;
   name: string;
@@ -469,7 +515,8 @@ export interface GhostRecord {
 
 export function makeGhost(plan: MatchPlan, tally: MatchTally, name: string, look: string, at: number): GhostRecord {
   return {
-    v: 1,
+    v: 2,
+    keys: plan.keys?.slice(),
     seed: plan.seed,
     mode: plan.mode,
     name,
@@ -482,18 +529,19 @@ export function makeGhost(plan: MatchPlan, tally: MatchTally, name: string, look
   };
 }
 
-/** Compact wire form: `g1.` + base64-free JSON with short keys. */
+/** Compact wire form: `g2.` + JSON with short keys (g1 records still decode). */
 export function encodeGhost(g: GhostRecord): string {
-  const rows = g.rows.map((r) => [r.choice, r.lockMs, r.guess ?? null, r.buzzMs ?? null, r.stealChoice ?? null, r.stealMs ?? null, r.stake ?? null, r.chomp ? 1 : 0, r.holdForfeit ? 1 : 0, r.answerMs ?? null]);
-  return `g1.${JSON.stringify([g.seed, g.mode, g.name, g.look, g.score, g.correct, g.at, g.qids, rows])}`;
+  const rows = g.rows.map((r) => [r.choice, r.lockMs, r.guess ?? null, r.buzzMs ?? null, r.stealChoice ?? null, r.stealMs ?? null, r.stake ?? null, r.chomp ? 1 : 0, r.holdForfeit ? 1 : 0]);
+  return `g2.${JSON.stringify([g.seed, g.mode, g.name, g.look, g.score, g.correct, g.at, g.qids, rows, g.keys ?? null])}`;
 }
 
 export function decodeGhost(s: string): GhostRecord | null {
-  if (!s.startsWith('g1.')) return null;
+  const v = s.startsWith('g2.') ? 2 : s.startsWith('g1.') ? 1 : 0;
+  if (!v) return null;
   try {
-    const [seed, mode, name, look, score, correct, at, qids, rows] = JSON.parse(s.slice(3));
+    const [seed, mode, name, look, score, correct, at, qids, rows, keys] = JSON.parse(s.slice(3));
     return {
-      v: 1, seed, mode, name, look, score, correct, at, qids,
+      v: v as 1 | 2, keys: keys ?? undefined, seed, mode, name, look, score, correct, at, qids,
       rows: (rows as unknown[][]).map((r) => {
         const row: SideInput = { choice: r[0] as number, lockMs: r[1] as number };
         if (r[2] != null) row.guess = r[2] as number;
@@ -503,7 +551,6 @@ export function decodeGhost(s: string): GhostRecord | null {
         if (r[6] != null) row.stake = r[6] as number;
         if (r[7]) row.chomp = true;
         if (r[8]) row.holdForfeit = true;
-        if (r[9] != null) row.answerMs = r[9] as number;
         return row;
       }),
     };
@@ -519,9 +566,14 @@ export function gradeRun(plan: MatchPlan, rows: readonly SideInput[]): MatchTall
   return t;
 }
 
-/** Ghost input for a round; its recorded wager applies as the same absolute stake. */
-export function ghostInput(g: GhostRecord, round: number): SideInput {
-  return g.rows[round] ? { ...g.rows[round] } : { ...NO_INPUT };
+/**
+ * Ghost input for a round; its recorded wager applies as the same absolute
+ * stake, capped at what the ghost holds in this replay (never a free stake).
+ */
+export function ghostInput(g: GhostRecord, round: number, ghostScoreNow?: number): SideInput {
+  const row = g.rows[round] ? { ...g.rows[round] } : { ...NO_INPUT };
+  if (row.stake != null && ghostScoreNow != null) row.stake = Math.max(0, Math.min(row.stake, ghostScoreNow));
+  return row;
 }
 
 export const _test = { scoreQuickSide };

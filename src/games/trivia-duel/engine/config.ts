@@ -1,5 +1,5 @@
 /**
- * Trivia Duel tunables (design doc studio/design/trivia.md, rev 4).
+ * Trivia Duel tunables (design doc studio/design/trivia.md, rev 7).
  *
  * Every number the doc names lives here so balance passes never touch logic.
  * Pure data: safe on the UI thread, in node tests and as the source for the
@@ -16,9 +16,12 @@ export type SpeedTier = 'lightning' | 'great' | 'nice' | 'none';
 /** 5.2 grace: clamp(300 + 12 x choice characters, 400, 1100); slider fixed. */
 export const GRACE = { base: 300, perChar: 12, min: 400, max: 1100, slider: 800 } as const;
 
-/** 4.1 / 4.2 read-lock (tiles face-down) by mode family, plus seeded jitter. */
+/**
+ * 4.1 / 4.2 read-lock (full question visible, tiles face-down), plus seeded
+ * jitter. Rev 7 (G10): the ride uses the queue clamp, 600-1500ms.
+ */
 export const READ_LOCK = {
-  ride: { base: 400, perChar: 25, min: 900, max: 2400 },
+  ride: { base: 300, perChar: 12, min: 600, max: 1500 },
   queue: { base: 300, perChar: 12, min: 600, max: 1500 },
   jitterMax: 250,
   /** A HOLD during the read-lock restarts it with this much left. */
@@ -37,19 +40,15 @@ export const STREAK_MULT: readonly [number, number][] = [
 ];
 export const HOT_STREAK = 3;
 export const BLAZING = 5;
-export const FREEZE_AT_STREAK = 2;
 
 export const POINTS = {
   base: 100,
   speedMax: 100,
   chompSpeedCap: 50,
   buzzBase: 150,
-  /** Rev 4 (C2): a wrong buzz costs 100, so buzzing breaks even near 50% confidence. */
+  /** 5.4: a wrong buzz costs a flat 100 (0 with a Shield); the streak holds. */
   buzzWrong: -100,
   stealBase: 125,
-  /** DEAD HEAT: the slower of two correct blind picks still takes a flat 75; a wrong blind pick costs 50. */
-  deadHeatSecond: 75,
-  deadHeatWrong: -50,
   openPhaseFlat: 50,
   /** Ride challenge: correct = 100 + round5(150 x speed fraction), no streak. */
   rideSpeedMax: 150,
@@ -64,30 +63,42 @@ export const TIERS: readonly { tier: SpeedTier; min: number }[] = [
   { tier: 'none', min: 0 },
 ];
 
-/** 5.3 Buzz Bell timing. */
+/**
+ * 5.4 Buzz Bell (rev 7). Tiles stay face-down for everyone after the
+ * read-lock; buzzing flips them for the buzzer only. The bell's speed runs on
+ * its own grace and horizon from unlock. The other side's tiles flip 1.0s
+ * after a buzz as the steal pick. Nobody by 6s: tiles open for 4s, flat 50.
+ */
 export const BUZZ = {
-  buzzWindowMs: 8000,
+  buzzWindowMs: 6000,
   answerMs: 3500,
-  horizonMs: 6000,
+  graceMs: 400,
+  horizonMs: 5000,
+  stealFlipMs: 1000,
   stealGraceMs: 300,
   stealHorizonMs: 3000,
   openPhaseMs: 4000,
-  /** Rev 4 (C2): buzzes within 200ms of the first are a DEAD HEAT (blind picks), never a coin flip. */
-  deadHeatMs: 200,
-  /** Fallback blind-pick time for a record without one (older ghosts). */
-  deadHeatDefaultAnswerMs: 2000,
   hitStopMs: 60,
 } as const;
 
-/** 5.5 wager chips: percent of score, or fixed stakes when the score is small. */
+/** 7.2: share of bell rounds Fin buzzes on, by rank. */
+export const FIN_BUZZ_SHARE: Record<FinRank, number> = { deckhand: 0.5, firstmate: 0.6, captain: 0.7, admiral: 0.8 };
+
+/**
+ * 5.5 wager (rev 7): three chips, always a share of what you hold. A stake
+ * never exceeds your score, so no stake is ever free.
+ */
 export const WAGER = {
-  percents: [0, 0.25, 0.5, 1] as const,
-  fixed: [0, 50, 100, 200] as const,
-  fixedBelow: 200,
-  defaultIndex: 1,
-  pickMs: 5000,
-  labels: ['SAFE', '25%', '50%', 'ALL IN'] as const,
+  percents: [0, 0.5, 1] as const,
+  labels: ['SAFE', 'HALF', 'ALL IN'] as const,
+  pickMs: 4000,
+  /** suggestWager thresholds: "unbeatable when right" and "covers their best bet". */
+  lockMargin: 350,
+  coverMargin: 100,
 } as const;
+
+/** 5.5 Final answers: press and hold this long to lock (Millionaire). */
+export const FINAL_HOLD_MS = 300;
 
 /**
  * C9 Relaxed mode: the same speed points at a calmer pace. Read-lock x1.5,
@@ -95,11 +106,8 @@ export const WAGER = {
  */
 export const RELAXED = { readLockScale: 1.5, windowAddMs: 4000, graceScale: 1.5, horizonScale: 1.5 } as const;
 
-/** C11 Final category pick: 2 cards, 3s, default left. */
-export const CATEGORY_PICK = { cards: 2, pickMs: 3000 } as const;
-
-/** C8 Peek: a noisy sample of real answers, only on medium/hard items. */
-export const PEEK = { sample: 12, maxP: 0.75, minAnswers: 30, showMs: 2000 } as const;
+/** 5.5 Final category pick: 2 cards, 2.5s, default left (vs Fin, Huddle and live only). */
+export const CATEGORY_PICK = { cards: 2, pickMs: 2500 } as const;
 
 /** 15.2 HOLD credit per question in graded modes. */
 export const HOLD = { creditMs: 6000 } as const;
@@ -143,16 +151,27 @@ export const QUEUE_ROUNDS: Record<'q1' | 'q2' | 'buzz' | 'q4' | 'final', RoundSp
   q2: { type: 'quick', formats: ['pair', 'closest'], difficulty: 'medium', windowMs: 8000, sliderWindowMs: 14000, horizonMs: 4000, sliderHorizonMs: 7000 },
   buzz: { type: 'buzz', formats: ['choice4'], difficulty: 'medium', windowMs: BUZZ.buzzWindowMs, horizonMs: BUZZ.horizonMs },
   q4: { type: 'quick', formats: ['choice4', 'opened'], difficulty: 'medium', windowMs: 12000, horizonMs: 7000 },
-  final: { type: 'final', formats: ['choice4'], difficulty: 'hard', windowMs: 14000, horizonMs: 8000 },
+  final: { type: 'final', formats: ['choice4'], difficulty: 'hard', windowMs: 10000, horizonMs: 7000 },
 };
-/** Templates rotate per match: B never first, F always last. */
-export const TEMPLATES: readonly (readonly (keyof typeof QUEUE_ROUNDS)[])[] = [
+export type QueueRoundKey = keyof typeof QUEUE_ROUNDS;
+/** Templates rotate per match (match 3 and later): B never first, F always last. */
+export const TEMPLATES: readonly (readonly QueueRoundKey[])[] = [
   ['q1', 'q2', 'buzz', 'q4', 'final'],
   ['q1', 'buzz', 'q2', 'q4', 'final'],
 ];
+/**
+ * 2.3 feature unlocks by lifetime queue match (1-based): match 1 is QQQQ with
+ * no lifelines; match 2 is QQBQ and brings Chomp, the bell, steals and the
+ * Shield; match 3 adds Fin's Final.
+ */
+export const UNLOCK_TEMPLATES: Record<1 | 2, readonly QueueRoundKey[]> = {
+  1: ['q1', 'q2', 'q4', 'q4'],
+  2: ['q1', 'q2', 'buzz', 'q4'],
+};
+export const UNLOCKS = { chompFromMatch: 2, bellFromMatch: 2, shieldFromMatch: 2, finalFromMatch: 3 } as const;
 export const SUDDEN_DEATH: RoundSpec = { type: 'quick', formats: ['choice4'], difficulty: 'medium', windowMs: 10000, horizonMs: 5000 };
 
-/** 4.1 ride challenge: 3 easy questions, 8s window. */
+/** 4.1 ride challenge: 3 questions at the gate, 8s window. */
 export const RIDE_ROUND: RoundSpec = { type: 'quick', formats: ['choice4', 'truetale'], difficulty: 'easy', windowMs: 8000, horizonMs: 8000 };
 export const RIDE_QUESTIONS = 3;
 export const RIDE_WIN_CORRECT = 2;
@@ -164,8 +183,8 @@ export const DAILY_LADDER: readonly Difficulty[] = ['easy', 'easy', 'medium', 'm
 /** Content limits (3). */
 export const TEXT_LIMITS = { queue: 90, ride: 110, truetale: 60 } as const;
 
-/** 11.1 beat clock (measured). */
-export const BEAT = { duelBpm: 135.999, finalBpm: 117.454 } as const;
+/** 11.1 beat clock (measured): duel_loop, and duel_loop_final = +1 semitone at tape speed. */
+export const BEAT = { duelBpm: 135.999, finalBpm: 144.08 } as const;
 
 /** Ceremony timings (11.3 / 11.4). */
 export const CEREMONY = {

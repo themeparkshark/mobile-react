@@ -29,9 +29,9 @@ test('grace scales with answer text and clamps at 400 / 1100; slider is fixed', 
   assert.equal(sc.graceMs('slider'), 800);
 });
 
-test('read-lock clamps per mode family', () => {
-  assert.equal(sc.readLockMs(10, 'ride'), 900);
-  assert.equal(sc.readLockMs(200, 'ride'), 2400);
+test('read-lock clamps per mode family (rev 7: the ride uses the queue clamp, 600-1500)', () => {
+  assert.equal(sc.readLockMs(10, 'ride'), 600);
+  assert.equal(sc.readLockMs(200, 'ride'), 1500);
   assert.equal(sc.readLockMs(50, 'queue'), 900);
   assert.equal(sc.readLockMs(0, 'queue'), 600);
 });
@@ -70,47 +70,46 @@ test('speed tiers', () => {
   assert.deepEqual([100, 95, 94, 70, 69, 35, 34, 0].map(sc.speedTier), ['lightning', 'lightning', 'great', 'great', 'nice', 'nice', 'none', 'none']);
 });
 
-test('buzz (rev 4): correct 150 + speed, wrong -100 (0 with Shield), steal 125 + steal speed (max 225)', () => {
-  assert.equal(sc.buzzPoints(true, 500, 780, 1, false), 250);
-  assert.equal(sc.buzzPoints(true, 500, 780, 5, false), Math.round(250 * 1.75), 'buzz max 437');
-  assert.equal(sc.buzzPoints(false, 500, 780, 1, false), -100);
-  assert.equal(sc.buzzPoints(false, 500, 780, 1, true), 0);
+test('bell (rev 7): correct (150 + speed) x m on the bell clock (g 400, H 5000), wrong a flat -100 (0 with Shield), steal 125 + speed from the flip (max 225)', () => {
+  assert.equal(sc.buzzPoints(true, 500, 1, false), 250);
+  assert.equal(sc.buzzPoints(true, 500, 5, false), Math.round(250 * 1.75), 'bell max 437');
+  assert.equal(sc.buzzPoints(true, 2700, 1, false), 150 + sc.speedPoints(2700, 400, 5000));
+  assert.equal(sc.buzzPoints(true, 6000, 1, false), 150);
+  assert.equal(sc.buzzPoints(false, 500, 1, false), -100);
+  assert.equal(sc.buzzPoints(false, 500, 5, false), -100, 'flat: no streak-scaled penalty');
+  assert.equal(sc.buzzPoints(false, 500, 1, true), 0);
+  assert.equal(sc.bellValue(500), 250);
   assert.equal(sc.stealPoints(true, 200), 225);
   assert.equal(sc.stealPoints(true, 3000), 125);
   assert.equal(sc.stealPoints(false, 200), 0);
-  assert.deepEqual(plain(sc.buzzOrder(1000, 1020)), { first: 'a', deadHeat: true });
-  assert.deepEqual(plain(sc.buzzOrder(1199, 1000)), { first: 'b', deadHeat: true });
-  assert.deepEqual(plain(sc.buzzOrder(1000, 1200)), { first: 'a', deadHeat: true }, '200ms is inside the window');
-  assert.deepEqual(plain(sc.buzzOrder(1000, 1201)), { first: 'a', deadHeat: false });
+  assert.equal(sc.buzzFirst(1000, 1020), 'a');
+  assert.equal(sc.buzzFirst(1199, 1000), 'b');
+  assert.equal(sc.buzzFirst(1000, 1000), 'a', 'equal times go to side a');
 });
-
-test('buzz EV: break-even confidence sits near 50% once the steal is counted', () => {
-  // Relative swing of buzzing vs the opponent: 220c - (1 - c)(100 + 126) at p(steal) 0.7 (design 5.3).
-  const correct = 220;
-  const loss = -sc.buzzPoints(false, 0, 780, 1, false) + 0.7 * 180;
-  const breakEven = loss / (correct + loss);
-  assert.ok(breakEven > 0.45 && breakEven < 0.55, `break-even ${breakEven}`);
+test('bell EV (5.4): break-even confidence 0.51 / 0.47 / 0.41 / 0.38 by multiplier', () => {
+  // G = (150 + ~60) x m; W = 100 + opponent steal EV (0.7 x 175 = 122) = 222; c = W / (W + G).
+  const W = -sc.buzzPoints(false, 0, 1, false) + 0.7 * 175;
+  const c = (m) => W / (W + 210 * m);
+  assert.ok(Math.abs(c(1) - 0.51) < 0.01, `x1.0 ${c(1)}`);
+  assert.ok(Math.abs(c(1.2) - 0.47) < 0.01, `x1.2 ${c(1.2)}`);
+  assert.ok(Math.abs(c(1.5) - 0.41) < 0.01, `x1.5 ${c(1.5)}`);
+  assert.ok(Math.abs(c(1.75) - 0.38) < 0.01, `x1.75 ${c(1.75)}`);
 });
-
-test('DEAD HEAT: correct beats wrong, faster blind pick wins, slower correct takes 75, wrong costs 50', () => {
+test('DEAD HEAT lives only in live rooms (party/deadHeat.ts): correct beats wrong, faster blind pick wins, slower correct takes 75, wrong costs 50', () => {
+  const dh = loadTs('src/games/trivia-duel/party/deadHeat.ts');
   const side = (correct, answerMs, buzzMs = 1000, shield = false) => ({ correct, answerMs, buzzMs, streakAfter: 1, shield });
-  let r = sc.deadHeatPoints(side(true, 900), side(true, 1400), 780);
+  let r = dh.deadHeatPoints(side(true, 900), side(true, 1400));
   assert.equal(r.winner, 'a');
-  assert.equal(r.a, sc.buzzPoints(true, 1000, 780, 1, false));
+  assert.equal(r.a, sc.buzzPoints(true, 1000, 1, false));
   assert.equal(r.b, 75);
-  r = sc.deadHeatPoints(side(true, 2000), side(true, 600), 780);
-  assert.equal(r.winner, 'b');
-  assert.equal(r.a, 75);
-  r = sc.deadHeatPoints(side(false, 300), side(true, 2500), 780);
+  r = dh.deadHeatPoints(side(false, 300), side(true, 2500));
   assert.equal(r.winner, 'b');
   assert.equal(r.a, -50);
-  r = sc.deadHeatPoints(side(false, 300), side(false, 2500, 1000, true), 780);
-  assert.equal(r.winner, 'none');
+  r = dh.deadHeatPoints(side(false, 300), side(false, 2500, 1000, true));
   assert.deepEqual([r.a, r.b], [-50, 0], 'a Shield absorbs the blind miss');
-  r = sc.deadHeatPoints(side(true, 900, 1100), side(true, 900, 1000), 780);
-  assert.equal(r.winner, 'b', 'equal pick times fall back to the earlier buzz');
+  assert.equal(dh.isDeadHeat(1000, 1200), true);
+  assert.equal(dh.isDeadHeat(1000, 1201), false);
 });
-
 test('Closest Number: accuracy, 0.8 counts as correct, 0.97 is a bullseye', () => {
   const exact = sc.closestPoints(1969, 1969, 8, 0, 7000, 1);
   assert.equal(exact.bullseye, true);
@@ -126,14 +125,49 @@ test('Closest Number: accuracy, 0.8 counts as correct, 0.97 is a bullseye', () =
   assert.equal(partial.points, 50);
 });
 
-test('wager stakes: percents, fixed stakes under 200, floor at 0', () => {
-  assert.deepEqual(plain(sc.wagerStakes(800)), [0, 200, 400, 800]);
-  assert.deepEqual(plain(sc.wagerStakes(150)), [0, 50, 100, 200]);
+test('wager (rev 7, S0-3): SAFE / HALF / ALL IN, always a share of what you hold, no fixed stakes, never above the score', () => {
+  assert.deepEqual(plain(sc.wagerStakes(800)), [0, 400, 800]);
+  assert.deepEqual(plain(sc.wagerStakes(150)), [0, 75, 150], 'no fixed stakes under 200');
+  assert.deepEqual(plain(sc.wagerStakes(0)), [0, 0, 0], 'ALL IN at 0 is worth nothing');
+  for (let s = 0; s <= 3000; s += 7) {
+    const st = sc.wagerStakes(s);
+    assert.equal(st.length, 3);
+    for (const x of st) { assert.ok(x <= s, `stake ${x} above score ${s}`); assert.ok(x >= 0); }
+    assert.equal(st[2], s);
+  }
+  assert.equal(cfg.WAGER.fixed, undefined);
+  assert.equal(cfg.WAGER.fixedBelow, undefined);
   assert.equal(sc.applyFinal(800, true, 250, 400), 1450);
   assert.equal(sc.applyFinal(800, false, 0, 400), 400);
-  assert.equal(sc.applyFinal(150, false, 0, 200), 0, 'score floor 0');
+  assert.equal(sc.applyFinal(150, false, 0, 150), 0, 'score floor 0');
 });
 
+test('suggestWager: every branch of 5.5', () => {
+  // 1) A chip that makes you unbeatable when right: the smallest one.
+  let s = sc.suggestWager(1000, 300, 1);
+  assert.equal(s.index, 0);
+  assert.equal(s.reason, "Wins it if you're right.");
+  s = sc.suggestWager(700, 400, 1); // 700+100+0 = 800 < 1150; +350 = 1150 no; +700 = 1500 > 1150
+  assert.equal(s.index, 2);
+  assert.equal(s.reason, "Wins it if you're right.");
+  // 2) Trailing with no locking chip: ALL IN.
+  s = sc.suggestWager(300, 600, 1);
+  assert.equal(s.index, 2);
+  assert.equal(s.reason, 'You need it all.');
+  // 3) Leading or tied: smallest chip covering their best bet, else SAFE.
+  s = sc.suggestWager(600, 400, 1); // lock: 2*400+350=1150; 700/1000/1300 -> ALL IN locks
+  assert.equal(s.index, 2);
+  s = sc.suggestWager(500, 500, 1); // lock 1350: 600/850/1100 no; cover 1100: 1100 > 1100 no -> SAFE
+  assert.equal(s.index, 0);
+  assert.equal(s.reason, 'Keeps the lead if they miss.');
+  s = sc.suggestWager(520, 500, 1); // cover 1100: 620 / 880 / 1140 -> ALL IN covers
+  assert.equal(s.index, 2);
+  assert.equal(s.reason, 'Covers their best bet.');
+  s = sc.suggestWager(900, 700, 1.5); // lock 1750: 1050/1500/1950 -> ALL IN locks
+  assert.equal(s.index, 2);
+  s = sc.suggestWager(800, 600, 1); // lock 1550: 900/1300/1700 -> ALL IN; check cover not reached first
+  assert.equal(s.reason, "Wins it if you're right.");
+});
 test('ride points and stars', () => {
   assert.equal(sc.ridePoints(true, 0, 640), 250);
   assert.equal(sc.ridePoints(true, 8000, 640), 100);
@@ -154,22 +188,35 @@ test('duel stars', () => {
   assert.equal(sc.duelStars(610, 600, 5, 5), 3);
 });
 
-test('streak: ignite at 3 grants a Shield, Shield absorbs one miss, Freeze at 2', () => {
+test('streak: ignite at 3 grants a Shield (from match 2), Shield absorbs one miss, a wrong buzz holds the streak', () => {
   const s = sc.createStreak();
-  assert.equal(sc.applyStreak(s, true).freezeGranted, false);
-  assert.equal(sc.applyStreak(s, true).freezeGranted, true);
+  sc.applyStreak(s, true);
+  sc.applyStreak(s, true);
   const ig = sc.applyStreak(s, true);
   assert.equal(ig.ignited, true);
   assert.equal(ig.shieldGranted, true);
+  assert.equal(ig.freezeGranted, undefined, 'Freeze is cut');
   const absorbed = sc.applyStreak(s, false);
   assert.equal(absorbed.shieldUsed, true);
   assert.equal(absorbed.streak, 3);
+  const held = sc.applyStreak(s, false, true);
+  assert.equal(held.streak, 3, 'a wrong buzz holds the streak');
+  assert.equal(held.broke, false);
   const broke = sc.applyStreak(s, false);
   assert.equal(broke.broke, true);
   assert.equal(broke.streak, 0);
   assert.equal(s.best, 3);
+  // Match 1: no Shield.
+  const m1 = sc.createStreak(0, true, false);
+  assert.equal(m1.shield, false);
+  sc.applyStreak(m1, true); sc.applyStreak(m1, true);
+  assert.equal(sc.applyStreak(m1, true).shieldGranted, false);
+  // A wrong buzz with a Shield: the -100 is zeroed and the Shield pops.
+  const sh = sc.createStreak(4, true);
+  const ev = sc.applyStreak(sh, false, true);
+  assert.equal(ev.shieldUsed, true);
+  assert.equal(sh.streak, 4);
 });
-
 function finStats(rank, difficulty, n = 10000) {
   const stats = fin.priorStats(difficulty);
   let correct = 0;
@@ -194,24 +241,40 @@ test('Fin AI: accuracy within 2 points and median lock within 5% of the rank qua
   assert.ok(adm.median >= 1200 && adm.median <= 1600, `admiral easy median ${adm.median}`);
 });
 
-test('Fin AI is seeded: same seed and round give the same answer', () => {
+test('Fin AI is seeded: same seed and round give the same answer; he buzzes on a rank share of bell rounds at 0.9 x his lock time', () => {
   const q = { correctIndex: 1, choiceCount: 4, windowMs: 12000, graceMs: 600, stats: fin.priorStats('medium') };
   assert.deepEqual(plain(fin.finAnswer(77, 2, 'captain', q)), plain(fin.finAnswer(77, 2, 'captain', q)));
   const a = fin.finAnswer(77, 2, 'captain', q);
   assert.ok(a.lockMs >= 800 && a.lockMs <= 11400);
-  assert.ok(a.buzzMs <= a.lockMs);
-});
-
-test('Fin wager policy: lead 200+ = 25%, close = 50%, trailing = ALL IN (Captain has no noise)', () => {
-  assert.equal(fin.finWagerIndex(5, 'captain', 900, 600), 1);
-  assert.equal(fin.finWagerIndex(5, 'captain', 700, 600), 2);
-  assert.equal(fin.finWagerIndex(5, 'captain', 300, 600), 3);
-  for (let s = 0; s < 50; s++) {
-    const i = fin.finWagerIndex(s, 'deckhand', 700, 600);
-    assert.ok(i >= 1 && i <= 3);
+  for (const [rank, share] of [['deckhand', 0.5], ['firstmate', 0.6], ['captain', 0.7], ['admiral', 0.8]]) {
+    let buzzes = 0;
+    const N = 4000;
+    for (let i = 0; i < N; i++) {
+      const b = fin.finAnswer(9000 + i, 2, rank, { ...q, windowMs: 6000 });
+      if (b.buzzMs >= 0) {
+        buzzes++;
+        assert.ok(b.buzzMs >= 600 && b.buzzMs <= 5700, `${b.buzzMs}`);
+      }
+      assert.ok(b.answerMs >= 450 && b.answerMs <= 3100);
+    }
+    assert.ok(Math.abs(buzzes / N - share) < 0.03, `${rank} buzz share ${buzzes / N}`);
   }
 });
-
+test('Fin wager policy: suggestWager for his own state; Deckhand and First Mate go one chip off 25% of the time', () => {
+  for (let s = 0; s < 50; s++) {
+    assert.equal(fin.finWagerIndex(s, 'captain', 900, 600), sc.suggestWager(900, 600, 1).index);
+    assert.equal(fin.finWagerIndex(s, 'admiral', 300, 600), 2);
+  }
+  let off = 0;
+  const N = 2000;
+  for (let s = 0; s < N; s++) {
+    const i = fin.finWagerIndex(s, 'deckhand', 520, 500);
+    assert.ok(i >= 0 && i <= 2);
+    if (i !== sc.suggestWager(520, 500, 1).index) off++;
+  }
+  assert.ok(Math.abs(off / N - 0.25) < 0.04, `deckhand off-chip rate ${off / N}`);
+  for (let s = 0; s < 200; s++) assert.ok(fin.finStake(s, 'deckhand', 330, 600) <= 330, 'never a stake above his score');
+});
 test('Fin rank ladder: promote after N wins, demote after 3 straight losses', () => {
   const st = fin.createRankState('deckhand');
   fin.applyMatchToRank(st, true);
@@ -220,7 +283,17 @@ test('Fin rank ladder: promote after N wins, demote after 3 straight losses', ()
   fin.applyMatchToRank(st, false); fin.applyMatchToRank(st, false);
   assert.equal(fin.applyMatchToRank(st, false).demoted, true);
   assert.equal(st.rank, 'deckhand');
-  for (const k of Object.keys(fin.BARKS)) for (const b of fin.BARKS[k]) assert.ok(b.length <= 32, b);
+  let n = 0;
+  let named = 0;
+  for (const k of Object.keys(fin.BARKS)) for (const b of fin.BARKS[k]) {
+    n++;
+    if (b.includes('{name}')) named++;
+    assert.ok(b.replace('{name}', 'Sharkbait12').length <= 32 || fin.pickBark(k, fin.BARKS[k].indexOf(b), 'Sharkbait12').length <= 32, b);
+    assert.ok(!/[\u{1F300}-\u{1FAFF}]/u.test(b), `emoji in ${b}`);
+  }
+  assert.equal(n, 60, '60 barks');
+  assert.equal(named, 20, '20 with a {name} token');
+  for (let i = 0; i < 20; i++) assert.ok(fin.pickBark('intro', i, 'AVeryLongShark').length <= 32);
 });
 
 test('deck: filler dropped, deterministic per seed, formats honour the round table, no repeats', () => {
@@ -316,43 +389,45 @@ test('resolveRound: quick draw applies streak multiplier to both sides', () => {
   assert.equal(t.me.streak.shield, true);
 });
 
-test('resolveRound: buzz wrong -100 hands the steal; steal scores 125 + speed', () => {
-  const t = match.createTally();
+test('resolveRound: a wrong buzz costs 100, holds the streak and hands the steal; steal scores 125 + speed and counts for the stealer', () => {
+  const t = match.createTally(2, false);
   t.me.score = 300;
   const r = quickRound('buzz');
   const res = match.resolveRound('queue', r, { choice: 1, lockMs: 900, buzzMs: 900 }, { choice: 2, lockMs: -1, buzzMs: 2000, stealChoice: 2, stealMs: 200 }, t);
   assert.equal(res.buzz.first, 'me');
-  assert.equal(res.buzz.deadHeat, false);
   assert.equal(res.buzz.steal, true);
   assert.equal(res.me.points, -100);
+  assert.equal(res.me.buzzMiss, true);
   assert.equal(res.opp.points, 225);
   assert.equal(t.me.score, 200);
+  assert.equal(t.me.streak.streak, 2, 'a wrong buzz holds the streak');
+  assert.equal(t.opp.streak.streak, 1, 'a landed steal counts for the streak');
+  // A right buzz: the other side's steal pick does nothing and never touches its streak.
+  const t2 = match.createTally(0, false);
+  t2.opp.streak.streak = 3;
+  const res2 = match.resolveRound('queue', r, { choice: 2, lockMs: 900, buzzMs: 900 }, { choice: 1, lockMs: -1, buzzMs: -1, stealChoice: 1, stealMs: 300 }, t2);
+  assert.equal(res2.buzz.steal, false);
+  assert.equal(res2.me.points, sc.buzzPoints(true, 900, 1, false));
+  assert.equal(res2.opp.points, 0);
+  assert.equal(t2.opp.streak.streak, 3);
+  // A failed steal never touches the stealer's streak.
+  const t3 = match.createTally();
+  t3.opp.streak.streak = 2;
+  match.resolveRound('queue', r, { choice: 1, lockMs: 900, buzzMs: 900 }, { choice: 0, lockMs: -1, buzzMs: -1, stealChoice: 0, stealMs: 300 }, t3);
+  assert.equal(t3.opp.streak.streak, 2);
 });
 
-test('resolveRound: buzzes 150ms apart are a DEAD HEAT settled by blind picks, never a coin', () => {
+test('resolveRound: simultaneous buzzes (vs Fin or a ghost) go to the lower scored time, never a DEAD HEAT', () => {
   const r = quickRound('buzz');
-  // Fin buzzed first but picked wrong; you picked right, slower: correct beats wrong.
-  let t = match.createTally();
-  let res = match.resolveRound('queue', r, { choice: 2, lockMs: 1150, buzzMs: 1150, answerMs: 2400 }, { choice: 0, lockMs: 1000, buzzMs: 1000, answerMs: 500 }, t);
-  assert.equal(res.buzz.deadHeat, true);
-  assert.equal(res.me.deadHeatWon, true);
-  assert.equal(res.me.correct, true);
-  assert.equal(res.opp.points, -50);
-  assert.equal(t.me.streak.streak, 1);
-  // Both right: the faster pick takes the bell points, the other a flat 75 (both keep their streaks).
-  t = match.createTally();
-  res = match.resolveRound('queue', r, { choice: 2, lockMs: 1000, buzzMs: 1000, answerMs: 1600 }, { choice: 2, lockMs: 1100, buzzMs: 1100, answerMs: 700 }, t);
-  assert.equal(res.opp.deadHeatWon, true);
-  assert.equal(res.me.points, 75);
-  assert.equal(res.opp.points, sc.buzzPoints(true, 1100, r.graceMs, 1, false));
-  assert.equal(t.me.streak.streak, 1);
-  assert.equal(t.opp.streak.streak, 1);
-  // Same inputs, same result: replays and the server agree.
+  const t = match.createTally();
+  const res = match.resolveRound('queue', r, { choice: 2, lockMs: 1150, buzzMs: 1150 }, { choice: 0, lockMs: 1000, buzzMs: 1000, stealChoice: 0, stealMs: 400 }, t);
+  assert.equal(res.buzz.first, 'opp');
+  assert.equal(res.buzz.deadHeat, undefined);
+  assert.equal(res.opp.points, -100);
   const t2 = match.createTally();
-  const res2 = match.resolveRound('queue', r, { choice: 2, lockMs: 1000, buzzMs: 1000, answerMs: 1600 }, { choice: 2, lockMs: 1100, buzzMs: 1100, answerMs: 700 }, t2);
-  assert.deepEqual(plain(res2), plain(res));
+  const res2 = match.resolveRound('queue', r, { choice: 2, lockMs: 1150, buzzMs: 1150 }, { choice: 0, lockMs: 1000, buzzMs: 1000, stealChoice: 0, stealMs: 400 }, t2);
+  assert.deepEqual(plain(res2), plain(res), 'replays and the server agree');
 });
-
 test('resolveRound: nobody buzzes -> open phase flat 50', () => {
   const t = match.createTally();
   const res = match.resolveRound('queue', quickRound('buzz'), { choice: 2, lockMs: 9000 }, { choice: 0, lockMs: 9500 }, t);
@@ -385,25 +460,28 @@ test('ghost: encode/decode round-trips under 1KB and regrades identically', () =
   assert.ok(wire.length < 1024, `ghost ${wire.length} bytes`);
   const back = match.decodeGhost(wire);
   assert.deepEqual(plain(back), plain(g));
-  const rebuilt = match.planFromIds('queue', back.seed, back.qids, POOL);
+  const rebuilt = match.planFromIds('queue', back.seed, back.qids, POOL, 'deckhand', false, back.keys);
   assert.deepEqual(plain(rebuilt.rounds.map((r) => r.question)), plain(plan.rounds.map((r) => r.question)));
   const regraded = match.gradeRun(rebuilt, back.rows);
   assert.equal(regraded.me.score, t.me.score);
   assert.equal(match.decodeGhost('nope'), null);
 });
 
-test('Fin input for a buzz steal never picks the crumbled tile', () => {
+test('Fin bell input: a replayable buzz (or none), his steal pick from his own flip, an open-phase pick when he holds back', () => {
   const plan = match.planMatch('queue', 7, POOL, { rank: 'deckhand' });
   const bi = plan.rounds.findIndex((r) => r.spec.type === 'buzz');
-  for (let s = 0; s < 100; s++) {
+  assert.ok(bi > 0, 'the bell is never first');
+  let none = 0;
+  for (let s = 0; s < 200; s++) {
     const p = { ...plan, seed: s };
-    const wrong = (p.rounds[bi].question.correctIndex + 1) % 4;
-    const { input } = match.finInput(p, p.rounds[bi], match.createTally(), wrong);
-    assert.notEqual(input.stealChoice, wrong);
+    const { input } = match.finInput(p, p.rounds[bi], match.createTally());
     assert.ok(input.stealMs > 0 && input.stealMs < 3500);
+    assert.equal(input.stealChoice, input.choice, 'he never sees your pick: the steal pick is his own answer');
+    if (input.buzzMs < 0) { none++; assert.ok(input.lockMs >= 0 && input.lockMs < 4000); }
+    else assert.equal(input.lockMs, input.buzzMs);
   }
+  assert.ok(none > 60 && none < 140, `deckhand holds back on about half: ${none}/200`);
 });
-
 test('near-miss finds the smallest single change', () => {
   const plan = match.planMatch('queue', 3, POOL, {});
   const t = match.createTally();
@@ -448,13 +526,59 @@ test('balance sim: a typical player beats Deckhand far more often than Admiral',
 
 // -- Revision 4 (C6, C8, C9, C11) ---------------------------------------------------
 
-test('rev 4 windows: R1 10s, R4 12s, Final 14s; horizons stay shorter than windows', () => {
+test('rev 7 windows: R1 10s, bell 6s to buzz + 3.5s, R4 12s, Final 10s with H 7s; horizons shorter than windows', () => {
   assert.equal(cfg.QUEUE_ROUNDS.q1.windowMs, 10000);
+  assert.equal(cfg.QUEUE_ROUNDS.buzz.windowMs, 6000);
+  assert.equal(cfg.BUZZ.answerMs, 3500);
+  assert.equal(cfg.BUZZ.stealFlipMs, 1000);
   assert.equal(cfg.QUEUE_ROUNDS.q4.windowMs, 12000);
-  assert.equal(cfg.QUEUE_ROUNDS.final.windowMs, 14000);
+  assert.equal(cfg.QUEUE_ROUNDS.final.windowMs, 10000);
+  assert.equal(cfg.QUEUE_ROUNDS.final.horizonMs, 7000);
+  assert.equal(cfg.CATEGORY_PICK.pickMs, 2500);
+  assert.equal(cfg.WAGER.pickMs, 4000);
+  assert.equal(cfg.FINAL_HOLD_MS, 300);
   for (const k of Object.keys(cfg.QUEUE_ROUNDS)) assert.ok(cfg.QUEUE_ROUNDS[k].horizonMs < cfg.QUEUE_ROUNDS[k].windowMs, k);
 });
 
+test('2.3 unlocks: match 1 QQQQ with no lifelines, match 2 QQBQ with Chomp/bell/Shield, match 3+ rotates QQBQF / QBQQF', () => {
+  const m1 = match.planMatch('queue', 11, POOL, { matchNo: 1 });
+  assert.deepEqual(plain(m1.rounds.map((r) => r.spec.type)), ['quick', 'quick', 'quick', 'quick']);
+  assert.deepEqual(plain(m1.features), { chomp: false, bell: false, shield: false, final: false });
+  const m2 = match.planMatch('queue', 11, POOL, { matchNo: 2 });
+  assert.deepEqual(plain(m2.rounds.map((r) => r.spec.type)), ['quick', 'quick', 'buzz', 'quick']);
+  assert.deepEqual(plain(m2.features), { chomp: true, bell: true, shield: true, final: false });
+  const templates = new Set();
+  for (let seed = 0; seed < 40; seed++) {
+    const p = match.planMatch('queue', seed, POOL, { matchNo: 3 + (seed % 5) });
+    const types = p.rounds.map((r) => r.spec.type).join('');
+    templates.add(types);
+    assert.equal(p.rounds[0].spec.type, 'quick', 'B never first');
+    assert.equal(p.rounds[p.rounds.length - 1].spec.type, 'final', 'F always last');
+    assert.equal(p.features.final, true);
+  }
+  assert.equal(templates.size, 2);
+  assert.equal(match.planMatch('ride', 3, POOL).features.chomp, true, 'the ride has Chomp from the first attempt');
+  assert.equal(match.planMatch('queue', 3, POOL, { matchNo: 5, async: true }).finalAlt, undefined, 'async modes never get a category pick');
+});
+
+test('rule sweep: Peek, Freeze, DEAD HEAT outside live rooms, shadow pick, Survey Says and SPEED ROUND are gone from the duel', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const root = path.join(__dirname, '../../src/games/trivia-duel');
+  const files = [];
+  const walk = (d) => fs.readdirSync(d).forEach((f) => { const p = path.join(d, f); if (fs.statSync(p).isDirectory()) { if (f !== 'party') walk(p); } else if (/\.tsx?$/.test(f)) files.push(p); });
+  walk(root);
+  for (const f of files) {
+    const src = fs.readFileSync(f, 'utf8');
+    for (const banned of [/peekMode|peekSample|usePeek/, /useFreeze|freezeGranted|FREEZE_AT/, /deadHeatPoints|startDeadHeat|DEAD HEAT!/, /SPEED ROUND|surveySays|shadowPick|calledIt/, /Haptic\.warning\(/]) {
+      assert.ok(!banned.test(src), `${path.basename(f)} still has ${banned}`);
+    }
+    // No em dashes in UI strings, no emoji.
+    assert.ok(!/\u2014/.test(src), `em dash in ${path.basename(f)}`);
+  }
+  assert.equal(sc.peekMode, undefined);
+  assert.equal(sc.deadHeatPoints, undefined);
+});
 test('Relaxed mode: read-lock x1.5, window +4s, grace and horizon x1.5, same points reachable', () => {
   const spec = cfg.QUEUE_ROUNDS.q1;
   const q = { id: 'x', format: 'choice4', prompt: 'Which ride opened first at the park?', choices: ['aaaa', 'bbbb', 'cccc', 'dddd'], correctIndex: 0, difficulty: 'easy', category: 'X', stats: fin.priorStats('easy') };
@@ -470,20 +594,7 @@ test('Relaxed mode: read-lock x1.5, window +4s, grace and horizon x1.5, same poi
   assert.equal(sc.tickerValue(t * 1.5, rel.graceMs, rel.horizonMs), sc.tickerValue(t, std.graceMs, std.horizonMs));
   const plan = match.planMatch('queue', 77, POOL, { relaxed: true });
   assert.equal(plan.relaxed, true);
-  assert.ok(plan.rounds.every((r) => r.windowMs >= 12000));
-});
-
-test('Peek gate: never on easy items; the 12-answer sample needs 30+ answers', () => {
-  assert.equal(sc.peekMode({ p: 0.8, t: [0, 0, 0, 0] }), 'too_easy');
-  assert.equal(sc.peekMode({ p: 0.6, t: [0, 0, 0, 0] }), 'lean_only');
-  assert.equal(sc.peekMode({ p: 0.6, t: [0, 0, 0, 0], n: 12, dist: [1, 1, 1, 1] }), 'lean_only');
-  assert.equal(sc.peekMode({ p: 0.6, t: [0, 0, 0, 0], n: 40, dist: [5, 1, 1, 1] }), 'sample');
-  let k = 0;
-  const rnd = () => ((k++ * 0.6180339) % 1);
-  const counts = sc.peekSample([60, 20, 10, 10], rnd);
-  assert.equal(counts.reduce((a, b) => a + b, 0), 12, 'never more than 12 answers');
-  assert.ok(counts[0] >= counts[1], 'it leans toward the real distribution');
-  assert.deepEqual(plain(sc.peekSample([], rnd)), []);
+  assert.ok(plan.rounds.every((r) => r.windowMs >= 10000));
 });
 
 test('Final category pick: the trailing player picks; ties go to the slower locker', () => {
@@ -531,16 +642,25 @@ test('seen list: when every item is seen, the least recently played comes back f
   }
 });
 
-test('ghost rows keep DEAD HEAT blind-pick times through encode/decode', () => {
-  const plan = match.planMatch('queue', 5, POOL);
+test('ghost v2 carries its template keys (matches 1-2 replay their short templates); g1 records still decode', () => {
+  const plan = match.planMatch('queue', 5, POOL, { matchNo: 2 });
   const t = match.createTally();
-  plan.rounds.forEach((r, i) => match.resolveRound('queue', r, { choice: 0, lockMs: 1200, buzzMs: 900, answerMs: 640 + i }, null, t));
+  plan.rounds.forEach((r) => match.resolveRound('queue', r, { choice: r.question.correctIndex, lockMs: 1200, buzzMs: r.spec.type === 'buzz' ? 900 : undefined }, null, t));
   const g = match.makeGhost(plan, t, 'Crew', 'blue', 1);
-  const back = match.decodeGhost(match.encodeGhost(g));
-  assert.equal(back.rows[2].answerMs, 642);
-  assert.ok(match.encodeGhost(g).length < 1024);
+  const wire = match.encodeGhost(g);
+  assert.ok(wire.startsWith('g2.'));
+  assert.ok(wire.length < 1024);
+  const back = match.decodeGhost(wire);
+  assert.deepEqual(plain(back.keys), ['q1', 'q2', 'buzz', 'q4']);
+  const rebuilt = match.planFromIds('queue', back.seed, back.qids, POOL, 'deckhand', false, back.keys);
+  assert.equal(rebuilt.rounds.length, 4);
+  assert.equal(match.gradeRun(rebuilt, back.rows).me.score, t.me.score);
+  const g1 = match.decodeGhost(`g1.${JSON.stringify([1, 'queue', 'Old', 'blue', 0, 0, 1, ['a'], [[0, 1000, null, null, null, null, null, 0, 0, 640]]])}`);
+  assert.equal(g1.v, 1);
+  assert.equal(g1.rows[0].lockMs, 1000);
+  // A ghost's recorded stake never exceeds what it holds in the replay.
+  assert.equal(match.ghostInput({ ...g, rows: [{ choice: 0, lockMs: 1, stake: 900 }] }, 0, 300).stake, 300);
 });
-
 test('decisive marks a lead flip or a Final tie-break, never the first points of a match', () => {
   let t = match.createTally();
   let res = match.resolveRound('queue', quickRound(), { choice: 2, lockMs: 500 }, { choice: 0, lockMs: 900 }, t);

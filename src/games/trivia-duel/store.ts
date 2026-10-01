@@ -29,6 +29,8 @@ export interface DuelMemory {
   rank: FinRankState;
   seen: string[];
   plays: number;
+  /** Lifetime queue/practice duels started (2.3 feature unlocks: match 1 QQQQ, 2 QQBQ, 3+ full). */
+  duels?: number;
   carry: { streak: number; shield: boolean; at: number } | null;
   best: number;
   album: FactCard[];

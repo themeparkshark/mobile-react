@@ -6,7 +6,7 @@
  * tools/tests/fixtures/trivia-duel-vectors.json).
  */
 import {
-  BUZZ, GRACE, HOT_STREAK, BLAZING, PEEK, POINTS, READ_LOCK, RELAXED, RIDE_STARS, RIDE_WIN_CORRECT, STREAK_MULT, TIERS, WAGER,
+  BUZZ, GRACE, HOT_STREAK, BLAZING, POINTS, READ_LOCK, RELAXED, RIDE_STARS, RIDE_WIN_CORRECT, STREAK_MULT, TIERS, WAGER,
   type SpeedTier,
 } from './config';
 
@@ -20,6 +20,9 @@ const W_MULT: number[][] = STREAK_MULT.map((m) => [m[0], m[1]]);
 const W_TIERS: { tier: SpeedTier; min: number }[] = TIERS.map((t) => ({ tier: t.tier, min: t.min }));
 const W_HOT: number = HOT_STREAK;
 const W_BLAZING: number = BLAZING;
+const W_BUZZ_BASE: number = POINTS.buzzBase;
+const W_BELL_G: number = BUZZ.graceMs;
+const W_BELL_H: number = BUZZ.horizonMs;
 
 export function clamp(v: number, lo: number, hi: number): number {
   'worklet';
@@ -130,49 +133,30 @@ export function rideStars(correctCount: number, total: number, points: number): 
   return 1;
 }
 
-/** 5.3 buzz: correct = (150 + speed) x mult, wrong = -100 (0 with a Shield). */
-export function buzzPoints(correct: boolean, buzzT: number, g: number, streakAfter: number, shield: boolean, mods: SpeedMods = {}): number {
+/**
+ * 5.4 buzz: correct = (150 + speed) x mult with the bell's own grace (400ms)
+ * and horizon (5s) from unlock; wrong = a flat -100 (0 with a Shield).
+ */
+export function buzzPoints(correct: boolean, buzzT: number, streakAfter: number, shield: boolean, mods: SpeedMods = {}): number {
   if (!correct) return shield ? 0 : POINTS.buzzWrong;
-  const s = creditedSpeed(buzzT, g, BUZZ.horizonMs, mods);
-  return Math.round((POINTS.buzzBase + s) * streakMult(streakAfter));
+  return Math.round(bellValue(buzzT, mods) * streakMult(streakAfter));
 }
 
-/** 5.3 steal: 125 + speed(steal time, g 300, H 3s), max 225. */
+/** The bell's live stake before the multiplier: 150 + speed(buzz t). Worklet-safe. */
+export function bellValue(buzzT: number, mods: SpeedMods = {}): number {
+  'worklet';
+  return W_BUZZ_BASE + creditedSpeed(buzzT, W_BELL_G, W_BELL_H, mods);
+}
+
+/** 5.4 steal: 125 + speed(t from your own tile flip, g 300, H 3s), max 225, no multiplier. */
 export function stealPoints(correct: boolean, stealT: number, mods: SpeedMods = {}): number {
   if (!correct) return 0;
   return POINTS.stealBase + creditedSpeed(stealT, BUZZ.stealGraceMs, BUZZ.stealHorizonMs, mods);
 }
 
-/**
- * Buzz order (rev 4): lower scored time wins; a second buzz within 200ms of
- * the first is a DEAD HEAT, settled by blind picks (never a coin flip).
- */
-export function buzzOrder(aMs: number, bMs: number): { first: 'a' | 'b'; deadHeat: boolean } {
-  return { first: aMs <= bMs ? 'a' : 'b', deadHeat: Math.abs(aMs - bMs) <= BUZZ.deadHeatMs };
-}
-
-/**
- * DEAD HEAT resolution (5.3): correct beats wrong; between two correct blind
- * picks the lower answer time takes 150 + speed (buzz time), the other a flat
- * 75. A wrong (or missing) blind pick costs 50, 0 with a Shield. Equal answer
- * times fall back to the earlier buzz, then to side a.
- */
-export function deadHeatPoints(
-  a: { correct: boolean; answerMs: number; buzzMs: number; streakAfter: number; shield: boolean; mods?: SpeedMods },
-  b: { correct: boolean; answerMs: number; buzzMs: number; streakAfter: number; shield: boolean; mods?: SpeedMods },
-  g: number,
-): { a: number; b: number; winner: 'a' | 'b' | 'none' } {
-  const win = (x: typeof a) => buzzPoints(true, x.buzzMs, g, x.streakAfter, false, x.mods ?? {});
-  const lose = (x: typeof a) => (x.shield ? 0 : POINTS.deadHeatWrong);
-  if (a.correct && b.correct) {
-    const aFirst = a.answerMs < b.answerMs || (a.answerMs === b.answerMs && a.buzzMs <= b.buzzMs);
-    return aFirst
-      ? { a: win(a), b: POINTS.deadHeatSecond, winner: 'a' }
-      : { a: POINTS.deadHeatSecond, b: win(b), winner: 'b' };
-  }
-  if (a.correct) return { a: win(a), b: lose(b), winner: 'a' };
-  if (b.correct) return { a: lose(a), b: win(b), winner: 'b' };
-  return { a: lose(a), b: lose(b), winner: 'none' };
+/** Simultaneous buzzes (vs Fin, ghost, Huddle): the lower scored time wins; equal goes to side a. */
+export function buzzFirst(aMs: number, bMs: number): 'a' | 'b' {
+  return aMs <= bMs ? 'a' : 'b';
 }
 
 /** Relaxed scaling (C9) for one round's timing. */
@@ -184,37 +168,6 @@ export function relaxedTiming(t: { readLockMs: number; windowMs: number; graceMs
     graceMs: Math.round(t.graceMs * RELAXED.graceScale),
     horizonMs: Math.min(windowMs, Math.round(t.horizonMs * RELAXED.horizonScale)),
   };
-}
-
-/**
- * C8 Peek gate: never on easy items (p >= 0.75, the icon greys and is not
- * used up). The 12-answer sample needs 30+ answers on record; without them
- * Peek still marks the opponent's lean (vs Fin) or lock state (vs a ghost).
- */
-export function peekMode(stats: { p: number; n?: number; dist?: readonly number[] }): 'too_easy' | 'lean_only' | 'sample' {
-  if (stats.p >= PEEK.maxP) return 'too_easy';
-  if ((stats.n ?? 0) < PEEK.minAnswers || !stats.dist?.length) return 'lean_only';
-  return 'sample';
-}
-
-/**
- * C8 Peek sample: 12 answers drawn (seeded) from the item's answer
- * distribution, so it's noisy by design. Returns counts per choice.
- */
-export function peekSample(dist: readonly number[], rnd: () => number, n: number = PEEK.sample): number[] {
-  const total = dist.reduce((s, v) => s + Math.max(0, v), 0);
-  const out = dist.map(() => 0);
-  if (total <= 0 || !dist.length) return out;
-  for (let k = 0; k < n; k++) {
-    let x = rnd() * total;
-    let i = 0;
-    for (; i < dist.length - 1; i++) {
-      x -= Math.max(0, dist[i]);
-      if (x < 0) break;
-    }
-    out[i] += 1;
-  }
-  return out;
 }
 
 /** 5.2 Closest Number accuracy 0..1. */
@@ -230,10 +183,39 @@ export function closestPoints(guess: number, truth: number, tol: number, t: numb
   return { points, accuracy: a, correct, bullseye: a >= 0.97 };
 }
 
-/** 5.5 wager stakes for the current score. */
+/**
+ * 5.5 wager stakes (rev 7): SAFE 0, HALF round5(score / 2), ALL IN = score.
+ * Always a share of what you hold, so a stake can never exceed your score
+ * and no stake is ever free (S0-3: the old fixed stakes under 200 are gone).
+ */
 export function wagerStakes(score: number): number[] {
-  if (score < WAGER.fixedBelow) return WAGER.fixed.slice();
-  return WAGER.percents.map((p) => Math.round(score * p));
+  const s = Math.max(0, Math.floor(score));
+  return WAGER.percents.map((p) => (p >= 1 ? s : Math.min(s, round5(p * s))));
+}
+
+export interface WagerSuggestion {
+  index: number;
+  reason: string;
+}
+
+/**
+ * 5.5 suggestWager (the gold-glow chip; doing nothing takes it):
+ *  1. a chip that makes you unbeatable when right (you + 100m + stake > 2 x opp + 350): the smallest one;
+ *  2. else trailing: ALL IN;
+ *  3. else (leading or tied): the smallest chip with you + 100m + stake > 2 x opp + 100, else SAFE.
+ * `m` is the multiplier your streak would carry into a right answer.
+ */
+export function suggestWager(me: number, opp: number, m: number): WagerSuggestion {
+  const stakes = wagerStakes(me);
+  const right = (k: number) => me + Math.round(POINTS.base * m) + stakes[k];
+  for (let k = 0; k < stakes.length; k++) {
+    if (right(k) > 2 * opp + WAGER.lockMargin) return { index: k, reason: "Wins it if you're right." };
+  }
+  if (me < opp) return { index: stakes.length - 1, reason: 'You need it all.' };
+  for (let k = 0; k < stakes.length; k++) {
+    if (right(k) > 2 * opp + WAGER.coverMargin) return { index: k, reason: 'Covers their best bet.' };
+  }
+  return { index: 0, reason: 'Keeps the lead if they miss.' };
 }
 
 /** Final: correct = question points + stake; wrong/timeout = -stake. Score never drops below 0. */
@@ -255,11 +237,12 @@ export interface StreakState {
   streak: number;
   best: number;
   shield: boolean;
-  freezeEarned: boolean;
+  /** 2.3: the Shield unlocks from a player's second match. */
+  shieldOn: boolean;
 }
 
-export function createStreak(streak = 0, shield = false): StreakState {
-  return { streak, best: streak, shield, freezeEarned: false };
+export function createStreak(streak = 0, shield = false, shieldOn = true): StreakState {
+  return { streak, best: streak, shield: shield && shieldOn, shieldOn };
 }
 
 export interface StreakEvent {
@@ -268,25 +251,29 @@ export interface StreakEvent {
   blazing: boolean;
   shieldGranted: boolean;
   shieldUsed: boolean;
-  freezeGranted: boolean;
   broke: boolean;
 }
 
 /**
  * Apply one graded answer to the streak. A wrong answer or timeout with a
- * Shield is absorbed: the streak holds and the Shield pops.
+ * Shield is absorbed: the streak holds and the Shield pops. `hold` (a wrong
+ * buzz, 5.3) neither increments nor resets the streak; a held Shield still
+ * zeroes the -100, so it pops.
  */
-export function applyStreak(s: StreakState, correct: boolean): StreakEvent {
-  const ev: StreakEvent = { streak: s.streak, ignited: false, blazing: false, shieldGranted: false, shieldUsed: false, freezeGranted: false, broke: false };
+export function applyStreak(s: StreakState, correct: boolean, hold = false): StreakEvent {
+  const ev: StreakEvent = { streak: s.streak, ignited: false, blazing: false, shieldGranted: false, shieldUsed: false, broke: false };
+  if (hold) {
+    if (s.shield) { s.shield = false; ev.shieldUsed = true; }
+    return ev;
+  }
   if (correct) {
     s.streak += 1;
     if (s.streak > s.best) s.best = s.streak;
     if (s.streak === HOT_STREAK) {
       ev.ignited = true;
-      if (!s.shield) { s.shield = true; ev.shieldGranted = true; }
+      if (!s.shield && s.shieldOn) { s.shield = true; ev.shieldGranted = true; }
     }
     if (s.streak === BLAZING) ev.blazing = true;
-    if (s.streak >= 2 && !s.freezeEarned) { s.freezeEarned = true; ev.freezeGranted = true; }
   } else if (s.shield) {
     s.shield = false;
     ev.shieldUsed = true;

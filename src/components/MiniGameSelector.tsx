@@ -155,8 +155,9 @@ export default function MiniGameSelector({
         mode="ride"
         seed={seed}
         title="Beat the Buzzer"
-        subtitle={`${taskName}, 2 of 3 to win`}
+        subtitle="Ride Challenge: 2 of 3 to win"
         parkId={parkId}
+        coinImage={coinImageUrl ?? null}
         chapterId={rideChapter?.id}
         onClose={onClose}
         onQuit={handleQuit}
@@ -197,7 +198,7 @@ export default function MiniGameSelector({
             mode={isPractice ? 'practice' : 'queue'}
             seed={seed}
             title="Trivia Duel"
-            subtitle={taskName}
+            subtitle="Queue Duel"
             parkId={parkId}
             chapterId={rideChapter?.id}
             onClose={onClose}
