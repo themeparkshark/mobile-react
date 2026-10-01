@@ -1132,10 +1132,11 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
     return p;
   }, [buoyR]);
   const buoyFont = useFont(require('../../../assets/fonts/shark-random-funnyness-2.ttf'), Math.max(10, Math.round(l.cell * 0.19)));
-  const buoyTagW = useDerivedValue(() => (buoyFont ? buoyFont.getTextWidth(buoyText.value) + 8 : 0));
+  // The display font's advance under-measures two-digit numbers a little; pad generously.
+  const buoyTagW = useDerivedValue(() => (buoyFont ? buoyFont.getTextWidth(buoyText.value) * 1.12 + 12 : 0));
   const buoyTagX = useDerivedValue(() => -buoyTagW.value / 2);
   const buoyTagRect = useDerivedValue(() => Skia.RRectXY(Skia.XYWHRect(buoyTagX.value, buoyR * 0.95, buoyTagW.value, l.cell * 0.22), 6, 6));
-  const buoyTextX = useDerivedValue(() => buoyTagX.value + 4);
+  const buoyTextX = useDerivedValue(() => buoyTagX.value + 6);
 
   const sharkNode = (r: number) => (
     <Group key={`shark${r}`} opacity={slotAlpha[r]}>

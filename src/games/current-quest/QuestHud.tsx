@@ -68,7 +68,7 @@ const POP = { damping: 9, stiffness: 320, mass: 0.6 };
 // ---------------------------------------------------------------------------
 // Stroke medallion
 
-const MED = 52;
+const MED = 50;
 
 function arcPath(cx: number, cy: number, r: number, from: number, to: number) {
   const p = Skia.Path.Make();
@@ -381,9 +381,9 @@ const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 14 },
   row: { height: HUD_ROW_H, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   medWrap: { minWidth: 64, flexDirection: 'row', alignItems: 'center', gap: 3 },
-  medTagWrap: { position: 'absolute', left: -6, right: -6, bottom: -7, alignItems: 'center' },
+  medTagWrap: { position: 'absolute', left: -6, right: -6, bottom: -5, alignItems: 'center' },
   medTag: {
-    fontFamily: 'Knockout', fontSize: 11, color: CQ.navy, backgroundColor: '#ffffff',
+    fontFamily: 'Knockout', fontSize: 10, color: CQ.navy, backgroundColor: '#ffffff',
     paddingHorizontal: 5, borderRadius: 7, overflow: 'hidden', borderWidth: 1.5, borderColor: CQ.ink,
   },
   ringCol: { gap: 1 },
