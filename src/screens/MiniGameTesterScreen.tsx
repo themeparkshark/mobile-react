@@ -21,6 +21,8 @@ import AnimatedShark from '../components/AnimatedShark';
 import Wrapper from '../components/Wrapper';
 import EngineDemo from '../gamekit/demo/EngineDemo';
 import FxLab from '../gamekit/demo/FxLab';
+import FeelLab from '../gamekit/demo/FeelLab';
+import JuiceLab from '../gamekit/demo/JuiceLab';
 
 type GameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'photo' | 'random';
 
@@ -56,6 +58,12 @@ export default function MiniGameTesterScreen() {
   // EXPO_PUBLIC_ENGINE_DEMO=fxlab opens the FX Lab bench with its tour.
   const fxLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'fxlab';
   const [fxLab, setFxLab] = useState(fxLabAuto);
+  // EXPO_PUBLIC_ENGINE_DEMO=feellab opens the Feel Lab bench (engine pass 4) with its tour.
+  const feelLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'feellab';
+  const [feelLab, setFeelLab] = useState(feelLabAuto);
+  // EXPO_PUBLIC_ENGINE_DEMO=juicelab opens the Juice Lab bench (engine pass 5) with its tour.
+  const juiceLabAuto = __DEV__ && process.env.EXPO_PUBLIC_ENGINE_DEMO === 'juicelab';
+  const [juiceLab, setJuiceLab] = useState(juiceLabAuto);
 
   const handlePlay = (type: GameType) => {
     setActiveGame(type);
@@ -161,6 +169,20 @@ export default function MiniGameTesterScreen() {
                 onPress={() => setFxLab(true)}
               />
               <Cell
+                title="Studio Engine Lab: Feel Lab"
+                cellStyle="Subtitle"
+                detail="Stamps, finisher cam, haptic bus, screen cap, thermal ladder, tally results"
+                accessory="DisclosureIndicator"
+                onPress={() => setFeelLab(true)}
+              />
+              <Cell
+                title="Studio Engine Lab: Juice Lab"
+                cellStyle="Subtitle"
+                detail="On twos, line boil, mesh sprites, fly-to-score, beat layers, parallax, camera and flash presets"
+                accessory="DisclosureIndicator"
+                onPress={() => setJuiceLab(true)}
+              />
+              <Cell
                 title="[GYM]  GameKit Gym"
                 cellStyle="Subtitle"
                 detail="Particles, shake, combo, FPS counter — engine stress test"
@@ -231,6 +253,8 @@ export default function MiniGameTesterScreen() {
         <EngineDemo visible={engineDemo} autoplay={engineDemoAuto} onClose={() => setEngineDemo(false)} />
       ) : null}
       {fxLab ? <FxLab visible={fxLab} autoplay={fxLabAuto} onClose={() => setFxLab(false)} /> : null}
+      {feelLab ? <FeelLab visible={feelLab} autoplay={feelLabAuto} onClose={() => setFeelLab(false)} /> : null}
+      {juiceLab ? <JuiceLab visible={juiceLab} autoplay={juiceLabAuto} onClose={() => setJuiceLab(false)} /> : null}
 
       {/* Post-Win Modal */}
       <PostWinRewardsModal

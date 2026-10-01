@@ -290,3 +290,10 @@ export function restoreClock(c: GameClock, snap: { simMs: number; fxMs: number; 
   c.freezeUntil = c.wallMs;
   c.slowScale = 1;
 }
+
+/**
+ * Impact frames (white silhouette, 2-frame sprite flash) hold this much WALL
+ * time, never "1 frame": at 120 Hz one frame is 8 ms and reads as nothing
+ * (Whack v5). They count as flashes for the FX governor.
+ */
+export const IMPACT_FRAME_MS = 33;

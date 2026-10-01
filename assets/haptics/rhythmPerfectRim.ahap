@@ -1,0 +1,26 @@
+{
+  "Version": 1,
+  "Metadata": {
+    "Project": "Theme Park Shark studio",
+    "Created": "gamekit",
+    "Description": "rhythmPerfectRim"
+  },
+  "Pattern": [
+    {
+      "Event": {
+        "Time": 0,
+        "EventType": "HapticTransient",
+        "EventParameters": [
+          {
+            "ParameterID": "HapticIntensity",
+            "ParameterValue": 0.8
+          },
+          {
+            "ParameterID": "HapticSharpness",
+            "ParameterValue": 0.75
+          }
+        ]
+      }
+    }
+  ]
+}
