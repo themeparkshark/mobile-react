@@ -11,13 +11,11 @@ interface Props {
 
 /** A shark-led status for the moments between live GPS finds. */
 export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: Props) {
-  const scale = useRef(new Animated.Value(0.92)).current;
+  // The card itself never animates. A native-driven scale pop on this
+  // bordered, rounded card left the blue fill at its starting 0.92 scale on
+  // device (Fabric) while the white border and text laid out at full size,
+  // so the copy ran past the visible card. Only the shark floats.
   const sharkFloat = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    scale.setValue(0.92);
-    Animated.spring(scale, { toValue: 1, friction: 7,
-      tension: 110, useNativeDriver: true }).start();
-  }, [mode, scale]);
   useEffect(() => {
     if (mode !== 'loading') {
       sharkFloat.setValue(0);
@@ -31,7 +29,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: 
     return () => float.stop();
   }, [mode, sharkFloat]);
 
-  if (mode === 'saved') return <Animated.View style={[styles.savedCard, { transform: [{ scale }] }]}>
+  if (mode === 'saved') return <View style={styles.savedCard}>
     <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
       style={styles.savedShark} contentFit="contain" />
     <View style={styles.savedCopy}>
@@ -43,7 +41,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: 
       style={styles.savedButton}>
       <Text style={styles.savedButtonText}>RETRY</Text>
     </Pressable>}
-  </Animated.View>;
+  </View>;
 
   const title = mode === 'park_check' ? 'CHECKING YOUR MAP'
     : mode === 'loading' ? 'SCOUTING THE MAP'
@@ -53,7 +51,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: 
     : mode === 'error' ? 'Could not refresh nearby finds.'
       : 'Check your collection while new finds appear.';
 
-  return <Animated.View style={[styles.card, { transform: [{ scale }] }]}>
+  return <View style={styles.card}>
     <Animated.View style={[styles.sharkFrame, { transform: [{ translateY: sharkFloat }] }]}>
       <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
         style={styles.shark} contentFit="contain" />
@@ -78,7 +76,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: 
       style={styles.refreshButton}>
       <GameIcon name="retry" size={22} accessibilityLabel="Refresh" />
     </Pressable>}
-  </Animated.View>;
+  </View>;
 }
 
 const styles = StyleSheet.create({
@@ -105,7 +103,7 @@ const styles = StyleSheet.create({
   kicker: { color: '#ffe06c', fontFamily: 'Knockout', fontSize: 11, letterSpacing: 0.4 },
   title: { color: '#fff', fontFamily: 'Shark', fontSize: 15, marginTop: 1 },
   detail: { color: '#e4f5ff', fontFamily: 'Knockout', fontSize: 12,
-    lineHeight: 15, marginTop: 2 },
+    lineHeight: 15, marginTop: 2, flexShrink: 1 },
   button: { alignSelf: 'flex-start', backgroundColor: '#ffca30',
     borderColor: '#fff', borderWidth: 2, borderRadius: 9,
     paddingHorizontal: 7, paddingVertical: 3, marginTop: 4 },

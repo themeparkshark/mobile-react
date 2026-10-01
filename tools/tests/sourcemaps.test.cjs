@@ -106,5 +106,7 @@ test('store profiles emit the Hermes map and upload it after a successful build'
   assert.equal(pkg.scripts['eas-build-on-success'], 'node tools/upload-sourcemaps.cjs build');
   assert.match(pkg.scripts['update-testflight'], /publish-update\.cjs testflight/);
   assert.match(read('.gitignore'), /^ios\/main\.jsbundle\.map$/m);
-  assert.match(read('tools/publish-update.cjs'), /'--source-maps', 'true', '--json'/);
+  // The OTA is exported with source maps, checked, then uploaded as exported.
+  assert.match(read('tools/publish-update.cjs'), /'export', '--platform', 'ios', '--source-maps'/);
+  assert.match(read('tools/publish-update.cjs'), /'--skip-bundler', '--input-dir', 'dist'/);
 });

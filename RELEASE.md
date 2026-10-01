@@ -96,9 +96,15 @@ binaries whose native code matches. The app checks once per cold start,
 downloads in the background and applies on the next cold start. It never
 reloads mid-session. A foreground return after 6 hours also checks.
 
-Publish with `npm run update-testflight -- "<message>"` (or `update-prod`),
-never a bare `eas update`: it runs the API target gate, publishes iOS with
-source maps and uploads the map to Sentry (see Crash reporting).
+Publish with `npm run update-testflight -- "<message>"` (or `update-prod`,
+or `update-internal` for the internal-tunnel tester channel), never a bare
+`eas update`: it runs the API target gate, takes the API env from the
+channel's eas.json profile (the shell's API_URL/EXPO_PUBLIC_API_URL are
+ignored), exports iOS with source maps, refuses to upload unless the bundle
+contains the profile's `/api` URL, then uploads the map to Sentry (see Crash
+reporting). On Oct 1 2026 hand-run internal-tunnel publishes inlined the bare
+tunnel host (no `/api`) and every tester request 404'd with no offline banner.
+The app now also appends `/api` to a bare origin (src/apiTarget.ts).
 
 **Not yet proven on a device.** The simulator check (one expo-updates request
 per cold start) ran before an EAS channel existed, so every request got HTTP
