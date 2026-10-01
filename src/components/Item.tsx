@@ -1,55 +1,91 @@
 import { Image } from 'expo-image';
-import { useContext } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useContext, useEffect, useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { AuthContext } from '../context/AuthProvider';
-import { isItemWorn, isLockedWhileWorn } from '../helpers/wardrobe';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { isItemWorn, isLockedWhileWorn, itemDisplayName, wearableBadge } from '../helpers/wardrobe';
+import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 
-export default function Item({ item, onToggle, disabled = false, saving = false }: {
+/** Short phones get compact cards so at least 1.5 rows show (dressing-room.md 5.2). */
+export const COMPACT_HEIGHT = 700;
+
+/**
+ * One Inventory card (dressing-room.md 9.2). The border shows rarity only;
+ * WORN is the yellow pill plus a navy check stamp. Cards never lock: a tap
+ * always reaches the screen, which decides what it means.
+ */
+export default function Item({ item, onToggle, inventory, highlighted = false }: {
   readonly item: ItemType;
   readonly onToggle?: (item: ItemType) => void;
-  readonly disabled?: boolean;
-  readonly saving?: boolean;
+  /** The look on the stage, including taps not saved yet. Defaults to the profile. */
+  readonly inventory?: InventoryType;
+  /** Deep-link target: a gold ring that pulses twice. */
+  readonly highlighted?: boolean;
 }) {
   const { player } = useContext(AuthContext);
-  const { width } = useWindowDimensions();
-  const artSize = Math.max(60, Math.floor(width / 3) - 44);
-  const isEquipped = isItemWorn(player?.inventory, item);
-  const fixedEquippedItem = isLockedWhileWorn(player?.inventory, item);
+  const reduceMotion = useReducedGameMotion();
+  const { width, height } = useWindowDimensions();
+  const compact = height < COMPACT_HEIGHT;
+  const artSize = Math.max(compact ? 52 : 60, Math.floor(width / 3) - (compact ? 60 : 44));
+  const worn = inventory ?? player?.inventory;
+  const isEquipped = isItemWorn(worn, item);
+  const fixedEquippedItem = isLockedWhileWorn(worn, item);
+  const badge = wearableBadge(item);
+  const name = itemDisplayName(item);
+  const isNew = !isEquipped && item.seen === false;
+  const isVip = !isEquipped && !isNew && (item.is_member_item || item.source === 'vip');
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!highlighted || reduceMotion) return;
+    // 1.0 to 1.08 to 1.0 over 500ms, twice (progression.md 9.8).
+    const beat = () => [
+      Animated.timing(pulse, { toValue: 1.08, duration: 250, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1, duration: 250, useNativeDriver: true }),
+    ];
+    const animation = Animated.sequence([...beat(), ...beat()]);
+    animation.start();
+    return () => animation.stop();
+  }, [highlighted, reduceMotion]);
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, highlighted && { transform: [{ scale: pulse }] }]}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={fixedEquippedItem ? `${item.name}, currently worn`
-          : isEquipped ? `Remove ${item.name} from your shark` : `Wear ${item.name} on your shark`}
-        accessibilityState={{ disabled: disabled || saving || fixedEquippedItem || !onToggle, selected: isEquipped }}
-        disabled={disabled || saving || fixedEquippedItem || !onToggle}
-        style={({ pressed }) => [styles.card, isEquipped && styles.cardEquipped,
+        accessibilityLabel={fixedEquippedItem ? `${name}, currently worn`
+          : isEquipped ? `Remove ${name} from your shark` : `Wear ${name} on your shark`}
+        accessibilityHint={badge.label ? badge.label.toLowerCase() : undefined}
+        accessibilityState={{ disabled: !onToggle, selected: isEquipped }}
+        disabled={!onToggle}
+        style={({ pressed }) => [styles.card, compact && styles.cardCompact, { borderColor: badge.border },
           pressed && styles.cardPressed]}
         onPress={() => onToggle?.(item)}
       >
-        {item.is_coin_code_item && (
-          <View style={styles.specialBadge}>
-            <Image
-              source={require('../../assets/images/modals/brown_closed.png')}
-              style={styles.specialBadgeImage}
-              contentFit="contain"
-            />
-          </View>
+        {!!badge.inner && <View pointerEvents="none" style={[styles.innerStroke, { borderColor: badge.inner }]} />}
+        {isEquipped && <View style={styles.cornerBadge}><Text style={styles.wornText}>WORN</Text></View>}
+        {isNew && <View style={[styles.cornerBadge, styles.newBadge]}><Text style={styles.newText}>NEW</Text></View>}
+        {isVip && (
+          <Image source={require('../../assets/images/screens/profile/subscribed.png')}
+            style={[styles.cornerIcon]} contentFit="contain" />
         )}
-        {isEquipped && <View style={styles.wornBadge}><Text style={styles.wornText}>WORN</Text></View>}
-        <View style={[styles.artArea, { height: artSize + 16 }]}>
+        <View style={[styles.artArea, { height: artSize + (compact ? 10 : 16) }]}>
+          {!!badge.glow && (
+            <View pointerEvents="none" style={[styles.glow, {
+              width: artSize * 0.8, height: artSize * 0.8, borderRadius: artSize * 0.4,
+              backgroundColor: badge.glow, shadowColor: badge.glow,
+            }]} />
+          )}
           {item.item_type?.id === 4 && !!item.paper_url ? (
             <View style={{ width: artSize, height: artSize }}>
               <Image
-                source={player?.inventory?.skin_item?.no_eye_url
-                  ? { uri: player.inventory.skin_item.no_eye_url }
+                source={worn?.skin_item?.no_eye_url
+                  ? { uri: worn.skin_item.no_eye_url }
                   : require('../../assets/images/screens/inventory/shark-colored-v2.png')}
                 style={StyleSheet.absoluteFill}
                 contentFit="contain"
               />
-              {player?.inventory?.skin_item?.no_eye_url && (
+              {worn?.skin_item?.no_eye_url && (
                 <Image source={require('../../assets/images/screens/inventory/blink.png')}
                   style={StyleSheet.absoluteFill} contentFit="contain" />
               )}
@@ -62,15 +98,37 @@ export default function Item({ item, onToggle, disabled = false, saving = false 
               contentFit="contain"
             />
           )}
+          {!!badge.label && (
+            // Sits on the bottom edge of the art so every card in a row keeps
+            // today's height (the grid budget in dressing-room.md 5).
+            <View pointerEvents="none" style={styles.labelPill}>
+              <Text style={[styles.label, { color: badge.labelColor }]}>{badge.label}</Text>
+            </View>
+          )}
         </View>
-        {!!item.name && (
-          <Text numberOfLines={2} style={styles.name}>
-            {item.name}
+        {!!name && (
+          <Text numberOfLines={2} style={[styles.name, compact && styles.nameCompact]}>
+            {name}
           </Text>
         )}
-        {saving && <Text style={styles.status}>Saving…</Text>}
+        {item.is_coin_code_item && (
+          <View style={styles.chest}>
+            <Image
+              source={require('../../assets/images/modals/brown_closed.png')}
+              style={styles.chestImage}
+              contentFit="contain"
+            />
+          </View>
+        )}
+        {isEquipped && (
+          <View style={styles.checkStamp} accessibilityElementsHidden>
+            <View style={styles.checkShort} />
+            <View style={styles.checkLong} />
+          </View>
+        )}
       </Pressable>
-    </View>
+      {highlighted && <View pointerEvents="none" style={styles.highlightRing} />}
+    </Animated.View>
   );
 }
 
@@ -80,16 +138,32 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: '#fff', backgroundColor: '#f1fbff', overflow: 'hidden',
     shadowColor: '#073967', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.23,
     shadowRadius: 3, elevation: 3 },
-  cardEquipped: { borderColor: '#ffd44c', backgroundColor: '#eefaff' },
+  cardCompact: { minHeight: 112 },
   cardPressed: { transform: [{ scale: 0.97 }] },
-  specialBadge: { zIndex: 20, position: 'absolute', top: 4, left: 4 },
-  specialBadgeImage: { width: 25, height: 25 },
-  wornBadge: { zIndex: 12, position: 'absolute', top: 5, right: 5,
+  innerStroke: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 11, borderWidth: 1, zIndex: 2 },
+  cornerBadge: { zIndex: 12, position: 'absolute', top: 5, right: 5,
     borderRadius: 7, backgroundColor: '#ffd44c', borderWidth: 1, borderColor: '#fff',
     paddingHorizontal: 5, paddingVertical: 3 },
+  newBadge: { backgroundColor: '#e8412c' },
   wornText: { color: '#123e65', fontFamily: 'Knockout', fontSize: 11 },
+  newText: { color: '#fff', fontFamily: 'Knockout', fontSize: 11 },
+  cornerIcon: { zIndex: 12, position: 'absolute', top: 5, right: 5, width: 18, height: 18 },
   artArea: { width: '100%', alignItems: 'center', justifyContent: 'center' },
+  glow: { position: 'absolute', opacity: 0.55, shadowOpacity: 1, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } },
   name: { color: '#15395B', fontFamily: 'Knockout', fontSize: 15,
     textAlign: 'center', paddingHorizontal: 4, paddingBottom: 7, minHeight: 43 },
-  status: { color: '#15395B', fontSize: 11, fontWeight: '700', textAlign: 'center', paddingBottom: 7 },
+  nameCompact: { fontSize: 12, minHeight: 30, paddingBottom: 4 },
+  labelPill: { position: 'absolute', bottom: 0, alignSelf: 'center', paddingHorizontal: 6, paddingVertical: 1,
+    borderRadius: 7, backgroundColor: 'rgba(241, 251, 255, 0.92)' },
+  label: { fontFamily: 'Knockout', fontSize: 11, textAlign: 'center', letterSpacing: 0.5 },
+  chest: { zIndex: 20, position: 'absolute', bottom: 4, left: 4 },
+  chestImage: { width: 22, height: 22 },
+  checkStamp: { zIndex: 12, position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#123e65', borderWidth: 1, borderColor: '#fff' },
+  checkShort: { position: 'absolute', left: 4, top: 9, width: 5, height: 2.5, borderRadius: 1.25,
+    backgroundColor: '#fff', transform: [{ rotate: '45deg' }] },
+  checkLong: { position: 'absolute', left: 6.5, top: 7.5, width: 9, height: 2.5, borderRadius: 1.25,
+    backgroundColor: '#fff', transform: [{ rotate: '-50deg' }] },
+  highlightRing: { position: 'absolute', top: 5, left: 5, right: 5, bottom: 5, borderRadius: 16,
+    borderWidth: 3, borderColor: '#ffcf3b' },
 });

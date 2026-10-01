@@ -1,9 +1,10 @@
 import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { useRoute } from '@react-navigation/native';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   ImageBackground,
   Pressable,
@@ -14,8 +15,8 @@ import {
 import { useAsyncEffect, useWillUnmount } from 'rooks';
 import getItemTypes from '../api/endpoints/item-types/item-types';
 import getItems from '../api/endpoints/me/inventory/items';
-import updateInventory from '../api/endpoints/me/inventory/update-inventory';
-import Item from '../components/Item';
+import markItemsSeen from '../api/endpoints/me/inventory/seen';
+import Item, { COMPACT_HEIGHT } from '../components/Item';
 import HapticPatterns from '../helpers/hapticPatterns';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
@@ -28,15 +29,38 @@ import { MusicContext } from '../context/MusicProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
-import { wardrobeCategoryLabel } from '../helpers/wardrobe';
+import { isRequiredSlot, requiredSlotCopy, slotForItem, wardrobeCategoryLabel } from '../helpers/wardrobe';
+import useLook from '../hooks/useLook';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { LookNotice } from '../helpers/lookQueue';
+
+/** What the player reads when a save does not go through (dressing-room.md 7.10). */
+export function lookNoticeCopy(notice: LookNotice): string {
+  switch (notice.kind) {
+    case 'other_device': return 'Updated from your other device.';
+    case 'not_owned': return "That item isn't in your closet.";
+    case 'save_failed': return "Couldn't save. Your shark is back to your last look.";
+  }
+}
+
+/** NEW clears once a card has been at least 60% on screen for 800ms (8.6). */
+const SEEN_VIEWABILITY = { itemVisiblePercentThreshold: 60, minimumViewTime: 800 };
+const SEEN_FLUSH_MS = 3000;
 
 export default function InventoryScreen() {
   const route = useRoute();
-  const requestedItemTypeId = (route.params as { itemTypeId?: number } | undefined)?.itemTypeId;
+  const navigation = useNavigation();
+  const params = route.params as { itemTypeId?: number; highlightItemId?: number } | undefined;
+  const requestedItemTypeId = params?.itemTypeId;
+  // A deep link ("See it in Inventory") pins its item first and pulses it
+  // once; captured at open so a back-and-forward never replays it.
+  const pinItemId = useRef(params?.highlightItemId).current;
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
+  const listRef = useRef<FlashList<ItemType>>(null);
   const [itemTypes, setItemTypes] = useState<ItemTypeType[]>([]);
   const [currentItemType, setCurrentItemType] = useState<ItemTypeType>();
   const [items, setItems] = useState<ItemType[]>([]);
-  const { player, setPlayer } = useContext(AuthContext);
+  const { player } = useContext(AuthContext);
   const [loading, setLoading] = useState<boolean>(true);
   const [itemsLoading, setItemsLoading] = useState<boolean>(true);
   const { refreshPlayer } = useContext(AuthContext);
@@ -46,37 +70,77 @@ export default function InventoryScreen() {
   const [typeLoadAttempt, setTypeLoadAttempt] = useState(0);
   const [itemLoadAttempt, setItemLoadAttempt] = useState(0);
   const requestGeneration = useRef(0);
-  const outfitMutation = useRef(false);
-  const outfitNeedsRefreshRef = useRef(false);
-  const [outfitNeedsRefresh, setOutfitNeedsRefresh] = useState(false);
-  const [pendingItemId, setPendingItemId] = useState<number | null>(null);
   const { playSound } = useContext(SoundEffectContext);
   const { overrideTrack, restoreMusic } = useContext(MusicContext);
+  const { height: windowHeight } = Dimensions.get('window');
+  const compact = windowHeight < COMPACT_HEIGHT;
+  const reduceMotion = useReducedGameMotion();
+  // The look on the stage: saved plus every tap still saving. Taps apply in
+  // the same frame and nothing ever locks (dressing-room.md 13.3).
+  const look = useLook();
+  const worn = look.inventory;
+  const [toast, setToast] = useState<string | null>(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const changeOutfit = async (item: ItemType, fromAvatar = false) => {
-    if (outfitMutation.current || outfitNeedsRefreshRef.current) return;
-    outfitMutation.current = true;
-    setPendingItemId(item.id);
+  const showToast = useCallback((text: string, ms: number) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(text);
+    toastOpacity.setValue(0);
+    Animated.timing(toastOpacity, { toValue: 1, duration: 140, useNativeDriver: true }).start();
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastOpacity, { toValue: 0, duration: 180, useNativeDriver: true })
+        .start(() => setToast(null));
+    }, ms);
+  }, [toastOpacity]);
+
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
+  useEffect(() => {
+    if (!look.notice) return;
+    if (look.notice.kind !== 'other_device') {
+      playSound(require('../../assets/sounds/nope.mp3'));
+      HapticPatterns.warning();
+    }
+    showToast(lookNoticeCopy(look.notice), look.notice.kind === 'save_failed' ? 2500 : 2000);
+    look.clearNotice();
+  }, [look.notice]);
+
+  const changeOutfit = (item: ItemType, fromAvatar = false) => {
+    const slot = slotForItem(item);
+    if (!slot || !worn) return;
+    const isWorn = (worn[slot] as ItemType | null | undefined)?.id === item.id;
+    if (isWorn && isRequiredSlot(slot)) {
+      // The shark always keeps a skin and a backdrop.
+      playSound(require('../../assets/sounds/nope.mp3'));
+      showToast(requiredSlotCopy(slot), 1200);
+      return;
+    }
     playSound(fromAvatar
       ? require('../../assets/sounds/whoosh.mp3')
       : require('../../assets/sounds/inventory_item_tap.mp3'));
-    if (fromAvatar) HapticPatterns.buttonTap();
-    try {
-      const outfit = await updateInventory(item);
-      // The server answers with the saved outfit: dress the shark now, then
-      // refresh the rest of the profile quietly.
-      if (player) setPlayer({ ...player, inventory: outfit });
-      refreshPlayer().catch(() => undefined);
-    } catch {
-      // The server may have changed the outfit even if its response was lost.
-      // Block every wardrobe control until a profile read confirms its state.
-      outfitNeedsRefreshRef.current = true;
-      setOutfitNeedsRefresh(true);
-    } finally {
-      setPendingItemId(null);
-      outfitMutation.current = false;
-    }
+    HapticPatterns.selection();
+    look.set(slot, isWorn ? null : item);
   };
+
+  // Owned cards that have been on screen long enough, sent in small batches.
+  const seenQueue = useRef(new Set<number>());
+  const reportedSeen = useRef(new Set<number>());
+  const flushSeen = useCallback(() => {
+    const ids = [...seenQueue.current].slice(0, 60);
+    if (ids.length === 0) return;
+    ids.forEach((id) => { seenQueue.current.delete(id); reportedSeen.current.add(id); });
+    markItemsSeen(ids).catch(() => ids.forEach((id) => reportedSeen.current.delete(id)));
+  }, []);
+  useEffect(() => {
+    const timer = setInterval(flushSeen, SEEN_FLUSH_MS);
+    return () => { clearInterval(timer); flushSeen(); };
+  }, [flushSeen]);
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: { item: ItemType }[] }) => {
+    viewableItems.forEach(({ item }) => {
+      if (item?.seen === false && !reportedSeen.current.has(item.id)) seenQueue.current.add(item.id);
+    });
+  }).current;
 
   // Play inventory music on mount, restore on unmount
   useAsyncEffect(async () => {
@@ -105,7 +169,8 @@ export default function InventoryScreen() {
     const generation = requestGeneration.current;
     setItemsLoading(true);
     setLoadError(null);
-    getItems(currentItemType.id, page)
+    const pin = pinItemId && currentItemType.id === requestedItemTypeId ? pinItemId : undefined;
+    getItems(currentItemType.id, page, pin)
       .then(({ items: response, hasMore: nextPageAvailable }) => {
         if (cancelled || generation !== requestGeneration.current) return;
         setItems((previous) => page === 1 ? response : [
@@ -113,6 +178,12 @@ export default function InventoryScreen() {
           ...response.filter((item) => !previous.some((owned) => owned.id === item.id)),
         ]);
         setHasMore(nextPageAvailable);
+        if (page === 1 && pin && response[0]?.id === pin && highlightedId === null) {
+          setHighlightedId(pin);
+          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+          HapticPatterns.selection();
+          (navigation as unknown as { setParams?: (value: object) => void }).setParams?.({ highlightItemId: undefined });
+        }
       })
       .catch(() => {
         if (!cancelled && generation === requestGeneration.current) {
@@ -154,7 +225,7 @@ export default function InventoryScreen() {
           </Text>
         </Pressable>
       )}
-      {!loading && player?.inventory && itemTypes && currentItemType && (
+      {!loading && worn && itemTypes && currentItemType && (
         <>
           <ImageBackground
             source={require('../../assets/images/screens/park/background-new.png')}
@@ -167,39 +238,29 @@ export default function InventoryScreen() {
             }}
           >
             <Playercard
-              inventory={player.inventory}
+              inventory={worn}
               onItemTap={(item) => changeOutfit(item, true)}
+              popLayers={!reduceMotion}
               style={{
                 position: 'absolute',
                 width: Dimensions.get('window').width,
                 height: 380,
               }}
             />
-            {outfitNeedsRefresh && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Refresh your shark outfit status"
-                onPress={async () => {
-                  if (outfitMutation.current) return;
-                  outfitMutation.current = true;
-                  try {
-                    await refreshPlayer();
-                    outfitNeedsRefreshRef.current = false;
-                    setOutfitNeedsRefresh(false);
-                  } catch {
-                    // Keep the same recovery action available while offline.
-                  } finally {
-                    outfitMutation.current = false;
-                  }
-                }}
-                style={{ position: 'absolute', top: 12, left: 20, right: 20,
-                  paddingVertical: 9, paddingHorizontal: 12, borderRadius: 12,
-                  borderWidth: 2, borderColor: '#fff', backgroundColor: '#164f82', zIndex: 30 }}
+            {!!toast && (
+              <Animated.View
+                pointerEvents="none"
+                accessibilityLiveRegion="polite"
+                style={{ position: 'absolute', top: 12, left: 20, right: 20, alignItems: 'center', zIndex: 30,
+                  opacity: toastOpacity }}
               >
-                <Text style={{ color: '#fff', fontFamily: 'Knockout', fontSize: 16, textAlign: 'center' }}>
-                  Couldn't confirm your outfit. Tap to refresh.
-                </Text>
-              </Pressable>
+                <View style={{ paddingVertical: 9, paddingHorizontal: 14, borderRadius: 14,
+                  borderWidth: 2, borderColor: '#fff', backgroundColor: '#164f82' }}>
+                  <Text style={{ color: '#fff', fontFamily: 'Knockout', fontSize: 16, textAlign: 'center' }}>
+                    {toast}
+                  </Text>
+                </View>
+              </Animated.View>
             )}
             <ScrollView
               style={{
@@ -308,7 +369,11 @@ export default function InventoryScreen() {
               )}
               {items.length > 0 || (!itemsLoading && !loadError) ? (
                 <FlashList
+                  ref={listRef}
                   data={items}
+                  extraData={worn}
+                  viewabilityConfig={SEEN_VIEWABILITY}
+                  onViewableItemsChanged={onViewableItemsChanged}
                   ListEmptyComponent={<Text style={{ color: '#15395B', textAlign: 'center', padding: 20 }}>No items in this wardrobe category yet.</Text>}
                   ListFooterComponent={items.length > 0 && itemsLoading ? (
                     <ActivityIndicator size="small" color="#15395B" style={{ paddingVertical: 16 }} />
@@ -318,10 +383,10 @@ export default function InventoryScreen() {
                     </Pressable>
                   ) : null}
                   renderItem={({ item }) => <Item item={item}
-                    onToggle={changeOutfit}
-                    disabled={outfitNeedsRefresh || pendingItemId !== null}
-                    saving={pendingItemId === item.id} />}
-                  estimatedItemSize={150}
+                    inventory={worn}
+                    highlighted={highlightedId === item.id}
+                    onToggle={changeOutfit} />}
+                  estimatedItemSize={compact ? 116 : 150}
                   keyExtractor={(item) => item.id.toString()}
                   numColumns={3}
                   onEndReached={() => {
