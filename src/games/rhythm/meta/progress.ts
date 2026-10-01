@@ -7,6 +7,7 @@
  * throw (a storage failure must not break a round).
  */
 
+import type { GripPrefs } from '../core/grip';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STAGE_ORDER, type StageId } from '../stages';
 
@@ -20,6 +21,8 @@ export interface GhostRun {
   touches: string;
   marchBars: number[];
   autoFever: boolean;
+  /** Chart version the run was judged on (a version bump retires old ghosts). */
+  chartVersion?: string;
   score: number;
   name: string;
   /** Per playable bar: cumulative score at the end of the bar (delta chip). */
@@ -41,6 +44,12 @@ export interface ParadeProgress {
   lastStage?: StageId;
   plays: number;
   earbudNudgeShown?: boolean;
+  /** Best stars per stage:difficulty (d2 unlocks at 2 stars on d1). */
+  starsD?: Record<string, number>;
+  /** Grip and handedness once the player has picked or we detected them. */
+  grip?: GripPrefs;
+  /** The player has walked during a round (the MARCH callout shows on stage 4 otherwise). */
+  walkSeen?: boolean;
 }
 
 export function emptyProgress(): ParadeProgress {
@@ -65,18 +74,16 @@ export async function saveProgress(p: ParadeProgress): Promise<void> {
   }
 }
 
-/** Stages unlock one by one on a clear (design 5.5). Backpack Bounce needs 2 stars on 3 stages. */
+/** Rev 6: Backpack Bounce opens at 2 stars on any 2 stages; the first 3 unlock in order on a clear. */
 export function unlockedStages(p: ParadeProgress): StageId[] {
   const out: StageId[] = [];
   for (const id of STAGE_ORDER) {
-    if (id === 'backpack_bounce_a') {
-      const twoStar = STAGE_ORDER.filter((s) => (p.stars[s] ?? 0) >= 2).length;
-      if (twoStar >= 3) out.push(id);
-      continue;
-    }
+    if (id === 'backpack_bounce_a') continue;
     out.push(id);
     if ((p.stars[id] ?? 0) < 1) break;
   }
+  const twoStar = STAGE_ORDER.filter((s) => (p.stars[s] ?? 0) >= 2).length;
+  if (twoStar >= 2 && STAGE_ORDER.includes('backpack_bounce_a')) out.push('backpack_bounce_a');
   return out;
 }
 
@@ -85,7 +92,7 @@ export function unlockedStages(p: ParadeProgress): StageId[] {
  * otherwise a seeded pick among unlocked stages that is not the last one.
  */
 export function pickQueueStage(p: ParadeProgress, seed: number): StageId {
-  const open = unlockedStages(p).filter((s) => s !== 'backpack_bounce_a' || (p.stars.shark_shop_a ?? 0) >= 2);
+  const open = unlockedStages(p);
   const fresh = open.find((s) => (p.stars[s] ?? 0) < 1);
   if (fresh) return fresh;
   const pool = open.filter((s) => s !== p.lastStage);
@@ -103,7 +110,14 @@ export function masteryXp(score: number, stars: number, newPb: boolean): number 
   return Math.floor(score / 100) * (newPb ? 2 : 1) + starXp;
 }
 
-export const MASTERY_TIERS = [1500, 4000, 8000, 14000, 22000];
+/** Rev 6: 3 cosmetic tiers per stage (crowd hats, drum skin decal, baton trail). */
+export const MASTERY_TIERS = [2000, 6000, 12000];
+
+/** Difficulty a stage plays at: d2 needs 2 stars on that stage's d1 (design 5.5). */
+export function effectiveDifficulty(p: ParadeProgress, stage: StageId, wanted: number): 1 | 2 {
+  if (wanted <= 1) return 1;
+  return (p.starsD?.[`${stage}:1`] ?? 0) >= 2 ? 2 : 1;
+}
 
 export function masteryTier(xp: number): number {
   let t = 0;
@@ -131,6 +145,7 @@ export function recordRound(p: ParadeProgress, r: RoundRecord): { next: ParadePr
     ...p,
     firstParadeDone: p.firstParadeDone || r.ftue,
     stars: { ...p.stars, [r.stage]: Math.max(p.stars[r.stage] ?? 0, r.stars) },
+    starsD: { ...(p.starsD ?? {}), [`${r.stage}:${r.difficulty}`]: Math.max(p.starsD?.[`${r.stage}:${r.difficulty}`] ?? 0, r.stars) },
     pb: newPb ? { ...p.pb, [key]: r.score } : p.pb,
     mastery: { ...p.mastery, [r.stage]: xp1 },
     lastStage: r.stage,

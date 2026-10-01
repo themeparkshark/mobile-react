@@ -5,8 +5,8 @@
  * (the PHP twin must read the same constants).
  */
 
-export const CHART_VERSION = 'pb-1.0';
-export const PROOF_VERSION = 4;
+export const CHART_VERSION = 'pb-2.0';
+export const PROOF_VERSION = 5;
 export const GAME_KEY = 'timing';
 
 // -- Note kinds (stage JSON column 3) ----------------------------------------
@@ -69,10 +69,22 @@ export interface Windows {
 
 /** Section 3.3. SHARP exists only when the session gate enables it. */
 export const WINDOWS: Record<Difficulty, Windows> = {
-  1: { sharp: 0, perfect: 50, great: 100, good: 150, consider: 200, approachMs: 1600 },
-  2: { sharp: 0, perfect: 40, great: 85, good: 130, consider: 180, approachMs: 1300 },
+  1: { sharp: 0, perfect: 55, great: 110, good: 165, consider: 210, approachMs: 1600 },
+  2: { sharp: 0, perfect: 45, great: 95, good: 145, consider: 190, approachMs: 1300 },
   3: { sharp: 22, perfect: 35, great: 70, good: 115, consider: 160, approachMs: 1050 },
 };
+
+/** Ride Assist (design 3.5): d1 chart, GOOD widened, approach x1.3. */
+export const ASSIST_WINDOWS: Windows = { sharp: 0, perfect: 55, great: 110, good: 180, consider: 230, approachMs: 2080 };
+
+/** Fever Launch Swipe (design 3.1, 4.3): one finger up >= 90 pt within 300 ms. */
+export const LAUNCH = { swipePt: 90, swipeMs: 300, catchMs: 150 };
+/** Queue rounds: Groove 0 = Limping until Groove is back to this (design 3.6). */
+export const LIMP_RECOVER = 30;
+/** A touch with no note in reach is a stray only after this (design 4.1). */
+export const PENDING_STRAY_MS = 250;
+/** Playable bars per section; a drop line opens every section after the first. */
+export const SECTION_BARS = 4;
 
 /** Section 5.2 base points. */
 export const BASE_POINTS = {

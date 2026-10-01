@@ -25,6 +25,8 @@ import {
   Group,
   Image,
   Line,
+  LinearGradient,
+  Oval,
   Path,
   Rect,
   RoundedRect,
@@ -42,11 +44,15 @@ import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { useSpriteAtlas } from '../../../gamekit/fx/SpriteAtlas';
 import type { JudgeState } from '../core/judge';
 import { J_GREAT, J_PERFECT, J_SHARP } from '../core/types';
+import { gripSpans } from '../core/grip';
+import { scaleAt } from '../core/projection';
 import { MAX_NOTES, type DrawList, type LaneGeom } from './layout';
 import { JUDGE_TEXT, RIBBON_TEXT, TXT_GOOD, TXT_GREAT, type ParadeView } from './view';
 
 const NAVY = '#0b3a6b';
 const GOLD = '#ffcf3b';
+const BLUE = '#1f7fe0';
+const CORAL = '#ff6b4a';
 const SKY = '#4fd2ff';
 const CREAM = '#fff8e4';
 
@@ -95,17 +101,7 @@ export function fieldGeom(width: number, height: number): FieldGeom {
   };
 }
 
-/** Zone of a touch x (design 3.1): centre 40%, rims 30% each, 16pt dead bands. */
-export function zoneOfX(x: number, width: number): number {
-  'worklet';
-  const l = width * 0.3;
-  const r = width * 0.7;
-  if (x < l - 8) return 1;
-  if (x <= l + 8) return 3;
-  if (x < r - 8) return 0;
-  if (x <= r + 8) return 4;
-  return 2;
-}
+export { zoneOf } from '../core/grip';
 
 interface Props {
   geom: FieldGeom;
@@ -117,6 +113,12 @@ interface Props {
   /** Rival / ghost rails: colours (max 3). */
   rails: string[];
   railFlash: SharedValue<number[]>;
+  /** Grip (core/grip.ts): 0 One Thumb, 1 Two Thumbs; hand 1 right / -1 left; swap sides. */
+  grip: number;
+  hand: number;
+  swap: number;
+  /** Approach time (ms) for the drop-line marker. */
+  approach: number;
 }
 
 // Crowd slots: side (0 left, 1 right), row (0 back, 1 front), x fraction inside the side band.
@@ -245,7 +247,7 @@ function buildBursts(v: ParadeView): SkPathLike[] {
   return [gold, sky, white, coral, grey, outline];
 }
 
-export const ParadeField = React.memo(function ParadeField({ geom, judge, view, draw, tick, reducedMotion, rails, railFlash }: Props) {
+export const ParadeField = React.memo(function ParadeField({ geom, judge, view, draw, tick, reducedMotion, rails, railFlash, grip, hand, swap, approach }: Props) {
   const { width: W, height: H, cx, yLine, halfW, touchTop, yHorizon } = geom;
   const font = useFont(FONT, 22);
   const bigFont = useFont(FONT, 96);
@@ -302,14 +304,27 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     }
     return [{ translateX: dx + cx * (1 - z) }, { translateY: dy + (yLine * 0.6) * (1 - z) }, { scale: z }];
   });
+  // The inhale (design 6.5): in the rest beat before a queued drop the
+  // world dims 6% and the crowd crouches; the drop lands out of silence.
+  const inhale = useDerivedValue(() => {
+    tick.value;
+    const s = judge.value;
+    const drop = s.pendingDeploy;
+    if (drop < 0 || drop >= s.nBars) return 0;
+    const t0 = s.barStart[drop];
+    const beat = (t0 - s.barStart[drop - 1]) / 4;
+    const dt = t0 - view.value.now;
+    return dt > 0 && dt <= beat ? 1 - dt / beat : 0;
+  });
   const feverMatrix = useDerivedValue(() => {
     tick.value;
     const f = view.value.fever * 0.65;
+    const dim = 1 - 0.06 * Math.min(1, inhale.value * 3);
     // Golden hour: lift red and green, cool the blue a little. Never purple.
     return [
-      1 + 0.1 * f, 0.08 * f, 0, 0, 0.06 * f,
-      0.02 * f, 1 + 0.02 * f, 0, 0, 0.03 * f,
-      0, 0, 1 - 0.28 * f, 0, 0,
+      (1 + 0.1 * f) * dim, 0.08 * f, 0, 0, 0.06 * f,
+      0.02 * f, (1 + 0.02 * f) * dim, 0, 0, 0.03 * f,
+      0, 0, (1 - 0.28 * f) * dim, 0, 0,
       0, 0, 0, 1, 0,
     ];
   });
@@ -390,8 +405,9 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     // Tiers: downbeat jumps at 25+, a wave every bar at 50+ (design 6.4).
     const combo = judge.value.combo;
     if (!reducedMotion && combo >= 25 && d.beatIdx % 4 === 0) y -= (combo >= 50 ? 18 : 12) * Math.max(0, 1 - ph * 3);
-    // One shark sits down on a MISS.
-    if (i === 0 && v.wt - v.crowdSitAt < 600) y += 10;
+    // One shark sits down on a MISS; the whole crowd crouches in the inhale.
+    if (i === (Math.floor(v.crowdSitAt / 97) % 6) && v.wt - v.crowdSitAt < 600) y += 10;
+    y += 9 * inhale.value;
     const sway = combo >= 10 ? Math.sin((d.beatIdx + d.beatPhase) * Math.PI) * 0.05 : 0;
     const flip = slot[0] === 0 ? 1 : -1;
     const sc = size / Math.max(r.width, r.height);
@@ -586,10 +602,32 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     p.close();
     return p;
   });
-  const lanePlateOpacity = useDerivedValue(() => {
+  // Receptor telegraph (design 6.2): the earliest unjudged live note lights
+  // its zone over its last 1/4 beat of approach. [blueK, coralK, anyK]
+  const tele = useDerivedValue(() => {
     tick.value;
-    return 0.55 * view.value.fever;
+    const s = judge.value;
+    const now = view.value.now;
+    for (let i = s.cursor; i < s.n; i++) {
+      if (s.res[i] !== 0) continue;
+      const b = s.bar[i];
+      const march = s.barLayer[b] === 2;
+      const layer = march ? 2 : 1;
+      if ((s.layers[i] & layer) === 0) continue;
+      const dt = s.t[i] - now;
+      const q = s.beatLen[i] / 4;
+      if (dt > q) return [0, 0, 0];
+      if (dt < -60) continue;
+      const k = Math.min(1, 1 - Math.max(0, dt) / q);
+      const kk = k * k;
+      const kind = s.kind[i];
+      if (march || kind === 3 || kind === 2) return [kk, kk, kk];
+      return kind === 1 ? [0, kk, kk] : [kk, 0, kk];
+    }
+    return [0, 0, 0];
   });
+  // Lane backing plate: white at the line to sky at the horizon, constant in every state.
+  const laneGradEnd = useMemo(() => vec(0, laneTop), [laneTop]);
   const railPath = useDerivedValue(() => {
     tick.value;
     const m = view.value.march;
@@ -606,16 +644,84 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
   const railColor = useDerivedValue(() => {
     tick.value;
     const v = view.value;
+    if (v.fever > 0.5) return GOLD;
     if (v.armed) return SKY;
-    return v.fever > 0.5 ? '#ffffff' : GOLD;
+    return '#ffffff';
   });
   const railWidth = useDerivedValue(() => {
     tick.value;
     const v = view.value;
-    if (!v.armed) return 4;
     const ph = draw.value.beatPhase;
-    return 2 + 3 * Math.max(0, 1 - ph * 3);
+    if (v.fever > 0.5) return 5 + 3 * Math.max(0, 1 - ph * 3);
+    if (!v.armed) return 4;
+    return 3 + 4 * Math.max(0, 1 - ph * 3);
   });
+  const railInkWidth = useDerivedValue(() => railWidth.value + 3);
+  // Rail-fire (Fever): gold flame licks up both rails, flickering on the beat.
+  const flamePath = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const p = Skia.Path.Make();
+    if (v.fever < 0.5) return p;
+    const d = draw.value;
+    const m = v.march;
+    const widen = 1 + 0.17 * m;
+    const topHalf = halfW * widen * 0.35;
+    const botHalf = halfW * widen;
+    const kick = 1 + 0.6 * Math.max(0, 1 - d.beatPhase * 3);
+    for (let side = -1; side <= 1; side += 2) {
+      for (let j = 0; j < 9; j++) {
+        const u = (j + 0.5) / 9;
+        const yy = yLine + 10 - (yLine + 10 - laneTop) * u;
+        const xx = cx + side * (botHalf + (topHalf - botHalf) * u);
+        const h = (16 - 9 * u) * kick * (0.75 + 0.5 * rnd(j + side * 31, d.beatIdx));
+        const w = 5 - 2.5 * u;
+        p.moveTo(xx - w, yy);
+        p.quadTo(xx - w * 0.2 + side * 2, yy - h * 0.6, xx + side * 1.5, yy - h);
+        p.quadTo(xx + w * 0.4, yy - h * 0.5, xx + w, yy);
+        p.close();
+      }
+    }
+    return p;
+  });
+  // Drop-line marker: the bar line Fever will drop on, gold, coming down the lane.
+  const dropLine = useDerivedValue(() => {
+    tick.value;
+    const s = judge.value;
+    const p = Skia.Path.Make();
+    const drop = s.pendingDeploy;
+    if (drop < 0 || drop >= s.nBars) return p;
+    const u = (s.barStart[drop] - view.value.now) / approach;
+    if (u < 0 || u > 1) return p;
+    const sc = scaleAt(u);
+    const y = yHorizon + (yLine - yHorizon) * sc;
+    const hw = halfW * (1 + 0.17 * view.value.march) * sc;
+    p.moveTo(cx - hw - 8 * sc, y);
+    p.lineTo(cx + hw + 8 * sc, y);
+    addStar(p, cx - hw - 6 * sc, y, 9 * sc + 3, view.value.wt * 0.01);
+    addStar(p, cx + hw + 6 * sc, y, 9 * sc + 3, -view.value.wt * 0.01);
+    return p;
+  });
+  // Lane-edge spark kick on PERFECT/GREAT: sparks shoot up both rails.
+  const railSparks = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const p = Skia.Path.Make();
+    const t = v.wt - v.railSparkAt;
+    if (t < 0 || t > 160) return p;
+    const u = 1 - (1 - t / 160) * (1 - t / 160);
+    const widen = 1 + 0.17 * v.march;
+    for (let side = -1; side <= 1; side += 2) {
+      for (let j = 0; j < v.railSparkN; j++) {
+        const rise = (80 + j * 26) * u;
+        const f = rise / (yLine + 10 - laneTop);
+        const xx = cx + side * halfW * widen * (1 - 0.65 * f);
+        addStar(p, xx, yLine + 6 - rise, 6.5 * (1 - 0.5 * u), j + t * 0.02);
+      }
+    }
+    return p;
+  });
+  const railSparkColor = useDerivedValue(() => (view.value.railSparkN >= 2 ? GOLD : '#ffffff'));
   const beatLines = useDerivedValue(() => {
     tick.value;
     const d = draw.value;
@@ -710,6 +816,12 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     const k = Math.max(0, 1 - ph * 4);
     return pocket ? 4 + 4 * k : 3 + 2 * k;
   });
+  const ringTeleColor = useDerivedValue(() => (tele.value[2] > 0.05 ? '#ffffff' : NAVY));
+  const ringTeleOpacity = useDerivedValue(() => tele.value[2]);
+  const shadowRx = useDerivedValue(() => 20 * (0.5 + 0.5 * tele.value[2]));
+  const shadowOpacity = useDerivedValue(() => 0.25 * tele.value[2]);
+  const shadowX = useDerivedValue(() => cx - shadowRx.value);
+  const shadowW = useDerivedValue(() => shadowRx.value * 2);
   const ringR = useDerivedValue(() => {
     tick.value;
     return 34 * (W / 390) * (1 + 0.15 * view.value.march);
@@ -768,7 +880,11 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     const k = t < 60 ? 0.8 + 0.2 * (t / 60) : 1;
     const rise = Math.min(8, (t / 220) * 8);
     const w = judgeWidths[v.judgTxt] ?? 0;
-    return [{ translateX: cx }, { translateY: yLine - 44 - rise }, { scale: k }, { translateX: -w / 2 }];
+    // Beside the lane, alternating sides (design 6.3): never over the read zone.
+    const side = v.judgSide ? 1 : -1;
+    const x = cx + side * (halfW + 18 + w / 2);
+    const xc = Math.max(w / 2 + 6, Math.min(W - w / 2 - 6, x));
+    return [{ translateX: xc }, { translateY: yLine - 22 - rise }, { scale: k }, { translateX: -w / 2 }];
   });
   const judgOpacity = useDerivedValue(() => {
     tick.value;
@@ -781,7 +897,13 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     return v.wt - v.judgAt < 260 && v.judgFS ? (v.judgFS === 1 ? 'FAST' : 'SLOW') : '';
   });
   const fsColor = useDerivedValue(() => (view.value.judgFS === 1 ? '#2f9be8' : '#ff7a59'));
-  const fsX = useDerivedValue(() => cx - (fastW[view.value.judgFS === 1 ? 0 : 1] ?? 20) / 2);
+  const fsX = useDerivedValue(() => {
+    const v = view.value;
+    const w = judgeWidths[v.judgTxt] ?? 60;
+    const side = v.judgSide ? 1 : -1;
+    const x = Math.max(w / 2 + 6, Math.min(W - w / 2 - 6, cx + side * (halfW + 18 + w / 2)));
+    return x - (fastW[v.judgFS === 1 ? 0 : 1] ?? 20) / 2;
+  });
 
   // Hit-error bar (120 x 6 on the hoop band) with ticks and the mean chevron.
   const errBarY = yLine + 16;
@@ -845,76 +967,133 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
   }), [rails, cx, halfW, laneTop, yLine]);
 
   // ------------------------------------------------------------------ drum
+  // The bass drum face fills the touch zone (design 3.1): a white hoop on top,
+  // the head with the grip's zone tints (blue = DRUM, coral = RIM), and the
+  // blue shell with white lugs at the bottom. Colour equals input zone.
   const zoneH = H - touchTop;
-  const drumW = W * 0.4;
-  const drumH = drum ? drumW * (drum.height() / drum.width()) : drumW;
-  const drumY = touchTop + Math.max(0, (zoneH - drumH) * 0.42);
-  const rimW = W * 0.24;
-  const rimH = n1 ? rimW * (n1.height() / n1.width()) : rimW;
-  const rimY = touchTop + Math.max(0, (zoneH - rimH) * 0.45);
-  const drumTransform = useDerivedValue(() => {
+  const hoopY = touchTop + 4;
+  const headY = touchTop + 22;
+  const shellH = 30;
+  const headH = zoneH - (headY - touchTop) - shellH;
+  const spanList = useMemo(() => {
+    const sp = gripSpans(grip, hand, swap);
+    const out: { x0: number; x1: number; kind: number }[] = [];
+    for (let i = 0; i + 2 < sp.length; i += 3) out.push({ x0: sp[i] * W, x1: sp[i + 1] * W, kind: sp[i + 2] });
+    return out;
+  }, [grip, hand, swap, W]);
+  const ropePath = useMemo(() => {
+    const p = Skia.Path.Make();
+    const y0 = hoopY + 13;
+    const y1 = headY - 2;
+    const step = 26;
+    for (let x = -step; x < W + step; x += step) {
+      p.moveTo(x, y0);
+      p.lineTo(x + step / 2, y1);
+      p.lineTo(x + step, y0);
+    }
+    return p;
+  }, [W, hoopY, headY]);
+  const lugPath = useMemo(() => {
+    const p = Skia.Path.Make();
+    const n = 7;
+    for (let i = 0; i < n; i++) {
+      const x = ((i + 0.5) / n) * W;
+      p.addRRect(Skia.RRectXY({ x: x - 7, y: H - shellH + 6, width: 14, height: shellH - 12 }, 4, 4));
+    }
+    return p;
+  }, [W, H]);
+  // Fixed hook count (3 spans max): the grip may have 2 or 3 spans.
+  const spanOpacity = [0, 1, 2].map((i) => useDerivedValue(() => {
+    const sp = spanList[i];
+    if (!sp) return 0;
+    const t = tele.value;
+    const base = view.value.march > 0.5 ? 0.24 : 0.18;
+    return base + 0.27 * (sp.kind === 0 ? t[0] : t[1]);
+  }));
+  const spanFlash = [0, 1, 2].map((i) => useDerivedValue(() => {
+    tick.value;
+    const sp = spanList[i];
+    if (!sp) return 0;
+    const v = view.value;
+    const t = v.wt - v.zoneFlashAt;
+    if (t < 0 || t > 80 || v.zoneFlashX < sp.x0 || v.zoneFlashX >= sp.x1) return 0;
+    return (v.zoneFlashKind ? 0.55 : 0.3) * (1 - t / 80);
+  }));
+  const headTransform = useDerivedValue(() => {
     tick.value;
     const v = view.value;
     const t = v.wt - v.drumAt;
-    let sy = 1;
+    let sy = 1 - 0.015 * tele.value[0];
     let sx = 1;
-    if (t >= 0 && t < 160) {
-      // Damped spring back from the squash (design 6.3).
-      const u = t / 160;
-      const amt = v.drumAmt * Math.exp(-u * 3.2) * Math.cos(u * Math.PI * 1.6);
+    if (t >= 0 && t < 220) {
+      // Damped spring back from the squash (design 6.3), anchored on the shell.
+      const u = t / 220;
+      const amt = v.drumAmt * 0.45 * Math.exp(-u * 3.2) * Math.cos(u * Math.PI * 1.6);
       sy = 1 - amt;
-      sx = 1 + amt * 0.5;
+      sx = 1 + amt * 0.25;
     }
-    const oy = drumY + drumH;
+    const oy = H - shellH;
     return [{ translateX: cx }, { translateY: oy }, { scaleX: sx }, { scaleY: sy }, { translateX: -cx }, { translateY: -oy }];
   });
   const drumOpacity = useDerivedValue(() => (view.value.wt < view.value.drumDimUntil ? 0.7 : 1));
-  const rimLeftFlash = useDerivedValue(() => {
+  const overOpacity = useDerivedValue(() => {
+    tick.value;
+    const t = view.value.wt - view.value.overAt;
+    return t >= 0 && t < 34 ? 0.6 : 0;
+  });
+  const overCx = useDerivedValue(() => view.value.overX);
+  const overCy = useDerivedValue(() => Math.max(headY + 20, view.value.overY));
+  const rippleR = useDerivedValue(() => {
+    tick.value;
+    const t = view.value.wt - view.value.rippleAt;
+    return t >= 0 && t < 260 ? 18 + 0.9 * t : 0;
+  });
+  const rippleOpacity = useDerivedValue(() => {
     tick.value;
     const v = view.value;
-    const t = v.wt - v.rimAt;
-    return t >= 0 && t < 120 && v.rimSide === 0 ? 1 - t / 120 : 0;
+    const t = v.wt - v.rippleAt;
+    return t >= 0 && t < 260 ? v.rippleAmp * 0.7 * (1 - t / 260) : 0;
   });
-  const rimRightFlash = useDerivedValue(() => {
-    tick.value;
-    const v = view.value;
-    const t = v.wt - v.rimAt;
-    return t >= 0 && t < 120 && v.rimSide === 1 ? 1 - t / 120 : 0;
-  });
-  const rimWobbleL = useDerivedValue(() => {
-    tick.value;
-    const v = view.value;
-    const t = v.wt - v.rimAt;
-    const k = t >= 0 && t < 160 && v.rimSide === 0 ? Math.sin(t / 18) * 0.08 * (1 - t / 160) : 0;
-    const ox = rimW * 0.62;
-    const oy = rimY + rimH / 2;
-    return [{ translateX: ox }, { translateY: oy }, { rotate: k }, { translateX: -ox }, { translateY: -oy }];
-  });
-  const rimWobbleR = useDerivedValue(() => {
-    tick.value;
-    const v = view.value;
-    const t = v.wt - v.rimAt;
-    const k = t >= 0 && t < 160 && v.rimSide === 1 ? Math.sin(t / 18) * 0.08 * (1 - t / 160) : 0;
-    const ox = W - rimW * 0.62;
-    const oy = rimY + rimH / 2;
-    return [{ translateX: ox }, { translateY: oy }, { rotate: k }, { translateX: -ox }, { translateY: -oy }];
-  });
-  // March: a gold rim flash on the drum every beat (stronger on downbeats).
+  const rippleX = useDerivedValue(() => view.value.zoneFlashX);
+  const rippleY = useDerivedValue(() => Math.max(headY + 20, view.value.touchY));
+  // March: a white rim flash on the hoop every beat (stronger on downbeats).
   const marchRimOpacity = useDerivedValue(() => {
     tick.value;
     const v = view.value;
     const d = draw.value;
     if (v.march < 0.5 && !v.pocket) return 0;
     const t = d.beatPhase;
-    return (d.beatIdx % 4 === 0 ? 0.9 : 0.6) * Math.max(0, 1 - t * 2.5);
+    return (d.beatIdx % 4 === 0 ? 1 : 0.65) * Math.max(0, 1 - t * 2.5);
   });
   const starburstTransform = useDerivedValue(() => {
     tick.value;
     const rot = (view.value.wt / 1000) * (20 * Math.PI / 180);
-    const oy = drumY + drumH / 2;
-    return [{ translateX: cx }, { translateY: oy }, { rotate: rot }, { translateX: -drumW * 0.9 }, { translateY: -drumW * 0.9 }];
+    const oy = headY + headH / 2;
+    return [{ translateX: cx }, { translateY: oy }, { rotate: rot }, { translateX: -W * 0.75 }, { translateY: -W * 0.75 }];
   });
-  const starburstOpacity = useDerivedValue(() => 0.35 * view.value.fever);
+  const starburstOpacity = useDerivedValue(() => 0.22 * view.value.fever);
+  const glyphSize = 58 * (W / 390);
+  // Launch Swipe streak: a gold ribbon shooting up from the thumb.
+  const launchPath = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const p = Skia.Path.Make();
+    const t = v.wt - v.launchAt;
+    if (t < 0 || t > 420) return p;
+    const u = t / 420;
+    const top = touchTop - (touchTop - laneTop) * Math.min(1, u * 1.6);
+    const x = v.launchX;
+    p.moveTo(x - 9 * (1 - u), touchTop + 40);
+    p.lineTo(x, top);
+    p.lineTo(x + 9 * (1 - u), touchTop + 40);
+    p.close();
+    return p;
+  });
+  const launchOpacity = useDerivedValue(() => {
+    tick.value;
+    const t = view.value.wt - view.value.launchAt;
+    return t >= 0 && t < 420 ? 1 - t / 420 : 0;
+  });
 
   const bursts = useDerivedValue(() => {
     tick.value;
@@ -990,12 +1169,18 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       </Group>
 
       {/* ------------------------- READING SURFACE ------------------------- */}
-      <Path path={lanePath} color="rgba(236,248,255,0.9)" />
-      <Path path={lanePath} color="#1f7fe0" opacity={lanePlateOpacity} />
+      <Path path={lanePath}>
+        <LinearGradient start={vec(0, yLine + 10)} end={laneGradEnd} colors={['rgba(255,255,255,0.86)', 'rgba(191,230,255,0.62)']} />
+      </Path>
       <Path path={beatLines} color={NAVY} style="stroke" strokeWidth={beatLineWidth} opacity={beatLineOpacity} />
       <Path path={barLines} color={NAVY} style="stroke" strokeWidth={3} opacity={0.7} />
       <Path path={lanePath} color={NAVY} style="stroke" strokeWidth={3} strokeJoin="round" />
+      <Path path={railPath} color={NAVY} style="stroke" strokeWidth={railInkWidth} strokeCap="round" />
       <Path path={railPath} color={railColor} style="stroke" strokeWidth={railWidth} strokeCap="round" />
+      <Path path={flamePath} color={GOLD} />
+      <Path path={flamePath} color={NAVY} style="stroke" strokeWidth={1.6} strokeJoin="round" />
+      <Path path={dropLine} color={GOLD} style="stroke" strokeWidth={6} strokeCap="round" />
+      <Path path={dropLine} color={NAVY} style="stroke" strokeWidth={1.8} strokeCap="round" />
       {railPaths.map((p, i) => (
         <Path key={i} path={p} color={rails[i]} style="stroke" strokeWidth={4} strokeCap="round" opacity={railFlashOpacity[i]} />
       ))}
@@ -1005,9 +1190,13 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       </Path>
       <Path path={tailPath} color={NAVY} style="stroke" strokeWidth={2.5} />
       {/* judgment line = the drum's top hoop */}
-      <Line p1={vec(cx - halfW - 6, yLine)} p2={vec(cx + halfW + 6, yLine)} color={GOLD} strokeWidth={4} />
+      <Line p1={vec(cx - halfW - 8, yLine)} p2={vec(cx + halfW + 8, yLine)} color={NAVY} strokeWidth={7} strokeCap="round" />
+      <Line p1={vec(cx - halfW - 8, yLine)} p2={vec(cx + halfW + 8, yLine)} color="#ffffff" strokeWidth={4} strokeCap="round" />
+      <Group opacity={shadowOpacity}>
+        <Oval x={shadowX} y={yLine - 4} width={shadowW} height={8} color={NAVY} />
+      </Group>
       <Circle cx={cx} cy={yLine} r={ringR} color={NAVY} style="stroke" strokeWidth={ringStroke} />
-      <Circle cx={cx} cy={yLine} r={ringR} color="rgba(255,207,59,0.55)" style="stroke" strokeWidth={2} />
+      <Circle cx={cx} cy={yLine} r={ringR} color={ringTeleColor} style="stroke" strokeWidth={4} opacity={ringTeleOpacity} />
       {noteAtlas ? <Atlas image={noteAtlas.image} sprites={noteSprites} transforms={noteXf} /> : null}
       <Path path={echoPath} color={NAVY} style="stroke" strokeWidth={3}>
         <DashPathEffect intervals={[6, 4]} />
@@ -1039,41 +1228,64 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       <Path path={bGold} color={GOLD} />
       <Path path={bWhite} color="#ffffff" />
       <Path path={bOutline} color={NAVY} style="stroke" strokeWidth={2.2} strokeJoin="round" />
+      <Path path={railSparks} color={railSparkColor} />
+      <Path path={railSparks} color={NAVY} style="stroke" strokeWidth={1.8} strokeJoin="round" />
       <RoundedRect x={cx - 60} y={errBarY - 3} width={120} height={6} r={3} color="rgba(11,58,107,0.55)" />
       <Rect x={cx - 1.5} y={errBarY - 6} width={3} height={12} color={GOLD} />
       <Path path={errPath} color="#ffffff" />
       <Path path={errMeanPath} color={NAVY} />
 
       {/* -------------------------------- DRUM ------------------------------- */}
-      {starburst ? (
-        <Group transform={starburstTransform} opacity={starburstOpacity}>
-          <Image image={starburst} x={0} y={0} width={drumW * 1.8} height={drumW * 1.8} fit="contain" />
-        </Group>
-      ) : null}
-      {n1 ? (
-        <>
-          <Group transform={rimWobbleL}>
-            <Image image={n1} x={rimW * 0.12} y={rimY} width={rimW} height={rimH} fit="contain" />
-            <Group opacity={rimLeftFlash}>
-              <Circle cx={rimW * 0.62} cy={rimY + rimH / 2} r={rimW * 0.5} color="rgba(255,236,150,0.55)" />
+      <Group opacity={drumOpacity}>
+        <Group transform={headTransform}>
+          {/* head */}
+          <Rect x={0} y={headY} width={W} height={headH + 4}>
+            <LinearGradient start={vec(0, headY)} end={vec(0, headY + headH)} colors={['#ffffff', '#f4f8ff', '#e6f1ff']} />
+          </Rect>
+          {spanList.map((sp, i) => (
+            <Group key={`z${i}`}>
+              <Rect x={sp.x0} y={headY} width={sp.x1 - sp.x0} height={headH + 4} color={sp.kind === 0 ? BLUE : CORAL} opacity={spanOpacity[i]} />
+              <Rect x={sp.x0} y={headY} width={sp.x1 - sp.x0} height={headH + 4} color="#ffffff" opacity={spanFlash[i]} />
             </Group>
-          </Group>
-          <Group transform={rimWobbleR}>
-            <Image image={n1} x={W - rimW * 1.12} y={rimY} width={rimW} height={rimH} fit="contain" />
-            <Group opacity={rimRightFlash}>
-              <Circle cx={W - rimW * 0.62} cy={rimY + rimH / 2} r={rimW * 0.5} color="rgba(255,236,150,0.55)" />
+          ))}
+          {spanList.slice(1).map((sp, i) => (
+            <Line key={`b${i}`} p1={vec(sp.x0, headY + 6)} p2={vec(sp.x0, headY + headH - 4)} color={NAVY} strokeWidth={2} opacity={0.7}>
+              <DashPathEffect intervals={[8, 7]} />
+            </Line>
+          ))}
+          {starburst ? (
+            <Group transform={starburstTransform} opacity={starburstOpacity}>
+              <Image image={starburst} x={0} y={0} width={W * 1.5} height={W * 1.5} fit="contain" />
             </Group>
-          </Group>
-        </>
-      ) : null}
-      {drum ? (
-        <Group transform={drumTransform} opacity={drumOpacity}>
-          <Image image={drum} x={cx - drumW / 2} y={drumY} width={drumW} height={drumH} fit="contain" />
+          ) : null}
+          {/* zone glyphs: the note that belongs to each colour */}
+          {spanList.map((sp, i) => {
+            const img = sp.kind === 0 ? n0 : n1;
+            if (!img) return null;
+            const gh = glyphSize * (img.height() / img.width());
+            return (
+              <Image key={`g${i}`} image={img} x={(sp.x0 + sp.x1) / 2 - glyphSize / 2} y={headY + headH * 0.5 - gh / 2} width={glyphSize} height={gh} fit="contain" opacity={0.5} />
+            );
+          })}
+          <Circle cx={rippleX} cy={rippleY} r={rippleR} color={NAVY} style="stroke" strokeWidth={3} opacity={rippleOpacity} />
+          <Circle cx={overCx} cy={overCy} r={60} color="#ffffff" opacity={overOpacity} />
         </Group>
-      ) : null}
-      <Group opacity={marchRimOpacity}>
-        <Circle cx={cx} cy={drumY + drumH * 0.26} r={drumW * 0.44} color={GOLD} style="stroke" strokeWidth={5} />
+        {/* top hoop + coral rope */}
+        <Path path={ropePath} color={CORAL} style="stroke" strokeWidth={5} strokeJoin="round" />
+        <Path path={ropePath} color={NAVY} style="stroke" strokeWidth={1.5} strokeJoin="round" opacity={0.6} />
+        <RoundedRect x={-6} y={hoopY} width={W + 12} height={14} r={7} color="#ffffff" />
+        <RoundedRect x={-6} y={hoopY} width={W + 12} height={14} r={7} color={NAVY} style="stroke" strokeWidth={3} />
+        <Group opacity={marchRimOpacity}>
+          <RoundedRect x={-6} y={hoopY - 2} width={W + 12} height={18} r={9} color="#ffffff" style="stroke" strokeWidth={4} />
+        </Group>
+        {/* shell */}
+        <Rect x={0} y={H - shellH} width={W} height={shellH} color={BLUE} />
+        <Line p1={vec(0, H - shellH)} p2={vec(W, H - shellH)} color={NAVY} strokeWidth={3} />
+        <Path path={lugPath} color="#ffffff" />
+        <Path path={lugPath} color={NAVY} style="stroke" strokeWidth={2} />
       </Group>
+      <Path path={launchPath} color={GOLD} opacity={launchOpacity} />
+      <Path path={launchPath} color={NAVY} style="stroke" strokeWidth={2} opacity={launchOpacity} />
 
       {/* Ribbon moments (world layer copy drawn last so it reads over the crowd) */}
       {ribbonImg && ribbonFont ? (

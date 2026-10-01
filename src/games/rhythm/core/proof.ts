@@ -1,5 +1,5 @@
 /**
- * proof: Parade Beat proof v4 (design 9.2) and its replay.
+ * proof: Parade Beat proof v5 (design 9.2) and its replay.
  *
  * The phone sends two views of the same run:
  *   - `inputs` rows [noteIndex, signedDeltaMs, kind, zone] (design 9.2) for
@@ -15,13 +15,13 @@
  */
 
 import { generate } from './generate';
-import { createJudge, finishJudge, judgeDown, judgeMove, judgeTick, judgeUp, marchBarsOf, type JudgeState } from './judge';
+import { createJudge, finishJudge, judgeDown, judgeLaunch, judgeMove, judgeTick, judgeUp, marchBarsOf, type JudgeState } from './judge';
 import { summarize } from './score';
 import { GAME_KEY, PROOF_VERSION, type Difficulty, type RoundFormat, type StageJson } from './types';
 
 export interface RhythmProofV4 {
   game: 'timing';
-  v: 4;
+  v: 5;
   seed: number;
   stage: string;
   chart_version: string;
@@ -29,6 +29,14 @@ export interface RhythmProofV4 {
   difficulty: number;
   format: RoundFormat;
   ftue: boolean;
+  /** one_thumb_r | one_thumb_l | two_thumbs | two_thumbs_swap */
+  grip: string;
+  assist: boolean;
+  /** Queue rounds Limp instead of stalling (design 3.6). */
+  limp: boolean;
+  /** Groove floor 10 until this song time (first ride ever); -1 = the whole run (First Parade). */
+  no_fail_until_ms: number;
+  touch_ts: 'est';
   audio_backend: string;
   route: string;
   offset_ms: number;
@@ -37,9 +45,10 @@ export interface RhythmProofV4 {
   elapsed_ms: number;
   pause_spans: [number, number][];
   march_bars: number[];
-  walk_source: string;
-  steps_per_march_bar: number[];
-  fever_deploys: number[];
+  /** Section indexes (0-5 queue, 0-2 ride) played on the March layer. */
+  march_sections: number[];
+  /** [launchMs, dropBar] per Fever launch. */
+  fever_deploys: [number, number][];
   auto_fever: boolean;
   inputs: [number, number, number, number][];
   poppers: [number, number, number][];
@@ -90,9 +99,22 @@ export interface ProofContext {
   pocket: boolean;
   elapsedMs: number;
   pauseSpans: [number, number][];
-  walkSource: string;
-  stepsPerMarchBar: number[];
+  grip: string;
+  assist: boolean;
+  limp: boolean;
   roundToken?: string;
+}
+
+function pairsOf(a: number[]): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i + 1 < a.length; i += 2) out.push([a[i], a[i + 1]]);
+  return out;
+}
+
+export function marchSectionsOf(s: JudgeState): number[] {
+  const out: number[] = [];
+  for (let b = s.firstBar, k = 0; b <= s.lastBar; b += 4, k++) if (s.barLayer[b] === 2) out.push(k);
+  return out;
 }
 
 export function buildProof(s: JudgeState, ctx: ProofContext, chartVersion: string, beatmapHash: string): RhythmProofV4 {
@@ -113,6 +135,11 @@ export function buildProof(s: JudgeState, ctx: ProofContext, chartVersion: strin
     difficulty: ctx.difficulty,
     format: ctx.format,
     ftue: ctx.ftue,
+    grip: ctx.grip,
+    assist: ctx.assist,
+    limp: ctx.limp,
+    no_fail_until_ms: Number.isFinite(ctx.noFailUntilMs) ? Math.round(ctx.noFailUntilMs) : -1,
+    touch_ts: 'est',
     audio_backend: ctx.audioBackend,
     route: ctx.route,
     offset_ms: Math.round(ctx.offsetMs),
@@ -121,9 +148,8 @@ export function buildProof(s: JudgeState, ctx: ProofContext, chartVersion: strin
     elapsed_ms: Math.round(ctx.elapsedMs),
     pause_spans: ctx.pauseSpans.map(([a, b]) => [Math.round(a), Math.round(b)] as [number, number]),
     march_bars: marchBarsOf(s),
-    walk_source: ctx.walkSource,
-    steps_per_march_bar: ctx.stepsPerMarchBar,
-    fever_deploys: s.deployT.slice(),
+    march_sections: marchSectionsOf(s),
+    fever_deploys: pairsOf(s.deployT),
     auto_fever: ctx.autoFever,
     inputs,
     poppers,
@@ -149,7 +175,9 @@ export function replayProof(stage: StageJson, proof: RhythmProofV4): { score: nu
     autoFever: proof.auto_fever,
     marchBars: proof.march_bars,
     sharpEnabled: proof.sharp_enabled,
-    noFailUntilMs: proof.ftue ? Infinity : 0,
+    noFailUntilMs: proof.ftue || proof.no_fail_until_ms < 0 ? Infinity : proof.no_fail_until_ms,
+    limp: proof.limp,
+    assist: proof.assist,
   });
   const touches = decodeTouches(proof.touches);
   let now = chart.barStart[0];
@@ -160,6 +188,7 @@ export function replayProof(stage: StageJson, proof: RhythmProofV4): { score: nu
     }
     if (x.type === 0) judgeDown(s, x.t, x.zone, x.pid, x.y);
     else if (x.type === 1) judgeUp(s, x.t, x.pid);
+    else if (x.type === 3) judgeLaunch(s, x.t, x.pid);
     else judgeMove(s, x.t, x.pid, x.y);
   }
   const end = s.stalled ? s.stallT : chart.endMs + 50;

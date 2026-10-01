@@ -40,7 +40,7 @@ OUT = os.path.join(ROOT, 'src/games/rhythm/stages')
 DRUM, RIM, ROLL, BIG, CYMBAL, POPPER, FREEZE = range(7)
 STANDING, MARCH = 1, 2
 F_ECHO, F_EITHER, F_FLICK = 1, 2, 4
-CHART_VERSION = 'pb-1.0'
+CHART_VERSION = 'pb-2.0'
 
 # Round sections (queue, 24 playable bars): name, first bar, last bar (1-based).
 QUEUE_SECTIONS = [
@@ -52,13 +52,15 @@ DENSITY = {  # notes per bar, d1 / d2 / d3
     'breakdown': (2, 3, 4), 'finale': (4, 6, 9),
 }
 ECHO = 'echo'
+# Rev 6 launch vocabulary (DRUM, RIM, ROLL, BIG). CYMBAL, POPPER, ECHO and
+# FREEZE are post-launch content drops (design 3.8) and are not charted.
 VOCAB = {
-    'opening_day_a': {1: {DRUM, BIG}, 2: {DRUM, RIM, BIG, ROLL}, 3: {DRUM, RIM, BIG, ROLL, CYMBAL, ECHO, FREEZE, POPPER}},
-    'waiting_room_a': {1: {DRUM, RIM, BIG}, 2: {DRUM, RIM, BIG, ROLL, CYMBAL, ECHO}, 3: {DRUM, RIM, BIG, ROLL, CYMBAL, ECHO, FREEZE, POPPER}},
-    'shark_shop_a': {1: {DRUM, RIM, ROLL, BIG}, 2: {DRUM, RIM, ROLL, BIG, CYMBAL, ECHO, POPPER}, 3: {DRUM, RIM, BIG, ROLL, CYMBAL, ECHO, FREEZE, POPPER}},
-    'backpack_bounce_a': {1: {DRUM, RIM, BIG}, 2: {DRUM, RIM, ROLL, BIG, CYMBAL, ECHO, POPPER}, 3: {DRUM, RIM, BIG, ROLL, CYMBAL, ECHO, FREEZE, POPPER}},
+    'opening_day_a': {1: {DRUM, BIG}, 2: {DRUM, RIM, BIG, ROLL}},
+    'waiting_room_a': {1: {DRUM, RIM, BIG}, 2: {DRUM, RIM, BIG, ROLL}},
+    'shark_shop_a': {1: {DRUM, RIM, ROLL, BIG}, 2: {DRUM, RIM, ROLL, BIG}},
+    'backpack_bounce_a': {1: {DRUM, RIM, ROLL, BIG}, 2: {DRUM, RIM, ROLL, BIG}},
 }
-RIDE_VOCAB = {DRUM, ROLL, BIG, CYMBAL}
+RIDE_VOCAB = {DRUM, ROLL, BIG}
 POS_WEIGHT = {0: 1.35, 4: 1.0, 8: 1.15, 12: 1.0, 2: 0.9, 6: 0.9, 10: 0.9, 14: 0.9}  # slot in bar -> weight
 THRESH = 0.28  # minimum onset strength for a note (normalised flux)
 
@@ -181,25 +183,53 @@ def t_at(bar, slot, beat_us):
 
 
 def author(stage_id, fmt, d, analysis, f, bars):
+    """Rev 6 wrapper: author every difficulty together (nesting) and return one."""
+    charts = author_all(stage_id, fmt, f, bars)
+    return charts[d], []
+
+
+def pick_with(bar, d, n, forced, avoid, prev):
+    """Up to n slots: the forced slots first, then the strongest onsets that
+    keep the difficulty's spacing (quarters d1, 8ths d2)."""
+    out = sorted(set(forced))
+    gap = 4 if d == 1 else 2
+    slots = [s for s in allowed_slots(d) if s not in avoid and s not in out and bar.strength(s) >= THRESH]
+    scored = sorted(slots, key=lambda s: -bar.strength(s) * slot_weight(s))
+    if prev:
+        rep = [s for s in prev if s in slots]
+        if rep:
+            scored = rep + [s for s in scored if s not in rep]
+    for s in scored:
+        if len(out) >= n:
+            break
+        if any(abs(s - o) < gap for o in out):
+            continue
+        out.append(s)
+    return sorted(out)
+
+
+def author_all(stage_id, fmt, f, bars):
+    """Rev 6 charting (design rhythm.md 3.2-3.5, 4.6):
+      * launch vocabulary only: DRUM, RIM, ROLL, BIG (per-stage intro order);
+      * one canonical chart per stage and difficulty (no seeded groups);
+      * nesting by tick: MARCH layer in d1, d1 in d2;
+      * no note in the last beat before a drop line (sections start on
+        bars 5, 9, 13, 17, 21; ride 5, 9): Fever drops out of silence;
+      * at most one RIM a bar at d1; no d2 bar with 4 same-zone 8ths in a row;
+      * one BIG at d2 on the bar-12 crash, BIG on the last bar's downbeat."""
     beat_us = f['beatTimesUs']
     pre = f['preRollBars']
     nplay = f['playableBars']
     sections = QUEUE_SECTIONS if fmt == 'queue' else RIDE_SECTIONS
     if nplay != (24 if fmt == 'queue' else 12):
         raise RuntimeError('section table expects 24 queue / 12 ride bars')
-    vocab = RIDE_VOCAB if fmt == 'ride' else VOCAB[stage_id][d]
-    notes = []
-    groups = []  # [id, type, n alts, eligible]
-    gid = [0]
+    diffs = (1, 2) if fmt == 'queue' else (1,)
+    notes = {d: [] for d in diffs}
 
-    def new_group(kind, alts):
-        gid[0] += 1
-        groups.append([gid[0], kind, alts])
-        return gid[0]
-
-    def add(bar, slot, kind, zone, layers=STANDING, extra=0, g=0, a=0, flags=0, t=None):
-        tt = t if t is not None else t_at(bar, slot, beat_us)
-        notes.append([tt, bar.idx * 4 + slot // 4, slot % 4 + (slot // 4) * 0, kind, zone, layers, extra, g, a, flags])
+    def add(d, bar, slot, kind, layers=STANDING, extra=0):
+        tt = t_at(bar, slot, beat_us)
+        zone = 1 if kind == RIM else (2 if kind == BIG else 0)
+        notes[d].append([tt, bar.idx * 4 + slot // 4, slot % 4, kind, zone, layers, extra, 0, 0, 0])
 
     def section_of(r):
         for name, a, b in sections:
@@ -207,137 +237,72 @@ def author(stage_id, fmt, d, analysis, f, bars):
                 return name
         return 'finale'
 
-    prev = None
+    def slot_t(bar, slot):
+        b = bar.idx * 4 + slot // 4
+        return int((beat_us[b] + (beat_us[b + 1] - beat_us[b]) * (slot % 4) / 4) / 1000)
+
+    prev = {d: None for d in diffs}
     march_prev = None
-    echo_pairs = []
-    # ECHO candidates: bars 9-12 pairs (9,10), (11,12) plus chorus pair (13,14) -> seed picks 2 of 3
-    if ECHO in vocab and fmt == 'queue':
-        echo_pairs = [(9, 10), (11, 12), (15, 16)]
-    echo_group = {}
-    for pair in echo_pairs:
-        echo_group[pair] = new_group('echo', 2)
-    freeze_slots = []
-    ride_cymbal_done = False
     for r in range(1, nplay + 1):
         bar = bars[pre + r - 1]
         sec = section_of(r)
-        dens = DENSITY[sec][d - 1] if fmt == 'queue' else (3, 4, 4)[['warmup', 'chorus', 'finale'].index(sec)]
         last = r == nplay
-        # March layer for this bar (pattern held for 2 bars)
+        pre_drop = r % 4 == 0 and not last  # the bar before a drop line
+        forbid = set(range(12, 16)) if pre_drop else set()
+        vocab = {d: (RIDE_VOCAB if fmt == 'ride' else VOCAB[stage_id][d]) for d in diffs}
+        if last:
+            for d in diffs:
+                add(d, bar, 0, BIG, STANDING | MARCH)
+            continue
+        # March pattern held for 2 bars, only on audible quarters.
         if (r - 1) % 2 == 0 or march_prev is None:
             march_prev = march_pattern(bar)
         mslots = {'1234': [0, 4, 8, 12], '13': [0, 8], '24': [4, 12], '123': [0, 4, 8]}[march_prev]
-        if last:
+        mslots = [s for s in mslots if s not in forbid and bar.strength(s) >= THRESH * 0.8]
+        if not mslots:
             mslots = [0]
-
-        def emit_bar(slots, zones, g=0, a=0, flags=0, allow_special=True):
-            for s, z in zip(slots, zones):
-                kind = z  # DRUM or RIM
-                fl = flags
-                v = bar.slots.get(s, {})
-                if allow_special and CYMBAL in vocab and s in (0, 8) and v.get('c', 0) > 0.55 and v.get('sus', 0) > 0.25 and not last:
-                    if fmt == 'ride':
-                        if sec == 'finale' and not ride_cymbal_done:
-                            kind, fl = CYMBAL, fl
-                            mark_ride_cymbal()
-                    else:
-                        kind = CYMBAL
-                        fl |= F_EITHER
-                        if d == 3 and not any(0 < o - s <= 1 for o in slots):
-                            fl |= F_FLICK
-                layers = STANDING | (MARCH if (s in mslots and kind in (DRUM, RIM, CYMBAL)) else 0)
-                add(bar, s, kind, 1 if kind == RIM else 0, layers, 0, g, a, fl)
-
-        def mark_ride_cymbal():
-            nonlocal ride_cymbal_done
-            ride_cymbal_done = True
-
-        pair = next((p for p in echo_pairs if r in p), None)
-        is_fill_bar = r % 4 == 0 and not last
-        if last:
-            # BIG on beat 1, then nothing (the curtain). March hears it too.
-            add(bar, 0, BIG, 2, STANDING | MARCH)
-            prev = [0]
-            continue
-        if fmt == 'queue' and r == 20 and POPPER in vocab and d >= 2:
-            end_t = int(beat_us[bar.idx * 4 + 4] / 1000)
-            add(bar, 0, POPPER, 2, STANDING | MARCH, end_t, t=int(beat_us[bar.idx * 4] / 1000))
-            prev = None
-            continue
-        if pair and r == pair[0]:
-            # call bar: normal notes (alt 0) or empty for the leader's call (alt 1)
-            g = echo_group[pair]
-            slots = pick(bar, d, dens, prev)
-            emit_bar(slots, zones_for(bar, slots, d, vocab), g, 0)
-            # march still plays the call bar's quarter hits (no ECHO in March)
-            for s in mslots:
-                if bar.strength(s) >= THRESH * 0.8:
-                    add(bar, s, DRUM, 2, MARCH, 0, g, 1)
-                    if s not in slots:
-                        add(bar, s, DRUM, 2, MARCH, 0, g, 0)
-            prev = slots
-            continue
-        if pair and r == pair[1]:
-            g = echo_group[pair]
-            slots = pick(bar, min(d, 2), max(3, dens - 1), prev)
-            zones = zones_for(bar, slots, d, vocab)
-            emit_bar(slots, zones, g, 0, allow_special=False)
-            emit_bar(slots, zones, g, 1, F_ECHO, allow_special=False)
-            prev = slots
-            continue
-        if is_fill_bar:
-            # three onset-backed alternates for every 4th bar
-            g = new_group('fill', 3)
-            base = pick(bar, d, dens, prev)
-            alt1 = pick(bar, d, max(2, dens - 1), None, avoid=base[:1])
-            rs = roll_span(bar) if ROLL in vocab else None
-            for a_i, slots in enumerate([base, alt1, None]):
-                if slots is None:
-                    if rs:
-                        head = [s for s in pick(bar, d, dens, prev) if s < rs[0]]
-                        emit_bar(head, zones_for(bar, head, d, vocab), g, 2)
-                        end_slot = rs[1]
-                        b_end = bar.idx * 4 + end_slot // 4
-                        end_t = int((beat_us[b_end] + (beat_us[b_end + 1] - beat_us[b_end]) * (end_slot % 4) / 4) / 1000)
-                        add(bar, rs[0], ROLL, 2, STANDING, end_t, g, 2)
-                        for s in mslots:
-                            if s < rs[0] and s not in head:
-                                add(bar, s, DRUM, 2, MARCH, 0, g, 2)
-                            elif s >= rs[0]:
-                                add(bar, s, DRUM, 2, MARCH, 0, g, 2)
-                        continue
-                    slots = pick(bar, min(3, d + 1), dens, None)
-                emit_bar(slots, zones_for(bar, slots, d, vocab), g, a_i)
-                for s in mslots:
-                    if s not in slots and bar.strength(s) >= THRESH * 0.8:
-                        add(bar, s, DRUM, 2, MARCH, 0, g, a_i)
-            prev = base
-            continue
-        slots = pick(bar, d, dens, prev)
-        emit_bar(slots, zones_for(bar, slots, d, vocab))
-        for s in mslots:
-            if s not in slots and bar.strength(s) >= THRESH * 0.8:
-                add(bar, s, DRUM, 2, MARCH)
-        prev = slots
-        # FREEZE candidates on true rests in the Breakdown (d3)
-        if fmt == 'queue' and d == 3 and FREEZE in vocab and sec == 'breakdown':
-            for s in (4, 12, 6, 14):
-                if s not in slots and bar.strength(s) < 0.2 and all(abs(s - o) >= 2 for o in slots):
-                    freeze_slots.append((bar, s))
-                    break
-    for bar, s in freeze_slots[:4]:
-        g = new_group('freeze', 2)
-        add(bar, s, FREEZE, 2, STANDING, 0, g, 1)
-    # ROLL in the ride sprint: on the chorus fill when there is a snare run
-    if fmt == 'ride' and ROLL in vocab:
-        pass
-    notes.sort(key=lambda n: (n[0], n[3]))
-    if d == 3:
-        fix_runs(notes)
-    # normalise the 'sixteenth' column to the in-beat 16th (0-3)
-    for n_ in notes:
-        n_[2] = n_[2] % 4
-    return notes, groups
+        # ROLL on a real snare run in a fill bar (ends before the rest beat).
+        roll = None
+        if pre_drop and any(ROLL in vocab[d] for d in diffs):
+            hits = [s for s in range(4, 12) if bar.slots.get(s, {}).get('s', 0) >= 0.3]
+            if len(hits) >= 3:
+                roll = (4, 12)
+        # d1: march slots plus the strongest quarters.
+        dens = lambda d: DENSITY[sec][d - 1] if fmt == 'queue' else (3, 4, 4)[['warmup', 'chorus', 'finale'].index(sec)]
+        d1_avoid = set(forbid)
+        if roll:
+            d1_avoid |= set(range(5, 16))
+            mslots = [s for s in mslots if s <= 4]
+        s1 = pick_with(bar, 1, max(dens(1), len(mslots)), mslots, d1_avoid, prev[1])
+        chosen = {1: s1}
+        if 2 in diffs:
+            d2_avoid = set(forbid) | (set(range(5, 16)) if roll and ROLL in vocab[2] else set())
+            chosen[2] = pick_with(bar, 2, max(dens(2), len(s1)), s1, d2_avoid, prev[2])
+        for d in diffs:
+            slots = chosen[d]
+            prev[d] = slots
+            has_roll = roll and ROLL in vocab[d]
+            rim_used = 0
+            for s in slots:
+                kind = bar.zone(s) if RIM in vocab[d] else DRUM
+                if kind == RIM and d == 1:
+                    if rim_used >= 1:
+                        kind = DRUM
+                    rim_used += 1
+                if has_roll and s == roll[0]:
+                    add(d, bar, s, ROLL, STANDING, slot_t(bar, roll[1]))
+                    continue
+                if d == 2 and r == 12 and s == 0 and fmt == 'queue' and bar.slots.get(0, {}).get('c', 0) > 0.3:
+                    kind = BIG
+                layers = STANDING | (MARCH if s in mslots else 0)
+                add(d, bar, s, kind, layers)
+            if has_roll and roll[0] not in slots:
+                add(d, bar, roll[0], ROLL, STANDING, slot_t(bar, roll[1]))
+    for d in diffs:
+        notes[d].sort(key=lambda n: (n[0], n[3]))
+        if d == 2:
+            fix_runs(notes[d])
+    return notes
 
 
 def fix_runs(notes):
@@ -384,10 +349,9 @@ def main(ids):
                            chartVersion=CHART_VERSION, formats={})
             charts = {}
             groups = {}
-            for d in ((1, 2, 3) if fmt == 'queue' else (1,)):
-                n, g = author(sid, fmt, d, analysis, f, bars)
+            for d, n in author_all(sid, fmt, f, bars).items():
                 charts[str(d)] = n
-                groups[str(d)] = g
+                groups[str(d)] = []
             bh = hashlib.sha1(json.dumps(f['beatTimesUs']).encode()).hexdigest()[:8]
             out['formats'][fmt] = dict(
                 audio=f['audio'], fever=f['fever'], durationMs=f['durationMs'],

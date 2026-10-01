@@ -1,20 +1,23 @@
 /**
  * RhythmTapGame.tsx: "Parade Beat", the Rhythm Tap rework
- * (design: tps-prime-time-audit/studio/design/rhythm.md, revision 4).
+ * (design: tps-prime-time-audit/studio/design/rhythm.md, revision 6).
  *
  * Your shark is the drum major of the park parade. Chris's songs play, notes
  * march down the parade route onto the big drum, and every note is a drum hit
- * you can hear. Tap the drum for a boom, the gold hoops for a rim click, hold
- * for rolls, two fingers for BIG notes and to launch Firework Fever.
+ * you can hear. Colour equals input: blue notes on the blue part of the drum,
+ * coral notes on the coral part. Hold through rolls, two fingers on the gold
+ * BIG stars, and swipe up off the drum to launch Firework Fever on the next
+ * drop line.
  *
  * External contract (unchanged): MiniGameSelector, LinePlay and Crew Relay
  * render <RhythmTapGame visible seed difficulty format onComplete onClose
  * onQuit />. Proof: meta.score + meta.seed (what TaskGameProofService
- * validates today) plus meta.rhythmProof (v4, see core/proof.ts).
+ * validates today) plus meta.rhythmProof (v5, see core/proof.ts).
  *
- * QUEUE REALITY: movement never pauses. Walking switches bars to the March
- * layer (big quarter-note hits, zones ignored, softer penalties) through the
- * look-ahead lock, so a player can keep drumming by ear with eyes up.
+ * QUEUE REALITY: movement never pauses. The MARCH pill switches the next
+ * 4-bar section to the March layer (big quarter-note hits, zones ignored,
+ * softer penalties) so a player can keep drumming by ear with eyes up; the
+ * walk sensor only suggests it (the pill pulses), it never changes the chart.
  * Backgrounding, a locked screen or the pause button hold the round; resume
  * replays the bar before the pause as a counted pre-roll.
  */
@@ -55,6 +58,8 @@ import {
   EV_FLICK,
   EV_FREEZE_FAULT,
   EV_HIT,
+  EV_LAUNCH,
+  EV_LIMP,
   EV_MILESTONE,
   EV_MISS,
   EV_OOS,
@@ -68,9 +73,12 @@ import {
   feverActiveAt,
   finishJudge,
   judgeDown,
+  judgeLaunch,
   judgeMove,
   judgeTick,
   judgeUp,
+  lockTime,
+  nextOpenSection,
   noteActive,
   voidAround,
   type JudgeState,
@@ -78,11 +86,13 @@ import {
 import { buildProof } from './core/proof';
 import { autoTuneOffset, summarize, type RoundSummary } from './core/score';
 import { J_GOOD, J_GREAT, J_PERFECT, J_SHARP, K_BIG, K_CYMBAL, K_FREEZE, K_POPPER, K_RIM, K_ROLL, L_MARCH, STAR_ACCURACY, type Chart, type Difficulty, type RoundFormat } from './core/types';
+import { DEFAULT_GRIP, GRIP_ONE, GRIP_TWO, detectHand, gripFor, zoneOf, type GripPrefs } from './core/grip';
 import { createDrawList, layoutFrame, beatAt } from './field/layout';
-import { ParadeField, fieldGeom, zoneOfX } from './field/ParadeField';
-import { applyEventsUI, createView, showRibbon, stepView, RB_MARCH, RB_READY, type ParadeView } from './field/view';
+import { ParadeField, fieldGeom } from './field/ParadeField';
+import { applyEventsUI, createView, showRibbon, stepView, RB_CORAL_SIDE, RB_FULL, RB_HOLD, RB_MARCH, RB_READY, RB_TAP_BLUE, RB_TWO_THUMBS, type ParadeView } from './field/view';
 import { SongPlayer, type SongAnchor } from './audio/SongPlayer';
 import {
+  effectiveDifficulty,
   emptyProgress,
   ghostKey,
   loadProgress,
@@ -102,6 +112,9 @@ const DEFAULT_OFFSET_MS = 25; // built-in speaker placeholder (design 4.5)
 // Dev only: a scripted drummer plays the round (sigma ms) for capture and feel checks,
 // and EXPO_PUBLIC_RHYTHM_WALK=1 fakes walking in 8-bar stretches (March layer demo).
 const AUTOPLAY_SIGMA = __DEV__ ? Number(process.env.EXPO_PUBLIC_RHYTHM_AUTOPLAY || 0) : 0;
+// Section names for the pending MARCH label ("MARCH from Chorus").
+const SECTION_LABEL_QUEUE = ['Warm-up', 'Step it up', 'Parade', 'Chorus', 'Breakdown', 'Finale'];
+const SECTION_LABEL_RIDE = ['Warm-up', 'Chorus', 'Finale'];
 const FAKE_WALK = __DEV__ && process.env.EXPO_PUBLIC_RHYTHM_WALK === '1';
 const DEV_STAGE = (__DEV__ ? process.env.EXPO_PUBLIC_RHYTHM_STAGE : undefined) as StageId | undefined;
 const DEV_DIFF = __DEV__ ? Number(process.env.EXPO_PUBLIC_RHYTHM_DIFF || 0) : 0;
@@ -118,6 +131,8 @@ export interface RhythmTapGameProps {
   stageId?: StageId;
   /** A friend's or crew mate's ghost run to race (async challenge). */
   challenge?: GhostRun;
+  /** Ride Assist (design 3.5): granted by the server after a recorded ride loss. */
+  assist?: boolean;
   /** Preserved external contract used by MiniGameSelector. */
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
   onClose: () => void;
@@ -131,6 +146,9 @@ interface RoundPlan {
   seed: number;
   ftue: boolean;
   autoFever: boolean;
+  assist: boolean;
+  /** Queue rounds Limp at Groove 0 instead of stalling (design 3.6). */
+  limp: boolean;
   noFailUntil: number;
   chart: Chart;
   songSrc: number;
@@ -158,6 +176,8 @@ function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: numbe
     ftue = true;
   } else {
     stage = props.stageId ?? pickQueueStage(p, runSeed);
+    // Launch ships d1 and d2 (d3 arrives with the commissioned track); d2 needs 2 stars on d1.
+    difficulty = DEV_DIFF ? (Math.min(2, DEV_DIFF) as Difficulty) : effectiveDifficulty(p, stage, Math.min(2, difficulty));
   }
   const entry = STAGES[stage];
   const audio = entry.audio[format] ?? entry.audio.queue!;
@@ -171,6 +191,8 @@ function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: numbe
     seed: runSeed >>> 0,
     ftue,
     autoFever: ftue || ride || entry.order <= 2,
+    assist: ride && !!props.assist,
+    limp: !ride && format === 'queue',
     noFailUntil,
     chart,
     songSrc: audio.song,
@@ -181,7 +203,21 @@ function planRound(p: ParadeProgress, props0: RhythmTapGameProps, runSeed: numbe
 const PRELOAD = [
   'rh_bass_drum', 'rh_rim', 'rh_cymbal', 'rh_snare_tap', 'rh_glock', 'rh_firework', 'rh_whistle_call', 'rh_win', 'rh_clear', 'rh_stall',
   'sh_popper', 'sh_combo_break', 'sh_whistle', 'sh_powerup', 'sh_crowd_cheer', 'fx.reveal', 'fx.whoosh', 'fx.nope', 'fx.coin', 'fx.purchase',
+  'rh_thud', 'rh_tick',
 ];
+
+// Always-on hit thuds (design 5.3): a quiet cut of the drum one-shots, 14 dB
+// under the song, on every GOOD-or-better hit and on every backend.
+let thudsRegistered = false;
+function registerThuds(): void {
+  if (thudsRegistered) return;
+  thudsRegistered = true;
+  GameAudio.registerCues({
+    rh_thud: { src: require('./audio/sfx/rh_thud.wav'), durationMs: 120, maxVoices: 4, priority: 1, fallback: 'ui.tap' },
+    rh_tick: { src: require('./audio/sfx/rh_tick.wav'), durationMs: 60, maxVoices: 4, priority: 1, fallback: 'ui.tap' },
+  });
+}
+const THUD_VOL = 0.42;
 
 export function RhythmTapGame(props: RhythmTapGameProps) {
   const { visible, seed: roundSeed, onComplete, onClose, onQuit } = props;
@@ -199,6 +235,13 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const [pocket, setPocket] = useState(false);
   const [goalHits, setGoalHits] = useState(0);
   const [deltaChip, setDeltaChip] = useState<number | null>(null);
+  // MARCH pill (design 4.6): the player's choice; applies per 4-bar section.
+  const [marchOn, setMarchOn] = useState(false);
+  const [marchLive, setMarchLive] = useState(false);
+  const [marchFrom, setMarchFrom] = useState<string | null>(null);
+  const [walkHint, setWalkHint] = useState<0 | 1 | 2>(0);
+  const [gripPrefs, setGripPrefs] = useState<GripPrefs>(DEFAULT_GRIP);
+  const [armedJs, setArmedJs] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -207,6 +250,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       if (!alive) return;
       progressRef.current = p;
       setProgress(p);
+      if (p.grip) setGripPrefs(p.grip);
     });
     return () => {
       alive = false;
@@ -233,7 +277,9 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const anchor = useSharedValue<SongAnchor>({ pos: 0, wall: 0, playing: false });
   const lastWall = useSharedValue(0);
   const offset = useSharedValue(DEFAULT_OFFSET_MS);
-  const walkingSv = useSharedValue(0);
+  const marchSv = useSharedValue(0);
+  const gripSv = useSharedValue<number[]>([GRIP_ONE, 1, 0]);
+  const handXs = useSharedValue<number[]>([]);
   const endMs = useSharedValue(1e12);
   const ended = useSharedValue(0);
   const beatsSv = useSharedValue<number[]>([0, 500]);
@@ -253,24 +299,46 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   const pausedAt = useRef<number | null>(null);
   const hapticCancel = useRef<(() => void) | null>(null);
   const finished = useRef(false);
-  const stepsRef = useRef(0);
-  const stepsByBar = useRef<Map<number, number>>(new Map());
   const perfRunJs = useRef(0);
   const glockStep = useRef(0);
   const rivals = useRef<Rival[]>([]);
 
-  const walk = useWalkSense({
-    active: visible && ready && !result,
-    onStep: (n) => {
-      stepsRef.current = n;
-    },
-  });
+  // The walk sensor only suggests (design 4.6): walking 3 s on the full chart
+  // pulses "Walking? Tap to march"; standing 8 s while marching suggests the
+  // full chart. It never changes the chart, scores or boards.
+  const walk = useWalkSense({ active: visible && ready && !result });
   useEffect(() => {
-    walkingSv.value = walk.walking ? 1 : 0;
-  }, [walk.walking, walkingSv]);
+    if (walk.walking && !progressRef.current.walkSeen) {
+      progressRef.current = { ...progressRef.current, walkSeen: true };
+    }
+    const want = walk.walking ? (marchOn ? 0 : 1) : marchOn ? 2 : 0;
+    if (!want) {
+      setWalkHint(0);
+      return undefined;
+    }
+    const id = setTimeout(() => setWalkHint(want as 1 | 2), want === 1 ? 3000 : 8000);
+    return () => clearTimeout(id);
+  }, [walk.walking, marchOn]);
+
+  // Grip for this round (ride: always One Thumb).
+  const grip = plan ? gripFor(gripPrefs, plan.difficulty, plan.format) : GRIP_ONE;
+  useEffect(() => {
+    gripSv.value = [grip, gripPrefs.hand, gripPrefs.swap];
+  }, [grip, gripPrefs.hand, gripPrefs.swap, gripSv]);
+  const saveGrip = useCallback((g: GripPrefs) => {
+    setGripPrefs(g);
+    progressRef.current = { ...progressRef.current, grip: g };
+    void saveProgress(progressRef.current);
+  }, []);
+  const onHandSample = useCallback((xs: number[]) => {
+    const prev = progressRef.current.grip ?? DEFAULT_GRIP;
+    const hand = detectHand(xs, SCREEN_W, prev.hand);
+    if (hand !== prev.hand || !progressRef.current.grip) saveGrip({ ...prev, hand });
+  }, [saveGrip]);
 
   useEffect(() => {
     registerStudioAudio('rhythm');
+    registerThuds();
     void GameAudio.init().then(() => {
       hitSounds.current = GameAudio.backendName !== 'expo-av';
       return GameAudio.preload(PRELOAD);
@@ -285,7 +353,9 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     finished.current = false;
     pauseSpans.current = [];
     pausedAt.current = null;
-    stepsByBar.current = new Map();
+    setMarchLive(false);
+    setMarchFrom(null);
+    setArmedJs(false);
     perfRunJs.current = 0;
     glockStep.current = 0;
     setResult(null);
@@ -296,14 +366,16 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     setDeltaChip(null);
     setReady(false);
     const chart = plan.chart;
-    judge.value = createJudge(chart, { autoFever: plan.autoFever, noFailUntilMs: plan.noFailUntil });
+    const js = createJudge(chart, { autoFever: plan.autoFever, noFailUntilMs: plan.noFailUntil, limp: plan.limp, assist: plan.assist });
+    js.marchWant = marchSv.value;
+    judge.value = js;
     const v = createView(chart.t.length, geom.cx, geom.yLine, SCREEN_W, countInBeats(chart));
     v.reduced = reducedMotion ? 1 : 0;
     v.pocket = pocket ? 1 : 0;
     view.value = v;
     draw.value = createDrawList();
     beatsSv.value = chart.beats;
-    approachSv.value = { 1: 1600, 2: 1300, 3: 1050 }[chart.difficulty];
+    approachSv.value = js.approach;
     echoStyleSv.value = chart.difficulty === 2 ? 1 : 0;
     endMs.value = chart.endMs;
     ended.value = 0;
@@ -382,16 +454,22 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     anchor.value = { pos: 0, wall: Date.now(), playing: false };
     running.value = 1;
     void player.play(0);
-    // Stage title card on Alex's ribbon while the count-in plays.
-    const ribbonId = plan.ftue ? 7 : plan.stage === 'waiting_room_a' && !progressRef.current.seenCallouts.includes('rim') ? 8 : 0;
+    // One new idea per stage, once per player, on Alex's ribbon during the count-in (design 3.7).
+    const seen = progressRef.current.seenCallouts;
+    let callout = '';
+    if (plan.ftue) callout = 'blue';
+    else if (grip === GRIP_TWO && !seen.includes('two')) callout = 'two';
+    else if (plan.chart.kind.includes(K_RIM) && !seen.includes('rim')) callout = 'rim';
+    else if (plan.chart.kind.includes(K_ROLL) && !seen.includes('roll')) callout = 'roll';
+    const ribbonId = callout === 'blue' ? RB_TAP_BLUE : callout === 'two' ? RB_TWO_THUMBS : callout === 'rim' ? RB_CORAL_SIDE : callout === 'roll' ? RB_HOLD : 0;
     runOnUI((id: number) => {
       'worklet';
       showRibbon(view.value, id);
     })(ribbonId);
-    if (!progressRef.current.seenCallouts.includes('rim') && plan.chart.kind.includes(K_RIM)) {
-      progressRef.current = { ...progressRef.current, seenCallouts: [...progressRef.current.seenCallouts, 'rim'] };
+    if (callout && callout !== 'blue') {
+      progressRef.current = { ...progressRef.current, seenCallouts: [...seen, callout] };
     }
-  }, [plan, clock, anchor, running, view]);
+  }, [plan, clock, anchor, running, view, grip]);
 
   const wantStart = useRef(false);
   const onStart = useCallback(() => {
@@ -412,26 +490,26 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     forEachEvent(batch, (kind, a, b) => {
       if (kind === EV_HIT) {
         const k = s?.kind[a] ?? 0;
-        if (hitSounds.current) {
-          const cue = k === K_RIM ? 'rh_rim' : k === K_CYMBAL ? 'rh_cymbal' : 'rh_bass_drum';
-          GameAudio.play(cue, { volume: pocket ? 0.35 : 0.55 });
-        }
+        const rim = k === K_RIM;
+        // Always-on thud (DRUM, BIG, ROLL head) or rim tick, quiet under the song.
+        GameAudio.play(rim ? 'rh_tick' : 'rh_thud', { volume: pocket ? THUD_VOL * 0.7 : THUD_VOL });
         if (b <= J_PERFECT) {
           perfRunJs.current += 1;
-          if (perfRunJs.current % 4 === 0) {
-            GameAudio.playLadder('rh_glock', glockStep.current % 10, { volume: 0.4 });
+          if (hitSounds.current && perfRunJs.current % 4 === 0) {
+            // Glock sparkle (audio-api backend only, design 5.3).
+            GameAudio.playLadder('rh_glock', glockStep.current % 10, { volume: 0.32 });
             glockStep.current += fever ? 2 : 1;
           }
         } else perfRunJs.current = 0;
-        if (b === J_SHARP) Haptic.hitMedium();
-        else if (k === K_RIM) Haptic.tickSelection();
-        else if (b === J_PERFECT || b === J_GREAT) Haptic.tapLight();
-        else if (b === J_GOOD) Haptic.tickSelection();
+        // Per-judgment haptics (design 7.7, v1 table): DRUM duller than RIM.
         if (k === K_BIG) Haptic.comboHeavy();
+        else if (b <= J_PERFECT) (rim ? Haptic.hitRigid : Haptic.hitMedium)();
+        else if (b === J_GREAT) (rim ? Haptic.tapLight : Haptic.hitSoft)();
+        else Haptic.tickSelection();
       } else if (kind === EV_MISS) {
         perfRunJs.current = 0;
         if (b === 1) {
-          GameAudio.play('sh_combo_break', { volume: 0.7 });
+          GameAudio.play('sh_combo_break', { volume: 0.6 });
           Haptic.tapLight();
         }
       } else if (kind === EV_WRONG) {
@@ -440,24 +518,29 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         GameAudio.play('fx.nope', { volume: 0.5 });
         Haptic.failBuzz();
       } else if (kind === EV_ROLL_TICK) {
-        if (hitSounds.current) GameAudio.play('rh_snare_tap', { volume: 0.35 });
+        GameAudio.play('rh_thud', { volume: THUD_VOL * 0.6 });
         if (b % 2 === 0) Haptic.tickSelection();
       } else if (kind === EV_ROLL_BREAK) {
-        GameAudio.play('sh_combo_break', { volume: 0.5 });
+        GameAudio.play('sh_combo_break', { volume: 0.45 });
       } else if (kind === EV_BIG_DOUBLE) {
         GameAudio.play('rh_firework');
+        GameAudio.play('rh_cymbal', { volume: 0.55 });
         Haptic.comboHeavy();
       } else if (kind === EV_FLICK) {
         Haptic.hitMedium();
-        setTimeout(() => Haptic.tapLight(), 40);
       } else if (kind === EV_POPPER_TAP) {
         Haptic.tickSelection();
       } else if (kind === EV_POPPER_POP) {
         GameAudio.play('sh_popper');
         Haptic.comboHeavy();
       } else if (kind === EV_FEVER_ARMED) {
-        GameAudio.play('sh_powerup', { volume: 0.7 });
+        GameAudio.play('sh_powerup', { volume: 0.65 });
         Haptic.success();
+        setArmedJs(true);
+      } else if (kind === EV_LAUNCH) {
+        GameAudio.play('fx.whoosh', { volume: 0.7 });
+        Haptic.hitMedium();
+        setArmedJs(false);
       } else if (kind === EV_FEVER_START) {
         GameAudio.play('rh_firework');
         GameAudio.play('fx.whoosh');
@@ -465,6 +548,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         const beat = s ? (s.barStart[a + 1] - s.barStart[a]) / 4 : 450;
         song.current?.setFever(true, beat);
         setFeverOn(true);
+        setArmedJs(false);
       } else if (kind === EV_FEVER_END) {
         const beat = s ? (s.barStart[1] - s.barStart[0]) / 4 : 450;
         song.current?.setFever(false, beat * 1.2);
@@ -473,11 +557,19 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         GameAudio.play('fx.reveal', { volume: 0.7 });
         if (a >= 50) GameAudio.play('sh_crowd_cheer', { volume: 0.6 });
         Haptic.comboHeavy();
+      } else if (kind === EV_LIMP) {
+        if (a) {
+          GameAudio.play('fx.nope', { volume: 0.35 });
+          Haptic.warning();
+        } else {
+          GameAudio.play('fx.reveal', { volume: 0.5 });
+          Haptic.success();
+        }
       } else if (kind === EV_STALL) {
         Haptic.failBuzz();
         void onStall();
       } else if (kind === EV_BAR_LAYER) {
-        // March layer locked for bar a (b = 2): nothing to play, the view switches on the bar line.
+        // Layer locked for bar a (b = 2 March): the view switches on the bar line.
       }
     });
     setScore(sc);
@@ -497,6 +589,14 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
   // downbeat, soft otherwise, faint half-beat ticks. Scheduled per bar from
   // one start time (no drift), dropped if more than 40 ms late.
   const onBar = useCallback((bar: number, barWallStart: number, beatMs: number, march: number, noteBeats: number) => {
+    setMarchLive(!!march);
+    if (marchWantRef.current === !!march) setMarchFrom(null);
+    // Ghost delta chip on every bar line (design 11.2).
+    const r = rivals.current.find((x) => x.isGhost);
+    if (r && judgeMirror.current) {
+      const played = bar - (plan?.chart.firstBar ?? 2);
+      if (played > 0 && played <= r.barScores.length) setDeltaChip(played);
+    }
     if (!march && !pocket) return;
     const steps: HapticStep[] = [];
     for (let k = 0; k < 4; k++) {
@@ -506,14 +606,46 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
     }
     hapticCancel.current?.();
     hapticCancel.current = scheduleHaptics(steps, { startAt: barWallStart, lateDropMs: 40, priority: 2 });
-    stepsByBar.current.set(bar, stepsRef.current);
-    // Ghost delta chip on every bar line (design 11.2).
-    const r = rivals.current.find((x) => x.isGhost);
-    if (r && judgeMirror.current) {
-      const played = bar - (plan?.chart.firstBar ?? 2);
-      if (played > 0 && played <= r.barScores.length) setDeltaChip(played);
-    }
   }, [pocket, plan]);
+
+  // -- MARCH pill (design 4.6): toggles the layer from the next unlocked section.
+  const marchWantRef = useRef(false);
+  const toggleMarch = useCallback(() => {
+    const next = !marchWantRef.current;
+    marchWantRef.current = next;
+    setMarchOn(next);
+    setWalkHint(0);
+    marchSv.value = next ? 1 : 0;
+    const labels = plan?.format === 'ride' ? SECTION_LABEL_RIDE : SECTION_LABEL_QUEUE;
+    const onLabel = (sec: number) => {
+      setMarchFrom(sec >= 0 ? `${next ? 'MARCH' : 'FULL CHART'} from ${labels[sec] ?? 'next section'}` : null);
+    };
+    runOnUI((want: number) => {
+      'worklet';
+      const s = judge.value;
+      s.marchWant = want;
+      const b = nextOpenSection(s);
+      runOnJS(onLabel)(b < 0 ? -1 : Math.floor((b - s.firstBar) / 4));
+    })(next ? 1 : 0);
+  }, [plan, judge, marchSv]);
+
+  // -- Fever: tap the armed meter to launch (accessibility path, design 3.1).
+  const launchFromMeter = useCallback(() => {
+    runOnUI(() => {
+      'worklet';
+      if (!running.value) return;
+      const s = judge.value;
+      const v = view.value;
+      const t = clock.value + Math.min(34, Math.max(0, Date.now() - lastWall.value)) - offset.value;
+      v.touchX = SCREEN_W - 40;
+      judgeLaunch(s, t, 9000 + Math.floor(t));
+      const batch = drainEvents(s.ev);
+      if (batch.length) {
+        applyEventsUI(v, s, null, batch);
+        runOnJS(onBatch)(batch, s.score, s.combo, feverActiveAt(s, v.now) ? 1 : 0, s.hitN);
+      }
+    })();
+  }, [judge, view, clock, lastWall, offset, running, onBatch]);
 
   // -- The frame: clock, judge tick, layout, FX, events ----------------------------
   const onEnded = useRef<() => void>(() => {});
@@ -538,8 +670,8 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       lastWall.value = nowWall;
       const vnow = c - offset.value;
       v.now = vnow;
-      s.walking = walkingSv.value;
-      if (FAKE_WALK) s.walking = Math.floor(beatAt(beatsSv.value, vnow + 3000) / 16) % 2;
+      s.marchWant = marchSv.value;
+      if (FAKE_WALK) s.marchWant = Math.floor(beatAt(beatsSv.value, vnow + 3000) / 16) % 2;
       // Dev autoplay: a scripted drummer plays whichever layer is live.
       const ap = auto.value;
       if (ap.err.length) {
@@ -586,6 +718,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       if (bar !== lastBarSv.value && bar >= 0 && bar < s.nBars) {
         lastBarSv.value = bar;
         if (v.marchTarget > 0.5 && (bar === 0 || s.barLayer[bar - 1] !== L_MARCH)) showRibbon(v, RB_MARCH);
+        else if (v.marchTarget < 0.5 && bar > 0 && s.barLayer[bar - 1] === L_MARCH && bar <= s.lastBar) showRibbon(v, RB_FULL);
         // Beats in this bar carrying a March-layer note (the "tap now" pulse).
         let mask = 0;
         const beats = beatsSv.value;
@@ -601,7 +734,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       }
       if (s.armed && v.armed === 0) {
         v.armed = 1;
-        showRibbon(v, RB_READY);
+        if (!s.autoFever) showRibbon(v, RB_READY);
       }
       // Rival rails flash on their verified hits at the beat-map time.
       const rt = rivalHitT.value;
@@ -640,9 +773,15 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       const s = judge.value;
       const v = view.value;
       const base = clock.value + Math.min(34, Math.max(0, Date.now() - lastWall.value)) - offset.value;
+      const g = gripSv.value;
       for (const touch of e.changedTouches) {
         if (base < v.inputFrom) continue;
-        const zone = zoneOfX(touch.x, SCREEN_W);
+        const zone = zoneOf(touch.x, SCREEN_W, g[0], g[1], g[2]);
+        const hx = handXs.value;
+        if (hx.length < 20) {
+          hx.push(touch.x);
+          if (hx.length === 20) runOnJS(onHandSample)(hx.slice());
+        }
         v.touchX = touch.x;
         v.touchY = touch.y + geom.touchTop;
         v.touchZone = zone;
@@ -672,7 +811,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       const s = judge.value;
       const t = clock.value - offset.value;
       for (const touch of e.changedTouches) judgeUp(s, t, touch.id);
-    }), [judge, view, clock, lastWall, offset, running, geom, onBatch]);
+    }), [judge, view, clock, lastWall, offset, running, geom, onBatch, gripSv, handXs, onHandSample]);
 
   // -- Round end -----------------------------------------------------------------------
   const finishRound = useCallback(async (reason: 'end' | 'stall' | 'wrap') => {
@@ -708,15 +847,13 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       pocket,
       elapsedMs: elapsed,
       pauseSpans: pauseSpans.current,
-      walkSource: walk.walking ? 'motion' : 'motion',
-      stepsPerMarchBar: sum.marchBars.map((b) => {
-        const a = stepsByBar.current.get(b) ?? 0;
-        const n = stepsByBar.current.get(b + 1) ?? stepsRef.current;
-        return Math.max(0, n - a);
-      }),
+      grip: gripLabel(grip, gripPrefs),
+      assist: plan.assist,
+      limp: plan.limp,
     }, plan.chart.chartVersion, plan.chart.beatmapHash);
     // Progress: PB, stars, mastery, silent offset auto-tune, ghost of a PB run.
-    const board = plan.format === 'ride' ? 'ride' : sum.marchShare >= 0.5 ? 'march' : 'stage';
+    // 25% or more March sections posts to the March board (design 4.6).
+    const board = plan.format === 'ride' ? 'ride' : sum.marchShare >= 0.25 ? 'march' : 'stage';
     const p0 = progressRef.current;
     const { next, newPb } = recordRound(p0, { stage: plan.stage, difficulty: plan.difficulty, board, score: sum.score, stars: sum.stars, ftue: plan.ftue });
     const tuned = autoTuneOffset(offset.value, s);
@@ -726,7 +863,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
         ...next.ghosts,
         [ghostKey(plan.stage, plan.format, plan.difficulty)]: {
           stage: plan.stage, format: plan.format, difficulty: plan.difficulty, seed: plan.seed, touches: proof.touches,
-          marchBars: proof.march_bars, autoFever: plan.autoFever, score: sum.score, name: 'Your best', barScores: [], at: Date.now(),
+          marchBars: proof.march_bars, autoFever: plan.autoFever, chartVersion: plan.chart.chartVersion, score: sum.score, name: 'Your best', barScores: [], at: Date.now(),
         },
       };
     }
@@ -738,18 +875,23 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       if (win) GameAudio.play(stars >= 2 ? 'rh_win' : 'rh_clear');
       if (newPb && sum.score > 0) setTimeout(() => GameAudio.play('fx.purchase', { volume: 0.8 }), 900);
     }
+    const topRival = rivals.current.slice().sort((x, y) => y.finalScore - x.finalScore)[0];
+    const goal = nextGoal(sum, s.accN, plan.format === 'ride' && !plan.ftue, s.limped === 1);
     const res: GameResult = {
       score: sum.score,
       stars: win ? stars : 0,
       maxCombo: sum.maxCombo,
-      message: resultMessage(sum, plan.ftue, reason),
+      message: resultMessage(sum, plan.ftue, reason, s.limped === 1),
       thresholds: undefined,
+      rival: topRival ? { name: topRival.name, score: topRival.finalScore } : null,
       stats: [
         { label: 'Accuracy', value: `${Math.round(sum.accuracy)}%` },
         { label: sum.steadinessLabel, value: String(sum.steadiness) },
         { label: 'Timing', value: sum.timingWords.replace("You're ", '') },
-        ...(sum.marchBars.length ? [{ label: 'Marching', value: `${sum.marchBars.length} bars` }] : []),
+        ...(sum.feverBars ? [{ label: 'Fever', value: `${Math.round(sum.feverBars / 4)} drop${sum.feverBars > 4 ? 's' : ''}` }] : []),
+        ...(sum.marchBars.length ? [{ label: 'Marching', value: `${sum.marchBars.length / 4 >= 1 ? Math.round(sum.marchBars.length / 4) : 1} sect.` }] : []),
         ...(rivals.current.length ? [{ label: 'Drum-Off', value: placeText(sum.accuracy, rivals.current) }] : []),
+        ...(goal ? [{ label: 'Next goal', value: goal }] : []),
       ],
       meta: {
         // Legacy proof fields (TaskGameProofService today).
@@ -771,7 +913,7 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
       },
     };
     return res;
-  }, [plan, running, judge, pocket, offset, walk.walking]);
+  }, [plan, running, judge, pocket, offset, grip, gripPrefs]);
 
   onEnded.current = () => {
     void (async () => {
@@ -892,6 +1034,10 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
               reducedMotion={reducedMotion}
               rails={rivals.current.map((r) => r.color)}
               railFlash={railFlash}
+              grip={grip}
+              hand={gripPrefs.hand}
+              swap={gripPrefs.swap}
+              approach={plan.assist ? 2080 : plan.difficulty === 1 ? 1600 : 1300}
             />
           ) : null}
           <GestureDetector gesture={gesture}>
@@ -911,15 +1057,60 @@ export function RhythmTapGame(props: RhythmTapGameProps) {
           {deltaChip != null && rivals.current.find((r) => r.isGhost) ? (
             <DeltaChip bar={deltaChip} myScore={score} ghost={rivals.current.find((r) => r.isGhost)!} />
           ) : null}
+          <View style={styles.chipRow} pointerEvents="box-none">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={pocket ? 'Sound on' : 'Playing without sound'}
+              hitSlop={8}
+              onPress={() => setPocket((p) => !p)}
+              style={[styles.chip, pocket && styles.chipOn]}
+            >
+              <Text style={[styles.chipTxt, pocket && styles.chipTxtOn]}>{pocket ? 'FEEL' : 'SOUND'}</Text>
+            </Pressable>
+            {plan && plan.format === 'queue' && !plan.ftue ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Change grip"
+                hitSlop={8}
+                onPress={() => {
+                  // One Thumb -> Two Thumbs -> Two Thumbs swapped -> One Thumb.
+                  const g = gripPrefs;
+                  const cur = grip;
+                  if (cur === GRIP_ONE) saveGrip({ ...g, grip: GRIP_TWO, swap: 0 });
+                  else if (!g.swap) saveGrip({ ...g, grip: GRIP_TWO, swap: 1 });
+                  else saveGrip({ ...g, grip: GRIP_ONE, swap: 0 });
+                }}
+                style={styles.chip}
+              >
+                <Text style={styles.chipTxt}>{grip === GRIP_TWO ? (gripPrefs.swap ? '2 THUMBS SWAP' : '2 THUMBS') : '1 THUMB'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {/* MARCH pill (design 4.6): 44pt target on the HUD, never shakes. */}
+          {plan && !plan.ftue ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={marchOn ? 'Back to the full chart' : 'March: big beats only'}
+              hitSlop={6}
+              onPress={toggleMarch}
+              style={[styles.marchPill, marchLive && styles.marchPillLive, marchFrom ? styles.marchPillPending : null, walkHint === 1 && styles.marchPillHint]}
+            >
+              <Text style={[styles.marchTxt, marchLive && styles.marchTxtLive]} numberOfLines={1}>
+                {marchFrom ?? (marchLive ? 'MARCHING' : 'MARCH')}
+              </Text>
+              {walkHint ? (
+                <Text style={styles.marchHint} numberOfLines={1}>{walkHint === 1 ? 'Walking? Tap to march' : 'Standing? Tap for full chart'}</Text>
+              ) : null}
+            </Pressable>
+          ) : null}
+          {/* Tap the armed Fever meter to launch (accessibility path). */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={pocket ? 'Sound on' : 'Playing without sound'}
-            hitSlop={10}
-            onPress={() => setPocket((p) => !p)}
-            style={[styles.pocketBtn, pocket && styles.pocketBtnOn]}
-          >
-            <Text style={[styles.pocketTxt, pocket && styles.pocketTxtOn]}>{pocket ? 'FEEL' : 'SOUND'}</Text>
-          </Pressable>
+            accessibilityLabel="Launch Firework Fever"
+            disabled={!armedJs}
+            onPress={launchFromMeter}
+            style={styles.meterTap}
+          />
           {!ready ? (
             <View pointerEvents="none" style={styles.loading}>
               <Text style={styles.loadingTxt}>The parade is lining up...</Text>
@@ -955,15 +1146,35 @@ function countInBeats(chart: Chart): number[] {
   return out;
 }
 
-function resultMessage(sum: RoundSummary, ftue: boolean, reason: string): string {
+function resultMessage(sum: RoundSummary, ftue: boolean, reason: string, limped: boolean): string {
   if (reason === 'stall') return 'The parade needs you!';
   if (ftue) return 'Parade cleared';
+  if (limped) return sum.stars > 0 ? 'Limped home!' : 'Keep marching!';
   if (sum.allPerfect) return 'ALL PERFECT!';
   if (sum.fullCombo) return 'FULL COMBO!';
   if (sum.accuracy >= STAR_ACCURACY.three) return 'SHOWSTOPPER!';
   if (sum.accuracy >= STAR_ACCURACY.two) return 'What a parade!';
-  if (sum.cleared) return 'Parade cleared';
-  return 'The parade needs you!';
+  if (sum.stars > 0) return 'Parade cleared';
+  // Never a 0-star failure title (design 6.8).
+  return 'Keep marching!';
+}
+
+/** The concrete next goal (design 6.8): never a fixed hit count, always reachable. */
+function nextGoal(sum: RoundSummary, judged: number, ride: boolean, limped: boolean): string {
+  if (ride) {
+    if (sum.rideWin) return '';
+    const hr = Math.round(sum.hitRate * 100);
+    return hr < 75 ? `Hit 3 of every 4 (${hr}%)` : 'Fewer misstaps';
+  }
+  const next = sum.accuracy < STAR_ACCURACY.one ? [STAR_ACCURACY.one, 1] : sum.accuracy < STAR_ACCURACY.two ? [STAR_ACCURACY.two, 2] : sum.accuracy < STAR_ACCURACY.three ? [STAR_ACCURACY.three, 3] : null;
+  if (!next) return limped || !sum.fullCombo ? 'Go for FULL COMBO' : '';
+  const more = Math.max(1, Math.ceil(((next[0] - sum.accuracy) * judged) / 60));
+  return `${more} more PERFECT${more > 1 ? 's' : ''} for ${next[1]} star${next[1] > 1 ? 's' : ''}`;
+}
+
+function gripLabel(grip: number, g: GripPrefs): string {
+  if (grip === GRIP_TWO) return g.swap ? 'two_thumbs_swap' : 'two_thumbs';
+  return g.hand < 0 ? 'one_thumb_l' : 'one_thumb_r';
 }
 
 const styles = StyleSheet.create({
@@ -971,10 +1182,19 @@ const styles = StyleSheet.create({
   touchZone: { position: 'absolute', left: 0, right: 0 },
   loading: { position: 'absolute', top: '40%', alignSelf: 'center', backgroundColor: '#fff8e4', borderRadius: 16, borderWidth: 3, borderColor: '#0b3a6b', paddingHorizontal: 16, paddingVertical: 8 },
   loadingTxt: { fontFamily: 'Shark', fontSize: 18, color: '#0b3a6b' },
-  pocketBtn: { position: 'absolute', left: 62, top: 50, backgroundColor: '#fff8e4', borderRadius: 12, borderWidth: 2, borderColor: '#0b3a6b', paddingHorizontal: 8, paddingVertical: 4 },
-  pocketBtnOn: { backgroundColor: '#0b3a6b' },
-  pocketTxt: { fontFamily: 'Shark', fontSize: 12, color: '#0b3a6b' },
-  pocketTxtOn: { color: '#ffcf3b' },
+  chipRow: { position: 'absolute', left: 64, top: 46, flexDirection: 'row' },
+  chip: { backgroundColor: '#fff8e4', borderRadius: 12, borderWidth: 2, borderColor: '#0b3a6b', paddingHorizontal: 8, paddingVertical: 4, marginRight: 6 },
+  chipOn: { backgroundColor: '#1f7fe0' },
+  chipTxt: { fontFamily: 'Shark', fontSize: 12, color: '#0b3a6b' },
+  chipTxtOn: { color: '#ffffff' },
+  marchPill: { position: 'absolute', left: 12, top: 94, minWidth: 104, height: 44, borderRadius: 22, borderWidth: 3, borderColor: '#0b3a6b', backgroundColor: '#ffffff', paddingHorizontal: 14, justifyContent: 'center', alignItems: 'flex-start' },
+  marchPillLive: { backgroundColor: '#ffcf3b' },
+  marchPillPending: { borderStyle: 'dashed', backgroundColor: '#eaf6ff' },
+  marchPillHint: { borderColor: '#1f7fe0', backgroundColor: '#e3f4ff' },
+  marchTxt: { fontFamily: 'Shark', fontSize: 15, color: '#0b3a6b' },
+  marchTxtLive: { color: '#0b3a6b' },
+  marchHint: { fontFamily: 'Knockout', fontSize: 11, color: '#1f6fc0' },
+  meterTap: { position: 'absolute', right: 6, top: 34, width: 64, height: 64, borderRadius: 32 },
   rivalStrip: { position: 'absolute', top: 64, left: 8, right: 8, flexDirection: 'row', justifyContent: 'center' },
   rivalChip: { backgroundColor: 'rgba(255,248,228,0.92)', borderWidth: 2, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1, marginHorizontal: 3, alignItems: 'center', minWidth: 64 },
   rivalName: { fontFamily: 'Knockout', fontSize: 10, color: '#0b3a6b' },

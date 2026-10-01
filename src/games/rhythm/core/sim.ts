@@ -17,6 +17,7 @@ import { mulberry32 } from './generate';
 import {
   createJudge,
   judgeDown,
+  judgeLaunch,
   judgeMove,
   judgeTick,
   judgeUp,
@@ -42,7 +43,7 @@ import {
 
 export interface TouchEv {
   t: number;
-  /** 0 down, 1 up, 2 move */
+  /** 0 down, 1 up, 2 move, 3 Fever launch (swipe or meter tap) */
   type: number;
   zone: number;
   pid: number;
@@ -52,6 +53,8 @@ export interface TouchEv {
 export interface HumanModel {
   sigmaMs: number;
   biasMs?: number;
+  /** A linear drift across the run, 0 at the first note to this many ms at the last. */
+  driftMs?: number;
   lapse?: number;
   zoneSlip?: number;
   /** Bars (file bars) to deploy Fever at when armed; empty = deploy as soon as armed. */
@@ -91,7 +94,9 @@ export function scriptHuman(chart: Chart, model: HumanModel, seed: number): Touc
       continue;
     }
     if ((model.lapse ?? 0) > 0 && rand() < (model.lapse ?? 0)) continue;
-    const err = (model.biasMs ?? 0) + gauss(rand) * model.sigmaMs;
+    const span = chart.t.length > 1 ? chart.t[chart.t.length - 1] - chart.t[0] : 1;
+    const drift = (model.driftMs ?? 0) * ((chart.t[i] - chart.t[0]) / span);
+    const err = (model.biasMs ?? 0) + drift + gauss(rand) * model.sigmaMs;
     const t = chart.t[i] + err;
     let zone = k === K_RIM ? (rand() < 0.5 ? Z_RIM_L : Z_RIM_R) : Z_CENTRE;
     if ((model.zoneSlip ?? 0) > 0 && rand() < (model.zoneSlip ?? 0)) zone = zone === Z_CENTRE ? Z_RIM_L : Z_CENTRE;
@@ -131,19 +136,16 @@ export function scriptMasher(chart: Chart, tapsPerSec: number, seed: number): To
 }
 
 /**
- * Feed a script through the judge. `deployBars` adds two-finger deploys on
- * the first touch-down after each listed bar's previous bar starts (used by
- * the Fever routing search). Returns the finished judge.
+ * Feed a script through the judge with an 8 ms tick. `launchAtMs` adds a
+ * Fever launch (the one-finger Launch Swipe) at each time; `marchPlan`
+ * drives the MARCH pill. Returns the finished judge.
  */
-export function runScript(chart: Chart, script: TouchEv[], cfg: JudgeConfig = {}, deployAtMs: number[] = [], walkingPlan?: (t: number) => boolean): JudgeState {
+export function runScript(chart: Chart, script: TouchEv[], cfg: JudgeConfig = {}, launchAtMs: number[] = [], marchPlan?: (t: number) => boolean): JudgeState {
   const s = createJudge(chart, cfg);
-  // A deploy is a second finger 12 ms after the first scripted touch-down at or after each time.
   const events = script.slice();
   let pidX = 100000;
-  for (const at of deployAtMs) {
-    const first = script.find((x) => x.type === 0 && x.t >= at);
-    if (!first) continue;
-    events.push({ t: first.t + 12, type: 0, zone: Z_CENTRE, pid: pidX, y: 700 }, { t: first.t + 70, type: 1, zone: Z_CENTRE, pid: pidX, y: 700 });
+  for (const at of launchAtMs) {
+    events.push({ t: at, type: 3, zone: Z_CENTRE, pid: pidX, y: 700 });
     pidX++;
   }
   events.sort((a, b) => a.t - b.t || a.type - b.type);
@@ -151,11 +153,12 @@ export function runScript(chart: Chart, script: TouchEv[], cfg: JudgeConfig = {}
   const endT = chart.endMs + 50;
   let e = 0;
   while (now <= endT) {
-    if (walkingPlan) s.walking = walkingPlan(now) ? 1 : 0;
+    if (marchPlan) s.marchWant = marchPlan(now) ? 1 : 0;
     while (e < events.length && events[e].t <= now) {
       const x = events[e++];
       if (x.type === 0) judgeDown(s, x.t, x.zone, x.pid, x.y);
       else if (x.type === 1) judgeUp(s, x.t, x.pid);
+      else if (x.type === 3) judgeLaunch(s, x.t, x.pid);
       else judgeMove(s, x.t, x.pid, x.y);
     }
     judgeTick(s, now);
@@ -166,24 +169,31 @@ export function runScript(chart: Chart, script: TouchEv[], cfg: JudgeConfig = {}
   return s;
 }
 
-/** Perfect play with Fever deployed on the given bar lines (touch 1 beat before). */
-export function perfectRun(chart: Chart, deployBars: number[], cfg: JudgeConfig = {}): JudgeState {
+/** Perfect play with Fever launched in the rest beat before each listed drop bar. */
+export function perfectRun(chart: Chart, dropBars: number[], cfg: JudgeConfig = {}): JudgeState {
   const script = scriptHuman(chart, { sigmaMs: 0 }, 1);
-  const deployAt = deployBars.map((b) => chart.barStart[b] - (chart.barStart[b] - chart.barStart[b - 1]) / 2);
-  return runScript(chart, script, { ...cfg, forceMarch: 0 }, deployAt);
+  const launchAt = dropBars.map((b) => chart.barStart[b] - (chart.barStart[b] - chart.barStart[b - 1]) / 4 - 60);
+  return runScript(chart, script, { ...cfg, forceMarch: 0 }, launchAt);
+}
+
+/** Drop lines of a chart (first bar of every section after the first). */
+export function dropBarsOf(chart: Chart): number[] {
+  const out: number[] = [];
+  for (let b = chart.firstBar + 4; b <= chart.lastBar; b += 4) out.push(b);
+  return out;
 }
 
 /**
- * Max score (design 5.4): perfect play, Fever at the best bar lines the meter
- * allows. Searches deploy bars greedily bar by bar (exact enough for boards;
- * the server uses the same routine).
+ * Max score (design 5.4): perfect play with Fever on the best drop lines the
+ * meter allows (every subset of drop lines is tried; the meter decides which
+ * launches are possible). Auto-launch is a candidate too.
  */
 export function maxScore(chart: Chart): number {
-  const auto = perfectRun(chart, [], { autoFever: true });
-  let best = auto.score;
-  // Try every single deploy bar for the first Fever and auto for the rest.
-  for (let b = chart.firstBar + 1; b <= chart.lastBar - 1; b++) {
-    const s = perfectRun(chart, [b], {});
+  let best = perfectRun(chart, [], { autoFever: true }).score;
+  const drops = dropBarsOf(chart);
+  for (let mask = 1; mask < 1 << drops.length; mask++) {
+    const pick = drops.filter((_, i) => mask & (1 << i));
+    const s = perfectRun(chart, pick, {});
     if (s.score > best) best = s.score;
   }
   return best;

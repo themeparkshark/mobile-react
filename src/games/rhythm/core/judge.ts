@@ -19,11 +19,16 @@
  *   4.1 earliest-candidate consumption, zones + WRONG SIDE, CYMBAL flick,
  *       ROLL hold, BIG two-finger double
  *   4.2 groove / fever meter / combo deltas
- *   4.3 deployable Firework Fever (armed, two-finger deploy on the next bar
- *       line, 4 bars x2, fizzle on MISS or fault; auto-deploy option)
- *   4.4 anti-mash: consumption, stray drain, Out of Step lockout, FREEZE
- *   4.6 March layer: look-ahead lock, zones ignored, softer MISS and STRAY,
- *       Groove floor 10, identical windows and points
+ *   3.6 Groove: queue rounds Limp at 0 (x1, no Fever until 30), never end;
+ *       the ride sprint stalls at 0
+ *   4.3 Firework Fever (rev 6): armed at 100, launched by a one-finger
+ *       Launch Swipe (or a meter tap), queued for the next drop line (the
+ *       first bar of a section), one whole section x2, fizzle on MISS
+ *   4.4 anti-mash: consumption, pending stray drain, Out of Step lockout
+ *   4.6 March layer (rev 6): chosen by the player (pill), locked per 4-bar
+ *       section at sectionStart - approach - 1 beat, zones ignored, softer
+ *       MISS and STRAY, identical windows and points
+ *   3.5 Ride Assist windows
  *   5.1-5.2 beat-domain combo (no wall-clock decay), integer score
  *   11.1 pause voiding (+/-250 ms)
  */
@@ -31,7 +36,12 @@
 import { createEventRing, pushEvent, type EventRing } from '../../../gamekit/core/eventRing';
 import {
   ACCURACY_VALUE,
+  ASSIST_WINDOWS,
   BASE_POINTS,
+  LAUNCH,
+  LIMP_RECOVER,
+  PENDING_STRAY_MS,
+  SECTION_BARS,
   FEVER_METER,
   FLICK_MS,
   FLICK_PT,
@@ -93,12 +103,14 @@ export const EV_STALL = 19;
 export const EV_BAR_LAYER = 20; //   a bar, b layer (1 standing, 2 march)
 export const EV_FREEZE_PASS = 21; // a note
 export const EV_POPPER_GONE = 22; // a note
+export const EV_LIMP = 23; //        a 1 = started limping, 0 = recovered
+export const EV_LAUNCH = 24; //      a drop bar the Fever is queued for
 
 export const EVENT_NAMES: Record<number, string> = {
   1: 'hit', 2: 'miss', 3: 'wrong', 4: 'stray', 5: 'oos', 6: 'freezeFault', 7: 'rollTick', 8: 'rollBreak',
   9: 'rollDone', 10: 'bigDouble', 11: 'flick', 12: 'popperTap', 13: 'popperPop', 14: 'feverArmed',
   15: 'feverDeploy', 16: 'feverStart', 17: 'feverEnd', 18: 'milestone', 19: 'stall', 20: 'barLayer',
-  21: 'freezePass', 22: 'popperGone',
+  21: 'freezePass', 22: 'popperGone', 23: 'limp', 24: 'launch',
 };
 
 const MAX_POINTERS = 6;
@@ -110,10 +122,14 @@ export interface JudgeConfig {
   autoFever?: boolean;
   /** Groove floor 10 until this time (ms). Infinity = the run cannot fail (First Parade). */
   noFailUntilMs?: number;
-  /** Tests / proof replay: -1 = follow `walking`, 0 = never march, 1 = always march. */
+  /** Tests / proof replay: -1 = follow the MARCH pill (`marchWant`), 0 = never march, 1 = always march. */
   forceMarch?: number;
-  /** Explicit March bars (proof replay): overrides walking for these bars. */
+  /** Explicit March bars (proof replay): overrides the pill for these bars. */
   marchBars?: number[];
+  /** Queue rounds: Groove 0 = Limping, the round always plays to its last bar. */
+  limp?: boolean;
+  /** Ride Assist windows (server-granted after a ride loss). */
+  assist?: boolean;
 }
 
 export interface JudgeState {
@@ -151,7 +167,17 @@ export interface JudgeState {
   // per bar
   barLayer: number[];
   marchPlan: number[];
-  walking: number;
+  /** The MARCH pill: 1 = the player wants the March layer from the next unlocked section. */
+  marchWant: number;
+  dropBars: number[];
+  limp: number;
+  limping: number;
+  limped: number;
+  /** Song time the round first started Limping (-1 = never). */
+  limpT: number;
+  /** Per bar: 1 if the player was Limping at any tick inside it. */
+  barLimp: number[];
+  assist: number;
   cursor: number;
   now: number;
   // score and meters
@@ -200,6 +226,11 @@ export interface JudgeState {
   pCymDelta: number[];
   pStartT: number[];
   pStartY: number[];
+  pLaunched: number[];
+  pendT: number[];
+  pendPid: number[];
+  pendZone: number[];
+  launches: number;
   popperIdx: number;
   popperTaps: number;
   stalled: number;
@@ -224,7 +255,7 @@ export interface JudgeState {
 }
 
 export function createJudge(chart: Chart, cfg: JudgeConfig = {}): JudgeState {
-  const w = WINDOWS[chart.difficulty];
+  const w = cfg.assist && chart.difficulty === 1 ? ASSIST_WINDOWS : WINDOWS[chart.difficulty];
   const n = chart.t.length;
   const zeros = (k: number, v = 0): number[] => {
     const a: number[] = [];
@@ -234,6 +265,8 @@ export function createJudge(chart: Chart, cfg: JudgeConfig = {}): JudgeState {
   const nBars = chart.barStart.length - 1;
   const marchPlan = zeros(nBars, -1);
   if (cfg.marchBars) for (const b of cfg.marchBars) if (b >= 0 && b < nBars) marchPlan[b] = 1;
+  const dropBars: number[] = [];
+  for (let b = chart.firstBar + SECTION_BARS; b <= chart.lastBar; b += SECTION_BARS) dropBars.push(b);
   return {
     d: chart.difficulty,
     sharp: cfg.sharpEnabled && w.sharp > 0 ? 1 : 0,
@@ -265,7 +298,14 @@ export function createJudge(chart: Chart, cfg: JudgeConfig = {}): JudgeState {
     delta: zeros(n),
     barLayer: zeros(nBars),
     marchPlan,
-    walking: 0,
+    marchWant: 0,
+    dropBars,
+    limp: cfg.limp ? 1 : 0,
+    limping: 0,
+    limped: 0,
+    limpT: -1,
+    barLimp: zeros(nBars),
+    assist: cfg.assist && chart.difficulty === 1 ? 1 : 0,
     cursor: 0,
     now: -1e9,
     score: 0,
@@ -297,6 +337,11 @@ export function createJudge(chart: Chart, cfg: JudgeConfig = {}): JudgeState {
     pCymDelta: zeros(MAX_POINTERS),
     pStartT: zeros(MAX_POINTERS),
     pStartY: zeros(MAX_POINTERS),
+    pLaunched: zeros(MAX_POINTERS),
+    pendT: [],
+    pendPid: [],
+    pendZone: [],
+    launches: 0,
     popperIdx: -1,
     popperTaps: 0,
     stalled: 0,
@@ -346,20 +391,51 @@ export function noteActive(s: JudgeState, i: number): boolean {
   return (s.layers[i] & layer) !== 0;
 }
 
-function lockTime(s: JudgeState, b: number): number {
+/** First bar of the 4-bar section holding bar b (pre-roll and outro bars are their own). */
+export function sectionStartBar(s: JudgeState, b: number): number {
   'worklet';
-  const beat = (s.barStart[b + 1] - s.barStart[b]) / 4;
-  return s.barStart[b] - s.approach - beat;
+  if (b < s.firstBar || b > s.lastBar) return b;
+  return s.firstBar + Math.floor((b - s.firstBar) / SECTION_BARS) * SECTION_BARS;
+}
+
+/** The March layer of a section locks at sectionStart - approach - 1 beat (design 4.6). */
+export function lockTime(s: JudgeState, b: number): number {
+  'worklet';
+  const sb = sectionStartBar(s, b);
+  const beat = (s.barStart[sb + 1] - s.barStart[sb]) / 4;
+  return s.barStart[sb] - s.approach - beat;
+}
+
+/** The first section whose layer is not locked yet (-1 when every bar is locked). */
+export function nextOpenSection(s: JudgeState): number {
+  'worklet';
+  for (let b = s.firstBar; b <= s.lastBar; b += SECTION_BARS) if (s.barLayer[b] === 0) return b;
+  return -1;
 }
 
 function addGroove(s: JudgeState, t: number, dv: number): void {
   'worklet';
   const bar = barAt(s, t);
-  const floor = isMarchBar(s, bar) || t < s.noFailUntil ? GROOVE.marchFloor : 0;
+  const floor = (!s.limp && isMarchBar(s, bar)) || t < s.noFailUntil ? GROOVE.marchFloor : 0;
   let g = s.groove + dv;
   if (g > GROOVE.max) g = GROOVE.max;
   if (dv < 0 && g < floor) g = Math.max(g, Math.min(s.groove, floor));
+  if (g < 0) g = 0;
   s.groove = g;
+  if (s.limp) {
+    // Queue rounds never end early: Limping (x1, no Fever) until Groove is back to 30.
+    if (s.groove <= 0 && !s.limping && t >= s.noFailUntil) {
+      s.limping = 1;
+      s.limped = 1;
+      if (s.limpT < 0) s.limpT = t;
+      fizzleFever(s, t);
+      pushEvent(s.ev, EV_LIMP, 1, 0, 0, t);
+    } else if (s.limping && s.groove >= LIMP_RECOVER) {
+      s.limping = 0;
+      pushEvent(s.ev, EV_LIMP, 0, 0, 0, t);
+    }
+    return;
+  }
   if (s.groove <= 0 && !s.stalled && t >= s.noFailUntil) {
     s.groove = 0;
     s.stalled = 1;
@@ -370,7 +446,7 @@ function addGroove(s: JudgeState, t: number, dv: number): void {
 
 function addMeter(s: JudgeState, t: number, dv: number): void {
   'worklet';
-  if (dv > 0 && (s.armed || s.pendingDeploy >= 0 || feverActiveAt(s, t))) return; // overfill is wasted
+  if (dv > 0 && (s.armed || s.limping || s.pendingDeploy >= 0 || feverActiveAt(s, t))) return; // overfill is wasted
   let m = s.meter + dv;
   if (m < 0) m = 0;
   if (m >= FEVER_METER.full) {
@@ -385,7 +461,7 @@ function addMeter(s: JudgeState, t: number, dv: number): void {
 
 function points(s: JudgeState, t: number, base: number): number {
   'worklet';
-  const p = base * comboMultiplier(s.combo) * (feverActiveAt(s, t) ? 2 : 1);
+  const p = base * (s.limping ? 1 : comboMultiplier(s.combo)) * (feverActiveAt(s, t) ? 2 : 1);
   s.score += p;
   return p;
 }
@@ -472,7 +548,7 @@ function applyWrong(s: JudgeState, i: number, t: number, delta: number, zone: nu
   s.res[i] = J_WRONG;
   s.delta[i] = delta;
   s.cWrong++;
-  if (s.d >= 3) breakCombo(s);
+  if (s.d >= 2) breakCombo(s); // d1 keeps the combo (not increased)
   addGroove(s, t, GROOVE.wrong);
   addMeter(s, t, FEVER_METER.wrong);
   s.accN += 1;
@@ -487,14 +563,68 @@ function zoneOk(noteKind: number, zone: number): boolean {
   return true;
 }
 
-function deploy(s: JudgeState, t: number): void {
+/** The drop line a launch at t catches: the next section start at least 150 ms away (-1 = none left). */
+export function dropFor(s: JudgeState, t: number): number {
   'worklet';
-  const b = barAt(s, t);
-  s.pendingDeploy = Math.max(b + 1, s.firstBar);
+  for (let k = 0; k < s.dropBars.length; k++) {
+    const b = s.dropBars[k];
+    if (t <= s.barStart[b] - LAUNCH.catchMs) return b;
+  }
+  return -1;
+}
+
+function deploy(s: JudgeState, t: number): boolean {
+  'worklet';
+  const drop = dropFor(s, t);
+  if (drop < 0) return false;
+  s.pendingDeploy = drop;
   s.armed = 0;
   s.meter = 0;
-  if (s.deployT.length < 64) s.deployT.push(Math.round(t));
-  pushEvent(s.ev, EV_FEVER_DEPLOY, s.pendingDeploy, 0, 0, t);
+  if (s.deployT.length < 64) s.deployT.push(Math.round(t), drop);
+  pushEvent(s.ev, EV_FEVER_DEPLOY, drop, 0, 0, t);
+  pushEvent(s.ev, EV_LAUNCH, drop, 0, 0, t);
+  return true;
+}
+
+function canLaunch(s: JudgeState, t: number): boolean {
+  'worklet';
+  return s.armed === 1 && !s.limping && s.pendingDeploy < 0 && !feverActiveAt(s, t) && !s.stalled && !s.finished;
+}
+
+/**
+ * Fever launch (the Launch Swipe or a tap on the armed meter). Queues the
+ * Fever for the next drop line. A launch is never a stray: the pointer's
+ * pending stray is cancelled. Returns true when the Fever was queued.
+ */
+export function judgeLaunch(s: JudgeState, t0: number, pid: number): boolean {
+  'worklet';
+  const t = Math.round(t0);
+  if (t > s.now) judgeTick(s, t);
+  for (let k = s.pendT.length - 1; k >= 0; k--) {
+    if (s.pendPid[k] === pid) {
+      s.pendT.splice(k, 1);
+      s.pendPid.splice(k, 1);
+      s.pendZone.splice(k, 1);
+    }
+  }
+  logTouch(s, t, 3, 0, 0, pid); // logged even when not armed: it cancels the pending stray
+  if (!canLaunch(s, t)) return false;
+  s.launches++;
+  return deploy(s, t);
+}
+
+function resolveStray(s: JudgeState, k: number): void {
+  'worklet';
+  const t = s.pendT[k];
+  const zone = s.pendZone[k];
+  s.pendT.splice(k, 1);
+  s.pendPid.splice(k, 1);
+  s.pendZone.splice(k, 1);
+  s.strays++;
+  if (s.strayT.length < 512) s.strayT.push(t);
+  addGroove(s, t, isMarchBar(s, barAt(s, t)) ? GROOVE.strayMarch : GROOVE.stray);
+  addMeter(s, t, FEVER_METER.stray);
+  pushEvent(s.ev, EV_STRAY, zone, 0, 0, t);
 }
 
 function pointerSlot(s: JudgeState, pid: number, create: boolean): number {
@@ -507,6 +637,7 @@ function pointerSlot(s: JudgeState, pid: number, create: boolean): number {
       s.pRoll[k] = -1;
       s.pCym[k] = -1;
       s.pRollTicks[k] = 0;
+      s.pLaunched[k] = 0;
       return k;
     }
   }
@@ -542,11 +673,11 @@ export function judgeTick(s: JudgeState, now: number): void {
   'worklet';
   if (s.finished || now < s.now) return;
   s.now = now;
-  // March layer look-ahead lock: barStart - approach - 1 beat.
+  // March layer lock, per 4-bar section: sectionStart - approach - 1 beat.
   for (let b = 0; b < s.nBars; b++) {
     if (s.barLayer[b] !== 0) continue;
     if (now < lockTime(s, b)) break;
-    let march = s.walking;
+    let march = s.marchWant;
     if (s.marchPlan[b] >= 0) march = s.marchPlan[b];
     else if (s.forceMarch >= 0) march = s.forceMarch;
     if (b < s.firstBar || b > s.lastBar) march = 0;
@@ -565,10 +696,16 @@ export function judgeTick(s: JudgeState, now: number): void {
       pushEvent(s.ev, EV_FEVER_END, fizz, 0, 0, now);
     }
   }
-  if (s.armed && s.autoFever && s.pendingDeploy < 0 && s.feverFrom < 0) deploy(s, now);
+  if (s.limping) {
+    const lb = barAt(s, now);
+    if (lb >= 0 && lb < s.nBars) s.barLimp[lb] = 1;
+  }
+  // Pending strays resolve 250 ms after their touch-down (a launch cancels them).
+  while (s.pendT.length && now - s.pendT[0] >= PENDING_STRAY_MS) resolveStray(s, 0);
+  if (s.autoFever && canLaunch(s, now)) deploy(s, now);
   if (s.pendingDeploy >= 0 && s.pendingDeploy < s.nBars && now >= s.barStart[s.pendingDeploy]) {
     s.feverFrom = s.pendingDeploy;
-    s.feverTo = Math.min(s.pendingDeploy + 4, s.lastBar + 1);
+    s.feverTo = Math.min(s.pendingDeploy + SECTION_BARS, s.lastBar + 1);
     s.pendingDeploy = -1;
     s.feverKillAt = 0;
     pushEvent(s.ev, EV_FEVER_START, s.feverFrom, 0, 0, now);
@@ -665,10 +802,17 @@ export function judgeDown(s: JudgeState, t0: number, zone: number, pid: number, 
     s.pStartT[slot] = t;
     s.pStartY[slot] = y;
   }
-  // Second finger of a pair: Fever deploy and/or BIG double; never a stray.
+  // Second finger of a pair: a BIG double; never a stray, never a Fever launch.
   if (s.pairOpen && t - s.lastDownT <= PAIR_MS) {
     s.pairOpen = 0;
-    if (s.armed && s.pendingDeploy < 0 && !feverActiveAt(s, t) && t >= s.barStart[s.firstBar] - 2000) deploy(s, t);
+    // The pair's first finger is not a stray either.
+    for (let k = s.pendT.length - 1; k >= 0; k--) {
+      if (t - s.pendT[k] <= PAIR_MS) {
+        s.pendT.splice(k, 1);
+        s.pendPid.splice(k, 1);
+        s.pendZone.splice(k, 1);
+      }
+    }
     const bi = s.lastDownNote;
     if (bi >= 0 && s.kind[bi] === K_BIG && s.res[bi] >= J_SHARP && s.res[bi] <= J_GOOD) {
       s.bigDoubles++;
@@ -762,11 +906,12 @@ export function judgeDown(s: JudgeState, t0: number, zone: number, pid: number, 
         return -1;
       }
     }
-    s.strays++;
-    if (s.strayT.length < 512) s.strayT.push(Math.round(t));
-    addGroove(s, t, isMarchBar(s, barAt(s, t)) ? GROOVE.strayMarch : GROOVE.stray);
-    addMeter(s, t, FEVER_METER.stray);
-    pushEvent(s.ev, EV_STRAY, zone, 0, 0, t);
+    // Pending: a stray only if it does not become a Launch Swipe or a pair (250 ms).
+    if (s.pendT.length < 32) {
+      s.pendT.push(t);
+      s.pendPid.push(pid);
+      s.pendZone.push(zone);
+    }
     return -1;
   }
 
@@ -807,6 +952,12 @@ export function judgeMove(s: JudgeState, t0: number, pid: number, y: number): vo
   const t = Math.round(t0);
   const slot = pointerSlot(s, pid, false);
   if (slot < 0) return;
+  // Launch Swipe: one finger dragged up >= 90 pt within 300 ms of its touch-down.
+  if (!s.pLaunched[slot] && s.pStartY[slot] - y >= LAUNCH.swipePt && t - s.pStartT[slot] <= LAUNCH.swipeMs) {
+    s.pLaunched[slot] = 1;
+    if (s.pRoll[slot] < 0) judgeLaunch(s, t, pid);
+    return;
+  }
   const ci = s.pCym[slot];
   if (ci < 0) return;
   if (t > s.now) judgeTick(s, t);
@@ -854,10 +1005,10 @@ export function judgeUp(s: JudgeState, t0: number, pid: number): void {
   s.pId[slot] = -1;
 }
 
-/** Walk sense feeds this each frame (it only affects bars not yet locked). */
-export function setWalking(s: JudgeState, walking: boolean): void {
+/** The MARCH pill (or the pause sheet toggle): applies from the next unlocked section. */
+export function setMarchWant(s: JudgeState, march: boolean): void {
   'worklet';
-  s.walking = walking ? 1 : 0;
+  s.marchWant = march ? 1 : 0;
 }
 
 /** A pause: notes within +/-250 ms of the pause point are voided. */
@@ -872,11 +1023,15 @@ export function voidAround(s: JudgeState, t: number): void {
     s.pCym[k] = -1;
   }
   s.pairOpen = 0;
+  s.pendT.length = 0;
+  s.pendPid.length = 0;
+  s.pendZone.length = 0;
 }
 
 /** End the round now (outro reached, stall, or a queue wrap-up): resolve the rest. */
 export function finishJudge(s: JudgeState, t: number, voidRest: boolean): void {
   'worklet';
+  while (s.pendT.length) resolveStray(s, 0);
   for (let i = 0; i < s.n; i++) {
     if (s.res[i] === J_NONE || s.res[i] === -1) s.res[i] = voidRest || s.t[i] > t ? J_VOID : J_MISS;
   }

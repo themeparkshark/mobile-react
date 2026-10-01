@@ -21,6 +21,8 @@ import {
   EV_FLICK,
   EV_FREEZE_FAULT,
   EV_HIT,
+  EV_LAUNCH,
+  EV_LIMP,
   EV_MILESTONE,
   EV_MISS,
   EV_OOS,
@@ -52,8 +54,19 @@ export const JUDGE_TEXT = ['', 'SHARP', 'PERFECT', 'GREAT', 'GOOD', 'MISS', 'OTH
 export const RIBBON_TEXT = [
   '', 'FIREWORK FEVER', 'COMBO 10', 'COMBO 25', 'COMBO 50', 'COMBO 100', 'MARCHING', 'TAP ON THE BEAT', 'HIT THE SIDE',
   'HOLD', 'TWO FINGERS!', 'POP IT', "DON'T TAP", 'FLICK UP', 'FULL COMBO', 'THE PARADE NEEDS YOU!', 'LISTEN... NOW YOU',
-  'CRASH!', 'READY TO LAUNCH', 'FEEL THE BEAT', 'PARADE CLEARED', 'PERFECT x8',
+  'CRASH!', 'SWIPE UP TO LAUNCH', 'FEEL THE BEAT', 'PARADE CLEARED', 'PERFECT x8',
+  'TAP ON THE BLUE', 'CORAL = THE SIDE', 'BLUE LEFT, CORAL RIGHT', 'KEEP DRUMMING!', 'BACK IN STEP!', 'FEVER ON THE DROP',
+  'FULL CHART',
 ];
+export const RB_TAP_BLUE = 22;
+export const RB_CORAL_SIDE = 23;
+export const RB_TWO_THUMBS = 24;
+export const RB_LIMP = 25;
+export const RB_UNLIMP = 26;
+export const RB_QUEUED = 27;
+export const RB_FULL = 28;
+export const RB_HOLD = 9;
+export const RB_TWO_FINGERS = 10;
 export const RB_FEVER = 1;
 export const RB_MARCH = 6;
 export const RB_READY = 18;
@@ -129,6 +142,26 @@ export interface ParadeView {
   flashPeak: number;
   reduced: number;
   pocket: number;
+  /** Drum-face overexposure disc (PERFECT, 1 frame) at the touch point. */
+  overAt: number;
+  overX: number;
+  overY: number;
+  /** Ripple ring on the drum face. */
+  rippleAt: number;
+  rippleAmp: number;
+  /** Struck-zone flash (the span holding zoneFlashX). */
+  zoneFlashAt: number;
+  zoneFlashX: number;
+  zoneFlashKind: number;
+  /** Lane-edge spark kick: 2 per rail on PERFECT, 1 on GREAT. */
+  railSparkAt: number;
+  railSparkN: number;
+  /** Launch Swipe streak. */
+  launchAt: number;
+  launchX: number;
+  limping: number;
+  /** Per-hit text side: alternates left / right of the lane. */
+  judgSide: number;
   /** Count-in numerals 4-3-2-1 run on these 5 beat times (pre-roll or resume bar). */
   countBeats: number[];
   // geometry
@@ -160,6 +193,9 @@ export function createView(n: number, cx: number, yLine: number, width: number, 
     perfRun: 0,
     bAt: z(24), bType: z(24, 0), bX: z(24, 0), bY: z(24, 0), bN: z(24, 0), bHead: 0, flashAt: -1e9, flashPeak: 0,
     reduced: 0, pocket: 0,
+    overAt: -1e9, overX: 0, overY: 0, rippleAt: -1e9, rippleAmp: 0,
+    zoneFlashAt: -1e9, zoneFlashX: 0, zoneFlashKind: 0,
+    railSparkAt: -1e9, railSparkN: 0, launchAt: -1e9, launchX: 0, limping: 0, judgSide: 0,
     countBeats,
     cx, yLine, width,
   };
@@ -247,13 +283,29 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       v.ringGrade = b;
       v.ringRim = rim;
       v.judgAt = v.wt;
+      v.judgSide = 1 - v.judgSide;
       v.judgTxt = b === J_SHARP ? TXT_SHARP : b === J_PERFECT ? TXT_PERFECT : b === J_GREAT ? TXT_GREAT : TXT_GOOD;
       v.judgFS = (b === J_GREAT || b === J_GOOD) && Math.abs(c) >= 20 ? (c < 0 ? 1 : 2) : 0;
       v.strikeAt = v.wt;
+      v.zoneFlashAt = v.wt;
+      v.zoneFlashX = v.touchX;
+      v.zoneFlashKind = rim;
+      v.rippleAt = v.wt;
+      v.rippleAmp = b <= J_PERFECT ? 1 : b === J_GREAT ? 0.6 : 0.35;
+      if (b <= J_PERFECT) {
+        v.overAt = v.wt;
+        v.overX = v.touchX;
+        v.overY = v.touchY;
+      }
+      if (b <= J_GREAT) {
+        v.railSparkAt = v.wt;
+        v.railSparkN = b <= J_PERFECT ? 2 : 1;
+      }
       if (rim) {
         v.rimAt = v.wt;
         v.rimSide = v.touchZone === 2 || v.touchZone === 4 ? 1 : 0;
       } else {
+        // RIM hits do not squash the head (design 6.3).
         v.drumAt = v.wt;
         v.drumAmt = b === J_SHARP ? 0.16 : b === J_PERFECT ? 0.14 : b === J_GREAT ? 0.1 : 0.06;
       }
@@ -262,13 +314,26 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       if (v.perfRun === 8) ribbon(v, 21);
       {
         const n = b <= J_PERFECT ? 10 : b === J_GREAT ? 6 : 3;
-        const x = rim ? (v.rimSide ? v.cx + 30 : v.cx - 30) : v.cx;
+        const x = v.cx;
         addBurst(v, fever ? B_FEVER : rim ? B_SKY : b <= J_PERFECT ? B_GOLD : B_WHITE, x, v.yLine - 6, fever ? Math.round(n * 1.5) : n);
-        if (s.kind[a] === K_BIG) scheduleFireworks(v, 3, true);
+        if (s.kind[a] === K_BIG) {
+          scheduleFireworks(v, 3, true);
+          if (s.bar[a] === s.lastBar) {
+            // Finale BIG: the only camera move in the game (design 6.0, 6.6).
+            v.zoomAt = v.wt;
+            v.zoomAmt = 0.06;
+            v.shakeAt = v.wt;
+            v.shakeAmp = 5;
+            v.lineFull = 1;
+            v.flashAt = v.wt;
+            v.flashPeak = 0.3;
+          }
+        }
       }
     } else if (kind === EV_MISS) {
       v.missAt[a] = v.wt;
       v.judgAt = v.wt;
+      v.judgSide = 1 - v.judgSide;
       v.judgTxt = TXT_MISS;
       v.judgFS = 0;
       v.perfRun = 0;
@@ -281,6 +346,7 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       }
     } else if (kind === EV_WRONG) {
       v.judgAt = v.wt;
+      v.judgSide = 1 - v.judgSide;
       v.judgTxt = TXT_OTHER_SIDE;
       v.judgFS = 0;
       v.perfRun = 0;
@@ -310,13 +376,8 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       v.judgTxt = TXT_MISS;
       v.stumbleAt = v.wt;
     } else if (kind === EV_BIG_DOUBLE) {
-      v.zoomAt = v.wt;
-      v.zoomAmt = 0.06;
-      v.shakeAt = v.wt;
-      v.shakeAmp = 5;
-      scheduleFireworks(v, 3, true);
-      v.flashAt = v.wt;
-      v.flashPeak = 0.3;
+      scheduleFireworks(v, 4, true);
+      addBurst(v, B_CONFETTI, v.cx, v.yLine - 40, 36);
     } else if (kind === EV_FLICK) {
       addBurst(v, B_GOLD, v.cx, v.yLine - 20, 8);
     } else if (kind === EV_POPPER_TAP) {
@@ -331,19 +392,28 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
       v.judgFS = 0;
       v.popperTaps = 0;
       addBurst(v, B_CONFETTI, v.cx, v.yLine - 30, 30);
+    } else if (kind === EV_LIMP) {
+      v.limping = a;
+      if (a) {
+        v.stumbleAt = v.wt;
+        ribbon(v, RB_LIMP);
+      } else ribbon(v, RB_UNLIMP);
+    } else if (kind === EV_LAUNCH) {
+      v.launchAt = v.wt;
+      v.launchX = v.touchX;
+      ribbon(v, RB_QUEUED);
     } else if (kind === EV_FEVER_ARMED) {
       v.armed = 1;
     } else if (kind === EV_FEVER_DEPLOY) {
       v.armed = 0;
     } else if (kind === EV_FEVER_START) {
+      // The drop (design 6.5): light, sound and touch; the camera never moves.
       v.feverTarget = 1;
       v.armed = 0;
-      v.shakeAt = v.wt;
-      v.shakeAmp = 4;
       ribbon(v, RB_FEVER);
       scheduleFireworks(v, 3, false);
       v.flashAt = v.wt;
-      v.flashPeak = 0.35;
+      v.flashPeak = 0.5;
     } else if (kind === EV_FEVER_END) {
       v.feverTarget = 0;
     } else if (kind === EV_MILESTONE) {
@@ -357,7 +427,7 @@ export function applyEventsUI(v: ParadeView, s: JudgeState, fx: FxState | null, 
   }
   // Crowd tier follows the live combo (design 6.4).
   const combo = s.combo;
-  v.crowdTarget = combo >= 50 ? 22 : combo >= 25 ? 16 : combo >= 10 ? 10 : 6;
+  v.crowdTarget = s.limping ? 6 : combo >= 50 ? 22 : combo >= 25 ? 16 : combo >= 10 ? 10 : 6;
 }
 
 export function showRibbon(v: ParadeView, id: number): void {

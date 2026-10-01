@@ -19,7 +19,7 @@
 
 import { mulberry32 } from '../core/generate';
 import { decodeTouches } from '../core/proof';
-import { accuracyPct, createJudge, finishJudge, judgeDown, judgeMove, judgeTick, judgeUp, type JudgeConfig, type JudgeState } from '../core/judge';
+import { accuracyPct, createJudge, finishJudge, judgeDown, judgeLaunch, judgeMove, judgeTick, judgeUp, type JudgeConfig, type JudgeState } from '../core/judge';
 import { scriptHuman, type TouchEv } from '../core/sim';
 import { J_GOOD, J_SHARP, type Chart } from '../core/types';
 import type { GhostRun } from '../meta/progress';
@@ -58,6 +58,7 @@ export function playRival(chart: Chart, script: TouchEv[], cfg: JudgeConfig): { 
       const x = script[e++];
       if (x.type === 0) judgeDown(s, x.t, x.zone, x.pid, x.y);
       else if (x.type === 1) judgeUp(s, x.t, x.pid);
+      else if (x.type === 3) judgeLaunch(s, x.t, x.pid);
       else judgeMove(s, x.t, x.pid, x.y);
     }
     judgeTick(s, now);
@@ -80,15 +81,18 @@ function hitsOf(s: JudgeState): number[] {
 }
 
 export function ghostRival(chart: Chart, ghost: GhostRun, id: string, color: string, autoFever: boolean): Rival | null {
-  if (ghost.seed !== chart.seed) return null;
+  // Charts are canonical (one per stage, format and difficulty): a ghost matches
+  // on those plus the chart version, never on the seed.
+  if (ghost.stage !== chart.stage || ghost.format !== chart.format || ghost.difficulty !== chart.difficulty) return null;
+  if (ghost.chartVersion && ghost.chartVersion !== chart.chartVersion) return null;
   const touches = decodeTouches(ghost.touches).map((x) => ({ t: x.t, type: x.type, zone: x.zone, pid: x.pid, y: x.y }));
-  const { s, barScores } = playRival(chart, touches, { autoFever: ghost.autoFever ?? autoFever, marchBars: ghost.marchBars });
+  const { s, barScores } = playRival(chart, touches, { autoFever: ghost.autoFever ?? autoFever, marchBars: ghost.marchBars, limp: chart.format === 'queue' });
   return { id, name: ghost.name, color, isGhost: true, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s) };
 }
 
 export function botRival(chart: Chart, bot: (typeof CREW)[number], seed: number, autoFever: boolean): Rival {
   const script = scriptHuman(chart, { sigmaMs: bot.sigma, lapse: bot.lapse, zoneSlip: 0.02 }, seed);
-  const { s, barScores } = playRival(chart, script, { autoFever: true, forceMarch: 0 });
+  const { s, barScores } = playRival(chart, script, { autoFever: true, forceMarch: 0, limp: chart.format === 'queue' });
   void autoFever;
   return { id: bot.id, name: bot.name, color: bot.color, isGhost: false, hitT: hitsOf(s), barScores, finalScore: s.score, accuracy: accuracyPct(s) };
 }
