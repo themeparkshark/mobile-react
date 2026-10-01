@@ -22,6 +22,7 @@ import { useNavigation } from '@react-navigation/native';
 import deletePlayer from '../api/endpoints/me/delete';
 import deleteAccountNow from '../api/endpoints/me/delete-account';
 import updatePlayer from '../api/endpoints/me/update-player';
+import FindOriginalAccount from '../components/FindOriginalAccount';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -30,6 +31,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { useTutorial } from '../components/Tutorial';
+import { RECOVERY_COPY } from '../services/accountRecovery/model';
 import { syncBackgroundRideDetection } from '../services/RideDetectionService';
 import { BRAND, confirmGame, GameIcon, gameAlert, RADIUS, SHADOW, SharkLoader, showGameDialog, textPreset, type GameIconName } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
@@ -143,6 +145,7 @@ export default function SettingsScreen() {
   const [enabledSoundEffects, setEnabledSoundEffects] = useState<boolean>();
   const [backgroundLocationEnabled, setBackgroundLocationEnabled] = useState(false);
   const [backgroundLocationBusy, setBackgroundLocationBusy] = useState(false);
+  const [findingOriginal, setFindingOriginal] = useState(false);
   const [accountBusy, setAccountBusy] = useState<string | null>(null);
   const accountAction = useRef(false);
   const { urls, labels } = useCrumbs();
@@ -387,6 +390,8 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="Account" index={5}>
+          <SettingsRow art="search" title={RECOVERY_COPY.entryDetail} detail="Played the original game? Bring it back"
+            onPress={() => setFindingOriginal(true)} />
           <SettingsRow art="back" title="Sign Out" onPress={() => { void signOut(); }} />
           <SettingsRow art="pause" title="Deactivate My Account" detail="Take a break, sign in again any time" destructive
             onPress={() => { void deactivateAccount(); }} />
@@ -402,6 +407,7 @@ export default function SettingsScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      <FindOriginalAccount visible={findingOriginal} onClose={() => setFindingOriginal(false)} />
       {accountBusy && (
         <Animated.View entering={FadeIn.duration(160)} style={styles.busyScrim} accessibilityViewIsModal>
           <View style={styles.busyCard}>

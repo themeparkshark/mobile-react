@@ -12,8 +12,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import updatePlayer from '../api/endpoints/me/update-player';
+import FindOriginalAccount from '../components/FindOriginalAccount';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
+import { RECOVERY_COPY } from '../services/accountRecovery/model';
 import { BRAND, GameButton, GameIcon, textPreset } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
@@ -49,6 +51,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [findingOriginal, setFindingOriginal] = useState(false);
   const { refreshPlayer } = useContext(AuthContext);
   const { labels } = useCrumbs();
   const inputRef = useRef<TextInput>(null);
@@ -178,12 +181,21 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
               </Animated.View>
             )}
             {!done && (
+              <Animated.View entering={reduced ? undefined : FadeInUp.delay(800).duration(400)}>
+                {/* Returning players from the original app: bring back the old account instead of naming a new shark. */}
+                <GameButton label={RECOVERY_COPY.welcomeLink} variant="ghost" tone="onBlue"
+                  fullWidth={false} onPress={() => setFindingOriginal(true)}
+                  accessibilityHint="Reconnects the account you had in the original Theme Park Shark app" testID="welcome-find-original" />
+              </Animated.View>
+            )}
+            {!done && (
               <Animated.Text entering={reduced ? undefined : FadeInUp.delay(900).duration(400)} style={styles.disclaimer}>
                 Theme Park Shark is an independent fan app, not affiliated with or endorsed by any theme park.
               </Animated.Text>
             )}
           </KeyboardAvoidingView>
         </SafeAreaView>
+        <FindOriginalAccount visible={findingOriginal} onClose={() => setFindingOriginal(false)} />
       </View>
     </TouchableWithoutFeedback>
   );
