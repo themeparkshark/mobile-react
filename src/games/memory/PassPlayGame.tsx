@@ -22,6 +22,9 @@ import { FxStage, GameAudio, GameShellV2, Haptic, useGameMusic, useMusicBeat, us
 import { SHARKS } from '../../gamekit/party/partyArt';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, type MemoryCardHandle, type ShimmerState } from './MemoryCard';
+import { boothGeo, type BoothGeo } from './layout';
+import { BoardFxUnder, NO_ARC, type RippleState, type RopeState } from './BoardFx';
+import { BoothFront, useMarquee, marqueeChain } from './MemoryBooth';
 import { SharkStage, type SharkStageHandle } from './SharkStage';
 import { deckById, type Deck } from './decks';
 import { faceFor } from './faces';
@@ -35,6 +38,8 @@ const CARD_BACK = require('../../assets/games/memory/card-back.png');
 const PLAYER_SHARKS = [SHARKS.classic, SHARKS.green, SHARKS.pink, SHARKS.orange];
 const PLAYER_COLORS = [MM.blue, '#22B573', '#FF7EC8', '#ffa21f'];
 const HOLD_MS = 1500;
+const IDS16 = Array.from({ length: 16 }, (_, i) => i);
+const EMPTY_PRIZES: never[] = [];
 const TURN_RING_MS = 10000;
 
 export interface PassPlayProps {
@@ -46,9 +51,17 @@ export interface PassPlayProps {
   onQuit?: (resume: () => void) => void;
 }
 
-interface Geo { W: number; H: number; stripH: number; stageY: number; stageH: number; panel: { x: number; y: number; w: number; h: number }; gx: number; gy: number; cw: number; ch: number; gap: number }
+interface Geo { W: number; H: number; stripH: number; stageY: number; stageH: number; panel: { x: number; y: number; w: number; h: number }; gx: number; gy: number; cw: number; ch: number; gap: number; booth: BoothGeo }
 
 function geometry(W: number, H: number, bottom: number): Geo {
+  const booth = boothGeo(W, H, 4, 4, { bottomInset: bottom, bandFrac: 0.2 });
+  return {
+    W, H, stripH: 78, stageY: 80, stageH: Math.max(80, booth.awning.y - 80 + booth.awning.h * 0.5), panel: booth.felt,
+    gx: booth.grid.x, gy: booth.grid.y, cw: booth.cw, ch: booth.ch, gap: booth.gap, booth,
+  };
+}
+
+export function legacyGeometry(W: number, H: number, bottom: number) {
   const stripH = 78;
   const stageY = stripH + 2;
   const stageH = Math.max(80, Math.min(120, H * 0.2));
@@ -93,6 +106,10 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const later = useCallback((ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); }, []);
   const shimmer = useSharedValue<ShimmerState>({ id: -1, p: 0 });
+  const marquee = useMarquee();
+  const ropeSv: RopeState = { frac: useSharedValue(1), urgent: useSharedValue(0), dim: useSharedValue(0), glint: useSharedValue(-1), capHit: useSharedValue(0) };
+  const rippleSv = useSharedValue<RippleState>({ x: 0, y: 0, p: 0, strength: 0 });
+  void NO_ARC;
   const [say, setSay] = useState<{ text: string; color: string; key: number } | null>(null);
   const sayIt = useCallback((text: string, color: string) => setSay({ text, color, key: Date.now() }), []);
   const ring = useSharedValue(1);
@@ -231,6 +248,7 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
             stage.current?.pose(run >= 2 ? 'fist' : 'hmm', 700);
             if (run >= 3) sayIt('ON A ROLL!', MM.gold);
             warmth.value = withTiming(Math.min(3, run) * 0.06, { duration: 300 });
+            marqueeChain(marquee, run, reducedMotion);
             // Pair flies to the player's token.
             const tx = tokenX(gg.W, s.players.length, player) - gg.cw * 0.25;
             later(260, () => {
@@ -258,6 +276,7 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
           cards.current[ev.a]?.flipDown(FLIP_MS);
           cards.current[ev.b]?.flipDown(FLIP_MS, 60);
           warmth.value = withTiming(0, { duration: 300 });
+          marqueeChain(marquee, 0, reducedMotion);
           break;
         case 'pass':
           playing.current = false;
@@ -305,7 +324,8 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
     apply(r.events, r.allowed);
   }, [apply, curtain, startRing]);
 
-  const tap = useMemo(() => Gesture.Tap().maxDuration(900).maxDistance(40).onEnd((e, ok) => { if (ok) runOnJS(tapAt)(e.x, e.y); }), [tapAt]);
+  const offY = g?.panel.y ?? 0;
+  const tap = useMemo(() => Gesture.Tap().maxDuration(900).maxDistance(40).onEnd((e, ok) => { if (ok) runOnJS(tapAt)(e.x, e.y + offY); }), [tapAt, offY]);
 
   const continueTurn = useCallback(() => {
     setCurtain(null);
@@ -381,16 +401,8 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
               <SharkStage ref={stage} x={8} y={0} height={g.stageH} beat={beat.beat} reducedMotion={reducedMotion} calm={reducedMotion} />
               {say ? <Text key={say.key} style={[styles.say, { color: say.color }]}>{say.text}</Text> : null}
             </View>
-            <View style={[styles.panel, { left: g.panel.x, top: g.panel.y, width: g.panel.w, height: g.panel.h }]}>
-              <View style={[styles.felt, { borderColor: PLAYER_COLORS[view.current] }]}>
-                <LinearGradient colors={['#1b93e6', MM.felt, '#086cc0']} style={StyleSheet.absoluteFill} />
-              </View>
-            </View>
-            {Array.from({ length: 16 }, (_, s) => {
-              const p = slotXY(g, s);
-              const done = view.matched.indexOf(s) >= 0;
-              return <View key={`w${round}-${s}`} style={[styles.well, done && styles.wellGold, { left: p.x, top: p.y, width: g.cw, height: g.ch }]} />;
-            })}
+            <BoardFxUnder geo={g.booth} wells={view.matched} cards={cardValues} ids={IDS16} rope={ropeSv} showRope={false} notchFrac={-1} beads={null} ripple={rippleSv} />
+            <View pointerEvents="none" style={[styles.turnRim, { left: g.booth.felt.x - 2, top: g.booth.felt.y - 2, width: g.booth.felt.w + 4, height: g.booth.felt.h + 4, borderColor: PLAYER_COLORS[view.current] }]} />
             <View style={StyleSheet.absoluteFill} pointerEvents="none" collapsable={false}>
             <View style={[StyleSheet.absoluteFill, styles.tilt]} pointerEvents="none">
               {layout.faces.map((f, s) => {
@@ -406,6 +418,9 @@ export default function PassPlayGame({ visible, players, deckId, seed, onClose, 
               const p = slotXY(g, s);
               return <View key={`b${s}`} pointerEvents="none" style={[styles.blocked, { left: p.x, top: p.y, width: g.cw, height: g.ch }]} />;
             }) : null}
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <BoothFront geo={g.booth} marquee={marquee} beat={beat.beat} reducedMotion={reducedMotion} prizes={EMPTY_PRIZES} pot={null} rail={null} bounceKey={0} />
+            </View>
             <GestureDetector gesture={tap}>
               <View style={[styles.abs, { left: 0, top: g.panel.y, width: g.W, height: g.panel.h }]} accessible accessibilityLabel="Memory board" />
             </GestureDetector>
@@ -501,7 +516,8 @@ const styles = StyleSheet.create({
   felt: { flex: 1, borderRadius: 14, overflow: 'hidden', borderWidth: 3 },
   well: { position: 'absolute', backgroundColor: MM.well, borderWidth: 3, borderColor: '#ffffff', borderRadius: 9 },
   wellGold: { backgroundColor: 'rgba(254,201,14,0.18)', borderColor: MM.gold, borderStyle: 'dashed', borderWidth: 2 },
-  tilt: { transform: [{ perspective: 900 }, { rotateX: '2deg' }] },
+  tilt: {},
+  turnRim: { position: 'absolute', borderRadius: 16, borderWidth: 4 },
   blocked: { position: 'absolute', borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.55)', borderWidth: 2, borderColor: 'rgba(11,92,173,0.4)' },
   hint: { position: 'absolute', alignSelf: 'center', backgroundColor: '#ffffff', borderRadius: 14, borderWidth: 3, borderColor: MM.gold, paddingHorizontal: 14, paddingVertical: 4 },
   hintText: { fontFamily: 'Shark', fontSize: 18, color: MM.navyText },
