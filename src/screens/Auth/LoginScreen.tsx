@@ -2,6 +2,7 @@ import { ResizeMode, Video } from 'expo-av';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useIsFocused } from '@react-navigation/native';
 import { useContext, useEffect, useRef } from 'react';
 import {
   Animated,
@@ -143,6 +144,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
 
   // Continuous logo float
   const logoFloat = useRef(new Animated.Value(0)).current;
+  const focused = useIsFocused();
 
   useEffect(() => {
     // Entrance sequence
@@ -199,8 +201,13 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
       }),
     ]).start();
 
-    // Continuous gentle float on logo
-    Animated.loop(
+  }, []);
+
+  // Continuous gentle float on logo, only while this screen is on top (it
+  // stays mounted under the map after sign-in).
+  useEffect(() => {
+    if (!focused) return;
+    const float = Animated.loop(
       Animated.sequence([
         Animated.timing(logoFloat, {
           toValue: -8,
@@ -215,8 +222,10 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
           useNativeDriver: true,
         }),
       ])
-    ).start();
-  }, []);
+    );
+    float.start();
+    return () => float.stop();
+  }, [focused]);
 
   return (
     <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: '#09268f' }}>
@@ -224,7 +233,7 @@ export default function LoginScreen({ navigation }: NativeStackScreenProps<any>)
       <Video
         source={SPLASH_VIDEO}
         resizeMode={ResizeMode.COVER}
-        shouldPlay
+        shouldPlay={focused}
         isLooping
         isMuted
         style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}

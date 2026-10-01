@@ -2,6 +2,7 @@ import { ResizeMode, Video } from 'expo-av';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { sample } from 'lodash';
+import { useIsFocused } from '@react-navigation/native';
 import { useContext, useEffect, useState, useRef } from 'react';
 import {
   Animated,
@@ -55,7 +56,7 @@ function Bubble({ delay, size, left, duration }: { delay: number; size: number; 
       ]).start(() => startAnimation());
     };
 
-    Animated.loop(
+    const wobbleLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(wobble, {
           toValue: 10,
@@ -70,10 +71,17 @@ function Bubble({ delay, size, left, duration }: { delay: number; size: number; 
           useNativeDriver: true,
         }),
       ])
-    ).start();
+    );
+    wobbleLoop.start();
 
     const timeout = setTimeout(startAnimation, delay);
-    return () => clearTimeout(timeout);
+    // Stop both loops when the bubble unmounts (the screen left focus).
+    return () => {
+      clearTimeout(timeout);
+      wobbleLoop.stop();
+      translateY.stopAnimation();
+      opacity.stopAnimation();
+    };
   }, []);
 
   return (
@@ -117,15 +125,21 @@ import useCrumbs from '../hooks/useCrumbs';
 
 export default function LoadingScreen() {
   const logoFloat = useRef(new Animated.Value(0)).current;
+  // This screen stays mounted under the map for the whole session. Its video,
+  // logo float and bubbles only run while it is the screen on top.
+  const focused = useIsFocused();
 
   useEffect(() => {
-    Animated.loop(
+    if (!focused) return;
+    const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(logoFloat, { toValue: -6, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         Animated.timing(logoFloat, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ])
-    ).start();
-  }, []);
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [focused]);
 
   const { isReady, player } = useContext(AuthContext);
   const { requestPark, parkLoaded, permissionGranted } =
@@ -197,7 +211,7 @@ export default function LoadingScreen() {
       <Video
         source={SPLASH_VIDEO}
         resizeMode={ResizeMode.COVER}
-        shouldPlay
+        shouldPlay={focused}
         isLooping
         isMuted
         style={{ position: 'absolute', width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
@@ -220,7 +234,7 @@ export default function LoadingScreen() {
         />
       </Animated.View>
       {/* Rising bubbles */}
-      {BUBBLES.map((b, i) => (
+      {focused && BUBBLES.map((b, i) => (
         <Bubble key={i} {...b} />
       ))}
       <SafeAreaView

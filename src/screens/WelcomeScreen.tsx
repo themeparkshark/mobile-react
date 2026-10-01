@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
+import { useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useContext, useEffect, useRef, useState } from 'react';
 import {
@@ -63,11 +64,15 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   const cheer = useSharedValue(0);
   const dice = useSharedValue(0);
   const shake = useSharedValue(0);
+  // The idle bob and starburst run only while this screen is on top (it stays
+  // mounted under the map after onboarding) and rest under Reduce Motion.
+  const focused = useIsFocused();
   useEffect(() => {
+    if (!focused || reduced) return;
     bob.value = withDelay(700, withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.sin) }), -1, true));
     spin.value = withRepeat(withTiming(1, { duration: 24000, easing: Easing.linear }), -1, false);
     return () => { cancelAnimation(bob); cancelAnimation(spin); };
-  }, [bob, spin]);
+  }, [bob, spin, focused, reduced]);
   const sharkStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: -bob.value * 14 - cheer.value * 60 },

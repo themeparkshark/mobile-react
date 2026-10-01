@@ -135,3 +135,16 @@ test('map markers and pills stop timers and loops while the map is off screen', 
   const pill = read('src/components/LiveEventsPill.tsx');
   assert.match(pill, /const ticking = focused && appActive && \(rushes\.length > 0 \|\| raid\?\.status === 'active'\)/);
 });
+
+test('entry screens left under the map stop their video and loops', () => {
+  const loading = read('src/screens/LoadingScreen.tsx');
+  assert.match(loading, /const focused = useIsFocused\(\);/);
+  assert.match(loading, /shouldPlay=\{focused\}/);
+  assert.match(loading, /\{focused && BUBBLES\.map/);
+  assert.match(loading, /wobbleLoop\.stop\(\);/, 'bubbles stop their loops on unmount');
+  const login = read('src/screens/Auth/LoginScreen.tsx');
+  assert.match(login, /shouldPlay=\{focused\}/);
+  assert.match(login, /if \(!focused\) return;\s*const float = Animated\.loop/);
+  const welcome = read('src/screens/WelcomeScreen.tsx');
+  assert.match(welcome, /if \(!focused \|\| reduced\) return;/);
+});
