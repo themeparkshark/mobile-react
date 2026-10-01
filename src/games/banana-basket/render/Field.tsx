@@ -993,12 +993,12 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   });
   const burstOpacity = useDerivedValue(() => goldAmt.value * 0.4);
   const frameOpacity = useDerivedValue(() => goldAmt.value);
-  const sheenOp = useDerivedValue(() => goldAmt.value * 0.35);
-  const sheenX = useDerivedValue(() => {
+  // Gold basket sheen: the tint swells once every 4 beats (7.4), never washing out the wicker.
+  const sheenOp = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
     const u = ((s.clock - s.setStart) % (STEPS_BEAT * 4)) / (STEPS_BEAT * 4);
-    return -40 + u * (BASKET_W + 80);
+    return goldAmt.value * (0.55 + 0.45 * Math.max(0, Math.sin(u * Math.PI)));
   });
 
   // -- HUD ---------------------------------------------------------------------------------
@@ -1341,40 +1341,45 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
   const ghostNameX = useDerivedValue(() => 346 - (fontTiny ? fontTiny.measureText(ghostName).width / 2 : 10));
   const ghostTickX = useDerivedValue(() => ghostX.value - 3);
 
-  // Line Heat strip (11.2): up to 8 chips ranked by live score; frozen chips show a thumb glyph.
-  const stripPath = (lit: boolean) => useDerivedValue(() => {
-    tick.value;
-    const p = Skia.Path.Make();
-    const list = strip ? strip.value : null;
-    if (!list) return p;
-    for (let i = 0; i < list.length && i < 8; i++) {
-      if ((list[i].me === true) !== lit) continue;
-      p.addCircle(30 + i * 48, 76, list[i].me ? 15 : 13);
-    }
-    return p;
-  });
-  const stripOthers = stripPath(false);
-  const stripMe = stripPath(true);
+  // Line Heat strip (11.2): up to 8 pills ranked by live score; yours ringed; strangers are
+  // fin silhouettes (no name); a frozen chip dims and shows the thumb dot.
   const stripOp = useDerivedValue(() => (strip && strip.value ? 1 : 0));
-  const stripLabels = useDerivedValue(() => {
+  const pillOp = (i: number) => useDerivedValue(() => {
     tick.value;
     const list = strip ? strip.value : null;
-    if (!list) return '';
-    let t = '';
-    for (let i = 0; i < list.length && i < 8; i++) t += `${i + 1}`.padEnd(6, ' ');
-    return t;
+    if (!list || i >= list.length) return 0;
+    return list[i].frozen ? 0.55 : 1;
   });
-  const stripFrozen = useDerivedValue(() => {
+  const pillMe = (i: number) => useDerivedValue(() => {
     tick.value;
+    const list = strip ? strip.value : null;
+    return list && i < list.length && list[i].me ? 1 : 0;
+  });
+  const pillText = (i: number) => useDerivedValue(() => {
+    tick.value;
+    const list = strip ? strip.value : null;
+    if (!list || i >= list.length) return '';
+    const e = list[i];
+    return `${i + 1} ${e.me ? 'YOU' : e.silhouette ? '' : e.label}`.trim();
+  });
+  const pillFin = (i: number) => useDerivedValue(() => {
+    tick.value;
+    const list = strip ? strip.value : null;
+    return list && i < list.length && list[i].silhouette ? 1 : 0;
+  });
+  const PILLS = [0, 1, 2, 3, 4, 5, 6, 7];
+  const pOps = PILLS.map((i) => pillOp(i));
+  const pMes = PILLS.map((i) => pillMe(i));
+  const pTexts = PILLS.map((i) => pillText(i));
+  const pFins = PILLS.map((i) => pillFin(i));
+  const finPath = useMemo(() => {
     const p = Skia.Path.Make();
-    const list = strip ? strip.value : null;
-    if (!list) return p;
-    for (let i = 0; i < list.length && i < 8; i++) {
-      if (!list[i].frozen) continue;
-      p.addRRect(Skia.RRectXY(rect(30 + i * 48 - 4, 70, 8, 12), 4, 4));
-    }
+    p.moveTo(-4, 6);
+    p.lineTo(4, -7);
+    p.lineTo(8, 6);
+    p.close();
     return p;
-  });
+  }, []);
 
   // -- stamps --------------------------------------------------------------------------------------
   const stampText = useDerivedValue(() => {
@@ -1681,10 +1686,9 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
             {im.basket ? <SkImage image={im.basket} x={0} y={0} width={BW} height={BASKET_H} /> : null}
             {im.basket ? (
               <Group clip={rect(0, 0, BW, BASKET_H)}>
-                <SkImage image={im.basket} x={0} y={0} width={BW} height={BASKET_H} opacity={goldAmt}>
+                <SkImage image={im.basket} x={0} y={0} width={BW} height={BASKET_H} opacity={sheenOp}>
                   <BlendColor color="rgba(255,205,40,0.45)" mode="srcATop" />
                 </SkImage>
-                <Rect x={sheenX} y={0} width={40} height={BASKET_H} color="#ffffff" opacity={sheenOp} />
               </Group>
             ) : null}
             {im.basket ? (
@@ -1845,14 +1849,21 @@ export const BananaField = React.memo(function BananaField(props: FieldProps) {
           <Circle cx={TIME_X + TIME_W + 4} cy={70} r={5} style="stroke" strokeWidth={2} color={INK} />
         </Group>
 
-        {/* Line Heat strip (y 62-90): fin chips ranked by live score, yours ringed */}
-        <Group opacity={stripOp} transform={[{ translateY: 14 }]}>
-          <Path path={stripOthers} color="#dff3ff" />
-          <Path path={stripOthers} style="stroke" strokeWidth={2.5} color={INK} />
-          <Path path={stripMe} color="#ffffff" />
-          <Path path={stripMe} style="stroke" strokeWidth={4} color={BLUE} />
-          <Path path={stripFrozen} color={INK} opacity={0.6} />
-          {fontTiny ? <Text x={26} y={81} text={stripLabels} font={fontTiny} color={INK} /> : null}
+        {/* Line Heat strip: 8 ranked pills under the star meter */}
+        <Group opacity={stripOp}>
+          {PILLS.map((i) => (
+            <Group key={i} opacity={pOps[i]} transform={[{ translateX: 8 + i * 48 }, { translateY: 82 }]}>
+              <RoundedRect x={0} y={0} width={45} height={18} r={9} color="#ffffff" />
+              <RoundedRect x={0} y={0} width={45} height={18} r={9} style="stroke" strokeWidth={2} color={INK} />
+              <Group opacity={pMes[i]}>
+                <RoundedRect x={0} y={0} width={45} height={18} r={9} style="stroke" strokeWidth={3.5} color={BLUE} />
+              </Group>
+              <Group opacity={pFins[i]} transform={[{ translateX: 30 }, { translateY: 9 }]}>
+                <Path path={finPath} color="#7a8aa6" />
+              </Group>
+              {fontTiny ? <Text x={5} y={13.5} text={pTexts[i]} font={fontTiny} color={INK} /> : null}
+            </Group>
+          ))}
         </Group>
 
         {/* Rival portrait window (ghost rounds): their shark, score, tug bar */}

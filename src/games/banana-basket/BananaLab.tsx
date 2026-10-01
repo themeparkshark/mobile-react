@@ -7,7 +7,7 @@
  * teaching cards and the queue unlock gate replay from run 1.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BananaBasketGame } from './BananaBasketGame';
@@ -15,8 +15,8 @@ import { PROGRESS_KEY } from './constants';
 import { LocalHeatTransport, type HeatRound } from './heat';
 
 function labHeat(): { round: HeatRound; transport: LocalHeatTransport } {
-  const t = new LocalHeatTransport('lab', 4000);
-  const startAt = Date.now() + 4000;
+  const t = new LocalHeatTransport('lab', 9000);
+  const startAt = Date.now() + 9000;
   return { round: { roundId: Math.floor(startAt / 1000), rideId: 'lab', seed: (startAt >>> 0) ^ 0x5eed, twist: 1, startAt, durationBars: 24 }, transport: t };
 }
 
@@ -45,6 +45,8 @@ export default function BananaLab({ command, onClose }: { command: string; onClo
   const [run, setRun] = useState<LabMode | null>(parse(command));
   const [n, setN] = useState(0);
   const [last, setLast] = useState('');
+  // One heat per lab run (a new object every render would restart the round).
+  const heat = useMemo(() => (run && run.mode === 'heat' ? labHeat() : null), [run, n]);
 
   useEffect(() => {
     if (!command.includes('fresh')) return;
@@ -66,7 +68,7 @@ export default function BananaLab({ command, onClose }: { command: string; onClo
           unlock={run.unlock}
           rules={run.rules}
           twist={run.twist}
-          heat={run.mode === 'heat' ? labHeat() : null}
+          heat={heat}
           seed={20260930 + n}
           onComplete={(mult, meta) => {
             const m = meta as { score?: number; verifiedLocally?: boolean } | undefined;
