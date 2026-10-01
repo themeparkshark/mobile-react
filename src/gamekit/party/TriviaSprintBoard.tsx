@@ -28,11 +28,13 @@ export interface TriviaSprintBoardProps {
   onProgress?: (score: number, streak: number) => void;
   onTick?: (boardMs: number, score: number) => void;
   autoplay?: SprintBotProfile | null;
+  /** Board ms since GO from the PartyClient: frozen during this phone's personal HOLD. */
+  boardClock?: () => number | null;
 }
 
 type QPhase = 'wait' | 'read' | 'live' | 'reveal';
 
-function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, autoplay }: TriviaSprintBoardProps) {
+function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, autoplay, boardClock }: TriviaSprintBoardProps) {
   registerDuelAudio();
   const qs = useMemo(() => buildQuestions(seed), [seed]);
   const [qi, setQi] = useState(0);
@@ -74,7 +76,7 @@ function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, aut
     let raf = 0;
     let lastSec = -1;
     const frame = () => {
-      const t = perfNow() - goAt;
+      const t = boardClock?.() ?? perfNow() - goAt;
       let idx = 0;
       for (let k = 0; k < qs.length; k++) if (t >= qs[k].showAt) idx = k;
       const cq = qs[idx];
@@ -120,7 +122,7 @@ function TriviaSprintBoard({ seed, goAt, perfNow, onTap, onProgress, onTick, aut
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [auto, goAt, onProgress, onTick, perfNow, qs]);
+  }, [auto, boardClock, goAt, onProgress, onTick, perfNow, qs]);
 
   const picked = mine.picks[q.id];
   const tileW = (width - 12) / (q.choices === 2 ? 2 : 1);

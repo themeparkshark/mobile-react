@@ -57,6 +57,8 @@ export interface BonkBoardProps {
   autoplay?: BotProfile | null;
   /** Board time drives the HUD above the board (parent owns the strip). */
   onTick?: (boardMs: number, score: number) => void;
+  /** The client's board clock (ms since GO, frozen during a personal HOLD). */
+  boardClock?: () => number | null;
 }
 
 type OccPhase = 'peek' | 'up' | 'bonked' | 'none';
@@ -86,7 +88,7 @@ function grid(w: number, h: number): Cell[] {
 
 interface FlyUp { key: number; x: number; y: number; text: string; color: string; big: boolean }
 
-function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress, autoplay, onTick }: BonkBoardProps) {
+function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress, autoplay, onTick, boardClock }: BonkBoardProps) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const cells = useMemo(() => (size.w ? grid(size.w, size.h) : []), [size]);
   const [occ, setOcc] = useState<Occ[]>(() => Array(9).fill(EMPTY));
@@ -178,7 +180,7 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
     let lastSecond = -1;
     const frame = () => {
       const now = perfNow();
-      const t = now - goAt;
+      const t = boardClock?.() ?? now - goAt;
       const next: Occ[] = [];
       let changed = false;
       for (let h = 0; h < 9; h++) {
@@ -216,7 +218,7 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [auto, byHole, durationMs, goAt, onTick, perfNow]);
+  }, [auto, boardClock, byHole, durationMs, goAt, onTick, perfNow]);
 
   const onTouch = useCallback((x: number, y: number) => {
     // Generous hitboxes: the whole cell plus slop, and the rising sprite above it.

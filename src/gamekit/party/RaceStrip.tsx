@@ -24,6 +24,10 @@ import { EmotePop } from './EmoteBar';
 
 export interface RacerLine {
   seat: Seat;
+  /** Park alias for strangers, screen name for friends. */
+  name: string;
+  /** Series points so far (best 4 of 5). */
+  seriesPoints?: number;
   score: number;
   placement: number;
   me: boolean;
@@ -70,7 +74,7 @@ function Chip({ line }: { line: RacerLine }) {
         <SeatAvatar avatarUrl={line.seat.avatar_url} team={line.seat.team} size={40} me={line.me} ghost={line.ghost} away={line.away} bumpKey={line.emote?.key} />
         {line.emote ? <EmotePop key={line.emote.key} emote={line.emote.id} size={38} /> : null}
       </View>
-      <Text numberOfLines={1} style={[styles.name, line.me && styles.nameMe]}>{line.me ? 'YOU' : line.seat.name}</Text>
+      <Text numberOfLines={1} style={[styles.name, line.me && styles.nameMe]}>{line.me ? 'YOU' : line.name}</Text>
       <Score value={line.score} me={line.me} />
       {line.ghost ? <Text style={styles.tag}>GHOST</Text> : line.seat.kind === 'bot' ? <Text style={styles.tagBot}>CREW</Text> : <View style={styles.tagSpacer} />}
     </View>

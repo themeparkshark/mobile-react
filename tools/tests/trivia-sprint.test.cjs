@@ -108,13 +108,12 @@ test('bots rank rookie < ace on average; ghost fill keeps own taps then plays on
 
 test('party registry: trivia_sprint scores through the same sim the server replays', () => {
   const stub = {};
-  const reg = loadTs('src/gamekit/party/partyGames.ts', stub);
-  const g = reg.partyGame('trivia_sprint');
+  const reg = loadTs('src/games-registry/partySims.ts', stub);
+  const g = reg.partySim('trivia_sprint');
   assert.equal(g.version, sim.TRIVIA_SPRINT_VERSION);
-  const qs = sim.buildQuestions(4242);
-  const taps = sim.botTaps(qs, 4242, 2, 'ace');
-  assert.equal(g.score(4242, taps), sim.resolve(qs, taps).score);
-  assert.deepEqual(plain(g.botTaps(4242, 2, 'ace')), plain(taps));
-  assert.equal(reg.partyGame(undefined).key, 'bonk_race');
-  assert.equal(reg.partyGame('nope').key, 'bonk_race');
+  const qs = g.build(4242);
+  const taps = g.botTaps(qs, 4242, 2, 'ace');
+  assert.equal(g.resolve(qs, taps).score, sim.resolve(sim.buildQuestions(4242), taps).score);
+  assert.deepEqual(plain(taps), plain(sim.botTaps(sim.buildQuestions(4242), 4242, 2, 'ace')));
+  assert.equal(reg.partySim('nope'), null);
 });
