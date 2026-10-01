@@ -41,9 +41,11 @@ type Props = {
   readonly playKey: string;
   /** Pickers or filters drawn above the podium. */
   readonly header?: React.ReactNode;
+  /** False on Near Me boards, where names never open a profile. */
+  readonly interactive?: boolean;
 };
 
-export default function StandingsPodium({ podium, scoreOf, scoreIcon, meId, playKey, header }: Props) {
+export default function StandingsPodium({ podium, scoreOf, scoreIcon, meId, playKey, header, interactive = true }: Props) {
   const reduced = useUiReducedMotion();
   const { width } = useWindowDimensions();
   const { playSound } = useContext(SoundEffectContext);
@@ -106,6 +108,7 @@ export default function StandingsPodium({ podium, scoreOf, scoreIcon, meId, play
         landed={landed[rank]}
         reduced={reduced}
         isMe={!!meId && podium[rank - 1]?.id === meId}
+        interactive={interactive}
       />
     </View>
   );

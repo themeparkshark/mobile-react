@@ -23,6 +23,10 @@ import config from '../config';
 import HapticPatterns from '../helpers/hapticPatterns';
 import prepItemImage from '../helpers/prepItemImages';
 import type { RedeemPrepItemResponseType } from '../models/redeem-prep-item-response-type';
+import ReAnimated, { FadeInDown } from 'react-native-reanimated';
+import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { huntPointsChip } from '../screens/ExploreScreen/homeHuntMap';
+import { setHomeHuntRankLine } from '../screens/ExploreScreen/homeHuntRankStore';
 
 // Local asset icons for currency fly (must be hoisted to module level)
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
@@ -82,8 +86,9 @@ export default function PrepItemRedeemModal({
   } | null>(null);
   const [pickupOutcome, setPickupOutcome] = useState<Pick<
     RedeemPrepItemResponseType['data'],
-    'is_new_variant' | 'replayed' | 'set_progress' | 'project_update'
+    'is_new_variant' | 'replayed' | 'set_progress' | 'project_update' | 'hunt_points'
   > | null>(null);
+  const reducedMotion = useReducedGameMotion();
   const { refreshPlayer } = useContext(AuthContext);
   const { location, latestLocationSampleRef, permissionGranted, requestLocation } = useContext(LocationContext);
   const { triggerFly } = useCurrencyFly();
@@ -139,7 +144,10 @@ export default function PrepItemRedeemModal({
         replayed: response.data.replayed,
         set_progress: response.data.set_progress,
         project_update: response.data.project_update,
+        hunt_points: response.data.hunt_points,
       });
+      // The map's rank line follows the redeem response, only when the server sends it.
+      if (response.data.hunt_week?.rank_line) setHomeHuntRankLine(response.data.hunt_week.rank_line);
       if (!response.data.replayed) {
         HapticPatterns.collect(celebrationLevel);
         playSound(require('../../assets/sounds/reward.mp3'));
@@ -757,6 +765,20 @@ export default function PrepItemRedeemModal({
                         </Text>}
                       </View>
                     )}
+                    {(() => {
+                      // Only when the server sent hunt_points. Zero shows the server's line verbatim.
+                      const chip = huntPointsChip(pickupOutcome?.hunt_points);
+                      if (!chip) return null;
+                      return (
+                        <ReAnimated.View entering={reducedMotion ? undefined : FadeInDown.duration(220)}
+                          style={{ alignSelf: 'center', marginTop: 10, borderRadius: 12, borderWidth: 2, borderColor: '#fff',
+                            backgroundColor: chip.kind === 'points' ? '#ffca30' : '#07569e', paddingHorizontal: 13, paddingVertical: 6 }}
+                          accessible accessibilityRole="text" accessibilityLabel={chip.text}>
+                          <Text style={{ fontFamily: 'Shark', fontSize: 15, textAlign: 'center',
+                            color: chip.kind === 'points' ? '#073b73' : '#fff' }}>{chip.text}</Text>
+                        </ReAnimated.View>
+                      );
+                    })()}
                     {setProgress && prepItem.set_slug && (
                       <View style={{
                         marginTop: 12, borderWidth: 2, borderColor: '#FFC842',

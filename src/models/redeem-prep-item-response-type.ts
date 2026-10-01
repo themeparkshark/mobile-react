@@ -40,6 +40,14 @@ export interface RedeemPrepItemResponseType {
       readonly rewards_claimed?: boolean;
       readonly starter_milestone?: StarterMilestone | null;
     };
+    /** Hunt Points for this find. `line` is shown verbatim, including the neutral zero line. */
+    readonly hunt_points?: { readonly points: number; readonly line?: string | null } | null;
+    readonly hunt_week?: {
+      readonly points: number;
+      readonly rank: number | null;
+      readonly rank_line: string | null;
+      readonly week_key: string;
+    } | null;
     readonly item: {
       readonly id: number;
       readonly name: string;

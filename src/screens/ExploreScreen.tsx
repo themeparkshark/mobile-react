@@ -76,6 +76,7 @@ import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
+import HomeHuntResultsHost from '../components/home/HomeHuntResultsHost';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
@@ -842,6 +843,9 @@ function ExploreScreen() {
       {/* One overlay at a time: the daily chest comes last, after the first catch and never alongside a find. */}
       {mapFocused && player && permissionGranted && dailyGift && dailyGift.redeemed_at === null && hasCompleted('onboarding') && chestReady &&
         <DailyGiftModal dailyGift={dailyGift} onMapOcclusionChange={setDailyGiftOccluded} />}
+      {/* Monday Home Hunt results come through the presentation queue, after the daily chest (2 full-screen moments per app open). */}
+      <HomeHuntResultsHost enabled={!!player && !park && mapFocused && permissionGranted && hasCompleted('onboarding') && chestReady
+        && !dailyGiftOccluded && !(dailyGift && dailyGift.redeemed_at === null)} />
       {/* Home Mode: the map always renders without a park, even before the
           first park check settles (it shows the park-check card until then).
           Gating it on parkLoaded left a blank grey screen whenever park state
