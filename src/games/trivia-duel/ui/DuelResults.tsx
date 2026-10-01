@@ -16,6 +16,7 @@ import Animated, {
 import { ART, C } from '../art';
 import type { FactCard } from '../store';
 import { OutlinedText } from './Overlays';
+import Svg, { Path as SvgPath } from 'react-native-svg';
 
 export interface ResultsModel {
   won: boolean;
@@ -33,6 +34,8 @@ export interface ResultsModel {
   rank?: { label: string; progress: number; next: string | null } | null;
   /** Best Moment: the fastest correct lock. */
   best?: { label: string } | null;
+  /** Ride challenge: the coin line instead of the duel title. */
+  ride?: { won: boolean } | null;
 }
 
 interface Props {
@@ -82,10 +85,11 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
 
   const total = Math.max(1, model.myScore + model.oppScore);
   const fact = model.facts[0];
-  const title = model.practice ? (model.won ? 'PRACTICE WIN!' : 'GOOD PRACTICE!') : model.won ? 'YOU WIN!' : model.tie ? 'DEAD EVEN!' : 'GOOD GAME!';
+  const title = model.ride ? (model.ride.won ? 'RIDE COIN!' : 'GOOD TRY!')
+    : model.practice ? (model.won ? 'PRACTICE WIN!' : 'GOOD PRACTICE!') : model.won ? 'YOU WIN!' : model.tie ? 'DEAD EVEN!' : 'GOOD GAME!';
   return (
     <View style={[styles.root, { height }]} pointerEvents="box-none">
-      <Animated.View style={[styles.card, { minHeight: height - 8 }, cardStyle]}>
+      <Animated.View style={[styles.card, { minHeight: model.ride ? undefined : height - 8 }, cardStyle]}>
         <View style={styles.head}>
           <OutlinedText text={title} size={30} color={model.won ? C.gold : '#ffffff'} width={2.5} />
           <View style={styles.scoreRow}>
@@ -94,7 +98,12 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             <Text style={styles.scoreOpp}>{model.oppScore}</Text>
           </View>
         </View>
-        {!model.won && model.oppScore > model.myScore ? (
+        {model.ride ? (
+          <View style={styles.starRow}>
+            {[1, 2, 3].map((k) => <StarPip key={k} on={k <= model.stars} i={k} reducedMotion={reducedMotion} />)}
+          </View>
+        ) : null}
+        {!model.ride && !model.won && model.oppScore > model.myScore ? (
           <View style={styles.gapTrack}>
             <View style={[styles.gapMe, { flex: model.myScore / total }]} />
             <Animated.View style={[styles.gapSeg, { flex: (model.oppScore - model.myScore) / total }, gapStyle]} />
@@ -106,7 +115,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
             {model.banners.map((b, i) => <Banner key={b} text={b} i={i} reducedMotion={reducedMotion} />)}
           </View>
         ) : null}
-        {!model.won && model.nearMiss ? <Text style={styles.near}>{model.nearMiss}</Text> : null}
+        {(model.ride ? !model.ride.won : !model.won) && model.nearMiss ? <Text style={styles.near}>{model.nearMiss}</Text> : null}
         <View style={styles.rows}>
           {model.rows.map((r) => (
             <View key={r.label} style={styles.rowItem}>
@@ -155,6 +164,32 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
     </View>
   );
 }
+
+function StarPip({ on, i, reducedMotion }: { on: boolean; i: number; reducedMotion: boolean }) {
+  const s = useSharedValue(reducedMotion || !on ? 1 : 0);
+  useEffect(() => {
+    if (!on || reducedMotion) return;
+    s.value = withDelay(500 + i * 220, withSequence(withTiming(1.35, { duration: 120 }), withSpring(1, { damping: 7, stiffness: 300 })));
+  }, [on, i, s, reducedMotion]);
+  const st = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  return (
+    <Animated.View style={st}>
+      <Svg width={38} height={38}>
+        <SvgPath d={STAR_D} fill={on ? C.gold : '#ffffff'} stroke={C.ink} strokeWidth={3} strokeLinejoin="round" />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+const STAR_D = (() => {
+  let d = '';
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const r = i % 2 ? 8 : 17;
+    d += `${i ? 'L' : 'M'} ${(19 + Math.cos(a) * r).toFixed(1)} ${(20 + Math.sin(a) * r).toFixed(1)} `;
+  }
+  return `${d}Z`;
+})();
 
 function Banner({ text, i, reducedMotion }: { text: string; i: number; reducedMotion: boolean }) {
   const sx = useSharedValue(reducedMotion ? 1 : 0);
@@ -205,6 +240,7 @@ const styles = StyleSheet.create({
   bannerText: { fontFamily: 'Shark', fontSize: 18, color: C.navy },
   near: { fontFamily: 'Knockout', fontSize: 18, color: C.navy, textAlign: 'center', marginTop: 6 },
   rows: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8 },
+  starRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 4 },
   rowItem: { alignItems: 'center', minWidth: 70 },
   rowVal: { fontFamily: 'Shark', fontSize: 22, color: C.navy },
   rowLabel: { fontFamily: 'Knockout', fontSize: 13, color: C.navy, opacity: 0.6 },

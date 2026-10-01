@@ -36,9 +36,29 @@ export const GENERIC_LABELS: readonly (readonly [string, string])[] = [
   ['Magic Kingdom', 'the Florida castle park'],
   ['Disneyland', 'the California castle park'],
   ['Studio Tour', 'backlot tour'],
+  ['Super Nintendo World', 'the video game land'],
+  ['CityWalk', 'the dining promenade'],
+  ['King Kong 360', 'the giant ape 3-D scene'],
+  ['WaterWorld', 'the water stunt'],
   ['Universal', 'the studio'],
+  ['New Orleans Square', 'the bayou square'],
+  ['Tomorrowland', 'the future land'],
+  ['Adventureland', 'the adventure land'],
+  ['Fantasyland', 'the fairy-tale land'],
+  ['Frontierland', 'the frontier land'],
+  ['EPCOT', 'the Florida future park'],
+  ['Audio-Animatronics', 'animated figures'],
+  ['Imagineer', 'park designer'],
+  ['Walt Disney', 'Walt'],
+  ['Disney films', 'studio films'],
   ['Disney', 'the park company'],
 ];
+
+/**
+ * Items that name a film or brand as the answer itself cannot be relabelled
+ * without losing the question; they sit out until Dustin rules on names (19.2).
+ */
+export const DROP_TERMS: readonly string[] = ['Jaws', 'NOPE', 'Sharknado', 'The Meg'];
 
 const SORTED = GENERIC_LABELS.slice().sort((a, b) => b[0].length - a[0].length);
 const ESC = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -48,21 +68,63 @@ const MAP = new Map(SORTED.map(([n, l]) => [n, l] as const));
 /** Rewrite one string. Pure. */
 export function genericize(text: string): string {
   if (NAMES_IN_TEXT || !text) return text;
-  const out = text.replace(RE, (name, offset: number, whole: string) => {
+  let out = '';
+  let last = 0;
+  let prevLabelEnd = -1;
+  RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = RE.exec(text))) {
+    const name = m[0];
     let label = MAP.get(name) ?? name;
-    const before = whole.slice(0, offset);
-    // After a determiner or a possessive the label loses its own article.
-    if (/(?:\b(?:the|The|which|Which|its|Its|a|A)\s|[’']s\s)$/.test(before)) label = label.replace(/^the\s/, '');
-    return label;
-  });
-  // "The the" never survives, and sentence starts are capitalised.
+    const gap = text.slice(last, m.index);
+    const before = out + gap;
+    // Two names side by side ("Magic Kingdom Space Mountain"): the first becomes a possessive.
+    if (prevLabelEnd >= 0 && /^\s+$/.test(gap)) {
+      out = `${out}’s`;
+      label = label.replace(/^the\s/, '');
+    } else if (/(?:\b(?:the|The|which|Which|its|Its|a|A|two|three|both|all|each|every)\s|[’']s\s)$/.test(before)) {
+      // After a determiner, a number or a possessive the label loses its own article.
+      label = label.replace(/^the\s/, '');
+    }
+    out += gap + label;
+    last = m.index + name.length;
+    prevLabelEnd = last;
+  }
+  out += text.slice(last);
+  // "The original the ..." never survives, and sentence starts are capitalised.
   return out
     .replace(/\b([Tt]he)((?:\s+(?:original|early|first|same|new|old|classic|famous))?)\s+the\b/g, '$1$2')
+    .replace(/\b([Tt]he) (two|three|four) ([^’,.?]+?)’s /g, '$1 $3’s $2 ')
     .replace(/(^|[.!?]\s+)([a-z])/g, (_m, p: string, c: string) => p + c.toUpperCase());
 }
 
 /** True when a string still carries a name from the table (tests and the content guard). */
 export function hasTrademarkName(text: string): boolean {
   if (!text) return false;
-  return SORTED.some(([n]) => text.includes(n)) || /\bDisney\b|\bUniversal\b/.test(text);
+  return SORTED.some(([n]) => text.includes(n)) || /\bDisney\b|\bUniversal\b/.test(text) || DROP_TERMS.some((t) => new RegExp(`\\b${t}\\b`).test(text));
+}
+
+/** An item that must sit out entirely (its answer is a film or brand title). */
+export function mustDrop(texts: readonly string[]): boolean {
+  if (NAMES_IN_TEXT) return false;
+  return texts.some((t) => DROP_TERMS.some((d) => new RegExp(`\\b${d}\\b`).test(t)));
+}
+
+const STOP = new Set(['the', 'park', 'ride', 'rides', 'second', 'first', 'original', 'company', 'studio', 'california', 'florida', 'tokyo', 'paris', 'hollywood']);
+
+/**
+ * True when a generic label would give the answer away: a content word of a
+ * label used in the question also appears in the right answer ("What kind of
+ * ride is Space Mountain?" -> "the indoor space coaster" -> "A roller coaster
+ * in the dark"). Such items sit out until WS5 writes a "this ride" paraphrase.
+ */
+export function labelLeaks(question: string, answer: string): boolean {
+  if (NAMES_IN_TEXT) return false;
+  const ans = ` ${answer.toLowerCase()} `;
+  for (const [name, label] of SORTED) {
+    if (!question.includes(name)) continue;
+    const words = label.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4 && !STOP.has(w));
+    if (words.some((w) => ans.includes(w))) return true;
+  }
+  return false;
 }

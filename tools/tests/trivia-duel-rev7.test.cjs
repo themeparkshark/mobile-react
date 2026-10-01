@@ -179,3 +179,16 @@ test('S1 gate 2: no trademarked ride or park name in any planned question, choic
   const q = content.materializeQuestion('gen-42', pool, 1);
   assert.ok(q.factKeys.length > 0);
 });
+
+test('a generic label never hands over the answer: such items sit out of the pool', () => {
+  const labels = loadTs('src/games/trivia-duel/engine/labels.ts');
+  const content = loadTs('src/games/trivia-duel/engine/content.ts');
+  assert.equal(labels.labelLeaks('What kind of ride does Disney describe Space Mountain as?', 'A roller coaster in the dark'), true);
+  assert.equal(labels.labelLeaks('Which year did Disneyland open its Space Mountain?', '1977'), false);
+  assert.equal(labels.labelLeaks('Before it became a boat ride, what was Pirates of the Caribbean first planned as?', 'A walk-through wax museum'), false);
+  const pool = [
+    { id: 'leak', question: 'What kind of ride does Disney describe Space Mountain as?', choices: ['A roller coaster in the dark', 'A drop tower', 'A boat ride', 'A simulator'], correctIndex: 0, difficulty: 'easy', source: 'x' },
+    { id: 'ok', question: 'Which year did Disneyland open its Space Mountain?', choices: ['1977', '1969', '1995', '1959'], correctIndex: 0, difficulty: 'easy', source: 'x' },
+  ];
+  assert.deepEqual(plain(content.usablePool(pool).map((q) => q.id)), ['ok']);
+});

@@ -178,6 +178,7 @@ export function VsIntro({ ms, meName, oppName, oppLook, rankLabel, onDone, reduc
         </Animated.View>
         <Animated.View style={[styles.vsOpp, oppS]}>
           <Image source={oppLook === 'fin' ? FIN_POSES.point : SHARKS[oppLook]} style={styles.vsImg} resizeMode="contain" />
+          {oppLook === 'fin' ? <Image source={ART.hat} style={styles.vsHat} resizeMode="contain" /> : null}
         </Animated.View>
         <Animated.View style={[styles.vsMark, vsS]}>
           <Animated.View style={boil}><OutlinedText text="VS" size={96} color="#ffffff" width={4} /></Animated.View>
@@ -417,6 +418,8 @@ const styles = StyleSheet.create({
   vsMe: { position: 'absolute', left: 10, top: '26%' },
   vsOpp: { position: 'absolute', right: 6, top: '42%' },
   vsImg: { width: 190, height: 200 },
+  // Fin's captain hat sits on his head in the VS card too (cell 206 x 241 scaled into 190 x 200).
+  vsHat: { position: 'absolute', width: 118, height: 99, left: 52, top: -46, transform: [{ rotate: '-12deg' }] },
   vsMark: { position: 'absolute', alignSelf: 'center', top: '38%' },
   vsNames: { position: 'absolute', left: 20, right: 20, bottom: '18%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   rank: { fontFamily: 'Knockout', fontSize: 15, color: C.navy, backgroundColor: C.cream, borderRadius: 8, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 6, marginTop: 2 },

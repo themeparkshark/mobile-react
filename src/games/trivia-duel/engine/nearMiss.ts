@@ -55,3 +55,15 @@ export function nearMiss(plan: MatchPlan, tally: MatchTally, results: readonly R
   if (gap > 300) return { gap, kind: 'miss', line: 'Fin brought his A game. Rematch and take him down!' };
   return { gap, kind: 'miss', line: `Lost by ${gap}. So close! Rematch?` };
 }
+
+/**
+ * Ride challenge loss line (4.1): name the one change that wins the coin.
+ * "A right answer on Q2 wins the coin." Results are in question order.
+ */
+export function rideNearMiss(results: readonly { me: { correct: boolean } }[], need = 2): string {
+  const right = results.filter((r) => r.me.correct).length;
+  if (right >= need) return '';
+  const firstMiss = results.findIndex((r) => !r.me.correct);
+  if (need - right === 1 && firstMiss >= 0) return `A right answer on Q${firstMiss + 1} wins the coin.`;
+  return 'Two right answers win the coin. You have got this.';
+}

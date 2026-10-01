@@ -10,7 +10,7 @@
 import { createRng, mixSeed, rngFloat, rngInt, rngShuffle, type Rng } from '../../../gamekit/core/rng';
 import { CLOSEST_TOL, TEXT_LIMITS, type Difficulty, type QuestionFormat, type RoundSpec } from './config';
 import { OPENING_FACTS, type OpeningFact } from './facts';
-import { genericize, NAMES_IN_TEXT } from './labels';
+import { genericize, labelLeaks, mustDrop, NAMES_IN_TEXT } from './labels';
 import { priorStats, type QuestionStats } from './finAI';
 
 /** Shape of an authored question (matches services/lineplay TriviaQuestion). */
@@ -100,6 +100,9 @@ export function usablePool(pool: readonly PoolQuestion[], limit: number = TEXT_L
     if (seen.has(q.id) || isFiller(q)) continue;
     if (q.question.length > limit + 20) continue;
     if (q.choices.length < 2 || q.correctIndex < 0 || q.correctIndex >= q.choices.length) continue;
+    // 19.2: a generic label must never hand over the answer.
+    if (labelLeaks(q.question, q.choices[q.correctIndex])) continue;
+    if (mustDrop([q.question, ...q.choices])) continue;
     seen.add(q.id);
     out.push(q);
   }

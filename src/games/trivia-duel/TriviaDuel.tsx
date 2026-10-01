@@ -58,7 +58,7 @@ import {
   suddenDeathRound,
   type GhostRecord, type MatchPlan, type MatchTally, type PlannedRound, type RoundResult, type SideInput,
 } from './engine/match';
-import { nearMiss } from './engine/nearMiss';
+import { nearMiss, rideNearMiss } from './engine/nearMiss';
 import {
   bellValue, duelStars, flameTier, rideStars, rideWon, speedPoints, streakMult, suggestWager, wagerStakes,
 } from './engine/scoring';
@@ -1439,6 +1439,18 @@ export function TriviaDuel(props: TriviaDuelProps) {
       const stars = rideStars(t.me.correct, p.rounds.length, t.me.score);
       void updateMemory((m) => { rememberSeen(m, p.rounds.map((r) => r.question.id), p.rounds.flatMap((r) => factKeysOf(r.question))); addFactCards(m, facts); });
       const fastest = t.me.fastestMs >= 0 ? `${(t.me.fastestMs / 1000).toFixed(1)}s` : '-';
+      // The on-stage half-height card (renderResults) reads this model; the shell keeps the claim contract.
+      setResults({
+        won, tie: false, myScore: t.me.score, oppScore: t.opp.score, oppName,
+        banners: won ? (t.me.score > t.opp.score ? ['FIN BEATEN'] : []) : [],
+        nearMiss: rideNearMiss(resultsLog.current),
+        rows: [
+          { label: 'Correct', value: `${t.me.correct}/${p.rounds.length}` },
+          { label: 'Fastest', value: fastest },
+          { label: 'Best tier', value: TIER_TEXT[t.me.bestTier].replace('!', '') || 'NONE' },
+        ],
+        facts: facts.slice(0, 1).map((f) => ({ ...f, isNew: true })), stars, practice: false, rank: null, best: null, ride: { won },
+      });
       const result: GameResult = {
         score: t.me.score,
         stars,
@@ -1619,7 +1631,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (!AUTOPLAY) return;
     if (phase === 'wager' && wager) later(1600, () => pickWager((mixSeed(seedRef.current, 77) % 10) < 7 ? wager.suggested : (wager.suggested + 1) % 3));
     if (phase === 'category' && catPick?.picker === 'me') later(900, () => pickCategory(1));
-    if (phase === 'results' && results) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
+    if (phase === 'results' && results && !isRide) later(6500, () => (playsRef.current < 3 ? onRematch() : playsRef.current === 3 && !ghost ? void onPassToCrew() : onContinue()));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, results]);
 
@@ -1778,6 +1790,14 @@ export function TriviaDuel(props: TriviaDuelProps) {
       gameId="trivia"
       onWrapUp={onWrapUp}
       countdownScrim="none"
+      resultsScrim="none"
+      renderResults={isRide ? (args) => (
+        <View style={{ width: '100%', height: Dimensions.get('window').height }} pointerEvents="box-none">
+          {results ? (
+            <DuelResults model={{ ...results, stars: args.stars }} beatMs={beatMs()} onContinue={args.claim} reducedMotion={args.reducedMotion} height={RESULTS_H} />
+          ) : null}
+        </View>
+      ) : undefined}
       hideHeaderScore
       pauseExtras={<RelaxedToggle on={relaxed} onToggle={toggleRelaxed} />}
     >
@@ -1995,9 +2015,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
           ) : null}
 
           {vs ? (
-            <VsIntro ms={vs.ms} meName={myName} oppName={ghost ? oppName : 'Captain Fin'} oppLook={opponentLook} rankLabel={ghost ? 'GHOST RUN' : FIN_RANKS[rankRef.current].label} onDone={onVsDone} reducedMotion={reducedMotion} />
+            <VsIntro ms={vs.ms} meName={myName} oppName={ghost ? oppName : 'Captain Fin'} oppLook={opponentLook} rankLabel={ghost ? 'GHOST RUN' : FIN_RANKS[rankRef.current].label.replace(' Fin', '').toUpperCase()} onDone={onVsDone} reducedMotion={reducedMotion} />
           ) : null}
-          {results && phase === 'results' ? (
+          {results && phase === 'results' && !isRide ? (
             <DuelResults
               key={runKey}
               model={results}
