@@ -24,6 +24,7 @@ const ART: Readonly<Record<HelpArtKey, number>> = {
   stamps: require('../../assets/images/stamps/stamp-logo.png'),
   teams: require('../../assets/images/team-shark-badge.png'),
   standings: require('../../assets/images/screens/leaderboard/crown-gold.png'),
+  shop: require('../../assets/images/screens/profile/shark_shop.png'),
   extras: require('../../assets/images/screens/pin-collections/shark.png'),
 };
 

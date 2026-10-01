@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
+import OneTimeTip from './help/OneTimeTip';
 import PerkChipRow from './coin/PerkChip';
 import type { PerkChipData } from './coin/progressionModel';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -459,8 +460,12 @@ export default function PostWinRewardsModal({
               )}
 
               {attemptId != null && coinsEarned > 0 && (isVip || adsAvailable()) && (
-                <DoubleCoinsOffer attemptId={attemptId} vip={isVip} coins={coinsEarned}
-                  onGranted={() => { void refreshPlayer?.(); }} />
+                <>
+                  {/* The first ad offer a player meets says plainly that it is optional. */}
+                  {!isVip && <OneTimeTip id="bonus_ads" ready={visible} compact style={{ alignSelf: 'stretch', marginBottom: 6 }} />}
+                  <DoubleCoinsOffer attemptId={attemptId} vip={isVip} coins={coinsEarned}
+                    onGranted={() => { void refreshPlayer?.(); }} />
+                </>
               )}
 
               {!isVip && (xpEarned > 0 || coinsEarned > 0) && (

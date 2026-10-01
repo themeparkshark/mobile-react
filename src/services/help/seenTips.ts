@@ -14,6 +14,8 @@ export type TipId =
   | 'first_ride_part'
   | 'coin_card'
   | 'first_level_up'
+  | 'supplies_tab'
+  | 'bonus_ads'
   | `game:${string}`;
 
 export const TIP_STORAGE_PREFIX = 'tps_tips_seen_v1';

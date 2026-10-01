@@ -13,7 +13,8 @@ const icons = loadTs('src/ui/iconNames.ts');
 // Every term Dustin listed as undefined for a new player, plus what the audit found.
 const REQUIRED = ['tickets', 'ride_parts', 'energy', 'coins', 'ride_coins', 'coin_levels', 'limited_coins', 'lineplay',
   'ride_passport', 'coin_guide', 'adventure_ticket', 'park_goal', 'stamps', 'sets', 'pins', 'home_finds',
-  'rescue_pass', 'crew', 'standings', 'keys', 'swords', 'travel_mode', 'ride_control', 'daily_chest', 'day_streak'];
+  'rescue_pass', 'crew', 'standings', 'keys', 'swords', 'travel_mode', 'ride_control', 'daily_chest', 'day_streak',
+  'supplies', 'bonus_ads', 'vip'];
 
 test('the glossary covers every currency and game word a new player meets', () => {
   for (const key of REQUIRED) assert.ok(glossary.LOCAL_GLOSSARY[key], key);
@@ -134,4 +135,16 @@ test('every one-time tip and mini-game intro has copy without em dashes', () => 
   const selector = fs.readFileSync(path.join(root, 'src/components/MiniGameSelector.tsx'), 'utf8');
   const types = selector.match(/type MiniGameType = ([^;]+);/)[1].match(/'([a-z]+)'/g).map(value => value.slice(1, -1));
   for (const kind of types) assert.ok(topics.GAME_INTROS[kind], `intro for ${kind}`);
+});
+
+test('the Supplies shop and ad offers are explained: optional, what is sold, never Ride Parts', () => {
+  const supplies = glossary.LOCAL_GLOSSARY.supplies;
+  const ads = glossary.LOCAL_GLOSSARY.bonus_ads;
+  assert.match(supplies.earn, /never sold/);
+  assert.match(ads.what + ads.earn, /[Oo]ptional|costs nothing/);
+  assert.equal(glossary.glossaryKeyForName('Supplies'), 'supplies');
+  assert.ok(topics.TIP_COPY.supplies_tab && topics.TIP_COPY.bonus_ads);
+  assert.match(topics.TIP_COPY.bonus_ads.body, /lose nothing/);
+  // The Shark Shop "?" opens the shop card.
+  assert.equal(topics.infoSheetSections(3, '')[0].key, 'shop');
 });

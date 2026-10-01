@@ -62,6 +62,10 @@ interface Props {
  * Modal for collecting a prep item.
  * Styled to match app's AAA quality standards.
  */
+/** Every find reward says what it is, like the ride challenge tiles. */
+const FIND_REWARD_LABEL = { fontFamily: 'Knockout', fontSize: 13, color: '#fff', textAlign: 'center' as const, marginTop: 4,
+  textTransform: 'uppercase' as const };
+
 export default function PrepItemRedeemModal({
   visible,
   prepItem,
@@ -537,6 +541,7 @@ export default function PrepItemRedeemModal({
                             small
                             type="task"
                           />
+                          <Text style={FIND_REWARD_LABEL}>{'ENERGY'}</Text>
                         </View>
                       )}
                       {prepItem.ticket_reward > 0 && (
@@ -554,6 +559,7 @@ export default function PrepItemRedeemModal({
                             small
                             type="task"
                           />
+                          <Text style={FIND_REWARD_LABEL}>{'PARK TICKET'}</Text>
                         </View>
                       )}
                       {prepItem.experience_reward > 0 && (
@@ -571,6 +577,7 @@ export default function PrepItemRedeemModal({
                             small
                             type="task"
                           />
+                          <Text style={FIND_REWARD_LABEL}>{'XP'}</Text>
                         </View>
                       )}
                     </View>

@@ -13,7 +13,7 @@ export type GlossaryKey =
   | 'keys' | 'swords' | 'xp' | 'coin_levels' | 'limited_coins' | 'ride_challenge'
   | 'lineplay' | 'ride_passport' | 'coin_guide' | 'adventure_ticket' | 'park_goal'
   | 'stamps' | 'sets' | 'pins' | 'home_finds' | 'crew' | 'standings' | 'daily_chest'
-  | 'day_streak' | 'travel_mode' | 'ride_control' | 'shark_park' | 'vip';
+  | 'day_streak' | 'travel_mode' | 'ride_control' | 'shark_park' | 'vip' | 'supplies' | 'bonus_ads';
 
 export interface GlossaryTerm {
   readonly key: GlossaryKey;
@@ -30,7 +30,7 @@ export interface GlossaryTerm {
 
 export type HelpTopicId =
   | 'basics' | 'home' | 'park' | 'ride_challenge' | 'lineplay' | 'coins_levels'
-  | 'collections' | 'teams' | 'standings' | 'extras';
+  | 'collections' | 'teams' | 'standings' | 'shop' | 'extras';
 
 /** Currencies the server describes. Their wording wins when it loads. */
 export const SERVER_CURRENCY_KEYS: readonly GlossaryKey[] = [
@@ -55,7 +55,7 @@ const TERMS: readonly GlossaryTerm[] = [
     earn: 'Win a ride challenge at the ride.' },
   { key: 'rescue_pass', label: 'Rescue Pass', icon: 'ticket', topic: 'ride_challenge',
     what: 'One free try at a ride coin you do not have yet, once per park day.',
-    earn: 'Given automatically when you are out of Tickets at the park.' },
+    earn: 'Given automatically when you are out of Tickets at the park. Supplies sells them too.' },
   { key: 'keys', label: 'Keys', icon: 'lock', topic: 'park',
     what: 'Open treasure vaults on the park map.',
     earn: 'Pick up keys you spot on the park map.' },
@@ -122,9 +122,15 @@ const TERMS: readonly GlossaryTerm[] = [
   { key: 'shark_park', label: 'Shark Park', icon: 'dice', topic: 'extras',
     what: 'A side game: build your own theme park with its own Shark Park money.',
     earn: 'Open it from the menu. It never spends your Shark Coins.' },
-  { key: 'vip', label: 'VIP', icon: 'member', topic: 'extras',
-    what: 'A membership that boosts your rewards.',
+  { key: 'vip', label: 'VIP', icon: 'member', topic: 'shop',
+    what: 'A membership that boosts your rewards. VIP players get every bonus ad reward without watching an ad.',
     earn: 'Tap Member on the Social screen to see the perks.' },
+  { key: 'supplies', label: 'Supplies', icon: 'gift', topic: 'shop',
+    what: 'The Shark Shop tab for Park Tickets, Shark Coins, Energy and Rescue Passes. Every pack lists exactly what it holds.',
+    earn: 'Open the Shark Shop and tap Supplies. Ride Parts, ride coins and coin levels are never sold.' },
+  { key: 'bonus_ads', label: 'Bonus ads', icon: 'play', topic: 'shop',
+    what: 'Optional short ads for a small bonus: a free daily Ticket, double coins after a win, one more try, or Energy after a wait.',
+    earn: 'Tap a Watch button when you see one. Skipping costs nothing, and each one has a daily limit.' },
 ];
 
 export const LOCAL_GLOSSARY: Readonly<Record<GlossaryKey, GlossaryTerm>> =
@@ -193,6 +199,7 @@ const NAME_ALIASES: Readonly<Record<string, GlossaryKey>> = {
   'lineplay': 'lineplay', 'line play': 'lineplay',
   'travel mode': 'travel_mode',
   'stamp book': 'stamps', 'stamps': 'stamps',
+  'supplies': 'supplies', 'ads': 'bonus_ads', 'bonus ads': 'bonus_ads', 'vip': 'vip',
 };
 
 /** Map any visible name ("Coins", "Park Tickets", "Keys") to its glossary term. */

@@ -15,7 +15,7 @@ export interface HelpTopic {
   readonly art: HelpArtKey;
 }
 
-export type HelpArtKey = 'finn' | 'churro' | 'park' | 'coin' | 'lineplay' | 'level' | 'stamps' | 'teams' | 'standings' | 'extras';
+export type HelpArtKey = 'finn' | 'churro' | 'park' | 'coin' | 'lineplay' | 'level' | 'stamps' | 'teams' | 'standings' | 'shop' | 'extras';
 
 export const HELP_TOPICS: readonly HelpTopic[] = [
   { id: 'basics', title: 'The basics', art: 'finn',
@@ -72,12 +72,18 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       'Rides has Today (ride wins today), Collect (coins collected) and Master (coin levels).',
     ],
     terms: ['standings'] },
+  { id: 'shop', title: 'Shark Shop, Supplies and ads', art: 'shop',
+    lines: [
+      'Gear dresses your shark with Shark Coins. Supplies sells Tickets, Shark Coins, Energy and Rescue Passes, and lists exactly what each pack holds.',
+      'Bonus ads are always optional: watch one for a free daily Ticket or a small boost. VIP players skip the ad.',
+    ],
+    terms: ['supplies', 'bonus_ads', 'vip', 'coins'] },
   { id: 'extras', title: 'More to explore', art: 'extras',
     lines: [
       'Shark Park is a side game with its own money. Pins come from Pin Packs and Pin Trading.',
-      'VIP boosts your rewards. Ask for help any time from Settings.',
+      'Ask for help any time from Settings.',
     ],
-    terms: ['shark_park', 'pins', 'vip'] },
+    terms: ['shark_park', 'pins'] },
 ];
 
 export function helpTopic(id: HelpTopicId | string | null | undefined): HelpTopic | null {
@@ -92,7 +98,7 @@ export function helpTopic(id: HelpTopicId | string | null | undefined): HelpTopi
 export const INFO_MODAL_TOPICS: Readonly<Record<number, readonly HelpTopicId[]>> = {
   1: ['extras'],                         // Pin Trading
   2: ['park', 'coins_levels'],           // Park shelf
-  3: ['basics'],                         // Shark Shop
+  3: ['shop'],                           // Shark Shop (Gear and Supplies)
   4: ['extras', 'basics'],               // Social
   5: ['standings'],                      // Standings
 };
@@ -113,6 +119,10 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
     body: 'Ride Parts belong to this ride. Spend them with Energy to level up its coin on your shelf.' },
   coin_card: { title: 'Level up your coin',
     body: 'Each level costs Energy plus this ride\'s Ride Parts. Higher levels change the coin\'s look.' },
+  supplies_tab: { title: 'Welcome to Supplies',
+    body: 'Packs of Tickets, Coins, Energy and Rescue Passes. Each one shows exactly what you get. Ride Parts are never sold.' },
+  bonus_ads: { title: 'Bonus ads are optional',
+    body: 'Watch a short ad for a small extra, like a free Ticket or double coins. Skip it and you lose nothing.' },
   first_level_up: { title: 'First level up!',
     body: 'Keep going: there are 10 levels, all the way to Shark Crown.' },
 };
