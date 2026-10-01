@@ -210,3 +210,36 @@ export function buildWaterGlints(water: readonly GeoJSON.Feature[], b: Bounds, z
   }
   return found.sort((a, c) => a.d - c.d).slice(0, cap).map(({ latitude, longitude, seed }) => ({ latitude, longitude, seed }));
 }
+
+/**
+ * Lamp posts for the night map: points every ~28 m along the walkways and
+ * roads on screen (a world-anchored grid keeps one lamp per cell, so lamps
+ * never bunch where lines meet and stay put as the view is rebuilt).
+ */
+export function buildLampPoints(roads: readonly GeoJSON.Feature[], b: Bounds, zoom: number, cap = 120): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  if (zoom < 16 || !roads.length || cap <= 0) return { type: 'FeatureCollection', features };
+  const lat = (b.north + b.south) / 2;
+  const mLat = 1 / 111320;
+  const kx = Math.cos((lat * Math.PI) / 180);
+  const step = 28 * mLat; // in latitude-degree units (x scaled by kx)
+  const cell = 20 * mLat;
+  const taken = new Set<string>();
+  for (const [x1, y1, x2, y2] of segments(roads)) {
+    const dx = (x2 - x1) * kx; const dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (!len) continue;
+    // Anchor stops to a world grid along the segment so rebuilding never shuffles lamps.
+    for (let d = (step - (((Math.abs(x1 * kx) + Math.abs(y1)) / step) % 1) * step) % step; d <= len; d += step) {
+      const x = x1 + ((x2 - x1) * d) / len;
+      const y = y1 + ((y2 - y1) * d) / len;
+      if (x < b.west || x > b.east || y < b.south || y > b.north) continue;
+      const key = `${Math.floor((x * kx) / cell)}:${Math.floor(y / cell)}`;
+      if (taken.has(key)) continue;
+      taken.add(key);
+      features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x, y] }, properties: {} });
+      if (features.length >= cap) return { type: 'FeatureCollection', features };
+    }
+  }
+  return { type: 'FeatureCollection', features };
+}

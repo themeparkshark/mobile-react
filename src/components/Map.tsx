@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
+import { Camera, CircleLayer, FillLayer, HeatmapLayer, Images, LineLayer, MapView, ShapeSource, SymbolLayer, type CameraRef, type MapViewRef } from '@maplibre/maplibre-react-native';
 import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { Animated, Linking, Pressable, Text, View, Easing, StyleSheet, useWindowDimensions } from 'react-native';
 import Reanimated, { cancelAnimation, Easing as REasing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -9,11 +9,11 @@ import { BRAND, GameIcon, SHADOW } from '../ui';
 import { AuthContext } from '../context/AuthProvider';
 import { HeadingContext, LocationContext } from '../context/LocationProvider';
 import { Marker } from './map/Marker';
-import { buildDecorations, buildWaterGlints, DECO_ICONS, decorationBand } from './map/decorations';
+import { buildDecorations, buildLampPoints, buildWaterGlints, DECO_ICONS, decorationBand } from './map/decorations';
 import { MapAliveProvider, useMapAliveEngine } from './map/alive/MapAliveContext';
-import { MapSkyOverlay } from './map/alive/MapSkyOverlay';
+import { MapLightOverlay, MapSkyOverlay } from './map/alive/MapSkyOverlay';
 import { WaterGlints } from './map/alive/WaterGlints';
-import { DAYLIGHT } from './map/alive/skyLight';
+import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -32,9 +32,12 @@ export const MapQueryContext = createContext<{
 // eases under it (Pokemon GO style); panned away, it becomes a map marker.
 
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
+// The whole map, for the time-of-day tint layer.
+const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {},
+  geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -48,6 +51,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly ambientPaused?: boolean;
   /** Park pulse: busy rides as weighted points; a soft warm haze gathers over them. */
   readonly crowdHaze?: GeoJSON.FeatureCollection | null;
+  /** Development previews: pin the sun at this elevation (degrees) instead of the real sky. */
+  readonly sunOverride?: number;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -61,7 +66,21 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     setHeadingEnabled(true);
     return () => { setScreenFocused(false); setHeadingEnabled(false); };
   }, [setHeadingEnabled]));
-  const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, light: DAYLIGHT });
+  // Time of day: the real sun over the player, rechecked each minute while the map is on screen.
+  const [skyNow, setSkyNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!screenFocused) return;
+    setSkyNow(Date.now());
+    const timer = setInterval(() => setSkyNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, [screenFocused]);
+  const skyLat = location ? Math.round(location.latitude * 100) / 100 : null;
+  const skyLng = location ? Math.round(location.longitude * 100) / 100 : null;
+  const devSun = __DEV__ ? Number(process.env.EXPO_PUBLIC_MAP_SUN ?? NaN) : NaN;
+  const pinnedSun = sunOverride ?? (Number.isFinite(devSun) ? devSun : undefined);
+  const sun = pinnedSun ?? (skyLat === null || skyLng === null ? 45 : Math.round(sunElevation(skyNow, skyLat, skyLng) * 2) / 2);
+  const light = useMemo(() => lightForElevation(sun), [sun]);
+  const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, light });
 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
   // thread. Loops stop on unmount; reduced motion holds the shark still.
@@ -164,6 +183,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
   const [decorations, setDecorations] = useState<GeoJSON.FeatureCollection>(EMPTY);
   const [glints, setGlints] = useState<{ latitude: number; longitude: number; seed: number }[]>([]);
+  const [lampPoints, setLampPoints] = useState<GeoJSON.FeatureCollection>(EMPTY);
   const decoKey = useRef('');
   const decoTimer = useRef<ReturnType<typeof setTimeout>>();
   const refreshDecorations = useCallback(() => {
@@ -190,6 +210,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           homes: homes.features, buildings: buildings.features, roads: roads.features },
           { north, south, east, west }, zoom));
         setGlints(buildWaterGlints(water.features, { north, south, east, west }, zoom, 6));
+        setLampPoints(buildLampPoints(roads.features, { north, south, east, west }, zoom));
       } catch { /* map not ready yet; the next camera change retries */ }
     }, 250);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -408,6 +429,22 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             symbolSortKey: ['get', 'k'],
           }} />
         </ShapeSource>
+        {/* Time of day: one tint over the tiles only, so every pin stays bright on top. */}
+        <ShapeSource id="tps-sky-tint" shape={WORLD}>
+          <FillLayer id="tps-sky-tint" style={{ fillColor: light.tint.color, fillOpacity: light.tint.opacity,
+            fillColorTransition: { duration: 4000, delay: 0 }, fillOpacityTransition: { duration: 4000, delay: 0 } }} />
+        </ShapeSource>
+        {/* After sunset, warm lamps glow along the walkways (static GL circles). */}
+        {light.lamps >= 0.05 && lampPoints.features.length > 0 && (
+          <ShapeSource id="tps-lamps" shape={lampPoints}>
+            <CircleLayer id="tps-lamp-glow" style={{ circleColor: '#ffc95e', circleBlur: 1,
+              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 5, 17, 9, 19, 26],
+              circleOpacity: 0.62 * light.lamps, circlePitchAlignment: 'map' }} />
+            <CircleLayer id="tps-lamp-core" style={{ circleColor: '#fff3c4', circleBlur: 0.4,
+              circleRadius: ['interpolate', ['exponential', 1.6], ['zoom'], 16, 1, 17, 1.6, 19, 3.6],
+              circleOpacity: 0.9 * light.lamps }} />
+          </ShapeSource>
+        )}
         {/* Crowd haze: static GL heatmap (no per-frame cost), warm where the lines are long. */}
         {crowdHaze && crowdHaze.features.length > 0 && (
           <ShapeSource id="tps-crowd-haze" shape={crowdHaze}>
@@ -439,7 +476,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           </Marker>
         )}
       </MapView>
-      {/* Cloud shadows and passing gulls: above the map, under the controls and the shark. */}
+      {/* Light, cloud shadows, gulls and fireflies: above the map, under the controls and the shark. */}
+      {viewSize && <MapLightOverlay width={viewSize.width} height={viewSize.height} />}
       {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}

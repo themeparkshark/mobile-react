@@ -1,11 +1,12 @@
 /**
  * The sky over the map, drawn in one Skia canvas on the UI thread: soft cloud
  * shadows drifting across the park and a small flock of gulls passing over
- * now and then (each with its own shadow far below). Everything derives from
- * the map's ambient clock, so it all freezes together when the map pauses.
- * Pure decoration: the canvas never takes touches.
+ * now and then (each with its own shadow far below) by day, fireflies around
+ * the shark after dark. Everything derives from the map's ambient clock, so it
+ * all freezes together when the map pauses. MapLightOverlay adds the static
+ * golden-hour wash and night vignette. Pure decoration: never takes touches.
  */
-import { Canvas, Circle, Group, Oval, Path, RadialGradient, Skia, vec } from '@shopify/react-native-skia';
+import { Canvas, Circle, Group, LinearGradient, Oval, Path, RadialGradient, Rect, Skia, vec } from '@shopify/react-native-skia';
 import { memo } from 'react';
 import { StyleSheet } from 'react-native';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
@@ -96,13 +97,45 @@ function Gull({ clock, j, width, height, strength }: {
   );
 }
 
+/* ── Fireflies ─────────────────────────────────────────────────────────── */
+
+function Firefly({ clock, k, width, height, strength }: {
+  clock: SharedValue<number>; k: number; width: number; height: number; strength: number;
+}) {
+  // They drift in the lower middle of the map, where the shark is.
+  const cx = width * (0.2 + hash01(k * 3 + 1) * 0.6);
+  const cy = height * (0.42 + hash01(k * 3 + 2) * 0.4);
+  const rx = 14 + hash01(k * 3 + 3) * 26;
+  const ry = 8 + hash01(k * 5 + 4) * 16;
+  const speed = 0.25 + hash01(k * 5 + 5) * 0.3;
+  const blink = 0.35 + hash01(k * 5 + 6) * 0.35;
+  const phase = hash01(k * 5 + 7) * 6.28;
+  const transform = useDerivedValue(() => {
+    const t = clock.value * speed + phase;
+    return [{ translateX: cx + Math.sin(t) * rx + Math.sin(t * 2.3) * 4 }, { translateY: cy + Math.cos(t * 0.8) * ry }];
+  });
+  const opacity = useDerivedValue(() => {
+    const b = Math.sin(clock.value * blink * Math.PI * 2 + phase);
+    return strength * (b > 0 ? b * b : 0);
+  });
+  return (
+    <Group transform={transform} opacity={opacity}>
+      <Circle cx={0} cy={0} r={9}>
+        <RadialGradient c={vec(0, 0)} r={9} colors={['rgba(232,255,140,0.85)', 'rgba(232,255,140,0)']} />
+      </Circle>
+      <Circle cx={0} cy={0} r={1.8} color="#fffbd8" />
+    </Group>
+  );
+}
+
 /* ── The canvas ────────────────────────────────────────────────────────── */
 
 export const MapSkyOverlay = memo(function MapSkyOverlay({ width, height }: { readonly width: number; readonly height: number }) {
   const { clock, caps, light, running } = useMapAlive();
   const clouds = light.clouds > 0.02 ? caps.clouds : 0;
   const birds = light.birds > 0.02 ? caps.birds : 0;
-  if (!running || width <= 0 || height <= 0 || (!clouds && !birds)) return null;
+  const fireflies = light.fireflies > 0.02 ? caps.fireflies : 0;
+  if (!running || width <= 0 || height <= 0 || (!clouds && !birds && !fireflies)) return null;
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
       {Array.from({ length: clouds }, (_, i) => (
@@ -111,6 +144,37 @@ export const MapSkyOverlay = memo(function MapSkyOverlay({ width, height }: { re
       {Array.from({ length: birds }, (_, j) => (
         <Gull key={`g${j}`} clock={clock} j={j} width={width} height={height} strength={light.birds} />
       ))}
+      {Array.from({ length: fireflies }, (_, k) => (
+        <Firefly key={`f${k}`} clock={clock} k={k} width={width} height={height} strength={light.fireflies} />
+      ))}
+    </Canvas>
+  );
+});
+
+/**
+ * Static time-of-day light over the map (drawn once per change, no clock):
+ * a warm low-sun wash in golden hour and a soft navy vignette after dark.
+ * Calm keeps it: lighting is not motion.
+ */
+export const MapLightOverlay = memo(function MapLightOverlay({ width, height }: { readonly width: number; readonly height: number }) {
+  const { light } = useMapAlive();
+  const wash = light.wash >= 0.02;
+  const vignette = light.vignette >= 0.02;
+  if (width <= 0 || height <= 0 || (!wash && !vignette)) return null;
+  return (
+    <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+      {wash && (
+        <Rect x={0} y={0} width={width} height={height}>
+          <LinearGradient start={vec(width, 0)} end={vec(width * 0.2, height * 0.75)}
+            colors={[`rgba(255,184,92,${(0.26 * light.wash).toFixed(3)})`, 'rgba(255,184,92,0)']} />
+        </Rect>
+      )}
+      {vignette && (
+        <Rect x={0} y={0} width={width} height={height}>
+          <RadialGradient c={vec(width / 2, height * 0.55)} r={Math.hypot(width, height) * 0.6}
+            colors={['rgba(8,20,58,0)', 'rgba(8,20,58,0)', `rgba(8,20,58,${(0.5 * light.vignette).toFixed(3)})`]} positions={[0, 0.5, 1]} />
+        </Rect>
+      )}
     </Canvas>
   );
 });

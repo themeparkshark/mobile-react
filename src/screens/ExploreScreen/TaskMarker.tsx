@@ -148,6 +148,24 @@ function WaitGlow({ id, glow, moving }: { readonly id: number; readonly glow: Wa
   );
 }
 
+/**
+ * After sunset each island stands in a warm pool of lamp light, so the pins
+ * glow against the darker map. The nearest few flicker very slightly.
+ */
+function LampGlow({ id, level, moving }: { readonly id: number; readonly level: number; readonly moving: boolean }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(id + 0.75) * 10;
+  const style = useAnimatedStyle(() => {
+    const flicker = moving ? Math.sin(clock.value * 7.3 + phase) * Math.sin(clock.value * 3.1 + phase) * 0.06 : 0;
+    return { opacity: level * (0.78 + flicker) };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[styles.lampGlow, style]}>
+      <GlowPool id={`lamp-${id}`} color="#ffcf72" width={124} height={64} />
+    </Animated.View>
+  );
+}
+
 /** A sleeping island: little "z" float up and fade, one after another. */
 function SleepyZ({ i, moving, seed }: { readonly i: number; readonly moving: boolean; readonly seed: number }) {
   const { clock } = useMapAlive();
@@ -392,6 +410,7 @@ function TaskMarker({
           </View>
         )}
 
+        {alive.light.lamps >= 0.05 && <LampGlow id={task.id} level={alive.light.lamps} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
         {glow && <WaitGlow id={task.id} glow={glow} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
         {limited && <LimitedShimmer seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.limitedShimmer)} />}
         {/* Ground ring: flat, bright, no glow. */}
@@ -491,6 +510,7 @@ const styles = StyleSheet.create({
   // Two full colour cycles (9 stops), so sliding one band left loops seamlessly.
   limitedFlow: { position: 'absolute', left: 0, top: 0, bottom: 0, width: LIMITED_BAND * 2 },
   waitGlow: { position: 'absolute', bottom: 0, width: 104, height: 40 },
+  lampGlow: { position: 'absolute', bottom: -8, width: 124, height: 64 },
   sleepy: { position: 'absolute', top: 14, right: 4, width: 30, height: 40, zIndex: 6 },
   sleepyZ: { position: 'absolute', left: 0, bottom: 0, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy,
     textShadowColor: BRAND.white, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 3 },
