@@ -226,7 +226,9 @@ export default function CurrentQuestGame({
     [runSeed, context, progress === null, boardsKey]);
   // Race the Author (0.A.1): a chart node with a verified Gold sends the author route as a ghost.
   const authorActs = useMemo<number[]>(() => {
-    if (context !== 'chart' || !chartNodeId || !progress || (progress.chart[chartNodeId]?.medal ?? 0) < 3 || !boards) return [];
+    // Dev capture hook: EXPO_PUBLIC_CQ_AUTHOR=1 shows the ghost without a prior Gold.
+    const devForce = typeof __DEV__ !== 'undefined' && __DEV__ && process.env.EXPO_PUBLIC_CQ_AUTHOR === '1';
+    if (context !== 'chart' || !chartNodeId || !progress || (!devForce && (progress.chart[chartNodeId]?.medal ?? 0) < 3) || !boards) return [];
     return authorRoute(boards[0]);
   }, [context, chartNodeId, progress === null, boards]); // eslint-disable-line react-hooks/exhaustive-deps
   const authorShown = useRef(0);
