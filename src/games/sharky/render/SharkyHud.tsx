@@ -14,6 +14,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import {
   Canvas,
+  Circle,
   Group,
   Path,
   RoundedRect,
@@ -102,7 +103,7 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
   });
 
   // --- hearts ---------------------------------------------------------------
-  const heartOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.hearts > i ? 1 : 0.22))));
+  const heartOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.hearts > i ? 1 : 0))));
   const shieldOp = useDerivedValue(() => (tick.value, (sim.value.shield ? 1 : 0)));
 
   // --- chain pill -------------------------------------------------------------
@@ -142,7 +143,7 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
   });
 
   // --- tokens -------------------------------------------------------------------
-  const tokOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.tokenMask & (1 << i) ? 1 : 0.25))));
+  const tokOps = [0, 1, 2].map((i) => useDerivedValue(() => (tick.value, (sim.value.tokenMask & (1 << i) ? 1 : 0))));
   const showTokens = useDerivedValue(() => (tick.value, (sim.value.etier >= 1 ? 1 : 0)));
 
   // --- position tag (race / ghost) ----------------------------------------------
@@ -194,13 +195,20 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
       <Group transform={barPulse} origin={{ x: W / 2, y: barY + barH / 2 }}>
         <RoundedRect rect={barFill} color={barColor} />
       </Group>
+      {/* Cartoon gloss on the fill */}
+      <RoundedRect x={barX + 8} y={barY + 4} width={barW - 16} height={Math.max(2, barH * 0.22)} r={3} color="#ffffff" opacity={0.45} />
       <RoundedRect x={barX} y={barY} width={barW} height={barH} r={10} style="stroke" strokeWidth={3} color={INK} />
       {fontS ? <SkText x={barX + barW - 44} y={barY + 16} text={clockText} font={fontS} color={INK} /> : null}
 
       {/* Hearts */}
       {[0, 1, 2].map((i) => (
-        <Group key={i} opacity={heartOps[i]}>
-          <Path path={heartPath(28 + i * 34, rowY + 16, 12)} color="#ff5aa5" />
+        <Group key={i}>
+          {/* Empty socket: white heart, so a lost heart reads as a gap, never a tint. */}
+          <Path path={heartPath(28 + i * 34, rowY + 16, 12)} color="#ffffff" opacity={0.85} />
+          <Group opacity={heartOps[i]}>
+            <Path path={heartPath(28 + i * 34, rowY + 16, 12)} color="#ff5aa5" />
+            <Circle cx={23 + i * 34} cy={rowY + 11} r={3.2} color="#ffffff" opacity={0.85} />
+          </Group>
           <Path path={heartPath(28 + i * 34, rowY + 16, 12)} style="stroke" strokeWidth={3} color={INK} />
         </Group>
       ))}
@@ -212,15 +220,20 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, rivals,
       <Group transform={pillScale} origin={{ x: W / 2, y: rowY + 18 }}>
         <RoundedRect x={pillX} y={rowY} width={pillW} height={38} r={19} color={pillColor} />
         <RoundedRect x={pillX} y={rowY} width={pillW} height={38} r={19} style="stroke" strokeWidth={3} color={INK} />
+        <RoundedRect x={pillX + 14} y={rowY + 4} width={pillW - 28} height={9} r={4.5} color="#ffffff" opacity={0.35} />
         <RoundedRect rect={drain} color={INK} opacity={0.55} />
         {fontS ? <SkText x={chainTextX} y={rowY + 24} text={chainText} font={fontS} color={INK} /> : null}
       </Group>
 
       {/* Tokens */}
       <Group opacity={showTokens}>
-        {tokenImg ? [0, 1, 2].map((i) => (
-          <SkImage key={i} image={tokenImg} x={W - 118 + i * 34} y={rowY + 1} width={32} height={32} opacity={tokOps[i]} />
-        )) : null}
+        {[0, 1, 2].map((i) => (
+          <Group key={i}>
+            <Circle cx={W - 102 + i * 34} cy={rowY + 17} r={14} color="#ffffff" opacity={0.75} />
+            <Circle cx={W - 102 + i * 34} cy={rowY + 17} r={14} style="stroke" strokeWidth={2.5} color={INK} opacity={0.6} />
+            {tokenImg ? <SkImage image={tokenImg} x={W - 118 + i * 34} y={rowY + 1} width={32} height={32} opacity={tokOps[i]} /> : null}
+          </Group>
+        ))}
       </Group>
 
       {/* Race position */}
