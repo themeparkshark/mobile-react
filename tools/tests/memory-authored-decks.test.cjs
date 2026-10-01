@@ -12,7 +12,7 @@ function load(file, imports = {}) {
   }).outputText;
   vm.runInNewContext(code, { module: ref, exports: ref.exports, require(name) {
     if (name in imports) return imports[name];
-    if (name.endsWith('.png')) {
+    if (name.endsWith('.png') || name.endsWith('.jpg')) {
       const resolved = path.resolve(path.dirname(path.join(root, file)), name);
       assert.ok(fs.existsSync(resolved), `bundled artwork exists: ${name}`);
       return resolved;
@@ -40,6 +40,21 @@ test('Forbidden Journey gets authored magic art while other games and explicit d
   assert.equal(decks.deckById('unknown'), null);
 });
 
+/** PNG or baseline/progressive JPEG pixel size. */
+function imageSize(buf) {
+  if (buf.toString('hex', 0, 8) === '89504e470d0a1a0a') return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+  assert.equal(buf.toString('hex', 0, 2), 'ffd8', 'a PNG or JPEG sheet');
+  let i = 2;
+  while (i < buf.length) {
+    if (buf[i] !== 0xff) { i += 1; continue; }
+    const marker = buf[i + 1];
+    const len = buf.readUInt16BE(i + 2);
+    if (marker >= 0xc0 && marker <= 0xc3) return { height: buf.readUInt16BE(i + 5), width: buf.readUInt16BE(i + 7) };
+    i += 2 + len;
+  }
+  throw new Error('no JPEG frame header');
+}
+
 test('the magical deck supports every board size with distinct bundled face cells', () => {
   const deck = decks.deckById('wizard');
   assert.equal(deck.symbols.length, 10);
@@ -47,9 +62,7 @@ test('the magical deck supports every board size with distinct bundled face cell
   assert.deepEqual(Array.from(deck.symbols.slice(0, 8), symbol => symbol.sheetSlot), [0, 1, 2, 3, 4, 5, 6, 7]);
   assert.deepEqual(Array.from(deck.symbols.slice(8), symbol => symbol.extraSheetSlot), [0, 1]);
   for (const [file, cols, rows] of [[deck.faceSheet, 4, 2], [deck.extraFaceSheet, 2, 1]]) {
-    const png = fs.readFileSync(file);
-    assert.equal(png.toString('hex', 0, 8), '89504e470d0a1a0a');
-    const width = png.readUInt32BE(16), height = png.readUInt32BE(20);
+    const { width, height } = imageSize(fs.readFileSync(file));
     assert.equal(width % cols, 0);
     assert.equal(height % rows, 0);
     assert.equal((width / cols) / (height / rows), 0.75);
