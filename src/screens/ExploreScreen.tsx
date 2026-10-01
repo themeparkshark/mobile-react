@@ -61,6 +61,11 @@ import useBossMapMoment from '../hooks/useBossMapMoment';
 import BossMapDeparture from '../components/boss/BossMapDeparture';
 import { Circle } from '../components/map/Circle';
 import { crowdHaze } from '../components/map/alive/parkPulse';
+import { ghostSharks } from '../components/map/alive/friendsNearby';
+import { GhostSharks } from '../components/map/alive/GhostSharks';
+import { NightShowLayer } from '../components/map/alive/NightShowLayer';
+import NightShowPill from '../components/map/alive/NightShowPill';
+import useNightShow from '../components/map/alive/useNightShow';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
 import type { RushPick } from '../components/RushCallout';
 import LiveEventsPill from '../components/LiveEventsPill';
@@ -109,6 +114,8 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
+// Friends drawn as ghost sharks at most (the closest).
+const GHOST_CAP = 5;
 
 function ExploreScreen() {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
@@ -444,8 +451,15 @@ function ExploreScreen() {
       return live?.rush && live.status === 'OPERATING' ? [{ task, rush: live.rush, wait: live.wait ?? live.rush.wait }] : [];
     }).sort((a, b) => dist(a.task) - dist(b.task));
   }, [redeemables?.tasks, liveByTask, nearLat, nearLng]);
-  const hasLiveEvents = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
+  // Tonight's night show: real showtimes; the pill takes the live slot only when nothing else needs it.
+  const nightShow = useNightShow(park?.id ?? null, mapFocused && !!player);
+  const busyLiveSlot = !!rushes.length || raidActive || receiptNeedsCheck || !!bossMap.moment;
+  const nightPill = !busyLiveSlot && !!nightShow.show && (nightShow.phase === 'teaser' || nightShow.phase === 'live');
+  const hasLiveEvents = busyLiveSlot || nightPill;
   const slotTop = suggestionSlotTop(hasLiveEvents);
+  // Friends who share their spot in this park, as ghost sharks (only if the live feed carries them).
+  const ghosts = useMemo(() => ghostSharks(livePark?.friends_nearby, location ?? null, Date.now(), GHOST_CAP),
+    [livePark, nearLat, nearLng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mapContext = `${player?.id ?? ''}:${park?.id ?? ''}`;
   const latestMapContext = useRef(mapContext);
@@ -1001,6 +1015,11 @@ function ExploreScreen() {
               }}
               pendingAttack={bossRecovery?.pending} receiptNeedsCheck={receiptNeedsCheck}
               onRush={(task) => setSelectedTask(task)} />
+            {nightPill && nightShow.show && <NightShowPill show={nightShow.show} phase={nightShow.phase}
+              onSee={() => {
+                const anchor = nightShow.show?.anchor;
+                if (anchor) { setSelectedTask(null); setMapFocusRequest({ ...anchor, zoom: 17.2, requestId: Date.now() }); }
+              }} />}
           </View>
         )}
         {suggestionSlots.left === 'dwell' && suggestionSlots.leftStub && queueDwell && <MapSuggestionStub side="left" top={slotTop}
@@ -1138,6 +1157,8 @@ function ExploreScreen() {
               onPress={handleTaskPress}
             />;
           })}
+          <GhostSharks ghosts={ghosts} />
+          {nightShow.show && <NightShowLayer show={nightShow.show} live={nightShow.phase === 'live'} />}
           {/* After the ride islands so their ambience never prints over the label; it settles clear of them. */}
           {activeParkProject?.park_id === park.id && (
             <ParkProjectMapBeacon project={activeParkProject} avoid={beaconAvoid}

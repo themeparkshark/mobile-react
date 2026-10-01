@@ -58,7 +58,10 @@ export function useMapAliveEngine({ focused, paused, light }: {
   }, []);
 
   const [governor, setGovernor] = useState<FrameGovernor>(GOVERNOR_START);
-  const tier = aliveTier({ reducedMotion, strain: governor.strain });
+  // Development QA on a loaded simulator can pin the tier (EXPO_PUBLIC_MAP_ALIVE_TIER=full|lite); Reduce Motion still wins.
+  const pinned = __DEV__ ? process.env.EXPO_PUBLIC_MAP_ALIVE_TIER : undefined;
+  const governed = aliveTier({ reducedMotion, strain: governor.strain });
+  const tier: AliveTier = !reducedMotion && (pinned === 'full' || pinned === 'lite') ? pinned : governed;
   const caps = ALIVE_CAPS[tier];
   const running = focused && appActive && !paused && caps.hz > 0;
 

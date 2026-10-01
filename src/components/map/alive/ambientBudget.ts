@@ -42,9 +42,9 @@ export interface AliveCaps {
 
 export const ALIVE_CAPS: Readonly<Record<AliveTier, AliveCaps>> = {
   full: { hz: 60, clouds: 3, birds: 3, fireflies: 6, waterGlints: 6, pulsingRides: 10, idleCoins: 4,
-    limitedShimmer: 4, sleepyRides: 3, trail: 6, skyShowBursts: 3, sparksPerBurst: 12, ghosts: 5 },
+    limitedShimmer: 4, sleepyRides: 3, trail: 6, skyShowBursts: 4, sparksPerBurst: 14, ghosts: 5 },
   lite: { hz: 30, clouds: 2, birds: 2, fireflies: 3, waterGlints: 3, pulsingRides: 4, idleCoins: 3,
-    limitedShimmer: 2, sleepyRides: 2, trail: 4, skyShowBursts: 2, sparksPerBurst: 10, ghosts: 3 },
+    limitedShimmer: 2, sleepyRides: 2, trail: 4, skyShowBursts: 3, sparksPerBurst: 10, ghosts: 3 },
   calm: { hz: 0, clouds: 0, birds: 0, fireflies: 0, waterGlints: 0, pulsingRides: 0, idleCoins: 0,
     limitedShimmer: 0, sleepyRides: 0, trail: 0, skyShowBursts: 0, sparksPerBurst: 0, ghosts: 5 },
 };
@@ -54,13 +54,16 @@ export const MAX_AMBIENT_SPRITES = 120;
 
 /**
  * Worst case number of moving ambient sprites a tier can put on screen at once
- * (each island effect counts its sprites). Tests hold every tier under
+ * (each island effect counts its sprites). Daytime life (clouds, gulls, sun
+ * glints) and night life (fireflies, the night show) never run together, so
+ * only the bigger of the two counts. Tests hold every tier under
  * MAX_AMBIENT_SPRITES so a crowded park never turns into a particle storm.
  */
 export function ambientSpriteBudget(caps: AliveCaps): number {
-  return caps.clouds * 3 + caps.birds * 2 + caps.fireflies + caps.waterGlints + caps.pulsingRides +
-    caps.idleCoins * 3 + caps.limitedShimmer * 3 + caps.sleepyRides * 3 + caps.trail +
-    caps.skyShowBursts * caps.sparksPerBurst + (caps.hz ? caps.ghosts : 0);
+  const day = caps.clouds * 3 + caps.birds * 2 + caps.waterGlints;
+  const night = caps.fireflies + caps.skyShowBursts * caps.sparksPerBurst;
+  return Math.max(day, night) + caps.pulsingRides + caps.idleCoins * 3 + caps.limitedShimmer * 3 +
+    caps.sleepyRides * 3 + caps.trail + (caps.hz ? caps.ghosts : 0);
 }
 
 /** Frame governor state: strain 0 = healthy, 1 = lite, 2 = calm (probing back after a rest). */
