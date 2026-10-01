@@ -17,6 +17,39 @@
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
 
+/**
+ * react-native-audio-api 0.6 AudioParam automation is unsafe from JS: the
+ * native setValueAtTime / *RampToValueAtTime read the event deque's back()
+ * without its lock while the audio thread pops it, and cancelScheduledValues
+ * walks past the deque's front. Both abort the app (seen on the Whack, Boss
+ * and Memory simulators; three games had patched it three ways). Root fix for
+ * the whole studio: the engine never schedules param events. It writes
+ * `.value` directly (a param with no events renders its current value) and
+ * runs fades as JS-timed 16 ms steps. Fades are 5-400 ms, so the steps are
+ * inaudible. Sample-accurate starts still use `src.start(when)`, which is safe.
+ */
+const rampTimers = new WeakMap<object, ReturnType<typeof setInterval>>();
+export function rampParamValue(param: { value: number }, to: number, ms: number, exponential = false): void {
+  const prev = rampTimers.get(param);
+  if (prev) clearInterval(prev);
+  rampTimers.delete(param);
+  const from = param.value;
+  if (ms <= 16 || !Number.isFinite(from)) {
+    param.value = to;
+    return;
+  }
+  const t0 = Date.now();
+  const iv = setInterval(() => {
+    const k = Math.min(1, (Date.now() - t0) / ms);
+    param.value = exponential && from > 0 && to > 0 ? from * Math.pow(to / from, k) : from + (to - from) * k;
+    if (k >= 1) {
+      clearInterval(iv);
+      rampTimers.delete(param);
+    }
+  }, 16);
+  rampTimers.set(param, iv);
+}
+
 export interface PlayArgs {
   gain: number;
   rate: number;
@@ -57,6 +90,10 @@ export interface AudioBackend {
   musicFilter(cutoffHz: number | null, rampMs: number): void;
   setMasterGain(gain: number): void;
   unloadAll(): Promise<void>;
+  /** The audio hardware clock (ms), when the backend has one (audio-api). Look-ahead schedulers use it. */
+  clockMs?(): number;
+  /** True when musicPosition(deck) is a cheap clock read (audio-api), false for an expo-av status call. */
+  positionIsCheap?(deck: string): boolean;
 }
 
 // =============================================================================
@@ -70,6 +107,40 @@ interface AvVoice {
   stopTimer: ReturnType<typeof setTimeout> | null;
 }
 
+/**
+ * One expo-av music deck. Volume writes are serialized and coalesced: every
+ * expo-av setStatus re-applies the AVPlayer rate, and a flood of them (30 ms
+ * ramps, ducks on every reveal) racing the player's time observer deadlocked
+ * AVFoundation on the main thread (setRate vs currentTime, seen on the Trivia
+ * simulator after a rematch). At most one write is in flight per deck; the
+ * latest wanted volume wins, and tiny changes are skipped.
+ */
+interface AvDeck {
+  sound: Audio.Sound;
+  gain: number;
+  ramp: ReturnType<typeof setInterval> | null;
+  sent: number;
+  want: number;
+  busy: boolean;
+  dead: boolean;
+}
+
+function pushDeckVolume(d: AvDeck, v: number): void {
+  d.want = Math.max(0, Math.min(1, v));
+  if (d.busy || d.dead) return;
+  if (Math.abs(d.want - d.sent) < 0.01 && !(d.want === 0 && d.sent !== 0)) return;
+  d.busy = true;
+  const target = d.want;
+  d.sound.setVolumeAsync(target).catch(() => undefined).finally(() => {
+    d.sent = target;
+    d.busy = false;
+    if (Math.abs(d.want - d.sent) >= 0.01 || (d.want === 0 && d.sent !== 0)) pushDeckVolume(d, d.want);
+  });
+}
+
+/** Ramp step for expo-av decks (ms): coarse on purpose, see AvDeck. */
+const AV_RAMP_STEP_MS = 90;
+
 export class ExpoAvBackend implements AudioBackend {
   readonly name = 'expo-av' as const;
   readonly supportsPan = false;
@@ -77,7 +148,7 @@ export class ExpoAvBackend implements AudioBackend {
   readonly latencyMs = 80;
   private pools = new Map<string, AvVoice[]>();
   private sources = new Map<string, number>();
-  private decks = new Map<string, { sound: Audio.Sound; gain: number; ramp: ReturnType<typeof setInterval> | null }>();
+  private decks = new Map<string, AvDeck>();
   private tokens = new Map<number, AvVoice>();
   private nextToken = 1;
   private master = 1;
@@ -170,13 +241,16 @@ export class ExpoAvBackend implements AudioBackend {
     const src = this.sources.get(key);
     if (src === undefined) return;
     this.musicStop(deck, 0);
+    const v0 = a.fadeMs > 0 ? 0 : a.gain * this.master;
     void Audio.Sound.createAsync(src, {
       shouldPlay: true,
       isLooping: a.loop,
       positionMillis: a.fromMs,
-      volume: a.fadeMs > 0 ? 0 : a.gain * this.master,
+      volume: v0,
+      // Fewer status callbacks on the main thread (see AvDeck).
+      progressUpdateIntervalMillis: 5000,
     }).then(({ sound }) => {
-      this.decks.set(deck, { sound, gain: a.fadeMs > 0 ? 0 : a.gain, ramp: null });
+      this.decks.set(deck, { sound, gain: a.fadeMs > 0 ? 0 : a.gain, ramp: null, sent: v0, want: v0, busy: false, dead: false });
       if (a.fadeMs > 0) this.musicGain(deck, a.gain, a.fadeMs);
     }).catch(() => undefined);
   }
@@ -187,21 +261,21 @@ export class ExpoAvBackend implements AudioBackend {
     if (d.ramp) clearInterval(d.ramp);
     d.ramp = null;
     const from = d.gain;
-    if (rampMs <= 0) {
+    if (rampMs <= AV_RAMP_STEP_MS) {
       d.gain = gain;
-      d.sound.setVolumeAsync(Math.max(0, Math.min(1, gain * this.master))).catch(() => undefined);
+      pushDeckVolume(d, gain * this.master);
       return;
     }
     const started = Date.now();
     d.ramp = setInterval(() => {
       const t = Math.min(1, (Date.now() - started) / rampMs);
       d.gain = from + (gain - from) * t;
-      d.sound.setVolumeAsync(Math.max(0, Math.min(1, d.gain * this.master))).catch(() => undefined);
+      pushDeckVolume(d, d.gain * this.master);
       if (t >= 1 && d.ramp) {
         clearInterval(d.ramp);
         d.ramp = null;
       }
-    }, 30);
+    }, AV_RAMP_STEP_MS);
   }
 
   musicStop(deck: string, fadeMs: number): void {
@@ -210,7 +284,8 @@ export class ExpoAvBackend implements AudioBackend {
     this.decks.delete(deck);
     if (d.ramp) clearInterval(d.ramp);
     const kill = () => {
-      d.sound.stopAsync().catch(() => undefined);
+      d.dead = true;
+      // unloadAsync stops the player itself: one native call instead of two.
       d.sound.unloadAsync().catch(() => undefined);
     };
     if (fadeMs <= 0) {
@@ -221,12 +296,12 @@ export class ExpoAvBackend implements AudioBackend {
     const started = Date.now();
     const iv = setInterval(() => {
       const t = Math.min(1, (Date.now() - started) / fadeMs);
-      d.sound.setVolumeAsync(Math.max(0, from * (1 - t) * this.master)).catch(() => undefined);
+      pushDeckVolume(d, from * (1 - t) * this.master);
       if (t >= 1) {
         clearInterval(iv);
         kill();
       }
-    }, 30);
+    }, AV_RAMP_STEP_MS);
   }
 
   async musicPosition(deck: string): Promise<number> {
@@ -308,28 +383,7 @@ export class AudioApiBackend implements AudioBackend {
   private musicLowpass: AnyNode = null;
   private buffers = new Map<string, AnyNode>();
   private voices = new Map<number, { src: AnyNode; gain: AnyNode }>();
-  private decks = new Map<string, { src: AnyNode; gain: AnyNode; startedAt: number; offset: number; loopMs: number; queueEnd: number }>();
-  private filterQueueEnd = 0;
-
-  /**
-   * react-native-audio-api 0.6.5 crashes in AudioParam::cancelScheduledValues
-   * (it dereferences rbegin() of an empty deque and advances an iterator it just
-   * popped), and ignores any ramp that ends before the queued end time. So we
-   * never cancel: every change is appended after the last queued event, which
-   * keeps ramps at most one ramp late and never touches freed memory.
-   */
-  private appendRamp(param: AnyNode, queueEnd: number, value: number, rampMs: number, exponential = false): number {
-    const t = this.ctx.currentTime;
-    const start = Math.max(t, queueEnd) + 0.001;
-    const end = start + Math.max(0.005, rampMs / 1000);
-    try {
-      if (exponential) param.exponentialRampToValueAtTime(Math.max(0.0001, value), end);
-      else param.linearRampToValueAtTime(value, end);
-    } catch {
-      // Decoration only.
-    }
-    return end;
-  }
+  private decks = new Map<string, { src: AnyNode; gain: AnyNode; startedAt: number; offset: number; loopMs: number }>();
   private nextToken = 1;
 
   constructor() {
@@ -361,18 +415,39 @@ export class AudioApiBackend implements AudioBackend {
     return this.buffers.has(key);
   }
 
-  async load(key: string, src: number): Promise<boolean> {
-    if (this.buffers.has(key)) return true;
-    const path = await localPath(src);
-    if (!path) return false;
-    try {
-      const buffer = await this.ctx.decodeAudioDataSource(path);
-      this.buffers.set(key, buffer);
-      return true;
-    } catch (e) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameAudio] decode failed', path, String(e));
-      return false;
-    }
+  /**
+   * Decodes run ONE AT A TIME. react-native-audio-api 0.6.5 decodes each file
+   * on its own detached thread and builds the buffer host object there, and
+   * its JsiHostObject constructor pushes into an unsynchronized global vector
+   * (JSI_DEBUG_ALLOCATIONS is on in the shipped source). Parallel decodes race
+   * on that vector and abort the app (seen as bad_alloc in push_back on the
+   * engine simulator, Sep 30). Serializing is the JS-side root fix; the native
+   * one is tools/audio/patch-audio-api.mjs (turns the debug registry off).
+   */
+  private decodeChain: Promise<unknown> = Promise.resolve();
+  private pending = new Map<string, Promise<boolean>>();
+
+  load(key: string, src: number): Promise<boolean> {
+    if (this.buffers.has(key)) return Promise.resolve(true);
+    const inFlight = this.pending.get(key);
+    if (inFlight) return inFlight;
+    const job = this.decodeChain.then(async () => {
+      if (this.buffers.has(key)) return true;
+      const path = await localPath(src);
+      if (!path) return false;
+      try {
+        const buffer = await this.ctx.decodeAudioDataSource(path);
+        this.buffers.set(key, buffer);
+        return true;
+      } catch (e) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn('[GameAudio] decode failed', path, String(e));
+        return false;
+      }
+    });
+    this.decodeChain = job.catch(() => false);
+    this.pending.set(key, job);
+    void job.finally(() => this.pending.delete(key));
+    return job;
   }
 
   play(key: string, a: PlayArgs): number {
@@ -412,8 +487,7 @@ export class AudioApiBackend implements AudioBackend {
     if (!v) return;
     try {
       const t = this.ctx.currentTime;
-      v.gain.gain.setValueAtTime(v.gain.gain.value, t);
-      v.gain.gain.linearRampToValueAtTime(0, t + 0.012);
+      v.gain.gain.value = 0;
       v.src.stop(t + 0.015);
     } catch {
       // Already stopped.
@@ -437,17 +511,13 @@ export class AudioApiBackend implements AudioBackend {
       if (a.loopEndMs !== undefined) src.loopEnd = a.loopEndMs / 1000;
       const gain = this.ctx.createGain();
       const t = this.ctx.currentTime;
-      gain.gain.setValueAtTime(a.fadeMs > 0 ? 0 : a.gain, t);
-      let queueEnd = t;
-      if (a.fadeMs > 0) {
-        queueEnd = t + a.fadeMs / 1000;
-        gain.gain.linearRampToValueAtTime(a.gain, queueEnd);
-      }
+      gain.gain.value = a.fadeMs > 0 ? 0 : a.gain;
+      if (a.fadeMs > 0) rampParamValue(gain.gain, a.gain, a.fadeMs);
       src.connect(gain);
       gain.connect(this.musicBus);
       src.start(t, a.fromMs / 1000);
       const loopMs = (a.loopEndMs ?? buffer.duration * 1000) - (a.loopStartMs ?? 0);
-      this.decks.set(deck, { src, gain, startedAt: t, offset: a.fromMs, loopMs, queueEnd });
+      this.decks.set(deck, { src, gain, startedAt: t, offset: a.fromMs, loopMs });
     } catch {
       // Ignore: music is decoration.
     }
@@ -456,7 +526,11 @@ export class AudioApiBackend implements AudioBackend {
   musicGain(deck: string, gain: number, rampMs: number): void {
     const d = this.decks.get(deck);
     if (!d) return;
-    d.queueEnd = this.appendRamp(d.gain.gain, d.queueEnd, gain, rampMs);
+    try {
+      rampParamValue(d.gain.gain, gain, rampMs);
+    } catch {
+      // Music gain is decoration.
+    }
   }
 
   musicStop(deck: string, fadeMs: number): void {
@@ -464,8 +538,9 @@ export class AudioApiBackend implements AudioBackend {
     if (!d) return;
     this.decks.delete(deck);
     try {
-      const end = this.appendRamp(d.gain.gain, d.queueEnd, 0, Math.max(10, fadeMs));
-      d.src.stop(end + 0.01);
+      const t = this.ctx.currentTime;
+      rampParamValue(d.gain.gain, 0, fadeMs);
+      d.src.stop(t + Math.max(0.02, fadeMs / 1000 + 0.01));
     } catch {
       // Already stopped.
     }
@@ -480,7 +555,19 @@ export class AudioApiBackend implements AudioBackend {
 
   musicFilter(cutoffHz: number | null, rampMs: number): void {
     if (!this.musicLowpass) return;
-    this.filterQueueEnd = this.appendRamp(this.musicLowpass.frequency, this.filterQueueEnd, cutoffHz ?? 20000, Math.max(10, rampMs), true);
+    try {
+      rampParamValue(this.musicLowpass.frequency, cutoffHz ?? 20000, rampMs, true);
+    } catch {
+      // The filter is decoration.
+    }
+  }
+
+  clockMs(): number {
+    return this.ctx ? this.ctx.currentTime * 1000 : 0;
+  }
+
+  positionIsCheap(): boolean {
+    return true;
   }
 
   setMasterGain(gain: number): void {
@@ -587,6 +674,14 @@ export class HybridBackend implements AudioBackend {
 
   musicFilter(cutoffHz: number | null, rampMs: number): void {
     this.api.musicFilter(cutoffHz, rampMs);
+  }
+
+  clockMs(): number {
+    return this.api.clockMs();
+  }
+
+  positionIsCheap(deck: string): boolean {
+    return this.deckRoutes.get(deck) === this.api;
   }
 
   setMasterGain(gain: number): void {

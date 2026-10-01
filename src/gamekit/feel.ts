@@ -23,10 +23,13 @@
 import { useCallback, useRef, type RefObject } from 'react';
 import type { EmitterName } from './core/particles';
 import { GameAudio } from './audio/GameAudio';
-import { playHaptic, HP, type HapticPatternName } from './Haptics';
+import { playHaptic, playPattern, HP, type HapticPatternName } from './Haptics';
+import type { AhapPatternName, HapticPatternDef } from './core/hapticPattern';
+import type { StampLayerHandle, StampOptions } from './fx/StampLayer';
 import type { FxStageHandle, FlyUpOptions } from './fx/FxStage';
 import type { CameraRig } from './fx/useCamera';
 import type { GameClockHandle } from './useGameClock';
+import { FLASH_MERGED, govFlash, govHitStop, govPunch, govScreenEvent, govShake, type FxGovernor } from './core/fxGovernor';
 
 export interface FeelBurst {
   emitter: EmitterName;
@@ -73,6 +76,14 @@ export interface FeelDef {
   flyUp?: FlyUpOptions & { dy?: number };
   /** Duck music (dB) for this moment. */
   duckDb?: number;
+  /** Governor priority (higher wins stacked flashes, stops and punches). */
+  prio?: number;
+  /** KO / round end: bypass the governor's gaps and budgets. */
+  force?: boolean;
+  /** Bubble-letter stamp (fx/StampLayer) at the moment's point: at.stamp overrides the text. */
+  stamp?: StampOptions & { text?: string };
+  /** Core Haptics pattern (AHAP_LIBRARY name or events); used instead of `haptic` when set. */
+  pattern?: AhapPatternName | HapticPatternDef;
   /** Anything bespoke (sprite swaps, banners). Runs last. */
   custom?: (at: FeelAt) => void;
 }
@@ -93,6 +104,10 @@ export interface FeelAt {
   magnetTo?: { x: number; y: number };
   /** Rival-caused: skip haptics entirely. */
   rival?: boolean;
+  /** Own direct input (exempt from the Line Party haptic cap). */
+  input?: boolean;
+  /** Stamp text for def.stamp (e.g. 'x4 COMBO'). */
+  stamp?: string;
 }
 
 export interface FeelDeps {
@@ -103,6 +118,16 @@ export interface FeelDeps {
   width?: number;
   /** Walking or reduced motion: skip camera moves. */
   calm?: boolean;
+  /**
+   * Optional FX governor (core/fxGovernor): gates full-frame flashes (a denied
+   * flash becomes a localized bloom), budgets global hit-stops, merges shakes
+   * and keeps punches away from shakes. Create one per game with createFxGovernor().
+   */
+  governor?: FxGovernor | null;
+  /** Clock for the governor (default Date.now). */
+  now?: () => number;
+  /** Bubble-letter stamp layer (fx/StampLayer). */
+  stamps?: RefObject<StampLayerHandle | null>;
 }
 
 export type FeelFire<K extends string> = (name: K, at?: FeelAt) => void;
@@ -118,20 +143,31 @@ export function fireFeel(def: FeelDef, at: FeelAt, deps: FeelDeps): void {
     if (def.ladder && at.step !== undefined) GameAudio.playLadder(def.sfx, at.step, opts);
     else GameAudio.play(def.sfx, opts);
   }
-  if (def.haptic && !at.rival) {
-    playHaptic(def.haptic, { priority: def.priority ?? (def.tell ? HP.telegraph : HP.own), tell: def.tell });
+  if ((def.pattern || def.haptic) && !at.rival) {
+    const hopts = { priority: def.priority ?? (def.tell ? HP.telegraph : HP.own), tell: def.tell, input: at.input };
+    if (def.pattern) playPattern(def.pattern, hopts);
+    else if (def.haptic) playHaptic(def.haptic, hopts);
   }
   if (def.duckDb) GameAudio.duck(def.duckDb, 40, 250, 300);
+  const gov = deps.governor;
+  const now = gov ? (deps.now ? deps.now() : Date.now()) : 0;
+  const prio = def.prio ?? 0;
+  const force = !!(def.force || def.forceStop);
+  // Screen-event cap: one ticket covers every screen-space effect of this moment.
+  const screenFx = !!(def.flash || def.vignette || def.stamp || def.punch || def.kick || def.shake);
+  const screenOk = !screenFx || !gov || govScreenEvent(gov, now, force);
   // 2. Time.
   if (deps.clock) {
-    if (def.hitStop) deps.clock.hitStop(def.hitStop, { holdSim: def.hitStopSim, force: def.forceStop });
+    const stop = def.hitStop && gov ? govHitStop(gov, now, def.hitStop, prio, force) : def.hitStop;
+    if (stop) deps.clock.hitStop(stop, { holdSim: def.hitStopSim, force: def.forceStop });
     if (def.localStop && at.slot !== undefined) deps.clock.localStop(at.slot, def.localStop);
     if (def.slowMo) deps.clock.slowMo(def.slowMo[0], def.slowMo[1], def.slowMo[2]);
   }
   // 3. Camera (skipped while calm: walking / reduced motion handled in rig too).
-  if (deps.camera && !deps.calm) {
-    if (def.shake) deps.camera.shake(def.shake, at.dx ?? 0, at.dy ?? 0);
-    if (def.punch) deps.camera.punch(def.punch);
+  if (deps.camera && !deps.calm && screenOk) {
+    const trauma = def.shake && gov ? govShake(gov, now, def.shake) : def.shake;
+    if (trauma) deps.camera.shake(trauma, at.dx ?? 0, at.dy ?? 0);
+    if (def.punch && (!gov || govPunch(gov, now, prio, force))) deps.camera.punch(def.punch);
     if (def.kick && (at.dx || at.dy)) {
       const len = Math.hypot(at.dx ?? 0, at.dy ?? 0) || 1;
       deps.camera.kick(((at.dx ?? 0) / len) * def.kick, ((at.dy ?? 0) / len) * def.kick);
@@ -145,11 +181,19 @@ export function fireFeel(def: FeelDef, at: FeelAt, deps: FeelDeps): void {
       ...(b.magnet && at.magnetTo ? { tx: at.magnetTo.x, ty: at.magnetTo.y } : {}),
     }));
     if (def.ring) fx.ring(x, y, def.ring);
-    if (def.flash) fx.flash(def.flash);
+    if (def.flash) {
+      const want = def.flash.peak ?? 0.35;
+      const peak = !screenOk ? 0 : gov ? govFlash(gov, now, want, prio, force) : want;
+      if (peak > 0) fx.flash({ ...def.flash, peak });
+      // A merged flash (Whack v5) already reads as part of the live one: no bloom either.
+      else if (!def.bloom && !(gov && screenOk && gov.lastFlashVerdict === FLASH_MERGED)) fx.bloom(x, y, { color: def.flash.color, radius: 140, peak: 0.6 });
+    }
     if (def.bloom) fx.bloom(x, y, def.bloom);
-    if (def.vignette) fx.vignette(def.vignette);
+    if (def.vignette && screenOk) fx.vignette(def.vignette);
     if (def.flyUp && at.text) fx.flyUp(at.text, x, y + (def.flyUp.dy ?? -24), def.flyUp);
   }
+  const stampText = at.stamp ?? def.stamp?.text;
+  if (def.stamp && stampText && screenOk) deps.stamps?.current?.push(stampText, { x, y: y - 40, ...def.stamp });
   def.custom?.(at);
 }
 

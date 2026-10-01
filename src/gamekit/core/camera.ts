@@ -20,8 +20,15 @@ export interface CameraConfig {
   decay: number;
   /** Noise frequency (Hz) of the shake. */
   frequency: number;
-  /** Hard cap for any single shake (ms). */
+  /** Hard cap for any single shake (ms). 0 = no cap (Whack v5, Boss). */
   maxShakeMs: number;
+  /**
+   * > 0: trauma falls linearly to zero over this many ms from the latest add
+   * (Whack v5: 250 ms), instead of the fixed `decay` rate.
+   */
+  decayMs: number;
+  /** Shake = trauma^exponent (2 = Eiserloh squared, 1 = linear). */
+  exponent: number;
   /** 0..1 global multiplier (0 in reduced motion, ~0.3 while walking). */
   intensity: number;
   kickSpring: SpringConfig;
@@ -34,6 +41,8 @@ export const DEFAULT_CAMERA: CameraConfig = {
   decay: 1.6,
   frequency: 22,
   maxShakeMs: 120,
+  decayMs: 0,
+  exponent: 2,
   intensity: 1,
   kickSpring: { damping: 12, stiffness: 500, mass: 1 },
   zoomSpring: { damping: 14, stiffness: 180, mass: 0.9 },
@@ -45,6 +54,8 @@ export interface CameraState {
   seed: number;
   trauma: number;
   shakeUntil: number;
+  /** Per-shake linear decay rate (trauma/s) when cfg.decayMs > 0. */
+  decayRate: number;
   dirX: number;
   dirY: number;
   /** Kick spring (directional nudge). */
@@ -83,6 +94,8 @@ export function createCamera(cfg: Partial<CameraConfig> = {}, seed = 1): CameraS
       decay: cfg.decay ?? DEFAULT_CAMERA.decay,
       frequency: cfg.frequency ?? DEFAULT_CAMERA.frequency,
       maxShakeMs: cfg.maxShakeMs ?? DEFAULT_CAMERA.maxShakeMs,
+      decayMs: cfg.decayMs ?? DEFAULT_CAMERA.decayMs,
+      exponent: cfg.exponent ?? DEFAULT_CAMERA.exponent,
       intensity: cfg.intensity ?? DEFAULT_CAMERA.intensity,
       kickSpring: cfg.kickSpring ?? DEFAULT_CAMERA.kickSpring,
       zoomSpring: cfg.zoomSpring ?? DEFAULT_CAMERA.zoomSpring,
@@ -91,6 +104,7 @@ export function createCamera(cfg: Partial<CameraConfig> = {}, seed = 1): CameraS
     seed,
     trauma: 0,
     shakeUntil: 0,
+    decayRate: 0,
     dirX: 0,
     dirY: 0,
     kx: 0,
@@ -142,8 +156,10 @@ export function addTrauma(cam: CameraState, amount: number, dirX = 0, dirY = 0, 
   'worklet';
   if (cam.cfg.intensity <= 0) return;
   cam.trauma = Math.min(1, cam.trauma + amount);
-  const cap = capMs > 0 ? Math.min(capMs, cam.cfg.maxShakeMs) : cam.cfg.maxShakeMs;
+  const maxMs = cam.cfg.maxShakeMs > 0 ? cam.cfg.maxShakeMs : 1e9;
+  const cap = capMs > 0 ? Math.min(capMs, maxMs) : maxMs;
   cam.shakeUntil = cam.t + cap;
+  if (cam.cfg.decayMs > 0) cam.decayRate = cam.trauma / (cam.cfg.decayMs / 1000);
   const len = Math.sqrt(dirX * dirX + dirY * dirY);
   cam.dirX = len > 0 ? dirX / len : 0;
   cam.dirY = len > 0 ? dirY / len : 0;
@@ -201,9 +217,10 @@ export function stepCamera(cam: CameraState, dtMs: number): void {
   cam.t += dtMs;
   const cfg = cam.cfg;
   // Trauma decays; after the cap it collapses fast so shakes stay short.
-  const decay = cam.t > cam.shakeUntil ? cfg.decay * 6 : cfg.decay;
+  const rate = cfg.decayMs > 0 ? cam.decayRate : cfg.decay;
+  const decay = cam.t > cam.shakeUntil ? Math.max(rate, cfg.decay) * 6 : rate;
   cam.trauma = Math.max(0, cam.trauma - decay * dt);
-  const shake = cam.trauma * cam.trauma * cfg.intensity;
+  const shake = (cfg.exponent === 2 ? cam.trauma * cam.trauma : Math.pow(cam.trauma, cfg.exponent)) * cfg.intensity;
   const nt = (cam.t / 1000) * cfg.frequency;
   let sx = cfg.maxOffset * shake * noise1(cam.seed, nt);
   let sy = cfg.maxOffset * shake * noise1(cam.seed + 17, nt);
@@ -263,3 +280,24 @@ export function stepCamera(cam: CameraState, dtMs: number): void {
   cam.rot = roll;
   cam.zoom = cam.baseZoom + punch;
 }
+
+/**
+ * Per-game camera rules from the designs. Spread into useCamera's config:
+ *   useCamera({ width, height, ...CAMERA_PRESETS.whack, walking })
+ */
+export const CAMERA_PRESETS = {
+  /** Board-only shake: maxOffset 16, 250 ms linear decay, no cap (trauma 0.45 angler / 0.55 boss hit / 0.8 defeat). */
+  whack: { maxOffset: 16, decayMs: 250, maxShakeMs: 0 },
+  /** Trauma squared on the arena group, 1.6/s decay, no cap; x0.3 while walking comes from `walking`. */
+  boss: { maxOffset: 14, decay: 1.6, maxShakeMs: 0 },
+  /** Sharky: hit trauma +0.55, short shakes. */
+  sharky: { maxOffset: 12, decay: 2.2, maxShakeMs: 180 },
+  /** Banana: trauma only on 3 global events; vertical kicks 2-4 fu. */
+  banana: { maxOffset: 10, decay: 2.0, maxShakeMs: 200 },
+  /** Line Party: 6 px / 100 ms shakes on golden and VERIFIED. */
+  lineParty: { maxOffset: 6, decayMs: 100, maxShakeMs: 100, exponent: 1 },
+  /** Trivia: shake only at VS, your buzz and the crown. */
+  trivia: { maxOffset: 8, decay: 2.4, maxShakeMs: 160 },
+  /** Rhythm Finale BIG: 5 px / 140 ms on the world group only. */
+  rhythm: { maxOffset: 5, decayMs: 140, maxShakeMs: 140, exponent: 1 },
+} satisfies Record<string, Partial<CameraConfig>>;
