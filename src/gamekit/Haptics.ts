@@ -15,13 +15,31 @@ import {
   HAPTIC_PATTERNS,
   HP,
   PRIMITIVE_STRENGTH,
-  admitHaptic,
-  createHapticScheduler,
   patternStrength,
   type HapticPatternName,
   type HapticPrimitive,
   type HapticStep,
 } from './core/hapticGrammar';
+import {
+  BUS_FIRE,
+  BUS_QUEUED,
+  busDue,
+  busOffer,
+  busStats,
+  configureHapticBus,
+  createHapticBus,
+  type HapticBusConfig,
+  type HapticBusPreset,
+} from './core/hapticBus';
+import {
+  AHAP_LIBRARY,
+  fallbackSteps,
+  patternBusStrength,
+  toAhap,
+  type AhapJson,
+  type AhapPatternName,
+  type HapticPatternDef,
+} from './core/hapticPattern';
 
 export type HapticIntent =
   | 'tapLight'
@@ -147,7 +165,9 @@ const PRIMITIVE_INTENT: Record<HapticPrimitive, HapticIntent> = {
   error: 'failBuzz',
 };
 
-const scheduler = createHapticScheduler(60);
+/** The priority bus every pattern goes through (core/hapticBus). */
+const bus = createHapticBus('default');
+let busTimer: ReturnType<typeof setTimeout> | null = null;
 let tellsEnabled = true;
 let offsetMs = 0;
 
@@ -170,7 +190,24 @@ export function setHapticAudioOffsetMs(ms: number): void {
 
 /** Minimum gap between in-play haptics (the stronger wins a collision). */
 export function setHapticGapMs(ms: number): void {
-  scheduler.minGapMs = ms;
+  bus.cfg.minGapMs = ms;
+}
+
+/**
+ * Pick the game's density rule: a preset name from HAPTIC_BUS_PRESETS
+ * ('whack', 'banana', 'trivia', 'sharky', 'currentQuest', 'rhythm',
+ * 'rhythmDense', 'memory', 'boss', 'lineParty') or a partial config.
+ * Call it on mount and configureHaptics('default') on unmount.
+ */
+export function configureHaptics(cfg: HapticBusPreset | Partial<HapticBusConfig>): void {
+  if (busTimer) clearTimeout(busTimer);
+  busTimer = null;
+  configureHapticBus(bus, cfg);
+}
+
+/** Bus counters (fired / dropped / queued / preempted) for the dev overlay. */
+export function hapticBusStats(): { fired: number; dropped: number; queued: number; preempted: number } {
+  return busStats(bus);
 }
 
 export function firePrimitive(p: HapticPrimitive): void {
@@ -195,20 +232,101 @@ export interface PatternOptions {
  * Play a named pattern (or custom steps) under the grammar rules. Returns
  * false when it was dropped (disabled, rival-caused, or out-ranked in the gap).
  */
-export function playHaptic(pattern: HapticPatternName | HapticStep[], opts: PatternOptions = {}): boolean {
+export function playHaptic(pattern: HapticPatternName | HapticStep[], opts: PatternOptions & { input?: boolean } = {}): boolean {
   if (!enabled) return false;
   if (opts.tell && !tellsEnabled) return false;
   const steps: readonly HapticStep[] = typeof pattern === 'string' ? HAPTIC_PATTERNS[pattern] : pattern;
   if (!steps || steps.length === 0) return false;
   const priority = opts.priority ?? (opts.tell ? HP.telegraph : HP.own);
-  if (!admitHaptic(scheduler, Date.now(), patternStrength(steps), priority)) return false;
   const lead = opts.alignToAudio ? offsetMs : 0;
+  return offerToBus(priority, patternStrength(steps), opts, () => playSteps(steps, lead));
+}
+
+function playSteps(steps: readonly HapticStep[], lead: number): void {
   for (const step of steps) {
     const at = step.at + lead;
     if (at <= 0) firePrimitive(step.p);
     else setTimeout(() => firePrimitive(step.p), at);
   }
-  return true;
+}
+
+function offerToBus(priority: number, strength: number, opts: PatternOptions & { input?: boolean }, play: () => void): boolean {
+  const now = Date.now();
+  const verdict = busOffer(bus, now, { priority, strength, tell: opts.tell, input: opts.input, payload: play });
+  if (verdict === BUS_FIRE) {
+    play();
+    return true;
+  }
+  if (verdict === BUS_QUEUED && bus.queue) {
+    if (busTimer) clearTimeout(busTimer);
+    busTimer = setTimeout(() => {
+      busTimer = null;
+      const due = busDue(bus, Date.now());
+      if (due && typeof due.payload === 'function') (due.payload as () => void)();
+    }, Math.max(0, bus.queue.dueAt - now));
+    return true;
+  }
+  return false;
+}
+
+// =============================================================================
+// Core Haptics patterns (intensity / sharpness) with the expo-haptics fallback
+// =============================================================================
+
+/** A native AHAP player (WS9's Core Haptics Expo module) plugs in here. */
+export interface NativeHapticPlayer {
+  /** Play an AHAP pattern now (or at `delayMs`). Must never throw. */
+  play(ahap: AhapJson, delayMs: number): void;
+}
+
+let nativePlayer: NativeHapticPlayer | null = null;
+const ahapCache = new Map<string, AhapJson>();
+
+/**
+ * Register the Core Haptics player when the binary has it. Until then every
+ * pattern plays through its expo-haptics fallback (merged under 100 ms).
+ */
+export function setNativeHapticPlayer(player: NativeHapticPlayer | null): void {
+  nativePlayer = player;
+}
+
+export function hasNativeHaptics(): boolean {
+  return nativePlayer !== null;
+}
+
+/**
+ * Play a Core Haptics pattern (a name from AHAP_LIBRARY or your own events)
+ * under the bus rules. One pattern is one bus event, so a crit double or a
+ * purr is never half-swallowed by a debounce.
+ */
+export function playPattern(
+  pattern: AhapPatternName | HapticPatternDef,
+  opts: PatternOptions & { input?: boolean } = {},
+): boolean {
+  if (!enabled) return false;
+  if (opts.tell && !tellsEnabled) return false;
+  const def: HapticPatternDef = typeof pattern === 'string' ? AHAP_LIBRARY[pattern] : pattern;
+  if (!def || def.length === 0) return false;
+  const priority = opts.priority ?? (opts.tell ? HP.telegraph : HP.own);
+  const lead = opts.alignToAudio ? offsetMs : 0;
+  return offerToBus(priority, patternBusStrength(def), opts, () => {
+    const player = nativePlayer;
+    if (player) {
+      const key = typeof pattern === 'string' ? pattern : '';
+      let ahap = key ? ahapCache.get(key) : undefined;
+      if (!ahap) {
+        ahap = toAhap(def, key);
+        if (key) ahapCache.set(key, ahap);
+      }
+      try {
+        player.play(ahap, lead);
+        return;
+      } catch {
+        // Fall through to the preset fallback.
+      }
+    }
+    playSteps(fallbackSteps(def), lead);
+  });
 }
 
 /**
@@ -245,5 +363,5 @@ export function scheduleHaptics(
   };
 }
 
-export { HAPTIC_PATTERNS, HP, PRIMITIVE_STRENGTH };
-export type { HapticPatternName, HapticPrimitive, HapticStep };
+export { HAPTIC_PATTERNS, HP, PRIMITIVE_STRENGTH, AHAP_LIBRARY };
+export type { HapticPatternName, HapticPrimitive, HapticStep, AhapPatternName, HapticPatternDef, HapticBusPreset, HapticBusConfig };
