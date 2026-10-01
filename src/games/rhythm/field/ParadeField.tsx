@@ -849,6 +849,26 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
     const k = Math.max(0, 1 - ph * 4);
     return pocket ? 4 + 4 * k : 3 + 2 * k;
   });
+  // Approach ring (MARCH sections, Pocket Parade, Ride Assist): r 70 -> 34 over the final beat of the next note.
+  const approachRingR = useDerivedValue(() => {
+    tick.value;
+    const v = view.value;
+    const s = judge.value;
+    if (v.march < 0.5 && !v.pocket && !s.assist) return 0;
+    for (let i = s.cursor; i < s.n; i++) {
+      if (s.res[i] !== 0) continue;
+      const layer = s.barLayer[s.bar[i]] === 2 ? 2 : 1;
+      if ((s.layers[i] & layer) === 0) continue;
+      const dt = s.t[i] - v.now;
+      const beat = s.beatLen[i];
+      if (dt < -30) continue;
+      if (dt > beat) return 0;
+      const u = Math.max(0, dt) / beat;
+      return (34 + 36 * u) * (W / 390) * (1 + 0.15 * v.march);
+    }
+    return 0;
+  });
+  const approachRingOpacity = useDerivedValue(() => (approachRingR.value > 0 ? 0.9 : 0));
   const ringTeleColor = useDerivedValue(() => (tele.value[2] > 0.05 ? '#ffffff' : NAVY));
   const ringTeleOpacity = useDerivedValue(() => tele.value[2]);
   const shadowRx = useDerivedValue(() => 20 * (0.5 + 0.5 * tele.value[2]));
@@ -1272,6 +1292,7 @@ export const ParadeField = React.memo(function ParadeField({ geom, judge, view, 
       </Group>
       <Circle cx={cx} cy={yLine} r={ringR} color={NAVY} style="stroke" strokeWidth={ringStroke} />
       <Circle cx={cx} cy={yLine} r={ringR} color={ringTeleColor} style="stroke" strokeWidth={4} opacity={ringTeleOpacity} />
+      <Circle cx={cx} cy={yLine} r={approachRingR} color={NAVY} style="stroke" strokeWidth={3} opacity={approachRingOpacity} />
       {noteAtlas ? <Atlas image={noteAtlas.image} sprites={noteSprites} transforms={noteXf} /> : null}
       <Path path={echoPath} color={NAVY} style="stroke" strokeWidth={3}>
         <DashPathEffect intervals={[6, 4]} />
