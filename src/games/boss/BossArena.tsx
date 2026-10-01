@@ -26,8 +26,11 @@ import {
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import { rootSide, viewLane, type ArenaLayout, type BossView } from './view';
 import { aspectOf } from './useArenaImages';
+import { partAt, partLaunchTo, restMs, type Launch } from './parts';
+import { worldCamAt } from './worldCam';
+export { worldCamAt } from './worldCam';
 import {
-  bezierChain, bounceAt, chainAt, fractionAtX, lerpChain, newChain, stripIndices, stripVerts, JOINTS, type Pt,
+  bezierChain, chainAt, fractionAtX, lerpChain, newChain, stripIndices, stripVerts, JOINTS, type Pt,
 } from './rig/tentacle';
 
 export interface ArenaImages {
@@ -63,6 +66,11 @@ export interface ArenaImages {
   matBarnacle: SkImageType | null;
   matPearl: SkImageType | null;
   matScale: SkImageType | null;
+  finFull: SkImageType | null;
+  finPop: SkImageType | null;
+  finEmpty: SkImageType | null;
+  foreRope: SkImageType | null;
+  forePlank: SkImageType | null;
 }
 
 /** Event-driven timestamps (fx clock ms; -1 = never) the orchestrator sets from sim events. */
@@ -100,6 +108,11 @@ export interface ArenaAnim {
   catchAt: SharedValue<number>;
   catchLane: SharedValue<number>;
   caughtAt: SharedValue<number>;
+  /** Break push-in start (fx ms) for the camera (1.16 / 1.19 / 1.22 by partN). */
+  breakAt: SharedValue<number>;
+  /** Hat flight start (Break 1, or the KO hat-off) and shell shards (Break 3), fx ms. */
+  hatAt: SharedValue<number>;
+  shardAt: SharedValue<number>;
   /** Phase pose: 0 shallows, 1 on the wreck, 2 whirlpool (fx ms of the change in phaseAt). */
   phase: SharedValue<number>;
   phaseAt: SharedValue<number>;
@@ -117,6 +130,8 @@ export interface Pres {
   pinSide: number;
   pinStart: number;
   pinEnd: number;
+  /** Kind of the pinned opening (0 pin, 1 break, 2 ally, 3 final). */
+  pinKind: number;
   /** Training wheels (first rounds vs this boss, bout 1). */
   wheels: boolean;
   /** Retreat damage overlays: Breaks this round. */
@@ -128,7 +143,7 @@ export interface Pres {
 }
 
 export function emptyPres(): Pres {
-  return { sLane: -1, sSide: 1, sI: -1e9, sRes: 0, sAt: -1e9, pinSide: -1, pinStart: -1e9, pinEnd: -1e9, wheels: false, breaks: 0, walking: false, team: false };
+  return { sLane: -1, sSide: 1, sI: -1e9, sRes: 0, sAt: -1e9, pinSide: -1, pinStart: -1e9, pinEnd: -1e9, pinKind: 0, wheels: false, breaks: 0, walking: false, team: false };
 }
 
 // Palette (design 11.4)
@@ -151,6 +166,8 @@ const HAT = { x: 50 / 600, y: 0, w: 262 / 600, h: 196 / 593, px: 175 / 600, py: 
 const EYE_L = { x: 0.425, y: 0.476 };
 const EYE_R = { x: 0.608, y: 0.481 };
 const STRIP_TIP_U = 1;
+/** KO: the defeat pose holds this long before the sink (design 11.7). */
+const KO_HOLD = 600;
 
 function c01(x: number): number {
   'worklet';
@@ -202,26 +219,31 @@ interface Props {
   bossKind: number;
   reduced: boolean;
   bossArtScale: number;
+  /** Shake / punch / lean camera (world layers only; the row, float and HUD never move). */
+  cam: { x: SharedValue<number>; y: SharedValue<number>; rot: SharedValue<number>; zoom: SharedValue<number> };
 }
 
 export const BossArena = React.memo(function BossArena(p: Props) {
   return (
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Backdrop {...p} />
-      <Starburst {...p} />
-      <Rainbow {...p} />
-      <BossRig {...p} />
-      <WaterLip {...p} />
-      {p.bossKind === 0 ? <Limbs {...p} /> : null}
+      <World {...p}>
+        <Backdrop {...p} />
+        <Starburst {...p} />
+        <BossRig {...p} />
+        <WaterLip {...p} />
+        {p.bossKind === 0 ? <Limbs {...p} /> : null}
+        <Parts {...p} />
+        <PopBead {...p} />
+        <HeadStars {...p} />
+      </World>
       <RowPicture {...p} />
       <Fore {...p} />
       <Splash {...p} />
       <PlayerFloat {...p} />
       <FinPicture {...p} />
-      <PopBead {...p} />
-      <Parts {...p} />
       <SpeedLines {...p} />
       <WaterSheet {...p} />
+      <ForeLayer {...p} />
     </Canvas>
   );
 });
@@ -295,32 +317,8 @@ function Starburst({ L, view, beat, img }: Props) {
   return (
     <Group opacity={op} origin={vec(L.bossX, L.bossY)} transform={tr}>
       <SkImage image={img.starburst} x={L.bossX - size / 2} y={L.bossY - size / 2} width={size} height={size}>
-        <BlendColor color={GOLD} mode="srcIn" />
+        <BlendColor color={WHITE} mode="srcIn" />
       </SkImage>
-    </Group>
-  );
-}
-
-/** KO rainbow behind the sinking boss: 0 -> 0.7 -> 0 over 1 200 ms. */
-function Rainbow({ L, fx, anim }: Props) {
-  const op = useDerivedValue(() => {
-    if (anim.exitKind.value !== 1 || anim.exitAt.value < 0) return 0;
-    const p = (fx.value - anim.exitAt.value - 400) / 1200;
-    if (p <= 0 || p >= 1) return 0;
-    return 0.7 * Math.sin(p * Math.PI);
-  });
-  const arcs = useMemo(() => {
-    const cols = ['#FF6B5C', '#FF8A1F', '#FFCF3B', '#7BD94A', '#3FA9FF'];
-    return cols.map((c, i) => {
-      const r = L.W * 0.62 - i * 11;
-      const p = Skia.Path.Make();
-      p.addArc({ x: L.bossX - r, y: L.horizonY - r * 0.7, width: r * 2, height: r * 1.4 }, 180, 180);
-      return { p, c };
-    });
-  }, [L]);
-  return (
-    <Group opacity={op}>
-      {arcs.map((a, i) => <Path key={i} path={a.p} style="stroke" strokeWidth={11} color={a.c} />)}
     </Group>
   );
 }
@@ -424,8 +422,10 @@ function BossRig(p: Props) {
     if (xa >= 0 && f >= xa) {
       const e = f - xa;
       if (anim.exitKind.value === 1) {
-        dy += e < 400 ? 0 : L.bossSize * 1.2 * inBack((e - 400) / 1100, 1.4);
-        rot += e < 400 ? Math.sin(e / 30) * 0.03 : 0.3 * c01((e - 400) / 1100);
+        // Defeat pose held 600 ms (spiral eyes, slumped), then the KO sink (1 100 ms in-back).
+        dy += e < KO_HOLD ? 10 * outQuad(e / 120) : 10 + L.bossSize * 1.2 * inBack((e - KO_HOLD) / 1100, 1.4);
+        rot += e < KO_HOLD ? -0.08 * outQuad(e / 120) : -0.08 + 0.38 * c01((e - KO_HOLD) / 1100);
+        sy *= e < KO_HOLD ? 1 - 0.06 * outQuad(e / 120) : 0.94;
       } else {
         dy += e < 1500 ? 0 : L.bossSize * 1.15 * inQuad((e - 1500) / 700);
         rot += e < 1500 ? Math.sin(e / 90) * 0.04 : 0;
@@ -442,7 +442,7 @@ function BossRig(p: Props) {
   const lipClip = useMemo(() => Skia.XYWHRect(-L.W, -L.H * 2, L.W * 3, L.lipY + 3 + L.H * 2), [L]);
   const flashOp = useDerivedValue(() => (anim.flashAt.value >= 0 && fx.value - anim.flashAt.value < 40 && fx.value >= anim.flashAt.value ? 0.9 : 0));
   const rimOp = useDerivedValue(() => since(fx.value, anim.rimAt.value, 160) * 0.9);
-  const hatOn = useDerivedValue(() => (view.value.breaks >= 1 || (anim.partAt.value >= 0 && anim.partN.value >= 1) ? 0 : 1));
+  const hatOn = useDerivedValue(() => (view.value.breaks >= 1 || (anim.hatAt.value >= 0 && fx.value >= anim.hatAt.value) ? 0 : 1));
   const baldOn = useDerivedValue(() => 1 - hatOn.value);
   // Hat jiggle: spring 2-3 deg on every hurt and on the beat.
   const hatTr = useDerivedValue(() => {
@@ -460,7 +460,7 @@ function BossRig(p: Props) {
         <Group opacity={rimOp} transform={[{ scale: 1.045 }]}>
           {bodyImg ? (
             <SkImage image={bodyImg} x={-S / 2} y={-H / 2} width={S} height={H}>
-              <BlendColor color={GOLD} mode="srcIn" />
+              <BlendColor color={WHITE} mode="srcIn" />
             </SkImage>
           ) : null}
         </Group>
@@ -657,7 +657,8 @@ function WaterLip({ L, fx, anim, beat }: Props) {
   const make = (closed: boolean) => {
     'worklet';
     const pth = Skia.Path.Make();
-    const ph = fx.value / 520;
+    // Waves roll one cycle per beat (world on the beat, 11.9).
+    const ph = beat.value * Math.PI * 0.5;
     const en = anim.entranceAt.value;
     const e = en >= 0 ? fx.value - en : -1;
     const bulge = e >= 0 && e < 464 * 3 ? 6 * Math.sin(Math.min(1, e / 464) * Math.PI) : 0;
@@ -1022,14 +1023,14 @@ function RowPicture({ L, view, t, fx, beat, anim, img, bossKind, pres }: Props) 
           arc.quadTo(x + 40, (top + y) / 2, x, y - 46);
           canvas.drawPath(arc, strokeC(pt, NAVY, 9, 0.5));
           const st = strokeC(pt, ORANGE, 5);
-          st.setPathEffect(Skia.PathEffect.MakeDash([10, 8], -(f * 0.12) % 18));
+          st.setPathEffect(Skia.PathEffect.MakeDash([10, 8], -(b * 18) % 18));
           canvas.drawPath(arc, st);
           st.setPathEffect(null);
         }
         // Channel 3, the answer: lime ring with a downward chevron notch, tightening into PERFECT.
         const perfect = now >= I - 160 && now <= I + 40;
         const pp = c01(((now - T) / Math.max(1, I - T)) / Math.max(0.01, 1 - 160 / Math.max(1, v.aW)));
-        const r = 42 * (1 + 0.9 * (1 - pp)) * (perfect ? 1 + 0.05 * Math.sin(f / 40) : 1);
+        const r = 42 * (1 + 0.9 * (1 - pp)) * (perfect ? 1 + 0.05 * Math.sin(b * Math.PI * 8) : 1);
         canvas.drawCircle(x, y, r, strokeC(pt, NAVY, 11));
         canvas.drawCircle(x, y, r, strokeC(pt, LIME, 6));
         canvas.drawCircle(x, y, Math.max(0, r - 4), strokeC(pt, WHITE, 2));
@@ -1059,7 +1060,7 @@ function RowPicture({ L, view, t, fx, beat, anim, img, bossKind, pres }: Props) 
       if (v.bubLane === i && !v.bubPopped && now >= v.bubT0 && now < v.bubT1 && img.fxBubble) {
         const e = (now - v.bubT0) / 300;
         const from = i === 0 ? -60 : L.W + 60;
-        const bx = e < 1 ? from + (x - from) * outQuad(e) : x + Math.sin(now / 120) * 2;
+        const bx = e < 1 ? from + (x - from) * outQuad(e) : x + Math.sin(b * Math.PI) * 2;
         const bs = 72 * (1 + 0.06 * onBeat(b));
         drawImg(canvas, pt, img.fxBubble, bx - bs / 2, y - 6 - bs / 2, bs, bs);
       }
@@ -1118,7 +1119,7 @@ function RowPicture({ L, view, t, fx, beat, anim, img, bossKind, pres }: Props) 
           canvas.drawCircle(x, y, rr, strokeC(pt, GOLD, 5));
           const ticks = Skia.Path.Make();
           for (let k = 0; k < 12; k++) {
-            const a = (k / 12) * Math.PI * 2 + f / 900;
+            const a = (k / 12) * Math.PI * 2 + (b / 8) * Math.PI * 2;
             ticks.moveTo(x + Math.cos(a) * (rr + 3), y + Math.sin(a) * (rr + 3));
             ticks.lineTo(x + Math.cos(a) * (rr + 9), y + Math.sin(a) * (rr + 9));
           }
@@ -1170,7 +1171,7 @@ function FinPicture({ L, view, fx, beat, anim, img }: Props) {
   const SH = L.floatR * 1.95;
   const y = L.floatY - SH * 0.95 - 22;
   const FH = 26;
-  const FW = FH * (145 / 194);
+  const FW = FH * (384 / 360);
   const picture = useDerivedValue(() => createPicture((canvas) => {
     const v = view.value;
     const f = fx.value;
@@ -1186,20 +1187,22 @@ function FinPicture({ L, view, fx, beat, anim, img }: Props) {
         const last = v.grit === 1 && k === 0;
         const pulse = last ? onBeat(beat.value, 0.45) : 0;
         const pop = has ? 0 : since(f, anim.flinchAt.value, 320);
-        const op = has ? 1 : 0.18 + pop * 0.8;
-        const s = has ? 1 + 0.2 * pulse : 0.85 + pop * 0.5;
+        // K9 fin pips: full, popping (cracks and lifts as it goes), empty outline.
+        const s = has ? 1 + 0.2 * pulse : 1 + pop * 0.35;
         const yy = y - pop * 22;
-        if (last) canvas.drawCircle(x, yy + 1, 13, fillC(pt, CORAL, 0.4 + 0.5 * pulse));
+        if (last) canvas.drawCircle(x, yy + 1, 14, fillC(pt, CORAL, 0.4 + 0.5 * pulse));
         canvas.save();
         canvas.translate(x, yy);
         canvas.scale(s, s);
-        drawImg(canvas, pt, img.fin, -FW / 2, -FH / 2, FW, FH, op);
+        if (has) drawImg(canvas, pt, img.finFull ?? img.fin, -FW / 2, -FH / 2, FW, FH);
+        else if (pop > 0) drawImg(canvas, pt, img.finPop ?? img.fin, -FW / 2, -FH / 2, FW, FH, 0.3 + 0.7 * pop);
+        else drawImg(canvas, pt, img.finEmpty ?? img.fin, -FW / 2, -FH / 2, FW, FH, 0.85);
         canvas.restore();
       }
     }
     if (v.downOn && img.star) {
       for (let k = 0; k < 3; k++) {
-        const a = f / 280 + (k * Math.PI * 2) / 3;
+        const a = (beat.value / 2) * Math.PI * 2 + (k * Math.PI * 2) / 3;
         drawImg(canvas, pt, img.star, L.floatX - L.floatR * 0.2 + Math.cos(a) * 34 - 11, L.floatY - L.floatR * 0.6 + Math.sin(a) * 10 - 11, 22, 22);
       }
     }
@@ -1334,13 +1337,13 @@ function PlayerFloat({ L, view, t, fx, beat, anim, img, reduced }: Props) {
     );
   };
   // Easy Slam charge glow under the shark while the float is held.
-  const glow = useDerivedValue(() => (anim.padHeld.value > 0 && view.value.slamArmed ? 0.45 + 0.25 * Math.sin(fx.value / 60) : 0));
+  const glow = useDerivedValue(() => (anim.padHeld.value > 0 && view.value.slamArmed ? 0.4 + 0.3 * onBeat(beat.value * 2, 0.5) : 0));
   return (
     <Group>
       <Group transform={floatTr}>
         {img.float ? <SkImage image={img.float} x={-fw / 2} y={-fw / 2 * 0.62} width={fw} height={fw * 0.62} fit="fill" /> : null}
       </Group>
-      <Circle cx={L.floatX} cy={L.floatY - R * 0.7} r={R * 0.95} color={GOLD} opacity={glow} />
+      <Circle cx={L.floatX} cy={L.floatY - R * 0.7} r={R * 0.95} color={LIME} opacity={glow} />
       <Group transform={sharkTr}>
         {sharkImg(img.shark, p0)}
         {sharkImg(img.sharkStrike, p1)}
@@ -1353,7 +1356,7 @@ function PlayerFloat({ L, view, t, fx, beat, anim, img, reduced }: Props) {
 }
 
 // ---------------------------------------------------------------------------
-// POP: a gold bead travels up the pinned limb to the face in 90 ms (the payoff goes up, not under the thumb).
+// POP: a white pulse bead (navy line) travels up the pinned limb to the face in 90 ms (the payoff goes up, not under the thumb).
 
 function PopBead({ L, fx, anim, pres, view, t }: Props) {
   const pos = useDerivedValue(() => {
@@ -1385,74 +1388,73 @@ function PopBead({ L, fx, anim, pres, view, t }: Props) {
   const ty = useDerivedValue(() => pos.value.y1);
   return (
     <Group opacity={op}>
-      <Circle cx={tx} cy={ty} r={6} color={GOLD} opacity={0.6} />
+      <Circle cx={tx} cy={ty} r={6} color={WHITE} opacity={0.6} />
       <Circle cx={cx} cy={cy} r={11} color={NAVY} />
-      <Circle cx={cx} cy={cy} r={8} color={GOLD} />
+      <Circle cx={cx} cy={cy} r={8} color={WHITE} />
       <Circle cx={useDerivedValue(() => cx.value - 3)} cy={useDerivedValue(() => cy.value - 3)} r={2.5} color={WHITE} />
     </Group>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Part-breaks: the hat flies, bounces twice on the water, settles as a decal; its material flies to the HUD.
+// Part-breaks (6.2): the part leaves the rig, bounces twice and settles as a decal in a settle zone (left sand
+// bar, right wreck deck), never in the reach band; its material flies to the HUD slot on a 420 ms Bezier.
 
-export const PART_G = 2200;
-export const PART_E = 0.45;
-
-/** Launch state of a part-break (screen space), shared with the orchestrator's timing helper. */
-export function partLaunch(L: ArenaLayout, n: number, dir: number): { x: number; y: number; vx: number; vy: number; floor: number } {
+/** Hat launch point on the rig (world space). */
+function hatOrigin(L: ArenaLayout): { x: number; y: number } {
   'worklet';
   const S = L.bossSize;
   const H = S / SPR_AR;
+  return { x: L.bossX - S / 2 + (HAT.x + HAT.w / 2) * S, y: L.bossY - H / 2 + (HAT.y + HAT.h / 2) * H };
+}
+
+/** Launch of part k of Break n (k = 0 for the hat; 0..5 for the shell shards). */
+export function partLaunch(L: ArenaLayout, n: number, k = 0): Launch {
+  'worklet';
   if (n === 1) {
-    return {
-      x: L.bossX - S / 2 + (HAT.x + HAT.w / 2) * S, y: L.bossY - H / 2 + (HAT.y + HAT.h / 2) * H,
-      vx: 120, vy: -840, floor: L.lipY + 34,
-    };
+    const o = hatOrigin(L);
+    return partLaunchTo(L.W, L.H, 1, 0, o.x, o.y);
   }
-  return { x: L.bossX + S * 0.1 * dir, y: L.bossY - S * 0.2, vx: 220 * (dir === 0 ? 1 : dir), vy: -700, floor: L.lipY + 30 };
+  return partLaunchTo(L.W, L.H, 3, k, L.bossX + (k - 2.5) * 12, L.bossY - L.bossSize * 0.25);
 }
 
 /** Time (ms) from launch until a part comes to rest (2 bounces). */
-export function partRestMs(L: ArenaLayout, n: number, dir: number): number {
-  const l = partLaunch(L, n, dir);
-  for (let ms = 0; ms < 4000; ms += 10) if (bounceAt(ms / 1000, l.x, l.y, l.vx, l.vy, l.floor, PART_G, PART_E, 2).rest) return ms;
-  return 4000;
+export function partRestMs(L: ArenaLayout, n: number): number {
+  return restMs(partLaunch(L, n, 0));
 }
 
 function Parts(p: Props) {
-  const { L, fx, anim, img, beat, view } = p;
+  const { L, fx, anim, img, beat } = p;
   const S = L.bossSize;
   const H = S / SPR_AR;
   const hat = useDerivedValue(() => {
-    const at = anim.partAt.value;
+    const at = anim.hatAt.value;
     const f = fx.value;
-    if (at < 0 || anim.partN.value < 1 || f < at) return { op: 0, x: 0, y: 0, r: 0 };
-    const l = partLaunch(L, 1, anim.partDir.value);
+    if (at < 0 || f < at) return { op: 0, x: 0, y: 0, r: 0 };
+    const l = partLaunch(L, 1, 0);
     const e = (f - at) / 1000;
-    const b = bounceAt(e, l.x, l.y, l.vx, l.vy, l.floor, PART_G, PART_E, 2);
-    const spin = b.rest ? 0.15 : Math.min(e, 1.2) * (Math.PI * 4) / 0.9 * (anim.partDir.value < 0 ? -1 : 1);
+    const b = partAt(l, e);
+    const spin = b.rest ? -0.15 : -Math.min(e, 1.2) * (Math.PI * 4) / 0.9;
+    // Floats on the sand-bar shallows, bobbing on the bar line.
     const bob = b.rest ? Math.sin((beat.value / 4) * Math.PI * 2) * 3 : 0;
-    // The decal fades while the boss leaves at the end of the round.
-    return { op: view.value.on || anim.exitAt.value < 0 ? 1 : 0.9, x: b.x, y: b.y - 10 + bob, r: spin };
+    return { op: 1, x: b.x, y: b.y - 10 + bob, r: spin };
   });
-  const hatTr = useDerivedValue(() => [{ translateX: hat.value.x }, { translateY: hat.value.y }, { rotate: hat.value.r }]);
+  const hatTr = useDerivedValue(() => [{ translateX: hat.value.x }, { translateY: hat.value.y }, { rotate: hat.value.r }, { scale: 0.8 }]);
   const hatOp = useDerivedValue(() => hat.value.op);
-  // Break 3: six shell shards bounce out of the dome.
+  // Break 3: six shell shards bounce out of the dome into both settle zones and stay as decals.
   const shards = useDerivedValue(() => {
     const pth = Skia.Path.Make();
-    const at = anim.partAt.value;
+    const at = anim.shardAt.value;
     const f = fx.value;
-    if (at < 0 || anim.partN.value !== 3 || f < at || f > at + 2600) return pth;
+    if (at < 0 || f < at) return pth;
     const e = (f - at) / 1000;
     for (let k = 0; k < 6; k++) {
-      const dir = k % 2 === 0 ? -1 : 1;
-      const b = bounceAt(e, L.bossX + (k - 2.5) * 12, L.bossY - S * 0.25, dir * (90 + k * 40), -600 - k * 50, L.lipY + 28 + k * 4, PART_G, PART_E, 2);
-      const a = e * 8 + k;
-      const s = 9;
-      pth.moveTo(b.x + Math.cos(a) * s, b.y + Math.sin(a) * s);
-      pth.lineTo(b.x + Math.cos(a + 2.2) * s, b.y + Math.sin(a + 2.2) * s);
-      pth.lineTo(b.x + Math.cos(a + 4.1) * s, b.y + Math.sin(a + 4.1) * s);
+      const b = partAt(partLaunch(L, 3, k), e);
+      const a = b.rest ? k * 1.3 : e * 8 + k;
+      const sz = 9;
+      pth.moveTo(b.x + Math.cos(a) * sz, b.y + Math.sin(a) * sz);
+      pth.lineTo(b.x + Math.cos(a + 2.2) * sz, b.y + Math.sin(a + 2.2) * sz);
+      pth.lineTo(b.x + Math.cos(a + 4.1) * sz, b.y + Math.sin(a + 4.1) * sz);
       pth.close();
     }
     return pth;
@@ -1463,11 +1465,9 @@ function Parts(p: Props) {
     const f = fx.value;
     if (at < 0 || f < at || f > at + 520) return { op: 0, x: 0, y: 0, s: 1, n: 0 };
     const n = anim.partN.value;
-    const l = partLaunch(L, n, anim.partDir.value);
-    const restMs = 0;
-    const b0 = n === 1 ? bounceAt(9, l.x, l.y, l.vx, l.vy, l.floor, PART_G, PART_E, 2) : { x: L.bossX, y: L.bossY };
-    const k = c01((f - at - restMs) / 420);
-    const tx = 34;
+    const b0 = n === 1 ? partAt(partLaunch(L, 1, 0), 9) : n === 3 ? partAt(partLaunch(L, 3, 0), 9) : { x: L.bossX, y: L.bossY };
+    const k = c01((f - at) / 420);
+    const tx = 90;
     const ty = 58;
     const cx = (b0.x + tx) / 2;
     const cy = Math.min(b0.y, ty) - 120;
@@ -1500,6 +1500,100 @@ function Parts(p: Props) {
       </Group>
     </Group>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Camera (11.3): the world group (backdrop, boss, limbs, parts) looms, pulls back hard on the pin (0.92),
+// pushes in on Break (1.16 / 1.19 / 1.22 on the face) and the Final Pop (1.18 on the impact point). The row,
+// the float, the HUD and the callouts sit outside it and never scale or shake.
+
+function World(p: Props & { children: React.ReactNode }) {
+  const { L, view, t, fx, pres, anim, reduced, cam } = p;
+  const wc = useDerivedValue(() => worldCamAt(L, view.value, pres.value, t.value, fx.value, anim.breakAt.value, anim.partN.value,
+    anim.finalAt.value, anim.finalGrade.value, anim.beadLane.value, reduced));
+  const tr = useDerivedValue(() => {
+    const w = wc.value;
+    const cx = L.W / 2;
+    const cy = L.H / 2;
+    return [
+      // Shake, lean and punch (core camera, about the screen centre)...
+      { translateX: cx + cam.x.value }, { translateY: cy + cam.y.value }, { rotate: cam.rot.value }, { scale: cam.zoom.value },
+      { translateX: -cx }, { translateY: -cy },
+      // ...then the framing zoom about its own origin.
+      { translateX: w.ox }, { translateY: w.oy }, { scale: w.z }, { translateX: -w.ox }, { translateY: -w.oy },
+    ];
+  });
+  return <Group transform={tr}>{p.children}</Group>;
+}
+
+/** Pre-blurred foreground (rope left, wreck plank right) at 1.3x parallax: it moves more than the world. */
+function ForeLayer(p: Props) {
+  const { L, view, t, fx, pres, anim, img, reduced, cam } = p;
+  const wc = useDerivedValue(() => worldCamAt(L, view.value, pres.value, t.value, fx.value, anim.breakAt.value, anim.partN.value,
+    anim.finalAt.value, anim.finalGrade.value, anim.beadLane.value, reduced));
+  const k = 1.3;
+  const side = (dir: number) => useDerivedValue(() => { // eslint-disable-line react-hooks/rules-of-hooks
+    const w = wc.value;
+    const z = 1 + (w.z - 1) * k;
+    const slide = 24 * w.fg * dir;
+    return [
+      { translateX: slide + cam.x.value * k }, { translateY: cam.y.value * k },
+      { translateX: w.ox }, { translateY: w.oy }, { scale: z }, { translateX: -w.ox }, { translateY: -w.oy },
+    ];
+  });
+  const left = side(1);
+  const right = side(-1);
+  const ropeW = 56;
+  const ropeH = ropeW / aspectOf(img.foreRope, 0.26);
+  const plankW = 66;
+  const plankH = plankW / aspectOf(img.forePlank, 0.34);
+  // Edges only, clear of the lanes and the HUD band: rope hangs top-left, plank leans in on the right above the row.
+  return (
+    <Group>
+      {img.foreRope ? (
+        <Group transform={left}>
+          <SkImage image={img.foreRope} x={-22} y={L.H * 0.5 - ropeH} width={ropeW} height={ropeH} />
+        </Group>
+      ) : null}
+      {img.forePlank ? (
+        <Group transform={right}>
+          <SkImage image={img.forePlank} x={L.W - plankW + 24} y={L.H * 0.52 - plankH} width={plankW} height={plankH} />
+        </Group>
+      ) : null}
+    </Group>
+  );
+}
+
+/** Above the boss's head only (11.4): star.png orbits while it is stunned (Break), and 5 stars burst at the KO. */
+function HeadStars({ L, view, fx, beat, anim, img }: Props) {
+  const pt = usePaints();
+  const picture = useDerivedValue(() => createPicture((canvas) => {
+    if (!img.star) return;
+    const v = view.value;
+    const f = fx.value;
+    const hx = L.bossX;
+    const hy = L.bossY - L.bossSize * 0.5;
+    if (v.oOn && v.oKind === 1) {
+      // Stunned: 3 stars orbit 70 pt at 1 rev per 2 beats.
+      for (let k = 0; k < 3; k++) {
+        const a = (beat.value / 2) * Math.PI * 2 + (k * Math.PI * 2) / 3;
+        drawImg(canvas, pt, img.star, hx + Math.cos(a) * 70 - 13, hy + Math.sin(a) * 18 - 13, 26, 26);
+      }
+    }
+    const xa = anim.exitAt.value;
+    if (anim.exitKind.value === 1 && xa >= 0 && f >= xa && f < xa + 900) {
+      // KO: star.png x5 bursts outward from the head (scale 0.4 -> 1.0 over 500 ms).
+      const e = c01((f - xa) / 500);
+      const fade = f - xa > 600 ? 1 - (f - xa - 600) / 300 : 1;
+      for (let k = 0; k < 5; k++) {
+        const a = -Math.PI / 2 + (k - 2) * 0.55;
+        const r = 30 + 110 * outQuad(e);
+        const sz = 34 * (0.4 + 0.6 * outBack(e, 1.4));
+        drawImg(canvas, pt, img.star, hx + Math.cos(a) * r - sz / 2, hy + 20 + Math.sin(a) * r - sz / 2, sz, sz, fade);
+      }
+    }
+  }));
+  return <Picture picture={picture} />;
 }
 
 /** Final Pop / Break: white-on-sky radial speed lines from the impact for 300 ms. */
