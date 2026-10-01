@@ -8,7 +8,9 @@ import SharkMiniGame from './SharkMiniGame';
 // Queue Kit natives (2026-07-06 Wave 3): GameKit-based rebuilds. Legacy
 // components above stay importable so USE_QUEUE_KIT_GAMES=false is a
 // one-line rollback to the old games.
-import { WhackAShark } from '../games/whack';
+import { WhackAShark, type WhackFormat } from '../games/whack';
+import WhackRushLab from '../games/whack/party/WhackRushLab';
+import type { WhackTheme } from '../games/whack/assets';
 import { SnapTheRide } from '../games/snap/SnapTheRide';
 import { RhythmTapGame } from '../games/rhythm';
 import { MemoryGame } from '../games/memory';
@@ -19,6 +21,15 @@ import { TaskAttemptGame, TaskGameProof } from '../api/endpoints/me/task-attempt
 import { getLinePlayChapter } from '../services/lineplay/chapters';
 
 const USE_QUEUE_KIT_GAMES = true;
+
+// Dev-only Whack-a-Shark bench overrides for the MiniGameTester (never read in release builds):
+// EXPO_PUBLIC_WHACK_FORMAT=queue|daily|weekly|duel|raid, EXPO_PUBLIC_WHACK_UNLOCK=<lifetime Bursts>,
+// EXPO_PUBLIC_WHACK_THEME=park|pirates|mansion|space|jungle|backlot.
+const WHACK_DEV: { format?: WhackFormat; unlock?: number; theme?: WhackTheme } = __DEV__ ? {
+  format: (process.env.EXPO_PUBLIC_WHACK_FORMAT as WhackFormat) || undefined,
+  unlock: process.env.EXPO_PUBLIC_WHACK_UNLOCK ? Number(process.env.EXPO_PUBLIC_WHACK_UNLOCK) : undefined,
+  theme: (process.env.EXPO_PUBLIC_WHACK_THEME as WhackTheme) || undefined,
+} : {};
 
 type MiniGameType = 'tap' | 'timing' | 'memory' | 'trivia' | 'shark' | 'banana' | 'photo';
 
@@ -178,8 +189,15 @@ export default function MiniGameSelector({
   if (USE_QUEUE_KIT_GAMES) {
     switch (selectedGame) {
       case 'tap':
+        // Dev-only: EXPO_PUBLIC_WHACK_FORMAT=party opens a live Whack Rush Line Party against the house crew.
+        if (__DEV__ && (WHACK_DEV.format as string) === 'party') {
+          return <WhackRushLab visible={visible} onClose={onClose} autoplay={process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1'} />;
+        }
         return (
-          <WhackAShark visible={visible} seed={seed} taskName={taskName} format={rewardMode === 'task-attempt' ? 'ride' : 'queue'} onClose={onClose} onQuit={handleQuit}
+          <WhackAShark visible={visible} seed={seed} taskName={taskName}
+            format={WHACK_DEV.format ?? (rewardMode === 'task-attempt' ? 'ride' : 'queue')}
+            unlockLevel={WHACK_DEV.unlock} theme={WHACK_DEV.theme}
+            onClose={onClose} onQuit={handleQuit}
             onComplete={(mult, meta) => handleComplete(mult, meta)} />
         );
       case 'timing':

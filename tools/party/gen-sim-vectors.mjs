@@ -36,6 +36,21 @@ function lcg(seed) {
 function humanTaps(sim, board, seed) {
   const next = lcg(seed ^ 0x5bd1e995);
   const taps = [];
+  if (sim.key === 'whack_rush') {
+    // The Whack board is a Timeline: bonk most targets somewhere in their up-time, lures sometimes, plus bumps and mashes.
+    for (const e of board.events) {
+      const roll = next() % 100;
+      const lure = e.kind === 2;
+      if (lure ? roll < 15 : roll < 75) taps.push([Math.min(sim.roundMs, e.emergeAt + 120 + (next() % 1100)), e.hole]);
+      if (e.kind === 3 && roll < 60) taps.push([Math.min(sim.roundMs, e.emergeAt + 500 + (next() % 300)), e.hole]); // helmet, second bonk
+      if (roll > 93) {
+        const t = Math.min(sim.roundMs, e.tellAt + (next() % 400));
+        for (let k = 0; k < 3; k++) taps.push([Math.min(sim.roundMs, t + k * 90), next() % 9]);
+      }
+    }
+    taps.sort((a, b) => a[0] - b[0]);
+    return taps.slice(0, sim.maxTaps);
+  }
   if (sim.key === 'bonk_race') {
     const end = sim.roundMs - 1;
     for (const s of board) {
@@ -93,7 +108,11 @@ function main() {
   const { hash, sims } = loadBundle();
   fs.mkdirSync(outDir, { recursive: true });
   const profiles = ['rookie', 'regular', 'ace'];
+  // --only <game> regenerates one game's file (the others keep their committed vectors).
+  const onlyAt = process.argv.indexOf('--only');
+  const only = onlyAt > 0 ? process.argv[onlyAt + 1] : null;
   for (const sim of Object.values(sims)) {
+    if (only && sim.key !== only) continue;
     const seeds = [0, 1, 7, 42, 4294967295, 2147483648, 3735928559];
     const gen = lcg(0x1234abcd ^ sim.version);
     while (seeds.length < PER_GAME) seeds.push(gen());
@@ -111,7 +130,8 @@ function main() {
         ghost_incoming: sim.botTaps(board, seed, seat, profile, 0, incoming),
         empty: [],
       };
-      const out = { seed, seat, profile, until_ms: until, incoming, band: sim.bandCheck(board), band_ok: sim.bandOk(board), logs: {} };
+      const out = { seed, seat, profile, until_ms: until, incoming, logs: {} };
+      if (sim.bandCheck) { out.band = sim.bandCheck(board); out.band_ok = sim.bandOk(board); }
       const results = [];
       for (const [name, taps] of Object.entries(logs)) {
         const r = sim.resolve(board, taps);
