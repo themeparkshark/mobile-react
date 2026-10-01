@@ -11,6 +11,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import * as Location from 'expo-location';
 import { AppState } from 'react-native';
 import { LocationContext } from '../../context/LocationProvider';
+import { setLinePlayDetectionRide } from '../RideDetectionService';
 import {
   LinePlaySession,
   SessionSnapshot,
@@ -82,6 +83,16 @@ export function useLinePlaySession(): UseLinePlaySession {
     lastFedRef.current = { lat: raw.latitude, lng: raw.longitude };
     session.ingestLocation(raw);
   }, [session, latestLocationSampleRef, location?.latitude, location?.longitude]);
+
+  // Ride detection logs the LinePlay ride, not a neighbor whose zone overlaps
+  // the queue. Ending the session (or leaving this screen) keeps it for the
+  // visit in progress, so riding right after "I reached boarding" still counts.
+  const linePlayRideId = queueTracking ? snapshot.ride?.rideId ?? null : null;
+  useEffect(() => {
+    if (linePlayRideId == null) return;
+    setLinePlayDetectionRide(linePlayRideId);
+    return () => setLinePlayDetectionRide(null);
+  }, [linePlayRideId]);
 
   // Do not make a stationary guest wait for the 30-second heartbeat before
   // attempting a verified session when the launch sample is stale or missing.

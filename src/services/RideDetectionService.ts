@@ -31,8 +31,10 @@ const RE_RIDE_GAP_MS = 180_000; // 3 min gap before counting as re-ride
 const DETECTION_COOLDOWN_MS = 120_000; // 2 min cooldown per ride
 const BACKGROUND_LOCATION_TASK = 'ride-detection-background';
 // Catalog APIs also contain dining and shops; these are never ride candidates.
+// 'other' is what the catalog marks as no ride at all (a fortune-teller machine,
+// a play area, a seasonal decoration), so it never asks "Did you just ride X?".
 const DETECTABLE_TYPES = new Set(['ride', 'attraction', 'coaster', 'dark_ride',
-  'flat_ride', 'water_ride', 'show', 'walk_through', 'transport', 'other']);
+  'flat_ride', 'water_ride', 'show', 'walk_through', 'transport']);
 // wait for a clearer GPS position between overlapping attractions
 const AMBIGUOUS_DISTANCE_MARGIN = 15;
 /** Standing at one attraction this long suggests "In line at X? Play". */
@@ -45,10 +47,45 @@ const QUEUE_TYPES = new Set<string>(QUEUE_RIDE_TYPES);
  * area stays current this long after the last fix that placed the guest in it.
  */
 export const QUEUE_DWELL_STALE_MS = 5 * 60_000;
-/** Each fix keeps this share of a ride's closeness score, so the latest ride leads quickly. */
-const QUEUE_SCORE_DECAY = 0.8;
+/**
+ * The queue card weighs time, not fixes: each stretch between fixes counts for
+ * the ride that was closest, and older time halves every minute. Walking in
+ * past a neighbor makes many fixes while standing in line makes almost none,
+ * so a per-fix score kept the walk-in ride on the card (Pixar Short Film
+ * Spotlight while the guest stood on Space Mountain, 15 m away).
+ */
+const QUEUE_WEIGHT_HALF_LIFE_MS = 60_000;
+/**
+ * LinePlay proves which line the guest is in. Its ride gets the same reach the
+ * server allows a queue heartbeat (LinePlaySessionController::isNearRide:
+ * radius plus 75 m, at least 50 m, at most 250 m), because long queues spill
+ * well past the 60 m zone around the ride point.
+ */
+const LINEPLAY_REACH_BUFFER_M = 75;
+const LINEPLAY_REACH_MAX_M = 250;
+const LINEPLAY_STORAGE_KEY = 'ride_detection_lineplay_ride';
+/** A LinePlay ride that ended this long ago no longer names the ride logged. */
+const LINEPLAY_STICKY_MAX_MS = 3 * 60 * 60_000;
 
 interface QueueCandidate { ride: RideType; since: number; score: number }
+
+/** One attraction zone inside the current visit, with the time it was the closest. */
+interface VisitZone { ride: RideType; enteredAt: number; nearestMs: number }
+
+/**
+ * A stretch of time inside overlapping attraction zones. Every zone the guest
+ * is in is tracked; the ride credited is the active LinePlay ride when it is
+ * one of them, else the zone the guest was closest to for the longest time.
+ */
+interface ZoneVisit { zones: Map<number, VisitZone>; nearestId: number | null; lastFixAt: number }
+
+interface LinePlayRide { rideId: number; endedAt: number | null }
+
+function queueWeight(candidate: QueueCandidate, area: { lastSeenAt: number; nearestId: number | null }, now: number): number {
+  const elapsed = Math.max(0, now - area.lastSeenAt);
+  return candidate.score * 0.5 ** (elapsed / QUEUE_WEIGHT_HALF_LIFE_MS) +
+    (candidate.ride.id === area.nearestId ? elapsed : 0);
+}
 
 function isDetectionCandidate(ride: RideType): boolean {
   return DETECTABLE_TYPES.has(ride.type) && Number.isFinite(ride.lat) &&
@@ -123,15 +160,17 @@ function calculateConfidence(
 }
 
 class RideDetectionService {
-  private zoneStates: Map<number, ZoneState> = new Map();
+  private visit: ZoneVisit | null = null;
+  /** The ride of the current (or just finished) LinePlay session. */
+  private linePlay: LinePlayRide | null = null;
   /**
    * The "In line at X? Play" suggestion, tracked apart from ride logging.
-   * Ride logging follows one zone until a real exit; the queue card follows the
-   * ride the guest is closest to now. Disneyland's Buzz Lightyear Astro Blasters
+   * Ride logging credits the visit's longest dwell (or the LinePlay ride) when
+   * the guest leaves; the queue card follows the ride the guest is closest to now. Disneyland's Buzz Lightyear Astro Blasters
    * sits 28 m from Star Tours and 37 m from Astro Orbitor, so the first zone a
    * guest walked through used to keep the card on the wrong ride (or none).
    */
-  private queueArea: { lastSeenAt: number; candidates: Map<number, QueueCandidate> } | null = null;
+  private queueArea: { lastSeenAt: number; nearestId: number | null; candidates: Map<number, QueueCandidate> } | null = null;
   private rides: RideType[] = [];
   private running = false;
   private lifecycleToken = 0;
@@ -274,7 +313,7 @@ class RideDetectionService {
     this.running = false;
     // Stopping/reloading is not evidence that a guest left or rode an attraction.
     // Already queued detections remain intact; unfinished zones are discarded.
-    this.zoneStates.clear();
+    this.visit = null;
     this.queueArea = null;
 
     // Stop background location
@@ -288,71 +327,157 @@ class RideDetectionService {
 
   }
 
+  /**
+   * Tell detection which ride the guest is playing LinePlay for (null when the
+   * session ends). A ride ridden right after LinePlay is logged as that ride,
+   * so the session stays in effect for the visit it overlapped.
+   */
+  setLinePlayRide(rideId: number | null, now = Date.now()): void {
+    if (rideId != null && Number.isInteger(rideId) && rideId > 0) {
+      this.linePlay = { rideId, endedAt: null };
+    } else if (this.linePlay && this.linePlay.endedAt == null) {
+      this.linePlay = { ...this.linePlay, endedAt: now };
+      if (!this.linePlayInVisit()) this.linePlay = null;
+    } else {
+      return;
+    }
+    void this.persistLinePlay();
+  }
+
+  private linePlayInVisit(): boolean {
+    const zone = this.linePlay && this.visit?.zones.get(this.linePlay.rideId);
+    return !!zone && (this.linePlay!.endedAt == null || zone.enteredAt <= this.linePlay!.endedAt);
+  }
+
+  /** The LinePlay ride that still decides this fix, if any. */
+  private activeLinePlayRideId(now: number): number | null {
+    const linePlay = this.linePlay;
+    if (!linePlay) return null;
+    if (linePlay.endedAt == null) return linePlay.rideId;
+    if (now - linePlay.endedAt <= LINEPLAY_STICKY_MAX_MS && this.linePlayInVisit()) return linePlay.rideId;
+    return null;
+  }
+
+  private async persistLinePlay(): Promise<void> {
+    try {
+      if (this.linePlay) await AsyncStorage.setItem(LINEPLAY_STORAGE_KEY, JSON.stringify(this.linePlay));
+      else await AsyncStorage.removeItem(LINEPLAY_STORAGE_KEY);
+    } catch (e) {
+      console.warn('Failed to save the LinePlay ride for detection:', e);
+    }
+  }
+
+  /** Background task after an app kill: pick the LinePlay ride back up. */
+  async loadLinePlayFromCache(): Promise<void> {
+    if (this.linePlay) return;
+    try {
+      const raw = await AsyncStorage.getItem(LINEPLAY_STORAGE_KEY);
+      const value = raw ? JSON.parse(raw) as LinePlayRide : null;
+      if (value && Number.isInteger(value.rideId) && value.rideId > 0 && value.endedAt == null) {
+        this.linePlay = { rideId: value.rideId, endedAt: null };
+      }
+    } catch (e) {
+      console.warn('Failed to load the LinePlay ride for detection:', e);
+    }
+  }
+
   /** Public so background task can call it */
   processLocation(lat: number, lng: number) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
     const now = Date.now();
-    const nearbyRides = this.findNearbyRides(lat, lng);
+    const linePlayRideId = this.activeLinePlayRideId(now);
+    const ranked = this.findNearbyRides(lat, lng, linePlayRideId);
+    const nearbyRides = ranked.map(entry => entry.ride);
     const nearbyIds = new Set(nearbyRides.map(r => r.id));
     this.trackQueueArea(lat, lng, nearbyRides, now);
 
-    // Check for zone exits
-    for (const [rideId, state] of Array.from(this.zoneStates.entries())) {
-      if (!nearbyIds.has(rideId)) {
-        const dwellMs = now - state.enteredAt;
-
-        if (dwellMs <= MAX_WALKTHROUGH_MS) {
-          this.zoneStates.delete(rideId);
-          continue;
-        }
-
-        if (dwellMs > state.minDwellMs) {
-          // Snapshot foreground state BEFORE async work (BUG 6 fix)
-          const wasActive = this.lastKnownAppState === 'active';
-          this.enqueueWrite(() => this.queueDetection(state, dwellMs, now, wasActive));
-        }
-
-        this.zoneStates.delete(rideId);
+    let visit = this.visit;
+    if (visit) {
+      // The time since the last fix belongs to the ride the guest was closest to.
+      const nearest = visit.nearestId != null ? visit.zones.get(visit.nearestId) : undefined;
+      if (nearest) nearest.nearestMs += Math.max(0, now - visit.lastFixAt);
+      const credited = this.creditedZone(visit, linePlayRideId);
+      if (credited && !nearbyIds.has(credited.ride.id)) {
+        // Leaving the credited ride's zone ends the visit, even while a
+        // neighbor's overlapping zone still holds the guest.
+        this.closeVisit(credited, now);
+        visit = null;
       } else {
-        state.lastSeenAt = now;
+        for (const rideId of Array.from(visit.zones.keys())) {
+          if (!nearbyIds.has(rideId)) visit.zones.delete(rideId);
+        }
       }
     }
+    if (ranked.length === 0) { this.visit = null; return; }
 
-    // Track one attraction at a time. Keep it until a genuine zone exit;
-    // a crowded overlap with no clear closest attraction starts no new dwell.
-    const candidates = nearbyRides.map(ride => ({ ride,
-      distance: haversineDistance(lat, lng, ride.lat!, ride.lng!) }))
-      .sort((a, b) => a.distance - b.distance || a.ride.id - b.ride.id);
-    const unambiguous = candidates.length === 1 || (candidates.length > 1 &&
-      candidates[1].distance - candidates[0].distance >= AMBIGUOUS_DISTANCE_MARGIN);
-    const entries = this.zoneStates.size === 0 && unambiguous ? [candidates[0].ride] : [];
-    for (const ride of entries) {
-      if (!this.zoneStates.has(ride.id)) {
-        // Check cooldown from rideHistory (BUG 1 fix - was checking zoneStates which is always empty here)
-        const history = this.rideHistory.get(ride.id);
-        if (history && now - history.lastDetectionTime < DETECTION_COOLDOWN_MS) {
-          continue;
-        }
-
-        let minDwellMs = DEFAULT_MIN_DWELL_MS;
-        if (ride.min_dwell_minutes != null) {
-          minDwellMs = ride.min_dwell_minutes * 60_000;
-        } else if (ride.ride_duration_minutes != null) {
-          minDwellMs = ride.ride_duration_minutes * 60_000;
-        }
-
-        this.zoneStates.set(ride.id, {
-          rideId: ride.id,
-          rideName: ride.name,
-          rideType: ride.type,
-          parkId: ride.park_id,
-          enteredAt: now,
-          lastSeenAt: now,
-          rideDurationMinutes: ride.ride_duration_minutes,
-          minDwellMs,
-        });
-      }
+    if (!visit) visit = this.visit = { zones: new Map(), nearestId: null, lastFixAt: now };
+    for (const ride of nearbyRides) {
+      if (!visit.zones.has(ride.id)) visit.zones.set(ride.id, { ride, enteredAt: now, nearestMs: 0 });
     }
+    // A crowded overlap with no clear closest attraction keeps crediting the
+    // ride that was clearly closest before (or nothing), so GPS jitter cannot
+    // move credit. Two points 15 m apart can never differ by a full 15 m off
+    // their axis, so the margin shrinks to half the gap between them.
+    let unambiguous = ranked.length === 1;
+    if (ranked.length > 1) {
+      const gap = haversineDistance(ranked[0].ride.lat!, ranked[0].ride.lng!, ranked[1].ride.lat!, ranked[1].ride.lng!);
+      const lead = ranked[1].distance - ranked[0].distance;
+      unambiguous = lead > 0 && lead >= Math.min(AMBIGUOUS_DISTANCE_MARGIN, gap / 2);
+    }
+    if (unambiguous) visit.nearestId = ranked[0].ride.id;
+    else if (visit.nearestId != null && !visit.zones.has(visit.nearestId)) visit.nearestId = null;
+    visit.lastFixAt = now;
+  }
+
+  /**
+   * The active LinePlay ride when the guest is in its zone, else the longest
+   * dwell as the clearly closest ride. Null while no ride was ever clearly closest.
+   */
+  private creditedZone(visit: ZoneVisit, linePlayRideId: number | null): VisitZone | null {
+    if (linePlayRideId != null) {
+      const linePlayZone = visit.zones.get(linePlayRideId);
+      if (linePlayZone) return linePlayZone;
+    }
+    let best: VisitZone | null = null;
+    for (const zone of visit.zones.values()) {
+      if (zone.nearestMs <= 0 && zone.ride.id !== visit.nearestId) continue;
+      if (!best || zone.nearestMs > best.nearestMs ||
+          (zone.nearestMs === best.nearestMs && zone.enteredAt < best.enteredAt)) best = zone;
+    }
+    return best;
+  }
+
+  private closeVisit(zone: VisitZone, now: number): void {
+    this.visit = null;
+    if (this.linePlay?.endedAt != null) {
+      this.linePlay = null;
+      void this.persistLinePlay();
+    }
+    const { ride } = zone;
+    const dwellMs = now - zone.enteredAt;
+    if (dwellMs <= MAX_WALKTHROUGH_MS) return;
+    const history = this.rideHistory.get(ride.id);
+    if (history && zone.enteredAt - history.lastDetectionTime < DETECTION_COOLDOWN_MS) return;
+    let minDwellMs = DEFAULT_MIN_DWELL_MS;
+    if (ride.min_dwell_minutes != null) {
+      minDwellMs = ride.min_dwell_minutes * 60_000;
+    } else if (ride.ride_duration_minutes != null) {
+      minDwellMs = ride.ride_duration_minutes * 60_000;
+    }
+    if (dwellMs <= minDwellMs) return;
+    const state: ZoneState = {
+      rideId: ride.id,
+      rideName: ride.name,
+      rideType: ride.type,
+      parkId: ride.park_id,
+      enteredAt: zone.enteredAt,
+      lastSeenAt: now,
+      rideDurationMinutes: ride.ride_duration_minutes,
+      minDwellMs,
+    };
+    // Snapshot foreground state BEFORE async work (BUG 6 fix)
+    const wasActive = this.lastKnownAppState === 'active';
+    this.enqueueWrite(() => this.queueDetection(state, dwellMs, now, wasActive));
   }
 
   private trackQueueArea(lat: number, lng: number, nearbyRides: RideType[], now: number): void {
@@ -361,28 +486,33 @@ class RideDetectionService {
       .sort((a, b) => a.distance - b.distance || a.ride.id - b.ride.id);
     if (queueRides.length === 0) { this.queueArea = null; return; }
     if (!this.queueArea || now - this.queueArea.lastSeenAt > QUEUE_DWELL_STALE_MS) {
-      this.queueArea = { lastSeenAt: now, candidates: new Map() };
+      this.queueArea = { lastSeenAt: now, nearestId: null, candidates: new Map() };
     }
     const area = this.queueArea;
-    area.lastSeenAt = now;
     const inside = new Set(queueRides.map(entry => entry.ride.id));
     for (const [rideId, candidate] of Array.from(area.candidates.entries())) {
       if (!inside.has(rideId)) area.candidates.delete(rideId);
-      else candidate.score *= QUEUE_SCORE_DECAY;
+      else candidate.score = queueWeight(candidate, area, now);
     }
     for (const { ride } of queueRides) {
       if (!area.candidates.has(ride.id)) area.candidates.set(ride.id, { ride, since: now, score: 0 });
     }
-    area.candidates.get(queueRides[0].ride.id)!.score += 1;
+    area.lastSeenAt = now;
+    area.nearestId = queueRides[0].ride.id;
   }
 
-  private findNearbyRides(lat: number, lng: number): RideType[] {
-    return this.rides.filter(ride => {
-      if (!isDetectionCandidate(ride)) return false;
-      const dist = haversineDistance(lat, lng, ride.lat!, ride.lng!);
-      const radius = ride.radius ?? DEFAULT_RIDE_RADIUS;
-      return dist <= radius;
-    });
+  private findNearbyRides(lat: number, lng: number, linePlayRideId: number | null = null): { ride: RideType; distance: number }[] {
+    const nearby: { ride: RideType; distance: number }[] = [];
+    for (const ride of this.rides) {
+      if (!isDetectionCandidate(ride)) continue;
+      const distance = haversineDistance(lat, lng, ride.lat!, ride.lng!);
+      let radius = ride.radius ?? DEFAULT_RIDE_RADIUS;
+      if (ride.id === linePlayRideId && this.linePlay?.endedAt == null) {
+        radius = Math.min(LINEPLAY_REACH_MAX_M, Math.max(50, radius) + LINEPLAY_REACH_BUFFER_M);
+      }
+      if (distance <= radius) nearby.push({ ride, distance });
+    }
+    return nearby.sort((a, b) => a.distance - b.distance || a.ride.id - b.ride.id);
   }
 
   /**
@@ -477,10 +607,15 @@ class RideDetectionService {
   currentDwell(minMs = DWELL_SUGGESTION_MS, now = Date.now()): { rideId: number; rideName: string; parkId: number; dwellMs: number } | null {
     const area = this.queueArea;
     if (!area || now - area.lastSeenAt > QUEUE_DWELL_STALE_MS) return null;
-    let leader: QueueCandidate | null = null;
+    // Time since the last fix counts for the ride the guest stood closest to:
+    // iOS sends nothing while a guest stands still in line.
+    let leader: QueueCandidate | null = null, leaderWeight = -1;
     for (const candidate of area.candidates.values()) {
-      if (!leader || candidate.score > leader.score ||
-          (candidate.score === leader.score && candidate.since < leader.since)) leader = candidate;
+      const weight = queueWeight(candidate, area, now);
+      if (!leader || weight > leaderWeight || (weight === leaderWeight &&
+          (candidate.ride.id === area.nearestId || (leader.ride.id !== area.nearestId && candidate.since < leader.since)))) {
+        leader = candidate; leaderWeight = weight;
+      }
     }
     if (!leader) return null;
     const dwellMs = now - leader.since;
@@ -511,6 +646,7 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
 
   // BUG 3 fix: load rides from cache if not already loaded
   await rideDetectionService.loadRidesFromCache();
+  await rideDetectionService.loadLinePlayFromCache();
 
   const { locations } = data as { locations: Location.LocationObject[] };
   if (locations?.length) {
@@ -526,6 +662,7 @@ export function getPendingDetections() { return rideDetectionService.getPendingD
 export function clearPendingDetections() { return rideDetectionService.clearPendingDetections(); }
 export function removePendingDetection(id: string) { return rideDetectionService.removePendingDetection(id); }
 export function setDetectionRides(rides: RideType[]) { rideDetectionService.setRides(rides); }
+export function setLinePlayDetectionRide(rideId: number | null) { rideDetectionService.setLinePlayRide(rideId); }
 
 export default rideDetectionService;
 export function currentRideDwell(minMs?: number) { return rideDetectionService.currentDwell(minMs); }
