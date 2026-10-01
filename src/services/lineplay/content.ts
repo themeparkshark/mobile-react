@@ -26,6 +26,7 @@
 
 import { getLinePlayChapterById } from './chapters';
 import { cachedServerTrivia } from './triviaDeck';
+import { dealtTriviaId, markTriviaSeen, recentTriviaIds } from './triviaHistory';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +46,14 @@ export interface TriviaQuestion {
   /** Optional short factual reveal after an answer; bundled chapter copy has an editorial source. */
   readonly fact?: string;
   readonly source?: string;
+  /** Theme the newsroom filed it under: kids, classic, history, numbers, deep-cut, lands. */
+  readonly deck?: string;
+}
+
+/** Options for dealing a trivia card. */
+export interface TriviaDealOptions {
+  /** Family mode: kid-deck and easy questions first, hard ones only as a last resort. */
+  readonly kids?: boolean;
 }
 
 export interface LoreCard {
@@ -349,20 +358,52 @@ function varyTriviaChoices(question: TriviaQuestion, seed: number): TriviaQuesti
 }
 
 /**
- * Load a trivia question for this ride. Its eligible deck puts ride and park
- * questions before general fallback questions, avoiding cross-park trivia.
+ * Deal from ordered tiers with the no-repeat window: start at the seed's slot
+ * in the first tier and take the first question the player has not seen in
+ * their last TRIVIA_NO_REPEAT_WINDOW cards; move to the next tier only when a
+ * tier is fully seen. If everything is seen, the card seen longest ago wins.
+ */
+function dealFresh(tiers: readonly (readonly TriviaQuestion[])[], seed: number, dealKey: string): TriviaQuestion {
+  const all = tiers.flat();
+  const already = dealtTriviaId(dealKey);
+  const kept = already ? all.find(question => question.id === already) : undefined;
+  if (kept) return kept;
+  const seen = recentTriviaIds();
+  let pick: TriviaQuestion | undefined;
+  for (const tier of tiers) {
+    if (tier.length === 0) continue;
+    const start = Math.abs(Math.floor(seed)) % tier.length;
+    for (let step = 0; step < tier.length && !pick; step++) {
+      const question = tier[(start + step) % tier.length];
+      if (!seen.has(question.id)) pick = question;
+    }
+    if (pick) break;
+  }
+  if (!pick) {
+    pick = all.reduce((oldest, question) =>
+      (seen.get(question.id) ?? -1) < (seen.get(oldest.id) ?? -1) ? question : oldest, seededPick(all, seed));
+  }
+  markTriviaSeen(pick.id, dealKey);
+  return pick;
+}
+
+const kidFriendly = (question: TriviaQuestion) => question.deck === 'kids' || question.difficulty === 'easy';
+
+/**
+ * Load a trivia question for this ride. The local tier holds this ride's
+ * questions, then park questions, then the park's other rides (each names its
+ * ride); other parks' questions are a second tier, so a long wait or a small
+ * park deck still never repeats a card from the player's last 150.
  *
- * `seed` (e.g. an activity index) keeps selection stable across re-renders and
- * varied across playlist slots.
- *
- * TODO(server): when a free ride-trivia endpoint exists, fetch ride-keyed
- * questions here and merge them ahead of the bundled pool.
+ * `seed` (e.g. an activity index) keeps selection varied across playlist
+ * slots; the same slot keeps its card across re-renders and replays.
  */
 export async function fetchRideTrivia(
   rideId: number | undefined,
   parkId: number | undefined,
   seed: number,
   chapterId?: string,
+  options: TriviaDealOptions = {},
 ): Promise<TriviaQuestion> {
   const chapter = getLinePlayChapterById(chapterId);
   if (chapter?.trivia.length && seed < chapter.trivia.length)
@@ -375,17 +416,27 @@ export async function fetchRideTrivia(
   const bundled = BUNDLED_TRIVIA.filter(question => !serverIds.has(question.id));
   const rideMatches = rideId == null ? [] : bundled.filter((q) => q.rideId === rideId);
   const parkMatches = parkId == null ? [] : bundled.filter((q) => q.parkId === parkId && q.rideId == null);
-  const local = [...server.filter(q => q.rideId != null), ...rideMatches,
-    ...server.filter(q => q.rideId == null), ...parkMatches];
-  // Fact-checked ride, park and chapter questions lead. Arithmetic filler is
-  // gone; the ride-flavored glossary and crew code puzzles remain only to
-  // keep a long wait from repeating, and step aside once a park has a real
-  // sourced deck (SOURCED_DECK_TARGET).
-  const general = local.length >= SOURCED_DECK_TARGET ? []
+  const home = (q: TriviaQuestion) => q.parkId == null || q.parkId === parkId;
+  const local = [
+    ...server.filter(q => q.rideId != null && q.rideId === rideId), ...rideMatches,
+    ...server.filter(q => q.rideId == null && home(q)), ...parkMatches,
+    ...server.filter(q => q.rideId != null && q.rideId !== rideId && home(q)),
+  ];
+  const network = server.filter(q => !home(q));
+  // Fact-checked questions lead. The ride-flavored glossary and crew code
+  // puzzles remain only to keep a long wait from repeating, and step aside
+  // once sourced questions reach SOURCED_DECK_TARGET.
+  const general = local.length + network.length >= SOURCED_DECK_TARGET ? []
     : BUNDLED_TRIVIA.filter((q) => q.parkId == null && q.rideId == null);
-  const eligible = parkId == null ? BUNDLED_TRIVIA : [...local, ...general];
+  let tiers: (readonly TriviaQuestion[])[] = parkId == null ? [BUNDLED_TRIVIA] : [[...local, ...general], network];
+  if (options.kids) {
+    tiers = [...tiers.map(tier => tier.filter(kidFriendly)),
+      ...tiers.map(tier => tier.filter(q => !kidFriendly(q) && q.difficulty !== 'hard')),
+      ...tiers.map(tier => tier.filter(q => !kidFriendly(q) && q.difficulty === 'hard'))];
+  }
   const fallbackSeed = chapter ? Math.max(0, seed - chapter.trivia.length) : seed;
-  return varyTriviaChoices(seededPick(eligible, fallbackSeed), seed);
+  const dealKey = `${rideId ?? '-'}:${parkId ?? '-'}:${chapterId ?? '-'}:${seed}:${options.kids ? 'k' : 'a'}`;
+  return varyTriviaChoices(dealFresh(tiers, fallbackSeed, dealKey), seed);
 }
 
 /**

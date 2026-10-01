@@ -12,7 +12,7 @@ function load() {
     '@react-native-async-storage/async-storage': { __esModule: true, default: storage },
     '../../api/endpoints/lineplay/trivia': { __esModule: true, default: async () => { throw new Error('offline'); } },
   });
-  const content = loadTs('src/services/lineplay/content.ts', { './chapters': chapters, './triviaDeck': deck });
+  const content = loadTs('src/services/lineplay/content.ts', { './chapters': chapters, './triviaDeck': deck, './triviaHistory': { recentTriviaIds: () => new Map(), markTriviaSeen() {}, dealtTriviaId() {} } });
   return { values, deck, content, chapters };
 }
 

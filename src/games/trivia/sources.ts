@@ -127,6 +127,8 @@ export interface LinePlayTriviaOptions {
   questionCount?: number;
   /** Per-question seconds override. */
   timeLimitSeconds?: number;
+  /** Family mode: deal the kids deck and easy questions first. */
+  kids?: boolean;
 }
 
 /**
@@ -151,7 +153,9 @@ export function createLinePlayTriviaSource(
     async next(): Promise<TriviaCard | null> {
       if (index >= count) return null;
       // Vary selection per slot with the round seed; content.ts is deterministic.
-      const q = await fetchRideTrivia(opts.rideId, opts.parkId, opts.seed + index, opts.chapterId);
+      // No-repeat rotation lives in fetchRideTrivia (last 150 seen per player).
+      const q = await fetchRideTrivia(opts.rideId, opts.parkId, opts.seed + index, opts.chapterId,
+        opts.kids ? { kids: true } : undefined);
       currentCorrect = q.correctIndex;
       currentChoiceCount = q.choices.length;
       const card: TriviaCard = {

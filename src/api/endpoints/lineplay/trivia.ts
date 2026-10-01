@@ -9,6 +9,8 @@ export interface ServerTriviaQuestion {
   readonly choices: readonly string[];
   readonly correct_index: number;
   readonly difficulty: 'easy' | 'medium' | 'hard';
+  /** Theme: kids, classic, history, numbers, deep-cut or lands. Older servers omit it. */
+  readonly deck?: string;
   readonly fact: string | null;
   readonly source: string;
 }
@@ -20,10 +22,14 @@ export interface ServerTriviaDeck {
   readonly questions: readonly ServerTriviaQuestion[];
 }
 
-/** Free, ride-keyed queue trivia. Read-only: it never costs or grants anything. */
-export default async function getLinePlayTrivia(parkId: number, rideId?: number): Promise<ServerTriviaDeck> {
+/**
+ * Free, ride-keyed queue trivia. Read-only: it never costs or grants anything.
+ * With `network`, other parks' questions follow the local deck so the
+ * no-repeat rotation always has fresh cards.
+ */
+export default async function getLinePlayTrivia(parkId: number, rideId?: number, network = true): Promise<ServerTriviaDeck> {
   const response = await api.get('/lineplay/trivia', {
-    params: { park_id: parkId, ...(rideId ? { ride_id: rideId } : {}) },
+    params: { park_id: parkId, ...(rideId ? { ride_id: rideId } : {}), ...(network ? { network: 1 } : {}) },
     timeout: 8000,
   });
   return response.data;

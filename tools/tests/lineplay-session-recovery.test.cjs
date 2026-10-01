@@ -70,6 +70,7 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     './replay': require('./helpers/lineplay-replay.cjs'),
     './bonusRounds': require('./helpers/lineplay-bonus-rounds.cjs'),
     './triviaDeck': { primeTriviaDeck: async (...args) => { calls.triviaPrimed.push(args); } },
+    './triviaHistory': { primeTriviaHistory: async (...args) => { (calls.triviaHistoryPrimed ??= []).push(args); } },
     './checkpoint': {
       readCheckpoint: async () => saved,
       writeCheckpoint: async value => { calls.written.push(JSON.parse(JSON.stringify(value))); },

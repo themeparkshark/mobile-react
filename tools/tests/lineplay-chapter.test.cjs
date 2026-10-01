@@ -27,7 +27,7 @@ function load(file, mocks = {}) {
 const rideTheme = load('src/services/rideTheme.ts');
 const chapters = load('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme });
 const content = load('src/services/lineplay/content.ts', { './chapters': chapters,
-  './triviaDeck': { cachedServerTrivia: () => [] } });
+  './triviaDeck': { cachedServerTrivia: () => [] }, './triviaHistory': { recentTriviaIds: () => new Map(), markTriviaSeen() {}, dealtTriviaId() {} } });
 
 test('the Magic Kingdom chapter cannot bleed into Disneyland or other rides', () => {
   const chapter = chapters.getLinePlayChapter(2, 'space-mountain-2', 'Space Mountain');

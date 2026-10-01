@@ -68,6 +68,7 @@ import { createNavigationPanel, createNavigationPanelProgress, traceNavigationPa
   turnNavigationTile, type NavigationPanelProgress } from './navigationPanel';
 import { nextQueueDifficulty, replaySeed, type QueueDifficulty } from './replay';
 import { primeTriviaDeck } from './triviaDeck';
+import { primeTriviaHistory } from './triviaHistory';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -1287,6 +1288,8 @@ export class LinePlaySession {
     this.ride = ride;
     // Fact-checked server trivia for this ride; the bundled deck covers offline.
     void primeTriviaDeck(ride.parkId, ride.rideId).catch(() => undefined);
+    // This player's last 150 trivia cards, so the deck never repeats them.
+    void primeTriviaHistory(playerId).catch(() => undefined);
     this.checkpointPlayerId = playerId ?? null;
     this.serverSessionId = null;
     this.backgroundTrackingSessionId = null;
