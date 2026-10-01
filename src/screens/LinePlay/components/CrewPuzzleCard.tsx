@@ -16,6 +16,53 @@ function ClueChips({ exact, misplaced }: { exact: number; misplaced: number }) {
   </View>;
 }
 
+/** Echo sharks: fully synthetic flavor names, never a real player (the app has minors). */
+const ECHO_WORDS = ['Reef', 'Tide', 'Wave', 'Coral', 'Kelp', 'Drift', 'Splash', 'Lagoon'] as const;
+
+export function echoNames(seed: number, count: number): string[] {
+  const names: string[] = [];
+  let state = (Math.abs(Math.floor(seed)) * 2654435761) >>> 0;
+  while (names.length < Math.min(2, Math.max(0, count))) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const name = `Echo ${ECHO_WORDS[state % ECHO_WORDS.length]}`;
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * Seats (queue-bonus.md 6.2): Captain Fin sits in seat 1 of a lonely round,
+ * and up to 2 Echo sharks fill the rest at 55% with an ECHO tag. Echoes never
+ * guess, never type and are never counted: the count is live players only.
+ */
+function CrewSeats({ puzzle }: { puzzle: CrewPuzzleSummary }) {
+  const live = Math.max(0, puzzle.live_players ?? 0);
+  const echoes = puzzle.lonely ? echoNames((puzzle.generation ?? 1) * 7 + puzzle.stage, 2 - Math.min(2, live)) : [];
+  return <View style={styles.seats}>
+    {puzzle.lonely && <View style={styles.seat} accessibilityLabel="Captain Fin is on your crew">
+      <GameIcon name="fin" size={30} /><Text style={styles.seatName}>Captain Fin</Text>
+    </View>}
+    {echoes.map(name => <View key={name} style={[styles.seat, styles.echoSeat]} accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants">
+      <Image source={require('../../../../assets/images/screens/pin-collections/shark.png')}
+        resizeMode="contain" style={styles.echoShark} />
+      <Text style={styles.seatName}>{name}</Text>
+      <Text style={styles.echoTag}>ECHO</Text>
+    </View>)}
+    <Text style={styles.liveCount}>
+      {live > 0 ? `${live} shark${live === 1 ? '' : 's'} cracking` : 'Crack it with Captain Fin'}
+    </Text>
+  </View>;
+}
+
+function nextCodeLine(puzzle: CrewPuzzleSummary, now: number): string | null {
+  if (!puzzle.completed || !puzzle.next_code_at) return null;
+  const at = Date.parse(puzzle.next_code_at);
+  if (!Number.isFinite(at)) return null;
+  const left = Math.max(0, Math.floor((at - now) / 1000));
+  return `NEXT CODE IN ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+}
+
 interface Props {
   readonly puzzle: CrewPuzzleSummary | null;
   readonly route: 'route_a' | 'route_b' | null;
@@ -61,15 +108,23 @@ export default function CrewPuzzleCard({ puzzle, route, pending, retryPending, r
           </View>
         ))}
       </View>}
-      <Text style={styles.heading}>{puzzle?.completed ? 'All gates open' : puzzle ? `Gate ${puzzle.stage} of ${puzzle.total_stages}` : 'A shared mystery is waiting'}</Text>
+      {puzzle && puzzle.lonely !== undefined && <CrewSeats puzzle={puzzle} />}
+      <Text style={styles.heading}>{puzzle?.completed ? nextCodeLine(puzzle, Date.now()) ?? 'All gates open'
+        : puzzle ? `Gate ${puzzle.stage} of ${puzzle.total_stages}` : 'A shared mystery is waiting'}</Text>
+      {puzzle?.fin_hint && !puzzle.completed && <View style={styles.bonusRow}
+        accessibilityLabel={`Captain Fin's hint: ${SYMBOLS[puzzle.fin_hint.symbol] ?? ''} in slot ${puzzle.fin_hint.position + 1}`}>
+        <GameIcon name="fin" size={24} />
+        <Text style={styles.bonus}>Captain Fin: slot {puzzle.fin_hint.position + 1} is</Text>
+        <GameIcon name={SYMBOL_ICONS[puzzle.fin_hint.symbol] ?? 'star'} size={24} />
+      </View>}
       <Text style={styles.body}>
         {!puzzle
-          ? 'Three crew signals at this ride open a code the whole line can solve together.'
+          ? 'Crew signals at this ride open a code the whole line can solve together, even in a quiet line.'
           : route === 'route_a'
             ? 'The Shadow Trail has three sealed gates. Combine the clues from everyone’s guesses to open the next one.'
             : 'The Starlight beacon has three frequencies. Use the crew’s shared clues to align them.'}
       </Text>
-      {bonusAvailable && !puzzle?.completed && <View style={styles.bonusRow}>
+      {bonusAvailable && puzzle?.lonely === undefined && !puzzle?.completed && <View style={styles.bonusRow}>
         <GameIcon name="gift" size={28} />
         <Text style={styles.bonus}>
           Send a guess, then stay near the ride for {Math.ceil(partIntervalSeconds / 60)} verified minutes: 1 bonus Ride Part. Once per ride coin each park day.
@@ -161,6 +216,13 @@ export default function CrewPuzzleCard({ puzzle, route, pending, retryPending, r
 }
 
 const styles = StyleSheet.create({
+  seats: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: spacing.sm },
+  seat: { alignItems: 'center', minWidth: 64 },
+  echoSeat: { opacity: 0.55 },
+  echoShark: { width: 30, height: 30, tintColor: '#9fb4c4' },
+  seatName: { fontFamily: 'Knockout', fontSize: 11, color: '#083f7c', marginTop: 2 },
+  echoTag: { fontFamily: 'Knockout', fontSize: 9, color: '#5f7f99', letterSpacing: 1 },
+  liveCount: { fontFamily: 'Knockout', fontSize: 13, color: '#083f7c', marginLeft: 4 },
   scroll: { flex: 1, backgroundColor: '#83d5f9' },
   card: { margin: spacing.md, padding: spacing.md, borderRadius: borderRadius.xxl,
     borderWidth: 3, borderColor: '#fff', backgroundColor: '#d9f4ff', ...shadows.lg },

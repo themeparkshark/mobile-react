@@ -7,7 +7,8 @@ function shell(paid, reduced = false) {
   const haptic = new Proxy({}, { get: () => () => {} });
   const view = runtime('src/gamekit/GameShellV2.tsx', {
     './theme': { GAME_COLORS: {}, COUNTDOWN: { stepMs: 600, goMs: 400 }, JUICE: {}, LINE_MOVING_TOAST: 'Moving' },
-    './LinePlayMovementContext': { LinePlayMovementContext: { value: null } },
+    './LinePlayMovementContext': { LinePlayMovementContext: { value: null },
+      shouldPauseForMovement: context => Boolean(context?.moving && context.lineMovePolicy === 'pause') },
     './RideChallengeContext': { RideChallengeContext: { value: paid } },
     './Haptics': { Haptic: haptic }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => preference.reduced },

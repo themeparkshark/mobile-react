@@ -68,6 +68,7 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     './crewGrid': gridModule.exports,
     './navigationPanel': require('./helpers/navigation-panel.cjs'),
     './replay': require('./helpers/lineplay-replay.cjs'),
+    './bonusRounds': require('./helpers/lineplay-bonus-rounds.cjs'),
     './triviaDeck': { primeTriviaDeck: async (...args) => { calls.triviaPrimed.push(args); } },
     './checkpoint': {
       readCheckpoint: async () => saved,

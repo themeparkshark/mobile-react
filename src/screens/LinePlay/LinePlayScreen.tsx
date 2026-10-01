@@ -1,5 +1,5 @@
 /**
- * LinePlayScreen — the in-queue session UI.
+ * LinePlayScreen: the in-queue session UI.
  *
  * Layout (portrait, one-thumb):
  *   - Top: compact WaitCard (ride name, posted wait, elapsed, accrual, art).
@@ -86,6 +86,19 @@ import ChapterCard from './components/ChapterCard';
 import CrewRelayCard from './components/CrewRelayCard';
 import ProjectMissionModal from './components/ProjectMissionModal';
 import QueueArcadeSheet from './components/QueueArcadeSheet';
+import BonusPicker from './components/BonusPicker';
+import BonusPartFlight, { type FlightPoint } from './components/BonusPartFlight';
+import type { RailChip } from './components/LinePlayLiveRail';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as RootNavigation from '../../RootNavigation';
+import { SoundEffectContext } from '../../context/SoundEffectProvider';
+import useReducedGameMotion from '../../hooks/useReducedGameMotion';
+import { MovementFxGate, MOVING_CHIP_LINGER_MS, nextBonusSeconds } from '../../services/lineplay/bonusRounds';
+import { playBonusCue, type BonusCue } from '../../services/lineplay/bonusCues';
+import type { CurrentTier } from '../../games/current-quest/logic';
+
+/** Shown once per install, before the first queue game. */
+const EYES_UP_KEY = 'lineplay_eyes_up_seen_v1';
 import { resolveProjectMission } from '../../services/lineplay/projectMission';
 import { crewRelayEpilogue } from '../../services/lineplay/crewRelay';
 import type { LinePlayChapter } from '../../services/lineplay/chapters';
@@ -179,6 +192,7 @@ export default function LinePlayScreen() {
   const [resuming, setResuming] = useState(false);
   const [toast, setToast] = useState<QueueToastMessage | null>(null);
   const toastKey = useRef(0);
+  const showToastRef = useRef<((message: Omit<QueueToastMessage, 'key'>) => void) | null>(null);
   const showToast = useCallback((message: Omit<QueueToastMessage, 'key'>) => {
     toastKey.current += 1;
     setToast({ ...message, key: toastKey.current });
@@ -362,6 +376,8 @@ export default function LinePlayScreen() {
   // The line jumped well ahead: a gentle heads up. It never pauses anything.
   useEffect(() => {
     if (snapshot.queueAdvanceAt == null || snapshot.state !== 'active') return;
+    // Bonus rounds show the "Line moving. Eyes up." rail chip instead.
+    if (snapshot.bonus?.enabled) { session.acknowledgeQueueAdvance(); return; }
     showToast({ icon: 'ride', title: 'The line is moving!', body: 'Keep playing as you walk. Your round is safe.' });
     session.acknowledgeQueueAdvance();
   }, [snapshot.queueAdvanceAt, snapshot.state, session, showToast]);
@@ -402,7 +418,7 @@ export default function LinePlayScreen() {
   }, [session]);
 
   const [activeGame, setActiveGame] =
-    useState<(Extract<ActivityItem, { kind: 'minigame' }> & { difficulty: QueueDifficulty }) | null>(null);
+    useState<(Extract<ActivityItem, { kind: 'minigame' }> & { difficulty: QueueDifficulty; tier?: CurrentTier }) | null>(null);
 
   // A full-screen game hides every sheet: hold the wrap-up countdown for it.
   useEffect(() => { session.setGameOpen(activeGame != null); }, [activeGame != null, session]);
@@ -433,14 +449,29 @@ export default function LinePlayScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // The session owns replay variety: the first play keeps the saved board,
     // each replay deals a new one, and the count survives a restart.
-    const launch = session.beginGame(item);
-    setActiveGame({ ...item, seed: item.gameId === 'showdown'
-      ? showdownReplaySeed(item.seed, launch.plays) : launch.seed, difficulty: launch.difficulty });
+    const open = () => {
+      if (session.getState() !== 'active') return;
+      const launch = session.beginGame(item);
+      setActiveGame({ ...item, seed: item.gameId === 'showdown'
+        ? showdownReplaySeed(item.seed, launch.plays) : launch.seed, difficulty: launch.difficulty, tier: launch.tier });
+    };
+    // First game this install: a one-time safety line. Walking never pauses play.
+    void AsyncStorage.getItem(EYES_UP_KEY).then(seen => {
+      if (seen) return;
+      void AsyncStorage.setItem(EYES_UP_KEY, '1');
+      showToastRef.current?.({ icon: 'queue', title: 'Eyes up in line.', body: 'Games never pause for walking.' });
+    }).catch(() => undefined);
+    // Bonus rounds: Current Quest plays the server's own seed and tier.
+    if (item.gameId === 'current' && session.snapshot().bonus?.enabled) {
+      void session.prepareBonusQuest().finally(open);
+      return;
+    }
+    open();
   }, [session]);
 
   const handleGameDone = useCallback(() => {
     // Games show their own GameShellV2 results screen; session rewards stay
-    // server-side via the inline timer — nothing is granted per round here.
+    // server-side via the inline timer: nothing is granted per round here.
     setActiveGame(null);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
@@ -469,7 +500,7 @@ export default function LinePlayScreen() {
       case 'memory': return <MemoryGame {...common} deckId={snapshot.chapter?.finale.memoryDeckId} taskName={ride.rideName} />;
       case 'shark': return <SharkySwim {...common} difficulty={activeGame.difficulty} />;
       case 'banana': return <BananaBasketGame {...common} difficulty={Math.max(2, activeGame.difficulty) as QueueDifficulty} />;
-      case 'current': return <CurrentQuestGame {...common} taskName={ride.rideName} />;
+      case 'current': return <CurrentQuestGame {...common} taskName={ride.rideName} tier={activeGame.tier} />;
       case 'showdown': return <SharkShowdown {...common} rideId={ride.rideId} parkId={ride.parkId}
         chapterId={snapshot.chapter?.id} rideName={ride.rideName} />;
       case 'trivia':
@@ -621,6 +652,75 @@ export default function LinePlayScreen() {
       completed: choice.completed,
       bestStars: snapshot.gameBestStars[choice.gameId as keyof typeof snapshot.gameBestStars],
     }));
+  showToastRef.current = showToast;
+
+  // -- Queue Bonus Rounds presentation ------------------------------------
+  const bonus = snapshot.bonus?.enabled ? snapshot.bonus : null;
+  const { playSound } = useContext(SoundEffectContext);
+  const reducedFx = useReducedGameMotion();
+  const fxGate = useRef(new MovementFxGate<{ cue: BonusCue; slot?: number }>()).current;
+  // While the line moves, haptics and stings wait (dropped if 3 s late).
+  const fireCue = useCallback((cue: BonusCue, slot?: number) => {
+    if (fxGate.offer({ cue, slot }, Date.now()) === 'play') playBonusCue({ cue, slot }, playSound);
+  }, [fxGate, playSound]);
+  const [movingChip, setMovingChip] = useState(false);
+  useEffect(() => {
+    fxGate.setMoving(snapshot.moving, Date.now()).forEach(item => playBonusCue(item, playSound));
+    if (!bonus) { setMovingChip(false); return; }
+    if (snapshot.moving) {
+      // One tick per movement episode, then the chip lingers 1.5 s after it stops.
+      if (!movingChip) { setMovingChip(true); playBonusCue({ cue: 'line_moving' }, null); }
+      return;
+    }
+    if (!movingChip) return;
+    const timer = setTimeout(() => setMovingChip(false), MOVING_CHIP_LINGER_MS);
+    return () => clearTimeout(timer);
+  }, [snapshot.moving, bonus != null]);
+  const fxHead = snapshot.bonusFx[0] ?? null;
+  const [perkChip, setPerkChip] = useState<RailChip | null>(null);
+  useEffect(() => {
+    if (!fxHead || fxHead.kind !== 'perk') return;
+    setPerkChip({ key: `perk-${fxHead.id}`, tone: 'perk',
+      text: `+${fxHead.perk.parts} Part · ${fxHead.perk.kind === 'mastery' ? 'Mastery' : 'Queue Crew'}` });
+    const timer = setTimeout(() => { setPerkChip(null); session.consumeBonusFx(fxHead.id); }, 2_000);
+    return () => clearTimeout(timer);
+  }, [fxHead?.id]);
+  const railChip: RailChip | null = movingChip ? { key: 'moving', text: 'Line moving. Eyes up.', tone: 'moving' } : perkChip;
+  // A slot opens: one impact and the open sting, unless a saved win claims it
+  // in the same answer (that chain plays one absorb instead).
+  const openSlots = bonus?.slots.filter(slot => slot.state === 'open').length ?? 0;
+  const prevOpenSlots = useRef(openSlots);
+  useEffect(() => {
+    const savedChain = snapshot.bonusFx.some(event => event.kind === 'claim' && event.claim.saved);
+    if (openSlots > prevOpenSlots.current && !savedChain) fireCue('bonus_open');
+    prevOpenSlots.current = openSlots;
+  }, [openSlots]);
+  const savedNow = Boolean(bonus?.saved);
+  const prevSaved = useRef(savedNow);
+  useEffect(() => {
+    if (savedNow && !prevSaved.current) fireCue('bonus_saved');
+    prevSaved.current = savedNow;
+  }, [savedNow]);
+  const waitCardRef = useRef<View>(null);
+  const [partTarget, setPartTarget] = useState<FlightPoint>({ x: 48, y: 140 });
+  const measureWaitCard = useCallback(() => {
+    waitCardRef.current?.measureInWindow((x, y, _width, height) => {
+      if (Number.isFinite(x) && Number.isFinite(y)) setPartTarget({ x: x + 44, y: y + height / 2 });
+    });
+  }, []);
+  const secondsToNextBonus = bonus ? nextBonusSeconds(bonus, snapshot.verifiedEligibleSeconds,
+    snapshot.verifiedPresenceAt, Date.now()) : null;
+  const movementContext = useMemo(() => ({
+    moving: snapshot.moving,
+    onResume: () => undefined,
+    lineMovePolicy: 'passive' as const,
+    // Client-scored games never pay Parts; their win card points to the bonus games.
+    justForFunNote: bonus && activeGame && activeGame.gameId !== 'current' ? {
+      text: 'Bonus Parts come from Current Quest and Codebreaker',
+      actionLabel: 'PLAY FOR BONUS',
+      onPress: () => { setActiveGame(null); setArcadeOpen(true); },
+    } : null,
+  }), [snapshot.moving, bonus != null, activeGame?.gameId]);
   useEffect(() => {
     const id = pendingEncoreId.current;
     if (!id) return;
@@ -743,7 +843,7 @@ export default function LinePlayScreen() {
           )}
 
         {/* Wait card (top) */}
-        <View style={styles.waitWrap}>
+        <View style={styles.waitWrap} ref={waitCardRef} onLayout={measureWaitCard} collapsable={false}>
           {snapshot.startedAt == null ? (
             <WaitCardSkeleton rideName={ride.rideName} />
           ) : (
@@ -782,6 +882,8 @@ export default function LinePlayScreen() {
                 else { session.pause('manual'); void Haptics.selectionAsync(); }
               }}
               onPlayBonus={arcadeChoices.length ? () => setArcadeOpen(true) : undefined}
+              bonus={snapshot.bonus}
+              gameOpen={activeGame != null}
             />
           )}
         </View>
@@ -791,7 +893,17 @@ export default function LinePlayScreen() {
             onJump={() => { setNewRoundNotice(null); jumpToPage(newRoundIndex); }} />
         )}
 
-        {snapshot.state !== 'complete' && <LinePlayLiveRail crew={liveCrew}
+        {snapshot.leftLine && snapshot.state === 'active' && (
+          <View style={styles.leftLineCard} accessibilityLiveRegion="polite">
+            <Text style={styles.leftLineText}>Looks like you left the line</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Resume, I am back in line"
+              onPress={() => session.resumeAfterLeftLine()} style={styles.leftLineButton}>
+              <Text style={styles.leftLineButtonText}>RESUME</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {snapshot.state !== 'complete' && <LinePlayLiveRail crew={liveCrew} chip={railChip}
           projectTitle={projectMission?.title} projectStage={snapshot.parkProject?.stage}
           onOpenCrew={() => {
             if (liveCrew) jumpToPage(activityPages.findIndex(page => page.id === liveCrew.pageId));
@@ -814,6 +926,20 @@ export default function LinePlayScreen() {
               masteryBonusParts={snapshot.rewards?.masteryBonusParts ?? 0}
               crewPuzzleBonusParts={snapshot.rewards?.crewPuzzleBonusParts ?? 0}
               currentQuestBonusParts={snapshot.rewards?.currentQuestBonusParts ?? 0}
+              bonusRecap={snapshot.bonus?.enabled && snapshot.rewards ? {
+                parts: snapshot.rewards.rideParts.reduce((n, p) => n + p.quantity, 0),
+                liveParts: snapshot.rewards.liveParts,
+                bonusRoundParts: snapshot.rewards.bonusRoundParts,
+                masteryBonusParts: snapshot.rewards.masteryBonusParts,
+                crewPuzzleBonusParts: snapshot.rewards.crewPuzzleBonusParts,
+                currentQuestBonusParts: snapshot.rewards.currentQuestBonusParts,
+                encoreXp: snapshot.rewards.encoreXp,
+                encoreEnergy: snapshot.rewards.encoreEnergy,
+                bonusParkDayUsed: snapshot.rewards.bonusParkDayUsed,
+                bonusParkDayCap: snapshot.rewards.bonusParkDayCap,
+              } : null}
+              heroInventory={snapshot.bonus?.enabled ? player?.inventory ?? null : null}
+              onOpenInventory={() => RootNavigation.navigate('Inventory')}
               rewardsPending={snapshot.rewardsPending}
               rewardsConfirmed={snapshot.rewards != null}
               rewardTrackingAvailable={snapshot.serverSessionId != null}
@@ -970,7 +1096,34 @@ export default function LinePlayScreen() {
         </View>
       </Wrapper>
 
-      <QueueArcadeSheet
+      {bonus ? <BonusPicker
+        visible={arcadeOpen && snapshot.state === 'active'}
+        bonus={bonus}
+        secondsToNext={secondsToNextBonus}
+        questChoice={arcadeChoices.find(choice => choice.gameId === 'current') ?? null}
+        crew={snapshot.signal?.puzzle ?? null}
+        funChoices={arcadeChoices.filter(choice => choice.gameId !== 'current')}
+        onClose={() => {
+          queuedArcadeGame.current = null;
+          setArcadeOpen(false);
+        }}
+        onHidden={() => {
+          const next = queuedArcadeGame.current;
+          queuedArcadeGame.current = null;
+          if (next) handlePlayGame(next);
+        }}
+        onChoose={(index) => {
+          const page = activityPages[index];
+          if (page?.kind !== 'minigame') return;
+          queuedArcadeGame.current = page;
+          setArcadeOpen(false);
+          jumpToPage(index);
+        }}
+        onOpenCodebreaker={() => {
+          setArcadeOpen(false);
+          jumpToPage(activityPages.findIndex(page => page.kind === 'puzzle'));
+        }}
+      /> : <QueueArcadeSheet
         visible={arcadeOpen && snapshot.state === 'active'}
         choices={arcadeChoices}
         onClose={() => {
@@ -989,7 +1142,7 @@ export default function LinePlayScreen() {
           setArcadeOpen(false);
           jumpToPage(index);
         }}
-      />
+      />}
 
       {snapshot.parkProject && (
         <ProjectMissionModal
@@ -1015,9 +1168,20 @@ export default function LinePlayScreen() {
 
       {/* Mounted GameKit game (GameShellV2 renders its own Modal). The line is
           always moving, so LinePlay never asks a game to pause for movement. */}
-      <LinePlayMovementContext.Provider value={NEVER_PAUSE_FOR_MOVEMENT}>
+      <LinePlayMovementContext.Provider value={movementContext}>
         {renderActiveGame()}
       </LinePlayMovementContext.Provider>
+
+      {/* Bonus claim flights. They wait while a game covers the screen (the
+          Part is already in the wallet; only the celebration waits). */}
+      {bonus && activeGame == null && <BonusPartFlight
+        event={fxHead && fxHead.kind !== 'perk' ? fxHead : null}
+        partTarget={partTarget}
+        badgeTarget={{ x: SCREEN_W - 44, y: 64 }}
+        compact={snapshot.moving}
+        reducedMotion={reducedFx}
+        onCue={fireCue}
+        onDone={id => session.consumeBonusFx(id)} />}
 
       <QueueToast message={toast} onDone={() => setToast(null)} />
 
@@ -1080,7 +1244,6 @@ export default function LinePlayScreen() {
   );
 }
 
-const NEVER_PAUSE_FOR_MOVEMENT = { moving: false, onResume: () => undefined } as const;
 
 // -- skeletons ---------------------------------------------------------------
 
@@ -1129,6 +1292,11 @@ const styles = StyleSheet.create({
   },
   endBtnText: { color: '#073e79', fontFamily: 'Knockout', fontSize: 17 },
   waitWrap: { paddingHorizontal: spacing.lg },
+  leftLineCard: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.lg, marginTop: spacing.sm,
+    backgroundColor: '#fff8dc', borderRadius: 14, borderWidth: 2, borderColor: '#fec90e', paddingHorizontal: 12, paddingVertical: 8 },
+  leftLineText: { flex: 1, fontFamily: 'Knockout', fontSize: 15, color: '#083f7c' },
+  leftLineButton: { minHeight: 40, paddingHorizontal: 14, borderRadius: 12, backgroundColor: '#fec90e', justifyContent: 'center' },
+  leftLineButtonText: { fontFamily: 'Shark', fontSize: 15, color: '#075083' },
   queueTrackingHint: { backgroundColor: '#0a548f', borderBottomWidth: 1,
     borderBottomColor: '#55baf5', flexDirection: 'row', alignItems: 'center',
     gap: 10, paddingHorizontal: 16, paddingVertical: 7 },
