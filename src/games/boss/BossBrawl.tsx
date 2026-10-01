@@ -182,7 +182,9 @@ function fxNowOf(sv: { value: number }): number {
 }
 
 export function BossBrawl(props: BossBrawlProps) {
-  const { visible, boss, bossName, hpLeft, hpMax, damageRate = 1, onComplete, onClose, onQuit } = props;
+  const { visible, boss, bossName, hpMax, damageRate = 1, onComplete, onClose, onQuit } = props;
+  // Dev capture: EXPO_PUBLIC_BOSS_HP shrinks the raid's HP left so the KO plays in the practice arena.
+  const hpLeft = __DEV__ && process.env.EXPO_PUBLIC_BOSS_HP ? Math.min(props.hpLeft, Number(process.env.EXPO_PUBLIC_BOSS_HP)) : props.hpLeft;
   const reduced = useReducedGameMotion();
   const movement = useContext(LinePlayMovementContext);
   const autoplay = !!props.autoplay || (__DEV__ && process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1');
@@ -211,6 +213,7 @@ export function BossBrawl(props: BossBrawlProps) {
   const [strip, setStrip] = useState<{ fell: number; perBout: number[] } | null>(null);
   const [ghostLine, setGhostLine] = useState<string | null>(null);
   const [catchOn, setCatchOn] = useState<{ lane: number; mat: number } | null>(null);
+  const [chest, setChest] = useState(false);
 
   // Round state (JS)
   const round = useRef({
@@ -339,6 +342,7 @@ export function BossBrawl(props: BossBrawlProps) {
     setStars(0);
     setStrip(null);
     setCatchOn(null);
+    setChest(false);
     setGrit({ n: 3, max: 3 });
     setDown({ on: false, taps: 0 });
     setStageBoth('idle');
@@ -491,7 +495,7 @@ export function BossBrawl(props: BossBrawlProps) {
     const legacy = toLegacyProof(s.damage, s.simMs);
     const score = legacyDamage(legacy, damageRate);
     const proofs = bouts.map(boutProof);
-    const message = s.tko ? 'BACK FOR MORE?' : s.stars === 3 ? (hpLeft - score <= 0 ? 'KNOCKOUT!' : 'BOSS BUSTER!') : s.stars === 2 ? 'BIG DAMAGE!' : s.stars === 1 ? 'NICE HITS!' : 'WATCH THE SHADOW';
+    const message = s.tko ? 'BACK FOR MORE?' : hpLeft - score <= 0 && s.damage > 0 ? 'KNOCKOUT!' : s.stars === 3 ? 'BOSS BUSTER!' : s.stars === 2 ? 'BIG DAMAGE!' : s.stars === 1 ? 'NICE HITS!' : 'WATCH THE SHADOW';
     const g = ghostRef.current;
     const rival = g ? { name: g.name, score: legacyDamage(toLegacyProof(ghostAt(g, 2, 1e9), 26000), damageRate) } : null;
     return {
@@ -575,6 +579,11 @@ export function BossBrawl(props: BossBrawlProps) {
         anim.partAt.value = f + 400;
       }
       later(600, () => showCard('KNOCKOUT!', 1500));
+      later(1300, () => {
+        setChest(true);
+        burst('coins', L.W / 2, L.targetY - 80, { count: 24 });
+        GameAudio.play('fx.coin', { pitch: 7 });
+      });
       later(900, () => burst('splash', L.bossX, L.lipY, { count: 48 }));
       later(1200, () => burst('confetti', L.W / 2, L.bossY, { count: 48 }));
       later(2800, () => {
@@ -1531,6 +1540,12 @@ export function BossBrawl(props: BossBrawlProps) {
           </View>
         )}
 
+        {chest && (
+          <View style={[styles.chestWrap, { top: L.targetY - 150 }]} pointerEvents="none">
+            <Image source={ART.chest} style={styles.chestImg} />
+          </View>
+        )}
+
         {strip && (
           <View style={[styles.strip, { top: L.thumbTop + 10 }]} pointerEvents="none">
             <Text style={styles.stripTitle}>YOUR FIGHT</Text>
@@ -1674,6 +1689,8 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   fightText: { fontFamily: 'Shark', fontSize: 32, color: '#FFFFFF', textShadowColor: '#7A1010', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   a11y: { position: 'absolute' },
+  chestWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  chestImg: { width: 130, height: 110, resizeMode: 'contain' },
   skip: { position: 'absolute', right: 12, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 12, borderWidth: 2, borderColor: '#1B2A4A',
     paddingHorizontal: 10, paddingVertical: 4 },
   skipText: { fontFamily: 'Shark', fontSize: 14, color: '#1B2A4A' },
