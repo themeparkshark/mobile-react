@@ -46,6 +46,16 @@ function humanTaps(sim, board, seed) {
         for (let k = 0; k < 3; k++) taps.push([Math.min(sim.roundMs, t + k * 85), next() % holes]);
       }
     }
+  } else if (sim.key === 'lagoon_dash') {
+    // A walker's thumb: a slow solver line with stray swipes (bumps, wrong turns) and late undos mixed in.
+    const base = sim.botTaps(board, (seed ^ 0x55aa) >>> 0, 5, 'rookie');
+    for (const tap of base) {
+      taps.push(tap);
+      const roll = next() % 100;
+      if (roll < 18) taps.push([Math.min(sim.roundMs, tap[0] + 300 + (next() % 900)), next() % 4]);
+      if (roll < 6) taps.push([Math.min(sim.roundMs, tap[0] + 1400 + (next() % 400)), 5]);
+      if (roll === 99) taps.push([Math.min(sim.roundMs, tap[0] + 2000), 6]);
+    }
   } else {
     for (const q of board) {
       const roll = next() % 100;

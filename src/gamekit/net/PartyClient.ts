@@ -133,7 +133,8 @@ export const HOLD_BUDGET_MS = 6000;
 /** The quick 3-2-1 before a held board resumes (part of the hold). */
 export const RESUME_COUNT_MS = 900;
 /** Games this build can render. */
-export const DEFAULT_GAMES = ['bonk_race'];
+/** Lagoon Dash (Current Quest) needs the backend to register `lagoon_dash` in its rotation and sidecar bundle. */
+export const DEFAULT_GAMES = ['bonk_race', 'lagoon_dash'];
 
 const PENDING_KEY = 'party:pending-submit';
 

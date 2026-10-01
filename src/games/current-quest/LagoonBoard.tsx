@@ -316,7 +316,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
       const idle = t - sv.idleSince.value;
       if (idle > 6000) {
         const cyc = (idle - 6000) % 8000;
-        if (cyc < 1200 && goldenXY[0] >= 0 && !(sv.picks.value[board.pearls.length] >= 0)) {
+        if (cyc < 1200 && goldenXY[0] >= 0 && (sv.picks.value[board.pearls.length] ?? -1) === -1) {
           frame.facing = goldenXY[0] >= frame.x ? 1 : -1;
           frame.rot += Math.sin(Math.min(1, cyc / 200) * Math.PI / 2) * (goldenXY[1] < frame.y ? -0.12 : 0.12) * frame.facing;
         } else if (cyc >= 2000 && cyc < 2300) {
@@ -475,8 +475,9 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
   const pickScale = [0, 1, 2, 3].map((k) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useDerivedValue(() => {
+      // -1 = still on the board; any other value is the fx ms it was taken (-1e9 = long ago, from a resync).
       const at = sv.picks.value[k] ?? -1;
-      if (at < 0) {
+      if (at === -1) {
         const cell = k < nP ? board.pearls[k] : board.golden;
         // Wink when the shark rests one tile away.
         const f = sv.shark.value;
@@ -493,7 +494,7 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useDerivedValue(() => {
       const at = sv.picks.value[k] ?? -1;
-      if (at < 0) return 1;
+      if (at === -1) return 1;
       return Math.max(0, 1 - (sv.fxT.value - at) / 160);
     }));
   const pickBob = [0, 1, 2, 3].map((k) =>

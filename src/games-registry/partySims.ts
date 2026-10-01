@@ -11,8 +11,9 @@
  */
 import * as bonk from '../games/party/bonkRace';
 import * as sprint from '../games/trivia-duel/party/triviaSprint';
+import * as dash from '../games/current-quest/party/lagoonDash';
 
-export type PartySimKey = 'bonk_race' | 'trivia_sprint';
+export type PartySimKey = 'bonk_race' | 'trivia_sprint' | 'lagoon_dash';
 export type SimTap = [number, number];
 export type SimProfile = 'rookie' | 'regular' | 'ace';
 
@@ -53,6 +54,19 @@ export const PARTY_SIMS: Record<PartySimKey, PartySim<any, any>> = {
     botTaps: sprint.botTaps,
     ghostFill: sprint.ghostFill,
     resultHash: sprint.resultHash,
+  },
+  // Current Quest's Same-Board Showdown as a 45 s micro-round (ranked by shells, strokes, undos; never time).
+  lagoon_dash: {
+    key: 'lagoon_dash',
+    version: dash.LAGOON_DASH_VERSION,
+    roundMs: dash.ROUND_MS,
+    maxTaps: dash.MAX_TAPS,
+    build: dash.buildBoard,
+    validTaps: dash.validTaps,
+    resolve: dash.resolve,
+    botTaps: (board, seed, seat, profile, fromMs) => dash.botTaps(board, seed, seat, profile === 'ace' ? 'ace' : profile, fromMs),
+    ghostFill: dash.ghostFill,
+    resultHash: dash.resultHash,
   },
 };
 

@@ -21,7 +21,10 @@ import SharkLoader from '../../ui/SharkLoader';
 import { BRAND, FONT } from '../../ui/tokens';
 import { haptic } from '../Haptics';
 import { playSfx } from '../SFX';
-import { botTaps, buildTimeline, resolve, type BotProfile } from '../../games/party/bonkRace';
+import { buildTimeline, type BotProfile, type Spawn } from '../../games/party/bonkRace';
+import { partySim, type SimTap } from '../../games-registry/partySims';
+import LagoonDashBoard from '../../games/current-quest/party/LagoonDashBoard';
+import type { Board as LagoonBoardData } from '../../games/current-quest/rules';
 import type { PartyClient } from '../net/PartyClient';
 import { usePartyState } from '../net/useParty';
 import { displayName, placementOf } from '../net/roomState';
@@ -108,12 +111,16 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   const local = client.round;
   const [boardT, setBoardT] = useState(-3000);
   const [myScore, setMyScore] = useState(0);
-  const spawns = useMemo(() => (local?.spawns.length ? local.spawns : round ? buildTimeline(round.seed) : []), [local?.roundId, round?.seed]);
+  // Every party game runs through its registry sim: the shared board, bot logs and live bot scores.
+  const game = round?.game ?? 'bonk_race';
+  const sim = useMemo(() => partySim(game), [game]);
+  const simBoard = useMemo(() => (local?.board ?? (round && sim ? sim.build(round.seed) : null)), [local?.roundId, round?.seed, sim]);
+  const spawns = useMemo(() => (game !== 'bonk_race' ? [] : local?.spawns.length ? local.spawns : round ? buildTimeline(round.seed) : []) as Spawn[], [local?.roundId, round?.seed, game]);
   const botLogs = useMemo(() => {
-    const m = new Map<number, ReturnType<typeof botTaps>>();
-    round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, botTaps(spawns, round.seed, s.seat, s.profile)); });
+    const m = new Map<number, SimTap[]>();
+    if (sim && simBoard) round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, sim.botTaps(simBoard, round.seed, s.seat, s.profile)); });
     return m;
-  }, [round?.id, spawns]);
+  }, [round?.id, simBoard, sim]);
   const perfNow = useCallback(() => (globalThis.performance?.now ? globalThis.performance.now() : Date.now()), []);
 
   // Board clock for the HUD when the board is not mounted (ghosting, spectating).
@@ -138,7 +145,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         ghost = state.ghostedRoundId === round.id;
       } else if (seat.kind === 'bot') {
         const log = botLogs.get(seat.seat) ?? [];
-        score = resolve(spawns, log.filter(([t]) => t <= boardT)).score;
+        score = sim && simBoard ? sim.resolve(simBoard, log.filter(([t]) => t <= boardT)).score : 0;
       } else {
         const rival = seat.user_id !== undefined ? state.rivals[seat.user_id] : undefined;
         const member = state.room?.members.find((m) => m.id === seat.user_id);
@@ -153,7 +160,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
     });
     const all = raw.map((r) => r.score);
     return raw.map((r) => ({ ...r, placement: placementOf(r.score, all) }));
-  }, [boardT, botLogs, myScore, round, spawns, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
+  }, [boardT, botLogs, myScore, round, sim, simBoard, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
 
   const phase = state.phase;
   const playing = (phase === 'countdown' || phase === 'playing') && local && local.roundId === round?.id && !local.ended;
@@ -183,7 +190,22 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
         </View>
       </View>
       <View style={styles.boardWrap}>
-        {playing && local ? (
+        {playing && local && game === 'lagoon_dash' && simBoard ? (
+          <LagoonDashBoard
+            key={local.roundId}
+            board={simBoard as LagoonBoardData}
+            seed={local.seed}
+            goAt={local.goAt}
+            durationMs={local.durationMs}
+            perfNow={perfNow}
+            onTap={(action) => client.recordTap(action)}
+            onProgress={onProgress}
+            onTick={onTick}
+            autoplay={autoplay === 'ace' ? 'ace' : autoplay ?? null}
+            boardClock={boardClock}
+          />
+        ) : null}
+        {playing && local && game === 'bonk_race' ? (
           <BonkBoard
             key={local.roundId}
             spawns={spawns}

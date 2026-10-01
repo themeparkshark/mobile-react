@@ -410,7 +410,7 @@ test('a round in a game this build cannot draw goes straight to the ghost', asyn
   assert.equal(submit[2].partial, true);
   assert.equal(submit[2].until_ms, 0);
   const play = http.calls.find(([, u]) => u === '/party/play');
-  assert.deepEqual(plain(play[2].games), ['bonk_race'], 'the server only rotates in games this build can play');
+  assert.deepEqual(plain(play[2].games), ['bonk_race', 'lagoon_dash'], 'the server only rotates in games this build can play');
   c.destroy();
 });
 
