@@ -26,6 +26,7 @@ import { BRAND, FONT } from '../../ui/tokens';
 import { haptic } from '../Haptics';
 import { playSfx } from '../SFX';
 import { botTaps, buildTimeline, resolve, type BotProfile } from '../../games/party/bonkRace';
+import { partySim } from '../../games-registry/partySims';
 import type { PartyClient } from '../net/PartyClient';
 import { usePartyState } from '../net/useParty';
 import { displayName, incomingFor, placementOf } from '../net/roomState';
@@ -35,10 +36,10 @@ import type { EmoteId } from '../net/partyTypes';
 import BonkBoard from './BonkBoard';
 import WhackLiveBoard from '../../games/whack/party/WhackLiveBoard';
 import type { Timeline } from '../../games/whack/timeline';
-import { partySim } from '../../games-registry/partySims';
 
 /** Bot score curves sample every 250 ms of board time. */
 const CURVE_STEP_MS = 250;
+import TriviaSprintBoard from './TriviaSprintBoard';
 import PartyLobby from './PartyLobby';
 import PartyResults from './PartyResults';
 import RaceStrip, { type RacerLine } from './RaceStrip';
@@ -144,6 +145,14 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
     });
     return m;
   }, [round?.id, game]);
+  // Trivia Sprint rounds: the same seat logic, scored by the sprint sim (no Splashes, no SNATCH).
+  const sprint = round?.game === 'trivia_sprint' ? partySim('trivia_sprint') : null;
+  const sprintBoard = useMemo(() => (sprint && round ? (local?.roundId === round.id && local.board ? local.board : sprint.build(round.seed)) : null), [round?.id, round?.seed, sprint, local?.board]);
+  const sprintBots = useMemo(() => {
+    const m = new Map<number, [number, number][]>();
+    if (sprint && sprintBoard && round) round.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, sprint.botTaps(sprintBoard, round.seed, s.seat, s.profile)); });
+    return m;
+  }, [round?.id, sprint, sprintBoard]);
   const mySeat = client.mySeat();
   const incoming = useMemo(() => incomingFor(state, mySeat), [state.attacks, mySeat]);
   const onLanding = useCallback((n: number) => client.recordLanding(n), [client]);
@@ -210,6 +219,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
       } else if (seat.kind === 'bot') {
         const curve = botCurves.get(seat.seat);
         if (curve) score = curve[Math.max(0, Math.min(curve.length - 1, Math.floor(boardT / CURVE_STEP_MS)))] ?? 0;
+        else if (sprint && sprintBoard) score = sprint.resolve(sprintBoard, (sprintBots.get(seat.seat) ?? []).filter(([t]) => t <= boardT)).score;
         else score = resolve(spawns, (botLogs.get(seat.seat) ?? []).filter(([t]) => t <= boardT)).score;
       } else {
         const rival = seat.user_id !== undefined ? state.rivals[seat.user_id] : undefined;
@@ -228,7 +238,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
     });
     const all = raw.map((r) => r.score);
     return raw.map((r) => ({ ...r, placement: placementOf(r.score, all) }));
-  }, [boardT, bonusNow, botLogs, botCurves, myScore, round, spawns, stampTags, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
+  }, [boardT, bonusNow, botLogs, botCurves, sprint, sprintBoard, sprintBots, myScore, round, spawns, stampTags, state.emotes, state.ghostedRoundId, state.known, state.rivals, state.room?.members, state.room?.series, state.userId]);
 
   const phase = state.phase;
   const playing = (phase === 'countdown' || phase === 'playing') && local && local.roundId === round?.id && !local.ended;
@@ -272,6 +282,20 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
             onTick={onTick}
             autoplay={!!autoplay}
           />
+        ) : playing && local && sprint ? (
+          <TriviaSprintBoard
+            key={local.roundId}
+            seed={local.seed}
+            userId={state.userId ?? 0}
+            goAt={local.goAt}
+            durationMs={local.durationMs}
+            perfNow={perfNow}
+            onTap={(code) => client.recordTap(code)}
+            onProgress={onProgress}
+            onTick={onTick}
+            autoplay={autoplay}
+            boardClock={boardClock}
+          />
         ) : playing && local ? (
           <BonkBoard
             key={local.roundId}
@@ -293,7 +317,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
             onSplash={onSplash}
           />
         ) : null}
-        {playing ? <SplashTray client={client} boardT={boardT} mySeat={mySeat} lines={lines} /> : null}
+        {playing && !sprint ? <SplashTray client={client} boardT={boardT} mySeat={mySeat} lines={lines} /> : null}
         {state.hold && phase === 'playing' ? <HoldOverlay client={client} /> : null}
         {phase === 'countdown' && local ? <CountIn boardT={boardT} late={local.lateStart} /> : null}
         {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round from your score. You keep the result, and you are back for the next round." /> : null}

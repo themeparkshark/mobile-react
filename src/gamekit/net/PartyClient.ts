@@ -153,9 +153,8 @@ export const LATE_COUNT_IN_MS = 900;
 export const HOLD_BUDGET_MS = 6000;
 /** The quick 3-2-1 before a held board resumes (part of the hold). */
 export const RESUME_COUNT_MS = 900;
-/** Games this build can render. */
 /** Games this build can draw. Servers ignore any game they have not registered, so advertising early is safe. */
-export const DEFAULT_GAMES = ['bonk_race', 'whack_rush'];
+export const DEFAULT_GAMES = ['bonk_race', 'trivia_sprint', 'whack_rush'];
 
 const PENDING_KEY = 'party:pending-submit';
 

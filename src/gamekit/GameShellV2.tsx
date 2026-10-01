@@ -202,6 +202,8 @@ interface GameShellV2Props {
   introCountdown?: boolean;
   /** Countdown backdrop: 'default' navy scrim, 'light' white wash, 'none' (Trivia: the stage stays readable). */
   countdownScrim?: CountdownScrim;
+  /** Results backdrop behind a game-owned surface (renderResults): 'none' keeps the stage at full brightness (Trivia rev 7). */
+  resultsScrim?: CountdownScrim;
   /**
    * Movement never pauses (QUEUE REALITY). 'pause' is accepted for older
    * call sites and treated as play-through.
@@ -259,6 +261,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       headerScore,
       countdownStyle: countdownStyleProp,
       introCountdown,
+      resultsScrim = 'default',
       countdownScrim = 'default',
       resumeStyle = 'countdown',
       gameId,
@@ -772,7 +775,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
 
           {/* Results */}
           {phase === 'results' && renderResults && effectiveResult ? (
-            <View style={styles.overlay} pointerEvents="box-none">
+            <View style={[styles.overlay, resultsScrim === 'light' ? styles.scrimLight : resultsScrim === 'none' ? styles.scrimNone : null]} pointerEvents="box-none">
               <Animated.View style={[{ width: '100%', alignItems: 'center' }, resultsStyle]}>
                 {renderResults({
                   result: effectiveResult,
