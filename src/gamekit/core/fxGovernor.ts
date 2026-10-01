@@ -42,6 +42,12 @@ export interface GovernorConfig {
   /** Screen-space moments allowed per window (0 = no cap). */
   screenEventsPerWindow: number;
   screenWindowMs: number;
+  /**
+   * Whack v5 flash governor: a flash asked for inside the gap MERGES into the
+   * live one (it already reads as one beat), so it is neither a new flash nor
+   * a bloom. Off by default (a denied flash becomes a bloom).
+   */
+  flashMerge: boolean;
 }
 
 export const DEFAULT_GOVERNOR: GovernorConfig = {
@@ -57,7 +63,40 @@ export const DEFAULT_GOVERNOR: GovernorConfig = {
   calm: false,
   screenEventsPerWindow: 0,
   screenWindowMs: 250,
+  flashMerge: false,
 };
+
+/**
+ * Per-game referee rules from the designs:
+ *   createFxGovernor({ ...GOVERNOR_PRESETS.whack, calm: walking || reducedMotion })
+ */
+export const GOVERNOR_PRESETS = {
+  /** Whack v5: 334 ms gap, 3 per second, merge; impact frames hold 33 ms of wall time. */
+  whack: { flashMinGapMs: 334, flashesPerWindow: 3, flashWindowMs: 1000, flashMerge: true },
+  /** Trivia rev 7: at most 2 full-frame flashes per match (Final stamp, crown) at 35%. */
+  trivia: { flashMinGapMs: 500, flashesPerWindow: 2, flashWindowMs: 1e9, flashMaxPeak: 0.35 },
+  /** Current Quest: 1 flash per 2 s at 20%, one hit-stop per stroke, no punch within 150 ms of a shake. */
+  currentQuest: { flashMinGapMs: 2000, flashesPerWindow: 1, flashWindowMs: 2000, flashMaxPeak: 0.2 },
+  /** Line Party FlashGate: 35% max, never 2 within 500 ms. */
+  lineParty: { flashMinGapMs: 500, flashesPerWindow: 2, flashWindowMs: 1000, flashMaxPeak: 0.35 },
+  /** Sharky: global stops only on hit (70) and Wipeout (160), 90 ms of freeze per second. */
+  sharky: { hitStopBudgetMs: 90, hitStopWindowMs: 1000, hitStopMaxMs: 160 },
+  /** Banana 7.0: 2 screen-space moments per 250 ms; global stops never two within 15 steps (250 ms). */
+  banana: { screenEventsPerWindow: 2, screenWindowMs: 250, hitStopBudgetMs: 120, hitStopWindowMs: 250 },
+  /** Memory: flash-all only on Showtime matches, under 3 Hz per bulb. */
+  memory: { flashMinGapMs: 500, flashesPerWindow: 1, flashWindowMs: 1000 },
+  /** Boss: PERFECT and Break freezes are whole-arena; no screen wash. */
+  boss: { flashMaxPeak: 0.25, hitStopMaxMs: 300, hitStopBudgetMs: 360, hitStopWindowMs: 1000 },
+  /** Parade Beat: full-lane flash capped at 0.12 over the reading surface. */
+  rhythm: { flashMaxPeak: 0.12, flashMinGapMs: 334, flashesPerWindow: 3, flashWindowMs: 1000 },
+} satisfies Record<string, Partial<GovernorConfig>>;
+
+export type GovernorPreset = keyof typeof GOVERNOR_PRESETS;
+
+/** Verdict of the last govFlash call (for callers that branch on merge vs deny). */
+export const FLASH_ALLOWED = 0;
+export const FLASH_DENIED = 1;
+export const FLASH_MERGED = 2;
 
 export interface FxGovernor {
   cfg: GovernorConfig;
@@ -79,6 +118,9 @@ export interface FxGovernor {
   screenTimes: number[];
   /** Counters for the dev overlay. */
   denied: number;
+  merged: number;
+  /** FLASH_ALLOWED / FLASH_DENIED / FLASH_MERGED for the last govFlash. */
+  lastFlashVerdict: number;
 }
 
 export const GOV_TOOK_FLASH = 1;
@@ -102,6 +144,8 @@ export function createFxGovernor(cfg: Partial<GovernorConfig> = {}): FxGovernor 
     beatTook: 0,
     screenTimes: [],
     denied: 0,
+    merged: 0,
+    lastFlashVerdict: FLASH_ALLOWED,
   };
 }
 
@@ -145,12 +189,16 @@ export function govFlash(g: FxGovernor, now: number, peak: number, prio = 0, for
   const cap = c.calm ? Math.min(c.flashMaxPeak, 0.15) : c.flashMaxPeak;
   const allowedPeak = Math.min(peak, cap);
   if (!force) {
-    if (now - g.lastFlashAt < c.flashMinGapMs) { g.denied += 1; return 0; }
+    if (now - g.lastFlashAt < c.flashMinGapMs) {
+      if (c.flashMerge) { g.merged += 1; g.lastFlashVerdict = FLASH_MERGED; return 0; }
+      g.denied += 1; g.lastFlashVerdict = FLASH_DENIED; return 0;
+    }
     let inWindow = 0;
     for (let i = 0; i < g.flashTimes.length; i++) if (now - g.flashTimes[i] < c.flashWindowMs) inWindow += 1;
-    if (inWindow >= c.flashesPerWindow) { g.denied += 1; return 0; }
-    if (!claim(g, now, prio, GOV_TOOK_FLASH)) { g.denied += 1; return 0; }
+    if (inWindow >= c.flashesPerWindow) { g.denied += 1; g.lastFlashVerdict = FLASH_DENIED; return 0; }
+    if (!claim(g, now, prio, GOV_TOOK_FLASH)) { g.denied += 1; g.lastFlashVerdict = FLASH_DENIED; return 0; }
   }
+  g.lastFlashVerdict = FLASH_ALLOWED;
   g.lastFlashAt = now;
   g.flashTimes.push(now);
   if (g.flashTimes.length > 8) g.flashTimes.shift();

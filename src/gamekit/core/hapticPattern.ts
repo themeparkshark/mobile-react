@@ -95,6 +95,40 @@ export const AHAP_LIBRARY = {
 
 export type AhapPatternName = keyof typeof AHAP_LIBRARY;
 
+/**
+ * Explicit expo-haptics fallbacks (Whack v5 / Boss 7.1): re-timed, not merged.
+ * expo-haptics plays only the first of two pulses closer than ~100 ms, so a
+ * double that matters is spread to >= 110 ms instead of collapsing into one.
+ * Patterns not listed here use the merge rule in fallbackSteps.
+ */
+export const FALLBACK_STEPS: Partial<Record<AhapPatternName, HapticStep[]>> = {
+  whackCrit: [{ at: 0, p: 'rigid' }, { at: 110, p: 'rigid' }],
+  whackCounter: [{ at: 0, p: 'rigid' }, { at: 110, p: 'rigid' }],
+  purrTell: [{ at: 0, p: 'soft' }, { at: 110, p: 'soft' }, { at: 220, p: 'soft' }],
+  goldenTell: [{ at: 0, p: 'selection' }, { at: 110, p: 'selection' }],
+  champSlam: [{ at: 0, p: 'rigid' }, { at: 120, p: 'soft' }],
+  bossKo: [{ at: 0, p: 'success' }, { at: 450, p: 'heavy' }],
+  // Boss fallback rule: a multi-pulse pattern spaced under 100 ms plays its first pulse only.
+  bossPerfect: [{ at: 0, p: 'rigid' }],
+  bossBreak: [{ at: 0, p: 'heavy' }],
+  bossEasySlam: [{ at: 0, p: 'heavy' }],
+  bossFinRefill: [{ at: 0, p: 'selection' }, { at: 120, p: 'selection' }, { at: 240, p: 'selection' }],
+};
+
+/** Smallest gap between consecutive steps (ms); Infinity for one step. */
+export function minStepGapMs(steps: readonly HapticStep[]): number {
+  const t = steps.map((s) => s.at).sort((a, b) => a - b);
+  let m = Infinity;
+  for (let i = 1; i < t.length; i++) m = Math.min(m, t[i] - t[i - 1]);
+  return m;
+}
+
+/** The fallback a pattern plays on expo-haptics (explicit list first, else merged). */
+export function hapticFallbackFor(name: string | null, p: HapticPatternDef, minSpacingMs = 100): HapticStep[] {
+  const explicit = name ? (FALLBACK_STEPS as Record<string, HapticStep[] | undefined>)[name] : undefined;
+  return explicit ? explicit.map((s) => ({ ...s })) : fallbackSteps(p, minSpacingMs);
+}
+
 /** Length of a pattern (ms). */
 export function patternDurationMs(p: HapticPatternDef): number {
   let end = 0;
