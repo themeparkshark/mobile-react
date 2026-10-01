@@ -1,10 +1,10 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { Marker } from '../../components/map/Marker';
 import dayjs from 'dayjs';
 import { useFocusEffect } from '@react-navigation/native';
 import isBetween from 'dayjs/plugin/isBetween';
-import Map from '../../components/Map';
+import Map, { pointsPerMeter, type MapProjector } from '../../components/Map';
 import { AuthContext } from '../../context/AuthProvider';
 import { LocationContext } from '../../context/LocationProvider';
 import { PrepItemType } from '../../models/prep-item-type';
@@ -15,7 +15,7 @@ import HomeLive from '../../components/home/HomeLive';
 import PrepItemMarker, { PREP_MARKER_ANCHOR } from './PrepItem';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
-import TripGoalCard from './TripGoalCard';
+import TripGoalCard, { TRIP_CHIP_COIN_SIZE } from './TripGoalCard';
 import { shouldThrottleHomeRequest } from './homeRefresh';
 import { nearestHomeHuntTarget } from './homeHuntTarget';
 import HomeHuntCard from './HomeHuntCard';
@@ -23,6 +23,7 @@ import HomeMapStatusCard from './HomeMapStatusCard';
 import HomeFocusCard from './HomeFocusCard';
 import { HOME_PREP_PICKUP_RADIUS_METERS } from './homePickupRange';
 import { isInPickupRange } from './homeFindCopy';
+import { findOnZoneEdge, pickGrabTagAngle, placeTripChip, samePlacement, type ChipPlacement, type Point, type Rect } from './homeMapLayout';
 import HomeIntro, { useHomeIntroSeen } from './HomeIntro';
 import getPrepItemSets from '../../api/endpoints/me/prep-item-sets';
 import * as RootNavigation from '../../RootNavigation';
@@ -88,6 +89,8 @@ interface Props {
    */
   introEligible?: boolean;
   onIntroOpenChange?: (open: boolean) => void;
+  /** The daily chest button, under the recenter button while today's chest is unclaimed. */
+  chestButton?: ReactNode;
 }
 
 /**
@@ -95,7 +98,7 @@ interface Props {
  * This is the at-home gameplay experience.
  */
 export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, introEligible = false, onIntroOpenChange }: Props) {
+  introAllowed = false, introEligible = false, onIntroOpenChange, chestButton }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [playerStats, setPlayerStats] = useState<PlayerStatsType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -124,6 +127,27 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
   const [liveBar, setLiveBar] = useState<'raid' | 'teams' | null>(null);
   const [setProgress, setSetProgress] = useState<Record<string, { collected: number; total: number }>>({});
   const [introSeen, markIntroSeen] = useHomeIntroSeen(player?.id);
+  const projector = useRef<MapProjector | null>(null);
+  const [mapZoom, setMapZoom] = useState(17.6);
+  // Bumped every time the camera settles, so screen positions are re-measured.
+  const [mapSettled, setMapSettled] = useState(0);
+  const onMapSettled = useCallback((zoom: number) => {
+    setMapZoom(current => (Math.abs(current - zoom) < 0.02 ? current : zoom));
+    setMapSettled(version => version + 1);
+  }, []);
+  const [tagAngle, setTagAngle] = useState(0);
+  const [chipPlacement, setChipPlacement] = useState<ChipPlacement>({ collapsed: false, nudge: 0 });
+  // The full chip's window rect, measured while it is unfolded.
+  const chipRect = useRef<Rect | null>(null);
+  const chipRef = useRef<View>(null);
+  const measureChip = useCallback(() => {
+    if (chipPlacement.collapsed || chipPlacement.nudge) return;
+    chipRef.current?.measureInWindow((x, y, width, height) => {
+      if ([x, y, width, height].every(Number.isFinite) && width > 0) {
+        chipRect.current = { left: x, top: y, right: x + width, bottom: y + height };
+      }
+    });
+  }, [chipPlacement]);
   const introOpen = introSeen === false && introAllowed && homeLocationConfirmed;
   useEffect(() => { onIntroOpenChange?.(introOpen); }, [introOpen, onIntroOpenChange]);
 
@@ -358,8 +382,32 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prepItems, homeLocationConfirmed]);
   const findInRange = homeLocationConfirmed && placed.some(entry => entry.inRange);
+  const ppm = lat != null ? pointsPerMeter(mapZoom, lat) : 0;
+  // Where the finds are on screen, measured each time the map settles: the GRAB
+  // ZONE tag picks a spot on the circle clear of them, and the park trip chip
+  // folds (or slides) off any find under it.
+  useEffect(() => {
+    const project = projector.current;
+    // Only once the map has rendered and settled: asking an unmounted native map
+    // view for a point raises "Invalid react tag" in MapLibre.
+    if (!project || mapSettled === 0 || !homeLocationConfirmed || lat == null || lng == null) return;
+    let alive = true;
+    void (async () => {
+      const shark = await project(lat, lng);
+      const spots = await Promise.all(placed.map(({ item }) => (item.latitude != null && item.longitude != null
+        ? project(item.latitude, item.longitude) : Promise.resolve(null))));
+      if (!alive || !shark) return;
+      const finds = spots.filter((spot): spot is Point => spot != null);
+      const radius = HOME_PREP_PICKUP_RADIUS_METERS * ppm;
+      setTagAngle(pickGrabTagAngle(radius, finds.map(f => ({ x: f.x - shark.x, y: f.y - shark.y }))));
+      const next = placeTripChip(chipRect.current, TRIP_CHIP_COIN_SIZE, finds);
+      setChipPlacement(current => (samePlacement(current, next) ? current : next));
+    })().catch(() => undefined);
+    return () => { alive = false; };
+  }, [mapSettled, placed, homeLocationConfirmed, lat, lng, ppm]);
   const pickupRange = useMemo(() => (homeLocationConfirmed
-    ? { meters: HOME_PREP_PICKUP_RADIUS_METERS, findInside: findInRange } : null), [homeLocationConfirmed, findInRange]);
+    ? { meters: HOME_PREP_PICKUP_RADIUS_METERS, findInside: findInRange, tagAngle } : null),
+  [homeLocationConfirmed, findInRange, tagAngle]);
   const rowTop = TOP + (liveBar ? LIVE_BAR_ROW : 0);
   const focusedSet = playerStats?.focused_prep_set;
   const huntSlug = huntTarget?.item.set_slug ?? null;
@@ -403,7 +451,8 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
   return (
     <View style={styles.container}>
       {/* Map with prep items - player marker is handled by Map component */}
-      <Map focusCoordinate={huntFocus} controlsTop={rowTop} pickupRange={pickupRange}>
+      <Map focusCoordinate={huntFocus} controlsTop={rowTop} pickupRange={pickupRange}
+        projector={projector} onZoomChange={onMapSettled} extraControls={chestButton}>
         {homeLocationConfirmed && placed.map(({ item: prepItem, distance, inRange }) => (
           <Marker
             key={prepItem.pivot_id || prepItem.id}
@@ -423,14 +472,19 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
             }}
           >
             <PrepItemMarker prepItem={prepItem} onExpire={handlePrepItemExpire}
-              inRange={inRange} distanceMeters={distance} />
+              inRange={inRange} distanceMeters={distance}
+              onZoneEdge={!inRange && findOnZoneEdge(distance, HOME_PREP_PICKUP_RADIUS_METERS, ppm)} />
           </Marker>
         ))}
       </Map>
 
       {/* Corner stack, level with the recenter button. */}
       <View style={[styles.corner, { top: rowTop }]} pointerEvents="box-none">
-        <TripGoalCard refreshVersion={refreshVersion} compact />
+        {/* Folds to its coin over a find; slides below it only when nothing sits under the chip. */}
+        <View ref={chipRef} onLayout={measureChip} collapsable={false}
+          style={!showFocusCard && chipPlacement.nudge ? { transform: [{ translateY: chipPlacement.nudge }] } : undefined}>
+          <TripGoalCard refreshVersion={refreshVersion} compact collapsed={chipPlacement.collapsed} />
+        </View>
         {showFocusCard && focusedSet && (
           <HomeFocusCard set={focusedSet}
             onPress={() => RootNavigation.navigate('SetCollection', { slug: focusedSet.slug })} />
