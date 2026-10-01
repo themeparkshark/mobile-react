@@ -40,6 +40,8 @@ export interface BotProfile {
   panic?: boolean;
   /** Chance of a second (stray) tap in a slot. */
   doubleTap?: number;
+  /** Comeback bot (design 9.1): the first N attacks of bout 1 land on you (a wrong lane at the impact). */
+  comeback?: number;
 }
 
 const base = { jitter: 0, bias: 0, ringAcc: 0, popJitter: 60, laneAcc: 1, getupRate: 7, feintBite: 0 };
@@ -58,6 +60,8 @@ export const BOTS: Record<string, BotProfile> = {
   median: { ...base, name: 'median', read: 0.85, jitter: 150, bias: -40, ringAcc: 0.5, popJitter: 70, laneAcc: 0.9, feintBite: 0.3, getupRate: 6 },
   medianWalk: { ...base, name: 'medianWalk', read: 0.85, jitter: 150, bias: -40, ringAcc: 0.5, popJitter: 70, laneAcc: 0.9, feintBite: 0.3, getupRate: 6 },
   easySlam: { ...base, name: 'easySlam', read: 0.85, jitter: 150, bias: -40, slam: true, feintBite: 0.3, getupRate: 6 },
+  /** Median, but punished on the first 2 attacks of bout 1 (proves the 5.2 decay and cap). */
+  comeback: { ...base, name: 'comeback', read: 0.85, jitter: 150, bias: -40, ringAcc: 0.5, popJitter: 70, laneAcc: 0.9, feintBite: 0.3, getupRate: 6, comeback: 2 },
   mastery: { ...base, name: 'mastery', read: 0.97, jitter: 40, bias: -30, ringAcc: 0.9, popJitter: 45, laneAcc: 0.99, getupRate: 8 },
 };
 
@@ -124,6 +128,9 @@ export function runBotBout(cfg: BoutConfig, bot: BotProfile, botSeed: number, bo
       if (bot.guesser) {
         const I = a.steps[0].I;
         push(a.T + Math.floor(rngFloat(r) * (I + 90 - a.T)), IN_TARGET, Math.floor(rngFloat(r) * 3));
+      } else if (bot.comeback && b.cfg.bout === 0 && a.no < bot.comeback) {
+        const s0 = a.steps[0];
+        push(Math.max(s0.I - 20, t), IN_TARGET, otherLane(r, laneAt(a, 0, s0.I - 20)));
       } else {
         const right = rngFloat(r) < bot.read;
         a.steps.forEach((s, k) => {

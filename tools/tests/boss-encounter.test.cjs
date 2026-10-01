@@ -79,10 +79,13 @@ test('balance (Kraken, 200 seeds): every 9.1 bot target', () => {
   assert.ok(rate(kid, (s) => s.dizzy > 0) <= 0.34, 'kid DIZZY in <= 1 of 3 rounds');
   assert.ok(dmg(play('kraken', 'ringBlind', N)) <= 0.55 * m, 'ring-blind <= 55%');
   const slam = dmg(play('kraken', 'easySlam', N));
-  assert.ok(slam >= 0.76 * m && slam <= 0.86 * m, `Easy-Slam-only near 80-85% of median (got ${(slam / m).toFixed(2)})`);
+  assert.ok(slam >= 0.8 * m && slam <= 0.85 * m, `Easy-Slam-only 80-85% of median (got ${(slam / m).toFixed(3)})`);
+  const back = dmg(play('kraken', 'comeback', N));
+  assert.ok(back >= 0.85 * m, `comeback (punished on bout 1 attacks 1-2) >= 85% of median (got ${(back / m).toFixed(2)})`);
   const mast = play('kraken', 'mastery', N);
-  assert.ok(dmg(mast) >= 2.7 * m, `mastery >= 2.7x median (got ${(dmg(mast) / m).toFixed(2)})`);
-  assert.ok(rate(mast, (s) => s.stars === 3) >= 0.9, 'mastery 3 stars');
+  assert.ok(dmg(mast) >= 2.8 * m, `mastery >= 2.8x median (got ${(dmg(mast) / m).toFixed(2)})`);
+  assert.ok(rate(mast, (s) => s.stars === 3) >= 0.95, 'mastery 3 stars in >= 95%');
+  assert.ok(rate(mast, (s) => s.crown) >= 0.6, `mastery Crown in >= 60% (got ${rate(mast, (s) => s.crown)})`);
   assert.ok(rate(mast, (s) => s.knockdowns > 0) < 0.01, 'mastery Knockdown < 1%');
   assert.ok(mast.every((s) => s.maxChain >= 10), 'mastery reaches FURY');
 });
@@ -94,14 +97,15 @@ test('ring chain at 90% ring accuracy beats Easy Slam by >= 40%', () => {
   assert.ok(a >= 1.4 * b, `${a} vs ${b}`);
 });
 
-test('every boss: pad masher 0, mastery 3 stars, guesser <= 1 star, medians within 10% of the Kraken', () => {
+test('every boss on one point table: pad masher 0, mastery 3 stars, guesser <= 1 star; held bosses stay playable', () => {
   const k = dmg(play('kraken', 'median', 80));
   for (const boss of ['robo_shark', 'ghost_squid']) {
     assert.ok(play(boss, 'padMasher', 20).every((s) => s.damage === 0));
     assert.ok(play(boss, 'guesser', 30).every((s) => s.stars <= 1));
     assert.ok(rate(play(boss, 'mastery', 30), (s) => s.stars === 3) >= 0.7);
     const m = dmg(play(boss, 'median', 80));
-    assert.ok(Math.abs(m / k - 1) <= 0.1, `${boss} median ${m} vs Kraken ${k}`);
+    // v8: no per-boss weight. Held bosses may sit outside +-8% until M6 tunes their difficulty knobs (9.6).
+    assert.ok(m >= 0.8 * k && m <= 1.1 * k, `${boss} median ${m} vs Kraken ${k}`);
   }
 });
 
@@ -498,12 +502,12 @@ test('determinism: a round rebuilt from its bout proofs gives identical damage a
   }
 });
 
-test('golden replay fixtures (sidecar parity source) still replay exactly', () => {
+test('golden replay fixtures (sidecar parity source, v8) still replay exactly', () => {
   const dir = path.join(__dirname, 'fixtures/boss-replays');
   for (const boss of BOSSES) {
     const fx = JSON.parse(fs.readFileSync(path.join(dir, `${boss}.json`), 'utf8'));
     assert.equal(fx.version, C.SIM_VERSION);
-    assert.equal(fx.rounds.length, 20);
+    assert.equal(fx.rounds.length, 24);
     for (const r of fx.rounds) {
       const rs = round.replayRound({ boss, seed: r.seed, variant: r.variant, bouts: r.bouts });
       assert.equal(JSON.stringify(rs.map((b) => enc.scoreBout(b))), JSON.stringify(r.damage), `${boss} seed ${r.seed} ${r.bot}`);
@@ -545,7 +549,11 @@ test('stars, NEXT STAR in actions, and the Ride Challenge rule', () => {
   assert.equal(round.starsFor(5000, false), 0);
   assert.equal(round.starsFor(300, true), 1);
   assert.equal(round.starsFor(1000, true), 2);
-  assert.equal(round.starsFor(2600, true), 3);
+  assert.equal(round.starsFor(2199, true), 2);
+  assert.equal(round.starsFor(2200, true), 3);
+  assert.equal(round.crownFor(2899, true), false);
+  assert.equal(round.crownFor(2900, true), true);
+  assert.equal(round.crownFor(4000, false), false);
   const s = round.summarize(bots.runBotRound('kraken', 12, bots.BOTS.median));
   if (s.stars < 3) assert.ok(typeof s.nextStar === 'string' && s.nextStar.length > 0);
   const slam = round.summarize(bots.runBotRound('kraken', 12, bots.BOTS.easySlam));
@@ -553,4 +561,74 @@ test('stars, NEXT STAR in actions, and the Ride Challenge rule', () => {
   assert.equal(round.rideChallengeWin({ ...s, stars: 2, tkoEarly: false }), true);
   assert.equal(round.rideChallengeWin({ ...s, stars: 3, tkoEarly: true }), false);
   assert.equal(round.timingReadout(-42), 'You were 42 ms early');
+});
+
+// ---- v8 (design v7.1 M1.1) ------------------------------------------------------
+
+test('v8: one point table, no per-boss weight anywhere in sim/*', () => {
+  for (const f of fs.readdirSync(path.join(__dirname, '../../src/games/boss/sim'))) {
+    const src = fs.readFileSync(path.join(__dirname, '../../src/games/boss/sim', f), 'utf8');
+    assert.ok(!/COUNTER_PCT/.test(src), `${f}`);
+  }
+  assert.equal(C.SIM_VERSION, 8);
+  // The same PERFECT counter pays the same on every boss.
+  const pays = BOSSES.map((boss) => {
+    const [b, a] = firstAttack(boss, 0);
+    for (const s of a.steps) tap(b, s.I, s.lane);
+    return b.events.find((e) => e.code === enc.E_PERFECT).v;
+  });
+  assert.ok(pays.every((v) => v === C.PTS.perfect * C.UNIT), JSON.stringify(pays));
+});
+
+test('v8 combo decay: every bout starts one tier below where the last ended', () => {
+  assert.deepEqual([0, 2, 3, 5, 6, 9, 10, 40].map(C.decayChain), [0, 0, 0, 0, 3, 3, 6, 6]);
+  for (const chain of [0, 4, 7, 15]) {
+    const carry = { ...enc.freshCarry(), chain, maxChain: chain };
+    const b = enc.createBout({ boss: 'kraken', seed: 5, bout: 1, carry, variant: 1 });
+    assert.equal(b.carry.chain, C.decayChain(chain));
+    assert.equal(C.comboPct(b.carry.chain) < C.comboPct(chain) || C.comboPct(chain) === 100, true);
+    if (chain > 0) assert.ok(b.events.some((e) => e.code === enc.E_DECAY && e.a === chain && e.b === C.decayChain(chain)));
+    // Bout 1 never decays (nothing to carry).
+    const b0 = enc.createBout({ boss: 'kraken', seed: 5, bout: 0, carry, variant: 1 });
+    assert.equal(b0.carry.chain, chain);
+  }
+  // Over real rounds: the chain each bout starts with is decayChain(previous end).
+  for (const name of ['median', 'mastery']) {
+    for (let s = 1; s <= 30; s++) {
+      const bs = bots.runBotRound('kraken', s * 31, bots.BOTS[name]);
+      for (let n = 1; n < bs.length; n++) {
+        const ev = bs[n].events.find((e) => e.code === enc.E_DECAY);
+        const prevEnd = bs[n - 1].carry.chain;
+        if (prevEnd > 0) assert.equal(ev.b, C.decayChain(prevEnd));
+      }
+    }
+  }
+});
+
+test('v8 combined cap: combo x mult never pays above 250% on any event', () => {
+  let capped = 0;
+  for (let s = 1; s <= 40; s++) {
+    const bs = bots.runBotRound('kraken', s * 13, bots.BOTS.mastery);
+    for (const b of bs) {
+      for (const e of b.events) {
+        if (e.code !== enc.E_POP && e.code !== enc.E_POP_PERFECT && e.code !== enc.E_HIT && e.code !== enc.E_SLAM) continue;
+        const base = e.code === enc.E_POP ? C.PTS.pop : e.code === enc.E_POP_PERFECT ? C.PTS.popPerfect : e.code === enc.E_HIT ? C.PTS.hit : C.PTS.slam;
+        assert.ok(e.v <= base * C.COMBINED_CAP, `${e.code} ${e.v}`);
+        if (e.v === base * C.COMBINED_CAP) capped += 1;
+      }
+    }
+  }
+  assert.ok(capped > 0, 'FURY in a Break hits the cap in mastery rounds');
+});
+
+test('v8 best chain counts within a bout (no round-long x67)', () => {
+  for (let s = 1; s <= 30; s++) {
+    const bs = bots.runBotRound('kraken', s * 17, bots.BOTS.mastery);
+    const sum = round.summarize(bs);
+    assert.equal(sum.maxChain, Math.max(...bs.map((b) => b.stats.bestChain)));
+    for (const b of bs) {
+      const ups = b.events.filter((e) => e.code === enc.E_PERFECT || e.code === enc.E_GOOD || e.code === enc.E_POP || e.code === enc.E_POP_PERFECT || e.code === enc.E_SLAM).length;
+      assert.ok(b.stats.bestChain <= ups + 1);
+    }
+  }
 });

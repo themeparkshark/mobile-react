@@ -62,6 +62,11 @@ export function toLegacyProof(damage: number, simMs: number): LegacyProof {
   return { hits: 0, weak_hits: 0, duration_ms: duration };
 }
 
+/** The Crown (design 9.3): the mastery bar above 3 stars. */
+export function crownFor(points: number, convertedOpening: boolean): boolean {
+  return convertedOpening && points >= STAR_POINTS.crown;
+}
+
 export function starsFor(points: number, convertedOpening: boolean): 0 | 1 | 2 | 3 {
   if (!convertedOpening || points < STAR_POINTS.one) return 0;
   if (points >= STAR_POINTS.three) return 3;
@@ -73,6 +78,7 @@ export interface RoundSummary {
   damage: number;
   perBout: number[];
   stars: 0 | 1 | 2 | 3;
+  crown: boolean;
   perfect: number;
   good: number;
   popPerfect: number;
@@ -88,6 +94,7 @@ export interface RoundSummary {
   tkoEarly: boolean;
   fakes: number;
   dizzy: number;
+  /** Best chain within one bout (design 5.2; v7 showed a round-long count). */
   maxChain: number;
   /** Final Pop grade: 3 perfect pop, 2 pop, 1 hit, 0 miss, -1 never reached. */
   final: number;
@@ -116,7 +123,7 @@ export function summarize(bouts: readonly Bout[]): RoundSummary {
   const last = bouts[bouts.length - 1];
   const tkoAt = bouts.findIndex((b) => b.endReason === END_TKO);
   const s: RoundSummary = {
-    damage, perBout, stars, perfect, good, popPerfect, pops, hits, slams,
+    damage, perBout, stars, crown: crownFor(damage, converted), perfect, good, popPerfect, pops, hits, slams,
     breaks: last ? last.carry.breaks : 0,
     punishes: sum((b) => b.stats.punish),
     knockdowns: last ? last.carry.knockdowns : 0,
@@ -125,7 +132,7 @@ export function summarize(bouts: readonly Bout[]): RoundSummary {
     tkoEarly: tkoAt >= 0 && tkoAt < 2,
     fakes: sum((b) => b.stats.fakes),
     dizzy: sum((b) => b.stats.guard),
-    maxChain: last ? last.carry.maxChain : 0,
+    maxChain: bouts.reduce((m, b) => Math.max(m, b.stats.bestChain), 0),
     final: bouts.length >= 3 ? bouts[2].stats.final : -1,
     anchorStars: last ? last.carry.stars : 0,
     skillStar: last ? last.carry.skillStar : false,

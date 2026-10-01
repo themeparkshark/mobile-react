@@ -1,5 +1,5 @@
 /**
- * Boss Brawl v7 sim constants (design: studio/design/boss.md v7). Integer-only:
+ * Boss Brawl sim constants (design: studio/design/boss.md v7.1, SIM_VERSION 8). Integer-only:
  * every time is an int ms, every value an int, and the grid is a step table
  * (one step = a 1/16 note) per boss and bout, locked to Chris's loop edits
  * (Kraken 129.2 BPM, Robo 136, Ghost 117.5; Fury loops run x1.06).
@@ -11,8 +11,13 @@
 export type BossId = 'kraken' | 'robo_shark' | 'ghost_squid';
 export const BOSS_IDS: readonly BossId[] = ['kraken', 'robo_shark', 'ghost_squid'];
 
-/** Rule-set version carried in every proof. v4 proofs replay with their own bundle. */
-export const SIM_VERSION = 7;
+/**
+ * Rule-set version carried in every proof. Older proofs replay with their own
+ * frozen bundle (v7: tools/boss/bundles/boss-sim.6a349dc81e51.cjs).
+ * v8 (design v7.1 M1.1): the per-boss counter weight is deleted (one point table for every boss),
+ * combo drops one tier at each bout start, combined combo x mult capped at 250%.
+ */
+export const SIM_VERSION = 8;
 
 /** One step (1/16 note, ms) per boss per bout. Bout 3 plays the x1.06 Fury loop. 1 beat = 4 steps. */
 export const STEP: Record<BossId, readonly [number, number, number]> = {
@@ -102,25 +107,21 @@ export const KO_FREEZE = 300;
 export const ANCHOR_STARS_MAX = 3;
 
 /**
- * Points (design 5.1, starting values, lock after Gate H). Scaled by the node
- * balance sim (tools/tests/boss-encounter.test.cjs) so the median bot lands
- * near 1 050 and mastery near 3 000.
+ * Points (design 5.1, one table for every boss, starting values, lock after
+ * Gate H). v8 re-fit for the combo decay and the 250% cap on the 200-seed node
+ * sim (tools/boss/balance.cjs): median about 1 100, Easy Slam about 82%,
+ * mastery about 2.85x with the Crown in most mastery rounds.
  */
 export const PTS = {
-  perfect: 14, good: 5, popPerfect: 24, pop: 11, hit: 2, slam: 40, hazard: 3, breakLump: 40,
+  perfect: 14, good: 5, popPerfect: 27, pop: 10, hit: 2, slam: 46, hazard: 3, breakLump: 40,
   finalPerfect: 200, finalPop: 120, finalHit: 40, skillStar: 50,
 } as const;
-/**
- * Counter weight per boss (integer percent on a counter's points and Break gauge).
- * A Robo circuit counter is 2-3 ordered presses and a Ghost counter is a
- * which-one read, and neither boss gets Kraken's multi-step attacks, so each
- * counter carries more.
- */
-export const COUNTER_PCT: Record<BossId, number> = { kraken: 100, robo_shark: 140, ghost_squid: 170 };
 /** Multipliers as integer percents. */
 export const MULT = { normal: 100, break: 150, ally: 125 } as const;
 /** Scoring unit: points x combo pct x mult pct. One floor per bout. */
 export const UNIT = 10000;
+/** Combined combo % x mult % cap (design 5.2): 250%, i.e. 25 000 in pct x pct units. */
+export const COMBINED_CAP = 25000;
 
 /** Combo chain -> integer percent (x1.0 / x1.2 / x1.5 / x2.0 FURY). */
 export function comboPct(chain: number): number {
@@ -130,8 +131,18 @@ export function comboPct(chain: number): number {
   return 100;
 }
 
-/** Star thresholds (display only; rewards stay server-side). */
-export const STAR_POINTS = { one: 300, two: 1000, three: 2600 } as const;
+/**
+ * Combo decay at a bout start (design 5.2): the chain drops to the floor of the
+ * tier below (FURY 10+ -> 6, 6-9 -> 3, 3-5 -> 0, 0-2 -> 0).
+ */
+export function decayChain(chain: number): number {
+  if (chain >= 10) return 6;
+  if (chain >= 6) return 3;
+  return 0;
+}
+
+/** Star thresholds and the Crown (design 9.3; display only, rewards stay server-side). */
+export const STAR_POINTS = { one: 300, two: 1000, three: 2200, crown: 2900 } as const;
 
 // Boons (design 6.3): one of two seeded cards at each intermission.
 export const BOON_NONE = 0;

@@ -14,7 +14,7 @@ const med = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 const pct = (xs, f) => Math.round((100 * xs.filter(f).length) / xs.length);
 for (const boss of bosses) {
   const rows = {};
-  for (const name of ['padMasher', 'laneMasher', 'guesser', 'kid', 'ringBlind', 'median', 'easySlam', 'mastery']) {
+  for (const name of ['padMasher', 'laneMasher', 'guesser', 'kid', 'ringBlind', 'median', 'easySlam', 'comeback', 'mastery']) {
     const rs = [];
     for (let s = 1; s <= N; s++) rs.push(round.summarize(bots.runBotRound(boss, s * 7777, bots.BOTS[name], { variant: 1 })));
     rows[name] = rs;
@@ -23,7 +23,7 @@ for (const boss of bosses) {
   console.log(`\n${boss} (${N} seeds) median=${m}`);
   for (const [name, rs] of Object.entries(rows)) {
     const d = med(rs.map((s) => s.damage));
-    console.log(`${name.padEnd(11)} dmg ${String(d).padStart(5)} (${(d / m * 100).toFixed(0).padStart(3)}%) stars ${med(rs.map((s) => s.stars))} KD ${pct(rs, (s) => s.knockdowns > 0)}% TKO ${pct(rs, (s) => s.tko)}% dizzy ${pct(rs, (s) => s.dizzy > 0)}% 3star ${pct(rs, (s) => s.stars === 3)}% chain ${med(rs.map((s) => s.maxChain))} breaks ${med(rs.map((s) => s.breaks))}`);
+    console.log(`${name.padEnd(11)} dmg ${String(d).padStart(5)} (${(d / m * 100).toFixed(0).padStart(3)}%) stars ${med(rs.map((s) => s.stars))} KD ${pct(rs, (s) => s.knockdowns > 0)}% TKO ${pct(rs, (s) => s.tko)}% dizzy ${pct(rs, (s) => s.dizzy > 0)}% 3star ${pct(rs, (s) => s.stars === 3)}% crown ${pct(rs, (s) => s.crown)}% chain ${med(rs.map((s) => s.maxChain))} breaks ${med(rs.map((s) => s.breaks))}`);
   }
   const walk = []; for (let s = 1; s <= N; s++) walk.push(round.summarize(bots.runBotRound(boss, s * 7777, bots.BOTS.median, { variant: 1, walk: true })).damage);
   const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;

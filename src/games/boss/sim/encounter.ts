@@ -1,5 +1,5 @@
 /**
- * Boss Brawl v7 encounter sim: pure, integer-only, deterministic.
+ * Boss Brawl encounter sim (SIM_VERSION 8): pure, integer-only, deterministic.
  *
  *   const b = createBout({ boss, seed, bout: 0, carry, walk, offset, variant, novice });
  *   input(b, { t, k: IN_TARGET, a: lane });   // taps, stamped in bout simT
@@ -16,7 +16,7 @@
  * Time only moves forward through `advance` and `input`, and every transition
  * happens at its own scheduled integer time (never at a frame time), so the
  * same input log gives the same bout on the phone, in node and in the server
- * replay (sim-runner, {game: 'boss', sim_version: 7}). No floats, Math.random,
+ * replay (sim-runner, {game: 'boss', sim_version: 8}). No floats, Math.random,
  * Date or easing in here.
  *
  * Beat-absorbed freezes (Break, Final Pop, KO): sim time is music time. The
@@ -27,12 +27,12 @@
 import { mixSeed, createRng, type Rng } from '../../../gamekit/core/rng';
 import {
   ANCHOR_STARS_MAX, ATTACKS, BONUS_ATTACK_CAP, BOON_FIN, BOON_LOOK, BOON_NONE, BOON_POLISH, BOON_TIDE, BREAK_FREEZE,
-  BREAK_MAX, BREAK_Q, BREAK_RING_Q, BUFFER_MS, CLOSE_GRACE_MS, COUNTER_PCT, COYOTE_MS, DEBOUNCE_MS, DIZZY_MS, FINAL_FREEZE,
+  BREAK_MAX, BREAK_Q, BREAK_RING_Q, BUFFER_MS, CLOSE_GRACE_MS, COMBINED_CAP, COYOTE_MS, DEBOUNCE_MS, DIZZY_MS, FINAL_FREEZE,
   FINAL_Q, GAIN, GAUGE_MAX, GETUP_MIN_GAP, GETUP_MS, GETUP_TAPS, GRIT, GRIT_EXTRA, GUARD_SWAT_MS, GUARD_TAPS,
   GUARD_WARN_TAPS, GUARD_WINDOW_MS, IN_ALLY, IN_BOON, IN_END, IN_GETUP, IN_PAD_DOWN, IN_PAD_UP, IN_PAUSE, IN_RESCUE,
   IN_RESUME, IN_SURGE, IN_TARGET, KO_FREEZE, LEAD_Q, LOOK_Q, LOOK_WALK_Q, LOSS, MULT, NOVICE_GRIT_FLOOR, OFFSET_CLAMP,
   OPENING_Q, READ_GRACE_MS, PERFECT_EARLY, PERFECT_LATE, POP_LONG_MS, POP_MS, POP_PERFECT_MS, PTS, PUNISH_MS, RECOVER_Q, RINGS, STEP,
-  UNIT, comboPct, type BossId,
+  UNIT, comboPct, decayChain, type BossId,
 } from './constants';
 import {
   VARIANT_A0, boonOffer, freshRoundFlags, laneAt, planAttack, popLanes, type Attack, type RoundFlags,
@@ -83,6 +83,7 @@ export const E_STAR_OUT = 41; //     a anchor stars lit
 export const E_SKILL_STAR = 42; //   v points
 export const E_FAKE_TAP = 43; //     a lane (a fake bitten: SPLASHED, no Grit)
 export const E_BOON = 45; //         a boon id
+export const E_DECAY = 46; //        a chain before, b chain after (bout start, design 5.2)
 
 export const END_ATTACKS = 0;
 export const END_FINAL = 1;
@@ -158,6 +159,10 @@ export interface BoutStats {
   perfect: number; good: number; popPerfect: number; pop: number; hit: number; slam: number; clank: number; punish: number;
   guard: number; breaks: number; hazards: number; allyCrits: number; final: number; fakes: number; knockdown: number;
   getup: number; counterErr: number[]; popErr: number[];
+  /** Best chain run inside this bout (counted from 0 at the bout start, design 5.2). */
+  bestChain: number;
+  /** Current run inside this bout. */
+  run: number;
 }
 
 export interface Down { start: number; open: number; end: number; taps: number; last: number }
@@ -247,6 +252,9 @@ export function createBout(cfg: BoutConfig): Bout {
   const rng = createRng(boutSeed(cfg.seed, bout));
   // The bout's one foam bubble rides on one of bout 2's plain slams (attack 1 or 3), Kraken only.
   const bubbleNo = cfg.boss === 'kraken' && bout === 1 ? 1 + 2 * (rngU32(rng) % 2) : -1;
+  // Combo decay (design 5.2): every bout after the first starts one tier lower.
+  const chainIn = carry.chain;
+  if (bout > 0) carry.chain = decayChain(carry.chain);
   const b: Bout = {
     cfg: {
       boss: cfg.boss, seed: cfg.seed >>> 0, bout, walk, offset: clampOffset(cfg.offset ?? 0), variant: cfg.variant ?? 0,
@@ -259,12 +267,13 @@ export function createBout(cfg: BoutConfig): Bout {
     pendingAlly: 0, pauses: 0, sum: 0,
     stats: {
       perfect: 0, good: 0, popPerfect: 0, pop: 0, hit: 0, slam: 0, clank: 0, punish: 0, guard: 0, breaks: 0, hazards: 0,
-      allyCrits: 0, final: -1, fakes: 0, knockdown: 0, getup: 0, counterErr: [], popErr: [],
+      allyCrits: 0, final: -1, fakes: 0, knockdown: 0, getup: 0, counterErr: [], popErr: [], bestChain: 0, run: 0,
     },
     events: [], endT: -1, endReason: -1, log: [], gaugeHot: carry.gauge >= 800,
     grit: GRIT, gritMax: GRIT, boon: BOON_NONE, look: walk ? LOOK_WALK_Q : LOOK_Q, popMs: POP_MS, bubbleNo,
     down: null, bubble: null, lastTap: [-1e9, -1e9, -1e9], lastLane: -1,
   };
+  if (bout > 0 && chainIn > 0) emit(b, E_DECAY, 0, chainIn, carry.chain);
   return b;
 }
 
@@ -272,8 +281,10 @@ function emit(b: Bout, code: number, t: number, a = 0, bb = 0, v = 0): void {
   b.events.push({ code, t, a, b: bb, v });
 }
 
+/** Points in pct x pct units; the combined combo x mult is capped at 250% (design 5.2). */
 function score(b: Bout, base: number, pct: number, mult: number): number {
-  const units = base * pct * mult;
+  const m = pct * mult;
+  const units = base * (m > COMBINED_CAP ? COMBINED_CAP : m);
   b.sum += units;
   return units;
 }
@@ -292,6 +303,9 @@ function chainUp(b: Bout, t: number): void {
   const before = comboPct(c.chain);
   c.chain += 1;
   if (c.chain > c.maxChain) c.maxChain = c.chain;
+  const st = b.stats;
+  st.run += 1;
+  if (st.run > st.bestChain) st.bestChain = st.run;
   const after = comboPct(c.chain);
   if (after !== before) emit(b, E_TIER, t, after);
 }
@@ -299,6 +313,7 @@ function chainUp(b: Bout, t: number): void {
 function chainReset(b: Bout, t: number): void {
   if (b.carry.chain > 0) emit(b, E_COMBO_RESET, t, b.carry.chain);
   b.carry.chain = 0;
+  b.stats.run = 0;
 }
 
 function breakReady(b: Bout): boolean {
@@ -682,12 +697,11 @@ function counterPress(b: Bout, t: number, lane: number): void {
     return;
   }
   b.stats.counterErr.push(err);
-  const w = COUNTER_PCT[b.cfg.boss];
   let v: number;
   if (perfect) {
     b.stats.perfect += 1;
-    v = score(b, PTS.perfect, w, 100);
-    addGauge(b, Math.floor((GAIN.perfect * w) / 100), t);
+    v = score(b, PTS.perfect, 100, 100);
+    addGauge(b, GAIN.perfect, t);
     emit(b, E_PERFECT, t, lane, err, v);
     if (b.cfg.bout === 2 && b.carry.stars < ANCHOR_STARS_MAX) {
       b.carry.stars += 1;
@@ -699,8 +713,8 @@ function counterPress(b: Bout, t: number, lane: number): void {
     }
   } else {
     b.stats.good += 1;
-    v = score(b, PTS.good, w, 100);
-    addGauge(b, Math.floor((GAIN.good * w) / 100), t);
+    v = score(b, PTS.good, 100, 100);
+    addGauge(b, GAIN.good, t);
     emit(b, E_GOOD, t, lane, err, v);
   }
   chainUp(b, t);

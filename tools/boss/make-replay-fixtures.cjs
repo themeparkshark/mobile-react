@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * Golden replay fixtures for the Boss Brawl v7 server replay (sim-runner, {game: 'boss', sim_version: 7}).
+ * Golden replay fixtures for the Boss Brawl server replay (sim-runner, {game: 'boss', sim_version: SIM_VERSION}).
+ * v7 fixtures are frozen in tools/tests/fixtures/boss-replays/v7 with their bundle.
  * Each fixture is a full round (3 bout proofs) played by a bot, with pauses,
  * device offsets, walk and novice flags, boons and all three bout-3 variants
  * (A0, A, B) mixed in, plus the expected integer
@@ -47,7 +48,7 @@ fs.mkdirSync(out, { recursive: true });
 for (const boss of ['kraken', 'robo_shark', 'ghost_squid']) {
   const list = [];
   let k = 0;
-  for (const bot of ['guesser', 'kid', 'median', 'easySlam', 'mastery']) {
+  for (const bot of ['guesser', 'kid', 'median', 'easySlam', 'comeback', 'mastery']) {
     for (let i = 0; i < 4; i++) list.push(fixtureRound(boss, 1000 + 97 * k + i, bot, k++));
   }
   fs.writeFileSync(path.join(out, `${boss}.json`), `${JSON.stringify({ version: C.SIM_VERSION, boss, rounds: list })}\n`);

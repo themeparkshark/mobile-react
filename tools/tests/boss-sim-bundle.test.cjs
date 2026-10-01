@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Boss Brawl server replay: the content-hashed sim bundle (sim-runner,
- * {game: 'boss', sim_version: 7}) replays every golden fixture exactly like
+ * {game: 'boss', sim_version: 8}) replays every golden fixture exactly like
  * the app's TS sim, accepts honest bot proofs and rejects the design 18.1
  * cases (offset, order, events after the end, input rate, get-up rate, boons
  * outside the seeded offer).
@@ -28,7 +28,7 @@ async function bundle() {
   return { b, hash, code };
 }
 
-test('bundle: pure (no clock, randomness or bare imports), hashed, routed as boss@7', async () => {
+test('bundle: pure (no clock, randomness or bare imports), hashed, routed as boss@8', async () => {
   const { b, hash, code } = await bundle();
   assert.equal(b.SIM_BUNDLE, hash);
   assert.equal(b.BOSS_SIM.key, 'boss');
@@ -36,16 +36,46 @@ test('bundle: pure (no clock, randomness or bare imports), hashed, routed as bos
   assert.ok(!/Math\.random|\bDate\b/.test(code));
 });
 
-test('bundle replays every golden fixture to the same per-bout damage as the app', async () => {
+test('bundle replays every v8 golden fixture to the same per-bout damage and events as the app', async () => {
   const { b } = await bundle();
+  const enc = loadTs('src/games/boss/sim/encounter.ts');
+  const reg = loadTs('src/games-registry/bossSim.ts');
   for (const boss of ['kraken', 'robo_shark', 'ghost_squid']) {
     const fx = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/boss-replays', `${boss}.json`), 'utf8'));
+    assert.equal(fx.version, 8);
     for (const r of fx.rounds) {
-      const v = b.BOSS_SIM.replayRound({ boss, seed: r.seed, variant: r.variant, bouts: r.bouts });
+      const log = { boss, seed: r.seed, variant: r.variant, bouts: r.bouts };
+      const v = b.BOSS_SIM.replayRound(log);
       assert.deepEqual(v.map((x) => x.damage), r.damage, `${boss} ${r.seed} ${r.bot}`);
       assert.ok(v.every((x) => x.ok), `${boss} ${r.seed} ${r.bot}: ${v.map((x) => x.reason).join(',')}`);
+      // Bundle equals client: same damage and the same events hash as the app's own sim.
+      const app = reg.replayBossRound(log);
+      assert.equal(JSON.stringify(v.map((x) => [x.damage, x.hash, x.tko])), JSON.stringify(app.map((x) => [x.damage, x.hash, x.tko])));
+      assert.equal(JSON.stringify(round.replayRound(log).map((x) => enc.scoreBout(x))), JSON.stringify(r.damage));
     }
   }
+});
+
+test('v7 proofs keep replaying with the frozen v7 bundle; the v8 bundle refuses them by version', async () => {
+  const dir = path.join(__dirname, '../boss/bundles');
+  const v7 = require(path.join(dir, 'boss-sim.6a349dc81e51.cjs'));
+  assert.equal(v7.SIM_BUNDLE, '6a349dc81e51');
+  assert.equal(v7.BOSS_SIM.version, 7);
+  const { b } = await bundle();
+  for (const boss of ['kraken', 'robo_shark', 'ghost_squid']) {
+    const fx = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/boss-replays/v7', `${boss}.json`), 'utf8'));
+    assert.equal(fx.version, 7);
+    for (const r of fx.rounds) {
+      const log = { boss, seed: r.seed, variant: r.variant, bouts: r.bouts };
+      const v = v7.BOSS_SIM.replayRound(log);
+      assert.deepEqual(v.map((x) => x.damage), r.damage, `${boss} ${r.seed} ${r.bot}`);
+      assert.ok(v.every((x) => x.ok));
+      assert.ok(b.BOSS_SIM.replayRound(log).every((x) => x.reason === 'version' && x.damage === 0));
+    }
+  }
+  // Frozen bundles kept for the sidecar (the current version is built fresh by build-boss-sim-bundle.mjs).
+  const versions = fs.readdirSync(dir).filter((f) => f.endsWith('.cjs')).map((f) => require(path.join(dir, f)).BOSS_SIM.version);
+  assert.ok(versions.every((x) => x < C.SIM_VERSION) && versions.includes(7));
 });
 
 test('rejects tampered proofs with reason codes; damage 0 for the bout', async () => {

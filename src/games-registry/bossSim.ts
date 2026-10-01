@@ -1,5 +1,5 @@
 /**
- * Boss Brawl sim entry for the server replay (design v7 12.6, 18.1).
+ * Boss Brawl sim entry for the server replay (design v7.1 12.6, 18.1; sim_version 8, older versions replay with their frozen bundle in tools/boss/bundles).
  *
  * tools/boss/build-boss-sim-bundle.mjs bundles this exact file (and only its
  * relative, dependency-free imports) into a content-hashed CommonJS file the
