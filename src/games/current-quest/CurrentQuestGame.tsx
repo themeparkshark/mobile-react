@@ -382,7 +382,10 @@ export default function CurrentQuestGame({
   const [smallChip, setSmallChip] = useState<{ text: string; tone: 'coral' | 'white'; key: number } | null>(null);
   const [inspect, setInspect] = useState<{ text: string; x: number; y: number } | null>(null);
   const [splitChip, setSplitChip] = useState<{ text: string; good: boolean; key: number } | null>(null);
-  const [stake, setStake] = useState(false);
+  // Ride Challenge: the stake card is up from the first frame (it also covers the board's load), then GO.
+  const [stake, setStake] = useState(context === 'ride');
+  const stakeFor = useRef('');
+  const [runReady, setRunReady] = useState(false);
   const [elapsedNow, setElapsedNow] = useState(0);
   const busyUntil = useRef(0);
   const buffered = useRef<number | null>(null);
@@ -828,6 +831,13 @@ export default function CurrentQuestGame({
     runRef.current = run;
     setVoyageIdx(run.index);
     beginVoyage(run, true);
+    setRunReady(true);
+    // Ride Challenge: the stake card is the pre-start (the shell's count is off for rides), once per attempt.
+    if (context === 'ride' && run.voyage.strokes === 0 && run.index === 0 && stakeFor.current !== sessionKey) {
+      // The first attempt's card is already up from mount; a retry raises it again.
+      if (stakeFor.current) setStake(true);
+      stakeFor.current = sessionKey;
+    } else if (context === 'ride' && !stakeFor.current) { stakeFor.current = sessionKey; setStake(false); }
     if (run.voyage.strokes > 0 || run.voyage.spent > 0) {
       const p = center(run.voyage.pos);
       svRef.current.plan.value = { ...idlePlan(p.x, p.y, 1), beached: run.voyage.beached ? 1 : 0, t0: -1 };
@@ -1945,7 +1955,7 @@ export default function CurrentQuestGame({
     if (runEndAt.current && Date.now() - runEndAt.current < 10000) {
       void saveProgress((p) => ({ ...p, replays: p.replays.map((x, i) => (i === p.replays.length - 1 ? { ...x, again: true } : x)) }));
     }
-    if (context === 'ride' && run && run.voyage.strokes === 0 && run.index === 0) setStake(true);
+
     if (run && run.voyage.strokes === 0) { showRibbon(run); svRef.current.tourT0.value = svRef.current.fxT.value + 100; }
   }, [restore.snapshot, showRibbon, context]);
   // Ride Challenge: the stake card is the pre-start, then GO (0.A.5); the shell's own count is off for rides.
@@ -2257,7 +2267,7 @@ export default function CurrentQuestGame({
           ) : null}
           {result ? <ResultsVeil /> : null}
         </View>
-        {stake ? <StakeCard onDone={onStakeDone} /> : null}
+        {stake ? <StakeCard onDone={onStakeDone} ready={runReady} /> : null}
         {share ? <ShareCard ref={shareRef} data={share} /> : null}
         {layout ? <FxStage ref={fx} width={field?.w ?? layout.cw} height={field?.h ?? layout.ch} timeScale={clock.fxScale} reducedMotion={reducedMotion} capacity={lite ? 120 : 200} style={styles.fx} /> : null}
       </GestureHandlerRootView>

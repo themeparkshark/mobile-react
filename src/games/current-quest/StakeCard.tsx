@@ -21,17 +21,22 @@ export const STAKE_TIERS = [
   { coins: 3, label: '8 shells', sub: 'Tide Master Ride, double coins' },
 ] as const;
 
-export function StakeCard({ onDone }: { onDone: () => void }) {
+export function StakeCard({ onDone, ready = true }: { onDone: () => void; ready?: boolean }) {
   // The parent re-renders often (HUD, rail); the 1.2 s timer must not restart with it.
+  // It also covers the board's first load: GO waits until the board is ready.
   const done = useRef(onDone);
   done.current = onDone;
+  const elapsed = useRef(false);
+  const readyRef = useRef(ready);
+  readyRef.current = ready;
   useEffect(() => {
-    const t = setTimeout(() => done.current(), STAKE_MS);
+    const t = setTimeout(() => { elapsed.current = true; if (readyRef.current) done.current(); }, STAKE_MS);
     return () => clearTimeout(t);
   }, []);
+  useEffect(() => { if (ready && elapsed.current) done.current(); }, [ready]);
   return (
     <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(160)} style={styles.scrim}>
-      <Pressable style={styles.fill} onPress={() => done.current()} accessibilityLabel="Ride stakes. Tap to start.">
+      <Pressable style={styles.fill} onPress={() => { if (readyRef.current) done.current(); else elapsed.current = true; }} accessibilityLabel="Ride stakes. Tap to start.">
         <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.card}>
           <Text style={styles.title}>Ride Challenge</Text>
           <View style={styles.row}>
@@ -64,6 +69,6 @@ const styles = StyleSheet.create({
   tier: { flex: 1, alignItems: 'center' },
   stack: { width: 52, height: 66, alignItems: 'center', justifyContent: 'flex-end' },
   coin: { position: 'absolute', width: 48, height: 48, resizeMode: 'contain' },
-  label: { marginTop: 4, fontFamily: 'Shark', fontSize: 15, color: CQ.navy, textAlign: 'center' },
-  sub: { fontFamily: 'Knockout', fontSize: 12, color: CQ.navy, textAlign: 'center' },
+  label: { marginTop: 4, fontFamily: 'Shark', fontSize: 15, color: CQ.navy, textAlign: 'center', alignSelf: 'stretch' },
+  sub: { fontFamily: 'Knockout', fontSize: 12, color: CQ.navy, textAlign: 'center', alignSelf: 'stretch' },
 });

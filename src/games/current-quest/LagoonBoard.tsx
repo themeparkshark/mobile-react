@@ -1109,6 +1109,9 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
   });
   const buoyA = useDerivedValue(() => {
     if (sv.parBuoy.value <= 0) return 0;
+    // Rises with the chest's row, never before the tiles.
+    const rise = Math.max(0, Math.min(1, (sv.fxT.value - sv.riseT0.value - 60 - Math.floor(chestIdx / 5) * 40 - 120) / 200));
+    if (rise < 1) return rise;
     if (sv.parSinkT.value < 0) return 1;
     const e = (sv.fxT.value - sv.parSinkT.value) / 700;
     return e <= 0 ? 1 : e >= 1 ? 0 : 1 - e * e;
