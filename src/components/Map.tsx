@@ -9,7 +9,11 @@ import { BRAND, GameIcon, SHADOW } from '../ui';
 import { AuthContext } from '../context/AuthProvider';
 import { HeadingContext, LocationContext } from '../context/LocationProvider';
 import { Marker } from './map/Marker';
-import { buildDecorations, DECO_ICONS, decorationBand } from './map/decorations';
+import { buildDecorations, buildWaterGlints, DECO_ICONS, decorationBand } from './map/decorations';
+import { MapAliveProvider, useMapAliveEngine } from './map/alive/MapAliveContext';
+import { MapSkyOverlay } from './map/alive/MapSkyOverlay';
+import { WaterGlints } from './map/alive/WaterGlints';
+import { DAYLIGHT } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { nearestWaterPoint } from './map/water';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -30,7 +34,7 @@ export const MapQueryContext = createContext<{
 const FALLBACK_CENTER = { latitude: 34.1381, longitude: -118.3534 };
 const FOLLOW_ZOOM = 17.6;
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -40,6 +44,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly onZoomChange?: (zoom: number) => void;
   /** After "Find": a dashed path for 4 s, and an edge arrow while the target is off screen. */
   readonly guideTarget?: { latitude: number; longitude: number; requestId: number } | null;
+  /** A full-screen flow covers the map: hold every ambient loop still (battery). */
+  readonly ambientPaused?: boolean;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -53,6 +59,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     setHeadingEnabled(true);
     return () => { setScreenFocused(false); setHeadingEnabled(false); };
   }, [setHeadingEnabled]));
+  const alive = useMapAliveEngine({ focused: screenFocused, paused: ambientPaused, light: DAYLIGHT });
 
   // Player shark idle: swim bob, sway, breathe, shadow and glow, all on the UI
   // thread. Loops stop on unmount; reduced motion holds the shark still.
@@ -154,6 +161,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   // Trees, bushes and ripples are planted as icons for what's on screen.
   const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
   const [decorations, setDecorations] = useState<GeoJSON.FeatureCollection>(EMPTY);
+  const [glints, setGlints] = useState<{ latitude: number; longitude: number; seed: number }[]>([]);
   const decoKey = useRef('');
   const decoTimer = useRef<ReturnType<typeof setTimeout>>();
   const refreshDecorations = useCallback(() => {
@@ -179,6 +187,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         setDecorations(buildDecorations({ wood: wood.features, green: green.features, water: water.features,
           homes: homes.features, buildings: buildings.features, roads: roads.features },
           { north, south, east, west }, zoom));
+        setGlints(buildWaterGlints(water.features, { north, south, east, west }, zoom, 6));
       } catch { /* map not ready yet; the next camera change retries */ }
     }, 250);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -311,6 +320,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   );
 
   return (
+    <MapAliveProvider value={alive}>
     <View
       style={{
         position: 'relative',
@@ -402,6 +412,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             <LineLayer id="tps-guide" style={{ lineColor: BRAND.gold, lineWidth: 4, lineCap: 'round', lineDasharray: [1.6, 1.4] }} />
           </ShapeSource>
         )}
+        <WaterGlints spots={glints} />
         <MapQueryContext.Provider value={mapQuery}>{children}</MapQueryContext.Provider>
         {/* Panned away: the shark stays pinned to its spot on the map. Markers draw in
             order, so it comes after the ride islands and is never hidden under one. */}
@@ -411,6 +422,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           </Marker>
         )}
       </MapView>
+      {/* Cloud shadows and passing gulls: above the map, under the controls and the shark. */}
+      {viewSize && <MapSkyOverlay width={viewSize.width} height={viewSize.height} />}
       {arrow && <GuideArrow x={arrow.x} y={arrow.y} angle={arrow.angle} reducedMotion={reducedMotion} />}
       {/* Map data credit, in the game's own type instead of the stock (i) button. */}
       <Pressable accessibilityRole="link" accessibilityLabel="Map data from OpenStreetMap contributors"
@@ -431,6 +444,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         </View>
       )}
     </View>
+    </MapAliveProvider>
   );
 }
 

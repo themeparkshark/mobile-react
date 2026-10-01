@@ -468,6 +468,10 @@ function ExploreScreen() {
       ((taskDistance.get(task.id) ?? Infinity) <= 60 ? 10 : 0) + (restingTasks.includes(task) ? -5 : 0),
   })).filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude)), mapZoom),
   [visibleTasks, restingTasks, selectedTask?.id, adventureTaskId, goalTaskId, liveByTask, playableTaskId, taskDistance, mapZoom, bossMap.flag?.asset_id]);
+  // Living map budget: only the nearest islands spend animation (see ambientBudget).
+  const aliveRanks = useMemo(() => new globalThis.Map(rideClusters.map(cluster => cluster.lead.id)
+    .sort((a, b) => (taskDistance.get(a) ?? Infinity) - (taskDistance.get(b) ?? Infinity))
+    .map((id, index) => [id, index])), [rideClusters, taskDistance]);
   // First reveal of a park's islands: nearest drop in first.
   const revealRef = useRef<{ context: string; delays: globalThis.Map<number, number> } | null>(null);
   if (redeemables && visibleTasks.length && revealRef.current?.context !== mapContext) {
@@ -1041,6 +1045,7 @@ function ExploreScreen() {
         </Pressable>}
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
           onZoomChange={onMapZoom}
+          ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded}
           guideTarget={findGuide && selectedTask?.id === findGuide.taskId ? findGuide : null}
           controlsTop={slotTop + (queueRide ? 104 : 76)} focusCoordinate={bossMap.moment && bossMap.moment.phase !== 'settled'
             ? { ...bossMap.moment.impact.coordinate, requestId: bossMap.moment.impact.raidId } : selectedTask ? {
@@ -1078,6 +1083,7 @@ function ExploreScreen() {
                 (bossMap.moment?.phase === 'flag' || bossMap.moment?.phase === 'settled') ? bossMap.moment.impact.key : undefined}
               ambient={ambientTaskIds.has(task.id)}
               live={liveByTask.get(task.id)}
+              aliveRank={aliveRanks.get(task.id)}
               onPress={handleTaskPress}
             />;
           })}

@@ -2,6 +2,9 @@ import { Image } from 'expo-image';
 import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View, StyleSheet } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useMapAlive } from '../../components/map/alive/MapAliveContext';
+import { hash01, withinBudget } from '../../components/map/alive/ambientBudget';
 import { Marker } from '../../components/map/Marker';
 import RideTeamFlag from '../../components/map/RideTeamFlag';
 import Countdown, { zeroPad } from 'react-countdown';
@@ -74,18 +77,76 @@ function useWaterSpot(kind: string | undefined, latitude: number, longitude: num
   return spot;
 }
 
-/** The ride's coin hovering over its landmark: slow spin and bob. */
-function FloatingCoin({ reducedMotion }: { readonly reducedMotion: boolean }) {
-  const p = useSharedValue(0);
-  useEffect(() => {
-    p.value = 0;
-    if (!reducedMotion) p.value = withRepeat(withTiming(1, { duration: 3200, easing: Easing.linear }), -1, false);
-    return () => cancelAnimation(p);
-  }, [p, reducedMotion]);
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: Math.sin(p.value * Math.PI * 2) * 4 }, { scaleX: Math.cos(p.value * Math.PI * 2) }],
+const SPARKLE = require('../../../assets/images/map/fx/sparkle.png');
+const COIN_TURN = 3.2; // seconds per coin turn
+
+/**
+ * The ride's coin hovering over its landmark: a slow turn and bob on the map's
+ * ambient clock, a soft shadow on the roof that tightens as it rises, and a
+ * glint across its face every other turn. Calm (Reduce Motion) holds it face on.
+ */
+function FloatingCoin({ seed, moving }: { readonly seed: number; readonly moving: boolean }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(seed);
+  const coin = useAnimatedStyle(() => {
+    if (!moving) return { transform: [{ translateY: 0 }, { scaleX: 1 }] };
+    const a = (clock.value / COIN_TURN + phase) * Math.PI * 2;
+    return { transform: [{ translateY: -2 + Math.sin(a) * 4 }, { scaleX: Math.cos(a) }] };
+  });
+  const shadow = useAnimatedStyle(() => {
+    const rise = moving ? (Math.sin((clock.value / COIN_TURN + phase) * Math.PI * 2) + 1) / 2 : 0.5;
+    return { opacity: 0.3 - rise * 0.12, transform: [{ scaleX: 1 - rise * 0.25 }] };
+  });
+  const glint = useAnimatedStyle(() => {
+    if (!moving) return { opacity: 0 };
+    const turns = clock.value / COIN_TURN + phase;
+    const face = Math.cos(turns * Math.PI * 2);
+    const k = Math.floor(turns) % 2 === 0 && face > 0 ? face ** 14 : 0;
+    return { opacity: k, transform: [{ translateY: -2 + Math.sin(turns * Math.PI * 2) * 4 }, { scale: 0.3 + k * 0.8 }, { rotate: `${k * 45}deg` }] };
+  });
+  return <>
+    <Animated.View style={[styles.coinShadow, shadow]} />
+    <Animated.Image source={RIDE_COIN} style={[styles.floatingCoin, coin]} />
+    <Animated.Image source={SPARKLE} tintColor="#ffffff" resizeMode="contain" style={[styles.coinGlint, glint]} />
+  </>;
+}
+
+const LIMITED_COLORS = ['#c9a6ff', '#8fe8ff', '#fff1a3', '#ffb3de', '#c9a6ff', '#8fe8ff', '#fff1a3', '#ffb3de', '#c9a6ff'] as const;
+const LIMITED_BAND = 128; // px of one colour cycle in the halo
+
+/** A twinkle on the limited island, timed off the shared clock. */
+function LimitedTwinkle({ seed, x, y, tint }: { seed: number; x: number; y: number; tint: string }) {
+  const { clock } = useMapAlive();
+  const period = 1.9 + hash01(seed) * 0.9;
+  const phase = hash01(seed + 3);
+  const style = useAnimatedStyle(() => {
+    const p = (clock.value / period + phase) % 1;
+    const k = Math.sin(p * Math.PI) ** 2;
+    return { opacity: k, transform: [{ scale: 0.3 + k * 0.7 }, { rotate: `${p * 90}deg` }] };
+  });
+  return <Animated.Image source={SPARKLE} tintColor={tint} resizeMode="contain" style={[styles.limitedTwinkle, { left: x, top: y }, style]} />;
+}
+
+/**
+ * Limited coins shimmer: an iridescent halo flows around the island's base and
+ * two pastel twinkles wink over it, so a coin that is leaving reads as special
+ * from across the map. Over budget or calm, the halo holds still.
+ */
+function LimitedShimmer({ seed, moving }: { readonly seed: number; readonly moving: boolean }) {
+  const { clock } = useMapAlive();
+  const phase = hash01(seed + 11) * LIMITED_BAND;
+  const flow = useAnimatedStyle(() => ({
+    transform: [{ translateX: moving ? -((clock.value * 26 + phase) % LIMITED_BAND) : -LIMITED_BAND / 3 }],
   }));
-  return <Animated.Image source={RIDE_COIN} style={[styles.floatingCoin, style]} />;
+  return <>
+    <View pointerEvents="none" style={styles.limitedHalo}>
+      <Animated.View style={[styles.limitedFlow, flow]}>
+        <LinearGradient colors={LIMITED_COLORS} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+    </View>
+    {moving && <LimitedTwinkle seed={seed} x={4} y={30} tint="#e3ccff" />}
+    {moving && <LimitedTwinkle seed={seed + 1} x={52} y={18} tint="#fff1a3" />}
+  </>;
 }
 
 /** "Play here": a soft ring swells out from the island's base while the ride is playable. */
@@ -128,6 +189,8 @@ export interface TaskMarkerProps {
   readonly ticketCost?: number;
   /** First reveal: drop in after this many ms (stagger). */
   readonly revealDelay?: number;
+  /** Distance order among the islands on the map (0 = nearest): only the nearest few spend animation. */
+  readonly aliveRank?: number;
   readonly onPress: (task: TaskType) => void;
 }
 
@@ -141,9 +204,11 @@ export interface TaskMarkerProps {
 function TaskMarker({
   task, isSelected, isTripGoal = false, control, flagRaiseKey, ambient = false, live, onPress,
   near = false, playable = false, adventure = false, clusterCount = 0, restingUntil = null,
-  distanceMeters = null, ticketCost = 1, revealDelay,
+  distanceMeters = null, ticketCost = 1, revealDelay, aliveRank,
 }: TaskMarkerProps) {
   const reducedMotion = useReducedGameMotion();
+  const alive = useMapAlive();
+  const calm = alive.tier === 'calm';
   const expiresAt = gameTimestamp(task.active_to);
   const minsLeft = expiresAt !== null ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000)) : null;
 
@@ -274,6 +339,7 @@ function TaskMarker({
           </View>
         )}
 
+        {limited && <LimitedShimmer seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.limitedShimmer)} />}
         {/* Ground ring: flat, bright, no glow. */}
         <View style={[styles.groundRing, { borderColor: ringColor, backgroundColor: `${ringColor}33` }]} />
         {playable && !resting && <PlayPulse color={ringColor} reducedMotion={reducedMotion} />}
@@ -289,7 +355,7 @@ function TaskMarker({
         {/* The ride's landmark: themed art, or the classic shark tower. */}
         <Animated.View style={[styles.buildingContainer, liftStyle]}>
           <View style={[styles.landmarkWrap, resting && styles.landmarkResting]}>
-            {(isSelected || near) && !resting && <FloatingCoin reducedMotion={reducedMotion} />}
+            {(isSelected || near) && !resting && <FloatingCoin seed={task.id} moving={!calm && (isSelected || withinBudget(aliveRank, alive.caps.idleCoins))} />}
             <Image source={LANDMARKS[look.landmark]} style={styles.landmarkImage} contentFit="contain" />
           </View>
           {owned && !isSelected && <View style={styles.levelPip}><Text style={styles.levelText}>{task.coin_level ?? 1}</Text></View>}
@@ -362,4 +428,10 @@ const styles = StyleSheet.create({
   rushText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
   landmarkImage: { width: 64, height: 64 },
   floatingCoin: { position: 'absolute', top: 0, width: 20, height: 20 },
+  coinShadow: { position: 'absolute', top: 23, width: 14, height: 4, borderRadius: 7, backgroundColor: 'rgba(5,52,110,0.9)' },
+  coinGlint: { position: 'absolute', top: -2, marginLeft: 12, width: 12, height: 12 },
+  limitedHalo: { position: 'absolute', bottom: 7, width: 68, height: 26, borderRadius: 34, overflow: 'hidden', opacity: 0.7 },
+  // Two full colour cycles (9 stops), so sliding one band left loops seamlessly.
+  limitedFlow: { position: 'absolute', left: 0, top: 0, bottom: 0, width: LIMITED_BAND * 2 },
+  limitedTwinkle: { position: 'absolute', width: 13, height: 13, zIndex: 9 },
 });

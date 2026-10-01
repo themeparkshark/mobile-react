@@ -179,3 +179,34 @@ export function buildDecorations(input: DecoInput, b: Bounds, zoom: number): Geo
   }
   return { type: 'FeatureCollection', features };
 }
+
+/**
+ * Where the sun glints on water: a few world-anchored points inside the water
+ * polygons on screen, nearest the middle of the view first, so the glints sit
+ * where the player is looking and never on land. Deterministic per spot.
+ */
+export function buildWaterGlints(water: readonly GeoJSON.Feature[], b: Bounds, zoom: number, cap: number): { latitude: number; longitude: number; seed: number }[] {
+  if (cap <= 0 || zoom < 16 || !water.length) return [];
+  const areas = toAreas(water);
+  if (!areas.length) return [];
+  const lat = (b.north + b.south) / 2;
+  const lng = (b.east + b.west) / 2;
+  const spacing = zoom >= 18 ? 14 : zoom >= 17 ? 22 : 34; // metres between candidate spots
+  const dLat = spacing / 111320;
+  const dLng = spacing / (111320 * Math.cos((lat * Math.PI) / 180));
+  const i0 = Math.floor(b.west / dLng); const i1 = Math.ceil(b.east / dLng);
+  const j0 = Math.floor(b.south / dLat); const j1 = Math.ceil(b.north / dLat);
+  if ((i1 - i0) * (j1 - j0) > 6000) return [];
+  const found: { latitude: number; longitude: number; seed: number; d: number }[] = [];
+  for (let i = i0; i <= i1; i++) {
+    for (let j = j0; j <= j1; j++) {
+      if (hash(i, j, 61) > 0.5) continue;
+      const x = (i + 0.2 + hash(i, j, 62) * 0.6) * dLng;
+      const y = (j + 0.2 + hash(j, i, 63) * 0.6) * dLat;
+      if (!inAreas(x, y, areas)) continue;
+      const dx = (x - lng) / dLng; const dy = (y - lat) / dLat;
+      found.push({ latitude: y, longitude: x, seed: Math.floor(hash(i, j, 64) * 1000), d: dx * dx + dy * dy });
+    }
+  }
+  return found.sort((a, c) => a.d - c.d).slice(0, cap).map(({ latitude, longitude, seed }) => ({ latitude, longitude, seed }));
+}
