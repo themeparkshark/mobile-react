@@ -374,8 +374,8 @@ export const QuestHud = React.memo(function QuestHud({ h, onTideHold, width, tie
 });
 
 /** Static HUD heights (layout reserves them so the board never re-lays out). */
-export const HUD_ROW_H = 60;
-export const RUN_BAR_H = 18;
+export const HUD_ROW_H = 56;
+export const RUN_BAR_H = 16;
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 14 },
