@@ -140,7 +140,10 @@ export default function MiniGameSelector({
             correct_count: Number.isInteger(extra?.correctCount) ? extra.correctCount : 0,
             total_answered: Number.isInteger(extra?.totalAnswered) ? extra.totalAnswered : 0,
           } : {}),
-        }
+          // Sharky Tide Run: the replayable swim proof (design 11.2). 'shark'
+          // joins the paid pool only once WS7's Node swim verifier is live.
+          ...(selectedGame === 'shark' && extra?.swimProof ? { swim: extra.swimProof } : {}),
+        } as TaskGameProof
       : undefined;
     onComplete(multiplier, rewards, proof);
   }, [onComplete, rewardMode, selectedGame, attemptSeed]);
@@ -226,7 +229,8 @@ export default function MiniGameSelector({
         );
       case 'shark':
         return (
-          <SharkySwim visible={visible} seed={seed} onClose={onClose}
+          <SharkySwim visible={visible} seed={seed} taskName={taskName} onClose={onClose} onQuit={handleQuit}
+            mode={rewardMode === 'task-attempt' ? 'ride' : 'queue'}
             onComplete={(mult, meta) => handleComplete(mult, meta)} />
         );
       case 'banana':
