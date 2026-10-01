@@ -418,16 +418,20 @@ export default function PostWinRewardsModal({
           </View>
         </Animated.View>
       </ScrollView>
-      {/* The next action stays reachable on small phones while the card scrolls. */}
-      <Animated.View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) + 4 }, footerStyle]}>
-        <YellowButton text={primaryLabel}
-          onPress={hasCoin && onViewCoin ? () => onViewCoin(upgradeReady && !isNewCoin) : onClose} />
-        {hasCoin && onViewCoin && (
-          <TouchableOpacity onPress={onClose} accessibilityRole="button"
-            accessibilityLabel="Continue exploring the park" style={styles.continuePark}>
-            <Text style={styles.continueParkText}>Continue Park</Text>
-          </TouchableOpacity>
-        )}
+      {/* The next action stays reachable on small phones while the card scrolls.
+          It sits on a solid plate: bare text over the dimmed tab bar read as
+          covered by the center compass button. */}
+      <Animated.View testID="post-win-footer" style={[styles.footerPlate, { paddingBottom: Math.max(insets.bottom, 12) + 4 }, footerStyle]}>
+        <View style={styles.footer}>
+          <YellowButton text={primaryLabel}
+            onPress={hasCoin && onViewCoin ? () => onViewCoin(upgradeReady && !isNewCoin) : onClose} />
+          {hasCoin && onViewCoin && (
+            <TouchableOpacity onPress={onClose} accessibilityRole="button"
+              accessibilityLabel="Continue exploring the park" style={styles.continuePark}>
+              <Text style={styles.continueParkText}>Continue Park</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </Animated.View>
       </View>
       {visible && hasCoin && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
@@ -503,6 +507,8 @@ const styles = StyleSheet.create({
   vipChipText: { fontFamily: 'Knockout', fontSize: 15, color: '#05346e', flexShrink: 1 },
   hint: { color: '#ffffff', fontFamily: 'Knockout', fontSize: 16, lineHeight: 20, textAlign: 'center', marginTop: 10,
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0.1 },
+  footerPlate: { alignSelf: 'stretch', backgroundColor: '#05346e', borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    borderTopWidth: 3, borderLeftWidth: 3, borderRightWidth: 3, borderColor: '#0879ca', paddingTop: 6 },
   footer: { width: (SW - 28) * 0.9, alignSelf: 'center', paddingTop: 8 },
   continuePark: { paddingVertical: 9, alignItems: 'center' },
   continueParkText: { color: '#ffffff', textAlign: 'center', fontFamily: 'Shark', fontSize: 17 },

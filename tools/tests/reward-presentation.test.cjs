@@ -91,6 +91,28 @@ test('reduced-motion reward summary settles immediately and leaves its primary a
   assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Continue Park');
   assert.equal(rewards.find(node => node.type === './CoinCatchReveal'), undefined);
 });
+test('the win footer sits on a solid plate so the tab bar compass never reads over Continue Park', () => {
+  // QA P2-5: on "First coin here!" the bare "Continue Park" text sat over the
+  // dimmed center compass tab and looked covered by it.
+  const rewards = runtime('src/components/PostWinRewardsModal.tsx', {
+    '../context/AuthProvider': { AuthContext: { value: { player: null } } },
+    '../hooks/useReducedGameMotion': { default: () => true },
+    './rewards/postWinModel': postWinModel,
+  }, { visible: true, rideName: 'Main Street, U.S.A.', taskCoinUrl: 'coin.png', coinTimesCollected: 1, coinsEarned: 10,
+    xpEarned: 25, onViewCoin() {}, onClose() {} });
+  rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
+  const footer = rewards.find(node => node.props?.testID === 'post-win-footer');
+  const plate = Object.assign({}, ...[footer.props.style].flat(2).filter(Boolean));
+  assert.match(plate.backgroundColor, /^#[0-9a-f]{6}$/i, 'opaque, not a see-through strip');
+  assert.equal(plate.alignSelf, 'stretch', 'full width, over the whole tab bar');
+  const link = (function find(node) {
+    if (!node || typeof node !== 'object') return undefined;
+    if (Array.isArray(node)) return node.map(find).find(Boolean);
+    if (node.props?.accessibilityLabel === 'Continue exploring the park') return node;
+    return find(node.props?.children);
+  })(footer);
+  assert.ok(link, 'Continue Park lives inside the plate');
+});
 test('closing reward summary cancels its entrance clock and unmounts the catch', () => {
   const rewards = rewardView(false); rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
   assert.ok(rewards.motions.length > 0);
