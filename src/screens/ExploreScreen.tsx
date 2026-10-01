@@ -31,7 +31,7 @@ import Wrapper from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import { LocationContext } from '../context/LocationProvider';
-import { isConfirmedOutsidePark } from '../context/parkLookupPolicy';
+import { isConfirmedOutsidePark, isHomeMapConfirmed, nextHomeAnchor, type ParkLookupRecord } from '../context/parkLookupPolicy';
 import { ThemeContext } from '../context/ThemeProvider';
 import useTripGoal from '../hooks/useTripGoal';
 import AdventureTicketCard from './ExploreScreen/AdventureTicketCard';
@@ -53,7 +53,7 @@ import ParkProjectMapBeacon from './ExploreScreen/ParkProjectMapBeacon';
 import type { ParkProject } from '../api/endpoints/me/park-projects';
 import ItemMarker from './ExploreScreen/ItemMarker';
 import GuestInvite from './ExploreScreen/GuestInvite';
-import { chestMayPresent, hasFirstCatch, mapSuggestionSlots, suggestionSlotScreenTop, suggestionSlotTop } from './ExploreScreen/mapPresentationQueue';
+import { chestMayPresent, hasFirstCatch, homeIntroMayPresent, mapSuggestionSlots, suggestionSlotScreenTop, suggestionSlotTop } from './ExploreScreen/mapPresentationQueue';
 import PermissionsNotGranted from './ExploreScreen/PermissionsNotGranted';
 import RideControlBar from '../components/RideControlBar';
 import { rideLook } from '../services/rideLandmark';
@@ -211,7 +211,12 @@ function ExploreScreen() {
   const { refreshPlayer, player } = useContext(AuthContext);
   const { parkLoaded, parkLookupRecord, location, park, permissionGranted, permissionChecked } =
     useContext(LocationContext);
-  const homeLocationConfirmed = isConfirmedOutsidePark(location, parkLookupRecord) && !park;
+  // The anchor is the newest outside-park confirmation (kept through a failed
+  // re-check), so walking past the 25 m re-check never blanks the home map.
+  const homeAnchorRef = useRef<ParkLookupRecord | null>(null);
+  homeAnchorRef.current = nextHomeAnchor(homeAnchorRef.current, parkLookupRecord);
+  const homeLocationConfirmed = !park && (isConfirmedOutsidePark(location, parkLookupRecord) ||
+    isHomeMapConfirmed(location, homeAnchorRef.current));
 
   useEffect(() => {
     if (homeLocationConfirmed) return;
@@ -289,6 +294,7 @@ function ExploreScreen() {
   const [pendingFind, setPendingFind] = useState<{ item: PrepItemType; pivotId: number } | null>(null);
   const collectedOnce = useRef(false);
   const [caughtThisSession, setCaughtThisSession] = useState(false);
+  const [homeIntroOpen, setHomeIntroOpen] = useState(false);
   const [redeemFlowOpen, setRedeemFlowOpen] = useState(false);
 
   // Collect moment: after a ride win, back on the map, the coin flies from its island onto the shelf button.
@@ -741,7 +747,13 @@ function ExploreScreen() {
     firstCatchDone: hasFirstCatch(player, hasCompleted('home_first_find'), caughtThisSession),
     boss: bossOpen || bossOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     rideOpen: redeemFlowOpen, adventureOpen: adventureOccluded,
-    otherModalOpen: showTooFarModal || showCommunityCenterModal,
+    otherModalOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen,
+  });
+  const homeIntroAllowed = homeIntroMayPresent({
+    homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
+    tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
+    otherModalOpen: showTooFarModal || showCommunityCenterModal, chestShowing: dailyGiftOccluded,
+    caughtThisSession, firstFindLineDone: hasCompleted('home_first_find'),
   });
 
   return (
@@ -836,7 +848,8 @@ function ExploreScreen() {
           was cleared without a finished lookup. */}
       {player && !park && permissionGranted && (
         <HomeExplore key={`home-explore-${player.id}`} onPrepItemNearby={handlePrepItemNearby}
-          refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed} />
+          refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
+          introAllowed={mapFocused && homeIntroAllowed} onIntroOpenChange={setHomeIntroOpen} />
       )}
       {/* Guest: a bright sign-in invitation over the live map */}
       {!player && <GuestInvite />}

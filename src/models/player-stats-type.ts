@@ -10,6 +10,8 @@ export interface PlayerStatsType {
   readonly energy_regenerated?: number;
   readonly experience?: number;
   readonly ticket_guarantee_in?: number;
+  /** Today's home Ticket cap is used up (economy.home_tickets); the guarantee line hides. */
+  readonly home_tickets_capped?: boolean;
   readonly focused_prep_set?: {
     readonly slug: string;
     readonly name: string;

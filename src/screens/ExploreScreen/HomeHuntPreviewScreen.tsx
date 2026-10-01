@@ -148,9 +148,11 @@ export default function HomeHuntPreviewScreen() {
     {previewMode !== 'hunt' ? <HomeMapStatusCard mode={previewMode}
       onOpenCollections={() => RootNavigation.navigate('SetCollectionPreview')}
       onRetry={() => setPreviewMode('hunt')} />
-      : <HomeHuntCard target={{ item: previewItem, distanceMeters: distance,
-        kind: showNew ? 'new' : 'spare' }} findsUntilTicket={confirmed > 0 ? 3 : 2}
-        onPress={() => setPickupOpen(true)} />}
+      : <View style={{ position: 'absolute', bottom: 192, left: 16, right: 16, zIndex: 10 }}>
+        <HomeHuntCard target={{ item: previewItem, distanceMeters: distance,
+          kind: showNew ? 'new' : 'spare' }} findsUntilTicket={confirmed > 0 ? 3 : 2}
+          setProgress={{ collected: 19, total: 40 }} onPress={() => setPickupOpen(true)} />
+      </View>}
     <TripGoalCard refreshVersion={0} loadGoal={loadGoal} saveGoal={saveGoal}
       removeGoal={loadGoal} loadCollections={loadCollections} />
     <PrepItemRedeemModal visible={pickupOpen} prepItem={previewItem} pivotId={previewItem.pivot_id!}

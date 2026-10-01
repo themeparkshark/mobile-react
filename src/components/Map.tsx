@@ -41,7 +41,13 @@ const WORLD: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: 
   geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] } }] };
 const FOLLOW_ZOOM = 17.6;
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector }: {
+/** Map points per metre at this zoom and latitude (MapLibre: 512-point world tiles). */
+export function pointsPerMeter(zoom: number, latitude: number): number {
+  const metersPerPoint = 40075016.686 * Math.cos(latitude * Math.PI / 180) / (512 * 2 ** zoom);
+  return metersPerPoint > 0 ? 1 / metersPerPoint : 0;
+}
+
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, onZoomChange, guideTarget, ambientPaused = false, crowdHaze = null, sunOverride, projector, pickupRange = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -59,6 +65,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly sunOverride?: number;
   /** Filled with a function that finds a map coordinate on screen (window points), for moments that leave the map. */
   readonly projector?: MutableRefObject<MapProjector | null>;
+  /**
+   * Home map: a dashed "grab zone" circle around the shark at the real pickup
+   * radius, gold while a find is inside it. Replaces the shark's blue ground
+   * pill, which read like a mystery button.
+   */
+  readonly pickupRange?: { readonly meters: number; readonly findInside: boolean } | null;
 }) {
   const { location } = useContext(LocationContext);
   const { heading, setHeadingEnabled } = useContext(HeadingContext);
@@ -264,6 +276,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   }, [guideTarget?.requestId, projectGuide]); // eslint-disable-line react-hooks/exhaustive-deps
   const arrow = guideTarget && guidePoint && viewSize ? edgeArrow(guidePoint, viewSize) : null;
   const [focusedOnPlayer, setFocusedOnPlayer] = useState<boolean>(true);
+  // Camera zoom, for sizing the grab zone in metres (updated when a move settles).
+  const [cameraZoom, setCameraZoom] = useState(FOLLOW_ZOOM);
   const followRef = useRef(true);
   followRef.current = focusedOnPlayer;
   useEffect(() => {
@@ -326,18 +340,33 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     }],
   };
 
+  const rangeRadius = pickupRange && location
+    ? Math.max(24, Math.min(600, pickupRange.meters * pointsPerMeter(cameraZoom, location.latitude))) : 0;
   const playerShark = (
       <View style={styles.sharkMarkerContainer}>
-        {/* Animated glow ring */}
-        <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
-        {/* Inner blue ring (ground indicator) */}
-        <View style={styles.groundRing} />
+        {pickupRange ? (
+          // Grab zone: centred on the shark's ground point (50, 71.5 in this box).
+          <View pointerEvents="none" style={[styles.grabZone, pickupRange.findInside && styles.grabZoneReady, {
+            width: rangeRadius * 2, height: rangeRadius * 2, borderRadius: rangeRadius,
+            left: 50 - rangeRadius, top: 71.5 - rangeRadius }]}>
+            <View style={[styles.grabZoneTag, pickupRange.findInside && styles.grabZoneTagReady]}>
+              <Text style={[styles.grabZoneText, pickupRange.findInside && styles.grabZoneTextReady]}>GRAB ZONE</Text>
+            </View>
+          </View>
+        ) : (
+          <>
+            {/* Animated glow ring */}
+            <Reanimated.View style={[styles.outerGlowRing, glowStyle]} />
+            {/* Inner blue ring (ground indicator) */}
+            <View style={styles.groundRing} />
+          </>
+        )}
         {/* Wake: sparkles spill from under the shark while it walks. */}
         <SharkWake moving={wake} />
         {/* Animated shadow — shrinks when shark bobs up */}
         <Reanimated.View style={[styles.shadowDisc, shadowStyle]} />
         {/* Directional indicator — only visible in heading mode */}
-        {heading !== null && focusedOnPlayer && <View style={styles.sharkDirectionCone} />}
+        {heading !== null && focusedOnPlayer && !pickupRange && <View style={styles.sharkDirectionCone} />}
         {/* Player's avatar — bobs, tilts, breathes */}
         <Reanimated.View style={[{ width: 60, height: 60 }, sharkStyle]}>
           {player?.inventory?.skin_item?.no_eye_url ? (
@@ -426,12 +455,16 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           }
           onPress?.();
         }}
-        onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap(); }}
+        onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap();
+          void mapViewRef.current?.getZoom().then(zoom => { if (Number.isFinite(zoom)) setCameraZoom(zoom); }).catch(() => undefined); }}
         onRegionDidChange={(feature) => {
           refreshDecorations();
           void projectGuide();
           const zoom = Number(feature.properties?.zoomLevel);
-          if (Number.isFinite(zoom)) onZoomChange?.(zoom);
+          if (Number.isFinite(zoom)) {
+            onZoomChange?.(zoom);
+            setCameraZoom(current => (Math.abs(current - zoom) < 0.02 ? current : zoom));
+          }
           // A pinch or a tap that left the shark centered (within ~8 m) goes back
           // to following; a real pan stays put until the recenter button.
           if (!feature.properties?.isUserInteraction || followRef.current || !location) return;
@@ -602,6 +635,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 3,
   },
+  grabZone: { position: 'absolute', alignItems: 'center', borderWidth: 2.5, borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.95)', backgroundColor: 'rgba(124,198,245,0.10)' },
+  grabZoneReady: { borderColor: BRAND.gold, borderStyle: 'solid', borderWidth: 3, backgroundColor: 'rgba(255,207,59,0.12)' },
+  grabZoneTag: { position: 'absolute', top: -10, paddingHorizontal: 7, paddingVertical: 1, borderRadius: 9,
+    backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.blueBright },
+  grabZoneTagReady: { backgroundColor: BRAND.gold, borderColor: BRAND.white },
+  grabZoneText: { fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.5, color: BRAND.blue },
+  grabZoneTextReady: { color: BRAND.navy },
   outerGlowRing: {
     position: 'absolute',
     bottom: 0,

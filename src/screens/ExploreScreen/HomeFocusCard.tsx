@@ -5,9 +5,10 @@ import { GameIcon, GameRichText } from '../../ui';
 
 type FocusedSet = NonNullable<PlayerStatsType['focused_prep_set']>;
 
-export default function HomeFocusCard({ set, onPress, topOffset = 55 }: {
+export default function HomeFocusCard({ set, onPress, topOffset }: {
   readonly set: FocusedSet;
   readonly onPress: () => void;
+  /** Floats at this top offset; without it the card sits in its parent's layout (the home map's corner stack). */
   readonly topOffset?: number;
 }) {
   const waiting = !set.available_now;
@@ -22,7 +23,7 @@ export default function HomeFocusCard({ set, onPress, topOffset = 55 }: {
     : progress ? `FOCUSED · ${progress} FOUND` : '[icon:sparkle] FOCUSED HUNT';
   return <Pressable accessibilityRole="button"
     accessibilityLabel={`Focused collection: ${set.name}. ${progress ? `${collected} of ${set.total_items} found. ` : ''}${waiting ? reason : 'New finds favor this set'}. Open collection.`}
-    onPress={onPress} style={[styles.card, { top: topOffset }]}>
+    onPress={onPress} style={[styles.card, topOffset != null && [styles.floating, { top: topOffset }]]}>
     <Image source={require('../../../assets/images/screens/profile/pin_collections.png')}
       style={styles.icon} contentFit="contain" />
     <View style={styles.copy}>
@@ -34,8 +35,8 @@ export default function HomeFocusCard({ set, onPress, topOffset = 55 }: {
 }
 
 const styles = StyleSheet.create({
-  card: { position: 'absolute', left: 14, zIndex: 19,
-    flexDirection: 'row', alignItems: 'center', width: '43%', minHeight: 48,
+  floating: { position: 'absolute', left: 14, zIndex: 19, width: '43%' },
+  card: { flexDirection: 'row', alignItems: 'center', minHeight: 44, maxWidth: 240,
     paddingHorizontal: 7, borderRadius: 14, borderWidth: 2, borderColor: '#fff',
     backgroundColor: '#0879ca', shadowColor: '#003c7a', shadowOpacity: 0.3,
     shadowOffset: { width: 0, height: 3 }, shadowRadius: 4, elevation: 5 },

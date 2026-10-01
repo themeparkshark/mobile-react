@@ -7,10 +7,12 @@ interface Props {
   readonly mode: 'loading' | 'empty' | 'error' | 'saved' | 'park_check';
   readonly onRetry?: () => void;
   readonly onOpenCollections?: () => void;
+  /** Sit in the parent's layout (the home map's bottom slot) instead of floating. */
+  readonly inline?: boolean;
 }
 
 /** A shark-led status for the moments between live GPS finds. */
-export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: Props) {
+export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections, inline = false }: Props) {
   // The card itself never animates. A native-driven scale pop on this
   // bordered, rounded card left the blue fill at its starting 0.92 scale on
   // device (Fabric) while the white border and text laid out at full size,
@@ -29,7 +31,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: 
     return () => float.stop();
   }, [mode, sharkFloat]);
 
-  if (mode === 'saved') return <View style={styles.savedCard}>
+  if (mode === 'saved') return <View style={[styles.savedCard, inline && styles.inline]}>
     <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
       style={styles.savedShark} contentFit="contain" />
     <View style={styles.savedCopy}>
@@ -51,7 +53,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: 
     : mode === 'error' ? 'Could not refresh nearby finds.'
       : 'Check your collection while new finds appear.';
 
-  return <View style={styles.card}>
+  return <View style={[styles.card, inline && styles.inline]}>
     <Animated.View style={[styles.sharkFrame, { transform: [{ translateY: sharkFloat }] }]}>
       <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
         style={styles.shark} contentFit="contain" />
@@ -80,6 +82,7 @@ export default function HomeMapStatusCard({ mode, onRetry, onOpenCollections }: 
 }
 
 const styles = StyleSheet.create({
+  inline: { position: 'relative', bottom: undefined, alignSelf: 'stretch', width: undefined },
   savedCard: { position: 'absolute', bottom: 207, alignSelf: 'center', zIndex: 12,
     width: 268, minHeight: 66, flexDirection: 'row', alignItems: 'center',
     borderRadius: 16, borderWidth: 3, borderColor: '#fff', backgroundColor: '#0879ca',

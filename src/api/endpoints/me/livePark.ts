@@ -34,6 +34,11 @@ export interface LiveParks {
   readonly cheer_points: number;
   /** Team display names (server override for trademark review). */
   readonly team_names?: Partial<Record<TeamId, string>>;
+  /**
+   * Server HOME_HUNT_BOARD_ENABLED. The home map shows the team race bar only
+   * when this is true; a missing field (older server) keeps it hidden.
+   */
+  readonly home_hunt_board_enabled?: boolean;
   readonly parks: readonly LiveParkSummary[];
 }
 

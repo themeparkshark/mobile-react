@@ -66,7 +66,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../context/ThemeProvider': { ThemeContext: { value: contexts.theme } },
     '../context/CurrencyProvider': { CurrencyContext: { value: contexts.currency } },
     '../context/DailyGiftProvider': { DailyGiftContext: { value: contexts.dailyGift } },
-    '../context/parkLookupPolicy': { isConfirmedOutsidePark: () => false },
+    '../context/parkLookupPolicy': { isConfirmedOutsidePark: () => false, isHomeMapConfirmed: () => false, nextHomeAnchor: () => null },
     '../hooks/useTripGoal': { default: () => ({ data: options.trip ?? null, stale: false, refresh: async () => undefined,
       choose: async () => null, celebrate: async () => null, select: async () => null, dismiss: async () => undefined }) },
     // The real clock loads the map's opportunities on mount; the stub does it once.

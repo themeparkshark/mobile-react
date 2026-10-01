@@ -1,5 +1,5 @@
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, StyleSheet, View } from 'react-native';
 import { Marker } from '../../components/map/Marker';
 import dayjs from 'dayjs';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,7 +12,7 @@ import { PlayerStatsType } from '../../models/player-stats-type';
 import getPrepItems, { getCachedPrepItems } from '../../api/endpoints/me/prep-items';
 import getCurrentPrepItem from '../../api/endpoints/me/prep-items/current';
 import HomeLive from '../../components/home/HomeLive';
-import PrepItemMarker from './PrepItem';
+import PrepItemMarker, { PREP_MARKER_ANCHOR } from './PrepItem';
 import RadialStatsMenu from '../../components/RadialStatsMenu';
 import QuickAccessMenu from '../../components/QuickAccessMenu';
 import TripGoalCard from './TripGoalCard';
@@ -22,7 +22,21 @@ import HomeHuntCard from './HomeHuntCard';
 import HomeMapStatusCard from './HomeMapStatusCard';
 import HomeFocusCard from './HomeFocusCard';
 import { HOME_PREP_PICKUP_RADIUS_METERS } from './homePickupRange';
+import { isInPickupRange } from './homeFindCopy';
+import HomeIntro, { useHomeIntroSeen } from './HomeIntro';
+import getPrepItemSets from '../../api/endpoints/me/prep-item-sets';
 import * as RootNavigation from '../../RootNavigation';
+
+// ── Layout: one grid for every home card ─────────────────────────────
+// Top row: the live bar (only for a live boss, or the team race when the
+// Home Hunt board is on), then the corner stack (park trip chip, focused set)
+// level with the recenter button. Bottom slot: the find card or a status card,
+// above the menu and shark buttons (bottom 100, 76 tall) with one gutter.
+const EDGE = 16;
+const TOP = 12;
+const LIVE_BAR_ROW = 58; // bar (50) + gap
+const RECENTER_COLUMN = 54 + 12;
+const BOTTOM_SLOT = 100 + 76 + 14;
 
 
 // ── Throttle thresholds ──────────────────────────────────────────────
@@ -55,13 +69,17 @@ interface Props {
   onPrepItemNearby: (prepItem: PrepItemType, pivotId: number) => void;
   refreshVersion: number;
   homeLocationConfirmed: boolean;
+  /** The screen's overlay queue allows the first-time intro right now. */
+  introAllowed?: boolean;
+  onIntroOpenChange?: (open: boolean) => void;
 }
 
 /**
  * Home exploration view - shows prep items on map when not at a park.
  * This is the at-home gameplay experience.
  */
-export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLocationConfirmed }: Props) {
+export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLocationConfirmed,
+  introAllowed = false, onIntroOpenChange }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [playerStats, setPlayerStats] = useState<PlayerStatsType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,6 +104,11 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
   const cacheReadOnce = useRef(false);
   const firstScreenFocus = useRef(true);
   const screenFocused = useRef(false);
+  const [liveBar, setLiveBar] = useState<'raid' | 'teams' | null>(null);
+  const [setProgress, setSetProgress] = useState<Record<string, { collected: number; total: number }>>({});
+  const [introSeen, markIntroSeen] = useHomeIntroSeen(player?.id);
+  const introOpen = introSeen === false && introAllowed && homeLocationConfirmed;
+  useEffect(() => { onIntroOpenChange?.(introOpen); }, [introOpen, onIntroOpenChange]);
 
   /** Check whether enough distance/time has elapsed to allow a fetch */
   const shouldThrottle = (
@@ -171,6 +194,7 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     [homeLocationConfirmed, location?.latitude, location?.longitude, player?.id, refreshPlayer, loadError]
   );
   loadPrepItemsRef.current = loadPrepItems;
+  const loadSetProgressRef = useRef<() => void>(() => {});
   const handlePrepItemExpire = useCallback(() => {
     void loadPrepItemsRef.current(true);
   }, []);
@@ -200,6 +224,23 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     if (refreshVersion > 0) void loadPrepItems(true);
   }, [refreshVersion]);
 
+  // "Churro Collection: 3/40" on the find card. One small read on focus and
+  // after each pickup, never on GPS ticks.
+  const loadSetProgress = useCallback(() => {
+    if (!homeLocationConfirmed || !player?.id) return;
+    getPrepItemSets().then(sets => {
+      const next: Record<string, { collected: number; total: number }> = {};
+      for (const set of sets ?? []) {
+        if (set?.slug && Number.isFinite(set.total_items) && set.total_items > 0) {
+          next[set.slug] = { collected: set.collected_count ?? 0, total: set.total_items };
+        }
+      }
+      setSetProgress(next);
+    }).catch(() => undefined);
+  }, [homeLocationConfirmed, player?.id]);
+  loadSetProgressRef.current = loadSetProgress;
+  useEffect(() => { loadSetProgress(); }, [loadSetProgress, refreshVersion]);
+
   // Returning from Collections may change the focused set. Refresh immediately
   // even when GPS has not moved and the current spawn batch has not expired.
   useFocusEffect(useCallback(() => {
@@ -208,6 +249,7 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
       firstScreenFocus.current = false;
     } else {
       void loadPrepItemsRef.current(true);
+      loadSetProgressRef.current();
     }
     return () => { screenFocused.current = false; };
   }, []));
@@ -226,6 +268,9 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
       NEARBY_MIN_DISTANCE_M, NEARBY_MIN_INTERVAL_MS, NEARBY_MAX_IDLE_MS)) {
       return;
     }
+
+    // Never auto-open a find for a map that is off screen or backgrounded.
+    if (!screenFocused.current || AppState.currentState !== 'active') return;
 
     const checkNearby = async () => {
       try {
@@ -252,91 +297,95 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
     return dayjs().isBetween(dayjs(item.active_from), dayjs(item.active_to));
   });
   const huntTarget = nearestHomeHuntTarget(activePrepItems, location, Date.now(), selectedHuntPivotId);
+  const lat = location?.latitude;
+  const lng = location?.longitude;
+  const placed = useMemo(() => activePrepItems.map(item => {
+    const distance = item.latitude != null && item.longitude != null && lat != null && lng != null
+      ? calculateDistance(lat, lng, item.latitude, item.longitude) : null;
+    return { item, distance, inRange: !loadError && isInPickupRange(distance) };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [prepItems, lat, lng, loadError]);
+  const findInRange = homeLocationConfirmed && placed.some(entry => entry.inRange);
+  const pickupRange = useMemo(() => (homeLocationConfirmed
+    ? { meters: HOME_PREP_PICKUP_RADIUS_METERS, findInside: findInRange } : null), [homeLocationConfirmed, findInRange]);
+  const rowTop = TOP + (liveBar ? LIVE_BAR_ROW : 0);
+  const focusedSet = playerStats?.focused_prep_set;
+  const huntSlug = huntTarget?.item.set_slug ?? null;
+  const huntProgress = huntSlug ? setProgress[huntSlug]
+    ?? (focusedSet && focusedSet.slug === huntSlug && focusedSet.total_items
+      ? { collected: focusedSet.collected_count ?? 0, total: focusedSet.total_items } : null) : null;
+  // The find card already names its set and progress; the focus card only
+  // earns the corner when it adds something (a different set, or a wait).
+  const showFocusCard = homeLocationConfirmed && !isLoading && !loadError && !!focusedSet &&
+    (!huntTarget || focusedSet.slug !== huntSlug || !focusedSet.available_now);
+
+  let bottom: React.ReactNode = null;
+  if (!homeLocationConfirmed) {
+    bottom = <HomeMapStatusCard mode="park_check" inline />;
+  } else if (isLoading) {
+    bottom = <HomeMapStatusCard mode="loading" inline />;
+  } else if (activePrepItems.length === 0) {
+    bottom = <HomeMapStatusCard mode={loadError ? 'error' : 'empty'} inline
+      onOpenCollections={() => RootNavigation.navigate('SetCollection',
+        focusedSet?.slug ? { slug: focusedSet.slug } : undefined)}
+      onRetry={() => void loadPrepItems(true)} />;
+  } else if (loadError) {
+    bottom = <HomeMapStatusCard mode="saved" inline onRetry={() => void loadPrepItems(true)} />;
+  } else if (huntTarget) {
+    bottom = <HomeHuntCard target={huntTarget} setProgress={huntProgress}
+      findsUntilTicket={playerStats?.ticket_guarantee_in}
+      ticketsCapped={playerStats?.home_tickets_capped === true}
+      onPress={() => {
+        const item = huntTarget.item;
+        if (isInPickupRange(huntTarget.distanceMeters) && item.pivot_id) {
+          onPrepItemNearby(item, item.pivot_id);
+        } else if (item.latitude != null && item.longitude != null) {
+          setHuntFocus({ latitude: item.latitude, longitude: item.longitude,
+            requestId: ++nextHuntFocusRequest.current });
+        }
+      }} />;
+  }
 
   return (
     <View style={styles.container}>
       {/* Map with prep items - player marker is handled by Map component */}
-      <Map focusCoordinate={huntFocus}>
-        {/* Prep item markers */}
-        {homeLocationConfirmed && activePrepItems.map((prepItem) => {
-          const isInRange =
-            prepItem.latitude != null &&
-            prepItem.longitude != null &&
-            location?.latitude != null &&
-            location?.longitude != null &&
-            calculateDistance(
-              location.latitude,
-              location.longitude,
-              prepItem.latitude,
-              prepItem.longitude
-            ) <= HOME_PREP_PICKUP_RADIUS_METERS;
-
-          return (
-            <Marker
-              key={prepItem.pivot_id || prepItem.id}
-              coordinate={{
-                latitude: prepItem.latitude!,
-                longitude: prepItem.longitude!,
-              }}
-              tracksViewChanges={isInRange && !loadError}
-              anchor={{ x: 0.5, y: 0.5 }}
-              onPress={() => {
-                if (!loadError && prepItem.pivot_id) {
-                  setSelectedHuntPivotId(prepItem.pivot_id);
-                  if (!isInRange) return;
-                  onPrepItemNearby(prepItem, prepItem.pivot_id);
-                }
-              }}
-            >
-              <PrepItemMarker prepItem={prepItem} onExpire={handlePrepItemExpire} inRange={isInRange && !loadError} />
-            </Marker>
-          );
-        })}
+      <Map focusCoordinate={huntFocus} controlsTop={rowTop} pickupRange={pickupRange}>
+        {homeLocationConfirmed && placed.map(({ item: prepItem, distance, inRange }) => (
+          <Marker
+            key={prepItem.pivot_id || prepItem.id}
+            coordinate={{
+              latitude: prepItem.latitude!,
+              longitude: prepItem.longitude!,
+            }}
+            anchor={PREP_MARKER_ANCHOR}
+            accessibilityLabel={inRange ? `${prepItem.name}. In range. Tap to grab.` : `${prepItem.name}, ${distance == null ? 'distance unknown' : `${Math.round(distance)} meters away`}`}
+            onPress={() => {
+              if (!loadError && prepItem.pivot_id) {
+                setSelectedHuntPivotId(prepItem.pivot_id);
+                if (!inRange) return;
+                onPrepItemNearby(prepItem, prepItem.pivot_id);
+              }
+            }}
+          >
+            <PrepItemMarker prepItem={prepItem} onExpire={handlePrepItemExpire}
+              inRange={inRange} distanceMeters={distance} />
+          </Marker>
+        ))}
       </Map>
 
-      {homeLocationConfirmed && !isLoading && !loadError && huntTarget && (
-        <HomeHuntCard target={huntTarget}
-          findsUntilTicket={playerStats?.ticket_guarantee_in}
-          onPress={() => {
-            const item = huntTarget.item;
-            if (huntTarget.distanceMeters <= HOME_PREP_PICKUP_RADIUS_METERS && item.pivot_id) {
-              onPrepItemNearby(item, item.pivot_id);
-            } else if (item.latitude != null && item.longitude != null) {
-              setHuntFocus({ latitude: item.latitude, longitude: item.longitude,
-                requestId: ++nextHuntFocusRequest.current });
-            }
-          }} />
-      )}
+      {/* Corner stack, level with the recenter button. */}
+      <View style={[styles.corner, { top: rowTop }]} pointerEvents="box-none">
+        <TripGoalCard refreshVersion={refreshVersion} compact />
+        {showFocusCard && focusedSet && (
+          <HomeFocusCard set={focusedSet}
+            onPress={() => RootNavigation.navigate('SetCollection', { slug: focusedSet.slug })} />
+        )}
+      </View>
 
-      {/* Loading indicator */}
-      {!homeLocationConfirmed && <HomeMapStatusCard mode="park_check" />}
-      {homeLocationConfirmed && isLoading && (
-        <HomeMapStatusCard mode="loading" />
-      )}
+      {bottom && <View style={styles.bottomSlot} pointerEvents="box-none">{bottom}</View>}
 
-      {/* Empty state */}
-      {homeLocationConfirmed && !isLoading && activePrepItems.length === 0 && (
-        <HomeMapStatusCard mode={loadError ? 'error' : 'empty'}
-          onOpenCollections={() => RootNavigation.navigate('SetCollection',
-            playerStats?.focused_prep_set?.slug ? { slug: playerStats.focused_prep_set.slug } : undefined)}
-          onRetry={() => void loadPrepItems(true)} />
-      )}
-
-      {homeLocationConfirmed && !isLoading && loadError && activePrepItems.length > 0 && (
-        <HomeMapStatusCard mode="saved" onRetry={() => void loadPrepItems(true)} />
-      )}
-
-      {homeLocationConfirmed && !isLoading && !loadError && playerStats?.focused_prep_set && (
-        <HomeFocusCard set={playerStats.focused_prep_set} topOffset={76}
-          onPress={() => RootNavigation.navigate('SetCollection', {
-            slug: playerStats.focused_prep_set!.slug,
-          })} />
-      )}
-
-      <TripGoalCard refreshVersion={refreshVersion} />
-
-      {/* The parks, live: bosses to join from home, close fights to cheer. */}
-      <HomeLive top={12} />
+      {/* Live bosses from home; the team race only when the Home Hunt board is on. */}
+      <HomeLive top={TOP} onBarChange={setLiveBar} />
 
       {/* Quick Access Menu - hamburger on left */}
       <QuickAccessMenu position="left" />
@@ -344,6 +393,7 @@ export default function HomeExplore({ onPrepItemNearby, refreshVersion, homeLoca
       {/* Radial Stats Menu - shark avatar on right */}
       <RadialStatsMenu />
 
+      {introOpen && <HomeIntro onDone={markIntroSeen} />}
     </View>
   );
 }
@@ -352,12 +402,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  // Removed conditionsBar - weather/time badges removed
-  _placeholder: {
-    // placeholder to maintain structure
-    zIndex: 10,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  // Player marker moved to Map component
+  corner: { position: 'absolute', left: EDGE, right: EDGE + RECENTER_COLUMN, zIndex: 19,
+    alignItems: 'flex-start', gap: 8 },
+  bottomSlot: { position: 'absolute', left: EDGE, right: EDGE, bottom: BOTTOM_SLOT, zIndex: 12,
+    alignItems: 'stretch', maxWidth: 420, alignSelf: 'center' },
 });

@@ -1,29 +1,13 @@
 import { Image, ImageSource } from 'expo-image';
-import { useEffect, useState, useMemo, useRef } from 'react';
-import { Text, View } from 'react-native';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { PrepItemType } from '../../models/prep-item-type';
 import config from '../../config';
-import dayjs from 'dayjs';
 import prepItemImage from '../../helpers/prepItemImages';
-import { GameIcon } from '../../ui';
-
-/** Pulse cycle for in-range markers (toggles between two static visual states) */
-function usePulse(enabled: boolean, intervalMs = 800): boolean {
-  const [bright, setBright] = useState(true);
-  const ref = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (!enabled) {
-      setBright(true);
-      if (ref.current) clearInterval(ref.current);
-      return;
-    }
-    ref.current = setInterval(() => setBright((b) => !b), intervalMs);
-    return () => { if (ref.current) clearInterval(ref.current); };
-  }, [enabled, intervalMs]);
-
-  return bright;
-}
+import { BRAND, GameIcon } from '../../ui';
+import { useMapAlive } from '../../components/map/alive/MapAliveContext';
+import { formatFindDistance, formatLeavesIn, msUntilLeavesInChanges } from './homeFindCopy';
 
 // Local churro images map - React Native requires static imports
 const CHURRO_IMAGES: Record<string, ImageSource> = {
@@ -102,193 +86,131 @@ interface Props {
   prepItem: PrepItemType;
   onExpire: () => void;
   inRange?: boolean;
+  /** Metres from the player, for the out-of-range label. */
+  distanceMeters?: number | null;
 }
 
 /**
- * PrepItem — 100% STATIC layout (rendered inside <Marker>).
- * No Animated transforms — prevents teleporting on react-native-maps.
+ * The find circle sits at the exact centre of the marker box, so the find is
+ * drawn on its real spot whether or not the native MarkerView honours an
+ * off-centre anchor (on device it ignored one, which put every find about
+ * 19 points north of where the grab-zone math measured it).
  */
-export default function PrepItem({ prepItem, onExpire, inRange = false }: Props) {
-  const [timeRemaining, setTimeRemaining] = useState<string>('');
-  const bright = usePulse(inRange);
+export const PREP_MARKER_ANCHOR = { x: 0.5, y: 0.5 };
 
-  // Get local image for churros
+const RARITY: Record<number, string> = {
+  1: '#4CAF50', 2: config.secondary, 3: '#9C27B0', 4: '#FF9800', 5: '#FFD700',
+};
+
+/** "leaves in 21m": re-renders when the label changes, and only while the map is on screen. */
+function useLeavesIn(activeTo: string | null | undefined, onExpire: () => void, live: boolean): string | null {
+  const endsAt = activeTo ? Date.parse(activeTo) : NaN;
+  const [label, setLabel] = useState(() => Number.isFinite(endsAt) ? formatLeavesIn(endsAt - Date.now()) : null);
+  const expireRef = useRef(onExpire);
+  expireRef.current = onExpire;
+  useEffect(() => {
+    if (!Number.isFinite(endsAt) || !live) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const left = endsAt - Date.now();
+      setLabel(formatLeavesIn(left));
+      if (left <= 0) { expireRef.current(); return; }
+      timer = setTimeout(tick, msUntilLeavesInChanges(left));
+    };
+    tick();
+    return () => clearTimeout(timer);
+  }, [endsAt, live]);
+  return label;
+}
+
+/**
+ * A home find on the map. In pickup range it bounces with a bright gold ring
+ * and says TAP TO GRAB; out of range it sits a little dimmer and says how far
+ * it is. Motion rides the map's shared ambient clock on the UI thread, so it
+ * stops with the map (off screen, backgrounded, Reduce Motion).
+ */
+function PrepItem({ prepItem, onExpire, inRange = false, distanceMeters = null }: Props) {
+  const { clock, active } = useMapAlive();
+  const leavesIn = useLeavesIn(prepItem.active_to, onExpire, active);
+
   const localImage = useMemo(
     () => prepItemImage(prepItem.variant_slug) || getChurroImage(prepItem.name),
     [prepItem.variant_slug, prepItem.name]
   );
-
-  // Countdown timer
-  useEffect(() => {
-    if (!prepItem.active_to) return;
-
-    const interval = setInterval(() => {
-      const now = dayjs();
-      const end = dayjs(prepItem.active_to);
-      const diff = end.diff(now, 'second');
-
-      if (diff <= 0) {
-        clearInterval(interval);
-        onExpire();
-        return;
-      }
-
-      const minutes = Math.floor(diff / 60);
-      const seconds = diff % 60;
-      setTimeRemaining(`${minutes}:${seconds.toString().padStart(2, '0')}`);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [prepItem.active_to, onExpire]);
-
-  // Rarity config
-  const rarityConfig = {
-    1: { color: '#4CAF50', label: 'Common' },
-    2: { color: config.secondary, label: 'Uncommon' },
-    3: { color: '#9C27B0', label: 'Rare' },
-    4: { color: '#FF9800', label: 'Epic' },
-    5: { color: '#FFD700', label: 'Legendary' },
-  }[prepItem.rarity] || { color: '#4CAF50', label: 'Common' };
-
-  // Use the bundled collection art when available.
   const imageSource = localImage || (prepItem.icon_url ? { uri: prepItem.icon_url } : null);
+  const rarityColor = RARITY[prepItem.rarity] ?? RARITY[1];
+
+  const bounce = useAnimatedStyle(() => {
+    if (!inRange) return { transform: [{ translateY: 0 }] };
+    const hop = Math.abs(Math.sin(clock.value * Math.PI * 1.4));
+    return { transform: [{ translateY: -7 * hop }, { scale: 1 + 0.04 * hop }] };
+  }, [inRange]);
+  const ringPulse = useAnimatedStyle(() => {
+    if (!inRange) return { opacity: 0, transform: [{ scale: 1 }] };
+    const wave = 0.5 + 0.5 * Math.sin(clock.value * Math.PI * 2);
+    return { opacity: 0.55 + 0.45 * wave, transform: [{ scale: 1 + 0.12 * wave }] };
+  }, [inRange]);
+
+  const distance = distanceMeters != null && Number.isFinite(distanceMeters) ? formatFindDistance(distanceMeters) : '';
 
   return (
-    <View
-      style={{
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 80,
-        height: 80,
-      }}
-    >
-      {/* Outer pulse ring — only visible when in range */}
-      {inRange && (
-        <View
-          style={{
-            position: 'absolute',
-            width: bright ? 78 : 72,
-            height: bright ? 78 : 72,
-            borderRadius: bright ? 39 : 36,
-            borderWidth: 3,
-            borderColor: bright ? '#4AFF6F' : '#2DD855',
-            backgroundColor: 'transparent',
-            opacity: bright ? 0.9 : 0.4,
-          }}
-        />
-      )}
-
-      {/* Glow effect based on rarity — brighter when in range + pulsing */}
-      <View
-        style={{
-          position: 'absolute',
-          width: inRange && bright ? 74 : 70,
-          height: inRange && bright ? 74 : 70,
-          borderRadius: inRange && bright ? 37 : 35,
-          backgroundColor: inRange ? '#4AFF6F' : rarityConfig.color,
-          opacity: inRange ? (bright ? 0.6 : 0.3) : 0.4,
-        }}
-      />
-
-      {/* White outline circle — green border when in range */}
-      <View
-        style={{
-          position: 'absolute',
-          width: 60,
-          height: 60,
-          borderRadius: 30,
-          borderWidth: 3,
-          borderColor: inRange ? (bright ? '#4AFF6F' : '#2DD855') : 'white',
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          shadowColor: inRange ? '#4AFF6F' : '#000',
-          shadowOffset: { width: 2, height: 2 },
-          shadowRadius: inRange ? 6 : 0,
-          shadowOpacity: inRange ? (bright ? 0.8 : 0.4) : 0.3,
-        }}
-      />
-
-      {/* Item icon */}
-      {imageSource ? (
-        <Image
-          source={imageSource}
-          style={{
-            width: 45,
-            height: 45,
-            zIndex: 10,
-          }}
-          contentFit="contain"
-        />
-      ) : (
-        <View
-          style={{
-            width: 45,
-            height: 45,
-            borderRadius: 22,
-            backgroundColor: rarityConfig.color,
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10,
-          }}
-        >
-          <GameIcon name="gift" size={28} />
+    <View style={styles.box}>
+      <Animated.View style={[styles.findGroup, bounce]}>
+        <Animated.View style={[styles.rangeRing, ringPulse]} />
+        <View style={[styles.glow, { backgroundColor: inRange ? BRAND.gold : rarityColor },
+          inRange ? styles.glowInRange : styles.glowFar]} />
+        <View style={[styles.circle, inRange ? styles.circleInRange : styles.circleFar]}>
+          {imageSource ? (
+            <Image source={imageSource} style={styles.image} contentFit="contain" />
+          ) : (
+            <View style={[styles.fallback, { backgroundColor: rarityColor }]}>
+              <GameIcon name="gift" size={28} />
+            </View>
+          )}
         </View>
-      )}
+        {prepItem.is_new_variant && (
+          <View style={styles.newBadge}><Text style={styles.newText}>NEW</Text></View>
+        )}
+        <View style={[styles.rarityDot, { backgroundColor: rarityColor }]} />
+      </Animated.View>
 
-      {/* Timer */}
-      {timeRemaining && (
-        <View
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            backgroundColor: config.primary,
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            borderRadius: 10,
-            borderWidth: 2,
-            borderColor: 'white',
-            shadowColor: '#000',
-            shadowOffset: { width: 1, height: 1 },
-            shadowRadius: 0,
-            shadowOpacity: 0.3,
-          }}
-        >
-          <Text
-            style={{
-              fontFamily: 'Knockout',
-              fontSize: 11,
-              color: 'white',
-            }}
-          >
-            {timeRemaining}
-          </Text>
-        </View>
-      )}
-
-      {/* Rarity indicator */}
-      {prepItem.is_new_variant && (
-        <View style={{ position: 'absolute', top: 0, left: 0, zIndex: 12,
-          backgroundColor: '#ffca30', borderWidth: 2, borderColor: '#fff', borderRadius: 8,
-          paddingHorizontal: 4, paddingVertical: 1 }}>
-          <Text style={{ color: '#093d77', fontFamily: 'Knockout', fontSize: 10 }}>NEW</Text>
-        </View>
-      )}
-      <View
-        style={{
-          position: 'absolute',
-          top: 5,
-          right: 10,
-          width: 14,
-          height: 14,
-          borderRadius: 7,
-          backgroundColor: rarityConfig.color,
-          borderWidth: 2,
-          borderColor: 'white',
-          shadowColor: '#000',
-          shadowOffset: { width: 1, height: 1 },
-          shadowRadius: 0,
-          shadowOpacity: 0.3,
-        }}
-      />
+      <View style={[styles.label, inRange ? styles.labelInRange : styles.labelFar]}>
+        <Text style={[styles.labelTitle, inRange && styles.labelTitleInRange]} numberOfLines={1}>
+          {inRange ? 'TAP TO GRAB' : distance || 'WALK CLOSER'}
+        </Text>
+        {leavesIn && <Text style={[styles.labelTime, inRange && styles.labelTimeInRange]} numberOfLines={1}>{leavesIn}</Text>}
+      </View>
     </View>
   );
 }
+
+export default memo(PrepItem);
+
+const styles = StyleSheet.create({
+  box: { width: 128, height: 124, alignItems: 'center' },
+  findGroup: { position: 'absolute', top: 31, width: 62, height: 62, alignItems: 'center', justifyContent: 'center' },
+  rangeRing: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: BRAND.gold },
+  glow: { position: 'absolute', width: 70, height: 70, borderRadius: 35 },
+  glowInRange: { opacity: 0.55 },
+  glowFar: { opacity: 0.25 },
+  circle: { width: 60, height: 60, borderRadius: 30, borderWidth: 3, alignItems: 'center', justifyContent: 'center',
+    shadowColor: BRAND.shadow, shadowOffset: { width: 0, height: 2 }, shadowRadius: 2, shadowOpacity: 0.3 },
+  circleInRange: { borderColor: BRAND.gold, backgroundColor: BRAND.white },
+  circleFar: { borderColor: BRAND.white, backgroundColor: 'rgba(255,255,255,0.82)', opacity: 0.78 },
+  image: { width: 45, height: 45 },
+  fallback: { width: 45, height: 45, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  newBadge: { position: 'absolute', top: -6, left: -10, backgroundColor: BRAND.gold, borderWidth: 2,
+    borderColor: BRAND.white, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1 },
+  newText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 10 },
+  rarityDot: { position: 'absolute', top: 0, right: 0, width: 14, height: 14, borderRadius: 7,
+    borderWidth: 2, borderColor: BRAND.white },
+  label: { position: 'absolute', top: 91, alignItems: 'center', borderRadius: 10, borderWidth: 2,
+    borderColor: BRAND.white, paddingHorizontal: 7, paddingVertical: 2, maxWidth: 128,
+    shadowColor: BRAND.shadow, shadowOffset: { width: 0, height: 2 }, shadowRadius: 0, shadowOpacity: 0.3 },
+  labelInRange: { backgroundColor: BRAND.gold },
+  labelFar: { backgroundColor: BRAND.blue },
+  labelTitle: { fontFamily: 'Shark', fontSize: 12, color: BRAND.white },
+  labelTitleInRange: { color: BRAND.navy },
+  labelTime: { fontFamily: 'Knockout', fontSize: 10, color: '#d6efff', marginTop: -1 },
+  labelTimeInRange: { color: BRAND.navySoft },
+});

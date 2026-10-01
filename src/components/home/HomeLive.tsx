@@ -14,6 +14,7 @@ import { BOSS_ART } from '../boss/bossArt';
 import { BRAND, GameButton, GameIcon } from '../../ui';
 import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll, { useAppActive } from '../../hooks/useLivePoll';
+import { homeLiveBar } from './homeLiveBar';
 
 const ORDER = TEAM_ORDER;
 
@@ -27,7 +28,11 @@ function clock(endsAt: string, now: number) {
  * park) and a sheet with every live boss you can join remotely and the close
  * team fights you can tip with a home cheer.
  */
-export default function HomeLive({ top = 12 }: { readonly top?: number }) {
+export default function HomeLive({ top = 12, onBarChange }: {
+  readonly top?: number;
+  /** Tells the map whether a bar is taking the top row, so the controls below it can move up. */
+  readonly onBarChange?: (bar: 'raid' | 'teams' | null) => void;
+}) {
   const { refreshPlayer } = useContext(AuthContext);
   const [live, setLive] = useState<LiveParks | null>(null);
   const [open, setOpen] = useState(false);
@@ -59,6 +64,9 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
   }, [toast]);
 
   useEffect(() => applyTeamNames(live?.team_names), [live?.team_names]);
+  const raidLiveNow = !!live?.parks.some(p => p.raid && new Date(p.raid.ends_at).getTime() > now);
+  const bar = homeLiveBar(live, raidLiveNow);
+  useEffect(() => { onBarChange?.(bar); }, [bar, onBarChange]);
   if (!live) return null;
   const names = live.team_names;
   const yours = live.your_team;
@@ -92,12 +100,12 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
 
   return (
     <>
-      <Pressable accessibilityRole="button" onPress={() => (liveRaid ? setRaidPark(liveRaid.park_id) : setOpen(true))}
+      {bar && <Pressable accessibilityRole="button" onPress={() => (liveRaid ? setRaidPark(liveRaid.park_id) : setOpen(true))}
         onLongPress={() => setOpen(true)}
         style={[styles.bar, liveRaid && styles.barBoss, { top }]}
         accessibilityLabel={liveRaid?.raid
           ? `Boss live: ${BOSS_NAMES[liveRaid.raid.boss]} at ${liveRaid.name}. Open live parks.`
-          : 'Open live parks'}>
+          : 'Team race. What is this?'}>
         {liveRaid?.raid ? (
           <>
             <Image source={BOSS_ART[liveRaid.raid.boss]} style={styles.barBossArt} contentFit="contain" />
@@ -122,7 +130,7 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
             </View>
           </>
         )}
-      </Pressable>
+      </Pressable>}
 
       {toast && <View style={[styles.toast, { top: top + 60 }]} pointerEvents="none">
         <GameIcon name="check" size={22} /><Text style={styles.toastText}>{toast}</Text>
@@ -133,8 +141,13 @@ export default function HomeLive({ top = 12 }: { readonly top?: number }) {
         onModalHide={() => { const run = pending.current; pending.current = null; run?.(); }}>
         <View style={styles.sheet}>
           <View style={styles.grabber} />
-          <Text style={styles.title}>LIVE AT THE PARKS</Text>
-          <Text style={styles.sub}>Rides each team holds today, every park</Text>
+          <Text style={styles.title}>{bar === 'teams' ? 'THE TEAM RACE' : 'LIVE AT THE PARKS'}</Text>
+          <View style={styles.explain} accessible accessibilityRole="text">
+            <Text style={styles.explainTitle}>What's this?</Text>
+            <Text style={styles.explainLine}>Every ride at the parks is held by a team: {ORDER.map(team => teamShortName(team, names)).join(', ')}.</Text>
+            <Text style={styles.explainLine}>Play a ride at the park to win it for your team. The team holding the most rides leads.</Text>
+            <Text style={styles.explainLine}>From home you can defend your team's rides and join live bosses.</Text>
+          </View>
           {!liveRaid && live.next_boss && (
             <Text style={styles.nextBoss}>
               Next boss {new Date(live.next_boss.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} at {live.next_boss.park_name}
@@ -267,6 +280,9 @@ const styles = StyleSheet.create({
   title: { fontFamily: 'Shark', fontSize: 28, color: BRAND.gold, textAlign: 'center', textShadowColor: BRAND.navy,
     textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
   sub: { fontFamily: 'Knockout', fontSize: 15, color: '#e4f7ff', textAlign: 'center', marginTop: 2 },
+  explain: { backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14, padding: 10, marginTop: 8, gap: 3 },
+  explainTitle: { fontFamily: 'Shark', fontSize: 15, color: BRAND.gold },
+  explainLine: { fontFamily: 'Knockout', fontSize: 14, lineHeight: 18, color: BRAND.white },
   standings: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 12 },
   standing: { alignItems: 'center' },
   standingBadge: { width: 48, height: 48 },

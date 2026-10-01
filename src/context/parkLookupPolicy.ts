@@ -27,6 +27,33 @@ export function isConfirmedOutsidePark(
     distanceMeters(location, previous) < 25);
 }
 
+/**
+ * The home map's anchor: the newest successful outside-park check. A failed
+ * check keeps it (a network blip is not evidence of a park); a park answer or
+ * a reset clears it.
+ */
+export function nextHomeAnchor(anchor: ParkLookupRecord | null, latest: ParkLookupRecord | null): ParkLookupRecord | null {
+  if (!latest) return null;
+  if (latest.outcome === 'outside') return latest;
+  if (latest.outcome === 'park') return null;
+  return anchor;
+}
+
+/** Walking room around the anchor while the next 25 m re-check is in flight. */
+export const HOME_ANCHOR_GRACE_METERS = 120;
+
+/**
+ * Whether the home map stays live. The 25 m re-check fires as the guest walks,
+ * and checking strictly against the latest record blanked the map (the
+ * "Checking your map" card, every find hidden, an open find closed) for the
+ * length of that request, every 25 m. The server still refuses park-area
+ * spawns and pickups, so a short walk on the last confirmation is safe.
+ */
+export function isHomeMapConfirmed(location: LocationType | undefined, anchor: ParkLookupRecord | null): boolean {
+  return Boolean(location && anchor?.outcome === 'outside' &&
+    distanceMeters(location, anchor) < HOME_ANCHOR_GRACE_METERS);
+}
+
 /** Keep park entry responsive without checking in again for every GPS wobble. */
 export function shouldRefreshParkLookup(
   location: LocationType,

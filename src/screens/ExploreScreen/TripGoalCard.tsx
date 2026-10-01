@@ -2,7 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../design-system';
@@ -21,12 +21,19 @@ interface Props {
   readonly saveGoal?: (taskId: number) => Promise<TripGoalData>;
   readonly removeGoal?: () => Promise<TripGoalData>;
   readonly loadCollections?: typeof getPrepItemSets;
+  /**
+   * The home map's compact "Next park trip" chip. The park goal is the bridge
+   * to a park day, not the thing to do at home, so on the home map it sits in
+   * the top corner, smaller than the find card, instead of between the finds.
+   */
+  readonly compact?: boolean;
+  readonly style?: StyleProp<ViewStyle>;
 }
 
 /** A real, account-backed bridge from home finds to one chosen park coin. */
 export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
   saveGoal = setTripGoal, removeGoal = clearTripGoal,
-  loadCollections = getPrepItemSets }: Props) {
+  loadCollections = getPrepItemSets, compact = false, style }: Props) {
   const [data, setData] = useState<TripGoalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [stale, setStale] = useState(false);
@@ -185,8 +192,22 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
     setOpen(false);
   };
 
+  const chipName = busy ? 'Saving…' : loading && !data ? 'Loading…' : goal ? goal.ride_name
+    : data?.goal_unavailable ? 'Pick a new ride' : data ? 'Pick a ride' : 'Tap to retry';
+  // Only the actionable state earns words on the chip; the planner explains the rest.
+  const chipStatus = upgradeReady ? 'UPGRADE READY' : null;
+
   return <>
-    <Pressable style={styles.pill} accessibilityRole="button"
+    {compact ? <Pressable style={({ pressed }) => [styles.chip, style, pressed && styles.chipPressed]} accessibilityRole="button"
+      disabled={busy} accessibilityState={{ disabled: busy, busy }}
+      accessibilityLabel={goal ? `Next park goal: ${goal.ride_name}. Open ride choices.` : 'Choose your next park ride coin'}
+      onPress={() => { setPickerMode(!goal); setOpen(true); if (stale) void load(); }}>
+      <Image source={require('../../../assets/images/coingold.png')} style={styles.chipCoin} contentFit="contain" />
+      <View style={styles.chipCopy}>
+        <Text style={styles.chipKicker} numberOfLines={1}>{chipStatus ? `NEXT PARK TRIP · ${chipStatus}` : 'NEXT PARK TRIP'}</Text>
+        <Text style={styles.chipName} numberOfLines={1}>{chipName}</Text>
+      </View>
+    </Pressable> : <Pressable style={styles.pill} accessibilityRole="button"
       disabled={busy} accessibilityState={{ disabled: busy, busy }}
       accessibilityLabel={goal ? `Next park goal: ${goal.ride_name}. Open ride choices.` : 'Choose your next park ride coin'}
       onPress={() => { setPickerMode(!goal); setOpen(true); if (stale) void load(); }}>
@@ -205,7 +226,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
           : 'PARK GOAL · TICKET READY'
           : data ? 'PICK YOUR NEXT RIDE COIN' : 'TAP TO RETRY'}
       </Text>
-    </Pressable>
+    </Pressable>}
 
     <Modal isVisible={open} propagateSwipe onBackdropPress={close} onBackButtonPress={close}
       animationIn={reducedMotion ? 'fadeIn' : 'slideInUp'} animationOut={reducedMotion ? 'fadeOut' : 'slideOutDown'}
@@ -351,6 +372,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: 6, paddingRight: 43, borderRadius: 14,
     borderWidth: 3, borderColor: '#fff', backgroundColor: '#0879ca',
     shadowColor: '#003c7a', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 4, elevation: 5 },
+  chip: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingLeft: 5, paddingRight: 10,
+    borderRadius: 14, borderWidth: 2, borderColor: '#fff', backgroundColor: '#0879ca',
+    shadowColor: '#003c7a', shadowOpacity: 0.28, shadowOffset: { width: 0, height: 3 }, shadowRadius: 4, elevation: 5 },
+  chipPressed: { transform: [{ scale: 0.97 }] },
+  chipCoin: { width: 28, height: 28, marginRight: 6 },
+  chipCopy: { flexShrink: 1, minWidth: 0 },
+  chipKicker: { color: '#ffe06c', fontFamily: 'Knockout', fontSize: 10, letterSpacing: 0.4 },
+  chipName: { color: '#fff', fontFamily: 'Shark', fontSize: 13, marginTop: 1 },
   pillCoin: { width: 32, height: 32, position: 'absolute', right: 5, top: 7 },
   pillTitle: { color: '#fff', fontFamily: 'Shark', fontSize: 15 },
   pillDetail: { color: '#ffe06c', fontFamily: 'Knockout', fontSize: 10, marginTop: 1 },
