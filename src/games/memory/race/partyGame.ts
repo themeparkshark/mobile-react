@@ -12,7 +12,8 @@ import { createEngine, raceConfig, step, type MMState } from '../engine';
 import { RACE_MS, RACE_PLAY_AT, glimpseAll, raceLayout } from './raceSim';
 
 export const MEMORY_RACE_KEY = 'memory_race';
-export const MEMORY_RACE_VERSION = 1;
+/** 2 = engine mm-6 scoring (lucky 60 / glimpse 120 / recall 160, turn Showtime with a pot). */
+export const MEMORY_RACE_VERSION = 2;
 /** Round length the server schedules: play window plus the glimpse. */
 export const MEMORY_RACE_ROUND_MS = RACE_MS + RACE_PLAY_AT;
 

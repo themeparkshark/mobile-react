@@ -89,7 +89,7 @@ export interface CrewRun {
 }
 
 function frameOf(s: MMState, at: number): RaceFrame {
-  return { at, pairs: s.pairs, chain: s.chain, score: s.score, showtime: s.showLeftMs > 0 || s.showTurnsLeft > 0 };
+  return { at, pairs: s.pairs, chain: s.chain, score: s.score, showtime: s.showTurnsLeft > 0 };
 }
 
 /** Everyone gets the same glimpse at the start of the round. */
