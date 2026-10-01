@@ -7,7 +7,7 @@
  * what we hold, and round pushes only when they are for the current or a newer
  * round. Live rival scores are display telemetry and never decide anything.
  */
-import type { SnatchWhisper, EmoteEvent, ProgressWhisper, RoomSnapshot, RoundSummary } from './partyTypes';
+import type { AttackEvent, SnatchWhisper, EmoteEvent, ProgressWhisper, RoomSnapshot, RoundSummary } from './partyTypes';
 
 export type PartyPhase =
   | 'idle'
@@ -71,6 +71,8 @@ export interface PartyState {
   /** Screen names this phone may show (self, friends). Everyone else is a park alias. */
   known: Record<number, string>;
   hold: HoldState | null;
+  /** Splashes of the current round, by attack id (pushes and snapshots merge; a later status wins). */
+  attacks: AttackEvent[];
 }
 
 export function initialPartyState(userId: number | null = null): PartyState {
@@ -88,7 +90,37 @@ export function initialPartyState(userId: number | null = null): PartyState {
     clockOffsetMs: 0,
     known: {},
     hold: null,
+    attacks: [],
   };
+}
+
+const ATTACK_RANK: Record<string, number> = { sent: 0, landed: 1, absorbed: 1, rejected: 2 };
+
+/** Merge Splash events for the current round: one row per attack, a status only moves forward. */
+export function applyAttacks(state: PartyState, list: AttackEvent[] | undefined): PartyState {
+  const round = state.room?.round;
+  if (!round || !list || list.length === 0) return state;
+  let attacks = state.attacks.filter((a) => a.round_id === round.id);
+  let changed = attacks.length !== state.attacks.length;
+  for (const a of list) {
+    if (a.round_id !== round.id) continue;
+    const i = attacks.findIndex((x) => x.attack_id === a.attack_id);
+    if (i < 0) {
+      attacks = [...attacks, a];
+      changed = true;
+    } else if ((ATTACK_RANK[a.status] ?? 0) > (ATTACK_RANK[attacks[i].status] ?? 0)) {
+      attacks = attacks.map((x, j) => (j === i ? a : x));
+      changed = true;
+    }
+  }
+  return changed ? { ...state, attacks } : state;
+}
+
+/** Splashes due on my board: [land board-ms, n], only ones I should draw (sent to me, not absorbed or rejected). */
+export function incomingFor(state: PartyState, seat: number | null): Array<[number, number]> {
+  if (seat === null) return [];
+  return state.attacks.filter((a) => a.to_seat === seat && (a.status === 'sent' || a.status === 'landed'))
+    .map((a) => [a.land_ms, a.n] as [number, number]).sort((x, y) => x[0] - y[0] || x[1] - y[1]);
 }
 
 /** Friends see screen names; strangers only ever see the park alias. */
@@ -132,13 +164,15 @@ export function applySnapshot(state: PartyState, snap: RoomSnapshot): PartyState
   const roundChanged = previousRound !== nextRound;
   // Pushes carry no `you`; keep the last private block we got over HTTP.
   const you = snap.you ?? (current?.id === snap.id ? current?.you : undefined);
-  return {
+  const next: PartyState = {
     ...state,
     room: { ...snap, you },
     known: mergeKnown(state, snap),
     rivals: roundChanged ? {} : state.rivals,
     entry: roundChanged && state.entry?.roundId !== nextRound ? null : state.entry,
+    attacks: roundChanged ? [] : state.attacks,
   };
+  return applyAttacks(next, snap.round?.attacks);
 }
 
 export function applyRound(state: PartyState, round: RoundSummary): PartyState {
@@ -146,17 +180,19 @@ export function applyRound(state: PartyState, round: RoundSummary): PartyState {
   if (!room) return state;
   const current = room.round;
   if (current && current.round_no > round.round_no) return state;
-  if (current && current.id === round.id && current.status === 'finalized' && round.status !== 'finalized') return state;
-  const status = round.status === 'finalized' ? 'results' : room.status === 'lobby' || room.status === 'results' ? 'countdown' : room.status;
+  if (current && current.id === round.id && current.status !== 'scheduled' && round.status === 'scheduled') return state;
+  const status = round.status === 'finalized' || round.status === 'locked' ? 'results' : room.status === 'lobby' || room.status === 'results' ? 'countdown' : room.status;
   const roundChanged = current?.id !== round.id;
   // A private `you` block describes one round; drop it when a new round arrives.
   const you = roundChanged ? undefined : room.you;
-  return {
+  const next: PartyState = {
     ...state,
     room: { ...room, round, round_no: Math.max(room.round_no, round.round_no), status, you },
     rivals: roundChanged ? {} : state.rivals,
     entry: roundChanged ? null : state.entry,
+    attacks: roundChanged ? [] : state.attacks,
   };
+  return applyAttacks(next, round.attacks);
 }
 
 export function applyProgress(state: PartyState, w: ProgressWhisper, receivedAt: number): PartyState {

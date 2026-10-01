@@ -531,3 +531,98 @@ test('the line heads-up fires on a real advance only, and never more than once i
   for (let t = 113000; t < 125000; t += 500) { steps += 1; if (d.push(t, steps)) fired++; }
   assert.equal(fired, 2);
 });
+
+// ------------------------------------------------------------ rev 7: version gate, Splash, self-replay
+
+test('join states this build\'s sim versions and bundle hash; UPDATE_READY surfaces as an error', async () => {
+  const w = world();
+  const http = fakeHttp(w);
+  const c = await joined(w, http, null);
+  const play = http.calls.find(([, u]) => u === '/party/play');
+  assert.equal(play[2].sims.bonk_race, sim.BONK_RACE_VERSION);
+  assert.match(play[2].sim_bundle, /^[0-9a-f]{12}$/);
+  c.destroy();
+
+  const w2 = world();
+  const refusing = fakeHttp(w2, { post: async (url) => { if (url === '/party/play') throw { response: { status: 409, data: { code: 'UPDATE_READY', message: 'A quick update is ready.' } } }; } });
+  const c2 = await joined(w2, refusing, null);
+  assert.equal(c2.getState().phase, 'error');
+  assert.equal(c2.getState().error.code, 'UPDATE_READY');
+  c2.destroy();
+});
+
+test('a 10-streak Splash is POSTed at once; AttackIncoming for me lands in my log as 1000 + n; the submit carries the self-replay', async () => {
+  const w = world();
+  const attacks = [];
+  const http = fakeHttp(w, {
+    post: async (url, body) => {
+      if (url.endsWith('/splash')) {
+        const a = { attack_id: 41, round_id: '22222222-2222-4222-8222-222222222222', from_seat: 0, to_seat: 1, to_user_id: 9, n: 1, land_ms: 6176, status: 'sent' };
+        attacks.push(body);
+        return { data: { attack: a } };
+      }
+    },
+  });
+  const socket = fakeSocket();
+  const c = await joined(w, http, socket);
+  const ch = 'presence-party.11111111-1111-4111-8111-111111111111';
+  const start = w.serverNow() + 3500;
+  const round = roundAt(start, { sim_version: sim.BONK_RACE_VERSION, duration_ms: sim.ROUND_MS, end_at_ms: start + sim.ROUND_MS });
+  http.setRoom(snapshot({ version: 3, status: 'countdown', round_no: 1, round, you: { user_id: 7, seat: 0, submitted: false } }));
+  socket.emit(ch, 'round.scheduled', { round });
+  await w.advance(3500);
+  assert.equal(c.getState().phase, 'playing');
+  assert.equal(c.mySeat(), 0);
+
+  // My Splash: posted with the streak hit's board-ms, aimed by the server.
+  await w.advance(5000);
+  const sent = await c.splash(4410);
+  assert.equal(sent.to_seat, 1);
+  assert.deepEqual(plain(attacks), [{ streak_hit_ms: 4410 }]);
+  assert.equal(c.getState().attacks.length, 1);
+
+  // A rival's Splash aimed at me arrives over the socket, and my board logs its landing.
+  socket.emit(ch, 'attack.incoming', { attack_id: 42, round_id: round.id, from_seat: 2, to_seat: 0, to_user_id: 7, n: 1, land_ms: 7058, status: 'sent' });
+  assert.deepEqual(plain(rs.incomingFor(c.getState(), 0)), [[7058, 1]]);
+  socket.emit(ch, 'attack.incoming', { attack_id: 42, round_id: round.id, from_seat: 2, to_seat: 0, to_user_id: 7, n: 1, land_ms: 7058, status: 'sent' });
+  assert.equal(c.getState().attacks.length, 2, 'a duplicate push is merged');
+  await w.advance(7058 - 5000);
+  const at = c.recordLanding(1);
+  assert.ok(at >= 7058 && at < 7058 + 3529);
+  assert.equal(c.recordLanding(1), null, 'a landing is logged once');
+  c.reportProgress(sim.resolve(sim.buildTimeline(round.seed), c.round.taps).score, 0);
+
+  await w.advance(sim.ROUND_MS);
+  const submit = http.calls.find(([, u]) => u.endsWith('/submit'));
+  assert.deepEqual(plain(submit[2].taps), [[at, 1001]]);
+  assert.match(submit[2].self_replay_hash, /^[0-9a-f]{8}$/);
+  assert.equal(submit[2].self_replay_hash, submit[2].client_hash, 'the fresh-board replay matches the live claim');
+  assert.match(submit[2].sim_bundle, /^[0-9a-f]{12}$/);
+  c.destroy();
+});
+
+test('during a round the heartbeat carries my live score once a second (the server aims Splashes by it)', async () => {
+  const w = world();
+  const http = fakeHttp(w);
+  const socket = fakeSocket();
+  const c = await joined(w, http, socket);
+  const ch = 'presence-party.11111111-1111-4111-8111-111111111111';
+  const start = w.serverNow() + 3500;
+  const round = roundAt(start, { sim_version: sim.BONK_RACE_VERSION, duration_ms: sim.ROUND_MS, end_at_ms: start + sim.ROUND_MS });
+  http.setRoom(snapshot({ version: 3, status: 'countdown', round_no: 1, round, you: { user_id: 7, seat: 0, submitted: false } }));
+  socket.emit(ch, 'round.scheduled', { round });
+  await w.advance(3500);
+  const before = http.calls.filter(([, u]) => u.endsWith('/heartbeat')).length;
+  await w.advance(5000);
+  const beats = http.calls.filter(([, u]) => u.endsWith('/heartbeat')).slice(before);
+  assert.ok(beats.length >= 4 && beats.length <= 6, `${beats.length} heartbeats in 5 s`);
+  assert.ok(beats.every(([, , body]) => typeof body.live_score === 'number'));
+  // Outside a round it drops back to every 10 s.
+  await w.advance(sim.ROUND_MS);
+  http.setRoom(snapshot({ version: 9, status: 'results', round_no: 1, round: { ...round, status: 'finalized', results: [] } }));
+  socket.emit(ch, 'round.finalized', { round: { ...round, status: 'finalized', results: [] } });
+  const idle = http.calls.filter(([, u]) => u.endsWith('/heartbeat')).length;
+  await w.advance(9000);
+  assert.ok(http.calls.filter(([, u]) => u.endsWith('/heartbeat')).length - idle <= 1);
+  c.destroy();
+});

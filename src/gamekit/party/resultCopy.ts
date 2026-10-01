@@ -1,9 +1,9 @@
 /**
- * Results copy for Line Party (design rev 6, 8.3): losing teaches. Pure and
+ * Results copy for Line Party (design rev 7, 8.4): losing teaches. Pure and
  * string-only so the wording is unit-tested (no emoji, no em dashes).
  */
 import type { KeyMoment, SeatResult, StarHighlight } from '../net/partyTypes';
-import { isNoContest } from '../net/partyTypes';
+import { isGhostFinished, isNoContest } from '../net/partyTypes';
 
 const n = (v: number) => v.toLocaleString('en-US');
 
@@ -16,6 +16,7 @@ export function keyMomentLine(m: KeyMoment | null | undefined): string | null {
     case 'golden_escaped': return `The golden in bar ${m.bar} got away: ${n(m.cost)}.`;
     case 'shared_missed': return `The Shared Golden in bar ${m.bar} was worth ${n(m.cost)}.`;
     case 'snatch_missed': return `Snatch missed by ${m.byMs}ms in bar ${m.bar}.`;
+    case 'splashed': return `Splashed in bar ${m.bar}: -${n(m.cost)}.`;
     default: return null;
   }
 }
@@ -25,7 +26,8 @@ export function keyMomentLine(m: KeyMoment | null | undefined): string | null {
  * Safety no-contests never sting (no margin), and 1st place gets none.
  */
 export function lossLine(mine: SeatResult | undefined, results: SeatResult[]): string | null {
-  if (!mine || mine.placement === 1 || isNoContest(mine.verdict)) return null;
+  // Safety hand-offs never show a margin (design 8.4): "Your ghost took this one" says it all.
+  if (!mine || mine.placement === 1 || isNoContest(mine.verdict) || isGhostFinished(mine.verdict)) return null;
   const above = results.filter((r) => r.score > mine.score).sort((a, b) => a.score - b.score)[0];
   const margin = above ? above.score - mine.score : 0;
   const place = above?.placement === 1 ? '1st' : above?.placement === 2 ? '2nd' : above?.placement === 3 ? '3rd' : `${above?.placement ?? 1}th`;
@@ -35,7 +37,7 @@ export function lossLine(mine: SeatResult | undefined, results: SeatResult[]): s
 
 /** REMATCH is the big button when you lost 1st by under 10%. */
 export function nearMiss(mine: SeatResult | undefined, results: SeatResult[]): boolean {
-  if (!mine || mine.placement === 1 || isNoContest(mine.verdict)) return false;
+  if (!mine || mine.placement === 1 || isNoContest(mine.verdict) || isGhostFinished(mine.verdict)) return false;
   const top = results.find((r) => r.placement === 1);
   return !!top && top.score > 0 && (top.score - mine.score) * 10 < top.score;
 }

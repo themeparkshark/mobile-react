@@ -28,21 +28,30 @@ export interface Seat {
 }
 
 /**
- * Reason-coded verdicts (design 11.4). no_contest:* is never a loss: 0 points
- * and the dropped round of the series. Only dq:* is a proven cheat.
+ * Reason-coded verdicts (design rev 7, 11.3). ghost_finished:* is a safety
+ * hand-off: your score so far plus your ghost's remainder keeps its placement
+ * (half XP, no margin line, never a sting). no_contest:* scores no points for
+ * you (a desync is re-verified after a fix). Only dq:* is a proven cheat.
  */
 export type Verdict =
   | 'ok'
   | 'bot'
-  | 'no_contest:hold'
-  | 'no_contest:walk'
+  | 'ghost_finished:hold'
+  | 'ghost_finished:walk'
+  | 'ghost_finished:absorbed'
+  | 'ghost_finished:left'
   | 'no_contest:desync'
-  | 'no_contest:left'
+  | 'no_contest:late'
   | 'dq:token'
-  | 'dq:impossible';
+  | 'dq:impossible'
+  | 'dq:attack';
 
 export function isNoContest(v: string | null | undefined): boolean {
   return !!v && v.startsWith('no_contest:');
+}
+
+export function isGhostFinished(v: string | null | undefined): boolean {
+  return !!v && v.startsWith('ghost_finished:');
 }
 
 export function isDq(v: string | null | undefined): boolean {
@@ -58,13 +67,18 @@ export interface SeatResult extends Seat {
   verdict: Verdict | string;
   stats: {
     hits?: number;
-    quick?: number;
+    /** [PERFECT, GREAT, GOOD] */
+    judgements?: number[];
     goldens?: number;
     sgHits?: number;
     maxStreak?: number;
     lureHits?: number;
-    sgReactions?: number[];
+    /** |tap - mark| per Shared Golden (-1 = not hit) */
+    sgOffsets?: number[];
     barScores?: number[];
+    splashes?: number[];
+    bubbles?: number;
+    bubblesCleared?: number;
   };
   /** Bonk Race v2: the board's own score; `score` = board_score + shared_bonus. */
   board_score?: number;
@@ -77,7 +91,7 @@ export interface SeatResult extends Seat {
 }
 
 export interface KeyMoment {
-  kind: 'lure' | 'butterfingers' | 'golden_escaped' | 'shared_missed' | 'snatch_missed' | 'none';
+  kind: 'lure' | 'butterfingers' | 'golden_escaped' | 'shared_missed' | 'snatch_missed' | 'splashed' | 'none';
   bar: number;
   at: number;
   cost: number;
@@ -90,11 +104,28 @@ export interface StarHighlight {
   bar?: number;
 }
 
-/** Per Shared Golden: the winning replayed reaction and the seats that snatched it. */
+/** Per Shared Golden: the winning |tap - mark| and the seats that snatched it. */
 export interface SharedGoldResult {
   sg: number;
-  reaction: number;
+  offset: number;
   winners: number[];
+}
+
+/**
+ * A Splash (design 7.1.4): aimed by the server at the leader, landing on the
+ * victim's board at land_ms (a half-bar downbeat at least 1,200 ms after the
+ * server got it). The victim logs it as code 1000 + n.
+ */
+export interface AttackEvent {
+  attack_id: number;
+  round_id: string;
+  from_seat: number;
+  to_seat: number;
+  to_user_id: number | null;
+  n: number;
+  land_ms: number;
+  /** sent | landed | absorbed (the victim was offline) | rejected (never earned) */
+  status: string;
 }
 
 export interface RoundSummary {
@@ -109,11 +140,16 @@ export interface RoundSummary {
   start_at_ms: number;
   end_at_ms: number;
   duration_ms: number;
-  status: 'scheduled' | 'finalized';
+  /** locked: the sim version is held by the desync kill switch; scores lock in after an update. */
+  status: 'scheduled' | 'finalized' | 'locked';
   seats: Seat[];
   results: SeatResult[] | null;
-  /** Bonk Race v2 SNATCH settle; winners are indexes into `seats`. */
+  /** Bonk Race SNATCH settle; winners are indexes into `seats`. */
   shared?: SharedGoldResult[] | null;
+  /** Bot perfect-read score of this board (band-checked seed). */
+  band_score?: number | null;
+  /** Splashes so far this round (a reconnecting phone heals its tray). */
+  attacks?: AttackEvent[];
 }
 
 export interface SeriesStanding {
@@ -227,6 +263,6 @@ export interface SnatchWhisper {
   r: number;
   /** 1-5: the Shared Golden of bar 2/4/6/8/10 */
   sg: number;
-  /** replayed-style reaction: tap board-ms minus spawn board-ms */
+  /** |tap - mark| in ms, exactly as the replay will compute it */
   ms: number;
 }

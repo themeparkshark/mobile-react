@@ -16,9 +16,20 @@
  * LAST 2 BARS get a banner and a gold vignette. All of this is render-only:
  * nothing here writes board-ms.
  *
+ * v3 (design rev 7, 7.1 and 13.2-13.3): every target rises exactly one beat
+ * before its MARK and a gold approach ring closes on that mark (a true clock
+ * in board-ms). |tap - mark| <= 50 ms is PERFECT (a gold rim flash and the
+ * word), <= 110 ms GREAT, anything else while up GOOD. The anglerfish never
+ * gets a ring: its bulb flickers amber a beat before it rises and it glows
+ * coral while up. Every 10th streak hit throws a Splash (onSplash); a Splash
+ * aimed at this phone lands at its land_ms (or the next half-bar when it
+ * arrives late), is logged through onLanding, and seals the hole of the next
+ * spawn under a soap bubble for 4 beats: two taps crack and pop it.
+ *
  * Art: Alex's Whack-a-Shark pieces (hole plate, park Finn peek/pop/dazed,
- * golden shark, anglerfish lure) over the underwater playfield. The hole's
- * interior is code-drawn teal water so there are no black voids.
+ * golden shark, anglerfish lure) over the underwater playfield, and the
+ * gate-passed soap bubble from the pipeline. The hole's interior is
+ * code-drawn teal water so there are no black voids.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
@@ -53,8 +64,23 @@ import { useFlash, useShake } from '../Juice';
 import { haptic } from '../Haptics';
 import { playSfx } from '../SFX';
 import { BRAND, FONT } from '../../ui/tokens';
-import { botTaps, LAST_BARS_FROM, lureDrop, multTenths, resolve, type BotProfile, type Spawn, type Tap } from '../../games/party/bonkRace';
-import { BOARD } from './partyArt';
+import {
+  botTaps,
+  BUBBLE_CODE,
+  BUBBLE_SEAL_MS,
+  bubbleHole,
+  EIGHTH_UMS,
+  grid as beatGrid,
+  HALF_BAR_EIGHTHS,
+  LAST_BARS_FROM,
+  lureDrop,
+  multTenths,
+  resolve,
+  type BotProfile,
+  type Spawn,
+  type Tap,
+} from '../../games/party/bonkRace';
+import { BOARD, BUBBLE } from './partyArt';
 
 export interface BonkBoardProps {
   spawns: Spawn[];
@@ -73,15 +99,27 @@ export interface BonkBoardProps {
   boardClock?: () => number | null;
   /** Bright seat colors for the Shared Golden pip ring (one per seated player). */
   pipColors?: string[];
-  /** I bonked Shared Golden `sg` (1-5) with this replay-exact reaction. */
-  onShared?: (sg: number, reactionMs: number) => void;
+  /** I bonked Shared Golden `sg` (1-5) this far from its mark (|tap - mark|, replay-exact). */
+  onShared?: (sg: number, offsetMs: number) => void;
   /** Bumps when this phone stamps SNATCHED for me (one beat after the window). */
   snatchedKey?: number;
+  /** Splashes aimed at this board: [land board-ms, n]. */
+  incoming?: Array<[number, number]>;
+  /** Log a landing (code 1000 + n); returns the board-ms it was logged at, or null. */
+  onLanding?: (n: number) => number | null;
+  /** My 10th / 20th streak hit: the board-ms the server must find in my replay. */
+  onSplash?: (streakHitMs: number) => void;
 }
 
 type OccPhase = 'tell' | 'peek' | 'up' | 'bonked' | 'none';
-interface Occ { id: number; kind: Spawn['kind']; phase: OccPhase; sg: number }
-const EMPTY: Occ = { id: -1, kind: 'finn', phase: 'none', sg: 0 };
+interface Occ { id: number; kind: Spawn['kind']; phase: OccPhase; sg: number; at: number; mark: number; up: number }
+const EMPTY: Occ = { id: -1, kind: 'finn', phase: 'none', sg: 0, at: 0, mark: 0, up: 0 };
+const occOf = (s: Spawn, phase: OccPhase): Occ => ({ id: s.id, kind: s.kind, phase, sg: s.sg, at: s.at, mark: s.mark, up: s.up });
+/** The anglerfish's bulb flickers amber for the beat before it rises (render only). */
+const LURE_TELL_MS = beatGrid(2);
+/** 0 none, 1 a fresh bubble, 2 cracked once. */
+type SealLook = 0 | 1 | 2;
+interface Seal { n: number; from: number; until: number; taps: number }
 const PEEK_MS = 140;
 const BONKED_HOLD_MS = 280;
 
@@ -106,7 +144,7 @@ function grid(w: number, h: number): Cell[] {
 
 interface FlyUp { key: number; x: number; y: number; text: string; color: string; big: boolean }
 
-function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress, autoplay, onTick, boardClock, pipColors, onShared, snatchedKey }: BonkBoardProps) {
+function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress, autoplay, onTick, boardClock, pipColors, onShared, snatchedKey, incoming, onLanding, onSplash }: BonkBoardProps) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const cells = useMemo(() => (size.w ? grid(size.w, size.h) : []), [size]);
   const [occ, setOcc] = useState<Occ[]>(() => Array(9).fill(EMPTY));
@@ -124,6 +162,25 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
   const pulse = useSharedValue(1);
   const lastBeat = useRef(-1);
   const [lastBars, setLastBars] = useState(false);
+  // Board-ms on the UI thread: approach rings and the lure tell read it.
+  const boardT = useSharedValue(-1000);
+  // Splash bubbles on this board (by hole), and spawns they ate.
+  const seals = useRef<Array<Seal | null>>(Array(9).fill(null));
+  const [sealLook, setSealLook] = useState<SealLook[]>(() => Array(9).fill(0));
+  const eaten = useRef(new Set<number>());
+  const landSeen = useRef(new Map<number, number>());
+  const landed = useRef(new Set<number>());
+  const incomingRef = useRef(incoming ?? []);
+  incomingRef.current = incoming ?? [];
+  const publishSeals = useCallback(() => {
+    setSealLook(seals.current.map((x) => (x ? (x.taps > 0 ? 2 : 1) : 0)) as SealLook[]);
+  }, []);
+  const closeSeal = useCallback((h: number, end: number) => {
+    const seal = seals.current[h];
+    if (!seal) return;
+    for (const sp of spawns) if (sp.hole === h && sp.at >= seal.from && sp.at < end && !hitAt.current.has(sp.id)) eaten.current.add(sp.id);
+    seals.current[h] = null;
+  }, [spawns]);
   const byHole = useMemo(() => {
     const m: Spawn[][] = Array.from({ length: 9 }, () => []);
     spawns.forEach((s) => m[s.hole].push(s));
@@ -148,61 +205,86 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
     const r = resolve(spawns, taps.current);
     lastResult.current = r;
 
-    if (r.hits > before.hits) {
+    if (r.bubbleTaps > before.bubbleTaps) {
+      // Taps on a bubble never touch the streak: crack, then pop.
+      const seal = seals.current[hole];
+      if (r.bubblesCleared > before.bubblesCleared) {
+        closeSeal(hole, t);
+        particles.current?.burst({ x: cell.cx, y: cell.cy - cell.size * 0.1, preset: 'burst', count: 10, colors: ['#ffffff', '#bfeaff', '#ffe07a'], speed: 1.2 });
+        haptic('hitRigid');
+        playSfx('tap', 1);
+        addFlyUp(cell, 'POP!', BRAND.white);
+      } else if (seal) {
+        seal.taps += 1;
+        haptic('hitRigid');
+        playSfx('tap', 0.7);
+      }
+      publishSeals();
+    } else if (r.hits > before.hits) {
       const id = r.hitIds[r.hitIds.length - 1];
       hitAt.current.set(id, perfNow());
       streak.current += 1;
       const shared = r.sgHits > before.sgHits;
       const golden = r.goldens > before.goldens;
-      const quick = r.quick > before.quick;
+      const judged = r.judgements[0] > before.judgements[0] ? 0 : r.judgements[1] > before.judgements[1] ? 1 : 2;
       const gained = r.score - before.score;
       const nextTier = multTenths(streak.current);
       if (nextTier !== tier) {
         setTier(nextTier);
-        if (nextTier > tier) { haptic('comboHeavy'); playSfx('combo', 0.8); }
+        if (nextTier > tier) playSfx('combo', 0.8);
       }
+      const word = judged === 0 ? 'PERFECT' : judged === 1 ? 'GREAT' : '';
       if (shared) {
-        // Flat +100 now; the +200 SNATCH is settled room-wide one beat after the window.
-        const n = r.sgReactions.findIndex((v, i) => v >= 0 && before.sgReactions[i] < 0);
-        if (n >= 0) onShared?.(n + 1, r.sgReactions[n]);
+        // Golden points now; the +200 SNATCH is settled room-wide one beat after the window.
+        const n = r.sgOffsets.findIndex((v, i) => v >= 0 && before.sgOffsets[i] < 0);
+        if (n >= 0) onShared?.(n + 1, r.sgOffsets[n]);
         particles.current?.burst({ x: cell.cx, y: cell.cy - cell.size * 0.2, preset: 'coins', count: 16, colors: ['#ffcf3b', '#ffe07a', '#ffffff'] });
-        haptic('success');
+        haptic('hitMedium');
+        setTimeout(() => haptic('tapLight'), 50);
         playSfx('coin');
-        addFlyUp(cell, `+${gained}`, BRAND.gold, true);
+        addFlyUp(cell, `${word ? `${word} ` : ''}+${gained}`, BRAND.gold, true);
       } else if (golden) {
         // Local burst only: no full-screen flash in Bonk Race (design 13.2).
         particles.current?.burst({ x: cell.cx, y: cell.cy - cell.size * 0.2, preset: 'coins', count: 22, colors: ['#ffcf3b', '#ffe07a', '#ffffff'] });
-        haptic('success');
+        haptic('hitMedium');
+        setTimeout(() => haptic('tapLight'), 50);
         playSfx('coin');
         addFlyUp(cell, `GOLDEN +${gained}`, BRAND.gold, true);
       } else {
-        particles.current?.burst({ x: cell.cx, y: cell.cy - cell.size * 0.2, preset: 'burst', count: quick ? 16 : 9, colors: quick ? ['#ffffff', '#ffcf3b', '#7cc6f5'] : ['#ffffff', '#7cc6f5'], speed: quick ? 1.3 : 1 });
-        haptic('hitMedium');
-        playSfx('hit', quick ? 1 : 0.8);
-        addFlyUp(cell, quick ? `QUICK +${gained}` : `+${gained}`, quick ? BRAND.gold : BRAND.white, quick);
+        particles.current?.burst({ x: cell.cx, y: cell.cy - cell.size * 0.2, preset: 'burst', count: judged === 0 ? 14 : judged === 1 ? 10 : 6, colors: judged === 0 ? ['#ffffff', '#ffcf3b', '#ffe07a'] : ['#ffffff', '#7cc6f5'], speed: judged === 0 ? 1.3 : 1 });
+        haptic(judged === 2 ? 'hitRigid' : 'hitMedium');
+        playSfx('hit', judged === 0 ? 1 : 0.85);
+        addFlyUp(cell, word ? `${word} +${gained}` : `+${gained}`, judged === 0 ? BRAND.gold : judged === 1 ? '#7cd3ff' : BRAND.white, judged === 0);
+      }
+      if (r.splashes.length > before.splashes.length) {
+        // Every 10th streak hit throws a Splash at the leader (design 7.1.4).
+        const at = r.splashes[r.splashes.length - 1];
+        onSplash?.(at);
+        haptic('tapLight');
+        playSfx('whoosh', 0.9);
+        addFlyUp(cell, 'SPLASH!', '#7cd3ff', true);
       }
     } else if (r.lureHits > before.lureHits) {
       const id = r.hitIds[r.hitIds.length - 1];
       hitAt.current.set(id, perfNow());
-      // A lure drops ONE tier (x3 -> x2.5), never all the way.
+      // A lure drops ONE tier (x3 -> x2.5), never all the way. A soft error, never a fail buzz.
       streak.current = lureDrop(streak.current);
       setTier(multTenths(streak.current));
       shake.shake(3, 90);
       coralFlash.flash(0.22, 160);
-      haptic('comboHeavy');
-      setTimeout(() => haptic('hitMedium'), 60);
+      haptic('softBump');
+      setTimeout(() => haptic('softBump'), 70);
       playSfx('fail', 0.9);
       addFlyUp(cell, `${r.score - before.score === 0 ? '-150' : r.score - before.score}`, '#ff8a5c', true);
     } else if (r.butterfingers > before.butterfingers) {
       streak.current = 0;
       setTier(10);
-      haptic('warning');
+      haptic('softBump');
+      setTimeout(() => haptic('softBump'), 70);
       addFlyUp(cell, 'BUTTERFINGERS', '#ff8a5c');
-    } else {
-      playSfx('tap', 0.25);
     }
     onProgress?.(r.score, streak.current);
-  }, [addFlyUp, cells, coralFlash, onProgress, onShared, onTap, perfNow, shake, spawns, tier]);
+  }, [addFlyUp, cells, closeSeal, coralFlash, onProgress, onShared, onSplash, onTap, perfNow, publishSeals, shake, spawns, tier]);
   const bonkRef = useRef(bonk);
   bonkRef.current = bonk;
 
@@ -214,20 +296,55 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
     const frame = () => {
       const now = perfNow();
       const t = boardClock?.() ?? now - goAt;
+      boardT.value = t;
+      // Splashes due on this board: land at land_ms, or on the next half-bar when the push came late.
+      let sealsChanged = false;
+      for (let h = 0; h < 9; h++) {
+        const seal = seals.current[h];
+        if (seal && t >= seal.until) { closeSeal(h, seal.until); sealsChanged = true; }
+      }
+      if (t >= 0 && t < durationMs) {
+        for (const [land, n] of incomingRef.current) {
+          if (landed.current.has(n)) continue;
+          if (!landSeen.current.has(n)) {
+            landSeen.current.set(n, t <= land ? land : beatGrid((Math.floor((t * 1000) / (HALF_BAR_EIGHTHS * EIGHTH_UMS)) + 1) * HALF_BAR_EIGHTHS));
+          }
+          if (t < (landSeen.current.get(n) ?? land)) continue;
+          landed.current.add(n);
+          const ms = onLanding ? onLanding(n) : Math.round(t);
+          if (ms === null) continue;
+          taps.current.push([ms, BUBBLE_CODE + n]);
+          const hole = bubbleHole(spawns, ms, seals.current.map((x) => x !== null));
+          if (hole >= 0) seals.current[hole] = { n, from: ms, until: ms + BUBBLE_SEAL_MS, taps: 0 };
+          lastResult.current = resolve(spawns, taps.current);
+          sealsChanged = true;
+          const cell = cells[hole];
+          if (cell) particles.current?.burst({ x: cell.cx, y: cell.cy - cell.size * 0.3, preset: 'burst', count: 8, colors: ['#bfeaff', '#ffffff'] });
+          // Splash landing on you: Light then Medium (design 17).
+          haptic('tapLight');
+          setTimeout(() => haptic('hitMedium'), 70);
+          playSfx('whoosh', 0.9);
+          shake.shake(4, 110);
+        }
+      }
+      if (sealsChanged) publishSeals();
       const next: Occ[] = [];
       let changed = false;
       for (let h = 0; h < 9; h++) {
         let o: Occ = EMPTY;
+        const seal = seals.current[h];
         for (const s of byHole[h]) {
-          if (t < Math.min(s.tell, s.at - PEEK_MS)) break;
+          const tellFrom = s.kind === 'lure' ? s.at - LURE_TELL_MS : Math.min(s.tell, s.at - PEEK_MS);
+          if (t < tellFrom) break;
+          if (eaten.current.has(s.id) || (seal && s.at >= seal.from)) continue;
           const hitTime = hitAt.current.get(s.id);
           if (hitTime !== undefined) {
-            if (now - hitTime < BONKED_HOLD_MS) { o = { id: s.id, kind: s.kind, phase: 'bonked', sg: s.sg }; }
+            if (now - hitTime < BONKED_HOLD_MS) { o = occOf(s, 'bonked'); }
             continue;
           }
-          if (t < s.at - PEEK_MS) { o = { id: s.id, kind: s.kind, phase: 'tell', sg: s.sg }; break; }
-          if (t < s.at) { o = { id: s.id, kind: s.kind, phase: 'peek', sg: s.sg }; break; }
-          if (t < s.at + s.up) { o = { id: s.id, kind: s.kind, phase: 'up', sg: s.sg }; break; }
+          if (t < s.at - PEEK_MS) { o = occOf(s, 'tell'); break; }
+          if (t < s.at) { o = occOf(s, 'peek'); break; }
+          if (t < s.at + s.up) { o = occOf(s, 'up'); break; }
         }
         next.push(o);
       }
@@ -265,7 +382,7 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [auto, boardClock, byHole, durationMs, goAt, onTick, perfNow, pulse]);
+  }, [auto, boardClock, boardT, byHole, cells, closeSeal, durationMs, goAt, onLanding, onTick, perfNow, publishSeals, pulse, shake, spawns]);
 
   const onTouch = useCallback((x: number, y: number) => {
     // Generous hitboxes: the whole cell plus slop, and the rising sprite above it.
@@ -295,7 +412,7 @@ function BonkBoard({ spawns, seed, goAt, durationMs, perfNow, onTap, onProgress,
     <View style={styles.fill}>
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.fill, shake.style]} onLayout={onLayout}>
-          {size.w > 0 ? <Holes cells={cells} occ={occ} pulse={pulse} pipColors={pipColors ?? []} /> : null}
+          {size.w > 0 ? <Holes cells={cells} occ={occ} pulse={pulse} pipColors={pipColors ?? []} boardT={boardT} sealLook={sealLook} /> : null}
           <ParticleField ref={particles} width={size.w} height={size.h} style={StyleSheet.absoluteFill} pointerEvents="none" />
           {flyUps.map(({ key, ...f }) => <FlyUpText key={key} {...f} />)}
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.coralWash, coralFlash.style]} />
@@ -312,7 +429,9 @@ export default memo(BonkBoard);
 
 // ---------------------------------------------------------------- holes
 
-function Holes({ cells, occ, pulse, pipColors }: { cells: Cell[]; occ: Occ[]; pulse: SharedValue<number>; pipColors: string[] }) {
+function Holes({ cells, occ, pulse, pipColors, boardT, sealLook }: { cells: Cell[]; occ: Occ[]; pulse: SharedValue<number>; pipColors: string[]; boardT: SharedValue<number>; sealLook: SealLook[] }) {
+  const bubble = useImage(BUBBLE.idle);
+  const cracked = useImage(BUBBLE.crack[1]);
   const hole = useImage(BOARD.hole);
   const lure = useImage(BOARD.lure);
   const golden = useImage(BOARD.golden);
@@ -324,15 +443,15 @@ function Holes({ cells, occ, pulse, pipColors }: { cells: Cell[]; occ: Occ[]; pu
   return (
     <Canvas style={[StyleSheet.absoluteFill, { width: w, height: h }]} pointerEvents="none">
       {cells.map((cell, i) => (
-        <Hole key={i} cell={cell} occ={occ[i]} pulse={pulse} pipColors={pipColors} images={{ hole, lure, golden, peek, pop, dazed }} />
+        <Hole key={i} cell={cell} occ={occ[i]} pulse={pulse} pipColors={pipColors} boardT={boardT} seal={sealLook[i] ?? 0} images={{ hole, lure, golden, peek, pop, dazed, bubble, cracked }} />
       ))}
     </Canvas>
   );
 }
 
-interface HoleImages { hole: SkImage | null; lure: SkImage | null; golden: SkImage | null; peek: SkImage | null; pop: SkImage | null; dazed: SkImage | null }
+interface HoleImages { hole: SkImage | null; lure: SkImage | null; golden: SkImage | null; peek: SkImage | null; pop: SkImage | null; dazed: SkImage | null; bubble: SkImage | null; cracked: SkImage | null }
 
-const Hole = memo(function Hole({ cell, occ, images, pulse, pipColors }: { cell: Cell; occ: Occ; images: HoleImages; pulse: SharedValue<number>; pipColors: string[] }) {
+const Hole = memo(function Hole({ cell, occ, images, pulse, pipColors, boardT, seal }: { cell: Cell; occ: Occ; images: HoleImages; pulse: SharedValue<number>; pipColors: string[]; boardT: SharedValue<number>; seal: SealLook }) {
   const rise = useSharedValue(0);
   const sx = useSharedValue(1);
   const sy = useSharedValue(1);
@@ -407,6 +526,45 @@ const Hole = memo(function Hole({ cell, occ, images, pulse, pipColors }: { cell:
   const ww = useDerivedValue(() => sprite * sx.value);
   const hh = useDerivedValue(() => sprite * sy.value);
 
+  // Approach ring (design 13.3): a true clock in board-ms. It shrinks from
+  // 1.8x to 1.0x of the mouth at the rise -> mark, brightens into the PERFECT
+  // halo for the last 50 ms each side, then drains as a thin white ring.
+  // Lures never get one ("only ringed targets are bonkable").
+  const ringed = occ.kind !== 'lure' && (occ.phase === 'peek' || occ.phase === 'up');
+  const ringCy = g.my - g.ry * 0.55;
+  const ringBase = g.rx * 1.08;
+  const ringR = useDerivedValue(() => {
+    const t = boardT.value;
+    const span = Math.max(1, occ.mark - occ.at);
+    const k = Math.min(1, Math.max(0, (occ.mark - t) / span));
+    return ringBase * (1 + 0.8 * k);
+  });
+  const ringColor = useDerivedValue(() => {
+    const d = Math.abs(boardT.value - occ.mark);
+    if (boardT.value > occ.mark + 50) return 'rgba(255,255,255,0.85)';
+    return d <= 50 ? '#fff4c2' : BRAND.gold;
+  });
+  const ringWidth = useDerivedValue(() => {
+    const golden = occ.kind === 'golden' ? 2 : 1;
+    const d = Math.abs(boardT.value - occ.mark);
+    if (boardT.value > occ.mark + 50) return 3;
+    return (d <= 50 ? 7 : 4.5) * golden;
+  });
+  const ringOutline = useDerivedValue(() => ringWidth.value + 3);
+  const ringOpacity = useDerivedValue(() => {
+    const t = boardT.value;
+    if (t <= occ.mark + 50) return 1;
+    const end = occ.at + occ.up;
+    return Math.max(0, Math.min(1, (end - t) / Math.max(1, end - occ.mark - 50)));
+  });
+  // Lure tell: the bulb flickers amber three times on 16ths in the beat before it rises.
+  const lureTell = occ.kind === 'lure' && occ.phase === 'tell';
+  const bulbOpacity = useDerivedValue(() => {
+    const k = Math.floor((boardT.value - (occ.at - LURE_TELL_MS)) / 110);
+    return k >= 0 && k < 6 && k % 2 === 0 ? 0.95 : 0.25;
+  });
+  const lureUp = occ.kind === 'lure' && (occ.phase === 'peek' || occ.phase === 'up');
+
   return (
     <Group>
       {shared ? (
@@ -422,10 +580,26 @@ const Hole = memo(function Hole({ cell, occ, images, pulse, pipColors }: { cell:
         <LinearGradient start={vec(0, g.my - g.ry)} end={vec(0, g.my + g.ry)} colors={['#1c8fa6', '#46c3d1']} />
       </Oval>
       <Oval x={g.mx - g.rx * 0.8} y={g.my - g.ry * 0.9} width={g.rx * 1.6} height={g.ry * 0.5} color="rgba(255,255,255,0.28)" />
+      {lureTell ? (
+        <Group opacity={bulbOpacity}>
+          <Circle cx={g.mx} cy={g.my - g.ry * 0.1} r={g.ry * 0.9} color="rgba(255,179,71,0.55)" />
+          <Circle cx={g.mx} cy={g.my - g.ry * 0.1} r={g.ry * 0.42} color="#ffb347" />
+        </Group>
+      ) : null}
+      {lureUp ? <Circle cx={g.mx} cy={g.my - g.ry * 1.1} r={g.rx * 0.78} color="rgba(255,122,89,0.45)" /> : null}
       {occ.phase !== 'none' && occ.phase !== 'tell' && img ? (
         <Group clip={g.clip}>
           <SkiaImage image={img} x={x} y={y} width={ww} height={hh} fit="contain" />
         </Group>
+      ) : null}
+      {ringed ? (
+        <Group opacity={ringOpacity}>
+          <Circle cx={g.mx} cy={ringCy} r={ringR} color={BRAND.navy} style="stroke" strokeWidth={ringOutline} />
+          <Circle cx={g.mx} cy={ringCy} r={ringR} color={ringColor} style="stroke" strokeWidth={ringWidth} />
+        </Group>
+      ) : null}
+      {seal > 0 && (seal === 1 ? images.bubble : images.cracked) ? (
+        <SkiaImage image={(seal === 1 ? images.bubble : images.cracked)!} x={g.mx - cell.size * 0.62} y={g.my - cell.size * 0.98} width={cell.size * 1.24} height={cell.size * 1.24} fit="contain" />
       ) : null}
       {shared && occ.phase !== 'tell' ? pips.map((p) => <Pip key={p.i} index={p.i} count={p.n} color={p.color} spin={spin} cx={g.mx} cy={g.my - g.ry * 0.4} rx={g.rx * 1.25} ry={g.ry * 1.9} />) : null}
     </Group>

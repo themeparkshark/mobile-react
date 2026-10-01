@@ -12,10 +12,17 @@
  * pause, and it freezes only this phone's board clock: backgrounded, pocketed,
  * locked or the pause button. Back within the 6 s HOLD budget, the board picks
  * up exactly where it was after a quick 3-2-1. Over the budget, the seat goes
- * to this player's ghost for the rest of the round (a no contest: 0 points,
- * the dropped round of the series, never a loss) and they are back in for the
- * next round. Every span is logged in the submit so the server replays the
- * exact board time.
+ * to this player's ghost for the rest of the round (ghost_finished: the score
+ * so far plus the ghost's remainder keeps its placement, half XP, never a
+ * sting) and they are back in for the next round. Every span is logged in the
+ * submit so the server replays the exact board time.
+ *
+ * Rev 7: the join states this build's sim versions and bundle hash (refused
+ * with UPDATE_READY when the room plays another Bonk Race sim); a 10th/20th
+ * streak hit POSTs a Splash the server aims at the leader; Splashes aimed at
+ * this phone land on its board at land_ms and are logged as code 1000 + n; a
+ * 1 Hz heartbeat during rounds carries the live score the server aims by; and
+ * every submit is self-replayed first (SelfReplay).
  *
  * A round that starts while this phone is late (slow network, just unlocked)
  * still gets its full length: boards are parallel, the server replays each log
@@ -28,8 +35,11 @@
 import { partySim, type PartySim, type SimTap } from '../../games-registry/partySims';
 import type { Spawn } from '../../games/party/bonkRace';
 import { ClockSync } from './ClockSync';
-import type { EmoteEvent, EmoteId, EntryResponse, PartyApiError, ProgressWhisper, RoomSnapshot, RoundSummary, SeriesSummary, SnatchWhisper } from './partyTypes';
+import { selfReplay } from './SelfReplay';
+import { SIM_BUNDLE, simVersions } from './SimVersion';
+import type { AttackEvent, EmoteEvent, EmoteId, EntryResponse, PartyApiError, ProgressWhisper, RoomSnapshot, RoundSummary, SeriesSummary, SnatchWhisper } from './partyTypes';
 import {
+  applyAttacks,
   applyEmote,
   applyProgress,
   applySnatch,
@@ -122,6 +132,8 @@ export interface LocalRound {
 }
 
 export const HEARTBEAT_MS = 10000;
+/** During a round the heartbeat carries my live score once a second: the server aims Splashes by it. */
+export const ROUND_HEARTBEAT_MS = 1000;
 export const POLL_LIVE_MS = 5000;
 export const POLL_FALLBACK_MS = 1000;
 export const WHISPER_MS = 250;
@@ -204,7 +216,8 @@ export class PartyClient {
       await this.clock.sync(5, 120);
       this.set({ ...this.state, clockOffsetMs: this.clock.offsetMs });
       await this.flushPendingSubmit();
-      const { data } = await this.opts.http.post<{ room: RoomSnapshot }>('/party/play', { ride_id: rideId, games: this.opts.games ?? DEFAULT_GAMES });
+      const games = this.opts.games ?? DEFAULT_GAMES;
+      const { data } = await this.opts.http.post<{ room: RoomSnapshot }>('/party/play', { ride_id: rideId, games, sims: simVersions(games), sim_bundle: SIM_BUNDLE });
       this.applyRoom(data.room);
       this.connectSocket();
       this.startLoops();
@@ -274,6 +287,50 @@ export class PartyClient {
     r.taps.push([Math.max(t, last), choice]);
     return t;
   }
+
+  /**
+   * A Splash landed on my board (the board calls this on the frame it draws
+   * the bubble). Logged as code 1000 + n at my board time, which the server
+   * accepts anywhere in [land_ms, land_ms + 2 bars].
+   */
+  recordLanding(n: number): number | null {
+    const r = this.local;
+    if (!r || r.ended || r.heldAt !== null || n < 1 || n > 12) return null;
+    if (r.taps.some(([, c]) => c === 1000 + n)) return null;
+    const t = Math.round(this.perfNow() - r.goAt - r.heldMs);
+    if (t < 0 || t >= r.durationMs) return null;
+    const last = r.taps.length ? r.taps[r.taps.length - 1][0] : 0;
+    const at = Math.max(t, last);
+    r.taps.push([at, 1000 + n]);
+    return at;
+  }
+
+  /**
+   * My 10th (or 20th) streak hit just landed: send the Splash now, the frame
+   * it happens. The server aims it at the leader and pushes AttackIncoming to
+   * the room; a refusal (too late in the round, limit) is silent.
+   */
+  async splash(streakHitMs: number): Promise<AttackEvent | null> {
+    const r = this.local;
+    if (!r || r.ended) return null;
+    try {
+      const { data } = await this.opts.http.post<{ attack: AttackEvent }>(`/party/rounds/${r.roundId}/splash`, { streak_hit_ms: Math.round(streakHitMs) });
+      this.set(applyAttacks(this.state, [data.attack]));
+      return data.attack;
+    } catch (e) {
+      this.log('splash refused', this.toError(e));
+      return null;
+    }
+  }
+
+  /** My seat in the current round (null when spectating). */
+  mySeat(): number | null {
+    const seat = this.state.room?.round?.seats.find((s) => s.kind === 'human' && s.user_id === this.opts.userId);
+    return seat ? seat.seat : null;
+  }
+
+  /** The live board's latest score (for the self-replay check). */
+  private liveScore: { roundId: string; score: number } | null = null;
 
   /** Board time in ms since GO (negative during the count-in, frozen during a HOLD). */
   boardTime(): number | null {
@@ -367,6 +424,7 @@ export class PartyClient {
   /** Whisper my live score to the room at 4 Hz (display only). */
   reportProgress(score: number, streak: number): void {
     const r = this.local;
+    if (r) this.liveScore = { roundId: r.roundId, score };
     const channel = this.roomChannel;
     if (!r || !channel || this.state.connection !== 'live') return;
     const at = this.now();
@@ -462,7 +520,7 @@ export class PartyClient {
       this.log('round scheduled', { round: round.round_no, inMs: Math.round(goAt - nowPerf), lateStart });
       this.scheduleRoundTimers();
     }
-    if (round.status === 'finalized' && this.local?.roundId === round.id && !this.local.ended) {
+    if (round.status !== 'scheduled' && this.local?.roundId === round.id && !this.local.ended) {
       // The server closed the round (window over) before this board finished.
       this.local.ended = true;
     }
@@ -534,6 +592,10 @@ export class PartyClient {
     const taps = partial ? r.taps.filter(([t]) => t < untilMs) : r.taps;
     const sim = partySim(r.game);
     const claim = !partial && sim ? sim.resolve(r.board ?? sim.build(r.seed), taps) : null;
+    // Self-replay (design 11.2): the same sim, a fresh board, my own log.
+    const live = this.liveScore?.roundId === r.roundId ? this.liveScore.score : null;
+    const self = !partial && sim ? selfReplay(sim, r.seed, taps, live, this.perfNow) : null;
+    if (self && self.matches === false) this.log('party_self_replay_mismatch', { round: r.roundId, live, replay: self.score, hash: self.hash, taps });
     const body = {
       taps,
       partial,
@@ -541,7 +603,9 @@ export class PartyClient {
       holds: r.holds,
       client_score: claim ? claim.score : null,
       client_hash: claim && sim ? sim.resultHash(claim) : null,
+      self_replay_hash: self ? self.hash : null,
       sim_version: r.simVersion,
+      sim_bundle: SIM_BUNDLE,
       round_token: await this.tokenFor(r.roundId),
     };
     await this.opts.storage?.setItem(PENDING_KEY, JSON.stringify({ roundId: r.roundId, body, at: this.now() })).catch(() => {});
@@ -608,13 +672,18 @@ export class PartyClient {
       .catch((e) => this.handleError(e));
   };
 
+  private lastBeatAt = 0;
+
   private heartbeat = (): void => {
     const room = this.state.room;
     if (!room || this.destroyed) return;
     const r = this.local;
+    const inRound = !!r && !r.ended && this.state.phase === 'playing';
+    // Outside a round the 10 s cadence is enough; inside one, once a second.
+    if (!inRound && this.now() - this.lastBeatAt < HEARTBEAT_MS - 50) return;
+    this.lastBeatAt = this.now();
     const sim = r ? partySim(r.game) : null;
-    const liveScore = r && sim && r.board && !r.ended && this.state.connection !== 'live'
-      ? sim.resolve(r.board, r.taps).score : undefined;
+    const liveScore = r && sim && r.board && inRound ? sim.resolve(r.board, r.taps).score : undefined;
     this.opts.http.post<{ room: RoomSnapshot }>(`/party/rooms/${room.id}/heartbeat`, liveScore !== undefined ? { live_score: liveScore } : {})
       .then(({ data }) => this.applyRoom(data.room))
       .catch((e) => this.handleError(e));
@@ -633,7 +702,7 @@ export class PartyClient {
       };
       this.loopTimers.push(this.setTimer(tick, ms()));
     };
-    loop(this.heartbeat, () => HEARTBEAT_MS);
+    loop(this.heartbeat, () => ROUND_HEARTBEAT_MS);
     loop(this.pollIfNeeded, () => (this.state.connection === 'live' ? POLL_LIVE_MS : POLL_FALLBACK_MS));
   }
 
@@ -703,6 +772,7 @@ export class PartyClient {
       this.set({ ...this.state, rivals: { ...this.state.rivals, [e.user_id]: { score: prev?.score ?? e.verified_score ?? 0, streak: 0, t: prev?.t ?? 0, round, receivedAt: this.now(), ghost: true } } });
     });
     channel.bind('emote', (e: EmoteEvent) => this.set(applyEmote(this.state, e, this.now())));
+    channel.bind('attack.incoming', (e: AttackEvent) => this.set(applyAttacks(this.state, [e])));
     channel.bind('client-progress', (w: ProgressWhisper) => this.set(applyProgress(this.state, w, this.now())));
     channel.bind('client-snatch', (w: SnatchWhisper) => this.set(applySnatch(this.state, w, this.now())));
     channel.bind('pusher:subscription_error', (e: unknown) => this.log('room channel refused', e));

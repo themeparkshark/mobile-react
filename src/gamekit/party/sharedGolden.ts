@@ -1,25 +1,27 @@
 /**
- * Shared Golden display logic (design rev 6, 7.1.3), pure so it is testable.
+ * Shared Golden display logic (design rev 7, 7.1.3), pure so it is testable.
  *
  * One beat after a Shared Golden's window closes, every phone stamps SNATCHED
- * on the fastest seat it knows about: its own local reaction, rivals'
- * SNATCH/progress whispers, and the house crew's deterministic reactions from
- * the shared seed. It runs the sim's own settleShared over those, so the
- * provisional call uses the exact rule the server applies to the replayed
- * logs (lowest reaction, ties within 17 ms share). When the server's settle
- * disagrees, the results show an "updated" chip.
+ * on the seat closest to the downbeat mark that it knows about: its own local
+ * offset, rivals' SNATCH/progress whispers, and the house crew's
+ * deterministic offsets from the shared seed. It runs the sim's own
+ * settleShared over those, so the provisional call uses the exact rule the
+ * server applies to the replayed logs (smallest |tap - mark|, ties within
+ * 17 ms share). When the server's settle disagrees, the results show an
+ * "updated" chip.
  */
-import { grid, settleShared, SHARED_EIGHTHS, SHARED_UP_MS, type Spawn } from '../../games/party/bonkRace';
+import { grid, RISE_EIGHTHS, settleShared, SHARED_EIGHTHS, upFor, type Spawn } from '../../games/party/bonkRace';
 
-/** Board-ms at which Shared Golden n (1-5) is stamped: window close + one beat. */
+/** Board-ms at which Shared Golden n (1-5) is stamped: window close (rise + up) + one beat. */
 export function stampAt(sg: number): number {
-  return grid(SHARED_EIGHTHS[sg - 1]) + SHARED_UP_MS + grid(2);
+  const k = SHARED_EIGHTHS[sg - 1];
+  return grid(k - RISE_EIGHTHS) + upFor(k) + grid(2);
 }
 
 export interface SeatReactions {
   /** seat key: 'me', `u:<id>`, `b:<name>` */
   key: string;
-  /** reactions per Shared Golden known so far (-1 = not hit / unknown) */
+  /** |tap - mark| per Shared Golden known so far (-1 = not hit / unknown) */
   sg: number[] | null;
 }
 

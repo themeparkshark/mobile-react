@@ -11,7 +11,10 @@ test('a loss teaches: margin to the place above plus the key moment', () => {
   assert.equal(copy.lossLine(results[1], results), 'Lost 1st by 140. The lure in bar 10 cost you 410.');
   assert.equal(copy.lossLine(results[0], results), null, '1st place gets no lesson');
   assert.equal(copy.keyMomentLine({ kind: 'snatch_missed', bar: 6, at: 8823, cost: 200, byMs: 30 }), 'Snatch missed by 30ms in bar 6.');
-  assert.equal(copy.lossLine(row(3, 0, 4, { verdict: 'no_contest:hold' }), results), null, 'safety no-contests never sting');
+  assert.equal(copy.lossLine(row(3, 0, 4, { verdict: 'ghost_finished:hold' }), results), null, 'safety hand-offs never sting');
+  assert.equal(copy.lossLine(row(3, 0, 4, { verdict: 'no_contest:desync' }), results), null);
+  assert.equal(copy.nearMiss(row(1, 5100, 2, { verdict: 'ghost_finished:walk' }), [row(0, 5200, 1)]), false);
+  assert.equal(copy.keyMomentLine({ kind: 'splashed', bar: 9, at: 15000, cost: 260, byMs: 0 }), 'Splashed in bar 9: -260.');
 });
 
 test('REMATCH is bigger only under a 10% margin', () => {
@@ -30,5 +33,9 @@ test('Star Player labels, and no emoji or em dashes anywhere in party copy', () 
     const text = fs.readFileSync(path.join(dir, f), 'utf8');
     assert.ok(!text.includes('—'), `${f} has an em dash`);
     assert.ok(!/\p{Extended_Pictographic}/u.test(text), `${f} has an emoji`);
+    // Player copy never says "server" (design 13.8): only string literals are checked, not comments.
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const strings = code.match(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g) ?? [];
+    for (const lit of strings) assert.ok(!/server/i.test(lit) || /server_ms|serverNow|server_/.test(lit), `${f}: ${lit}`);
   }
 });

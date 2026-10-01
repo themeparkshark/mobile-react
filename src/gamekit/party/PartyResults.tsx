@@ -24,7 +24,7 @@ import GameIcon from '../../ui/GameIcon';
 import { BRAND, FONT } from '../../ui/tokens';
 import { haptic } from '../Haptics';
 import { playSfx } from '../SFX';
-import { isDq, isNoContest, type EmoteId, type SeatResult, type SeriesStanding, type SeriesSummary } from '../net/partyTypes';
+import { isDq, isGhostFinished, isNoContest, type EmoteId, type SeatResult, type SeriesStanding, type SeriesSummary } from '../net/partyTypes';
 import { displayName, type PartyState } from '../net/roomState';
 import { BOT_SHARK } from './partyArt';
 import SeatAvatar from './SeatAvatar';
@@ -70,14 +70,16 @@ function Crown() {
 
 function detailFor(r: SeatResult): string {
   if (isDq(r.verdict)) return 'NOT VERIFIED';
-  if (isNoContest(r.verdict)) return r.filled_by === 'ghost' ? 'GHOST FINISHED IT  ·  ROUND SKIPPED' : 'ROUND SKIPPED  ·  BEST 4 COUNT';
-  if (r.filled_by === 'ghost') return 'GHOST FINISHED IT';
+  if (r.verdict === 'no_contest:desync' || r.verdict === 'no_contest:late') return 'LOCKS IN AFTER AN UPDATE';
+  if (isNoContest(r.verdict)) return 'ROUND SKIPPED';
+  if (isGhostFinished(r.verdict) || r.filled_by === 'ghost') return 'YOUR GHOST TOOK THIS ONE';
   if (r.kind === 'bot') return 'HOUSE CREW';
   if (r.stats.hits === undefined) return `${r.stats.maxStreak ?? 0} IN A ROW`;
   const snatches = Math.floor((r.shared_bonus ?? 0) / 200);
+  const perfect = r.stats.judgements?.[0] ?? 0;
   return snatches > 0
-    ? `${r.stats.hits ?? 0} BONKS  ·  ${snatches} SNATCH${snatches > 1 ? 'ES' : ''} +${r.shared_bonus}`
-    : `${r.stats.hits ?? 0} BONKS  ·  BEST STREAK ${r.stats.maxStreak ?? 0}`;
+    ? `${perfect} PERFECT  ·  ${snatches} SNATCH${snatches > 1 ? 'ES' : ''} +${r.shared_bonus}`
+    : `${perfect} PERFECT  ·  BEST STREAK ${r.stats.maxStreak ?? 0}`;
 }
 
 function Row({ r, index, me, emote, name }: { r: SeatResult; index: number; me: boolean; emote?: { id: EmoteId; key: string }; name: string }) {
@@ -126,7 +128,7 @@ function PartyResults({ state, serverNow, onRematch, onEmote, onLeave }: PartyRe
   const finished = series?.status === 'finished' && series.rounds_played === room.round?.series_round;
   const crowned = finished && series?.crown_user_id === state.userId;
   const headline = finished ? (crowned ? 'SERIES CROWN!' : 'SERIES OVER!')
-    : !mine ? 'RESULTS' : isNoContest(mine.verdict) ? 'ROUND SKIPPED' : mine.placement === 1 ? 'YOU WIN!' : mine.placement === 2 ? 'SO CLOSE!' : 'NICE RUN!';
+    : !mine ? 'RESULTS' : isNoContest(mine.verdict) ? 'ROUND SKIPPED' : isGhostFinished(mine.verdict) ? 'YOUR GHOST TOOK THIS ONE' : mine.placement === 1 ? 'YOU WIN!' : mine.placement === 2 ? 'SO CLOSE!' : 'NICE RUN!';
   const lesson = lossLine(mine, results);
   const close = !finished && nearMiss(mine, results);
   const nameOf = (userId: number | null | undefined, fallback: string | null | undefined, kind: string) =>
@@ -137,7 +139,7 @@ function PartyResults({ state, serverNow, onRematch, onEmote, onLeave }: PartyRe
       <Animated.Text entering={FadeInDown.springify().damping(12)} style={styles.headline}>{headline}</Animated.Text>
       <View style={styles.verified}>
         <GameIcon name="sparkle" size={18} />
-        <Text style={styles.verifiedText}>{room.round?.final ? 'FINAL ROUND  ·  DOUBLE POINTS  ·  VERIFIED' : 'VERIFIED BY THE SERVER REPLAY'}</Text>
+        <Text style={styles.verifiedText}>{room.round?.status === 'locked' ? 'SCORES LOCK IN AFTER AN UPDATE' : room.round?.final ? 'FINAL ROUND  ·  DOUBLE POINTS  ·  VERIFIED' : 'VERIFIED  ·  EVERY BOARD REPLAYED'}</Text>
       </View>
       {finished && series ? <SeriesCrown series={series} nameOf={nameOf} me={state.userId} /> : (
         <View style={styles.list}>
@@ -166,7 +168,7 @@ export default memo(PartyResults);
 
 type NameOf = (userId: number | null | undefined, fallback: string | null | undefined, kind: string) => string;
 
-/** The Party Series so far: points per round (best 4 of 5 count; the dropped round fades). */
+/** The Party Series so far: points per round (3 rounds, or best 4 of 5 in crew rooms; the dropped round fades). */
 function SeriesTable({ series, nameOf, me }: { series: SeriesSummary; nameOf: NameOf; me: number | null }) {
   const rows = series.standings.slice(0, 4);
   return (

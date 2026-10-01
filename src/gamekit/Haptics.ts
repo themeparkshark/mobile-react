@@ -19,7 +19,11 @@ export type HapticIntent =
   | 'failBuzz'
   | 'tickSelection'
   | 'success'
-  | 'warning';
+  | 'warning'
+  /** A crisp, short thunk (expo Rigid): the GOOD hit in Line Party. */
+  | 'hitRigid'
+  /** A soft, dull bump (expo Soft): a gentle error that never reads as failure (a lure, Butterfingers). */
+  | 'softBump';
 
 /** Minimum ms between fires of the same intent. Tuned per intent below. */
 const DEBOUNCE_MS: Record<HapticIntent, number> = {
@@ -30,6 +34,8 @@ const DEBOUNCE_MS: Record<HapticIntent, number> = {
   tickSelection: 30,
   success: 250,
   warning: 250,
+  hitRigid: 40,
+  softBump: 60,
 };
 
 const lastFiredAt: Record<HapticIntent, number> = {
@@ -40,6 +46,8 @@ const lastFiredAt: Record<HapticIntent, number> = {
   tickSelection: 0,
   success: 0,
   warning: 0,
+  hitRigid: 0,
+  softBump: 0,
 };
 
 let enabled = true;
@@ -76,6 +84,12 @@ function run(intent: HapticIntent): void {
     case 'failBuzz':
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
+    case 'hitRigid':
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
+      return;
+    case 'softBump':
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
+      return;
   }
 }
 
@@ -104,4 +118,6 @@ export const Haptic: Record<HapticIntent, () => void> = {
   tickSelection: () => haptic('tickSelection'),
   success: () => haptic('success'),
   warning: () => haptic('warning'),
+  hitRigid: () => haptic('hitRigid'),
+  softBump: () => haptic('softBump'),
 };

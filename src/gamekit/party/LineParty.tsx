@@ -2,8 +2,12 @@
  * LineParty: live multiplayer for the people in one ride's line.
  *
  *   lobby -> 3-2-1 on the server's clock -> a micro-round on parallel boards
- *   with a live scoreboard and stickers -> server-verified results -> the next
- *   round, 5 to a Party Series (best 4 count, FINAL ROUND x2) -> the crown
+ *   with a live scoreboard and stickers -> verified results -> the next
+ *   round, 3 to a Party Series (crew rooms can pick 5; FINAL ROUND x2) -> the crown
+ *
+ * Rev 7: Bonk Race is judged on the beat, and a 10-streak throws a Splash the
+ * server aims at the leader; a Splash aimed at you lands in the tray band and
+ * seals one of your holes under a bubble (two taps clear it).
  *
  * The line is always moving, so the room never pauses and movement never
  * stops a board. A HOLD (the pause button, or the phone going to the
@@ -24,7 +28,7 @@ import { playSfx } from '../SFX';
 import { botTaps, buildTimeline, resolve, type BotProfile } from '../../games/party/bonkRace';
 import type { PartyClient } from '../net/PartyClient';
 import { usePartyState } from '../net/useParty';
-import { displayName, placementOf } from '../net/roomState';
+import { displayName, incomingFor, placementOf } from '../net/roomState';
 import { useLineHeadsUp } from '../motion/QueueMotion';
 import GameIcon from '../../ui/GameIcon';
 import type { EmoteId } from '../net/partyTypes';
@@ -33,7 +37,7 @@ import PartyLobby from './PartyLobby';
 import PartyResults from './PartyResults';
 import RaceStrip, { type RacerLine } from './RaceStrip';
 import { provisionalBonus, provisionalSnatch, stampAt, type SeatReactions } from './sharedGolden';
-import { BOARD, STICKERS, STICKER_LABEL } from './partyArt';
+import { BOARD, BUBBLE, STICKERS, STICKER_LABEL } from './partyArt';
 
 export interface LinePartyProps {
   client: PartyClient;
@@ -45,6 +49,7 @@ export interface LinePartyProps {
 
 const ERROR_COPY: Record<string, { title: string; message: string }> = {
   NOT_IN_QUEUE: { title: 'Get in line first', message: 'Line Party opens once you are in this ride\'s line.' },
+  UPDATE_READY: { title: 'Update ready', message: 'A quick update is ready. Update the app to keep playing Line Party.' },
   NETWORK: { title: 'Park signal is weak', message: 'We will keep trying. Your spot in line is safe.' },
 };
 
@@ -110,11 +115,21 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   const [boardT, setBoardT] = useState(-3000);
   const [myScore, setMyScore] = useState(0);
   const spawns = useMemo(() => (local?.spawns.length ? local.spawns : round ? buildTimeline(round.seed) : []), [local?.roundId, round?.seed]);
+  // Crew seats play their own deterministic logs, bubbles included (display only; the server replays the same).
+  const crewIncoming = useMemo(() => {
+    const m = new Map<number, Array<[number, number]>>();
+    round?.seats.forEach((s) => { if (s.kind === 'bot') m.set(s.seat, incomingFor(state, s.seat)); });
+    return m;
+  }, [round?.id, state.attacks]);
   const botLogs = useMemo(() => {
     const m = new Map<number, ReturnType<typeof botTaps>>();
-    round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, botTaps(spawns, round.seed, s.seat, s.profile)); });
+    round?.seats.forEach((s) => { if (s.kind === 'bot' && s.profile) m.set(s.seat, botTaps(spawns, round.seed, s.seat, s.profile, 0, crewIncoming.get(s.seat) ?? [])); });
     return m;
-  }, [round?.id, spawns]);
+  }, [round?.id, spawns, crewIncoming]);
+  const mySeat = client.mySeat();
+  const incoming = useMemo(() => incomingFor(state, mySeat), [state.attacks, mySeat]);
+  const onLanding = useCallback((n: number) => client.recordLanding(n), [client]);
+  const onSplash = useCallback((ms: number) => { void client.splash(ms); }, [client]);
   const perfNow = useCallback(() => (globalThis.performance?.now ? globalThis.performance.now() : Date.now()), []);
 
   // Board clock for the HUD when the board is not mounted (ghosting, spectating).
@@ -133,13 +148,13 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
   const [stampTags, setStampTags] = useState<Record<string, number>>({});
   const stamped = useRef(new Set<number>());
   useEffect(() => { setMySg([-1, -1, -1, -1, -1]); stamped.current = new Set(); setStampTags({}); }, [round?.id]);
-  const onShared = useCallback((sg: number, reactionMs: number) => {
-    client.reportSnatch(sg, reactionMs);
-    setMySg((prev) => prev.map((v, i) => (i === sg - 1 && v < 0 ? reactionMs : v)));
+  const onShared = useCallback((sg: number, offsetMs: number) => {
+    client.reportSnatch(sg, offsetMs);
+    setMySg((prev) => prev.map((v, i) => (i === sg - 1 && v < 0 ? offsetMs : v)));
   }, [client]);
   const botSg = useMemo(() => {
     const m = new Map<number, number[]>();
-    botLogs.forEach((log, seat) => m.set(seat, resolve(spawns, log).sgReactions));
+    botLogs.forEach((log, seat) => m.set(seat, resolve(spawns, log).sgOffsets));
     return m;
   }, [botLogs, spawns]);
   const reactions: SeatReactions[] = useMemo(() => (round?.seats ?? []).map((seat) => {
@@ -205,7 +220,7 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
 
   return (
     <View style={styles.race}>
-      <SeriesPill round={round} />
+      <SeriesPill round={round} roundsTotal={state.room?.series?.rounds_total ?? 3} />
       <RaceStrip lines={lines} />
       <View style={styles.hud}>
         <Text style={styles.myScore}>{(myScore + (bonusNow.me ?? 0)).toLocaleString('en-US')}</Text>
@@ -240,13 +255,17 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
             pipColors={pipColors}
             onShared={onShared}
             snatchedKey={snatchedKey}
+            incoming={incoming}
+            onLanding={onLanding}
+            onSplash={onSplash}
           />
         ) : null}
+        {playing ? <SplashTray client={client} boardT={boardT} mySeat={mySeat} lines={lines} /> : null}
         {state.hold && phase === 'playing' ? <HoldOverlay client={client} /> : null}
         {phase === 'countdown' && local ? <CountIn boardT={boardT} late={local.lateStart} /> : null}
-        {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round for you. Only your best 4 rounds count, so this one is free." /> : null}
+        {phase === 'ghosting' ? <Banner title="YOUR GHOST IS ON IT" sub="It finishes this round from your score. You keep the result, and you are back for the next round." /> : null}
         {phase === 'spectating' ? <Banner title="NEXT ROUND IS YOURS" sub="This race started before you joined. Cheer them on." /> : null}
-        {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Checking every board on the server..." big /> : null}
+        {phase === 'submitting' || phase === 'waiting' ? <Banner title="FINISH!" sub="Captain Fin is checking every board..." big /> : null}
       </View>
       <View style={styles.stickers}>
         <MiniStickers onEmote={onEmote} />
@@ -259,12 +278,45 @@ function Race({ client, autoplay, onEmote }: { client: PartyClient; autoplay?: B
 const SEAT_COLORS = ['#ffcf3b', '#7cc6f5', '#ff8a5c', '#1fc8b8', '#ffffff', '#ffe07a', '#9be15d', '#ff9fc4'];
 
 /** ROUND 2 OF 5, or the gold FINAL ROUND x2 on round five. */
-function SeriesPill({ round }: { round: { series_round: number | null; final: boolean } | null }) {
+function SeriesPill({ round, roundsTotal = 3 }: { round: { series_round: number | null; final: boolean } | null; roundsTotal?: number }) {
   if (!round?.series_round) return null;
   return (
     <Animated.View key={round.series_round} entering={ZoomIn.springify().damping(11)} style={[styles.pill, round.final && styles.pillFinal]}>
-      <Text style={[styles.pillText, round.final && styles.pillTextFinal]}>{round.final ? 'FINAL ROUND  x2 POINTS' : `ROUND ${round.series_round} OF 5`}</Text>
+      <Text style={[styles.pillText, round.final && styles.pillTextFinal]}>{round.final ? 'FINAL ROUND  x2 POINTS' : `ROUND ${round.series_round} OF ${roundsTotal}`}</Text>
     </Animated.View>
+  );
+}
+
+/**
+ * The tray band (design 14.1, 13.11): Splashes on their way to me show a
+ * bubble with a landing ring closing on land_ms; my own Splash shows who it
+ * was aimed at. Display only: the board applies landings on its own clock.
+ */
+function SplashTray({ client, boardT, mySeat, lines }: { client: PartyClient; boardT: number; mySeat: number | null; lines: RacerLine[] }) {
+  const state = usePartyState(client);
+  const round = state.room?.round;
+  if (!round) return null;
+  const incoming = state.attacks.filter((a) => a.to_seat === mySeat && a.status === 'sent' && a.land_ms > boardT - 300);
+  const outgoing = state.attacks.filter((a) => a.from_seat === mySeat && boardT - a.land_ms < 900);
+  const nameOf = (seat: number) => lines.find((l) => l.seat.seat === seat)?.name ?? 'the leader';
+  const next = incoming[0];
+  const sent = outgoing[outgoing.length - 1];
+  if (!next && !sent) return null;
+  return (
+    <View pointerEvents="none" style={styles.tray}>
+      {next ? (
+        <Animated.View key={`in-${next.attack_id}`} entering={ZoomIn.springify().damping(12)} style={[styles.trayChip, styles.trayIncoming]}>
+          <Image source={BUBBLE.idle} style={styles.trayBubble} />
+          <Text style={styles.trayText}>{`SPLASH IN ${Math.max(0, Math.ceil((next.land_ms - boardT) / 441))}`}</Text>
+        </Animated.View>
+      ) : null}
+      {sent && !next ? (
+        <Animated.View key={`out-${sent.attack_id}`} entering={ZoomIn.springify().damping(12)} style={styles.trayChip}>
+          <Image source={BUBBLE.idle} style={styles.trayBubble} />
+          <Text style={styles.trayText}>{`SPLASH AT ${nameOf(sent.to_seat).toUpperCase()}`}</Text>
+        </Animated.View>
+      ) : null}
+    </View>
   );
 }
 
@@ -414,6 +466,11 @@ function WrapUp({ reason, onClose }: { reason: string | null; onClose: () => voi
 const outline = { textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 };
 
 const styles = StyleSheet.create({
+  tray: { position: 'absolute', top: 4, left: 0, right: 0, alignItems: 'center' },
+  trayChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: BRAND.white, borderColor: BRAND.navy, borderWidth: 3, borderRadius: 18, paddingHorizontal: 12, paddingVertical: 4 },
+  trayIncoming: { backgroundColor: '#dff4ff' },
+  trayBubble: { width: 30, height: 30 },
+  trayText: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy, letterSpacing: 0.5 },
   root: { flex: 1, backgroundColor: BRAND.blue },
   tint: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,104,185,0.18)' },
   safe: { flex: 1, paddingTop: 54 },
