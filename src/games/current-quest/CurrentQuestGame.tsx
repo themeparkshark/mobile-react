@@ -76,7 +76,7 @@ import {
   bedFor, bedSetFor, CQ_PRELOAD, registerCqAudio, sfxAim, sfxAmbience, sfxBeached, sfxBump, sfxButton, sfxCarry, sfxChest, sfxFinalClear,
   sfxGolden, sfxHandoff, sfxLeftover, sfxOpponentClear, sfxPearl, sfxRingLost, sfxRingOn, sfxRiptide, sfxShells, sfxShieldPop, sfxSoClose,
   sfxSplashIncoming, sfxStall, sfxSwim, sfxTally, sfxTide, sfxTideShort, sfxTip, sfxTransition, sfxTread, sfxUndo, sfxUnlock, sfxWhirlpool,
-  sfxWin, sfxWrongTurn, useCqMusic,
+  sfxWin, sfxWrongTurn, sfxParSink, useCqMusic,
 } from './audio';
 import { carryPlan, cqSchedule, CQH } from './cqHaptics';
 import {
@@ -316,6 +316,8 @@ export default function CurrentQuestGame({
     shieldPopT: useSharedValue(-1e9),
     tidePip: useSharedValue(0),
     lowK: useSharedValue(0),
+    parBuoy: useSharedValue(0),
+    parSinkT: useSharedValue(-1e9),
   };
   const svRef = useRef(sv);
   svRef.current = sv;
@@ -357,6 +359,9 @@ export default function CurrentQuestGame({
   const misfires = useRef<number[]>([]);
   const lastCommitAt = useRef(0);
   const shellsRef = useRef<boolean[][]>(emptyShells(3));
+  const hudHold = useRef<{ index: number; left: number; golden: boolean; par: boolean } | null>(null);
+  /** The tide the board is showing (it turns on the land frame, not on touch-up); the medallion follows it. */
+  const tideShown = useRef<{ index: number; moves: number } | null>(null);
   const surgeUntil = useRef(0);
   const thinned = useRef(false);
   const scrubbing = useRef(false);
@@ -461,7 +466,17 @@ export default function CurrentQuestGame({
     const places = placesOf(list);
     return { place: places[0], of: list.length };
   }, []);
+  const tideMoves = (run: RunState) => {
+    const t = tideShown.current;
+    return t && t.index === run.index ? t.moves : run.voyage.moves;
+  };
   const syncHud = useCallback((run: RunState) => {
+    // A cleared voyage keeps its HUD (its shells fill, its strokes freeze) until the next tray rises.
+    const hold = hudHold.current;
+    if (hold) {
+      setHud((h) => (h ? { ...h, voyage: hold.index, left: hold.left, shells: shellsRef.current.map((x) => x.slice()), goldenTaken: hold.golden, parLost: !hold.par } : h));
+      return;
+    }
     const b = currentBoard(run);
     const v = run.voyage;
     const left = strokesLeft(run);
@@ -476,9 +491,9 @@ export default function CurrentQuestGame({
       goldenTaken: v.golden,
       parLost: v.undos > 0 || v.tips > 0 || v.continues > 0,
       hasTide: b.P > 0,
-      tideLow: tideAt(b.P, v.moves, v.phase) === TIDE_LOW,
+      tideLow: tideAt(b.P, tideMoves(run), v.phase) === TIDE_LOW,
       P: b.P,
-      movesToTurn: movesToTurn(b.P, v.moves, v.phase),
+      movesToTurn: movesToTurn(b.P, tideMoves(run), v.phase),
       tideTag,
       rings: run.rings,
       ringsMax: knobs.rings,
@@ -486,9 +501,23 @@ export default function CurrentQuestGame({
       tiers,
       rank: showdown ? rankOf() : null,
     });
-    // Tide warning pip over the shark at one move left (0.A.2: a warning only).
+    // Par buoy (0.A.14): shows the par target, sinks with a gurgle the moment Par is lost.
     const s = svRef.current;
-    const k = movesToTurn(b.P, v.moves, v.phase);
+    // Par = strokes <= par, or <= parGold once the golden pearl is banked; it is gone only when neither can still hold.
+    const goldReach = v.golden || b.golden >= 0;
+    const lost = v.undos > 0 || v.tips > 0 || v.continues > 0 || v.strokes > (goldReach ? v.parGoldT : v.parT);
+    s.parBuoy.value = v.golden || (goldReach && v.strokes >= v.parT) ? v.parGoldT : v.parT;
+    if (lost && s.parSinkT.value < 0) {
+      s.parSinkT.value = s.fxT.value;
+      sfxParSink();
+      const c = cellCenter(layoutRef.current as BoardLayout, b.chest);
+      const p = { x: c.x + boardOrigin.current.x, y: c.y + boardOrigin.current.y };
+      if (layoutRef.current) fx.current?.burst('bubbles', p.x, p.y, { count: 6 });
+    } else if (!lost && s.parSinkT.value >= 0) {
+      s.parSinkT.value = -1e9;
+    }
+    // Tide warning pip over the shark at one move left (0.A.2: a warning only).
+    const k = movesToTurn(b.P, tideMoves(run), v.phase);
     s.tidePip.value = b.P && k === 1 && !v.cleared ? (tideAt(b.P, v.moves, v.phase) === TIDE_LOW ? 2 : 1) : 0;
   }, [knobs.rings, trial, tideTag, showdown, rankOf, tiers[0], tiers[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -505,6 +534,7 @@ export default function CurrentQuestGame({
     const s = svRef.current;
     const b = currentBoard(run);
     const v = run.voyage;
+    tideShown.current = { index: run.index, moves: v.moves };
     const picks = [-1, -1, -1, -1];
     let banked = 0;
     for (let k = 0; k < b.pearls.length; k++) if (v.mask & (1 << k)) { picks[k] = -1e9; banked++; }
@@ -649,7 +679,11 @@ export default function CurrentQuestGame({
     s.recap.value = [];
     s.recapPar.value = [];
     s.sway.value = [];
-    if (rise) s.riseT0.value = s.fxT.value;
+    if (rise) {
+      s.riseT0.value = s.fxT.value;
+      // Tiles thunk into place row by row (Lara Croft GO): a settle tick as the front, middle and back rows land.
+      cqSchedule([0, Math.floor(H / 2), H - 1].map((r) => ({ at: 210 + r * 40, p: 'selection' as const })));
+    }
     // Glance tour (500 ms, no camera move): chest glint, golden sparkle, shark ring. Any input skips it.
     s.tourT0.value = s.fxT.value + (rise ? 480 : 80);
     s.idleSince.value = s.fxT.value;
@@ -660,6 +694,7 @@ export default function CurrentQuestGame({
     tideTurnsThisVoyage.current = 0;
     deadEpisode.current = false;
     setDead(null);
+    hudHold.current = null;
     syncHud(run);
     refreshPreviews(run);
     setBedFor(run);
@@ -957,6 +992,7 @@ export default function CurrentQuestGame({
         const r = runRef.current;
         if (!r || r.index !== run.index) return;
         syncBoardVisuals(r);
+        syncHud(r);
         if (ev.tideAfter !== ev.tideBefore) {
           const full = tideTurnsThisVoyage.current === 0;
           tideTurnsThisVoyage.current += 1;
@@ -1275,11 +1311,12 @@ export default function CurrentQuestGame({
   const presentClear = useCallback((run: RunState, ev: Extract<CqEvent, { type: 'clear' }>, startIn: number) => {
     const s = svRef.current;
     const r = ev.result;
-    shellsRef.current[ev.index] = [r.shellClear, r.shellPar, r.shellGolden];
+    hudHold.current = { index: ev.index, left: Math.max(0, r.limit - r.spent), golden: r.shellGolden, par: r.shellPar };
     const recap = !r.shellPar && !ev.runComplete && !scored && !showdown && context !== 'daily' && !reducedMotion && !run.boards[ev.index].id.startsWith('sealed');
     setDead(null);
     later(startIn, () => {
       const b = run.boards[ev.index];
+      shellsRef.current[ev.index] = [r.shellClear, r.shellPar, r.shellGolden];
       if (requestHitStop(gov.current, strokeNo.current)) clock.hitStop(60);
       s.chest.value = 2;
       sfxChest();
@@ -2003,22 +2040,6 @@ export default function CurrentQuestGame({
                       <Text style={styles.inspectTxt}>{inspect.text}</Text>
                     </Animated.View>
                   ) : null}
-                  {ribbon && !startCard ? (
-                    <Animated.View key={ribbon.key} entering={ZoomIn.springify().damping(11)} exiting={FadeOut} style={[styles.ribbon, ribbon.gold && styles.ribbonGold]} pointerEvents="none">
-                      <Text style={styles.ribbonTxt}>{ribbon.title}</Text>
-                      {ribbon.sub ? <Text style={styles.ribbonSub}>{ribbon.sub}</Text> : null}
-                    </Animated.View>
-                  ) : null}
-                  {startCard ? (
-                    <Animated.View key={startCard.key} entering={ZoomIn.springify().damping(10)} exiting={FadeOut} style={[styles.ribbon, styles.ribbonCoral]} pointerEvents="none">
-                      <Text style={styles.ribbonTxt}>{startCard.title}</Text>
-                      {startCard.parFrom != null ? (
-                        <Text style={styles.ribbonSub}>
-                          {'par '}<Text style={styles.strike}>{String(startCard.parFrom)}</Text>{` to ${startCard.parTo}`}
-                        </Text>
-                      ) : null}
-                    </Animated.View>
-                  ) : null}
                   {splitChip ? (
                     <Animated.View key={splitChip.key} entering={ZoomIn} exiting={FadeOut} style={[styles.split, splitChip.good ? styles.splitGood : styles.splitBad]} pointerEvents="none">
                       <Text style={styles.splitTxt}>{splitChip.text}</Text>
@@ -2033,6 +2054,27 @@ export default function CurrentQuestGame({
               </GestureDetector>
             ) : <View style={{ height: 300 }} />}
           </Animated.View>
+          {/* Voyage ribbon and Splash start card dock over the run bar, never over the board's pickups (J12). */}
+          {(ribbon && !startCard) || startCard ? (
+            <View style={[styles.ribbonDock, { top: HUD_ROW_H - 4 }]} pointerEvents="none">
+          {ribbon && !startCard ? (
+            <Animated.View key={ribbon.key} entering={ZoomIn.springify().damping(11)} exiting={FadeOut} style={[styles.ribbon, ribbon.gold && styles.ribbonGold]} pointerEvents="none">
+              <Text style={styles.ribbonTxt}>{ribbon.title}</Text>
+              {ribbon.sub ? <Text style={styles.ribbonSub}>{ribbon.sub}</Text> : null}
+            </Animated.View>
+          ) : null}
+          {startCard ? (
+            <Animated.View key={startCard.key} entering={ZoomIn.springify().damping(10)} exiting={FadeOut} style={[styles.ribbon, styles.ribbonCoral]} pointerEvents="none">
+              <Text style={styles.ribbonTxt}>{startCard.title}</Text>
+              {startCard.parFrom != null ? (
+                <Text style={styles.ribbonSub}>
+                  {'par '}<Text style={styles.strike}>{String(startCard.parFrom)}</Text>{` to ${startCard.parTo}`}
+                </Text>
+              ) : null}
+            </Animated.View>
+          ) : null}
+            </View>
+          ) : null}
           {controlsOn && arrows ? (
             <View style={styles.arrowArea}>
               <ArrowPad big={walking} disabled={!!dead && dead.kind === 'stall'} onArm={onArrowArm} onDisarm={onArrowDisarm} onCommit={commit} />
@@ -2115,8 +2157,9 @@ const styles = StyleSheet.create({
   aimTxtRip: { fontFamily: 'Shark', fontSize: 20 },
   inspect: { position: 'absolute', width: 200, padding: 8, borderRadius: 12, backgroundColor: CQ.cream, borderWidth: 2, borderColor: CQ.ink },
   inspectTxt: { fontFamily: 'Knockout', fontSize: 13, color: CQ.navy, textAlign: 'center' },
+  ribbonDock: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 20 },
   ribbon: {
-    position: 'absolute', alignSelf: 'center', bottom: 6, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 14, backgroundColor: '#ffffff',
+    paddingHorizontal: 16, paddingVertical: 5, borderRadius: 14, backgroundColor: '#ffffff',
     borderWidth: 3, borderColor: CQ.ink, alignItems: 'center', maxWidth: '92%',
   },
   ribbonGold: { backgroundColor: CQ.gold, borderColor: CQ.ink },

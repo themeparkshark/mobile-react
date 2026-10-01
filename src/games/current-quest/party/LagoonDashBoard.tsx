@@ -95,6 +95,7 @@ function LagoonDashBoard({ board, seed, goAt, durationMs, perfNow, onTap, onProg
     wrong: useSharedValue<number[]>([]), wrongT0: useSharedValue(-1e9), sweepT0: useSharedValue(-1e9), tourT0: useSharedValue(-1e9),
     idleSince: useSharedValue(0), sway: useSharedValue<number[]>([]),
     shield: useSharedValue(0), shieldPopT: useSharedValue(-1e9), tidePip: useSharedValue(0), lowK: useSharedValue(0),
+    parBuoy: useSharedValue(0), parSinkT: useSharedValue(-1e9),
   };
   const svRef = useRef(sv);
   svRef.current = sv;

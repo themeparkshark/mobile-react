@@ -16,7 +16,7 @@
 import React, { useEffect, useMemo } from 'react';
 import {
   Canvas, Circle, Group, Image, ImageShader, Oval, Paint, Path, Points, Rect, RoundedRect, Shader, Skia, Text,
-  Vertices, BlurMask, ColorMatrix, vec,
+  Vertices, BlurMask, ColorMatrix, useFont, vec,
   type SkFont, type SkImage, type SkPoint,
 } from '@shopify/react-native-skia';
 import { useDerivedValue, useFrameCallback, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -118,6 +118,9 @@ export interface BoardSV {
   tidePip: SharedValue<number>;
   /** The tide palette level 0 (HIGH) .. 1 (LOW), crossfaded on turns (8.2 Alto). */
   lowK: SharedValue<number>;
+  /** Par buoy beside the chest (0.A.14, Cut the Rope): the par target (0 hides it), and fx ms it sank (Par lost). */
+  parBuoy: SharedValue<number>;
+  parSinkT: SharedValue<number>;
 }
 
 export interface BoardImages {
@@ -1064,6 +1067,55 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
     return items;
   });
 
+  // J12: the shark behind an upright (coral or chest in the row in front) draws through it as a 40% INK silhouette.
+  const blockers = useMemo(() => board.tiles.split('').map((t, i) => (t === '#' || i === board.chest ? 1 : 0)), [board]);
+  const sharkBehind = useDerivedValue(() => {
+    const f = sv.shark.value;
+    const c = Math.floor((f.x - l.ax) / l.cell);
+    const below = (sharkRow.value + 1) * 5 + c;
+    if (c < 0 || c > 4 || below >= blockers.length) return 0;
+    return blockers[below] ? 0.4 * f.alpha : 0;
+  });
+  const inkMatrix = useMemo(() => [0, 0, 0, 0, 0x2f / 255, 0, 0, 0, 0, 0x2f / 255, 0, 0, 0, 0, 0x3a / 255, 0, 0, 0, 1, 0], []);
+
+  // Par buoy (0.A.14): floats beside the chest with the par number, sinks with a gurgle when Par is lost.
+  const buoyLeft = chestIdx % 5 === 4;
+  const buoyX = chestCx + (buoyLeft ? -1 : 1) * l.cell * 0.46;
+  const buoyY = chestBottom - l.cell * 0.2;
+  const buoyTf = useDerivedValue(() => {
+    const t = sv.fxT.value;
+    const e = sv.parSinkT.value < 0 ? 0 : Math.max(0, Math.min(1, (t - sv.parSinkT.value) / 700));
+    const bob = Math.sin(t / 620) * 1.6 * (1 - e);
+    const tilt = Math.sin(t / 900) * 0.06 + e * (buoyLeft ? -0.5 : 0.5);
+    return [{ translateX: buoyX }, { translateY: buoyY + bob + e * e * l.cell * 0.42 }, { rotate: tilt }];
+  });
+  const buoyA = useDerivedValue(() => {
+    if (sv.parBuoy.value <= 0) return 0;
+    if (sv.parSinkT.value < 0) return 1;
+    const e = (sv.fxT.value - sv.parSinkT.value) / 700;
+    return e <= 0 ? 1 : e >= 1 ? 0 : 1 - e * e;
+  });
+  const buoyText = useDerivedValue(() => `par ${sv.parBuoy.value}`);
+  const buoyR = l.cell * 0.15;
+  const buoyBody = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.addOval(Skia.XYWHRect(-buoyR, -buoyR * 0.8, buoyR * 2, buoyR * 1.6));
+    return p;
+  }, [buoyR]);
+  const buoyCap = useMemo(() => {
+    const p = Skia.Path.Make();
+    p.moveTo(-buoyR * 0.55, -buoyR * 0.55);
+    p.lineTo(0, -buoyR * 1.7);
+    p.lineTo(buoyR * 0.55, -buoyR * 0.55);
+    p.close();
+    return p;
+  }, [buoyR]);
+  const buoyFont = useFont(require('../../../assets/fonts/shark-random-funnyness-2.ttf'), Math.max(10, Math.round(l.cell * 0.19)));
+  const buoyTagW = useDerivedValue(() => (buoyFont ? buoyFont.getTextWidth(buoyText.value) + 8 : 0));
+  const buoyTagX = useDerivedValue(() => -buoyTagW.value / 2);
+  const buoyTagRect = useDerivedValue(() => Skia.RRectXY(Skia.XYWHRect(buoyTagX.value, buoyR * 0.95, buoyTagW.value, l.cell * 0.22), 6, 6));
+  const buoyTextX = useDerivedValue(() => buoyTagX.value + 4);
+
   const sharkNode = (r: number) => (
     <Group key={`shark${r}`} opacity={slotAlpha[r]}>
       <Vertices vertices={vertices} textures={textures} indices={MESH_IDX}>
@@ -1233,6 +1285,30 @@ function LagoonBoardImpl({ board, layout: l, images, font, sv, reducedMotion, li
             {sharkNode(r)}
           </Group>
         ))}
+        <Group opacity={sharkBehind} layer={<Paint><ColorMatrix matrix={inkMatrix} /></Paint>}>
+          <Vertices vertices={vertices} textures={textures} indices={MESH_IDX}>
+            <ImageShader image={sharkImage} tx="decal" ty="decal" fm="linear" />
+          </Vertices>
+        </Group>
+
+        {/* Par buoy beside the chest. */}
+        <Group transform={buoyTf} opacity={buoyA}>
+          <Path path={buoyCap} color={CQ.ink} style="stroke" strokeWidth={3} strokeJoin="round" />
+          <Path path={buoyCap} color={CQ.gold} />
+          <Path path={buoyBody} color={CQ.ink} style="stroke" strokeWidth={3} />
+          <Path path={buoyBody} color="#ffffff" />
+          <Group clip={buoyBody}>
+            <Rect x={-buoyR} y={-buoyR} width={buoyR * 2} height={buoyR * 0.85} color={CQ.coral} />
+          </Group>
+          {buoyFont ? (
+            <>
+              <RoundedRect rect={buoyTagRect} color={CQ.ink} />
+              <RoundedRect rect={buoyTagRect} color={CQ.cream} style="fill" opacity={1} />
+              <RoundedRect rect={buoyTagRect} color={CQ.ink} style="stroke" strokeWidth={2} />
+              <Text text={buoyText} x={buoyTextX} y={buoyR * 0.95 + l.cell * 0.18} font={buoyFont} color={CQ.navy} />
+            </>
+          ) : null}
+        </Group>
 
         {/* Ghost shark at the landing tile (beached flop if the sand dries under it). */}
         {ghostImg ? (

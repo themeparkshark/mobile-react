@@ -165,6 +165,8 @@ export function sfxAmbience(): void { play('cq_amb_lagoon', { volume: 0.9 }); }
 /** Win cadence cut from the bed (Extreme Fever and 3-star finales). */
 export function sfxWin(): void { play('cq_win', { volume: 0.85 }); }
 export function sfxBeached(): void { play('cq_beached'); }
+/** Par buoy sinks (0.A.14): a low bubble gurgle. */
+export function sfxParSink(): void { play('sh_bubble_pop', { volume: 0.55, pitch: -5 }); play('sh_bubble_pop', { volume: 0.4, pitch: -8, delayMs: 140 }); }
 export function sfxStall(): void { play('sh_thud'); }
 export function sfxRingOn(): void { play('cq_ring_on'); }
 export function sfxRingLost(): void { play('cq_ring_lost'); }

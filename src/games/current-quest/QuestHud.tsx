@@ -85,7 +85,6 @@ function arcPath(cx: number, cy: number, r: number, from: number, to: number) {
 export const StrokeMedallion = React.memo(function StrokeMedallion({ left, limit, par, spentPar, trial, rings, ringsMax }: {
   left: number; limit: number; par: number; spentPar: number; trial: boolean; rings: number; ringsMax: number;
 }) {
-  const art = useCqImage(RING_ART);
   const font = useFont(SHARK_FONT, 24);
   const hot = left <= 3;
   const pop = useSharedValue(1);
@@ -117,11 +116,13 @@ export const StrokeMedallion = React.memo(function StrokeMedallion({ left, limit
   return (
     <View style={styles.medWrap} accessibilityLabel={`${left} strokes left, par ${par}`}>
       <Animated.View style={st}>
-        {art && font ? <Canvas style={{ width: MED, height: MED }}>
+        {font ? <Canvas style={{ width: MED, height: MED }}>
+          {/* Royal Match moves badge: a cream coin with an INK rim (never the life ring art, which means rings). */}
+          <Circle cx={cx} cy={cy} r={r - 1} color={CQ.ink} />
+          <Circle cx={cx} cy={cy} r={r - 3} color={hot ? '#ffe3dc' : CQ.cream} />
+          <Circle cx={cx} cy={cy} r={r - 7} color={hot ? '#ffd0c4' : '#fde9b8'} />
           <Path path={arc} color={CQ.ink} style="stroke" strokeWidth={6} strokeCap="round" />
-          <Path path={arc} color={hot ? CQ.coral : '#7fdaf7'} style="stroke" strokeWidth={3} strokeCap="round" />
-          <SkiaImage image={art} x={6} y={6} width={MED - 12} height={MED - 12} fit="contain" />
-          <Circle cx={cx} cy={cy} r={MED * 0.2} color="#ffffff" />
+          <Path path={arc} color={hot ? CQ.coral : '#2fb6ec'} style="stroke" strokeWidth={3} strokeCap="round" />
           <Circle cx={nx} cy={ny} r={3.6} color={CQ.ink} />
           <Circle cx={nx} cy={ny} r={2.4} color={CQ.gold} />
           <Group>
@@ -129,9 +130,10 @@ export const StrokeMedallion = React.memo(function StrokeMedallion({ left, limit
             <SkiaText text={label} x={cx - tw / 2} y={cy + 9} font={font} color={hot ? CQ.coral : CQ.gold} />
           </Group>
         </Canvas> : <View style={{ width: MED, height: MED }} />}
+        <View style={styles.medTagWrap} pointerEvents="none"><Text style={styles.medTag}>strokes</Text></View>
       </Animated.View>
       {trial ? (
-        <View style={styles.ringRow}>
+        <View style={styles.ringCol} accessibilityLabel={`${rings} life ring${rings === 1 ? '' : 's'} left`}>
           {Array.from({ length: ringsMax }, (_, k) => (
             <Image key={`r${k}`} source={RING_ART} style={[styles.ringMini, k >= rings && styles.ringGone]} />
           ))}
@@ -277,6 +279,23 @@ export const TideMedallion = React.memo(function TideMedallion({ low, P, movesTo
 // ---------------------------------------------------------------------------
 // Run bar (0.A.5)
 
+const NOTCH = 22;
+function starPath(cx: number, cy: number, outer: number, inner: number) {
+  const p = Skia.Path.Make();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (i === 0) p.moveTo(x, y); else p.lineTo(x, y);
+  }
+  p.close();
+  return p;
+}
+/** Tier notches are stars with the star count inside, so the number is never unlabeled (J10). */
+const NOTCH_STAR = starPath(NOTCH / 2, NOTCH / 2 + 1, NOTCH / 2, NOTCH / 4.2);
+const NOTCH_STAR_IN = starPath(NOTCH / 2, NOTCH / 2 + 1, NOTCH / 2 - 2.2, NOTCH / 4.2 - 1.2);
+
 export const RunBar = React.memo(function RunBar({ shells, voyages, tiers, voyage, width, labels }: {
   shells: boolean[][]; voyages: number; tiers: [number, number]; voyage: number; width: number; labels?: [string, string];
 }) {
@@ -310,12 +329,17 @@ export const RunBar = React.memo(function RunBar({ shells, voyages, tiers, voyag
       k++;
     }
   }
-  const notchX = (t: number) => xOf(t - 1) + segW + (t % 3 === 0 ? divider / 2 : gap / 2) - 6;
+  const notchX = (t: number) => Math.min(width - NOTCH + 4, xOf(t - 1) + segW + (t % 3 === 0 ? divider / 2 : gap / 2) - NOTCH / 2);
   return (
     <View style={[styles.runBar, { width }]} accessibilityLabel={`${have} of ${total} shells. ${tiers[0]} and ${tiers[1]} shells are the next tiers.`}>
       {segs}
       {tiers.map((t, i) => (
-        <Animated.View key={`n${i}`} style={[styles.notch, { left: notchX(t) }, i === 0 ? n0 : n1, have >= t && styles.notchOn]}>
+        <Animated.View key={`n${i}`} style={[styles.notch, { left: notchX(t) }, i === 0 ? n0 : n1]}
+          accessibilityLabel={labels ? labels[i] : `${i + 2} stars at ${t} shells`}>
+          <Canvas style={StyleSheet.absoluteFill}>
+            <Path path={NOTCH_STAR} color={CQ.ink} />
+            <Path path={NOTCH_STAR_IN} color={have >= t ? CQ.gold : '#ffffff'} />
+          </Canvas>
           <Text style={styles.notchTxt}>{labels ? labels[i] : `${i + 2}`}</Text>
         </Animated.View>
       ))}
@@ -356,9 +380,14 @@ export const RUN_BAR_H = 18;
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 14 },
   row: { height: HUD_ROW_H, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  medWrap: { width: 64, alignItems: 'center' },
-  ringRow: { flexDirection: 'row', marginTop: -4, gap: 2 },
-  ringMini: { width: 14, height: 14, resizeMode: 'contain' },
+  medWrap: { minWidth: 64, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  medTagWrap: { position: 'absolute', left: -6, right: -6, bottom: -7, alignItems: 'center' },
+  medTag: {
+    fontFamily: 'Knockout', fontSize: 11, color: CQ.navy, backgroundColor: '#ffffff',
+    paddingHorizontal: 5, borderRadius: 7, overflow: 'hidden', borderWidth: 1.5, borderColor: CQ.ink,
+  },
+  ringCol: { gap: 1 },
+  ringMini: { width: 16, height: 16, resizeMode: 'contain' },
   ringGone: { opacity: 0.22 },
   sockets: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   socket: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
@@ -382,10 +411,6 @@ const styles = StyleSheet.create({
   seg: { position: 'absolute', top: 4, height: 9, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.55)', borderWidth: 1.5, borderColor: CQ.ink },
   segNow: { backgroundColor: 'rgba(255,255,255,0.9)' },
   segOn: { backgroundColor: CQ.gold },
-  notch: {
-    position: 'absolute', top: -1, width: 12, height: 18, borderRadius: 6, backgroundColor: '#ffffff', borderWidth: 2, borderColor: CQ.goldDeep,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  notchOn: { backgroundColor: CQ.gold, borderColor: CQ.ink },
-  notchTxt: { fontFamily: 'Knockout', fontSize: 9, color: CQ.navy },
+  notch: { position: 'absolute', top: -3, width: NOTCH, height: NOTCH, alignItems: 'center', justifyContent: 'center' },
+  notchTxt: { fontFamily: 'Knockout', fontSize: 9, color: CQ.navy, marginTop: 3 },
 });
