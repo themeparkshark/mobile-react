@@ -1,6 +1,8 @@
+import { wearableRarityUi, WearableRarity } from '../design-system';
 import { InventoryType } from '../models/inventory-type';
 import { ItemType } from '../models/item-type';
 import { ItemTypeType } from '../models/item-type-type';
+import { LookSlots, SLOT_KEYS, SlotKey } from '../models/look-type';
 import { PlayerType } from '../models/player-type';
 
 /**
@@ -62,4 +64,73 @@ export function liveOutfitFor(
     return signedIn.inventory;
   }
   return player.inventory ?? undefined;
+}
+
+/** The look slot an item is worn in, by the server's item type id. */
+const SLOT_BY_TYPE: Record<number, SlotKey> = {
+  1: 'head_item',
+  2: 'face_item',
+  3: 'neck_item',
+  4: 'body_item',
+  5: 'hand_item',
+  6: 'background_item',
+  7: 'skin_item',
+  8: 'pin_item',
+};
+
+export function slotForItem(item: Pick<ItemType, 'item_type'> | null | undefined): SlotKey | null {
+  const typeId = item?.item_type?.id;
+  return typeId ? SLOT_BY_TYPE[typeId] ?? null : null;
+}
+
+export function isRequiredSlot(slot: SlotKey | null): boolean {
+  return !!slot && (REQUIRED_SLOTS as readonly string[]).includes(slot);
+}
+
+/** What a player hears when they try to take off the shark or the backdrop. */
+export function requiredSlotCopy(slot: SlotKey): string {
+  return slot === 'skin_item' ? 'Your shark always needs a skin' : 'Your shark always needs a backdrop';
+}
+
+/** The look slots of a profile outfit, for the save queue. */
+export function lookSlotsOf(inventory: InventoryType | null | undefined): LookSlots {
+  if (!inventory) return {};
+  return Object.fromEntries(SLOT_KEYS.map((slot) => [slot, inventory[slot] ?? null])) as LookSlots;
+}
+
+/** The name players see: a reviewed override when the server sends one. */
+export function itemDisplayName(item: Pick<ItemType, 'name' | 'display_name'>): string {
+  const override = item.display_name?.trim();
+  return override ? override : item.name;
+}
+
+export interface WearableBadge {
+  /** 1-5; anything unknown reads as Common. */
+  readonly rarity: WearableRarity;
+  readonly border: string;
+  /** Legendary's second, inner stroke. */
+  readonly inner: string | null;
+  readonly glow: string | null;
+  /** UNCOMMON, RARE, EPIC, LEGENDARY, or VIP / CODE for those sources. Null for Common. */
+  readonly label: string | null;
+  readonly labelColor: string;
+}
+
+/**
+ * Card border, glow and label for a wearable (dressing-room.md 9.1, 9.2).
+ * VIP and code items show where they came from instead of a rarity name.
+ */
+export function wearableBadge(item: Pick<ItemType, 'rarity' | 'source' | 'is_member_item' | 'is_coin_code_item'>): WearableBadge {
+  const rarity = (item.rarity && item.rarity >= 1 && item.rarity <= 5 ? item.rarity : 1) as WearableRarity;
+  const ui = wearableRarityUi[rarity];
+  const source = item.source === 'vip' || item.is_member_item ? 'VIP'
+    : item.source === 'coin_code' || item.is_coin_code_item ? 'CODE' : null;
+  return {
+    rarity,
+    border: ui.border,
+    inner: ui.inner,
+    glow: ui.glow,
+    label: source ?? (rarity === 1 ? null : ui.name.toUpperCase()),
+    labelColor: ui.label ?? '#123e65',
+  };
 }

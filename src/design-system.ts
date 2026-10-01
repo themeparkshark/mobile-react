@@ -87,6 +87,22 @@ export const rarityConfig = {
   5: { name: 'Legendary', color: colors.rarity.legendary.main, glow: colors.rarity.legendary.glow },
 };
 
+/**
+ * Wearable rarity on Inventory cards (dressing-room.md 9.1). Separate from
+ * rarityConfig on purpose: Common wearables are white, while prep items,
+ * stamps and ride parts keep their green Common. The border shows rarity
+ * only; WORN never uses it.
+ */
+export const wearableRarityUi = {
+  1: { name: 'Common', border: '#FFFFFF', inner: null, sparkle: '#FFF8E4', glow: null, label: null },
+  2: { name: 'Uncommon', border: '#00a5f5', inner: null, sparkle: '#00a5f5', glow: null, label: '#00a5f5' },
+  3: { name: 'Rare', border: '#9C27B0', inner: null, sparkle: '#9C27B0', glow: 'rgba(156, 39, 176, 0.4)', label: '#9C27B0' },
+  4: { name: 'Epic', border: '#FF6B00', inner: null, sparkle: '#FF6B00', glow: colors.rarity.epic.glow, label: '#E05A00' },
+  5: { name: 'Legendary', border: '#FFD700', inner: '#123e65', sparkle: '#FFD700', glow: colors.rarity.legendary.glow, label: '#B8860B' },
+} as const;
+
+export type WearableRarity = keyof typeof wearableRarityUi;
+
 // =============================================================================
 // SPACING
 // =============================================================================

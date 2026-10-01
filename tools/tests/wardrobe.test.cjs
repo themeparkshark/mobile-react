@@ -82,19 +82,28 @@ test('a leaderboard row for the signed-in player draws the live outfit instead o
   assert.ok(collect(friend.tree, (n) => n.type === 'Image' && n.props.source === 'friend-picture').length === 1);
 });
 
-function card(target, inventory, onToggle = () => {}) {
+function card(target, inventory, onToggle = () => {}, extra = {}) {
   return runtime('src/components/Item.tsx', {
     '../context/AuthProvider': { AuthContext: { value: { player: { id: 5, inventory } } } },
     '../helpers/wardrobe': wardrobe,
-  }, { item: target, onToggle });
+    '../hooks/useReducedGameMotion': { default: () => extra.reduceMotion ?? false },
+  }, { item: target, onToggle, ...extra.props });
 }
 const button = (app) => app.find((n) => n.type === 'Pressable');
 
-test('wardrobe cards: the worn shark cannot be tapped off, a worn hat can, and a new item can be worn', () => {
+test('wardrobe cards: the worn shark reads as worn, a worn hat can come off, and a new item can be worn', () => {
   const worn = outfit();
-  const shark = button(card(item(2, 7), worn));
-  assert.equal(shark.props.disabled, true);
+  // Cards never lock: the screen answers a tap on the worn shark with
+  // "Your shark always needs a skin" instead of taking it off.
+  const sharkTaps = [];
+  const shark = button(card(item(2, 7), worn, (value) => sharkTaps.push(value.id)));
+  assert.equal(shark.props.disabled, false);
   assert.equal(shark.props.accessibilityLabel, 'Item 2, currently worn');
+  shark.props.onPress();
+  assert.deepEqual(sharkTaps, [2]);
+  assert.equal(wardrobe.isRequiredSlot(wardrobe.slotForItem(item(2, 7))), true);
+  assert.equal(wardrobe.requiredSlotCopy('skin_item'), 'Your shark always needs a skin');
+  assert.equal(wardrobe.requiredSlotCopy('background_item'), 'Your shark always needs a backdrop');
 
   const hat = button(card(item(10, 1), worn));
   assert.equal(hat.props.disabled, false);
@@ -122,8 +131,12 @@ test('Profile opens the Inventory dressing room without changing the navigation 
   assert.match(profile, /RootNavigation\.navigate\('Inventory'\)/);
 });
 
-test('a saved outfit dresses the shark from the server reply without waiting for a profile reload', () => {
+test('the stage dresses the shark from useLook, so a tap shows at once and nothing locks', () => {
   const screen = fs.readFileSync('src/screens/InventoryScreen.tsx', 'utf8');
-  assert.match(screen, /const outfit = await updateInventory\(item\);\s+\/\/[^\n]*\n[^\n]*\n\s+if \(player\) setPlayer\(\{ \.\.\.player, inventory: outfit \}\);/);
-  assert.match(screen, /refreshPlayer\(\)\.catch\(\(\) => undefined\)/);
+  assert.match(screen, /const look = useLook\(\);/);
+  assert.match(screen, /<Playercard\s+inventory=\{worn\}/);
+  assert.match(screen, /look\.set\(slot, isWorn \? null : item\)/);
+  assert.doesNotMatch(screen, /outfitMutation|pendingItemId|outfitNeedsRefresh|disabled=\{/);
+  const hook = fs.readFileSync('src/hooks/useLook.ts', 'utf8');
+  assert.match(hook, /setPlayer\(\{ \.\.\.current, inventory: \{ \.\.\.current\.inventory, \.\.\.slots \}/);
 });

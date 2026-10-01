@@ -16,20 +16,68 @@ const SLOT_ZONES: { slot: string; yMin: number; yMax: number; xMin?: number; xMa
   { slot: 'body_item',  yMin: 0.50, yMax: 0.66, xMin: 0.36, xMax: 0.68 },
 ];
 
+/**
+ * Where each worn layer lands, normalized on the 1353x1530 paper art
+ * (dressing-room.md 7.2 slot anchors). A newly worn layer pops in from here.
+ */
+const SLOT_ANCHORS: Record<string, string> = {
+  head_item: '62% 14%',
+  face_item: '39% 26%',
+  neck_item: '54% 50%',
+  body_item: '52% 58%',
+  hand_item: '19% 54%',
+};
+
+/**
+ * One worn layer. When it arrives after the shark is already on screen it
+ * fades in over 60ms and settles from 1.18 to 1.0 at its slot.
+ */
+function WornLayer({ uri, slot, pop }: { readonly uri: string; readonly slot: string; readonly pop: boolean }) {
+  const scale = useRef(new Animated.Value(pop ? 1.18 : 1)).current;
+  const opacity = useRef(new Animated.Value(pop ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (!pop) return;
+    const arrival = Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, damping: 9, stiffness: 260, mass: 1, useNativeDriver: true }),
+    ]);
+    arrival.start();
+    return () => arrival.stop();
+  }, []);
+
+  return (
+    <Animated.View pointerEvents="none" style={[styles.image, {
+      opacity,
+      transform: [{ scale }],
+      transformOrigin: SLOT_ANCHORS[slot] ?? 'center',
+    }]}>
+      <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" />
+    </Animated.View>
+  );
+}
+
 export default function Playercard({
   inventory,
   style,
   showBackground = true,
   sharkTransform,
   onItemTap,
+  popLayers = false,
 }: {
   readonly inventory: InventoryType;
   readonly style: StyleProp<ViewStyle>;
   readonly showBackground?: boolean;
   readonly sharkTransform?: any[];
   readonly onItemTap?: (item: ItemType, slot: string) => void;
+  /** Inventory stage: layers put on after the first frame pop in at their slot. */
+  readonly popLayers?: boolean;
 }) {
   const translate = useRef(new Animated.Value(0)).current;
+  // Layers present on the first frame never pop; only ones put on later do.
+  const firstFrameDone = useRef(false);
+  useEffect(() => { firstFrameDone.current = true; }, []);
+  const pop = popLayers && firstFrameDone.current;
   const nakedBounce = useRef(new Animated.Value(1)).current;
   const containerSize = useRef({ width: 0, height: 0 });
 
@@ -203,21 +251,12 @@ export default function Playercard({
               />
             )}
             {/* Item layers — purely visual, no individual Pressables */}
-            {inventory?.body_item && (
-              <Image source={{ uri: inventory.body_item.paper_url }} style={styles.image} contentFit="contain" />
-            )}
-            {inventory?.face_item && (
-              <Image source={{ uri: inventory.face_item.paper_url }} style={styles.image} contentFit="contain" />
-            )}
-            {inventory?.neck_item && (
-              <Image source={{ uri: inventory.neck_item.paper_url }} style={styles.image} contentFit="contain" />
-            )}
-            {inventory?.hand_item && (
-              <Image source={{ uri: inventory.hand_item.paper_url }} style={styles.image} contentFit="contain" />
-            )}
-            {inventory?.head_item && (
-              <Image source={{ uri: inventory.head_item.paper_url }} style={styles.image} contentFit="contain" />
-            )}
+            {(['body_item', 'face_item', 'neck_item', 'hand_item', 'head_item'] as const).map((slot) => {
+              const worn = inventory?.[slot];
+              return worn?.paper_url ? (
+                <WornLayer key={`${slot}-${worn.id}`} slot={slot} uri={worn.paper_url} pop={pop} />
+              ) : null;
+            })}
             {/* Single tap overlay — uses coordinates to determine which equipped item */}
             {onItemTap && (
               <Pressable
