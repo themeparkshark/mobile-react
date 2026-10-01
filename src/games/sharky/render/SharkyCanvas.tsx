@@ -120,7 +120,7 @@ function gradeMatrix(frenzy: number, desat: number): number[] {
   const gold = [0xff / 255, 0xd8 / 255, 0x6b / 255];
   const light = 0.85;
   const mixH = 0.12;
-  const mixG = 0.3 * frenzy;
+  const mixG = 0.4 * frenzy;
   const bright = 1 + 0.08 * frenzy;
   const m: number[] = [];
   const rows = [[lr + sat, lg, lb], [lr, lg + sat, lb], [lr, lg, lb + sat]];
@@ -246,7 +246,8 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     const twos = Math.floor(now / 83.333);
     let n = 0;
     const put = (spr: number, cx: number, cy: number, w: number, rot: number, al: number, byH: boolean) => {
-      if (n >= SLOTS) return;
+      // Atlas draws are opaque per sprite: blinks and fades step on the twos (alpha < 0.5 hides).
+      if (n >= SLOTS || al < 0.5) return;
       const o = n * PSTRIDE;
       const rw = rects[spr * 4 + 2];
       const rh = rects[spr * 4 + 3];
@@ -373,7 +374,7 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     const now = p.fx;
     let n = 0;
     const put = (spr: number, cx: number, cy: number, w: number, rot: number, al: number) => {
-      if (n >= BACK_SLOTS) return;
+      if (n >= BACK_SLOTS || al < 0.25) return;
       const o = n * PSTRIDE;
       const rw = rects[spr * 4 + 2];
       out[o] = spr;
@@ -388,14 +389,17 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     // Speed streaks (7.6): 2 at base (alpha 0.3), 4 at the cap (0.6), 12 in Overdrive or Frenzy.
     const sf = (s.speed - s.speedBase) / Math.max(1, s.speedCap - s.speedBase);
     const hot = s.od > 0 || s.frenzy > 0;
-    const count = hot ? 12 : s.phase === PH_POCKET ? 1 : 2 + Math.round(2 * sf);
-    const al = hot ? 0.7 : 0.3 + 0.3 * sf;
+    const count = hot ? 8 : s.phase === PH_POCKET ? 1 : 2 + Math.round(2 * sf);
     const fr = Math.floor(now / 83.333) % 2;
+    const span = VIEW_W + 500;
     for (let k = 0; k < count; k++) {
-      const lane = 160 + ((k * 211) % 680);
-      const span = VIEW_W + 400;
-      const x = VIEW_W + 200 - (((dist * 1.6 + k * 397) % span) + span) % span;
-      put(SPR_STREAK + fr, x, lane, hot ? 150 : 110, 0, al);
+      // Each streak owns a lane and a phase; the lane re-rolls every lap.
+      const pos = dist * 1.6 + k * 613;
+      const lap = Math.floor(pos / span);
+      const h = ((lap * 7919 + k * 104729) % 9973 + 9973) % 9973;
+      const lane = 170 + (h % 660);
+      const x = VIEW_W + 250 - (pos - lap * span);
+      put(SPR_STREAK + fr, x, lane, hot ? 84 : 64, 0, 1);
     }
     const am = ambient.value;
     for (let i = 0; i < AMB_N; i++) {
@@ -442,24 +446,6 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
   };
   const world = mkBuffers(plan, SLOTS);
   const back = mkBuffers(backPlan, BACK_SLOTS);
-  const worldColors = useDerivedValue(() => {
-    const p = plan.value;
-    const out = [];
-    for (let i = 0; i < SLOTS; i++) {
-      const al = p[i * PSTRIDE + 5];
-      out.push(new Float32Array([al, al, al, al]));
-    }
-    return out;
-  });
-  const backColors = useDerivedValue(() => {
-    const p = backPlan.value;
-    const out = [];
-    for (let i = 0; i < BACK_SLOTS; i++) {
-      const al = p[i * PSTRIDE + 5];
-      out.push(new Float32Array([al, al, al, al]));
-    }
-    return out;
-  });
   const shadowPaint = useMemo(() => {
     const pt = Skia.Paint();
     pt.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color('rgba(35,56,79,0.18)'), BlendMode.SrcIn));
@@ -571,18 +557,22 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
       const hp = s.grazeEnt === i || (s.ef[i] & F_PASS) ? near : halo;
       const isFlash = flashOn && p.closeEnt === i;
       if (t === E_PYLON) {
+        // The danger read lives at the gap: halo and rim hug the caps (the
+        // lattice column above them is narrower art and needs no outline).
         const half = s.ep1[i] / 2;
         const top = s.ey[i] - half;
         const bot = s.ey[i] + half;
-        const x0 = vx - 12;
-        const x1 = vx + PYLON_W + 12;
-        hp.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 - 28, SURFACE_Y - 300, x1 - x0 + 56, top + 28 - (SURFACE_Y - 300)), 30, 30));
-        hp.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 - 28, bot - 28, x1 - x0 + 56, FLOOR_Y + 300 - (bot - 28)), 30, 30));
-        rim.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 + 6, SURFACE_Y - 300, x1 - x0 - 12, top - 6 - (SURFACE_Y - 300)), 10, 10));
-        rim.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 + 6, bot + 6, x1 - x0 - 12, FLOOR_Y + 300 - (bot + 6)), 10, 10));
+        const cx = vx + PYLON_W / 2;
+        const cw = PYLON_W + 24;
+        const ch = 95;
+        const x0 = cx - cw / 2;
+        hp.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 - 28, top - ch - 90, cw + 56, ch + 90 + 28), 34, 34));
+        hp.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 - 28, bot - 28, cw + 56, ch + 90 + 28), 34, 34));
+        rim.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 + 8, top - ch + 10, cw - 16, ch - 16), 14, 14));
+        rim.addRRect(Skia.RRectXY(Skia.XYWHRect(x0 + 8, bot + 6, cw - 16, ch - 16), 14, 14));
         if (isFlash) {
-          flash.addRRect(Skia.RRectXY(Skia.XYWHRect(x0, SURFACE_Y - 300, x1 - x0, top - (SURFACE_Y - 300)), 10, 10));
-          flash.addRRect(Skia.RRectXY(Skia.XYWHRect(x0, bot, x1 - x0, FLOOR_Y + 300 - bot), 10, 10));
+          flash.addRRect(Skia.RRectXY(Skia.XYWHRect(x0, top - ch, cw, ch), 16, 16));
+          flash.addRRect(Skia.RRectXY(Skia.XYWHRect(x0, bot, cw, ch), 16, 16));
         }
       } else if (t === E_JELLY) {
         const jy = jellyY(s, i);
@@ -772,7 +762,7 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
   });
   const badgePaint = useMemo(() => {
     const pt = Skia.Paint();
-    pt.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color(DANGER), BlendMode.Multiply));
+    pt.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color(DANGER), BlendMode.Modulate));
     return pt;
   }, []);
 
@@ -793,7 +783,7 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
   const skyX = useDerivedValue(() => [{ translateX: -((distV.value * 0.06 * L.k) % (skyTile.w * 2)) }]);
   const inkLayer = useMemo(() => {
     const pt = Skia.Paint();
-    pt.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color('rgba(35,56,79,0.7)'), BlendMode.SrcIn));
+    pt.setColorFilter(Skia.ColorFilter.MakeBlend(Skia.Color('rgba(35,56,79,0.5)'), BlendMode.SrcIn));
     return pt;
   }, []);
 
@@ -802,7 +792,8 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
     <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* Graded background: water, rays, caustics, far reef, floor strip, arches. */}
       <Group layer={gradeLayer}>
-        <Rect x={0} y={0} width={L.w} height={L.h}>
+        {/* Overscan: camera shake and punches never reveal the shell behind. */}
+        <Rect x={-80} y={-80} width={L.w + 160} height={L.h + 160}>
           <LinearGradient start={vec(0, L.offY)} end={vec(0, L.offY + FLOOR_Y * L.k)} colors={waterColors} />
         </Rect>
         <Group transform={worldTransform}>
@@ -842,7 +833,7 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
         <Rect x={-300} y={FLOOR_Y - 6} width={VIEW_W + 600} height={5} color={INK} opacity={0.55} />
         <Oval rect={shadowRect} color={INK} opacity={shadowOp} />
 
-        {atlas ? <Atlas image={atlas.image} sprites={back.sprites} transforms={back.transforms} colors={backColors} blendMode="modulate" /> : null}
+        {atlas ? <Atlas image={atlas.image} sprites={back.sprites} transforms={back.transforms} /> : null}
 
         <Rivals sim={sim} pres={pres} rivals={rivals} tick={tick} alpha={alpha} swim={swim} colors={rivalColors} />
         <Gates sim={sim} pres={pres} tick={tick} alpha={alpha} tideArt={tideGate} rideArt={rideGate} part="line" />
@@ -859,10 +850,10 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
           <Group opacity={hazardOp}>
             {q === 0 ? (
               <Group transform={[{ translateY: 7.4 }]} layer={shadowPaint}>
-                <Atlas image={atlas.image} sprites={world.sprites} transforms={world.transforms} colors={worldColors} blendMode="modulate" />
+                <Atlas image={atlas.image} sprites={world.sprites} transforms={world.transforms} />
               </Group>
             ) : null}
-            <Atlas image={atlas.image} sprites={world.sprites} transforms={world.transforms} colors={worldColors} blendMode="modulate" />
+            <Atlas image={atlas.image} sprites={world.sprites} transforms={world.transforms} />
           </Group>
         ) : null}
 
@@ -908,13 +899,13 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
           </Group>
         ) : null}
 
-        <Stamps state={stampState} images={stampImgs} />
-        <Badges list={badges} fin={finBadge} paint={badgePaint} icons={[cap, jelly, puff, boat]} />
         {bunting ? (
           <Group transform={buntingT}>
-            {[0, 1, 2].map((k) => <SkImage key={k} image={bunting} x={-60 + k * 512} y={SURFACE_Y - 20} width={512} height={170} />)}
+            {[0, 1, 2].map((k) => <SkImage key={k} image={bunting} x={-60 + k * 512} y={SURFACE_Y - 30} width={512} height={120} />)}
           </Group>
         ) : null}
+        <Stamps state={stampState} images={stampImgs} />
+        <Badges list={badges} fin={finBadge} paint={badgePaint} icons={[cap, jelly, puff, boat]} />
       </Group>
 
       <SkyBand sky={sky} layout={L} tile={skyTile} skyX={skyX} surface={surfacePath} pres={pres} />
@@ -938,7 +929,7 @@ const SkyBand = React.memo(function SkyBand({ sky, layout: L, tile, skyX, surfac
   return (
     <Group>
       <Group clip={clipPath}>
-        <Rect x={0} y={0} width={L.w} height={tile.y + tile.h}>
+        <Rect x={-80} y={-80} width={L.w + 160} height={tile.y + tile.h + 80}>
           <LinearGradient start={vec(0, 0)} end={vec(0, tile.y + tile.h * 0.8)} colors={['#6cc9ff', '#bfe9ff', '#e8f8ff']} />
         </Rect>
         <Group transform={skyX}>

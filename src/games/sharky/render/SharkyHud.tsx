@@ -57,7 +57,7 @@ function heartPath(cx: number, cy: number, r: number) {
 }
 
 /** Four-pass number treatment (design 7.2): shadow, 7pt ink, 2pt white inner, fill. */
-function Num({ text, x, y, font, color, size }: { text: SharedValue<string>; x: SharedValue<number> | number; y: number; font: ReturnType<typeof useFont>; color: string | SharedValue<string> | SharedValue<'#ffc233' | '#ffffff'>; size: number }) {
+function Num({ text, x, y, font, color, size }: { text: SharedValue<string>; x: SharedValue<number> | number; y: number; font: ReturnType<typeof useFont>; color: string | SharedValue<string>; size: number }) {
   if (!font) return null;
   const sh = Math.max(1.5, size * 0.07);
   return (
@@ -142,7 +142,10 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, pres, r
     if (t < 0 || t > 400) return { i: -1, k: 0 };
     return { i: sim.value.hearts, k: t / 400 };
   });
-  const hx = (i: number) => W - 30 - (2 - i) * 32;
+  const hx = (i: number) => {
+    'worklet';
+    return W - 30 - (2 - i) * 32;
+  };
   const heartShards = useDerivedValue(() => {
     const h = heartPop.value;
     const p = Skia.Path.Make();
@@ -223,7 +226,7 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, pres, r
     const flip = left < 220 ? Math.max(0, left / 220) : 1;
     return { op: flip, x, rot: (6 * Math.PI) / 180 };
   });
-  const postT = useDerivedValue(() => [{ translateX: post.value.x }, { translateY: L.offY + 160 * L.k }, { rotate: post.value.rot }, { scaleX: post.value.op }]);
+  const postT = useDerivedValue(() => [{ translateX: post.value.x }, { translateY: L.offY + 400 * L.k }, { rotate: post.value.rot }, { scaleX: post.value.op }]);
   const postOp = useDerivedValue(() => post.value.op > 0 ? 1 : 0);
   const postTitle = useDerivedValue(() => postcard.value.title);
   const postTitleX = useDerivedValue(() => (fontPost ? -fontPost.measureText(postcard.value.title).width / 2 : 0));

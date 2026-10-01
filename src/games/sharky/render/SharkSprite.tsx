@@ -349,7 +349,8 @@ export const SharkSprite = React.memo(function SharkSprite({
     if (s.odArmed && t >= 0) {
       const fill = Math.min(1, t / 200);
       path.addArc(Skia.XYWHRect(l.x - 104, l.y - 74, 208, 148), -90, 360 * fill);
-      op = t < 200 ? 1 : 0.55 + 0.25 * Math.sin(p.fx / 160);
+      // Fills, pops white, then hands over to the gold shimmer on the sticker rim.
+      op = t < 200 ? 1 : t < 300 ? 1 - (t - 200) / 100 : 0;
       w = t > 200 && t < 300 ? 12 * (1 - (t - 200) / 100) + 6 : 6;
     } else if (s.od > 0) {
       const k = s.od / OD_STEPS;

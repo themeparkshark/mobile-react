@@ -136,7 +136,7 @@ export function SharkySwim({
   const layoutRef = useRef<SharkyLayout>(sharkyLayout(390, 700));
   const [progress, setProgress] = useState<SharkyProgress | null>(null);
   const [runIdx, setRunIdx] = useState(0);
-  const devMode = (__DEV__ ? process.env.EXPO_PUBLIC_SHARKY_MODE : undefined) as SharkyMode | 'race' | undefined;
+  const devMode = ((__DEV__ ? process.env.EXPO_PUBLIC_SHARKY_MODE : undefined) || undefined) as SharkyMode | 'race' | undefined;
   const [runMode, setRunMode] = useState<SharkyMode>(devMode === 'race' ? 'rally' : devMode ?? mode);
   const [ghost, setGhost] = useState<GhostRecord | null>(null);
   const [score, setScore] = useState(0);
