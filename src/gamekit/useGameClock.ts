@@ -60,6 +60,10 @@ export interface GameClockHandle {
   fxScale: SharedValue<number>;
   /** Gameplay ms (mirrored each frame, read-only). */
   simMs: SharedValue<number>;
+  /** Presentation ms (freezes in hit-stop): drive springs, boil and flipbooks from it. */
+  fxMs: SharedValue<number>;
+  /** Drawing frame on the 12 fps grid: floor(fxMs / 83.33) (Trivia rev 7, Whack v5). Changes 12 times a second. */
+  twosFrame: SharedValue<number>;
   hitStop: (ms: number, opts?: HitStopOptions) => void;
   slowMo: (scale: number, holdMs: number, easeMs?: number, holdSim?: boolean) => void;
   localStop: (slot: number, ms: number) => void;
@@ -82,6 +86,8 @@ export function useGameClock({
   const clock = useSharedValue<GameClock>(createClock(config));
   const fxScale = useSharedValue(1);
   const simMs = useSharedValue(0);
+  const fxMs = useSharedValue(0);
+  const twos = useSharedValue(0);
 
   const frame = useFrameCallback((info) => {
     'worklet';
@@ -97,6 +103,9 @@ export function useGameClock({
     const scale = c.paused ? 0 : c.fxScale;
     if (fxScale.value !== scale) fxScale.value = scale;
     simMs.value = c.simMs;
+    if (fxMs.value !== c.fxMs) fxMs.value = c.fxMs;
+    const tf = Math.floor((c.fxMs * 12) / 1000);
+    if (twos.value !== tf) twos.value = tf;
   }, autostart);
 
   // useFrameCallback returns a new handle every render; read it through a ref so
@@ -107,6 +116,8 @@ export function useGameClock({
     clock,
     fxScale,
     simMs,
+    fxMs,
+    twosFrame: twos,
     hitStop: (ms, opts = {}) => runOnUI((m: number, o: HitStopOptions) => {
       'worklet';
       hitStop(clock.value, m, o);
@@ -139,5 +150,5 @@ export function useGameClock({
       'worklet';
       restoreClock(clock.value, s);
     })(snap),
-  }), [clock, fxScale, simMs]);
+  }), [clock, fxScale, simMs, fxMs, twos]);
 }

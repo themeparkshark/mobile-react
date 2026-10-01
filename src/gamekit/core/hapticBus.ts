@@ -52,6 +52,11 @@ export interface HapticBusConfig {
   rateExemptTells: boolean;
   /** Banana: a lower request within this many ms after a higher one is dropped (0 = off). */
   shadowMs: number;
+  /**
+   * Whack v5: a fired event at or above this priority cancels the remaining
+   * pulses of a LOWER-priority pattern that is still playing (0 = off).
+   */
+  cancelTailAtOrAbove: number;
 }
 
 export const DEFAULT_HAPTIC_BUS: HapticBusConfig = {
@@ -64,12 +69,14 @@ export const DEFAULT_HAPTIC_BUS: HapticBusConfig = {
   inputExempt: false,
   rateExemptTells: false,
   shadowMs: 0,
+  cancelTailAtOrAbove: 0,
 };
 
 /** Per-game presets straight from the design docs. */
 export const HAPTIC_BUS_PRESETS = {
   default: {},
-  whack: { minGapMs: 90, maxDelayMs: 30, tellGapMs: 300, preemptInGap: false, bypassPriority: 99 },
+  // cancelTailAtOrAbove 8 = WHACK_PRIO.quick: doc priorities 1-2 (decoy, quick) cut a playing lower pattern.
+  whack: { minGapMs: 90, maxDelayMs: 30, tellGapMs: 300, preemptInGap: false, bypassPriority: 99, cancelTailAtOrAbove: 8 },
   banana: { minGapMs: 84, maxPerSec: 12, maxDelayMs: 30, shadowMs: 50, preemptInGap: false, bypassPriority: 99 },
   trivia: { minGapMs: 60, maxPerSec: 6 },
   sharky: { minGapMs: 60, maxPerSec: 4, rateExemptTells: true },
@@ -262,6 +269,15 @@ export function busDue(s: HapticBusState, now: number): HapticRequest | null {
   }
   commit(s, now, q);
   return q;
+}
+
+/**
+ * Should a just-fired request of `newPriority` cut the remaining pulses of a
+ * pattern of `playingPriority` that is still playing? (Whack v5 rule.)
+ */
+export function busShouldCancelTail(s: HapticBusState, playingPriority: number, newPriority: number): boolean {
+  const at = s.cfg.cancelTailAtOrAbove;
+  return at > 0 && newPriority >= at && newPriority > playingPriority;
 }
 
 /** Counters for the dev overlay / tests. */

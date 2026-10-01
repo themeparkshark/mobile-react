@@ -14,6 +14,7 @@
  */
 
 import { createRng, rngFloat, type Rng } from './rng';
+import { twosHash } from './twos';
 
 // =============================================================================
 // Sprite indices in the shared FX atlas (see fx/FxAtlas.ts for the art).
@@ -113,6 +114,15 @@ export interface ParticlePool {
   my0: number[];
   /** Per-particle local clock scale (0 = frozen by a local hit-stop). */
   slot: number[];
+  /** On twos: rotation jitter (rad) and scale jitter (fraction) re-picked every drawing frame; 0 = smooth. */
+  twRot: number[];
+  twScale: number[];
+  /** Staggered phase (ms, 0..83) so one burst never steps in lockstep. */
+  twPhase: number[];
+  /** Flipbook mode (frames stepped on twos instead of the flutter foreshortening). */
+  flip: number[];
+  /** Global switch (reduced motion turns the boil off). */
+  twosOn: boolean;
 }
 
 function nums(n: number, v = 0): number[] {
@@ -166,6 +176,11 @@ export function createParticlePool(cap = 200, seed = 7, layerBudget?: number[]):
     mx0: nums(cap),
     my0: nums(cap),
     slot: nums(cap, -1),
+    twRot: nums(cap),
+    twScale: nums(cap),
+    twPhase: nums(cap),
+    flip: nums(cap),
+    twosOn: true,
   };
 }
 
@@ -209,6 +224,14 @@ export interface EmitterDef {
   /** Floor bounce restitution (0 = none). */
   bounce?: number;
   bounces?: number;
+  /**
+   * On twos (Whack v5 / Rhythm / Boss): the drawing re-picks a small rotation
+   * (deg) and scale (fraction) every 83 ms while its position stays smooth.
+   * `true` = the studio default +/-8 deg and +/-6%.
+   */
+  twos?: boolean | { rotDeg: number; scale: number };
+  /** Step `frames` as a flipbook on twos (hand-drawn FX sequences) instead of flutter foreshortening. */
+  flipbook?: boolean;
 }
 
 /** Pack a hex colour (#rgb, #rrggbb, #aarrggbb-free) and alpha into ARGB. */
@@ -248,13 +271,13 @@ export const EMITTERS = {
   glints: {
     sprite: FX_SPRITE.glint, count: [3, 4], speed: [120, 220], angle: -90, spread: 360,
     life: [0.22, 0.32], size: [5, 8], sizeEnd: 0.3, gravity: 200, drag: 3, spin: [-180, 180],
-    fadeIn: 0, fadeOut: 0.5, prio: PRIO.minor, colors: [WHITE], jitter: 4,
+    fadeIn: 0, fadeOut: 0.5, prio: PRIO.minor, colors: [WHITE], twos: true, jitter: 4,
   },
   /** Outlined stars: the GOOD hit tier. */
   stars: {
     sprite: FX_SPRITE.starArt, count: [6, 6], speed: [240, 380], angle: -90, spread: 150,
     life: [0.36, 0.44], size: [9, 13], sizeEnd: 0.35, gravity: 900, drag: 1.2, spin: [-420, 420],
-    fadeIn: 0, fadeOut: 0.35, prio: PRIO.hit, colors: [WHITE], jitter: 6,
+    fadeIn: 0, fadeOut: 0.35, prio: PRIO.hit, colors: [WHITE], twos: true, jitter: 6,
   },
   /** Velocity-aligned sparks (crit, boss hits, electric). */
   sparks: {
@@ -291,7 +314,7 @@ export const EMITTERS = {
   ink: {
     sprite: FX_SPRITE.inkBlob, count: [8, 12], speed: [160, 420], angle: -90, spread: 360,
     life: [0.5, 0.8], size: [6, 14], sizeEnd: 0.6, gravity: 700, drag: 2.2, spin: [-90, 90],
-    fadeIn: 0, fadeOut: 0.35, prio: PRIO.hit, colors: [TINT.ink], jitter: 8,
+    fadeIn: 0, fadeOut: 0.35, prio: PRIO.hit, colors: [TINT.ink], twos: true, jitter: 8,
   },
   bubbles: {
     sprite: FX_SPRITE.bubble, count: [3, 5], speed: [30, 80], angle: -90, spread: 50,
@@ -301,12 +324,12 @@ export const EMITTERS = {
   puff: {
     sprite: FX_SPRITE.puff, count: [4, 6], speed: [40, 120], angle: -90, spread: 360,
     life: [0.35, 0.55], size: [10, 16], sizeEnd: 1.6, gravity: -60, drag: 3, spin: [-60, 60],
-    fadeIn: 0, fadeOut: 0.6, prio: PRIO.minor, colors: [WHITE], jitter: 6,
+    fadeIn: 0, fadeOut: 0.6, prio: PRIO.minor, colors: [WHITE], twos: true, jitter: 6,
   },
   shards: {
     sprite: FX_SPRITE.shard, count: [6, 8], speed: [220, 420], angle: -90, spread: 200,
     life: [0.5, 0.75], size: [6, 10], sizeEnd: 0.8, gravity: 1300, drag: 0.6, spin: [-720, 720],
-    fadeIn: 0, fadeOut: 0.3, prio: PRIO.hit, colors: [WHITE], jitter: 4,
+    fadeIn: 0, fadeOut: 0.3, prio: PRIO.hit, colors: [WHITE], twos: true, jitter: 4,
   },
   embers: {
     sprite: FX_SPRITE.ember, count: [10, 16], speed: [60, 180], angle: -90, spread: 70,
@@ -328,18 +351,18 @@ export const EMITTERS = {
   sparkles: {
     sprite: FX_SPRITE.sparkle, count: [6, 10], speed: [60, 200], angle: -90, spread: 360,
     life: [0.5, 0.9], size: [6, 11], sizeEnd: 0.2, gravity: 0, drag: 2, spin: [-120, 120],
-    fadeIn: 0.15, fadeOut: 0.4, prio: PRIO.minor, colors: [WHITE], jitter: 16,
+    fadeIn: 0.15, fadeOut: 0.4, prio: PRIO.minor, colors: [WHITE], twos: true, jitter: 16,
   },
   /** One impact star decal (QUICK / crit): scales up then shrinks. */
   impact: {
     sprite: FX_SPRITE.impactStar, count: [1, 1], speed: [0, 0], angle: 0, spread: 0,
     life: [0.09, 0.09], size: [22, 22], sizeEnd: 2.1, gravity: 0, drag: 0, spin: [-20, 20],
-    fadeIn: 0, fadeOut: 0.3, prio: PRIO.major, colors: [WHITE], jitter: 0,
+    fadeIn: 0, fadeOut: 0.3, prio: PRIO.major, colors: [WHITE], twos: true, jitter: 0,
   },
   hearts: {
     sprite: FX_SPRITE.heart, count: [4, 6], speed: [80, 180], angle: -90, spread: 60,
     life: [0.8, 1.1], size: [8, 11], sizeEnd: 0.8, gravity: -120, drag: 1.2, spin: [-60, 60],
-    fadeIn: 0.1, fadeOut: 0.4, prio: PRIO.minor, colors: [WHITE], jitter: 8,
+    fadeIn: 0.1, fadeOut: 0.4, prio: PRIO.minor, colors: [WHITE], twos: true, jitter: 8,
   },
 } satisfies Record<string, EmitterDef>;
 
@@ -373,6 +396,19 @@ function rr(r: Rng, lo: number, hi: number): number {
   return lo + (hi - lo) * rngFloat(r);
 }
 
+/**
+ * Free a slot. MUST stay declared above claim(): the Reanimated plugin captures
+ * a worklet's closure where it is created, so a helper declared later is still
+ * undefined inside claim() on the UI runtime ("kill is not a function", Boss).
+ */
+function kill(pool: ParticlePool, i: number): void {
+  'worklet';
+  if (pool.alive[i] === 0) return;
+  pool.alive[i] = 0;
+  pool.live -= 1;
+  pool.layerLive[pool.layer[i]] -= 1;
+}
+
 /** Find a slot: a free one, else cull the lowest-priority oldest (if lower than prio). */
 function claim(pool: ParticlePool, prio: number, layer: number): number {
   'worklet';
@@ -398,17 +434,13 @@ function claim(pool: ParticlePool, prio: number, layer: number): number {
     }
   }
   if (victim < 0 || vPrio > prio) return -1;
-  kill(pool, victim);
+  // Evict inline (no helper call): claim runs inside every emit on the UI thread.
+  pool.alive[victim] = 0;
+  pool.live -= 1;
+  pool.layerLive[pool.layer[victim]] -= 1;
   return victim;
 }
 
-function kill(pool: ParticlePool, i: number): void {
-  'worklet';
-  if (pool.alive[i] === 0) return;
-  pool.alive[i] = 0;
-  pool.live -= 1;
-  pool.layerLive[pool.layer[i]] -= 1;
-}
 
 /** Emit particles from a def at (x, y). Returns how many were spawned. */
 export function emit(pool: ParticlePool, def: EmitterDef, x: number, y: number, p: EmitParams = {}): number {
@@ -463,6 +495,17 @@ export function emit(pool: ParticlePool, def: EmitterDef, x: number, y: number, 
     pool.slot[i] = p.slot !== undefined ? p.slot : -1;
     pool.mx0[i] = 0;
     pool.my0[i] = 0;
+    const tw = def.twos;
+    if (tw) {
+      pool.twRot[i] = ((tw === true ? 8 : tw.rotDeg) * Math.PI) / 180;
+      pool.twScale[i] = tw === true ? 0.06 : tw.scale;
+      pool.twPhase[i] = rngFloat(r) * (1000 / 12);
+    } else {
+      pool.twRot[i] = 0;
+      pool.twScale[i] = 0;
+      pool.twPhase[i] = 0;
+    }
+    pool.flip[i] = def.flipbook ? 1 : 0;
     if (magnet) {
       pool.tx[i] = p.tx as number;
       pool.ty[i] = p.ty as number;
@@ -565,11 +608,38 @@ export function particleAlpha(pool: ParticlePool, i: number): number {
   return a < 0 ? 0 : a;
 }
 
-/** Sprite index for particle i, including flutter/flip frames. */
-export function particleSprite(pool: ParticlePool, i: number): number {
+/** Drawing frame (12 fps, staggered) of particle i at fx time tMs. */
+export function particleTwosFrame(pool: ParticlePool, i: number, tMs: number): number {
+  'worklet';
+  return Math.floor(((tMs + pool.twPhase[i]) * 12) / 1000);
+}
+
+/** On-twos rotation offset (rad) for particle i: holds for one drawing frame. */
+export function particleTwosRot(pool: ParticlePool, i: number, tMs: number): number {
+  'worklet';
+  const amp = pool.twRot[i];
+  if (amp === 0 || !pool.twosOn) return 0;
+  return (twosHash(pool.born[i], particleTwosFrame(pool, i, tMs), 1) * 2 - 1) * amp;
+}
+
+/** On-twos scale multiplier for particle i. */
+export function particleTwosScale(pool: ParticlePool, i: number, tMs: number): number {
+  'worklet';
+  const amp = pool.twScale[i];
+  if (amp === 0 || !pool.twosOn) return 1;
+  return 1 + (twosHash(pool.born[i], particleTwosFrame(pool, i, tMs), 2) * 2 - 1) * amp;
+}
+
+/** Sprite index for particle i, including flutter/flip frames (tMs drives flipbooks on twos). */
+export function particleSprite(pool: ParticlePool, i: number, tMs = 0): number {
   'worklet';
   const frames = pool.frames[i];
   if (frames <= 1) return pool.sprite[i];
+  if (pool.flip[i] === 1) {
+    // Flipbook on twos from the particle's birth: age in ms, staggered phase, holds the last frame.
+    const f = Math.floor(((pool.age[i] * 1000 + pool.twPhase[i]) * 12) / 1000);
+    return pool.sprite[i] + (f >= frames ? frames - 1 : f);
+  }
   // |cos(phase)| picks a foreshortening frame: 0 = face-on, frames-1 = edge-on.
   const c = Math.abs(Math.cos(pool.phase[i]));
   let f = Math.floor((1 - c) * frames);

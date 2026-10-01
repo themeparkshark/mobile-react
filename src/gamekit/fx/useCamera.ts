@@ -61,6 +61,8 @@ export interface CameraRig {
   kick: (dx: number, dy: number) => void;
   lean: (x: number, y: number) => void;
   frame: (zoom: number) => void;
+  /** Swap shake rules at runtime (CAMERA_PRESETS); intensity stays under walking / reduced-motion control. */
+  configure: (cfg: Partial<CameraConfig>) => void;
 }
 
 export function useCamera({ width, height, config, timeScale, reducedMotion = false, walking = false }: CameraOptions): CameraRig {
@@ -129,5 +131,16 @@ export function useCamera({ width, height, config, timeScale, reducedMotion = fa
       'worklet';
       setBaseZoom(state.value, v);
     })(z),
+    configure: (cfg) => runOnUI((c: Partial<CameraConfig>) => {
+      'worklet';
+      const cur = state.value.cfg;
+      if (c.maxOffset !== undefined) cur.maxOffset = c.maxOffset;
+      if (c.maxRollRad !== undefined) cur.maxRollRad = c.maxRollRad;
+      if (c.decay !== undefined) cur.decay = c.decay;
+      if (c.frequency !== undefined) cur.frequency = c.frequency;
+      if (c.maxShakeMs !== undefined) cur.maxShakeMs = c.maxShakeMs;
+      cur.decayMs = c.decayMs !== undefined ? c.decayMs : 0;
+      cur.exponent = c.exponent !== undefined ? c.exponent : 2;
+    })(cfg),
   }), [state, x, y, rot, zoom, transform, style, width, height]);
 }
