@@ -189,6 +189,10 @@ export function SharkySwim({
 
   // --- run config ---------------------------------------------------------------
   const prog = progress ?? EMPTY_PROGRESS;
+  // The run's config reads progress as it was when the run began: saving the
+  // finished run must never re-create the config and restart a sim under the results.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const progAtRun = useMemo(() => prog, [runIdx, runMode, ghost, progress == null]);
   const cfg = useMemo<SimConfig>(() => {
     if (round) return rallyConfig(round.seed);
     const m = MODE_ID[runMode];
@@ -198,11 +202,11 @@ export function SharkySwim({
     return {
       seed: runSeed | 0,
       mode: m,
-      difficulty: ghost ? ghost.difficulty : difficulty ?? ratedDifficulty(prog),
-      tier: ghost ? ghost.tier : unlockTier(prog.runs),
-      runs: ghost ? ghost.runs : prog.runs,
+      difficulty: ghost ? ghost.difficulty : difficulty ?? ratedDifficulty(progAtRun),
+      tier: ghost ? ghost.tier : unlockTier(progAtRun.runs),
+      runs: ghost ? ghost.runs : progAtRun.runs,
     };
-  }, [runMode, seed, runIdx, ghost, difficulty, prog, round]);
+  }, [runMode, seed, runIdx, ghost, difficulty, progAtRun, round]);
   const cfgKey = `${cfg.seed}:${cfg.mode}:${cfg.difficulty}:${cfg.tier}:${cfg.runs}:${runIdx}:${ghost ? ghost.at : 0}`;
 
   // --- engine ---------------------------------------------------------------------

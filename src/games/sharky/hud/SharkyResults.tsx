@@ -18,7 +18,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View, type LayoutChangeEvent } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
@@ -108,6 +108,7 @@ function Star({ on, index, delayMs, reduced }: { on: boolean; index: number; del
 
 export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, challengeLabel, reducedMotion }: SharkyResultsProps) {
   const fx = useRef<FxStageHandle>(null);
+  const win = useWindowDimensions();
   const [box, setBox] = useState({ w: 390, h: 700 });
   const shown = useCountUp(data.score, 300, 1100);
   const [tapReady, setTapReady] = useState(false);
@@ -159,7 +160,7 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
   const splitMax = useMemo(() => Math.max(1, ...data.splits.map((d) => Math.abs(d))), [data.splits]);
 
   return (
-    <View style={styles.root} onLayout={onLayout}>
+    <View style={[styles.root, { height: win.height }]} onLayout={onLayout}>
       <LinearGradient colors={['#dff3ff', NEUTRAL]} style={StyleSheet.absoluteFill} />
       <View style={styles.trim} />
       <Text style={styles.headline}>{data.headline}</Text>
@@ -230,9 +231,9 @@ export function SharkyResults({ data, playAgain, claim, claimLabel, challenge, c
 }
 
 const styles = StyleSheet.create({
-  root: { width: '100%', height: '100%', alignItems: 'center', overflow: 'hidden' },
+  root: { width: '100%', alignItems: 'center', overflow: 'hidden' },
   trim: { position: 'absolute', left: 0, right: 0, top: 0, height: 5, backgroundColor: REWARD },
-  headline: { fontFamily: 'Shark', fontSize: 30, color: INK, marginTop: 18 },
+  headline: { fontFamily: 'Shark', fontSize: 30, color: INK, marginTop: 58 },
   stage: { width: '100%', height: 210, alignItems: 'center', justifyContent: 'flex-end' },
   sharkWrap: { position: 'absolute', bottom: 70, alignItems: 'center' },
   shark: { width: 130, height: 160 },
