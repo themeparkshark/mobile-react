@@ -1,12 +1,12 @@
 /**
- * Banana Basket v2 tuning (design rev 4, "earn every catch").
+ * Banana Basket v2 tuning (design rev 5, "the ball is the key").
  *
  * Integer only: field units (fu) with 256 sub-units, 60 Hz steps, q8
  * timescales. The deterministic sim, the bots, the proof and the server
  * replay port all read these. Baked physics tables live in tables.ts.
  */
 
-export const VERSION = 'bb2r4';
+export const VERSION = 'bb2r5';
 export const SUB = 256;
 
 // Field (portrait, logical). The renderer scales by screenW / 400.
@@ -121,6 +121,12 @@ export const BALL_SURFACE = 10;
 export const BALL_WALL_Q8 = 230;
 export const BALL_RESPAWN = 360;
 export const BALL_RESPAWN_BEACH = 180;
+/** Tutorial grace: a ball lost before clock 10 s respawns in 2 s. */
+export const BALL_RESPAWN_GRACE = 120;
+export const BALL_GRACE_UNTIL = 600;
+/** The serve: bananas start after the ball's 2nd bounce or at 3 s. */
+export const SERVE_BOUNCES = 2;
+export const SERVE_MAX = 180;
 export const BALL_GOLD_AT = 10;
 export const BALL_ARC_BOUNCES = 3;
 
@@ -153,6 +159,9 @@ export const GOLD_BOUNCE_PTS = 50;
 export const BONK_BASE = 20;
 export const SPARE_POWER_PTS = 50;
 export const CLEAN_SWEEP = 200;
+/** Multi-catch: catches within 18 steps, flat totals DOUBLE 25, TRIPLE 75, QUAD 150. */
+export const MULTI_WINDOW = 18;
+export const MULTI_PTS = [0, 0, 25, 75, 150];
 export const PERFECT_STREAK_PTS = 20;
 export const HEART_PTS = 50;
 
@@ -187,16 +196,16 @@ export const CARD_SPLASH = 256;
 /** Set cards are 1000 + the set that just ended. */
 export const CARD_SET_BASE = 1000;
 
-// Stars (Ride table; queue x1.35). Index = difficulty 1..3. Calibrated on the
-// bots (120 seeds each, 2026-09-30): 1 star sits near the Kid bot's 5-15th
-// percentile (the Ride Challenge win must stay kind to first-timers), 3 stars
-// near the Expert bot's median and above the Human bot's 90th percentile.
-// Humans have the final say (design A7b P2 gate).
+// Stars (Ride table; queue x1.35). Index = difficulty 1..3. Rev 5 calibration
+// on the bots (80 seeds per difficulty, 2026-09-30, ball-gated tiers):
+// 1 star near the Human/Kid bots' 8-10th percentile (a Ride win stays kind
+// and never needs the ball), 3 stars near the Expert's 40th percentile and
+// above the Human's 92nd. Humans have the final say (A7b P2 gate).
 export const STARS_RIDE: readonly (readonly [number, number, number])[] = [
-  [5500, 8500, 11200],
-  [5500, 8500, 11200],
-  [6000, 9000, 11700],
-  [6300, 9300, 12000],
+  [5300, 7800, 9600],
+  [5300, 7800, 9600],
+  [5400, 8000, 10000],
+  [5600, 8300, 10600],
 ];
 export const QUEUE_STAR_Q8 = 346;
 

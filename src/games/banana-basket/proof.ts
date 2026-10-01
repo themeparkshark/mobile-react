@@ -72,6 +72,10 @@ export interface BananaProof {
   ball_bounces: number;
   gold_balls: number;
   grazes: number;
+  multi: number;
+  misses: number;
+  /** Clock steps with a live ball (the Why line: ball down for N s). */
+  ball_live_steps: number;
 }
 
 export function buildProof(cfg: SimConfig, s: SimState, elapsedMs: number, freezes: number[][] = []): BananaProof {
@@ -108,6 +112,9 @@ export function buildProof(cfg: SimConfig, s: SimState, elapsedMs: number, freez
     ball_bounces: s.bounces,
     gold_balls: s.goldBalls,
     grazes: s.grazes,
+    multi: s.multi,
+    misses: s.misses,
+    ball_live_steps: s.ballLive,
   };
 }
 

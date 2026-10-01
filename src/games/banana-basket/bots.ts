@@ -161,12 +161,39 @@ export function botInput(s: SimState, b: Bot): number {
     }
     target = lx + b.focusOff;
   }
-  // Juggle: go under the ball when nothing must-catch is close.
+  // Juggle (rev 5: the ball is the key to x3/x4). Plan the order of the next
+  // ball landing and the most urgent catch: take both when the bot's own
+  // speed allows it, otherwise keep the chain (catch) unless the gate is
+  // what is holding the tier back.
   if (b.ball && s.bOn === 1 && s.bVy > 0 && s.bPredStep >= 0) {
     const dt = s.bPredStep - s.clock;
-    if (dt >= 0 && dt < 40 && (best < 0 || bestR > dt + (b.kind === BOT_EXPERT ? 4 : 16))) {
-      const px = s.bPredX >> 8;
-      target = px + (b.kind === BOT_EXPERT ? (px > 200 ? 18 : -18) : 0);
+    const px = s.bPredX >> 8;
+    const strike = px + (b.kind === BOT_EXPERT ? (px > 200 ? 18 : -18) : 0);
+    const per = Math.floor((24 * b.speed) / 256) + 1;
+    const slack = b.kind === BOT_EXPERT ? 3 : 10;
+    // Both the catch zone (62) and the ball band (76) are wide: the basket
+    // only needs to get within ~40 fu of each to take it cleanly.
+    const travel = (d: number) => {
+      const a = (d < 0 ? -d : d) - 40;
+      return (a > 0 ? Math.floor(a / per) : 0) + slack;
+    };
+    if (dt >= 0 && dt < 60) {
+      let goBall = best < 0;
+      if (!goBall) {
+        const r = remaining(s, best);
+        const lx = target;
+        const reachBallFirst = travel(strike - bx) <= dt && travel(lx - strike) <= r - dt;
+        const reachItemFirst = r <= dt && travel(lx - bx) <= r && travel(strike - lx) <= dt - r;
+        if (reachBallFirst && !(reachItemFirst && r < dt)) goBall = true;
+        else if (reachItemFirst) goBall = false;
+        else if (!reachItemFirst && !reachBallFirst) {
+          // Can't have both: protect the key once the chain needs it.
+          const k = s.iKind[best];
+          const must = (k === K_BANANA || k === K_BUNCH || k === K_LUCKY) && s.iMust[best] === 1 && s.iOpt[best] === 0;
+          goBall = !must || (b.kind === BOT_EXPERT && s.chain < 4);
+        }
+      }
+      if (goBall) target = strike;
     }
   }
   // Dodge puffers that will cross soon near the target or the basket.

@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Banana Basket v2 (design rev 4): the deterministic sim, the director's
+ * Banana Basket v2 (design rev 5, "the ball is the key"): the deterministic sim, the director's
  * reachability, thumb-driven time, scoring, proofs and replays, ghosts, the
  * queue unlock gate, telegraph timing, onboarding spacing and the HapticBus.
  */
@@ -221,7 +221,7 @@ test('director: 0 infeasible must-catch pairs over many seeds, both modes, all d
   assert.ok(pairs > 5000);
 });
 
-test('onboarding spacing (Ride): coin 5 s, ball 10 s, puffer 18 s, Final Rush 35 s, finale lands in the last second', () => {
+test('onboarding spacing (Ride, A22): serve 0 s, bananas after the serve, coin 10 s, puffer 18 s, Final Rush 35 s, finale last', () => {
   const s = sim.createSim(cfg({ cards: 0 }));
   const b = bots.createBot(bots.BOT_EXPERT, 1);
   const first = {};
@@ -235,11 +235,13 @@ test('onboarding spacing (Ride): coin 5 s, ball 10 s, puffer 18 s, Final Rush 35
       if (k === sim.EV_CARD) cards.push(s.evA[e]);
     }
   }
-  assert.ok(first[`spawn${C.K_COIN}`] >= 295 && first[`spawn${C.K_COIN}`] <= 310, `coin ${first[`spawn${C.K_COIN}`]}`);
-  assert.equal(first[sim.EV_BALL_TOSS], 600);
+  assert.ok(first[`spawn${C.K_COIN}`] >= 600 && first[`spawn${C.K_COIN}`] <= 610, `coin ${first[`spawn${C.K_COIN}`]}`);
+  assert.ok(first[sim.EV_BALL_TOSS] <= 1, 'the cart serves the ball at clock 0');
+  assert.ok(first[sim.EV_SERVE] > 0 && first[sim.EV_SERVE] <= C.SERVE_MAX, `serve done ${first[sim.EV_SERVE]}`);
+  assert.ok(first[`spawn${C.K_BANANA}`] >= first[sim.EV_SERVE], 'no bananas before the serve');
   assert.ok(first[`spawn${C.K_PUFFER}`] >= 1080 && first[`spawn${C.K_PUFFER}`] <= 1082);
   assert.equal(first[sim.EV_RUSH], 2072, 'Rush tell one beat early');
-  assert.ok(first[`spawn${C.K_PUFFER}`] - first[sim.EV_BALL_TOSS] >= 8 * 60 - 2);
+  assert.ok(first[`spawn${C.K_PUFFER}`] - first[`spawn${C.K_COIN}`] >= 8 * 60 - 12);
   assert.ok(2100 - first[`spawn${C.K_PUFFER}`] >= 8 * 60);
   assert.ok(cards.includes(C.CARD_BALL) && cards.includes(C.CARD_PUFFER), 'teaching cards fire on first appearance');
   assert.ok(first[sim.EV_FINALE] >= 2600, 'finale slow-mo near the end');
@@ -247,7 +249,7 @@ test('onboarding spacing (Ride): coin 5 s, ball 10 s, puffer 18 s, Final Rush 35
 
 test('puffers: tell at a fixed lead before the lane, two-step puff, min fall time', () => {
   for (const mode of [sim.MODE_RIDE, sim.MODE_QUEUE]) {
-    const s = sim.createSim(cfg({ mode, seed: 55 }));
+    const s = sim.createSim(cfg({ mode, seed: 55, unlock: 1 }));
     const b = bots.createBot(bots.BOT_EXPERT, 2);
     const tells = new Map();
     const lead = mode === sim.MODE_QUEUE ? C.PUFFER_TELL_QUEUE : C.PUFFER_TELL_RIDE;
@@ -273,8 +275,8 @@ test('puffers: tell at a fixed lead before the lane, two-step puff, min fall tim
 
 test('Golden Hour never overlaps Final Rush and only 3 events request global hit-stop', () => {
   const src = fs.readFileSync(path.join(root, 'src/games/banana-basket/sim.ts'), 'utf8');
-  const calls = src.match(/hitStop\(s, [A-Z_]+\)/g) || [];
-  assert.deepEqual([...new Set(calls)].sort(), ['hitStop(s, HITSTOP_GOLDEN)', 'hitStop(s, HITSTOP_PUFFER)', 'hitStop(s, HITSTOP_TIME)']);
+  const calls = src.match(/hitStop\(s, [A-Z_]+, [01]\)/g) || [];
+  assert.deepEqual([...new Set(calls)].sort(), ['hitStop(s, HITSTOP_GOLDEN, 0)', 'hitStop(s, HITSTOP_PUFFER, 0)', 'hitStop(s, HITSTOP_TIME, 1)']);
   for (let seed = 1; seed <= 40; seed++) {
     const s = sim.createSim(cfg({ seed }));
     const b = bots.createBot(bots.BOT_EXPERT, seed);
@@ -285,21 +287,139 @@ test('Golden Hour never overlaps Final Rush and only 3 events request global hit
   }
 });
 
-test('queue unlock gate: one new system per run; twist from run 3; assist never in Ride', () => {
+test('queue unlock gate (v2.0): run 1 puffers only, Gull Set from run 2, no twists or power-ups; assist never in Ride', () => {
   const u1 = sim.createSim(cfg({ mode: sim.MODE_QUEUE, unlock: 1 }));
-  assert.equal(u1.hasBall, 0);
-  assert.equal(u1.hasGift, 0);
+  assert.equal(u1.hasBall, 1, 'the ball is core from run 1');
+  assert.equal(u1.hasGift + u1.hasFinger + u1.hasWatch, 0);
   assert.equal(u1.twist, C.TWIST_NONE);
-  const u2 = sim.createSim(cfg({ mode: sim.MODE_QUEUE, unlock: 2 }));
-  assert.equal(u2.hasBall, 1);
-  assert.equal(u2.hasFinger, 1);
-  assert.equal(u2.twist, C.TWIST_NONE);
-  assert.equal(sim.createSim(cfg({ mode: sim.MODE_QUEUE, unlock: 3 })).twist, C.TWIST_BREEZY);
-  assert.equal(sim.createSim(cfg({ mode: sim.MODE_QUEUE, unlock: 4 })).hasWatch, 1);
-  assert.equal(sim.createSim(cfg({ mode: sim.MODE_QUEUE, unlock: 1, deck: 'ocean' })).twist, C.TWIST_SPLASH, 'water decks force Splashdown');
+  for (const u of [2, 3, 5]) {
+    const q = sim.createSim(cfg({ mode: sim.MODE_QUEUE, unlock: u, twist: C.TWIST_BREEZY }));
+    assert.equal(q.twist, C.TWIST_GULLS, `run ${u}: Gull Set`);
+    assert.equal(q.hasGift + q.hasFinger + q.hasWatch, 0, 'power-ups are v2.1');
+    assert.ok(q.unlock <= 3);
+  }
+  assert.equal(sim.createSim(cfg({ mode: sim.MODE_QUEUE, unlock: 1, deck: 'ocean' })).twist, C.TWIST_NONE, 'no splash in v2.0');
   assert.equal(sim.createSim(cfg({ assist: true })).assist, 0, 'no Easy Basket in Ride');
-  const r = botRun(cfg({ mode: sim.MODE_QUEUE, unlock: 1 }));
-  assert.equal(r.bounces, 0, 'no ball before run 2');
+  // Gull Set: gulls dive in set 2 and no puffer spawns there.
+  const s = sim.createSim(cfg({ mode: sim.MODE_QUEUE, unlock: 3 }));
+  const bt = bots.createBot(bots.BOT_HUMAN, 3);
+  let gulls = 0;
+  let puffersInSet2 = 0;
+  for (let n = 0; n < 40000 && !s.done; n++) {
+    sim.step(s, 1, bots.botInput(s, bt));
+    for (let e = 0; e < s.evN; e++) {
+      if (s.evK[e] === sim.EV_GULL && s.evA[e] === 1) gulls++;
+      if (s.evK[e] === sim.EV_SPAWN && s.evB[e] === C.K_PUFFER && s.set === 1) puffersInSet2++;
+    }
+  }
+  assert.ok(gulls >= 2, `gulls ${gulls}`);
+  assert.ok(puffersInSet2 <= 1, `puffers in the Gull Set ${puffersInSet2}`);
+});
+
+test('the ball is the key: x3/x4 only with a live ball, the gate locks on a loss and unlocks on the next bounce', () => {
+  const s = sim.createSim(cfg());
+  s.chain = 25;
+  s.bOn = 0;
+  assert.equal(sim.gatedTier(s), 2, 'no ball: held at x2');
+  assert.equal(sim.gateHeld(s), 1);
+  s.bOn = 1;
+  s.bN = 0;
+  assert.equal(sim.gatedTier(s), 2, 'a ball that has not bounced yet is not live');
+  s.bN = 1;
+  assert.equal(sim.gatedTier(s), 4);
+  s.chain = 8;
+  s.bOn = 0;
+  assert.equal(sim.gatedTier(s), 2, 'x2 never needs the ball');
+  // In a real run: lock and unlock events pair up and points respect the gate.
+  let locks = 0;
+  let unlocks = 0;
+  let heldCatches = 0;
+  for (let seed = 1; seed <= 6; seed++) {
+    const r = sim.createSim(cfg({ seed }));
+    const b = bots.createBot(bots.BOT_HUMAN, seed);
+    for (let n = 0; n < 40000 && !r.done; n++) {
+      sim.step(r, 1, bots.botInput(r, b));
+      for (let e = 0; e < r.evN; e++) {
+        const k = r.evK[e];
+        if (k === sim.EV_GATE && r.evA[e] === 1) locks++;
+        if (k === sim.EV_GATE && r.evA[e] === 2) unlocks++;
+        if (k === sim.EV_CATCH) {
+          const tier = (r.evB[e] >> 8) & 15;
+          const held = (r.evB[e] >> 12) & 1;
+          if (held) {
+            heldCatches++;
+            assert.equal(tier, 2, 'a held catch scores at x2');
+          }
+        }
+      }
+    }
+  }
+  assert.ok(locks > 0 && unlocks > 0, `locks ${locks} unlocks ${unlocks}`);
+  assert.ok(heldCatches > 0);
+});
+
+test('the serve: bananas wait for 2 bounces or 3 s; tutorial grace respawns a lost ball in 2 s before 10 s', () => {
+  // Never touch the ball: bananas start at 3 s.
+  const s = sim.createSim(cfg());
+  let firstBanana = -1;
+  let lostAt = -1;
+  let tossAgain = -1;
+  for (let n = 0; n < 4000 && !s.done; n++) {
+    sim.step(s, 1, 60 * 16);
+    for (let e = 0; e < s.evN; e++) {
+      if (s.evK[e] === sim.EV_SPAWN && s.evB[e] === C.K_BANANA && firstBanana < 0) firstBanana = s.clock;
+      if (s.evK[e] === sim.EV_BALL_LOST && lostAt < 0) lostAt = s.clock;
+      if (s.evK[e] === sim.EV_BALL_TOSS && lostAt >= 0 && tossAgain < 0) tossAgain = s.clock;
+    }
+  }
+  assert.ok(firstBanana >= C.SERVE_MAX && firstBanana <= C.SERVE_MAX + C.STEPS_BEAT, `first banana ${firstBanana}`);
+  assert.ok(lostAt > 0 && lostAt < 600);
+  assert.ok(tossAgain - lostAt >= C.BALL_RESPAWN_GRACE - 1 && tossAgain - lostAt <= C.BALL_RESPAWN_GRACE + 1, `grace ${tossAgain - lostAt}`);
+});
+
+test('multi-catch pays flat DOUBLE/TRIPLE/QUAD and hit-stops are never within 15 steps', () => {
+  let multi = 0;
+  let stops = 0;
+  for (let seed = 1; seed <= 20; seed++) {
+    const s = sim.createSim(cfg({ seed }));
+    const b = bots.createBot(bots.BOT_EXPERT, seed);
+    let lastStop = -1000;
+    let prevQ = 0;
+    for (let n = 0; n < 40000 && !s.done; n++) {
+      sim.step(s, 1, bots.botInput(s, b));
+      if (s.hitStopQ > prevQ && !s.done) {
+        assert.ok(s.clock - lastStop >= 15, `seed ${seed}: global stops ${lastStop} -> ${s.clock}`);
+        lastStop = s.clock;
+        stops++;
+      }
+      prevQ = s.hitStopQ;
+      for (let e = 0; e < s.evN; e++) {
+        if (s.evK[e] !== sim.EV_MULTI) continue;
+        multi++;
+        const n2 = s.evB[e];
+        assert.equal(s.evC[e], C.MULTI_PTS[n2] - C.MULTI_PTS[n2 - 1]);
+      }
+    }
+    assert.equal(s.multi >= 0, true);
+  }
+  assert.ok(multi > 0, 'multi-catch happens');
+  assert.ok(stops > 0);
+});
+
+test('Sugar Crush: hearts left and a live ball add to the verified end bonus', () => {
+  const s = sim.createSim(cfg());
+  s.catches = 10;
+  s.misses = 1;
+  s.hearts = 2;
+  s.bOn = 1;
+  s.bN = 4;
+  s.endReason = sim.END_TIME;
+  assert.equal(sim.endBonus(s), 2 * C.HEART_PTS + 20);
+  s.bGold = 1;
+  assert.equal(sim.endBonus(s), 2 * C.HEART_PTS + C.GOLD_BOUNCE_PTS);
+  s.endReason = sim.END_HEARTS;
+  s.hearts = 0;
+  assert.equal(sim.endBonus(s), 0);
 });
 
 test('queue sets: forced set cards at each break keep the chain; tip-over in set 3', () => {
@@ -425,7 +545,8 @@ test('audio ladder: climbs per catch, resolves on the tonic at a tier-up, octave
 
 test('golden vectors (shared with the WS7 PHP replay) replay to their exact scores', () => {
   const vectors = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/banana/golden-vectors.json'), 'utf8'));
-  assert.equal(vectors.length, 16);
+  assert.equal(vectors.length, 26);
+  assert.ok(vectors.filter((v) => v.expect.end === 'hearts').length >= 2);
   for (const v of vectors) {
     const r = proof.verifyProof(v.proof);
     assert.equal(r.ok, true, `${v.name}: ${r.reason}`);

@@ -5,7 +5,7 @@
  */
 
 import {
-  HEARTS, QUEUE_SETS, RIDE_STEPS, S_FREE, SET_STEPS, SUB, TIER_AT, TWIST_NONE, TWIST_SPLASH, WATER_DECKS,
+  HEARTS, QUEUE_SETS, RIDE_STEPS, S_FREE, SET_STEPS, SUB, TIER_AT, TWIST_GULLS, TWIST_NONE, WATER_DECKS,
 } from './constants';
 import { clampInt, mixSeed, type BRng } from './fixed';
 
@@ -59,6 +59,9 @@ export const EV_TIPOVER = 32; // -
 export const EV_DOWNWELL = 33; // a x, b pips
 export const EV_GRADE = 34; // a grade (render stamp for early catches), b perfect streak
 export const EV_HEARTS_OUT = 35;
+export const EV_MULTI = 36; // a x, b count (2 DOUBLE, 3 TRIPLE, 4+ QUAD), c points
+export const EV_GATE = 37; // a 1 locked (ball lost at chain 12+), 2 unlocked (first bounce), b effective tier
+export const EV_SERVE = 38; // bananas start (the serve is done)
 
 export interface SimConfig {
   seed: number;
@@ -180,6 +183,18 @@ export interface SimState {
   luckyN: number;
   pops: number;
   bonks: number;
+  /** Rev 5: bananas start after the serve (2nd bounce or 3 s). */
+  served: number;
+  /** Multi-catch: clock of the last catch and the run of catches within 18 steps. */
+  mcLast: number;
+  mcN: number;
+  multi: number;
+  /** Clock of the last global hit-stop (never two within 15 steps). */
+  lastStop: number;
+  /** Steps with a live ball (in play, bounced this life). */
+  ballLive: number;
+  /** Last effective (ball-gated) tier announced. */
+  gTier: number;
   // director
   dNext: number;
   dLastX: number;
@@ -245,10 +260,11 @@ export function isWaterDeck(deck: string): boolean {
 export function createSim(cfg: SimConfig): SimState {
   'worklet';
   const queue = cfg.mode === MODE_QUEUE;
-  const unlock = queue ? clampInt(cfg.unlock | 0, 1, 5) : 5;
-  let twist = TWIST_NONE;
-  if (queue && unlock >= 3) twist = cfg.twist | 0;
-  if (queue && isWaterDeck(cfg.deck)) twist = TWIST_SPLASH;
+  // v2.0 (rev 5): unlock 1..3. Run 1 = catch, ball, coin, Golden Hour,
+  // puffer; run 2+ adds the Gull Set (queue set 2). Twists, splash and
+  // power-ups are v2.1 and never run in a v2.0 config.
+  const unlock = queue ? clampInt(cfg.unlock | 0, 1, 3) : 3;
+  const twist = queue && unlock >= 2 ? TWIST_GULLS : TWIST_NONE;
   const diff = clampInt(cfg.difficulty | 0, 1, 3);
   const s: SimState = {
     seed: cfg.seed >>> 0,
@@ -257,10 +273,10 @@ export function createSim(cfg: SimConfig): SimState {
     unlock,
     twist,
     assist: queue && cfg.assist ? 1 : 0,
-    hasBall: !queue || unlock >= 2 ? 1 : 0,
-    hasGift: queue && unlock >= 2 ? 1 : 0,
-    hasFinger: queue && unlock >= 2 ? 1 : 0,
-    hasWatch: queue && unlock >= 4 ? 1 : 0,
+    hasBall: 1,
+    hasGift: 0,
+    hasFinger: 0,
+    hasWatch: 0,
     rng: { s: mixSeed(cfg.seed >>> 0, 0x62616e61) },
     steps: 0,
     holdTs: 0,
@@ -346,7 +362,14 @@ export function createSim(cfg: SimConfig): SimState {
     luckyN: 0,
     pops: 0,
     bonks: 0,
-    dNext: 28,
+    served: 0,
+    mcLast: -100000,
+    mcN: 0,
+    multi: 0,
+    lastStop: -100000,
+    ballLive: 0,
+    gTier: 1,
+    dNext: 1 << 30,
     dLastX: 200,
     pN: 0,
     pSpawn: zeros(MAX_PENDING),
@@ -410,12 +433,26 @@ export function emit(s: SimState, k: number, a: number, b: number, c: number): v
   s.evN = i + 1;
 }
 
+/** Rev 5: the ball is the key. Live = in play with at least one bounce this life. */
+export function ballIsLive(s: SimState): boolean {
+  'worklet';
+  return s.bOn === 1 && s.bN > 0;
+}
+
 export function tierOf(chain: number): number {
   'worklet';
   if (chain >= TIER_AT[3]) return 4;
   if (chain >= TIER_AT[2]) return 3;
   if (chain >= TIER_AT[1]) return 2;
   return 1;
+}
+
+/** The scoring tier: x3 and x4 need a live ball, else it is held at x2. */
+export function gatedTier(s: SimState): number {
+  'worklet';
+  const t = tierOf(s.chain);
+  if (t > 2 && !(s.bOn === 1 && s.bN > 0)) return 2;
+  return t;
 }
 
 export function maybeCard(s: SimState, card: number): void {

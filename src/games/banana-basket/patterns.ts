@@ -19,11 +19,11 @@ import {
   K_BUNCH, K_COIN, K_FINGER, K_GIFT, K_LUCKY, K_PUFFER, K_WATCH, LANE_Y, PHASE_BREATHER, PHASE_BUDGET, PHASE_BUILD,
   PHASE_G, PHASE_PRESSURE, PHASE_RUSH, PHASE_TIPOVER, PHASE_VY0, PHASE_WARM, PUFFER_CLEAR, PUFFER_MIN_FALL_QUEUE,
   PUFFER_MIN_FALL_RIDE, REACH_SLACK, REACT_STEPS, SPAWN_Y, STEPS_BEAT, STEPS_HALF, SUB, TWIST_BREEZY, WATCH_MAX,
-  FIELD_W, BALL_WALL_Q8,
+  FIELD_W, BALL_WALL_Q8, SERVE_BOUNCES, SERVE_MAX, TWIST_GULLS,
 } from './constants';
 import { absInt, clampInt, floorDiv, rngBelow, rngRange, rngWeighted } from './fixed';
 import { MAXDX, TRAVEL, TRAVEL_MAX } from './tables';
-import { EV_TIPOVER, MAX_PENDING, MODE_QUEUE, WINDOW, emit, tierOf, type SimState } from './state';
+import { EV_SERVE, EV_TIPOVER, MAX_PENDING, MODE_QUEUE, WINDOW, emit, tierOf, type SimState } from './state';
 
 // -- phases -------------------------------------------------------------------------
 
@@ -526,10 +526,18 @@ export function directorStep(s: SimState): void {
   const phase = phaseAt(s, lt);
   const queue = s.mode === MODE_QUEUE;
   const lastSet = !queue || s.set === 2;
+  // The serve (rev 5): the cart tosses the ball at clock 0 of the Ride and
+  // queue set 1; bananas start after its 2nd bounce or at 3 s.
+  if ((!queue || s.set === 0) && oneShot(s, TL_BALL, lt, 0)) s.tossReq = 200 + 1;
+  if (!s.served) {
+    if (s.bounces < SERVE_BOUNCES && lt < SERVE_MAX) return;
+    s.served = 1;
+    s.dNext = onBeat(s, c + 1);
+    emit(s, EV_SERVE, 0, 0, 0);
+  }
   // Fixed beats of the run.
   if (!queue) {
-    if (oneShot(s, TL_COIN, lt, 300)) addItem(s, c, K_COIN, 200, 0, 0, phase);
-    if (oneShot(s, TL_BALL, lt, 600)) s.tossReq = clampInt(s.dLastX, 90, 310) + 1;
+    if (oneShot(s, TL_COIN, lt, 600)) addItem(s, c, K_COIN, 200, 0, 0, phase);
     if (oneShot(s, TL_PUFFER, lt, 1080)) {
       s.pufferOn = 1;
       addItem(s, c, K_PUFFER, clampInt(s.bx >> 8, 70, 330), 0, 0, phase);
@@ -540,15 +548,15 @@ export function directorStep(s: SimState): void {
       s.dNext = s.setStart + 2100;
     }
   } else if (s.set === 0) {
-    if (oneShot(s, TL_COIN, lt, 180)) addItem(s, c, K_COIN, 200, 0, 0, phase);
-    if (s.hasBall && oneShot(s, TL_BALL, lt, 360)) s.tossReq = clampInt(s.dLastX, 90, 310) + 1;
+    if (oneShot(s, TL_COIN, lt, 300)) addItem(s, c, K_COIN, 200, 0, 0, phase);
     if (oneShot(s, TL_PUFFER, lt, 720)) {
       s.pufferOn = 1;
       addItem(s, c, K_PUFFER, clampInt(s.bx >> 8, 70, 330), 0, 0, phase);
       if (s.dNext < c + 84) s.dNext = c + 84;
     }
   } else if (s.set === 1) {
-    s.pufferOn = 1;
+    // Gull Set (unlock 2+) replaces puffers; on run 1 it is a second puffer set.
+    s.pufferOn = s.twist === TWIST_GULLS ? 0 : 1;
     if (s.hasGift && oneShot(s, TL_GIFT, lt, 600)) addItem(s, c, K_GIFT, near(s, s.dLastX, 40, 110), 0, 0, phase);
   } else if (oneShot(s, TL_TIPOVER, lt, 0)) {
     // Cart Tip-Over: a 6 s shower in weaving lanes (24 bananas + 4 coins).

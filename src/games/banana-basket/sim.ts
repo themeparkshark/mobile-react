@@ -1,5 +1,5 @@
 /**
- * Banana Basket v2: the deterministic sim (design rev 4).
+ * Banana Basket v2: the deterministic sim (design rev 5, "the ball is the key").
  *
  * Pure, integer-only and worklet-safe. The same code runs on the UI thread
  * (useGameClock onStep), in node tests, in the bots, in ghost playback and
@@ -15,25 +15,26 @@
  */
 
 import {
-  ACC_SUB, ASSIST_ZONE, BALL_GOLD_AT, BALL_R, BALL_RESPAWN, BALL_RESPAWN_BEACH, BALL_SURFACE, BALL_WALL_Q8, BASKET_MAX,
+  ACC_SUB, ASSIST_ZONE, BALL_GOLD_AT, BALL_R, BALL_GRACE_UNTIL, BALL_RESPAWN, BALL_RESPAWN_GRACE, BALL_SURFACE, BALL_WALL_Q8, BASKET_MAX,
   BASKET_MIN, BONK_BASE, CAP_SUB, CARD_BALL, CARD_BEACH, CARD_BREEZY, CARD_FINGER, CARD_GOLDEN, CARD_GULLS, CARD_PUFFER,
   CARD_RIM, CARD_SET_BASE, CARD_SPLASH, CHAIN_FREEZE_STEPS, CLEAN_SWEEP, CLOSE_CALL_BAND, CLOSE_EASE, CLOSE_HOLD,
   CLOSE_PTS, CLOSE_TS, EVENT_GOLDEN, EVENT_RUSH, FIELD_W, FINALE_NEAR, FINALE_TS, FINGER_RANGE, FINGER_STEPS, FREE_SUB,
   G_GOLD_POP, G_GOOD, G_GREAT, G_PERFECT, G_POP, GOLD_BOUNCE_PTS, GOLDEN_BANK, GOLDEN_COIN_EXT, GOLDEN_EXT_MAX,
   GOLDEN_STEPS, GOLDEN_WARN, GOLDEN_ZONE_Q8, GRAZE_PTS, GRAZE_WINDOW, GREAT_D, GULL_REACH, GULL_TELL,
   GULL_TELL_FIRST, HALF_ZONE, HEART_PTS, HITSTOP_GOLDEN, HITSTOP_PUFFER, HITSTOP_TIME, INVULN_STEPS, ITEM_BASE,
-  ITEM_SIZE, K_BANANA, K_BUNCH, K_COIN, K_FINGER, K_GIFT, K_LUCKY, K_PUFFER, K_WATCH, LANE_Y, METER_PIPS, MQ_CAP,
+  ITEM_SIZE, K_BANANA, K_BUNCH, K_COIN, K_FINGER, K_GIFT, K_LUCKY, K_PUFFER, K_WATCH, LANE_Y, METER_PIPS, MQ_CAP, MULTI_PTS, MULTI_WINDOW,
   PERFECT_D, PERFECT_STREAK_PTS, PLAZA_Y, PUFFER_TELL_QUEUE, PUFFER_TELL_RIDE, QUEUE_SETS, QUEUE_STAR_Q8,
   RIM_ROLL_BAND, RIM_ROLL_STEPS, S_BONKED, S_DUNK, S_FALL, S_FREE, S_MISS, S_PASS, S_POP, S_RIM, SAVE_PTS, SET_STEPS,
   SPARE_POWER_PTS, SPAWN_Y, SPLASH_HALF, SPLASH_TELL, STARS_RIDE, STEPS_BAR, STEPS_BEAT, SUB, TIER_AT, TWIST_BEACH,
   TWIST_BREEZY, TWIST_GULLS, TWIST_NONE, TWIST_SPLASH, WATCH_MAX, WATCH_STEPS,
 } from './constants';
 import { absInt, clampInt, floorDiv, rngRange, signInt } from './fixed';
+import { ballIsLive, gatedTier } from './state';
 import { G_BALL, RAMP_DOWN, RAMP_UP, VX_GAIN, VY_BALL } from './tables';
 import { directorStep, predictBall, travelOf } from './patterns';
 import {
   EV_BALL_LOST, EV_BALL_POP, EV_BALL_TOSS, EV_BANK, EV_BONK, EV_BOUNCE, EV_BREAK, EV_CARD, EV_CATCH, EV_CLOSE, EV_COIN,
-  EV_DOWNWELL, EV_FINALE, EV_GOLD_BALL, EV_GOLDEN, EV_GRAZE, EV_GULL, EV_HEARTS_OUT, EV_HIT, EV_MISS, EV_POWER, EV_PUFF,
+  EV_DOWNWELL, EV_FINALE, EV_GOLD_BALL, EV_GOLDEN, EV_GRAZE, EV_GULL, EV_GATE, EV_HEARTS_OUT, EV_HIT, EV_MULTI, EV_MISS, EV_POWER, EV_PUFF,
   EV_RIM, EV_RUSH, EV_SAVE, EV_SET, EV_SPAWN, EV_SPLASH, EV_SPLAT, EV_TELL, EV_TICK, EV_TIER, EV_TIME, END_HEARTS,
   END_TIME, MAX_ITEMS, MODE_QUEUE, MODE_RIDE, createSim, emit, freeSlot, maybeCard, queueRaw, tierOf,
   type SimConfig, type SimState,
@@ -60,10 +61,27 @@ export * from './state';
 
 // -- the step ------------------------------------------------------------------------------
 
-/** Ball Boost: the chain tier counts one higher while the ball is up with a bounce. */
-export function boosted(s: SimState): number {
+/** 1 when the ball gate is holding the tier at x2 (chain 12+ without a live ball). */
+export function gateHeld(s: SimState): number {
   'worklet';
-  return s.bOn === 1 && s.bN > 0 ? 1 : 0;
+  return tierOf(s.chain) > 2 && !ballIsLive(s) ? 1 : 0;
+}
+
+/**
+ * Re-evaluate the ball-gated tier after a chain or ball change. A rise is a
+ * tier-up (c = 1 when the ball just unlocked it); a ball loss at chain 12+
+ * locks it back to x2. Chain breaks reset silently (EV_BREAK says it).
+ */
+function updateGate(s: SimState, why: number): void {
+  'worklet';
+  // why: 0 chain grew, 1 quiet (break, gull steal), 2 ball change
+  const t = gatedTier(s);
+  if (why !== 1 && t > s.gTier) {
+    emit(s, EV_TIER, t, s.chain, why === 2 ? 1 : 0);
+    if (why === 2) emit(s, EV_GATE, 2, t, 0);
+  } else if (why === 2 && t < s.gTier) emit(s, EV_GATE, 1, t, 0);
+  s.gTier = t;
+  s.tier = t;
 }
 
 export function eventQuarters(s: SimState): number {
@@ -113,10 +131,18 @@ function computeFxTs(s: SimState): number {
   return 256;
 }
 
-export function hitStop(s: SimState, steps: number): void {
+/**
+ * Global hit-stop (puffer hit, Golden Hour entry, TIME! only). Never two
+ * within 15 clock steps: a later request is downgraded to the render-only
+ * local freeze (it returns false). TIME! always wins.
+ */
+export function hitStop(s: SimState, steps: number, force: number): boolean {
   'worklet';
+  if (!force && s.clock - s.lastStop < 15) return false;
+  s.lastStop = s.clock;
   const q = steps * 256;
   if (q > s.hitStopQ) s.hitStopQ = q;
+  return true;
 }
 
 export function moveBasket(s: SimState): void {
@@ -148,19 +174,16 @@ export function moveBasket(s: SimState): void {
 function addChain(s: SimState): void {
   'worklet';
   if (s.chainFreezeQ > 0) return;
-  const before = tierOf(s.chain);
   s.chain += 1;
   if (s.chain > s.maxChain) s.maxChain = s.chain;
-  const after = tierOf(s.chain);
-  s.tier = after;
-  if (after > before) emit(s, EV_TIER, after, s.chain, 0);
+  updateGate(s, 0);
 }
 
 function breakChain(s: SimState): void {
   'worklet';
   if (s.chain > 0) emit(s, EV_BREAK, s.chain, 0, 0);
   s.chain = 0;
-  s.tier = 1;
+  updateGate(s, 1);
 }
 
 /** Gull steal: the chain drops to the first value of the tier below. */
@@ -168,7 +191,7 @@ export function dropTier(s: SimState): void {
   'worklet';
   const t = tierOf(s.chain);
   s.chain = t >= 2 ? TIER_AT[t - 2] : 0;
-  s.tier = tierOf(s.chain);
+  updateGate(s, 1);
 }
 
 /** The step Golden Hour (and its extensions) must end by: Final Rush or the set end. */
@@ -189,7 +212,7 @@ function addPip(s: SimState, x: number): void {
     s.ghQ = GOLDEN_STEPS * 256;
     s.ghExt = 0;
     s.fevers += 1;
-    hitStop(s, HITSTOP_GOLDEN);
+    hitStop(s, HITSTOP_GOLDEN, 0);
     emit(s, EV_GOLDEN, 1, x, 0);
     maybeCard(s, CARD_GOLDEN);
   } else {
@@ -239,6 +262,36 @@ function collectPower(s: SimState, kind: number, xf: number): void {
   }
 }
 
+/**
+ * The ball term: a must-catch item whose landing the ball's next landing makes
+ * unreachable (both within 24 steps and too far apart to take both) becomes
+ * optional, so juggling never forces a chain break.
+ */
+function demoteIfBallConflict(s: SimState, i: number): void {
+  'worklet';
+  if (s.bPredStep < 0 || s.iOpt[i] === 1) return;
+  const dtS = absInt(s.iLandStep[i] - s.bPredStep);
+  if (dtS > 24) return;
+  const need = absInt((s.iX[i] - s.bPredX) >> 8) - 40;
+  if (need > 0 && dtS < travelOf(need)) s.iOpt[i] = 1;
+}
+
+/** Fruit Ninja combo: catches within 18 steps: DOUBLE +25, TRIPLE +75, QUAD +150 (flat totals). */
+function multiCatch(s: SimState, xf: number): void {
+  'worklet';
+  if (s.clock - s.mcLast <= MULTI_WINDOW) s.mcN += 1;
+  else s.mcN = 1;
+  s.mcLast = s.clock;
+  if (s.mcN < 2) return;
+  const n = s.mcN < 4 ? s.mcN : 4;
+  const prev = s.mcN - 1 < 4 ? MULTI_PTS[s.mcN - 1] : MULTI_PTS[4];
+  const pts = MULTI_PTS[n] - (s.mcN > 4 ? MULTI_PTS[4] : prev);
+  if (s.mcN === 2) s.multi += 1;
+  if (pts <= 0) return;
+  s.score += pts;
+  emit(s, EV_MULTI, xf, n, pts);
+}
+
 function collect(s: SimState, i: number, xc: number, grade: number, popped: number): void {
   'worklet';
   const kind = s.iKind[i];
@@ -251,10 +304,11 @@ function collect(s: SimState, i: number, xc: number, grade: number, popped: numb
   }
   let base = ITEM_BASE[kind];
   if (kind === K_LUCKY && grade >= G_PERFECT) base = base * 5;
-  const t = tierOf(s.chain) + boosted(s);
+  const t = gatedTier(s);
   const pts = scorePoints(base, t, grade, eventQuarters(s));
   s.score += pts;
   s.catches += 1;
+  if (!popped) multiCatch(s, xf);
   if (grade === G_PERFECT) {
     s.perfects += 1;
     s.perfStreak += 1;
@@ -265,7 +319,7 @@ function collect(s: SimState, i: number, xc: number, grade: number, popped: numb
   }
   if (popped) s.pops += 1;
   addChain(s);
-  emit(s, EV_CATCH, xf, kind | (grade << 4) | (tierOf(s.chain) << 8) | (boosted(s) << 12), pts + s.chain * 65536);
+  emit(s, EV_CATCH, xf, kind | (grade << 4) | (gatedTier(s) << 8) | (gateHeld(s) << 12), pts + s.chain * 65536);
   if (kind === K_COIN) {
     if (s.ghQ > 0) {
       const room = goldenLimit(s) - s.clock - (s.ghQ >> 8);
@@ -316,6 +370,7 @@ function spawnPending(s: SimState): void {
         s.idc += 1;
         s.iId[i] = s.idc;
         if (s.pFlag[r] === 1) s.finaleSlot = i;
+        else if (s.iMust[i] === 1 && s.bOn === 1) demoteIfBallConflict(s, i);
         emit(s, EV_SPAWN, s.pX[r] >> 8, s.pKind[r], i);
         if (s.pKind[r] === K_PUFFER) maybeCard(s, CARD_PUFFER);
       }
@@ -354,6 +409,8 @@ export function endBonus(s: SimState): number {
   b += s.bestPerfStreak * PERFECT_STREAK_PTS;
   if (s.endReason !== END_HEARTS) b += s.hearts * HEART_PTS;
   b += s.banked * GOLDEN_BANK;
+  // Sugar Crush: a live ball does one victory bounce at its current value.
+  if (s.endReason !== END_HEARTS && ballIsLive(s)) b += s.bGold ? GOLD_BOUNCE_PTS : s.bN * 5 < 40 ? s.bN * 5 : 40;
   return b;
 }
 
@@ -363,7 +420,7 @@ export function finish(s: SimState, reason: number): void {
   s.done = 1;
   s.endReason = reason;
   s.bonus = endBonus(s);
-  if (reason === END_TIME) hitStop(s, HITSTOP_TIME);
+  if (reason === END_TIME) hitStop(s, HITSTOP_TIME, 1);
   emit(s, EV_TIME, reason, 0, 0);
 }
 
@@ -377,7 +434,7 @@ function resolveCrossing(s: SimState, i: number, xc: number, zone: number): void
     if (d <= hz && s.invulnQ <= 0) {
       s.hearts -= 1;
       s.invulnQ = INVULN_STEPS * 256;
-      hitStop(s, HITSTOP_PUFFER);
+      hitStop(s, HITSTOP_PUFFER, 0);
       perfectBreak(s);
       emit(s, EV_HIT, xc >> 8, s.hearts, i);
       if (s.hearts <= 0) {
@@ -461,6 +518,7 @@ function bounce(s: SimState, dx: number): void {
   s.bVy = VY_BALL[n];
   s.bG = G_BALL[n];
   s.bVx = floorDiv(dx * VX_GAIN[n], HALF_ZONE * SUB) + floorDiv(s.bv, 4);
+  updateGate(s, 2);
   if (s.bN === BALL_GOLD_AT) {
     s.bGold = 1;
     s.goldBalls += 1;
@@ -479,14 +537,8 @@ function bounce(s: SimState, dx: number): void {
   }
   predictBall(s);
   // Demote in-flight must-catch items the new arc makes unreachable.
-  if (s.bPredStep >= 0) {
-    for (let i = 0; i < MAX_ITEMS; i++) {
-      if (s.iSt[i] !== S_FALL || s.iMust[i] !== 1 || s.iOpt[i] === 1) continue;
-      const dtS = absInt(s.iLandStep[i] - s.bPredStep);
-      if (dtS > 24) continue;
-      const need = absInt((s.iX[i] - s.bPredX) >> 8) - 40;
-      if (need > 0 && dtS < travelOf(need)) s.iOpt[i] = 1;
-    }
+  for (let i = 0; i < MAX_ITEMS; i++) {
+    if (s.iSt[i] === S_FALL && s.iMust[i] === 1) demoteIfBallConflict(s, i);
   }
 }
 
@@ -533,7 +585,7 @@ function stepBall(s: SimState, dt: number): void {
     const dy = (s.iY[i] - s.bY) >> 8;
     if (dx * dx + dy * dy > r * r) continue;
     if (s.iY[i] > (LANE_Y - 30) * SUB) continue;
-    const t = tierOf(s.chain) + boosted(s);
+    const t = gatedTier(s);
     if (kind === K_PUFFER) {
       const pts = scorePoints(BONK_BASE, t, G_POP, eventQuarters(s));
       s.score += pts;
@@ -556,8 +608,10 @@ function stepBall(s: SimState, dt: number): void {
     s.bN = 0;
     s.bGold = 0;
     s.bPredStep = -1;
-    s.bRespawnQ = (s.twist === TWIST_BEACH && s.set === 1 ? BALL_RESPAWN_BEACH : BALL_RESPAWN) * 256;
+    // Tutorial grace: a ball lost before clock 10 s comes back in 2 s.
+    s.bRespawnQ = (s.clock < BALL_GRACE_UNTIL ? BALL_RESPAWN_GRACE : BALL_RESPAWN) * 256;
     emit(s, EV_BALL_LOST, s.bX >> 8, 0, 0);
+    updateGate(s, 2);
   }
 }
 
@@ -671,6 +725,7 @@ function onClockStep(s: SimState): void {
     if (s.set === 1 && s.twist !== TWIST_NONE) {
       if (s.twist === TWIST_GULLS) {
         s.gNext = c + STEPS_BAR;
+        s.pufferOn = 0;
         maybeCardLater(s, CARD_GULLS);
       } else if (s.twist === TWIST_SPLASH) {
         s.sNext = c + STEPS_BAR;
@@ -679,6 +734,7 @@ function onClockStep(s: SimState): void {
       else if (s.twist === TWIST_BEACH) maybeCardLater(s, CARD_BEACH);
     }
     if (s.set === 2) {
+      s.pufferOn = 1;
       s.gNext = 1 << 30;
       s.sNext = 1 << 30;
     }
@@ -822,6 +878,7 @@ export function step(s: SimState, touch: number, targetQ4: number): void {
   s.clockQ += s.finale === 1 ? dt : s.holdTs;
   s.clock = s.clockQ >> 8;
   for (let c = before + 1; c <= s.clock && !s.done && !s.cardPending; c++) {
+    if (ballIsLive(s)) s.ballLive += 1;
     spawnPending(s);
     onClockStep(s);
     if (s.tossReq > 0) {
