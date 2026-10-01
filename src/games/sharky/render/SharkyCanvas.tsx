@@ -491,23 +491,25 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
 
       <Group transform={worldTransform}>
         {/* God rays and caustics: far layer only, never over gameplay sprites. */}
-        {quality < 2 ? <Group transform={rayTransform} origin={vec(480, SURFACE_Y)}>
+        {/* Quality tiers never unmount Skia nodes (removing a node with live
+            derived props crashed Skia 1.5 on the UI thread); they zero sizes instead. */}
+        <Group transform={rayTransform} origin={vec(480, SURFACE_Y)} opacity={quality < 2 ? 1 : 0}>
           {rayPaths.map((p, i) => (
             <Path key={i} path={p} color="#ffffff" opacity={0.07 + (i % 2) * 0.03} />
           ))}
-        </Group> : null}
-        {caustic && quality === 0 ? (
-          <Rect x={-60} y={SURFACE_Y} width={VIEW_W + 120} height={560}>
+        </Group>
+        {caustic ? (
+          <Rect x={-60} y={SURFACE_Y} width={quality === 0 ? VIEW_W + 120 : 0} height={quality === 0 ? 560 : 0}>
             <Shader source={caustic} uniforms={causticUniforms} />
           </Rect>
         ) : null}
 
         {/* Far layer (0.2x): the sunken carnival reef, low contrast behind everything. */}
-        {farReef && quality < 2 ? (
+        {farReef ? (
           <Group transform={farX} opacity={0.42}>
             {[0, 1, 2, 3].map((k) => (
               <Group key={k} transform={k % 2 === 1 ? [{ translateX: -60 + (k + 1) * FAR.w }, { scaleX: -1 }] : [{ translateX: -60 + k * FAR.w }]}>
-                <SkImage image={farReef} x={0} y={FLOOR_Y + 30 - FAR.h} width={FAR.w} height={FAR.h} />
+                <SkImage image={farReef} x={0} y={FLOOR_Y + 30 - FAR.h} width={quality < 2 ? FAR.w : 0} height={quality < 2 ? FAR.h : 0} />
               </Group>
             ))}
           </Group>
@@ -543,9 +545,9 @@ export const SharkyCanvas = React.memo(function SharkyCanvas({
         {/* Near strip: 40% alpha (25% in Storm Surge), floor band only. */}
         <Group transform={nearX} opacity={0.5}>
           {[0, 1, 2, 3].map((k) => (
-            reefNear && quality < 2 ? (
+            reefNear ? (
               <Group key={k} transform={k % 2 === 1 ? [{ translateX: -60 + (k + 1) * NEAR.w }, { scaleX: -1 }] : [{ translateX: -60 + k * NEAR.w }]}>
-                <SkImage image={reefNear} x={0} y={FLOOR_Y + 110 - NEAR.h} width={NEAR.w} height={NEAR.h} />
+                <SkImage image={reefNear} x={0} y={FLOOR_Y + 110 - NEAR.h} width={quality < 2 ? NEAR.w : 0} height={quality < 2 ? NEAR.h : 0} />
               </Group>
             ) : null
           ))}
